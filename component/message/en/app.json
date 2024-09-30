@@ -1,8 +1,8 @@
 {
     "app": {
         "title": "Deforestation Alerts Analysis",
-        "footer": "The sky is the limit \u00a9 {}",
-        "banner": "This is a automatically generated application. Remove this banner once your application is ready.",
+        "footer": "SEPAL \u00a9 {}",
+        "banner": "This is my first app :)",
         "drawer_item": {
             "about": "About"
         }
