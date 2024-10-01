@@ -13,6 +13,9 @@ class AlertFilterModel(model.Model):
     available_alerts_list = Any("").tag(sync=True)
     "List of alert collections that has alerts in the aoi and dates selected by the users"
 
+    available_alerts_raster_list = Any("").tag(sync=True)
+    "List of alert collections that has alerts in the aoi and dates selected by the users"
+
     alert_selection_polygons = Any(None).tag(sync=True)
     "User drawn polygons used for filtering alerts in case this method of filtering is selected"
 

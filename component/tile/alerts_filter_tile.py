@@ -21,12 +21,13 @@ class SepalCard(sw.SepalWidget, v.Card):
 
 
 class AlertsFilterTile(sw.Layout):
-    def __init__(self, aoi_date_model, aux_model, alert_filter_model):
+    def __init__(self, aoi_date_model, aux_model, alert_filter_model, selected_alerts_model):
 
         self._metadata = {"mount_id": "filter_alerts"}
         self.aoi_date_model = aoi_date_model
         self.aux_model = aux_model
         self.alert_filter_model = alert_filter_model
+        self.selected_alerts_model = selected_alerts_model
 
         # Variables to describe collections
         self.lista_nombres_alertas = ["GLAD-L", "GLAD-S2", "RADD", "CCDC"]
@@ -166,7 +167,7 @@ class AlertsFilterTile(sw.Layout):
                 end_date = self.aoi_date_model.end_date
                 nombre = self.selected_alert_names[i]
                 raster = get_alerts(nombre, start_date, end_date, aoi, alerta)
-                clip_raster = raster.clip(aoi)
+                clip_raster = raster.clip(aoi.geometry())
                 self.filtered_alert_rasters.append(clip_raster)
 
     def initialize_layout(self):
@@ -285,6 +286,33 @@ class AlertsFilterTile(sw.Layout):
                 clearable=True,
                 chips=True,
             )
+            self.card01 = SepalCard(
+            class_="pa-2",
+            children=[
+                v.CardTitle(children=["Available alerts"]),
+                self.checkbox_container21,
+            ],
+            )
+            layout = sw.Row(
+            children=[
+                sw.Col(cols=9, style="height: 100vh;", children=[self.map_2]),
+                sw.Col(
+                    cols=3,
+                    style="height: 100vh;",
+                    children=[
+                        self.card00,
+                        self.card01,
+                        self.card03,
+                        self.card02,
+                        self.card04,
+                        self.card05,
+                        ],
+                    ),
+                ]
+            )
+
+            self.children = [layout]
+
             # Add content to map
             # self.map_2.zoom_ee_object(aoi_date_model.aoi, zoom_out = 3)
             self.map_2.add_ee_layer(self.aoi_date_model.aoi, name="AOI")
@@ -305,14 +333,19 @@ class AlertsFilterTile(sw.Layout):
             self.card00.hide(), self.card01.show(), self.card02.show(), self.card03.show(), self.card04.hide(), self.card05.show()
 
     def update_tile(self, change):
-        print("observed")
+        #print("observed")
         if change["new"]:
             # Update the tile when aoi_date_model changes
             self.create_alert_list()  # Recreate the alert list
             self.update_layout()  # Reinitialize the layout with the new data
-
+   
     def bind_user_input_variables(self, widget, event, data):
         self.alert_filter_model.available_alerts_list = self.card01.children[1].v_model
         self.alert_filter_model.alert_selection_method = self.card03.children[1].v_model
         self.alert_filter_model.min_area = self.card02.children[1].v_model
         self.alert_filter_model.max_number_alerts = self.card04.children[1].v_model
+        self.alert_filter_model.available_alerts_raster_list = self.filtered_alert_rasters
+
+
+        
+        
