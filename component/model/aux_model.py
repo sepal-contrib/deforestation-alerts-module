@@ -19,6 +19,9 @@ class AuxModel(model.Model):
     aux_layer = Any(None).tag(sync=True)
     "auxiliary layer that the user can visualize during alert analysis, for example, forest plantation or forest management areas"
 
+    aux_layer_vis = Any(None).tag(sync=True)
+    "auxiliary layer visualization parameters"
+
     custom_report_template = Any(None).tag(sync=True)
     "User custom template for reports"
 

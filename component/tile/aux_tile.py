@@ -61,4 +61,6 @@ class AuxTile(sw.Layout):
 
         aux_model.bind(ccdc_alerts_input, "ccdc_layer").bind(
             fnf_input, "mask_layer"
-        ).bind(aux_input, "aux_layer").bind(form_input, "custom_report_template")
+        ).bind(aux_input, "aux_layer").bind(aux_viz, "aux_layer_vis").bind(
+            form_input, "custom_report_template"
+        )

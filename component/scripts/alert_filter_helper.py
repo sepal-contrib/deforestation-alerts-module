@@ -13,6 +13,7 @@ import ee
 import pandas as pd
 
 from component.message import cm
+from shapely.geometry import Point, Polygon
 
 
 def date_range_check(
@@ -322,3 +323,190 @@ def _from_glad_s(start, end, aoi):
     all_alerts = alert_band.addBands(date_band)
 
     return all_alerts
+
+
+def convert_to_geopandas(data_list):
+    # Extract geometry (coordinates) and properties into separate lists
+    geometries = [Point(item["geometry"]["coordinates"]) for item in data_list]
+    properties = [item["properties"] for item in data_list]
+    gee_ids = [item["id"] for item in data_list]
+
+    # Create a pandas DataFrame from the properties
+    df = pd.DataFrame(properties)
+    df["gee_id"] = gee_ids
+    df["status"] = pd.Series()
+    df["before_img"] = pd.Series()
+    df["after_img"] = pd.Series()
+    df["alert_polygon_dir"] = pd.Series()
+    df["area"] = pd.Series()
+    df["description"] = pd.Series()
+    df["status"] = "Not reviewed"
+
+    # Create a GeoDataFrame by combining the properties with the geometries
+    gdf = gpd.GeoDataFrame(df, geometry=geometries)
+
+    # Set the coordinate reference system (CRS) if needed
+    gdf.set_crs(epsg=4326, inplace=True)  # Assuming WGS84 (EPSG:4326)
+
+    return gdf
+
+
+def convert_to_geopandas_old(point_features, polygon_features):
+    # Create dictionaries to store the matching points and polygons by id
+    point_dict = {f["id"]: f for f in point_features}
+    polygon_dict = {f["id"]: f for f in polygon_features}
+
+    # Combine features by id
+    combined_features = []
+
+    for feature_id in point_dict.keys():
+        if feature_id in polygon_dict:
+            point = Point(point_dict[feature_id]["geometry"]["coordinates"])
+            polygon = Polygon(polygon_dict[feature_id]["geometry"]["coordinates"][0])
+
+            # Use the common properties
+            properties = point_dict[feature_id]["properties"]
+            properties["gee_id"] = feature_id
+            properties["point"] = point
+            properties["bounding_box"] = polygon
+
+            combined_features.append(properties)
+
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(combined_features, geometry="point")
+
+    # Add columns
+    gdf["status"] = pd.Series()
+    gdf["before_img"] = pd.Series()
+    gdf["before_img_info"] = pd.Series()
+    gdf["after_img"] = pd.Series()
+    gdf["after_img_info"] = pd.Series()
+    gdf["alert_polygon"] = pd.Series()
+    gdf["area_ha"] = pd.Series()
+    gdf["description"] = pd.Series()
+    gdf["status"] = "Not reviewed"
+
+    # Check result
+    return gdf
+
+
+def convert_to_geopandas(polygon_features):
+    # Convert polygon features into GeoDataFrame and calculate centroids
+    combined_features = []
+
+    for feature in polygon_features:
+        polygon = Polygon(feature["geometry"]["coordinates"][0])
+
+        # Extract properties and add relevant information
+        properties = feature["properties"]
+        properties["gee_id"] = feature["id"]
+        properties["bounding_box"] = polygon
+        properties["point"] = polygon.centroid  # Add centroid as 'point'
+
+        combined_features.append(properties)
+
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(combined_features, geometry="point")
+
+    # Add additional columns with default values
+    gdf["status"] = "Not reviewed"
+    gdf["before_img"] = pd.Series(dtype="object")
+    gdf["before_img_info"] = pd.Series(dtype="object")
+    gdf["after_img"] = pd.Series(dtype="object")
+    gdf["after_img_info"] = pd.Series(dtype="object")
+    gdf["alert_polygon"] = pd.Series(dtype="object")
+    gdf["area_ha"] = pd.Series(dtype="float")
+    gdf["description"] = pd.Series(dtype="object")
+
+    # Save gdf to file
+    # gdf.set_crs(epsg = '4326', allow_override=True, inplace=True).to_file(gpkg_name, driver='GPKG')
+
+    # Check result
+    return gdf
+
+
+def obtener_datos_gee_parcial(
+    aoi_grid,
+    alert_raster,
+    ee_reducer,
+    pixel_size,
+    min_alert_size_pixels,
+    max_elementos=20,
+):
+    def get_bb(feature, min_alert_size_pixels):
+        grid_geometry = ee.Feature(feature).geometry()
+        bounding_boxes = alert_raster.clip(grid_geometry).reduceToVectors(
+            ee_reducer,
+            grid_geometry,
+            pixel_size,
+            "bb",
+            True,
+            None,
+            None,
+            None,
+            True,
+            1e13,
+            1,
+        )
+        # Eliminar cluster con menos de x cantidad de pixels
+        bb_cleaned = bounding_boxes.filter(
+            ee.Filter.gte("count", min_alert_size_pixels)
+        )
+        return bb_cleaned
+
+    resultados = []
+
+    def procesar_elemento(elemento):
+        bb = get_bb(elemento, min_alert_size_pixels)
+        # Aquí puedes definir la función de conteo de elementos
+        conteo = bb.size().getInfo()
+        print(conteo)
+
+        # Si hay elementos, llamar a getInfo() para almacenar los datos
+        if conteo > 0:
+            info = bb.toList(conteo).getInfo()
+            resultados.extend(info)
+            print("conteo fue mayor a 0, reusltados es ", len(resultados))
+
+    # Procesar cada elemento en el FeatureCollection hasta que alcancemos max_elementos
+    elementos = aoi_grid.toList(aoi_grid.size())
+    for i in range(elementos.size().getInfo()):
+        if len(resultados) >= max_elementos:
+            # print( 'resultado es ', len(resultados))
+            break
+        elemento = ee.FeatureCollection(elementos.get(i))
+        procesar_elemento(elemento)
+    # print('Out of loop')
+    return resultados
+
+
+def obtener_datos_gee_total(
+    aoi, alert_raster, ee_reducer, pixel_size, min_alert_size_pixels, max_elementos
+):
+
+    bounding_boxes = alert_raster.reduceToVectors(
+        ee_reducer, aoi, pixel_size, "bb", True, None, None, None, True, 1e13, 1
+    )
+
+    # Eliminar cluster con menos de x cantidad de pixels
+    bb_cleaned = bounding_boxes.filter(ee.Filter.gte("count", min_alert_size_pixels))
+
+    # Calcular el numero de alertas detectadas
+    bb_number_elements = bb_cleaned.size().getInfo()
+
+    if bb_number_elements <= 5000:
+        number_export = bb_number_elements
+    else:
+        number_export = 5000
+
+    if max_elementos > 0:
+        number_export = max_elementos
+    else:
+        number_export = number_export
+
+    # Sort by size, date, etc
+    bb_sorted = bb_cleaned.sort("count", False)
+
+    bb_sorted_list = bb_sorted.toList(number_export).getInfo()
+
+    return bb_sorted_list
