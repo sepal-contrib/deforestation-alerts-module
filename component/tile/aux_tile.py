@@ -18,42 +18,33 @@ class AuxTile(sw.Layout):
 
         super().__init__()
 
-        ccdc_alerts_input = sw.inputs.AssetSelect()
-        card01 = v.Card(
-            class_="pa-2",
-            children=[v.CardTitle(children=["CCDC Alerts Asset"]), ccdc_alerts_input],
-        )
-
-        fnf_input = sw.inputs.AssetSelect()
-        card02 = v.Card(
-            class_="pa-2", children=[v.CardTitle(children=["Mask Asset"]), fnf_input]
-        )
-
-        aux_input = sw.inputs.AssetSelect()
+        title1 = v.CardTitle(class_="pa-1 ma-1", children=["CCDC Alerts Asset"])
+        ccdc_alerts_input = sw.inputs.AssetSelect(types=["IMAGE"])
+        title2 = v.CardTitle(class_="pa-1 ma-1", children=["Mask Asset"])
+        fnf_input = sw.inputs.AssetSelect(types=["IMAGE"])
+        title3 = v.CardTitle(class_="pa-1 ma-1", children=["Auxiliary Asset"])
+        aux_input = sw.inputs.AssetSelect(types=["IMAGE"])
         aux_viz = sw.TextField(
             label="Auxiliary Asset Visualization Parameters", v_model=None
         )
-        card03 = v.Card(
-            class_="pa-2",
-            children=[v.CardTitle(children=["Auxiliary Asset"]), aux_input, aux_viz],
-        )
-
-        planet_view = PlanetView()
-        card04 = v.Card(
-            class_="pa-2",
-            children=[v.CardTitle(children=["Planet Login Data"]), planet_view],
-        )
-
+        title4 = v.CardTitle(class_="pa-1 ma-1", children=["Report template"])
         form_input = sw.inputs.FileInput()
-        card05 = v.Card(
-            class_="pa-2",
-            children=[v.CardTitle(children=["Report template"]), form_input],
+        title5 = v.CardTitle(class_="pa-1 ma-1", children=["Planet Login Data"])
+        planet_view = PlanetView()
+
+        card1 = v.Card(
+            class_="pa-3 ma-5", hover=True, children=[title1, ccdc_alerts_input]
         )
+        card2 = v.Card(class_="pa-3 ma-5", hover=True, children=[title2, fnf_input])
+        card3 = v.Card(
+            class_="pa-3 ma-5", hover=True, children=[title3, aux_input, aux_viz]
+        )
+        card4 = v.Card(class_="pa-3 ma-5", hover=True, children=[title4, form_input])
+        card5 = v.Card(class_="pa-3 ma-5", hover=True, children=[title5, planet_view])
 
         layout = sw.Row(
-            fluid=True,
             children=[
-                sw.Col(children=[card01, card02, card03, card04, card05]),
+                sw.Col(children=[card1, card2, card3, card4, card5]),
             ],
         )
 

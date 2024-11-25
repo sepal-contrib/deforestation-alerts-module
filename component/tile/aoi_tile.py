@@ -1,41 +1,68 @@
 from sepal_ui import sepalwidgets as sw
 from sepal_ui import aoi
 from sepal_ui.mapping import SepalMap
-from component.message import cm
 import ipyvuetify as v
-from sepal_ui.scripts.utils import init_ee
-from traitlets import Any, Unicode, link
-import ee
-from component.scripts.alert_filter_helper import *
+from IPython.display import display, HTML
 
-init_ee()
+from sepal_ui.scripts import utils as su
+from component.message import cm
+
+from traitlets import Any, Unicode, link
+
+from component.scripts.aoi_helper import *
+
+import ee
+
+su.init_ee()
 
 
 class AoiTile(sw.Layout):
-    def __init__(self, aoi_date_model, alert_filter_model, aux_model):
+    def __init__(self, aoi_date_model, alert_filter_model, aux_model, app_tile_model):
 
         self._metadata = {"mount_id": "aoi_tile"}
         self.aoi_date_model = aoi_date_model
         self.alert_filter_model = alert_filter_model
         self.aux_model = aux_model
-
-        # Variables to describe collections
-        self.lista_nombres_alertas = ["GLAD-L", "GLAD-S2", "RADD", "CCDC"]
+        self.app_tile_model = app_tile_model
 
         # Bind first empty state
         self.alert_filter_model.available_alerts_raster_list = []
         self.alert_filter_model.available_alerts_list = []
 
+        self.search_button = sw.Btn(msg="Search alerts")
+        self.search_button_alert = sw.Alert().hide()
+        self.process_alerts = su.loading_button(
+            alert=self.search_button_alert, button=self.search_button
+        )(self.process_alerts)
+
         super().__init__()
 
         # 1. Crear el mapa para seleccionar el área de estudio
-        map_1 = SepalMap()
-        map_1.layout.height = "100%"
-        self.aoi_view = aoi.AoiView(gee=True, map_=map_1)
+        display(
+            HTML(
+                """
+        <style>
+            .custom-map-class {
+                width: 100% !important;
+                height: 90vh !important;
+                }
+        </style>
+        """
+            )
+        )
+
+        self.map_1 = SepalMap()
+        self.map_1.add_class("custom-map-class")
+        self.map_1.add_basemap("SATELLITE")
+        self.aoi_view = aoi.AoiView(gee=True, map_=self.map_1)
+        self.aoi_view.flat = True
+        section_title1 = v.CardTitle(class_="pa-1 ma-1", children=["AOI selection"])
+
         card11 = v.Card(
-            class_="pa-2",
+            class_="pa-3 ma-5",
+            hover=True,
             children=[
-                v.CardTitle(children=["Area of interest selection"]),
+                section_title1,
                 self.aoi_view,
             ],
         )
@@ -43,181 +70,74 @@ class AoiTile(sw.Layout):
         # 2. Crear los widgets para la selección lugar y de fechas
         self.start_date = sw.DatePicker(label="Start date")
         self.end_date = sw.DatePicker(label="End date")
+        section_title2 = v.CardTitle(class_="pa-1 ma-1", children=["Date selection"])
+
+        # 3.Search button
+        self.search_button.on_event("click", self.process_alerts)
+
         card12 = v.Card(
-            class_="pa-2",
+            class_="pa-3 ma-5",
+            hover=True,
             children=[
-                v.CardTitle(children=["Date selection"]),
+                section_title2,
                 self.start_date,
                 self.end_date,
+                self.search_button,
+                self.search_button_alert,
             ],
         )
 
-        # 3.Search button
-        search_button = sw.Btn(text="Search alerts", disabled=False)
-        # self.check_inputs(search_button)
-        search_button.on_event("click", self.create_available_alert_list)
-        card13 = v.Card(class_="pa-2", children=[search_button])
+        card0 = v.Card(class_="py-2", children=[card11, card12])
 
         # Layout 1 de la aplicación
-        layout1 = sw.Row(
+        layout = sw.Row(
+            dense=True,
             children=[
-                sw.Col(cols=9, style="height: 100vh;", children=[map_1]),
-                sw.Col(
-                    cols=3, style="height: 100vh;", children=[card11, card12, card13]
-                ),
-            ]
+                sw.Col(cols=10, children=[self.map_1]),
+                sw.Col(cols=2, children=[card0]),
+            ],
         )
 
-        self.children = [layout1]
+        self.children = [layout]
 
-    # Function to check if all variables are set and enable the search button
-    def check_inputs(self, widget):
-        if (
-            self.start_date.v_model
-            and self.end_date.v_model
-            and self.aoi_view.model.v_model
-        ):
-            widget.disabled = True
-        else:
-            widget.disabled = False
+        self.alert_filter_model.alerts_dictionary = create_basic_alerts_dictionary()
+        aux_model.observe(self.update_dictionary_ccdc, "ccdc_layer")
 
-    def bind_variables(self, widget, event, data):
-        # self.aoi_view.model.observe(self.set_feature_collection, "name")
+    def update_dictionary_ccdc(self, change):
+        # Update the alerts dictionary when ccdc model changes
+        if self.aux_model.ccdc_layer:
+            add_ccdc_alerts_dictionary(
+                self.alert_filter_model.alerts_dictionary, self.aux_model.ccdc_layer
+            )
+        elif self.aux_model.ccdc_layer is None:
+            remove_ccdc_alerts_dictionary(self.alert_filter_model.alerts_dictionary)
+
+    def process_alerts(self, widget, event, data):
+        # Check inputs
+        aoi, date1, date2 = check_aoi_inputs(self)
+        dictionary = self.alert_filter_model.alerts_dictionary
+
+        # Save data to model
         self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
         self.aoi_date_model.start_date = self.start_date.v_model
         self.aoi_date_model.end_date = self.end_date.v_model
 
-    def set_feature_collection(self, change):
-        """set feature collection trait"""
-
-        if change["new"]:
-            self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
-
-    def create_available_alert_list(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
-
-        self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
-        self.aoi_date_model.start_date = self.start_date.v_model
-        self.aoi_date_model.end_date = self.end_date.v_model
-
-        # If the AOI is None, return an empty alert list
-        if (
-            not self.aoi_date_model.aoi
-            or not self.aoi_date_model.end_date
-            or not self.aoi_date_model.start_date
-        ):
-            selected_alert_names = []
-        else:
-            # Colecciones de alertas
-            # Reset list of alerts
-            lista_colecciones_alertas = []
-            lista_start_date_alertas = []
-            lista_end_date_alertas = []
-            selected_alert_rasters = []
-            selected_alert_names = []
-            filtered_alert_rasters = []
-
-            # RADD
-            radd = ee.ImageCollection("projects/radar-wur/raddalert/v1").filterMetadata(
-                "layer", "contains", "alert"
+        # Generate list of available names and dictionary of filtered rasters
+        self.alert_filter_model.available_alerts_list = (
+            create_available_alert_dictionary(dictionary, aoi, date1, date2)
+        )
+        self.alert_filter_model.available_alerts_raster_list = (
+            create_filtered_alert_raster_dictionary(
+                self.alert_filter_model.available_alerts_list,
+                aoi,
+                date1,
+                date2,
+                self.aux_model.ccdc_layer,
             )
-            dateInicioRADD = "2019-01-01"
-            dateLastRADD = (
-                radd.sort("system:time_end", False)
-                .first()
-                .get("version_date")
-                .getInfo()
-            )
-            lista_start_date_alertas.append(dateInicioRADD)
-            lista_end_date_alertas.append(dateLastRADD)
-            # GLADS2
-            gladS2 = ee.ImageCollection("projects/glad/S2alert")
-            dateInicioGLADS2 = "2019-01-01"
-            dateLastGLADS2 = (
-                ee.Image("projects/glad/S2alert/alert").get("date").getInfo()
-            )
-            lista_start_date_alertas.append(dateInicioGLADS2)
-            lista_end_date_alertas.append(dateLastGLADS2)
-            # GLADl
-            gladL18 = ee.ImageCollection("projects/glad/alert/2018final")
-            dateInicioGLADL = "2018-01-01"
-            dateLastGLADL = (
-                ee.Date(
-                    ee.ImageCollection("projects/glad/alert/UpdResult")
-                    .sort("system:time_start", False)
-                    .first()
-                    .get("system:time_start")
-                )
-                .format("yyyy-MM-dd")
-                .getInfo()
-            )
-            lista_start_date_alertas.append(dateInicioGLADL)
-            lista_end_date_alertas.append(dateLastGLADL)
-            # CCDC
-            if self.aux_model.ccdc_layer:
-                ccdc = ee.ImageCollection.fromImages(
-                    [ee.Image(self.aux_model.ccdc_layer)]
-                )
-                dateInicioCCDC = (
-                    ee.Date(
-                        ee.Image(self.aux_model.ccdc_layer).get("system:time_start")
-                    )
-                    .format("yyyy-MM-dd")
-                    .getInfo()
-                )
-                dateLastCCDC = (
-                    ee.Date(ee.Image(self.aux_model.ccdc_layer).get("system:time_end"))
-                    .format("yyyy-MM-dd")
-                    .getInfo()
-                )
-                lista_start_date_alertas.append(dateInicioCCDC)
-                lista_end_date_alertas.append(dateLastCCDC)
+        )
+        self.app_tile_model.current_page_view = "filter_alerts"
 
-                lista_colecciones_alertas = [gladL18, gladS2, radd, ccdc]
-            else:
-                lista_colecciones_alertas = [gladL18, gladS2, radd]
-
-            # Filter alerts based on the AOI/dayes and get list of available alert names
-            for i in range(len(lista_colecciones_alertas)):
-                alerta = lista_colecciones_alertas[i]
-                nombre = self.lista_nombres_alertas[i]
-                n1 = (
-                    ee.ImageCollection(alerta)
-                    .filterBounds(self.aoi_date_model.aoi)
-                    .limit(10)
-                    .size()
-                    .getInfo()
-                )
-                date_test = date_range_check(
-                    self.aoi_date_model.start_date,
-                    self.aoi_date_model.end_date,
-                    lista_start_date_alertas[i],
-                    lista_end_date_alertas[i],
-                )
-                if n1 > 0 and date_test == "Pass":
-                    selected_alert_rasters.append(alerta)
-                    selected_alert_names.append(nombre)
-                else:
-                    selected_alert_rasters, selected_alert_names
-
-            # Filter alerts based on AOI/dates and return rasters
-
-            for i in range(len(selected_alert_names)):
-                alerta = selected_alert_rasters[i]
-                aoi = self.aoi_date_model.aoi
-                start_date = self.aoi_date_model.start_date
-                end_date = self.aoi_date_model.end_date
-                nombre = selected_alert_names[i]
-                raster = get_alerts(nombre, start_date, end_date, aoi, alerta)
-                clip_raster = raster.clip(aoi.geometry())
-                filtered_alert_rasters.append(clip_raster)
-
-            self.alert_filter_model.available_alerts_list = selected_alert_names
-            self.alert_filter_model.available_alerts_raster_list = (
-                filtered_alert_rasters
-            )
-            # self.alert_filter_model.rnd_number =
-
-            widget.loading = False  # Remove loading state
-            widget.disabled = False  # Re-enable the button
+    def load_saved_parameters(data):
+        self.aoi_view.model.feature_collection = data.get("aoi", self.aoi)
+        self.start_date.v_model = data.get("start_date", self.start_date)
+        self.end_date.v_model = data.get("end_date", self.end_date)

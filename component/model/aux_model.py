@@ -28,3 +28,35 @@ class AuxModel(model.Model):
     ############################################################################
     # planet credentials
     ############################################################################
+
+    def export_dictionary(self):
+        dictionary = {
+            "ccdc_layer": self.ccdc_layer,
+            "mask_layer": self.mask_layer,
+            "aux_layer": self.aux_layer,
+            "aux_layer_vis": self.aux_layer_vis,
+            "custom_report_template": self.custom_report_template,
+        }
+        return dictionary
+
+    def import_from_dictionary(self, file_path):
+        """
+        Import class attributes from a JSON file.
+        Args:
+            file_path (str): Path to the JSON file.
+        """
+        try:
+            # with open(file_path, 'r') as f:
+            #     data = json.load(f)
+            data = file_path
+            # Update attributes
+            self.ccdc_layer = data.get("ccdc_layer", self.ccdc_layer)
+            self.mask_layer = data.get("mask_layer", self.mask_layer)
+            self.aux_layer = data.get("aux_layer", self.aux_layer)
+            self.aux_layer_vis = data.get("aux_layer_vis", self.aux_layer_vis)
+            self.custom_report_template = data.get(
+                "custom_report_template", self.custom_report_template
+            )
+
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading JSON file: {e}")

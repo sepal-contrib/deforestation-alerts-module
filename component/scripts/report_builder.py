@@ -1,237 +1,212 @@
+from docx import Document
+from docx.shared import Inches, Pt
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import rasterio
 from rasterio.plot import show
-from fpdf import FPDF
-from PIL import Image
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib_scalebar.scalebar import ScaleBar
+import cartopy.crs as ccrs
+from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
+from component.scripts.mosaics_helper import *
 from datetime import datetime
+import cartopy.io.img_tiles as cimgt
+from shapely.geometry import box
+from pathlib import Path
+from component.parameter import directory
 
 
-def generate_report(
-    tiff1_path,
-    tiff2_path,
-    geodataframe,
-    district,
-    alert_system_a,
-    alert_system_b,
-    detection_date,
-    confirmation_date,
-    area_loss,
-    output_path,
-    bands1=(1, 2, 3),
-    bands2=(1, 2, 3),
-    scale_length=100,
+def plot_tiff_with_overlay(
+    tiff_path, output_path, bands=(1, 2, 3), vector_overlay=None, overlay_color="red"
 ):
-    # Initialize PDF
-    pdf = FPDF()
-    pdf.add_page()
+    """
+    Plot a multi-band TIFF image with map elements and an optional vector overlay.
 
-    # Title
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Deforestation Alert Report", 0, 1, "C")
+    Parameters:
+    - tiff_path (str): Path to the input TIFF image.
+    - output_path (str): Path to save the output JPEG image.
+    - bands (tuple): Tuple of band indices for RGB visualization (e.g., (1, 2, 3) for Red, Green, Blue).
+    - vector_overlay (GeoDataFrame): Optional GeoDataFrame for overlaying vector data on the map.
+    - overlay_color (str): Color for vector overlay.
+    """
 
-    # Introduction
-    intro_text = (
-        f"In the district {district} on {detection_date}, a deforestation alert was detected using "
-        f"{alert_system_a} and {alert_system_b} alert systems. This was confirmed on {confirmation_date}, "
-        f"with a total of {area_loss} hectares of tree cover loss confirmed using the provided images."
+    # Load the TIFF image
+    with rasterio.open(tiff_path) as src:
+        # Read the specified bands
+        img_data = src.read(bands)
+        img_extent = [
+            src.bounds.left,
+            src.bounds.right,
+            src.bounds.bottom,
+            src.bounds.top,
+        ]
+        crs_proj = src.crs.to_string()
+
+    # Set up the plot
+    fig, ax = plt.subplots(
+        figsize=(6, 6), subplot_kw={"projection": ccrs.epsg(int(src.crs.to_epsg()))}
+    )
+    ax.set_extent(img_extent, crs=ccrs.epsg(int(src.crs.to_epsg())))
+
+    # Display image data
+    ax.imshow(img_data.transpose(1, 2, 0), extent=img_extent, origin="upper")
+
+    # Add gridlines and ticks
+    gl = ax.gridlines(draw_labels=True, color="gray", alpha=0.5, linestyle="--")
+    gl.top_labels = True
+    gl.bottom_labels = True
+    gl.left_labels = True
+    gl.right_labels = True
+
+    # Rotate left and right tick labels for vertical orientation
+    # gl.xlabel_style = {'rotation': 0}
+    # gl.ylabel_style = {'rotation': 90}
+
+    # Add north arrow
+    ax.annotate(
+        "N",
+        xy=(0.95, 0.95),
+        xycoords="axes fraction",
+        ha="center",
+        va="center",
+        fontsize=16,
+        color="black",
+        weight="bold",
+        arrowprops=dict(
+            facecolor="black", width=4, headwidth=8, headlength=4, shrink=0.4
+        ),
     )
 
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 10, intro_text)
+    # Add scale bar
+    # scale_length_km = 5  # scale length in km (customize as needed)
+    # scale_length_deg = scale_length_km / 111  # approximate conversion to degrees
+    # x0, y0 = ax.get_xlim()[0] + scale_length_deg * 1, ax.get_ylim()[0] + scale_length_deg * 1
+    # ax.plot([x0, x0 + scale_length_deg], [y0, y0], color='black', lw=3)
+    # ax.text(x0 + scale_length_deg / 2, y0, f'{scale_length_km} km', ha='center', va='bottom')
+    ax.add_artist(
+        ScaleBar(
+            4.77,
+            location="lower left",
+            label_loc="bottom",
+            scale_loc="top",
+            frameon=True,
+            length_fraction=0.1,
+            width_fraction=0.004,
+            box_alpha=0.2,
+        )
+    )
 
-    # Load, process, and save Image 1 with bands and visualization elements
-    with rasterio.open(tiff1_path) as src:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        show((src, *bands1), ax=ax)
+    # Add vector overlay if provided
+    if vector_overlay is not None and not vector_overlay.empty:
+        vector_overlay.to_crs(crs_proj, inplace=True)
+        vector_overlay.plot(
+            ax=ax,
+            edgecolor=overlay_color,
+            facecolor="none",
+            linewidth=1,
+            transform=ccrs.epsg(int(src.crs.to_epsg())),
+        )
 
-        # Adding GeoDataFrame overlay
-        geodataframe.plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1)
-
-        # Adding map elements
-        add_north_arrow(ax)
-        add_scale_bar(ax, scale_length, src)
-
-        img1_path = "/mnt/data/image1_overlay.jpg"
-        plt.savefig(img1_path)
-        plt.close()
-
-    pdf.ln(10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Image 1 with Map Elements:", 0, 1)
-    pdf.image(img1_path, x=10, w=100)
-
-    # Load, process, and save Image 2 with bands and visualization elements
-    with rasterio.open(tiff2_path) as src:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        show((src, *bands2), ax=ax)
-
-        # Adding GeoDataFrame overlay
-        geodataframe.plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1)
-
-        # Adding map elements
-        add_north_arrow(ax)
-        add_scale_bar(ax, scale_length, src)
-
-        img2_path = "/mnt/data/image2_overlay.jpg"
-        plt.savefig(img2_path)
-        plt.close()
-
-    pdf.ln(10)
-    pdf.cell(0, 10, "Image 2 with Map Elements and Overlay:", 0, 1)
-    pdf.image(img2_path, x=10, w=100)
-
-    # Save the PDF
-    pdf.output(output_path)
-    print(f"Report generated successfully: {output_path}")
+    # Save the output as JPEG
+    plt.savefig(output_path, format="jpg", bbox_inches="tight", dpi=150)
+    plt.close(fig)
 
 
-def add_north_arrow(ax, x=0.9, y=0.1):
+# Check https://coolum001.github.io/cartopylayout.html
+def add_north_arrow(ax, x=0.95, y=0.95):
     """Adds a north arrow to a Matplotlib axis."""
     ax.annotate(
         "N",
         xy=(x, y),
         xytext=(x, y - 0.05),
         xycoords="axes fraction",
-        arrowprops=dict(facecolor="black", width=5, headwidth=15),
+        arrowprops=dict(
+            facecolor="black", width=4, headwidth=8, headlength=4, shrink=0.4
+        ),
         ha="center",
-        fontsize=12,
+        fontsize=10,
     )
 
 
-def add_scale_bar(ax, length, src, location=(0.1, 0.1), linewidth=3):
-    """Adds a scale bar to the map, where 'length' is in meters."""
-    # Get the spatial resolution of the raster in meters
-    scale_bar_length = length / src.res[0]  # Convert length to the raster's pixel scale
-    x0, x1, y0, y1 = ax.get_extent()
+def generate_deforestation_report_with_word_template(
+    image_path, geodataframe_path, template_path, output_path, scale_bar_length=200
+):
+    # Load Word template
+    doc = Document(template_path)
+    geodataframe = gpd.read_file(geodataframe_path)
 
-    ax.plot([x0, x0 + scale_bar_length], [y0, y0], color="k", linewidth=linewidth)
-    ax.text(
-        x0, y0 - (y1 - y0) * 0.02, f"{length} m", va="top", ha="center", fontsize=10
+    # Extract the first row's attributes from the GeoDataFrame
+    gdf_row = geodataframe.iloc[0]  # Assuming one row of relevant data
+    attributes = {
+        "admin1": gdf_row["admin1"],
+        "admin2": gdf_row["admin2"],
+        "admin3": gdf_row["admin3"],
+        "detection_date1": convert_julian_to_date(gdf_row["alert_date_min"]),
+        "detection_date2": convert_julian_to_date(gdf_row["alert_date_max"]),
+        "confirmation_date": datetime.now().strftime("%Y-%m-%d"),
+        "before_img": gdf_row["before_img"],
+        "after_img": gdf_row["after_img"],
+        # "alert_system_a": gdf_row["AlertSystemA"],
+        "alert_system_a": "GLAD Landsat",
+        # "alert_system_b": gdf_row["AlertSystemB"],
+        "alert_system_b": "CCDC",
+        "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
+    }
+
+    # Replace placeholders in the Word document
+    for para in doc.paragraphs:
+        for key, value in attributes.items():
+            if f"{{{key}}}" in para.text:
+                para.text = para.text.replace(f"{{{key}}}", str(value))
+
+    # Process Image 1
+    folder_temp = os.path.abspath(directory.module_dir / "temp")
+    img1_path_jpg = folder_temp + "/output_image1.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img1_path_jpg),
+        bands=(4, 3, 2),
+        vector_overlay=None,
+        overlay_color="red",
     )
 
-
-# Example usage:
-# generate_report("image1.tiff", "image2.tiff", geodataframe, "Amazonas", "Alert System A", "Alert System B", "2023-01-01", "2023-01-15", 100, "report.pdf")
-
-
-import json
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import rasterio
-from rasterio.plot import show
-from fpdf import FPDF
-from PIL import Image
-
-
-def generate_report_from_form(form_path, geodataframe):
-    # Load JSON report form
-    with open(form_path, "r") as f:
-        form = json.load(f)
-
-    # Extract parameters from form
-    title = form["report_title"]
-    district = form["district"]
-    alert_system_a = form["alert_system_a"]
-    alert_system_b = form["alert_system_b"]
-    detection_date = form["detection_date"]
-    confirmation_date = form["confirmation_date"]
-    area_loss = form["area_loss"]
-    scale_length = form["scale_length"]
-    image1_path = form["image1"]["path"]
-    image1_bands = tuple(form["image1"]["bands"])
-    image2_path = form["image2"]["path"]
-    image2_bands = tuple(form["image2"]["bands"])
-    output_path = form["output_path"]
-
-    # Initialize PDF
-    pdf = FPDF()
-    pdf.add_page()
-
-    # Title
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, title, 0, 1, "C")
-
-    # Introduction
-    intro_text = (
-        f"In the district {district} on {detection_date}, a deforestation alert was detected using "
-        f"{alert_system_a} and {alert_system_b} alert systems. This was confirmed on {confirmation_date}, "
-        f"with a total of {area_loss} hectares of tree cover loss confirmed using the provided images."
+    # Process Image 2
+    img2_path_jpg = folder_temp + "/output_image2.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img2_path_jpg),
+        bands=(8, 7, 6),
+        vector_overlay=None,
+        overlay_color="red",
     )
 
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 10, intro_text)
+    # Process Image 2
+    img3_path_jpg = folder_temp + "/output_image3.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img3_path_jpg),
+        bands=(8, 7, 6),
+        vector_overlay=geodataframe,
+        overlay_color="red",
+    )
 
-    # Load, process, and save Image 1 with bands and visualization elements
-    with rasterio.open(image1_path) as src:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        show((src, *image1_bands), ax=ax)
+    # Insert images in place of placeholders
+    for para in doc.paragraphs:
+        if "[Placeholder for Image 1]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img1_path_jpg, width=Pt(250))
 
-        # Adding GeoDataFrame overlay
-        geodataframe.plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1)
+        elif "[Placeholder for Image 2]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img2_path_jpg, width=Pt(250))
 
-        # Adding map elements
-        add_north_arrow(ax)
-        add_scale_bar(ax, scale_length, src)
+        elif "[Placeholder for Image 3]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img3_path_jpg, width=Pt(250))
 
-        img1_path = "/mnt/data/image1_overlay.jpg"
-        plt.savefig(img1_path)
-        plt.close()
-
-    pdf.ln(10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "Image 1 with Map Elements:", 0, 1)
-    pdf.image(img1_path, x=10, w=100)
-
-    # Load, process, and save Image 2 with bands and visualization elements
-    with rasterio.open(image2_path) as src:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        show((src, *image2_bands), ax=ax)
-
-        # Adding GeoDataFrame overlay
-        geodataframe.plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1)
-
-        # Adding map elements
-        add_north_arrow(ax)
-        add_scale_bar(ax, scale_length, src)
-
-        img2_path = "/mnt/data/image2_overlay.jpg"
-        plt.savefig(img2_path)
-        plt.close()
-
-    pdf.ln(10)
-    pdf.cell(0, 10, "Image 2 with Map Elements and Overlay:", 0, 1)
-    pdf.image(img2_path, x=10, w=100)
-
-    # Save the PDF
-    pdf.output(output_path)
+    # Save the report as a Word document
+    doc.save(output_path)
     print(f"Report generated successfully: {output_path}")
-
-
-def add_north_arrow(ax, x=0.9, y=0.1):
-    """Adds a north arrow to a Matplotlib axis."""
-    ax.annotate(
-        "N",
-        xy=(x, y),
-        xytext=(x, y - 0.05),
-        xycoords="axes fraction",
-        arrowprops=dict(facecolor="black", width=5, headwidth=15),
-        ha="center",
-        fontsize=12,
-    )
-
-
-def add_scale_bar(ax, length, src, location=(0.1, 0.1), linewidth=3):
-    """Adds a scale bar to the map, where 'length' is in meters."""
-    # Get the spatial resolution of the raster in meters
-    scale_bar_length = length / src.res[0]  # Convert length to the raster's pixel scale
-    x0, x1, y0, y1 = ax.get_extent()
-
-    ax.plot([x0, x0 + scale_bar_length], [y0, y0], color="k", linewidth=linewidth)
-    ax.text(
-        x0, y0 - (y1 - y0) * 0.02, f"{length} m", va="top", ha="center", fontsize=10
-    )
-
-
-# Example usage:
-# generate_report_from_form("report_form.json", geodataframe)

@@ -19,20 +19,8 @@ class AlertAnalysisModel(model.Model):
     before_planet_monthly_images = Any(None).tag(sync=True)
     "List of available before images from planet monthly, just for current alert"
 
-    before_sentinel2_images = Any(None).tag(sync=True)
-    "List of available before images from sentinel 2 img, just for current alert"
-
-    before_planet_daily_images = Any(None).tag(sync=True)
-    "List of available before images from planet daily, just for current alert"
-
     after_planet_monthly_images = Any(None).tag(sync=True)
     "List of available after images from planet monthly, just for current alert"
-
-    after_sentinel2_images = Any(None).tag(sync=True)
-    "List of available after images from sentinel 2 img, just for current alert"
-
-    after_planet_daily_images = Any(None).tag(sync=True)
-    "List of available after images from planet daily, just for current alert"
 
     before_img = Any(None).tag(sync=True)
     "Path to downloaded before img"
@@ -48,3 +36,9 @@ class AlertAnalysisModel(model.Model):
 
     alert_report = Any(None).tag(sync=True)
     "Path to reach pdf/word report file generated"
+
+    def export_dictionary(self):
+        dictionary = {
+            "actual_alert_id": self.actual_alert_id,
+        }
+        return dictionary

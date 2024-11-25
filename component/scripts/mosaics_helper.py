@@ -5,12 +5,26 @@ import geemap
 import os
 import pathlib
 import zipfile
-from datetime import datetime
 import ast
-
+import numpy as np
 
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from operator import itemgetter
+from ipyleaflet import GeoData
+
+
+def convert_julian_to_date(julian_date):
+    # Split the input string into year and julian day
+    julian_date_str = "%.3f" % julian_date
+    year_str, julian_str = julian_date_str.split(".")
+    year = int(year_str)
+
+    # Calculate the date by adding the julian day to the beginning of the year
+    date = datetime(year, 1, 1) + timedelta(days=int(julian_str) - 1)
+
+    # Return the formatted date string
+    return date.strftime("%Y-%m-%d")
 
 
 def process_decimal_date(decimal_date):
@@ -26,46 +40,108 @@ def process_decimal_date(decimal_date):
     return date.strftime("%Y-%m-%d")
 
 
-def get_five_dates(input_date):
+def is_future_date(target_date_str):
+    """
+    Check if the given date string is in the future compared to today's date.
+
+    Parameters:
+        target_date_str (str): The target date in the format 'YYYY-MM-DD'.
+
+    Returns:
+        bool: True if the target date is greater than today's date, False otherwise.
+    """
+    today = datetime.now().date()
+    target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    return target_date > today
+
+
+def get_planet_dates(input_date1, input_date2):
     # Ensure input_date is a datetime object
-    if isinstance(input_date, str):
-        input_date = datetime.strptime(input_date, "%Y-%m-%d")
+    if isinstance(input_date1, str):
+        input_date1 = datetime.strptime(input_date1, "%Y-%m-%d")
 
-    # 1. First day of the current month
-    first_day_current_month = input_date.replace(day=1)
+    if isinstance(input_date2, str):
+        input_date2 = datetime.strptime(input_date2, "%Y-%m-%d")
 
-    # 2. First day of the next month
-    next_month = first_day_current_month + relativedelta(months=+1)
+    # 1. First day of initial detection date
+    first_day_current_month = input_date1.replace(day=1)
 
-    # 3. First day of the previous month
-    prev_month = first_day_current_month + relativedelta(months=-1)
+    # 2. Second day of the next month from initial detection date
+    next_month = (
+        first_day_current_month + relativedelta(months=+1) + relativedelta(days=+1)
+    )
 
-    # 4.  First day of 2 month after
-    next_month2 = first_day_current_month + relativedelta(months=+2)
+    # 4. First day of 5 month before
+    prev_month5 = first_day_current_month + relativedelta(months=-5)
 
-    # 5. First day of 2 month before
-    prev_month2 = first_day_current_month + relativedelta(months=-1)
+    # 5. First day of final detection date
+    first_day_current_month2 = input_date2.replace(day=1)
 
-    return [first_day_current_month, next_month, next_month2, prev_month, prev_month2]
+    # 5. Second day of 3 month after last detection date
+    next_3month = (
+        first_day_current_month2 + relativedelta(months=3) + relativedelta(days=+1)
+    )
 
-
-def filter_older_dates(date_list, comparison_date):
-    # Ensure comparison_date is a datetime object
-    if isinstance(comparison_date, str):
-        comparison_date = datetime.strptime(comparison_date, "%Y-%m-%d")
-
-    # Convert the dates in the list to datetime objects if necessary
-    date_list = [
-        datetime.strptime(d, "%Y-%m-%d") if isinstance(d, str) else d for d in date_list
+    return [
+        prev_month5.strftime("%Y-%m-%d"),
+        next_month.strftime("%Y-%m-%d"),
+        first_day_current_month.strftime("%Y-%m-%d"),
+        next_3month.strftime("%Y-%m-%d"),
     ]
 
-    # Filter out the dates that are older than the comparison_date
-    older_dates = [d.strftime("%Y-%m-%d") for d in date_list if d < comparison_date]
 
-    return older_dates
+def get_sentinel2_dates(input_date1, input_date2):
+    # Ensure input_date is a datetime object
+    if isinstance(input_date1, str):
+        input_date1 = datetime.strptime(input_date1, "%Y-%m-%d")
+
+    if isinstance(input_date2, str):
+        input_date2 = datetime.strptime(input_date2, "%Y-%m-%d")
+
+    # 1. First day of initial detection date
+    first_day_current_month = input_date1.replace(day=1)
+
+    # 2. Second day of the next month from initial detection date
+    next_month = (
+        first_day_current_month + relativedelta(months=+1) + relativedelta(days=+1)
+    )
+
+    # 4. First day of 3 month before
+    prev_month3 = first_day_current_month + relativedelta(months=-2)
+
+    # 5. First day of final detection date
+    first_day_current_month2 = input_date2.replace(day=1)
+
+    # 5. Second day of 3 month after last detection date
+    next_3month = (
+        first_day_current_month2 + relativedelta(months=2) + relativedelta(days=+1)
+    )
+
+    return [
+        prev_month3.strftime("%Y-%m-%d"),
+        input_date1.strftime("%Y-%m-%d"),
+        first_day_current_month2.strftime("%Y-%m-%d"),
+        next_3month.strftime("%Y-%m-%d"),
+    ]
 
 
-def reEscalePlanet(image):
+# def filter_older_dates(date_list, comparison_date):
+#     # Ensure comparison_date is a datetime object
+#     if isinstance(comparison_date, str):
+#         comparison_date = datetime.strptime(comparison_date, "%Y-%m-%d")
+
+#     # Convert the dates in the list to datetime objects if necessary
+#     date_list = [
+#         datetime.strptime(d, "%Y-%m-%d") if isinstance(d, str) else d for d in date_list
+#     ]
+
+#     # Filter out the dates that are older than the comparison_date
+#     older_dates = [d.strftime("%Y-%m-%d") for d in date_list if d < comparison_date]
+
+#     return older_dates
+
+
+def scalePlanet(image):
     rgb = image.select(["B", "G", "R"])
     nir = image.select(["N"])
 
@@ -81,12 +157,13 @@ def reEscalePlanet(image):
     return result
 
 
-def reEscaleS2(image):
+def scaleS2(image):
+    image = image.select(["B2", "B3", "B4", "B8"], ["B", "G", "R", "N"])
     rgb = image.select(["B", "G", "R"])
     nir = image.select(["N"])
 
     expression1 = "min(2540, rgb / 2) / 10"
-    expression2 = "min(2540, nir / 2.5) / 10"
+    expression2 = "min(2540, nir / 2.2) / 10"
 
     rgb_rscl = rgb.expression(expression1, {"rgb": rgb}).toUint8()
     nir_rscl = (
@@ -97,11 +174,46 @@ def reEscaleS2(image):
     return result
 
 
-def download_both_images(image1, image2, image_name):
+def scaleS2v2(image):
+    image = image.select(["B2", "B3", "B4", "B8"], ["B", "G", "R", "N"])
+    band1 = image.select("B").subtract(100).multiply(0.7)
+    band2 = image.select("G").multiply(0.6)
+    band3 = image.select("R").multiply(0.8)
+    band4 = image.select("N").add(600).multiply(0.85)
+
+    image_adj = band1.addBands(band2).addBands(band3).addBands(band4)
+    rgb = image_adj.select(["B", "G", "R"])
+    nir = image_adj.select(["N"])
+
+    expression1 = "min(2540, rgb) / 10"
+    expression2 = "min(2540, nir / 3.937) / 10"
+
+    rgb_rscl = rgb.expression(expression1, {"rgb": rgb}).toUint8()
+    nir_rscl = (
+        nir.expression(expression2, {"nir": nir}).toUint8().select(["constant"], ["N"])
+    )
+
+    result = rgb_rscl.addBands(nir_rscl)
+    return result
+
+
+def download_both_images(image1, image2, image_name, source1, source2):
     from geemap import download_ee_image
     import ee
 
-    download_ee_image(image1.addBands(image2), image_name, scale=4.77, crs="EPSG:3857")
+    if source1 == "Sentinel 2":
+        rimage1 = scaleS2v2(image1)
+    elif source1 == "Planet NICFI":
+        rimage1 = scalePlanet(image1)
+
+    if source2 == "Sentinel 2":
+        rimage2 = scaleS2v2(image2)
+    elif source2 == "Planet NICFI":
+        rimage2 = scalePlanet(image2)
+
+    download_ee_image(
+        rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857"
+    )
     return image_name
 
 
@@ -114,31 +226,31 @@ def download_both_images(image1, image2, image_name):
 #     return rasters
 
 
-def sentinel2_individual_images(aoi, dates, text):
-    # Sentinel 2 collections
-    s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-    csPlus = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
-    s2List = ee.List([])
+# def sentinel2_individual_images(aoi, dates, text):
+#     # Sentinel 2 collections
+#     s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+#     csPlus = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED")
+#     s2List = ee.List([])
 
-    def changeBandNameS2(image):
-        return image.select(["B2", "B3", "B4", "B8"], ["blue", "green", "red", "nir"])
+#     def changeBandNameS2(image):
+#         return image.select(["B2", "B3", "B4", "B8"], ["blue", "green", "red", "nir"])
 
-    # Cloud Masks parameters
-    QA_BAND = "cs_cdf"
-    CLEAR_THRESHOLD = 0.65
+#     # Cloud Masks parameters
+#     QA_BAND = "cs_cdf"
+#     CLEAR_THRESHOLD = 0.65
 
-    def maskCLouds(img):
-        mask = img.select(QA_BAND).gte(CLEAR_THRESHOLD)
-        image = changeBandNameS2(img)
-        result = image.updateMask(mask)
-        return result
+#     def maskCLouds(img):
+#         mask = img.select(QA_BAND).gte(CLEAR_THRESHOLD)
+#         image = changeBandNameS2(img)
+#         result = image.updateMask(mask)
+#         return result
 
-    filterCollection = (
-        s2.filterBounds(aoi)
-        .filterDate(startDate, endDate)
-        .ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudCover)
-        .linkCollection(csPlus, [QA_BAND])
-    )
+#     filterCollection = (
+#         s2.filterBounds(aoi)
+#         .filterDate(startDate, endDate)
+#         .ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudCover)
+#         .linkCollection(csPlus, [QA_BAND])
+#     )
 
 
 def raster_to_gdf(raster_path, output_epsg, threshold):
@@ -337,7 +449,6 @@ def apply_dl_model(image, model):
     import tensorflow as tf
     from matplotlib import pyplot as plt
 
-    # from patchify import patchify, unpatchify
     from tensorflow.keras import layers, models
     from tensorflow.keras import backend as K
     from MightyMosaic import MightyMosaic
@@ -351,6 +462,9 @@ def apply_dl_model(image, model):
         img_array2 = img_array / 255
         img_array3 = np.transpose(img_array2, (1, 2, 0))
         return img_array3.astype(np.float32)
+
+    if not os.path.exists(image):
+        raise Exception("First download selected images.")
 
     # Input large image
     input_image = image
@@ -456,3 +570,200 @@ def add_files_to_zip(zip_filename, file1, file2, file3):
         zipf.write(file2)
         zipf.write(file3)
     # print(f"Files {file1}, {file2}, {file3} have been added to {zip_filename}")
+
+
+def getPlanetMonthly(geometry, date1, date2):
+    planetSA = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/americas")
+    planetAF = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/africa")
+    planetAS = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/asia")
+
+    lista2 = [
+        "American Samoa",
+        "Arunachal Pradesh",
+        "Ashmore and Cartier Islands",
+        "Baker Island",
+        "Bangladesh",
+        "Bhutan",
+        "British Indian Ocean Territory",
+        "Brunei Darussalam",
+        "Cambodia",
+        "Christmas Island",
+        "Cocos (Keeling) Islands",
+        "Cook Islands",
+        "Fiji",
+        "French Polynesia",
+        "Guam",
+        "Howland Island",
+        "India",
+        "Indonesia",
+        "Jarvis Island",
+        "Johnston Atoll",
+        "Kingman Reef",
+        "Kiribati",
+        "Lao People's Democratic Republic",
+        "Malaysia",
+        "Maldives",
+        "Marshall Islands",
+        "Micronesia (Federated States of)",
+        "Myanmar",
+        "Nauru",
+        "Nepal",
+        "Niue",
+        "Northern Mariana Islands",
+        "Palau",
+        "Palmyra Atoll",
+        "Papua New Guinea",
+        "Paracel Islands",
+        "Philippines",
+        "Samoa",
+        "Scarborough Reef",
+        "Singapore",
+        "Solomon Islands",
+        "Spratly Islands",
+        "Sri Lanka",
+        "Thailand",
+        "Timor-Leste",
+        "Tokelau",
+        "Tonga",
+        "Tuvalu",
+        "Vanuatu",
+        "Viet Nam",
+        "Wake Island",
+        "Wallis and Futuna",
+    ]
+
+    footprint_asia = (
+        ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0")
+        .filter(ee.Filter.inList("ADM0_NAME", lista2))
+        .geometry()
+    )
+    test = ee.Algorithms.If(
+        footprint_asia.intersects(geometry, 10),
+        # True case
+        planetAS,
+        # False case
+        planetSA.merge(planetAF),
+    )
+    selected_planet = ee.ImageCollection(test)
+
+    planet_filtered_collection = selected_planet.filterDate(date1, date2).filterBounds(
+        geometry
+    )
+
+    # Retrieve all image IDs with a single getInfo call
+    image_ids = planet_filtered_collection.aggregate_array("system:id").getInfo()
+    elements = []
+
+    if len(image_ids) > 0:
+        # Process each image ID to format the name
+        for image_id in image_ids:
+            # Split the image ID into parts
+            parts = image_id.split("/")
+            # Extract region and date parts
+            region_part = parts[-2].title()
+            date_part = parts[-1].split("_")[-2]
+            # Parse year and month
+            year = date_part[:4]
+            month = int(date_part[5:7])
+
+            date_str = date_part + "-01"
+            date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
+
+            # Format the name
+            name = f"Planet Monthly {region_part} {date_str2}"
+            # Create image to display
+            planet_clip = ee.Image(image_id)  ##.clip(geometry)
+
+            # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
+            t2 = ee.Number(planet_clip.get("system:time_end"))
+            t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
+
+            # dictionary= {'value': name, 'image_id' : image_id, 'ee_image': planet_clip, 'milis': t3, 'source': 'Planet NICFI',  'cloud_cover':'Not available'}
+            dictionary = {
+                "value": name,
+                "image_id": image_id,
+                "milis": t3,
+                "source": "Planet NICFI",
+                "cloud_cover": "Not available",
+            }
+            elements.append(dictionary)
+
+    elif len(image_ids) == 0 and is_future_date(date2):
+
+        image_id = (
+            selected_planet.sort("system:time_end", false)
+            .first()
+            .get("system:id")
+            .getInfo()
+        )
+        # Split the image ID into parts
+        parts = image_id.split("/")
+        # Extract region and date parts
+        region_part = parts[-2].title()
+        date_part = parts[-1].split("_")[-2]
+        # Parse year and month
+        year = date_part[:4]
+        month = int(date_part[5:7])
+
+        date_str = date_part + "-01"
+        date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
+
+        # Format the name
+        name = f"Planet Monthly {region_part} {date_str2}"
+        # Create image to display
+        planet_clip = ee.Image(image_id)
+
+        # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
+        t2 = ee.Number(planet_clip.get("system:time_end"))
+        t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
+        dictionary = {
+            "value": name,
+            "image_id": image_id,
+            "milis": t3,
+            "source": "Planet NICFI",
+            "cloud_cover": "Not available",
+        }
+        elements.append(dictionary)
+
+    return elements
+
+
+def getIndividualS2(geometry, date1, date2):
+    s2 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+    s2_filtered = (
+        s2.filterDate(date1, date2)
+        .filterBounds(geometry)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 90))
+    )
+
+    # Retrieve all unique Generation time values
+    s2_dates_list = s2_filtered.aggregate_array("GENERATION_TIME").getInfo()
+    elements = []
+
+    if len(s2_dates_list) > 0:
+        # Process each unique Generation time to get the mosaic
+
+        for s2_date in s2_dates_list:
+            # Create image to display
+            s2_same_date = s2_filtered.filter(ee.Filter.eq("GENERATION_TIME", s2_date))
+            # s2_same_date_clip = s2_same_date.mosaic().clip(geometry)
+
+            # Calculate properties of images
+            mean_cloud = (
+                s2_same_date.aggregate_mean("CLOUDY_PIXEL_PERCENTAGE")
+                .format("%.2f")
+                .getInfo()
+            )
+            date = datetime.fromtimestamp(s2_date / 1000).strftime("%Y-%m-%d")
+            name = f"Sentinel 2 {date} "
+
+            dictionary = {
+                "value": name,
+                "image_id": s2_date,
+                "milis": s2_date,
+                "source": "Sentinel 2",
+                "cloud_cover": mean_cloud,
+            }
+            elements.append(dictionary)
+
+    return elements

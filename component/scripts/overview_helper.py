@@ -1,106 +1,15 @@
+from ipyleaflet import Marker, AwesomeIcon, Map, Popup, MarkerCluster, WidgetControl
+import ipywidgets as widgets
+from ipywidgets import HTML, HBox, VBox, Label, Button, Layout
+from shapely.geometry import Point, Polygon
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
-from ipyleaflet import GeoJSON, AwesomeIcon, Marker, GeoData, Popup, MarkerCluster
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
-import ipywidgets
+from datetime import datetime, timedelta
+from ipyevents import Event
 
-# Function to convert list of polygons to geodataframe
-def convert_to_geopandas(polygon_features):
-    # Convert polygon features into GeoDataFrame and calculate centroids
-    combined_features = []
-
-    for feature in polygon_features:
-        polygon = Polygon(feature["geometry"]["coordinates"][0])
-
-        # Extract properties and add relevant information
-        properties = feature["properties"]
-        properties["gee_id"] = feature["id"]
-        properties["bounding_box"] = polygon
-        properties["point"] = polygon.centroid  # Add centroid as 'point'
-
-        combined_features.append(properties)
-
-    # Create GeoDataFrame
-    gdf = gpd.GeoDataFrame(combined_features, geometry="point")
-
-    # Add additional columns with default values
-    gdf["status"] = "Not reviewed"
-    gdf["before_img"] = pd.Series(dtype="object")
-    gdf["before_img_info"] = pd.Series(dtype="object")
-    gdf["after_img"] = pd.Series(dtype="object")
-    gdf["after_img_info"] = pd.Series(dtype="object")
-    gdf["alert_polygon"] = pd.Series(dtype="object")
-    gdf["area_ha"] = pd.Series(dtype="float")
-    gdf["description"] = pd.Series(dtype="object")
-
-    # Save gdf to file
-    # gdf.set_crs(epsg = '4326', allow_override=True, inplace=True).to_file(gpkg_name, driver='GPKG')
-
-    # Check result
-    return gdf
-
-
-# Function to get the color based on the dictionary and handle missing values
-def get_color(value, color_dict):
-    if value is None or value not in color_dict:
-        return "gray"  # Default color for None or missing value
-    return color_dict[value]
-
-
-def create_grouped_layers(geodataframe, field, color_dict, m):
-    """
-    Function to read a GeoDataFrame, separate it into unique groups based on a field,
-    and create GeoJSON layers for each group with fill colors based on a color dictionary.
-    If the value is None or missing in the dictionary, set the color to gray.
-
-    Parameters:
-    geodataframe (gpd.GeoDataFrame): Input GeoDataFrame
-    field (str): Field name to group by
-    color_dict (dict): Dictionary mapping field values to colors
-    """
-
-    # Get the unique values in the specified field
-    unique_values = geodataframe[field].unique()
-    # Loop through each unique value and create GeoJSON layers
-    for value in unique_values:
-        # Filter GeoDataFrame for the current unique value
-        group_gdf = geodataframe[geodataframe[field] == value]
-
-        # Convert the filtered GeoDataFrame to GeoJSON format
-        geojson_data = group_gdf.__geo_interface__
-
-        # Get the color for this group based on the dictionary
-        color = get_color(value, color_dict)
-
-        # Create the GeoJSON layer for this group
-        geo_json_layer = GeoData(
-            geo_dataframe=group_gdf.drop(columns=["bounding_box", "alert_polygon"]),
-            style={
-                "color": "black",
-                "radius": 8,
-                "fillColor": color,
-                "opacity": 0.5,
-                "weight": 1.9,
-                "dashArray": "2",
-                "fillOpacity": 0.6,
-            },
-            point_style={
-                "radius": 5,
-                "color": "black",
-                "fillOpacity": 0.8,
-                "fillColor": color,
-                "weight": 3,
-            },
-            hover_style={"fillColor": "yellow"},
-            name=f'{field}: {value if value is not None else "Unknown"}',
-        )
-
-        # Add the GeoJSON layer to the map
-        m.add_layer(geo_json_layer)
-
-    # Display the map
-    return m
+import ipyleaflet
+import ipyvuetify as v
+from sepal_ui.mapping.menu_control import MenuControl
 
 
 def calculateAlertClasses(gpdf):
@@ -114,181 +23,276 @@ def calculateAlertClasses(gpdf):
     return result
 
 
-# Taken from leafmap  https://github.com/opengeos/leafmap/blob/f576896844a668b3bf6cd20c744d646696b3745e/leafmap/leafmap.py#L3190
+def convert_julian_to_date(julian_date):
+    # Split the input string into year and julian day
+    julian_date_str = "%.3f" % julian_date
+    year_str, julian_str = julian_date_str.split(".")
+    year = int(year_str)
+
+    # Calculate the date by adding the julian day to the beginning of the year
+    date = datetime(year, 1, 1) + timedelta(days=int(julian_str) - 1)
+
+    # Return the formatted date string
+    return date.strftime("%Y-%m-%d")
 
 
-def add_point_layer(
-    mapa,
-    geodataframe,
-    popup,
-    layer_name,
-    **kwargs,
-) -> None:
-    """Adds a point layer to the map with a popup attribute.
-
-    Args:
-        geodataframe,
-        popup (str | list, optional): Column name(s) to be used for popup. Defaults to None.
-        layer_name (str, optional): A layer name to use. Defaults to "Marker Cluster".
-
-    Raises:
-        ValueError: If the specified column name does not exist.
-        ValueError: If the specified column names do not exist.
+def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_function):
     """
-    gdf = geodataframe
-    df = gdf.to_crs(epsg="4326")
-    col_names = df.columns.values.tolist()
-
-    df["x"] = df.geometry.x
-    df["y"] = df.geometry.y
-
-    points = list(zip(df["y"], df["x"]))
-
-    if popup is not None:
-        if isinstance(popup, str):
-            labels = df[popup]
-            markers = [
-                Marker(
-                    location=point,
-                    draggable=False,
-                    popup=ipywidgets.HTML(str(labels[index])),
-                )
-                for index, point in enumerate(points)
-            ]
-        elif isinstance(popup, list):
-            labels = []
-            for i in range(len(points)):
-                label = ""
-                for item in popup:
-                    label = label + str(item) + ": " + str(df[item][i]) + "<br>"
-                labels.append(label)
-            df["popup"] = labels
-
-            markers = [
-                Marker(
-                    location=point,
-                    draggable=False,
-                    popup=ipywidgets.HTML(labels[index]),
-                )
-                for index, point in enumerate(points)
-            ]
-
-    else:
-        markers = [Marker(location=point, draggable=False) for point in points]
-
-    marker_cluster = MarkerCluster(markers=markers, name=layer_name)
-    mapa.add_layer(marker_cluster)
-
-    mapa.default_style = {"cursor": "default"}
-    return mapa
-
-
-def create_grouped_layers_with_popup(
-    geodataframe, field, color_dict, m, popup_columns=None
-):
-    """
-    Function to read a GeoDataFrame, separate it into unique groups based on a field,
-    create GeoJSON layers for each group with fill colors based on a color dictionary,
-    and add popups for points using the specified popup columns.
+    Create ipyleaflet.Marker objects from a GeoDataFrame and group them by unique attribute.
 
     Parameters:
-    geodataframe (gpd.GeoDataFrame): Input GeoDataFrame
-    field (str): Field name to group by
-    color_dict (dict): Dictionary mapping field values to colors
-    m (Map): Map object to add the layers to
-    popup_columns (str or list, optional): Column name(s) to be used for popup. Defaults to None.
+        gdf (GeoDataFrame): The GeoDataFrame containing the data.
+        point_col (str): The name of the geometry column containing point geometries.
+        title_cols (list of str): List of column names to join into a title string.
+        icon_map (dict): Dictionary mapping unique attribute values to icon configurations.
+        group_by_col (str): Column name to group markers by.
+
+    Returns:
+        dict: A dictionary where keys are unique values of `group_by_col` and values are lists of Marker objects.
     """
+    icon_dictionary = {
+        "Not reviewed": AwesomeIcon(
+            name="fa-light fa-circle-question", marker_color="gray", icon_color="white"
+        ),
+        "Confirmed": AwesomeIcon(
+            name="fa-check-circle", marker_color="red", icon_color="white"
+        ),
+        "Maybe": AwesomeIcon(
+            name="fa-flag-o", marker_color="orange", icon_color="white"
+        ),
+        "False Positive": AwesomeIcon(
+            name=" fa-ban", marker_color="green", icon_color="black"
+        ),
+    }
 
-    # Get the unique values in the specified field
-    unique_values = geodataframe[field].unique()
+    markers_dict = {}
 
-    # Loop through each unique value and create GeoJSON layers
-    for value in unique_values:
-        # Filter GeoDataFrame for the current unique value
-        group_gdf = geodataframe[geodataframe[field] == value]
+    for _, row in gdf.iterrows():
+        # Extract point coordinates from the geometry
+        if isinstance(row[point_col], Point):
+            location = (
+                row[point_col].y,
+                row[point_col].x,
+            )  # Leaflet uses (lat, lon) format
 
-        # Convert the filtered GeoDataFrame to GeoJSON format
-        geojson_data = group_gdf.__geo_interface__
+            # Choose icon based on the icon_map dictionary
+            icon = icon_dictionary.get(row[group_by_col], {})
 
-        # Get the color for this group based on the dictionary
-        color = color_dict.get(value, "gray")
+            index = row.name
 
-        # Create the GeoJSON layer for this group
-        geo_json_layer = GeoData(
-            geo_dataframe=group_gdf,
-            style={
-                "color": "black",
-                "radius": 8,
-                "fillColor": color,
-                "opacity": 0.5,
-                "weight": 1.9,
-                "dashArray": "2",
-                "fillOpacity": 0.6,
-            },
-            point_style={
-                "radius": 5,
-                "color": "black",
-                "fillOpacity": 0.8,
-                "fillColor": color,
-                "weight": 3,
-            },
-            hover_style={"fillColor": "yellow"},
-            name=f'{field}: {value if value is not None else "Unknown"}',
-        )
-
-        # Add the GeoJSON layer to the map
-        m.add_layer(geo_json_layer)
-
-        # Add popup functionality if specified
-        if popup_columns is not None:
-            # Convert to the appropriate coordinate reference system (CRS)
-            df = group_gdf.to_crs(epsg="4326")
-
-            # Extract x and y coordinates from the geometry
-            df["x"] = df.geometry.x
-            df["y"] = df.geometry.y
-
-            points = list(zip(df["y"], df["x"]))
-
-            # Handle popups based on the type of popup_columns
-            if isinstance(popup_columns, str):
-                # Single column popup
-                labels = df[popup_columns].tolist()
-                markers = [
-                    Marker(
-                        location=point,
-                        draggable=False,
-                        popup=ipywidgets.HTML(str(labels[index])),
-                    )
-                    for index, point in enumerate(points)
-                ]
-            elif isinstance(popup_columns, list):
-                # Multiple column popups
-                labels = []
-                for i in range(len(points)):
-                    label = ""
-                    for item in popup_columns:
-                        label += f"{item}: {df[item][i]}<br>"
-                    labels.append(label)
-
-                markers = [
-                    Marker(
-                        location=point,
-                        draggable=False,
-                        popup=ipywidgets.HTML(labels[index]),
-                    )
-                    for index, point in enumerate(points)
-                ]
-            else:
-                # No popup columns provided
-                markers = [Marker(location=point, draggable=False) for point in points]
-
-            # Add the markers to a marker cluster and then add it to the map
-            marker_cluster = MarkerCluster(
-                markers=markers,
-                name=f'{field}: {value if value is not None else "Unknown"}',
+            # Create marker
+            marker = Marker(location=location, icon=icon, draggable=False)
+            message = HTML()
+            message.value = (
+                "<b>Start: </b> "
+                + convert_julian_to_date(row[title_cols[0]])
+                + " <b>End: </b>"
+                + convert_julian_to_date(row[title_cols[1]])
+                + " <b>ID: </b>"
+                + str(index)
             )
-            m.add_layer(marker_cluster)
+            # marker.popup = message
+            # Create a "Go" button for the popup
+            go_button = Button(
+                description="Go", button_style="success", layout=Layout(width="40px")
+            )
 
-    # Return the map with the added layers and popups
-    return m
+            # Attach the click handler to the button
+            go_button.on_click(lambda event, index=index: marker_popup_function(index))
+
+            # Combine HTML message and button in a VBox
+            # Center alignment for the VBox
+            popup_content = VBox(
+                [message, go_button],
+                layout=Layout(
+                    justify_content="center",  # Aligns items vertically to the center
+                    align_items="center",  # Aligns items horizontally to the center
+                    background_color="white",  # Background color
+                    # width='100%',              # Ensures the VBox takes the full width
+                    # height='100%'              # Ensures the VBox takes the full height
+                ),
+            )
+
+            # Create a popup and add it to the marker
+            marker.popup = Popup(child=popup_content, max_width=300)
+
+            # Group markers by unique attribute
+            group_value = row[group_by_col]
+            if group_value not in markers_dict:
+                markers_dict[group_value] = []
+            markers_dict[group_value].append(marker)
+
+    return markers_dict
+
+
+def add_marker_clusters_with_hover_button(map_object, data_dict):
+    # Dictionary to store the marker clusters associated with each category
+    marker_clusters = {}
+
+    # Create MarkerClusters for each category in the dictionary
+    for category, markers in data_dict.items():
+        marker_cluster = MarkerCluster(markers=markers, show_coverage_on_hover=False)
+        marker_clusters[category] = marker_cluster
+
+    # Function to handle checkbox changes
+    def toggle_layer(change, category):
+        if change["new"]:
+            # Add the marker cluster to the map when checkbox is checked
+            map_object.add_layer(marker_clusters[category])
+        else:
+            # Remove the marker cluster from the map when checkbox is unchecked
+            map_object.layers = [
+                layer
+                for layer in map_object.layers
+                if layer != marker_clusters[category]
+            ]
+
+    # Create a title for the widget
+    title_label = Label(
+        value="Marker control",
+        layout=widgets.Layout(
+            margin="0 0 10px 0",
+            display="flex",
+            justify_content="center",
+            font_weight="bold",
+        ),
+    )
+
+    # Create checkboxes for each category
+    checkboxes = {}
+    for category in data_dict.keys():
+        checkbox = widgets.Checkbox(
+            value=False,
+            description=category,
+            indent=False,
+            layout=widgets.Layout(width="100px"),
+        )
+        checkbox.observe(
+            lambda change, cat=category: toggle_layer(change, cat), names="value"
+        )
+        checkboxes[category] = checkbox
+
+    # Arrange checkboxes vertically in a VBox widget
+    checkbox_container = widgets.VBox(
+        [title_label] + list(checkboxes.values()),
+        layout=widgets.Layout(width="150px", padding="5px", border="solid 1px"),
+    )
+
+    # Create the button
+    button = widgets.Button(button_style="primary", icon="list")
+    # button.layout.width = "36px"
+
+    # Container for button and checkboxes
+    button_container = widgets.VBox([button])
+    button_container.layout.max_width = "300px"
+
+    # Event handler to show/hide checkboxes on hover
+    def handle_hover(event):
+        if event["type"] == "mouseenter":
+            button_container.children = [button, checkbox_container]
+        elif event["type"] == "mouseleave":
+            button_container.children = [button]
+
+    # Set up the hover events for the button container
+    hover_event = Event(
+        source=button_container, watched_events=["mouseenter", "mouseleave"]
+    )
+    hover_event.on_dom_event(handle_hover)
+
+    # Add the button container as a widget control on the map
+    widget_control = WidgetControl(widget=button_container, position="topright")
+    map_object.add_control(widget_control)
+
+    return map_object
+
+
+def add_marker_clusters_with_menucontrol(map_object, data_dict):
+    # Dictionary to store the marker clusters associated with each category
+    marker_clusters = {}
+
+    # Create MarkerClusters for each category in the dictionary
+    for category, markers in data_dict.items():
+        marker_cluster = MarkerCluster(markers=markers, show_coverage_on_hover=False)
+        marker_clusters[category] = marker_cluster
+        map_object.add_layer(marker_clusters[category])
+
+    # Function to handle checkbox changes
+    def toggle_layer(change, category):
+        if change["new"]:
+            # Add the marker cluster to the map when checkbox is checked
+            map_object.add_layer(marker_clusters[category])
+        else:
+            # Remove the marker cluster from the map when checkbox is unchecked
+            map_object.layers = [
+                layer
+                for layer in map_object.layers
+                if layer != marker_clusters[category]
+            ]
+
+    # Create checkboxes for each category using ipyvuetify checkboxes
+    checkboxes = {}
+    for category in data_dict.keys():
+        checkbox = v.Checkbox(v_model=False, label=category, dense=True)
+        checkbox.observe(
+            lambda change, cat=category: toggle_layer(change, cat), names="v_model"
+        )
+        checkboxes[category] = checkbox
+
+    # Arrange checkboxes vertically in a layout
+    checkbox_container = v.Container(
+        children=[checkboxes[cat] for cat in checkboxes],
+        class_="pa-3",
+        style_="padding: 5px; max-height: 300px; max-width: 300px; background-color: white;",
+    )
+
+    menu_control = MenuControl(
+        icon_content="mdi-layers",
+        position="topright",
+        card_content=checkbox_container,
+        card_title="Marker Control",
+    )
+    menu_control.set_size(
+        min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
+    )
+    map_object.add(menu_control)
+
+
+# Function to create the table rows based on a list of 4 numbers
+def create_table_rows(listaNumeros):
+    return [
+        v.Html(
+            tag="tr",
+            children=[
+                v.Html(tag="td", children=["Total Alerts"]),
+                v.Html(tag="td", children=[str(listaNumeros[0])]),
+            ],
+        ),
+        v.Html(
+            tag="tr",
+            children=[
+                v.Html(tag="td", children=["Reviewed Alerts"]),
+                v.Html(tag="td", children=[str(listaNumeros[1])]),
+            ],
+        ),
+        v.Html(
+            tag="tr",
+            children=[
+                v.Html(tag="td", children=["Confirmed Alerts"]),
+                v.Html(tag="td", children=[str(listaNumeros[2])]),
+            ],
+        ),
+        v.Html(
+            tag="tr",
+            children=[
+                v.Html(tag="td", children=["False Positives"]),
+                v.Html(tag="td", children=[str(listaNumeros[3])]),
+            ],
+        ),
+        v.Html(
+            tag="tr",
+            children=[
+                v.Html(tag="td", children=["Need further revision"]),
+                v.Html(tag="td", children=[str(listaNumeros[4])]),
+            ],
+        ),
+    ]
