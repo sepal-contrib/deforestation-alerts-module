@@ -9,7 +9,9 @@ import ast
 import numpy as np
 from datetime import datetime
 import json
+from shapely import wkt
 from component.parameter import directory
+from component.scripts.alert_filter_helper import check_alert_filter_inputs
 
 
 def generate_recipe_string():
@@ -108,10 +110,11 @@ def load_parameters_from_json(
     with open(file_name, "r") as json_file:
         model_parameters = json.load(json_file)
 
-    recipe_directory = model_parameters.get("recipe_folder", self.recipe_folder)
+    print(model_parameters)
     aux_model.import_from_dictionary(model_parameters)
     aoi_tile.load_saved_parameters(model_parameters)
-    aoi_tile.process_alerts()
+    app_tile_model.current_page_view = "aoi_tile"
+    aoi_tile.process_alerts2()
     alert_filter_tile.load_saved_parameters(model_parameters)
     (
         alert_source,
@@ -121,6 +124,11 @@ def load_parameters_from_json(
         user_max_number_alerts,
         user_selection_polygon,
     ) = check_alert_filter_inputs(alert_filter_tile)
+    alert_filter_tile.create_planet_images_dictionary(
+        aoi_date_model.feature_collection,
+        aoi_date_model.start_date,
+        aoi_date_model.end_date,
+    )
     alert_filter_tile.create_filtered_alert_raster(
         alert_source,
         user_min_alert_size,
@@ -129,11 +137,22 @@ def load_parameters_from_json(
         user_max_number_alerts,
         user_selection_polygon,
     )
-    analyzed_alerts_model.alerts_gdf = gpd.reaf_file(
-        recipe_directory + "/alert_db.gpkg"
+    app_tile_model.import_from_dictionary(model_parameters)
+    analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
+        app_tile_model.recipe_folder_path + "/alert_db.csv",
+        ["bounding_box", "point", "alert_polygon"]
     )
-    analyzed_alerts_model.actual_alert_id = model_parameters.get(
-        "actual_alert_id", self.actual_alert_id
-    )
-    app_tile_model.load_saved_parameters(model_parameters)
+    analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
+
+
+def load_gdf_from_csv (csv_file, geometry_columns_list):
+    # load encoded dataframe
+    df = pd.read_csv(csv_file)
+    # decode geometry columns as strings back into shapely objects
+    for c in geometry_columns_list:
+        df[c] = df[c].apply(lambda x: wkt.loads(x) if pd.notnull(x) and x != '' else None)
+    
+    # finally reconstruct geodataframe
+    gdf = gpd.GeoDataFrame(df)
+    return gdf

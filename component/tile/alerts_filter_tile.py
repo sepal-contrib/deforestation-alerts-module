@@ -246,8 +246,8 @@ class AlertsFilterTile(sw.Layout):
             # Reset map content
             self.map_2.remove_all()
             # Add content to map
-            self.map_2.add_ee_layer(self.aoi_date_model.aoi, name="AOI")
-            # self.map_2.centerObject(self.aoi_date_model.aoi)
+            self.map_2.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
+            # self.map_2.centerObject(self.aoi_date_model.feature_collection)
 
             for nombre in alerts_raster_dictionary:
                 self.map_2.add_ee_layer(
@@ -300,7 +300,7 @@ class AlertsFilterTile(sw.Layout):
         max_number_alerts,
         sorting,
     ):
-        print(pixel_size, min_size_pixels, self.selected_alerts_model.max_number_alerts)
+        #print(pixel_size, min_size_pixels, self.selected_alerts_model.max_number_alerts)
         thread = threading.Thread(
             target=lambda: self.assign_bb_full(
                 obtener_datos_gee_total_v2(
@@ -402,7 +402,7 @@ class AlertsFilterTile(sw.Layout):
         )
 
         # Generar poligono de area de estudio
-        poly = self.aoi_date_model.aoi
+        poly = self.aoi_date_model.feature_collection
         # Grid for faster download
         poly_grid = poly.geometry().coveringGrid("EPSG:4326", 50000)
 
@@ -443,7 +443,7 @@ class AlertsFilterTile(sw.Layout):
             polygon, planet_mosaics_dates[0], planet_mosaics_dates[1]
         )
         planet_images_dict_after = getPlanetMonthly(
-            polygon, planet_mosaics_dates[2], planet_mosaics_dates[3]
+            polygon, planet_mosaics_dates[4], planet_mosaics_dates[3]
         )
         self.analyzed_alerts_model.before_planet_monthly_images = (
             planet_images_dict_before
@@ -451,8 +451,6 @@ class AlertsFilterTile(sw.Layout):
         self.analyzed_alerts_model.after_planet_monthly_images = (
             planet_images_dict_after
         )
-        # print(planet_images_dict_before)
-        # print(planet_images_dict_after)
 
     def create_recipe_directory(self):
         if self.app_tile_model.recipe_folder_path == "":
@@ -494,6 +492,11 @@ class AlertsFilterTile(sw.Layout):
         self.selected_alerts_model.alert_selection_polygons = user_selection_polygon
 
         self.create_recipe_directory()
+        self.create_planet_images_dictionary(
+            self.aoi_date_model.feature_collection,
+            self.aoi_date_model.start_date,
+            self.aoi_date_model.end_date,
+        )
         self.save_recipe_parameters()
         self.create_filtered_alert_raster(
             alert_source,
@@ -502,11 +505,6 @@ class AlertsFilterTile(sw.Layout):
             alert_sorting_method,
             user_max_number_alerts,
             user_selection_polygon,
-        )
-        self.create_planet_images_dictionary(
-            self.aoi_date_model.aoi,
-            self.aoi_date_model.start_date,
-            self.aoi_date_model.end_date,
         )
         self.create_vectors(
             alert_source,
@@ -517,20 +515,22 @@ class AlertsFilterTile(sw.Layout):
             user_selection_polygon,
         )
 
-    def load_saved_parameters(data):
+    def load_saved_parameters(self, data):
         self.card01.children[1].v_model = data.get(
-            "selected_alert_sources", self.selected_alert_sources
+            "selected_alert_sources"
         )
-        self.card02.children[1].v_model = data.get("min_area", self.min_area)
+        self.card02.children[1].v_model = data.get("min_area")
         self.card03.children[1].v_model = data.get(
-            "alert_selection_area", self.alert_selection_area
+            "alert_selection_area"
         )
         self.card06.children[1].v_model = data.get(
-            "alert_sorting_method", self.alert_sorting_method
+            "alert_sorting_method"
         )
-        self.drawn_item.data = data.get(
-            "alert_selection_polygons", self.alert_selection_polygons
+        drawn_selection_polygons = data.get(
+            "alert_selection_polygons")
+        self.drawn_item.data = drawn_selection_polygons.get(
+            "features", self.drawn_item.data
         )
         self.card04.children[1].v_model = data.get(
-            "max_number_alerts", self.max_number_alerts
+            "max_number_alerts"
         )

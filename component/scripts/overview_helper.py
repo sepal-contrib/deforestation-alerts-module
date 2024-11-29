@@ -96,9 +96,25 @@ def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_functi
             go_button = Button(
                 description="Go", button_style="success", layout=Layout(width="40px")
             )
-
+            # Define the click handler with a loading state
+            def on_button_click(event, index=None):
+                # Set the loading state
+                go_button.description = "Moving to alert..."
+                #go_button.button_style = "warning"
+                go_button.disabled = True
+            
+                # Perform the desired function (e.g., marker_popup_function)
+                marker_popup_function(index)
+            
+                # Reset the button after the task completes
+                go_button.description = "Go"
+                #go_button.button_style = "success"
+                go_button.disabled = False
+            
             # Attach the click handler to the button
-            go_button.on_click(lambda event, index=index: marker_popup_function(index))
+            #go_button.on_click(lambda event, index=index: marker_popup_function(index))
+            go_button.on_click(lambda event: on_button_click(event, index=index))
+
 
             # Combine HTML message and button in a VBox
             # Center alignment for the VBox

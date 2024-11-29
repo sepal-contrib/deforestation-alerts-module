@@ -12,6 +12,7 @@ from component.scripts.recipe_helper import (
     create_directory,
     load_parameters_from_json,
 )
+from component.parameter import directory
 
 init_ee()
 
@@ -60,7 +61,7 @@ class RecipeTile(sw.Layout):
 
         title2 = v.CardTitle(class_="pa-1 ma-1", children=["Load Recipe"])
         self.load_recipe_input = sw.FileInput(
-            class_="pa-1 ma-1 d-flex align-center", medium=True
+            class_="pa-1 ma-1 d-flex align-center", medium=True, extensions= ['.json'], folder = directory.module_dir
         )
         load_btn = sw.Btn(msg="Load", medium=True, class_="pa-1 ma-1")
         load_new_btn_2 = v.Row(
@@ -99,8 +100,10 @@ class RecipeTile(sw.Layout):
         widget.disabled = False  # Re-enable the button
 
     def load_recipe_button(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
         load_parameters_from_json(
-            self.load_recipe_input,
+            self.load_recipe_input.v_model,
             self.aux_model,
             self.aoi_date_model,
             self.selected_alerts_model,
@@ -109,3 +112,5 @@ class RecipeTile(sw.Layout):
             self.aoi_tile,
             self.alert_filter_tile,
         )
+        widget.loading = False  # Remove loading state
+        widget.disabled = False  # Re-enable the button

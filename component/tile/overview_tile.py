@@ -10,6 +10,7 @@ from sepal_ui.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
 from component.scripts.overview_helper import *
 from sepal_ui.mapping.layers_control import LayersControl
+from sepal_ui.mapping.menu_control import MenuControl
 from sepal_ui.mapping.map_btn import MapBtn
 import ee
 
@@ -69,17 +70,27 @@ class OverviewTile(sw.Layout):
         self.map_1.add_class("custom-map-class")
         self.map_1.add_basemap("SATELLITE")
         refresh_map_button = MapBtn("fa-light fa-rotate-right")
-        widget_refresh = WidgetControl(
+        self.widget_refresh = WidgetControl(
             widget=refresh_map_button, position="bottomright"
         )
-        self.map_1.add(widget_refresh)
         refresh_map_button.on_event("click", self.update_button)
+        self.map_1.add(self.widget_refresh)
+        menu_control = MenuControl(
+            icon_content="mdi-layers",
+            position="topright",
+            card_content=v.CardTitle(class_="pa-1 ma-1", children=["Cluster Control"]),
+            card_title="Marker Control",
+            )
+        menu_control.set_size(
+            min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
+        )
+        self.map_1.add(menu_control)
 
         # Side information labels
         section_title = v.CardTitle(class_="pa-1 ma-1", children=["General Overview"])
         self.dwn_all_btn = sw.DownloadBtn(text="AlertsDB", small=True)
         self.dwn_summary_btn = sw.DownloadBtn(text="Summary", small=True)
-        gpkg_name = self.app_tile_model.recipe_folder_path + "/alert_db.parquet"
+        gpkg_name = self.app_tile_model.recipe_folder_path + "/alert_db.csv"
         self.dwn_all_btn.set_url(path=gpkg_name)
 
         card01 = v.Card(
@@ -112,10 +123,15 @@ class OverviewTile(sw.Layout):
         ):
             self.children = self.children
         else:
+            center = self.map_1.center
+            zoom = self.map_1.zoom
             self.map_1.remove_all()
             self.map_1.remove(self.map_1.controls[-1])
-            self.map_1.add_ee_layer(self.aoi_date_model.aoi, name="AOI")
-
+            self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
+            self.map_1.center = center
+            self.map_1.zoom = zoom
+            #self.map_1.add(self.widget_refresh)
+            
             # Add centroids
             centroides_gdf = self.analyzed_alerts_model.alerts_gdf
             markers_dictionary = create_markers(

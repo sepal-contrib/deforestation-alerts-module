@@ -118,9 +118,14 @@ class AoiTile(sw.Layout):
         dictionary = self.alert_filter_model.alerts_dictionary
 
         # Save data to model
-        self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
+       #self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
+        self.aoi_date_model.admin = self.aoi_view.model.admin
+        self.aoi_date_model.asset_name = self.aoi_view.model.asset_name
+        self.aoi_date_model.method = self.aoi_view.model.method
+        self.aoi_date_model.asset_json = self.aoi_view.model.asset_json
         self.aoi_date_model.start_date = self.start_date.v_model
         self.aoi_date_model.end_date = self.end_date.v_model
+        self.aoi_date_model.set_object()
 
         # Generate list of available names and dictionary of filtered rasters
         self.alert_filter_model.available_alerts_list = (
@@ -137,7 +142,44 @@ class AoiTile(sw.Layout):
         )
         self.app_tile_model.current_page_view = "filter_alerts"
 
-    def load_saved_parameters(data):
-        self.aoi_view.model.feature_collection = data.get("aoi", self.aoi)
-        self.start_date.v_model = data.get("start_date", self.start_date)
-        self.end_date.v_model = data.get("end_date", self.end_date)
+    def process_alerts2(self):
+        # Check inputs
+        aoi, date1, date2 = check_aoi_inputs(self)
+        dictionary = self.alert_filter_model.alerts_dictionary
+
+        # Save data to model
+       #self.aoi_date_model.aoi = self.aoi_view.model.feature_collection
+        self.aoi_date_model.admin = self.aoi_view.model.admin
+        self.aoi_date_model.asset_name = self.aoi_view.model.asset_name
+        self.aoi_date_model.method = self.aoi_view.model.method
+        self.aoi_date_model.asset_json = self.aoi_view.model.asset_json
+        self.aoi_date_model.start_date = self.start_date.v_model
+        self.aoi_date_model.end_date = self.end_date.v_model
+        self.aoi_date_model.set_object()
+
+        # Generate list of available names and dictionary of filtered rasters
+        self.alert_filter_model.available_alerts_list = (
+            create_available_alert_dictionary(dictionary, aoi, date1, date2)
+        )
+        self.alert_filter_model.available_alerts_raster_list = (
+            create_filtered_alert_raster_dictionary(
+                self.alert_filter_model.available_alerts_list,
+                aoi,
+                date1,
+                date2,
+                self.aux_model.ccdc_layer,
+            )
+        )
+        self.app_tile_model.current_page_view = "filter_alerts"
+
+    def load_saved_parameters(self, data):
+        self.aoi_view.model.admin = data.get("aoi_admin")
+        self.aoi_view.model.asset_name = data.get("aoi_asset_name")
+        self.aoi_view.model.method = data.get("aoi_method")
+        self.aoi_view.model.asset_json = data.get("aoi_asset_json")
+        self.aoi_view.model.set_object()
+        self.map_1.addLayer(ee_object = self.aoi_view.model.feature_collection, name= 'aoi')
+        self.map_1.centerObject(self.aoi_view.model.feature_collection)
+        self.start_date.v_model = data.get("start_date")
+        self.end_date.v_model = data.get("end_date")
+        

@@ -71,22 +71,26 @@ def get_planet_dates(input_date1, input_date2):
         first_day_current_month + relativedelta(months=+1) + relativedelta(days=+1)
     )
 
-    # 4. First day of 5 month before
+    # 3. First day of 5 month before
     prev_month5 = first_day_current_month + relativedelta(months=-5)
 
-    # 5. First day of final detection date
+    # 4. First day of final detection date
     first_day_current_month2 = input_date2.replace(day=1)
 
     # 5. Second day of 3 month after last detection date
     next_3month = (
         first_day_current_month2 + relativedelta(months=3) + relativedelta(days=+1)
     )
+    # 6. First day of 1 month before first detection date
+    prev_1month = first_day_current_month + relativedelta(months=-1)
+
 
     return [
         prev_month5.strftime("%Y-%m-%d"),
         next_month.strftime("%Y-%m-%d"),
         first_day_current_month.strftime("%Y-%m-%d"),
         next_3month.strftime("%Y-%m-%d"),
+        prev_1month.strftime("%Y-%m-%d")
     ]
 
 
@@ -678,7 +682,6 @@ def getPlanetMonthly(geometry, date1, date2):
             t2 = ee.Number(planet_clip.get("system:time_end"))
             t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
 
-            # dictionary= {'value': name, 'image_id' : image_id, 'ee_image': planet_clip, 'milis': t3, 'source': 'Planet NICFI',  'cloud_cover':'Not available'}
             dictionary = {
                 "value": name,
                 "image_id": image_id,
@@ -689,41 +692,40 @@ def getPlanetMonthly(geometry, date1, date2):
             elements.append(dictionary)
 
     elif len(image_ids) == 0 and is_future_date(date2):
+        
+        last_two_imgs = selected_planet.sort("system:time_end", False).limit(2)
+        image_ids_2 = last_two_imgs.aggregate_array("system:id").getInfo()
+        # Process each image ID to format the name
+        for image_id in image_ids_2:
+            # Split the image ID into parts
+            parts = image_id.split("/")
+            # Extract region and date parts
+            region_part = parts[-2].title()
+            date_part = parts[-1].split("_")[-2]
+            # Parse year and month
+            year = date_part[:4]
+            month = int(date_part[5:7])
 
-        image_id = (
-            selected_planet.sort("system:time_end", false)
-            .first()
-            .get("system:id")
-            .getInfo()
-        )
-        # Split the image ID into parts
-        parts = image_id.split("/")
-        # Extract region and date parts
-        region_part = parts[-2].title()
-        date_part = parts[-1].split("_")[-2]
-        # Parse year and month
-        year = date_part[:4]
-        month = int(date_part[5:7])
+            date_str = date_part + "-01"
+            date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
 
-        date_str = date_part + "-01"
-        date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
+            # Format the name
+            name = f"Planet Monthly {region_part} {date_str2}"
+            # Create image to display
+            planet_clip = ee.Image(image_id)  ##.clip(geometry)
 
-        # Format the name
-        name = f"Planet Monthly {region_part} {date_str2}"
-        # Create image to display
-        planet_clip = ee.Image(image_id)
+            # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
+            t2 = ee.Number(planet_clip.get("system:time_end"))
+            t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
 
-        # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
-        t2 = ee.Number(planet_clip.get("system:time_end"))
-        t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
-        dictionary = {
-            "value": name,
-            "image_id": image_id,
-            "milis": t3,
-            "source": "Planet NICFI",
-            "cloud_cover": "Not available",
-        }
-        elements.append(dictionary)
+            dictionary = {
+                "value": name,
+                "image_id": image_id,
+                "milis": t3,
+                "source": "Planet NICFI",
+                "cloud_cover": "Not available",
+            }
+            elements.append(dictionary)
 
     return elements
 
