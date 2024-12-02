@@ -110,10 +110,8 @@ def load_parameters_from_json(
     with open(file_name, "r") as json_file:
         model_parameters = json.load(json_file)
 
-    print(model_parameters)
     aux_model.import_from_dictionary(model_parameters)
     aoi_tile.load_saved_parameters(model_parameters)
-    app_tile_model.current_page_view = "aoi_tile"
     aoi_tile.process_alerts2()
     alert_filter_tile.load_saved_parameters(model_parameters)
     (
@@ -156,3 +154,39 @@ def load_gdf_from_csv (csv_file, geometry_columns_list):
     # finally reconstruct geodataframe
     gdf = gpd.GeoDataFrame(df)
     return gdf
+
+
+def update_actual_id(json_file_path, new_value):
+    """
+    Updates the value of the 'actual_id' key in a JSON file and rewrites the file.
+
+    Args:
+        json_file_path (str): Path to the JSON file.
+        new_value (any): New value to assign to the 'actual_id' key.
+    
+    Returns:
+        None
+    """
+    try:
+        # Read the JSON file
+        with open(json_file_path, 'r') as file:
+            data = json.load(file)
+        
+        # Ensure the content is a dictionary
+        if not isinstance(data, dict):
+            raise ValueError("JSON content must be a dictionary.")
+        
+        # Update the 'actual_id' key
+        data['actual_alert_id'] = new_value
+        
+        # Write the updated content back to the same file
+        with open(json_file_path, 'w') as file:
+            json.dump(data, file)
+        
+        print(f"'actual_id' successfully updated to {new_value}.")
+    except FileNotFoundError:
+        print(f"Error: File '{json_file_path}' not found.")
+    except json.JSONDecodeError:
+        print(f"Error: File '{json_file_path}' does not contain valid JSON.")
+    except Exception as e:
+        print(f"An error occurred: {e}")

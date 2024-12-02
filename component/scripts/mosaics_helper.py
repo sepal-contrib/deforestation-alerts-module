@@ -201,7 +201,7 @@ def scaleS2v2(image):
     return result
 
 
-def download_both_images(image1, image2, image_name, source1, source2):
+def download_both_images(image1, image2, image_name, source1, source2, region):
     from geemap import download_ee_image
     import ee
 
@@ -216,7 +216,7 @@ def download_both_images(image1, image2, image_name, source1, source2):
         rimage2 = scalePlanet(image2)
 
     download_ee_image(
-        rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857"
+        rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857", region= region
     )
     return image_name
 

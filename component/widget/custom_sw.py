@@ -100,7 +100,7 @@ class CustomAppBar(v.AppBar, SepalWidget):
             self.title,
             v.Spacer(),
             self.recipe_name,
-            self.save_button,
+            #self.save_button,
             self.locale,
             self.theme,
         ]
@@ -229,3 +229,36 @@ class CustomDrawControl(DrawControl):
         output["geometry"] = circle[0].__geo_interface__
 
         return output
+
+
+class CustomSlideGroup(v.Card):
+    def __init__(self, slide_items=None, **kwargs):
+        # Set default properties for the v.Card
+        kwargs.setdefault("flat", True)       # Make the card flat
+        kwargs.setdefault("elevation", 0)    # Remove elevation
+        kwargs.setdefault("outlined", False) # Remove outline
+        
+        # Initialize base class v.Card
+        super().__init__(**kwargs)
+        flat = True
+        # Initialize slide group and loading spinner
+        self.slide_group = v.SlideGroup(children=slide_items or [])
+        self.loading_spinner = v.ProgressCircular(
+            indeterminate=True,
+            color="primary",
+            size=24,
+            class_="mx-4"
+        )
+        
+        # Set the initial state to show the slide group
+        self.children = [self.slide_group]
+    
+    def set_loading_state(self, is_loading):
+        """Set the loading state of the component."""
+        self.children = [self.loading_spinner] if is_loading else [self.slide_group]
+
+
+
+
+
+

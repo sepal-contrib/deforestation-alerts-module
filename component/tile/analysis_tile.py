@@ -15,7 +15,8 @@ from component.message import cm
 from component.scripts.alert_filter_helper import convert_to_geopandas
 from component.scripts.mosaics_helper import *
 from component.scripts.report_builder import *
-from component.widget.custom_sw import CustomDrawControl
+from component.scripts.recipe_helper import update_actual_id
+from component.widget.custom_sw import CustomDrawControl, CustomSlideGroup
 
 import os
 import numpy as np
@@ -24,6 +25,7 @@ import math
 import ee
 from shapely.geometry import Point, Polygon
 import time
+from datetime import datetime
 from operator import itemgetter
 from ipyleaflet import GeoData, GeoJSON
 import threading
@@ -72,6 +74,8 @@ class AnalysisTile(sw.Layout):
         self.selected_alerts_model.observe(self.update_gdf, "alerts_bbs")
         self.selected_alerts_model.observe(self.add_gdf, "alerts_total_bbs")
         self.analyzed_alerts_model.observe(self.view_actual_alert, "actual_alert_id")
+        self.analyzed_alerts_model.observe(self.slider_s2_before, "before_s2_images_time")
+        self.analyzed_alerts_model.observe(self.slider_s2_after, "after_s2_images_time")
 
         # Queue for communication between main and worker threads
         self.file_queue = queue.Queue()
@@ -124,7 +128,7 @@ class AnalysisTile(sw.Layout):
         <style>
             .custom-map-class2 {
                 width: 100% !important;
-                height: 65vh !important;
+                height: 55vh !important;
                 }
         </style>
         """
@@ -144,8 +148,12 @@ class AnalysisTile(sw.Layout):
         center_link = link((self.map_31, "center"), (self.map_32, "center"))
         zoom_link = link((self.map_31, "zoom"), (self.map_32, "zoom"))
 
-        slider_before_planet = sw.SlideGroup(show_arrows=True)
-        slider_before_s2 = sw.SlideGroup(show_arrows=True)
+        
+        # slider_before_planet = sw.SlideGroup(show_arrows=True)
+        # slider_before_s2 = sw.SlideGroup(show_arrows=True)
+
+        slider_before_planet = CustomSlideGroup()
+        slider_before_s2 = CustomSlideGroup()      
 
         selected_img_before_info = v.Html(
             tag="div", children=["Source: Date: Cloud Cover:"]
@@ -162,8 +170,11 @@ class AnalysisTile(sw.Layout):
             ]
         )
 
-        slider_after_planet = sw.SlideGroup(show_arrows=True)
-        slider_after_s2 = sw.SlideGroup(show_arrows=True)
+        # slider_after_planet = sw.SlideGroup(show_arrows=True)
+        # slider_after_s2 = sw.SlideGroup(show_arrows=True)
+        
+        slider_after_planet = CustomSlideGroup()
+        slider_after_s2 = CustomSlideGroup()        
         
         selected_img_after_info = v.Html(
             tag="div", children=["Source: Date: Cloud Cover:"]
@@ -341,16 +352,13 @@ class AnalysisTile(sw.Layout):
         else:
             print("opcion 2 , Creando GDF")
             alertas_gdf = convert_to_geopandas(self.selected_alerts_model.alerts_bbs)
-            if self.analyzed_alerts_model.alerts_gdf is None:
-                self.analyzed_alerts_model.alerts_gdf = alertas_gdf
-            else:
-                # self.analyzed_alerts_model.alerts_gdf =  pd.concat([self.analyzed_alerts_model.alerts_gdf, alertas_gdf])
-                self.analyzed_alerts_model.alerts_gdf = alertas_gdf
+            self.analyzed_alerts_model.alerts_gdf = alertas_gdf
             self.analyzed_alerts_model.actual_alert_id = 0
-            alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
-                self.analyzed_alerts_model.actual_alert_id
-            ]
-            self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
+            self.analyzed_alerts_model.max_alert_id = len(alertas_gdf)+1
+            # alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
+            #     self.analyzed_alerts_model.actual_alert_id
+            # ]
+            # self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
 
     def add_gdf(self, change):
         print("Full bbs received", len(self.selected_alerts_model.alerts_total_bbs))
@@ -372,6 +380,7 @@ class AnalysisTile(sw.Layout):
             pd.concat([analyzed_temp_alerts, filtered_total])
         )
         self.analyzed_alerts_model.alerts_gdf = combined_gdf
+        self.analyzed_alerts_model.max_alert_id = len(combined_gdf)+1
         # Save gdf to app_tile_model.recipe_folder_path
         self.save_alerts_to_gdf()
 
@@ -392,8 +401,8 @@ class AnalysisTile(sw.Layout):
         self.create_gdf()
 
     def navigate(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
+        # widget.loading = True  # Set button to loading state
+        # widget.disabled = True  # Disable button to prevent further clicks
 
         if widget.value == 0:
             self.analyzed_alerts_model.actual_alert_id = int(
@@ -401,14 +410,14 @@ class AnalysisTile(sw.Layout):
             )
         else:
             self.analyzed_alerts_model.actual_alert_id = (
-                self.analyzed_alerts_model.actual_alert_id + widget.value
+                (self.analyzed_alerts_model.actual_alert_id + widget.value) % self.analyzed_alerts_model.max_alert_id
             )
 
         self.files_dwn_btn.set_url()
         self.report_dwn_btn.set_url()
 
-        widget.loading = False  # Remove loading state
-        widget.disabled = False  # Re-enable the button
+        # widget.loading = False  # Remove loading state
+        # widget.disabled = False  # Re-enable the button
 
     def create_horizontal_slide_group(
         self,
@@ -419,6 +428,7 @@ class AnalysisTile(sw.Layout):
         model_att1,
         callback2,
         model_att2,
+        fire_callback
     ):
 
         map_element = main_component.children[0]
@@ -440,9 +450,9 @@ class AnalysisTile(sw.Layout):
             "selected": "orange",
         }
         # Initialize slide_group as a v-slide-group
-        slide_group.children = []  # Clear any previous content
-        slide_group.mandatory = True
-        slide_group.show_arrows = True  # Show arrows for navigation if needed
+        #slide_group.slide_group.children = []  # Clear any previous content
+        #slide_group.mandatory = True
+        #slide_group.show_arrows = True  # Show arrows for navigation if needed
         # slide_group.style_="max-width: 90%;"
 
         # Helper function to create a button for each item
@@ -486,23 +496,16 @@ class AnalysisTile(sw.Layout):
             widget.disabled = False  # Re-enable the button
 
         # Create buttons for each item and add to slide group
-        et1 = time.time()
-        print("start slider")
         slides = [create_slide_button(i, item) for i, item in enumerate(sorted_data)]
-        slide_group.children = slides
-        et2 = time.time()
-        print("finish slider", et2 - et1)
+        slide_group.slide_group.children = slides
+        slide_group.set_loading_state(False)
 
-        # Set the initial slide callback
-        selected_item = date_indices[slide_group.children[default_v_model].value]
-        et3 = time.time()
-        print("select children", et3 - et2)
-        callback(selected_item, map_element, model_att1)
-        et4 = time.time()
-        print("map callback", et4 - et3)
-        callback2(selected_item, info_element, model_att2)
-        et5 = time.time()
-        print("info callback", et5 - et4)
+        if fire_callback == True:
+            #Set the initial slide callback
+            selected_item = date_indices[slide_group.slide_group.children[default_v_model].value]
+            callback(selected_item, map_element, model_att1)
+            callback2(selected_item, info_element, model_att2)
+
 
     def create_horizontal_slide_group_s2(
         self,
@@ -580,15 +583,13 @@ class AnalysisTile(sw.Layout):
             widget.disabled = False  # Re-enable the button
 
         # Create buttons for each item and add to slide group
-        et1 = time.time()
-        print("start slider")
         slides = [create_slide_button(i, item) for i, item in enumerate(sorted_data)]
-        slide_group.children = slides
-        et2 = time.time()
-        print("finish slider", et2 - et1)
-
+        slide_group.slide_group.children = slides
+        slide_group.set_loading_state(False)
         
     def image_slider_map_callback(self, selected_item, map_element, model_att):
+        et1 = time.time()
+        print('Add image to map callback')
         geom = self.actual_alert_grid
         image_id = selected_item["image_id"]
         img_source = selected_item["source"]
@@ -618,6 +619,8 @@ class AnalysisTile(sw.Layout):
         orig_alert = ee.Image(self.selected_alerts_model.filtered_alert_raster).clip(
             self.actual_bb.geometry()
         )
+        et2 = time.time()
+        print('images created ', et2- et1)
 
         map_element.addLayer(img, vis1, "True Color", False)
         map_element.addLayer(img, vis2, "False Color", True)
@@ -628,6 +631,8 @@ class AnalysisTile(sw.Layout):
             False,
             0.5,
         )
+        et3 = time.time()
+        print('Images addde to map', et3- et2)
 
     def image_slider_info_callback(self, selected_item, info_element, model_att):
         info_element.loading = True
@@ -650,6 +655,10 @@ class AnalysisTile(sw.Layout):
     def view_actual_alert(self, change):
         print("cambiando alerta", self.analyzed_alerts_model.actual_alert_id)
 
+        recipe_dictionary_path = self.app_tile_model.recipe_folder_path + '/recipe_parameters.json'
+        
+        update_actual_id(recipe_dictionary_path ,self.analyzed_alerts_model.actual_alert_id)
+        
         # Select alert
         alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
             self.analyzed_alerts_model.actual_alert_id
@@ -670,17 +679,21 @@ class AnalysisTile(sw.Layout):
             v.Html(tag="strong", children=[" Last Date: "]),
             fecha2,
         ]
-       
+        self.map31.children[1].children[5].set_loading_state(True)
+        self.map32.children[1].children[5].set_loading_state(True)
+        
         #Reset del mapa
-        #self.map_31.remove_all()
-        #self.map_32.remove_all()
+        self.map_31.remove_all()
+        self.map_32.remove_all()
 
         # Clean previous draw elements
         self.draw_alerts1.hide()
         self.draw_alerts2.hide()
         # Zoom to alert bb
         alerta_bb_geojson = alerta["bounding_box"].__geo_interface__
-        self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
+        self.map_31.center = (alerta.point.y, alerta.point.x)
+        self.map_31.zoom = 16
+        #self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
         #self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
         ##Add bounding box
         geojson_layer = GeoJSON(
@@ -697,14 +710,11 @@ class AnalysisTile(sw.Layout):
         )
         self.map_31.add_layer(geojson_layer)
         self.map_32.add_layer(geojson_layer)
-        et2 = time.time()
 
         # Create gee feature
         alerta_bb_geojson_ee = ee.Feature(alerta_bb_geojson).buffer(100, 1).bounds(1)
         self.aoi_control.add_aoi("AOI", alerta_bb_geojson_ee)
         self.actual_bb = alerta_bb_geojson_ee
-        et3 = time.time()
-        print("gee_feature created", et3 - et2)
 
         # Generar grilla de descarga
         gridDescarga = alerta_bb_geojson_ee.geometry().coveringGrid(
@@ -713,9 +723,7 @@ class AnalysisTile(sw.Layout):
         gridDescargaBounds = gridDescarga.geometry().bounds(1)
 
         self.actual_alert_grid = gridDescargaBounds
-        et4 = time.time()
-        
-        print("gee_grid created", et4 - et3)
+       
         
         # Actualizar slider de imagenes
         self.create_horizontal_slide_group(
@@ -726,6 +734,7 @@ class AnalysisTile(sw.Layout):
             0,
             self.image_slider_info_callback,
             0,
+            True,
         )
         self.create_horizontal_slide_group(
             self.analyzed_alerts_model.after_planet_monthly_images,
@@ -735,42 +744,44 @@ class AnalysisTile(sw.Layout):
             1,
             self.image_slider_info_callback,
             1,
+            True,
         )
-        et8 = time.time()
-        print("planet sliders created", et8 - et4)
 
         # Obtener imagenes
         et6 = time.time()
         sentinel2_mosaics_dates = get_sentinel2_dates(fecha1, fecha2)
-        s2ind_images_dict_before = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[0], sentinel2_mosaics_dates[1])
-        s2ind_images_dict_after = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[2], sentinel2_mosaics_dates[3])
-        print(s2ind_images_dict_before, s2ind_images_dict_after)
+        self.start_s2_dictionary_thread(gridDescargaBounds, sentinel2_mosaics_dates[0], sentinel2_mosaics_dates[1], self.assign_s2_before_dictionary)
+        self.start_s2_dictionary_thread(gridDescargaBounds, sentinel2_mosaics_dates[2], sentinel2_mosaics_dates[3], self.assign_s2_after_dictionary)
         et7 = time.time()
-        
         print("imagenes S2 seleccionadas", et7 - et6)
-
-        self.create_horizontal_slide_group_s2(
-            s2ind_images_dict_before,
-            self.map31,
-            0,
-            self.image_slider_map_callback,
-            0,
-            self.image_slider_info_callback,
-            0,
-        )
-        self.create_horizontal_slide_group_s2(
-            s2ind_images_dict_after,
-            self.map32,
-            1,
-            self.image_slider_map_callback,
-            1,
-            self.image_slider_info_callback,
-            1,
-        )
-        etf = time.time()
+        #s2ind_images_dict_before = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[0], sentinel2_mosaics_dates[1])
+        #s2ind_images_dict_after = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[2], sentinel2_mosaics_dates[3])
+        #print(s2ind_images_dict_before, s2ind_images_dict_after)
         
-        print("S2 sliders created", etf - et7)
+        # et7 = time.time()
+        # print("imagenes S2 seleccionadas", et7 - et6)
 
+        # self.create_horizontal_slide_group_s2(
+        #     s2ind_images_dict_before,
+        #     self.map31,
+        #     0,
+        #     self.image_slider_map_callback,
+        #     0,
+        #     self.image_slider_info_callback,
+        #     0,
+        #     #False,
+        # )
+        # self.create_horizontal_slide_group_s2(
+        #     s2ind_images_dict_after,
+        #     self.map32,
+        #     1,
+        #     self.image_slider_map_callback,
+        #     1,
+        #     self.image_slider_info_callback,
+        #     1,
+        #     #False,
+        # )
+        
     def download_images_button(self, widget, event, data):
         widget.loading = True  # Set button to loading state
         widget.disabled = True  # Disable button to prevent further clicks
@@ -780,7 +791,6 @@ class AnalysisTile(sw.Layout):
             + str(self.analyzed_alerts_model.actual_alert_id)
             + ".tif"
         )
-        print("Inicio descarga")
         source1 = self.selected_img_before_info_list[0]
         source2 = self.selected_img_after_info_list[0]
 
@@ -790,8 +800,8 @@ class AnalysisTile(sw.Layout):
             image_name,
             source1,
             source2,
+            self.actual_alert_grid,
         )
-        print("Fin descarga")
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
 
@@ -815,6 +825,7 @@ class AnalysisTile(sw.Layout):
             image_name,
             source1,
             source2,
+            self.actual_alert_grid,
         )
 
         prediction_name = self.send_file_for_processing(image_name)
@@ -823,8 +834,6 @@ class AnalysisTile(sw.Layout):
 
         self.defo_dl_layer = defo_gdf_layer
         geo_json_layer = GeoData(geo_dataframe=self.defo_dl_layer, name="Defo DL")
-
-        print("agregado como capa")
 
         self.map_31.add_layer(geo_json_layer)
         self.map_32.add_layer(geo_json_layer)
@@ -992,3 +1001,56 @@ class AnalysisTile(sw.Layout):
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
         # self.analyzed_alerts_model.actual_alert_id = self.analyzed_alerts_model.actual_alert_id + 1
+     
+    def assign_s2_before_dictionary(self, json):
+        self.analyzed_alerts_model.before_s2_images = json
+        self.analyzed_alerts_model.before_s2_images_time = datetime.today().timestamp()
+
+    def assign_s2_after_dictionary(self, json):
+        self.analyzed_alerts_model.after_s2_images = json
+        self.analyzed_alerts_model.after_s2_images_time = datetime.today().timestamp()
+
+
+    def start_s2_dictionary_thread(
+        self,
+        poly,
+        fecha1,
+        fecha2,
+        assign_function,
+    ):
+        thread = threading.Thread(
+            target=lambda: assign_function(
+                getIndividualS2(
+                    poly,
+                    fecha1,
+                    fecha2,
+                )
+            )
+        )
+        thread.start()
+
+    def slider_s2_before(self, change):
+        print(self.analyzed_alerts_model.before_s2_images, self.analyzed_alerts_model.before_s2_images_time)
+        self.create_horizontal_slide_group_s2(
+            self.analyzed_alerts_model.before_s2_images,
+            self.map31,
+            0,
+            self.image_slider_map_callback,
+            0,
+            self.image_slider_info_callback,
+            0,
+            #False,
+        )
+    
+    def slider_s2_after(self, change):
+        print(self.analyzed_alerts_model.after_s2_images, self.analyzed_alerts_model.after_s2_images_time)
+        self.create_horizontal_slide_group_s2(
+            self.analyzed_alerts_model.after_s2_images,
+            self.map32,
+            0,
+            self.image_slider_map_callback,
+            0,
+            self.image_slider_info_callback,
+            0,
+            #False,
+        )

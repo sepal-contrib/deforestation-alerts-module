@@ -170,7 +170,6 @@ class AoiTile(sw.Layout):
                 self.aux_model.ccdc_layer,
             )
         )
-        self.app_tile_model.current_page_view = "filter_alerts"
 
     def load_saved_parameters(self, data):
         self.aoi_view.model.admin = data.get("aoi_admin")

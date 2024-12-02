@@ -283,7 +283,6 @@ class AlertsFilterTile(sw.Layout):
                 )
 
     def update_tile(self, change):
-        print("change detected in alert filter tile")
         # Update the tile when aoi_date_model changes
         self.update_layout()  # Reinitialize the layout with the new data
 
