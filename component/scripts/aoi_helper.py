@@ -352,6 +352,7 @@ def _from_glad_l(start, end, aoi):
             alerts.select(f"alertDate{year%100}")
             .divide(1000)
             .add(ee.Image(year))
+            .toFloat()
             .rename("date")
         )
 
@@ -403,7 +404,7 @@ def _from_radd(start, end, aoi):
     )
 
     # change the date format
-    date_band = alerts.select("Date").divide(1000).add(2000).rename("date")
+    date_band = alerts.select("Date").divide(1000).add(2000).toFloat().rename("date")
 
     # create the composit image
     all_alerts = alert_band.addBands(date_band)
@@ -454,7 +455,7 @@ def _from_glad_s(start, end, aoi):
 
     # select the alerts and mosaic them as image
     alert_band = ee.Image(init + "/alert").selfMask().uint16().rename("alert")
-    date_band = ee.Image(init + "/obsDate").selfMask().rename("date")
+    date_band = ee.Image(init + "/alertDate").selfMask().rename("date")
 
     # alerts are stored in int : number of days since 2018-12-31
     origin = datetime.strptime("2018-12-31", "%Y-%m-%d")
@@ -468,7 +469,7 @@ def _from_glad_s(start, end, aoi):
     ).rename("alert")
 
     # change the date format
-    date_band2 = to_date(date_band).rename("date").updateMask(alert_band.mask())
+    date_band2 = to_date(date_band).toFloat().rename("date").updateMask(alert_band.mask())
 
     # create the composit image
     all_alerts = alert_band.addBands(ee.Image(date_band2).toFloat())

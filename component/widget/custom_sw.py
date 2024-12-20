@@ -1,7 +1,7 @@
 from sepal_ui import color, model, sepalwidgets as sw
 from traitlets import Any, HasTraits, Unicode, link, observe
 from component.message import cm
-from time import sleep
+import time
 from sepal_ui.frontend.resize_trigger import rt
 from copy import deepcopy
 import geopandas as gpd
@@ -22,7 +22,8 @@ class CustomApp(sw.App):
         self.show_tile_2(self.app_tile_model.current_page_view)
 
     def update_recipe_name_text(self, change):
-        self.appBar.set_recipe(self.app_tile_model.recipe_name)
+        if self.app_tile_model.recipe_name != '':
+            self.appBar.set_recipe(self.app_tile_model.recipe_name)
 
     def show_tile_2(self, name: str):
         """Select the tile to display when the app is launched.
@@ -82,7 +83,8 @@ class CustomAppBar(v.AppBar, SepalWidget):
 
         self.locale = sw.LocaleSelect(translator=translator)
         self.theme = sw.ThemeSelect()
-        self.recipe_name = v.Html(tag="div", children=[""])
+        #self.recipe_name = v.Html(tag="div", children=[""])
+        self.recipe_name = sw.Btn(msg = "", color= color.accent, class_="ma-2 pa-n6").hide()
         self.save_button = v.Btn(
             icon=True,
             children=[
@@ -132,13 +134,15 @@ class CustomAppBar(v.AppBar, SepalWidget):
         Return:
             self
         """
-        title = v.Html(tag="strong", children=["Recipe: "])
-        self.recipe_name.children = [title, recipe]
-
+        # title = v.Html(tag="strong", children=["Recipe: "])
+        # self.recipe_name.children = [title, recipe]
+        self.recipe_name.msg = recipe
+        self.recipe_name.show()
+        
         return self
 
 
-class CustomDrawControl(DrawControl):
+class CustomDrawControl(GeomanDrawControl):
     """
     A custom DrawingControl object to handle edition of features
 
@@ -153,12 +157,13 @@ class CustomDrawControl(DrawControl):
     def __init__(self, m, **kwargs):
 
         # set some default parameters
-        options = {"shapeOptions": {"color": color.info}}
+        #options = {"shapeOptions": {"color": color.info}}
+        options = {"shapeOptions": {"color": 'blue'}}
         kwargs["marker"] = kwargs.pop("marker", {})
         kwargs["circlemarker"] = kwargs.pop("circlemarker", {})
         kwargs["polyline"] = kwargs.pop("polyline", {})
-        kwargs["rectangle"] = kwargs.pop("rectangle", options)
-        kwargs["circle"] = kwargs.pop("circle", options)
+        kwargs["rectangle"] = kwargs.pop("rectangle", {})
+        kwargs["circle"] = kwargs.pop("circle", {})
         kwargs["polygon"] = kwargs.pop("polygon", options)
 
         # save the map in the memeber of the objects
@@ -232,7 +237,7 @@ class CustomDrawControl(DrawControl):
 
 
 class CustomSlideGroup(v.Card):
-    def __init__(self, slide_items=None, **kwargs):
+    def __init__(self, slide_items=None, defaul_child_color = "green", **kwargs):
         # Set default properties for the v.Card
         kwargs.setdefault("flat", True)       # Make the card flat
         kwargs.setdefault("elevation", 0)    # Remove elevation
@@ -242,6 +247,7 @@ class CustomSlideGroup(v.Card):
         super().__init__(**kwargs)
         flat = True
         # Initialize slide group and loading spinner
+        self.defaul_child_color = defaul_child_color
         self.slide_group = v.SlideGroup(children=slide_items or [])
         self.loading_spinner = v.ProgressCircular(
             indeterminate=True,
@@ -257,8 +263,119 @@ class CustomSlideGroup(v.Card):
         """Set the loading state of the component."""
         self.children = [self.loading_spinner] if is_loading else [self.slide_group]
 
+    def reset_default_color(self):
+        for button in self.slide_group.children:
+            if hasattr(button, 'color') and button.color != self.defaul_child_color:
+                button.color = self.defaul_child_color
 
 
+class CustomBtnWithLoader(v.Btn):
+    def __init__(self, text="Click", loader_type="circular", **kwargs):
+        kwargs["color"] = kwargs.pop("color", "primary")
+        kwargs["children"] = [text]
+        # Initialize parent class
+        super().__init__(**kwargs)
+        
+        # Define loader based on loader_type
+        self.loader_type = loader_type
+        self.loading = False
+        self.disabled = False
+
+        # Initialize loader element
+        self.loader = self._create_loader(loader_type)
+
+        # Add loader to slots
+        self.v_slots = [{'name': 'loader', 'children': [self.loader]}]
+
+    def _create_loader(self, loader_type):
+        """Create loader element based on loader_type."""
+        if loader_type == "circular":
+            return v.ProgressCircular(color = "primary", size=40, v_model=0, rotate=-90, children=["0"])
+        elif loader_type == "linear":
+            return v.ProgressLinear(color = "primary", height=10, v_model=0, children=["0"])
+        elif loader_type == "text":
+            return v.Html(color= 'gray', tag="div", children=["Loading..."], style={"fontSize": "8px", "background-color": "transparent"})
+        else:
+            raise ValueError("Invalid loader_type. Choose 'circular', 'linear', or 'text'.")
+
+    def set_loader_percentage(self, percentage):
+        """Update loader percentage for circular or linear loader."""
+        if self.loader_type in ["circular", "linear"]:
+            self.loader.v_model = percentage
+            self.loader.children = [f"{percentage}%"]
+        else:
+            raise ValueError("set_loader_percentage only works with 'circular' or 'linear' loader types.")
+
+    def set_loader_text(self, text):
+        """Update loader text for text-based loader."""
+        if self.loader_type == "text":
+            self.loader.children = [text]
+        else:
+            raise ValueError("set_loader_text only works with 'text' loader type.")
+    
+    def simulate_progress(self, total_time):
+        """Simulate progress updates every 10% over a total time."""
+        if self.loader_type in ["circular", "linear"]:
+            step_time = total_time / 10
+            for i in range(1, 11):
+                self.set_loader_percentage(i * 10)
+                time.sleep(step_time)
+
+    def indeterminate_state(self, boolean):
+        """Set a indeterminate loader with no text inside"""
+        if self.loader_type in ["circular", "linear"]:
+            self.loader.indeterminate = boolean
+            self.loader.children= [""]
+    
+    def toggle_loading(self):
+        """Toggle between loading and enabled states."""
+        self.loading = not self.loading
+        self.disabled = self.loading
+
+    def update_button_with_messages(self, messages, stop_model, stop_variable, pause=6):
+        """
+        Updates a button's text with a series of messages, pausing between changes. Stops if stop_variable is not None.
+    
+        Args:
+            button (v.Btn): The button to update.
+            messages (list): List of messages to display.
+            stop_variable (HasTraits): A traitlet-based object whose traits are observed.
+            pause (int): Time (in seconds) to pause between updates (default is 10).
+        """
+        stop_flag = {"should_stop": False}  # A mutable flag shared with the observer callback
+        
+        def stop_callback(change):
+            """Observer callback to set the stop flag."""
+            if change["new"]:  # Stop when the observed trait changes to `True`
+                stop_flag["should_stop"] = True
+        
+        # Observe the `is_done` trait
+        stop_model.observe(stop_callback, names=stop_variable)     
+        
+        while not stop_flag["should_stop"]:
+            for message in messages:
+                if stop_flag["should_stop"]:
+                    break
+                self.set_loader_text(message)
+                time.sleep(pause)
+
+    # def update_button_with_messages(self, messages, stop_variables, pause=6):
+    #     """
+    #     Updates a button's text with a series of messages, pausing between changes. Stops if stop_variable is not None.
+    
+    #     Args:
+    #         button (v.Btn): The button to update.
+    #         messages (list): List of messages to display.
+    #         stop_variables (list): A list of variables to monitor. Stops when any variable is not None.
+    #         pause (int): Time (in seconds) to pause between updates (default is 10).
+    #     """
+    #     while all(var is None for var in stop_variables):
+    #         for message in messages:
+    #             if any(var is not None for var in stop_variables):
+    #                 break
+    #             self.set_loader_text(message)
+    #             time.sleep(pause)
+        
 
 
 

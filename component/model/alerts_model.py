@@ -1,5 +1,5 @@
 from sepal_ui import model
-from traitlets import Any, Int, Float
+from traitlets import Any, Int, Float, Unicode
 
 from component import parameter as cp
 from component.message import cm
@@ -18,7 +18,11 @@ class AlertFilterModel(model.Model):
 
     available_alerts_raster_list = Any("").tag(sync=True)
     "Dictionary of alert rasters in the aoi and dates selected by the users"
-
+    
+    def reset_model(self):
+        self.alerts_dictionary = ""
+        self.available_alerts_list = ""
+        self.available_alerts_raster_list = ""
 
 class SelectedAlertsModel(model.Model):
 
@@ -53,7 +57,10 @@ class SelectedAlertsModel(model.Model):
     alerts_bbs = Any(None).tag(sync=True)
     "Feature Collection that cointains bounding boxes of first x filtered alerts, they may or may not have a priority field"
     "List of needed fields, valid, before_img, after_img, min_date, max_date, alert_polygon_dir, area, description"
-
+    
+    received_alerts = Any(None).tag(sync=True)
+    "Variable used to indicate that alerts in json format where received"
+    
     def export_dictionary(self):
         dictionary = {
             "selected_alert_sources": self.selected_alert_sources,
@@ -65,20 +72,14 @@ class SelectedAlertsModel(model.Model):
         }
         return dictionary
 
-
-class ReviewAlertsModel(model.Model):
-
-    ############################################################################
-    # selected alerts
-    ############################################################################
-    nTotalAlerts = Int(None).tag(sync=True)
-    "Total Alerts Number"
-
-    nReviewedAlerts = Int(None).tag(sync=True)
-    "Reviewed Alerts Number"
-
-    nConfirmedAlerts = Int(None).tag(sync=True)
-    "Confirmed Alerts Number"
-
-    nFalseAlerts = Int(None).tag(sync=True)
-    "False positive Alerts Number"
+    def reset_model(self):
+        self.selected_alert_sources = None
+        self.alert_selection_polygons = None
+        self.min_area = None
+        self.max_number_alerts = 0
+        self.alert_selection_area = None
+        self.alert_sorting_method = None
+        self.filtered_alert_raster = None
+        self.alerts_total_bbs = None
+        self.alerts_bbs = None
+        self.received_alerts = None

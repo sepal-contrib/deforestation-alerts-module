@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from operator import itemgetter
 from ipyleaflet import GeoData
+from shapely.geometry import shape
 
 
 def convert_julian_to_date(julian_date):
@@ -204,6 +205,7 @@ def scaleS2v2(image):
 def download_both_images(image1, image2, image_name, source1, source2, region):
     from geemap import download_ee_image
     import ee
+    import os
 
     if source1 == "Sentinel 2":
         rimage1 = scaleS2v2(image1)
@@ -215,9 +217,11 @@ def download_both_images(image1, image2, image_name, source1, source2, region):
     elif source2 == "Planet NICFI":
         rimage2 = scalePlanet(image2)
 
-    download_ee_image(
-        rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857", region= region
-    )
+    if os.path.exists(image_name):
+        pass
+    else:
+        download_ee_image(rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857", region= region, overwrite=True)
+
     return image_name
 
 
@@ -360,9 +364,9 @@ def convertir_formato(features):
 
 
 # Función que convierte el formato de los elementos de una lista de features
-def convertir_formato2(features):
+def convertir_formato2(features, color = '#2196F3'):
     # Estructura de estilo que se añadirá a las nuevas features
-    nuevo_estilo = {"style": {"color": "#2196F3", "pane": "overlayPane"}}
+    nuevo_estilo = {"style": {"color": color, "pane": "overlayPane"}}
 
     # Convertir cada feature al nuevo formato
     nuevas_features = []
@@ -505,11 +509,9 @@ def apply_dl_model(image, model):
         model, custom_objects={"RepeatElements": RepeatElements}, compile=False
     )
     mosaic = MightyMosaic.from_array(img, (256, 256), overlap_factor=2)
-    print("inicio aplicar modelo")
     prediction1 = mosaic.apply(
         lambda x: model1.predict(x, verbose=0), progress_bar=False, batch_size=2
     )
-    print("final aplicar modelo")
     final_prediction1 = prediction1.get_fusion()
 
     return final_prediction1
@@ -517,7 +519,7 @@ def apply_dl_model(image, model):
 
 # Function to calculate total area
 def calculate_total_area(gdf):
-    # Reproject to a CRS that uses meters (assuming UTM zone 10N, change depending on your location)
+    # Reproject to a CRS that uses meters, change depending on your location
     gdf_proj = gdf.to_crs("EPSG:3857")
 
     # Calculate the area for each polygon and add it to a new column
@@ -564,7 +566,7 @@ def simplify_and_extract_features(
     return features
 
 
-def add_files_to_zip(zip_filename, file1, file2, file3):
+def add_files_to_zip(zip_filename, file1, file2):
     import zipfile
 
     # Open a zip file in write mode, create it if it doesn't exist
@@ -572,8 +574,6 @@ def add_files_to_zip(zip_filename, file1, file2, file3):
         # Add the files to the zip
         zipf.write(file1)
         zipf.write(file2)
-        zipf.write(file3)
-    # print(f"Files {file1}, {file2}, {file3} have been added to {zip_filename}")
 
 
 def getPlanetMonthly(geometry, date1, date2):
@@ -739,7 +739,7 @@ def getIndividualS2(geometry, date1, date2):
     )
 
     # Retrieve all unique Generation time values
-    s2_dates_list = s2_filtered.aggregate_array("GENERATION_TIME").getInfo()
+    s2_dates_list = s2_filtered.aggregate_array("GENERATION_TIME").distinct().getInfo()
     elements = []
 
     if len(s2_dates_list) > 0:
@@ -769,3 +769,92 @@ def getIndividualS2(geometry, date1, date2):
             elements.append(dictionary)
 
     return elements
+
+
+
+def geojson_to_geodataframe(geojson):
+    from shapely.geometry import shape
+
+    """
+    Convert a GeoJSON-like dictionary to a GeoDataFrame.
+
+    Parameters:
+        geojson (dict): A dictionary representing a GeoJSON FeatureCollection.
+
+    Returns:
+        gpd.GeoDataFrame: The converted GeoDataFrame.
+
+    Raises:
+        ValueError: If the input has no features.
+    """
+    if not geojson.get('features'):
+        raise ValueError("The input GeoJSON has no features.")
+
+    # Extract features and convert to GeoDataFrame
+    features = geojson['features']
+    geometries = [shape(feature['geometry']) for feature in features]
+    properties = [feature['properties'] for feature in features]
+
+    # Create the GeoDataFrame
+    gdf = gpd.GeoDataFrame(properties, geometry=geometries)
+
+    return gdf
+
+def multipolygon_to_geodataframe(geometry):
+    """
+    Convert a shapely.geometry.multipolygon.MultiPolygon or shapely.geometry.polygon.Polygon to a GeoDataFrame.
+
+    Parameters:
+        geometry (shapely.geometry.base.BaseGeometry): A MultiPolygon or Polygon object.
+
+    Returns:
+        gpd.GeoDataFrame: A GeoDataFrame with each Polygon as a separate row.
+
+    Raises:
+        ValueError: If the input is not a MultiPolygon or Polygon.
+    """
+    from shapely.geometry import shape, MultiPolygon, Polygon
+
+    if isinstance(geometry, MultiPolygon):
+        # Extract individual polygons from the MultiPolygon
+        polygons = list(geometry.geoms)
+    elif isinstance(geometry, Polygon):
+        # Treat the single Polygon as a list with one element
+        polygons = [geometry]
+    else:
+        raise ValueError("The input must be a MultiPolygon or Polygon.")
+
+    # Create a GeoDataFrame
+    gdf = gpd.GeoDataFrame(geometry=polygons)
+
+    return gdf
+
+def filter_features_by_color(features, color_to_remove):
+    """
+    Filters out GeoJSON features with a specific color.
+
+    Args:
+        features (list of dict): List of GeoJSON feature dictionaries.
+        color_to_remove (str): The color to filter out (e.g., "red").
+
+    Returns:
+        list of dict: Filtered list of GeoJSON features.
+    """
+    if not isinstance(features, list):
+        raise ValueError("The 'features' argument must be a list of dictionaries.")
+
+    filtered_features = []
+
+    for feature in features:
+        # Check if the feature is a dictionary
+        if not isinstance(feature, dict):
+            continue
+
+        # Get the properties of the feature
+        properties = feature.get("properties", {})
+
+        # Check if the 'color' key exists and if it matches the color_to_remove
+        if properties.get("style").get("color") != color_to_remove:
+            filtered_features.append(feature)
+
+    return filtered_features

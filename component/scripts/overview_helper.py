@@ -1,4 +1,4 @@
-from ipyleaflet import Marker, AwesomeIcon, Map, Popup, MarkerCluster, WidgetControl
+from ipyleaflet import Marker, AwesomeIcon, Map, Popup, MarkerCluster, WidgetControl, LayerGroup
 import ipywidgets as widgets
 from ipywidgets import HTML, HBox, VBox, Label, Button, Layout
 from shapely.geometry import Point, Polygon
@@ -95,25 +95,9 @@ def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_functi
             # Create a "Go" button for the popup
             go_button = Button(
                 description="Go", button_style="success", layout=Layout(width="40px")
-            )
-            # Define the click handler with a loading state
-            def on_button_click(event, index=None):
-                # Set the loading state
-                go_button.description = "Moving to alert..."
-                #go_button.button_style = "warning"
-                go_button.disabled = True
-            
-                # Perform the desired function (e.g., marker_popup_function)
-                marker_popup_function(index)
-            
-                # Reset the button after the task completes
-                go_button.description = "Go"
-                #go_button.button_style = "success"
-                go_button.disabled = False
-            
+            )            
             # Attach the click handler to the button
-            #go_button.on_click(lambda event, index=index: marker_popup_function(index))
-            go_button.on_click(lambda event: on_button_click(event, index=index))
+            go_button.on_click(lambda event, index=index: marker_popup_function(index))
 
 
             # Combine HTML message and button in a VBox
@@ -130,7 +114,7 @@ def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_functi
             )
 
             # Create a popup and add it to the marker
-            marker.popup = Popup(child=popup_content, max_width=300)
+            marker.popup = Popup(child=popup_content, max_width=300, auto_pan=False)
 
             # Group markers by unique attribute
             group_value = row[group_by_col]
@@ -140,7 +124,99 @@ def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_functi
 
     return markers_dict
 
+def create_markers_ipyvuetify(gdf, point_col, title_cols, group_by_col, marker_popup_function):
+    """
+    Create ipyleaflet.Marker objects from a GeoDataFrame and group them by unique attribute.
 
+    Parameters:
+        gdf (GeoDataFrame): The GeoDataFrame containing the data.
+        point_col (str): The name of the geometry column containing point geometries.
+        title_cols (list of str): List of column names to join into a title string.
+        icon_map (dict): Dictionary mapping unique attribute values to icon configurations.
+        group_by_col (str): Column name to group markers by.
+
+    Returns:
+        dict: A dictionary where keys are unique values of `group_by_col` and values are lists of Marker objects.
+    """
+    icon_dictionary = {
+        "Not reviewed": AwesomeIcon(
+            name="fa-light fa-circle-question", marker_color="gray", icon_color="white"
+        ),
+        "Confirmed": AwesomeIcon(
+            name="fa-check-circle", marker_color="red", icon_color="white"
+        ),
+        "Maybe": AwesomeIcon(
+            name="fa-flag-o", marker_color="orange", icon_color="white"
+        ),
+        "False Positive": AwesomeIcon(
+            name=" fa-ban", marker_color="green", icon_color="black"
+        ),
+    }
+
+    markers_dict = {}
+
+    for _, row in gdf.iterrows():
+        # Extract point coordinates from the geometry
+        if isinstance(row[point_col], Point):
+            location = (
+                row[point_col].y,
+                row[point_col].x,
+            )  # Leaflet uses (lat, lon) format
+
+            # Choose icon based on the icon_map dictionary
+            icon = icon_dictionary.get(row[group_by_col], {})
+
+            index = row.name
+
+            # Create marker
+            marker = Marker(location=location, icon=icon, draggable=False)
+            message = v.Html(tag='div', children=[])
+            message.children = (
+                v.Html(tag="strong", children=["Start: "]),
+                convert_julian_to_date(row[title_cols[0]]),
+                #v.Html(tag="br"),
+                v.Html(tag="strong", children=[" End: "]),
+                convert_julian_to_date(row[title_cols[1]]),
+                #v.Html(tag="br"),
+                v.Html(tag="strong", children=[" ID: "]),
+                str(index),
+                v.Html(tag="strong", children=["  "]),
+
+            )
+            # marker.popup = message
+            # Create a "Go" button for the popup
+            go_button = v.Btn(children=['Go'], color='primary', value = index, small= True, outlined=True)
+         
+            # Attach the click handler to the button
+            go_button.on_event("click", marker_popup_function)
+
+            # Combine HTML message and button in a VBox
+            popup_content = v.Card(
+                class_="pa-1 ma-1 d-flex justify-space-between", 
+                min_width = 300,
+                max_height = 300,
+                flat=True,
+                children=[
+                    # v.Row(children=[message], align="center", justify="center")]),
+                    # v.Row(children=[go_button], align="center", justify="center")]),
+                    message,
+                    go_button,
+                ],
+                style_="minpadding: 0px; border-radius: 4px;",
+
+            )
+
+            # Create a popup and add it to the marker
+            marker.popup = Popup(child=popup_content, max_width=500, max_height= 200, auto_pan=False)
+
+            # Group markers by unique attribute
+            group_value = row[group_by_col]
+            if group_value not in markers_dict:
+                markers_dict[group_value] = []
+            markers_dict[group_value].append(marker)
+
+    return markers_dict
+    
 def add_marker_clusters_with_hover_button(map_object, data_dict):
     # Dictionary to store the marker clusters associated with each category
     marker_clusters = {}
@@ -157,11 +233,7 @@ def add_marker_clusters_with_hover_button(map_object, data_dict):
             map_object.add_layer(marker_clusters[category])
         else:
             # Remove the marker cluster from the map when checkbox is unchecked
-            map_object.layers = [
-                layer
-                for layer in map_object.layers
-                if layer != marker_clusters[category]
-            ]
+            map_object.remove_layer( marker_clusters[category])
 
     # Create a title for the widget
     title_label = Label(
@@ -219,7 +291,7 @@ def add_marker_clusters_with_hover_button(map_object, data_dict):
     widget_control = WidgetControl(widget=button_container, position="topright")
     map_object.add_control(widget_control)
 
-    return map_object
+    #return map_object
 
 
 def add_marker_clusters_with_menucontrol(map_object, data_dict):
@@ -230,25 +302,21 @@ def add_marker_clusters_with_menucontrol(map_object, data_dict):
     for category, markers in data_dict.items():
         marker_cluster = MarkerCluster(markers=markers, show_coverage_on_hover=False)
         marker_clusters[category] = marker_cluster
-        map_object.add_layer(marker_clusters[category])
+        map_object.add(marker_clusters[category])
 
     # Function to handle checkbox changes
     def toggle_layer(change, category):
         if change["new"]:
             # Add the marker cluster to the map when checkbox is checked
-            map_object.add_layer(marker_clusters[category])
+            map_object.add(marker_clusters[category])
         else:
             # Remove the marker cluster from the map when checkbox is unchecked
-            map_object.layers = [
-                layer
-                for layer in map_object.layers
-                if layer != marker_clusters[category]
-            ]
+            map_object.remove_layer( marker_clusters[category])
 
     # Create checkboxes for each category using ipyvuetify checkboxes
     checkboxes = {}
     for category in data_dict.keys():
-        checkbox = v.Checkbox(v_model=False, label=category, dense=True)
+        checkbox = v.Checkbox(v_model=True, label=category, dense=True)
         checkbox.observe(
             lambda change, cat=category: toggle_layer(change, cat), names="v_model"
         )
@@ -271,6 +339,17 @@ def add_marker_clusters_with_menucontrol(map_object, data_dict):
         min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
     )
     map_object.add(menu_control)
+
+
+def add_marker_clusters_as_LayerGroup(map_object, data_dict):
+    # Dictionary to store the marker clusters associated with each category
+    marker_clusters = {}
+
+    # Create MarkerClusters for each category in the dictionary
+    for category, markers in data_dict.items():
+        marker_cluster = LayerGroup(layers=[MarkerCluster(markers=markers, show_coverage_on_hover=False)], name=category)
+        marker_clusters[category] = marker_cluster
+        map_object.add_layer(marker_clusters[category])
 
 
 # Function to create the table rows based on a list of 4 numbers

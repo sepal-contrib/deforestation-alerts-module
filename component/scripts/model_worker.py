@@ -40,7 +40,7 @@ def save_prediction_prob(original_img, prediction, output_path):
     return output_path
 
 
-def apply_dl_model(image, model):
+def apply_dl_model(image, model, suffix):
     def read_image(file_path):
         file_path = file_path  # .decode('utf-8')
         with rasterio.open(file_path) as src:
@@ -89,21 +89,18 @@ def apply_dl_model(image, model):
         model_path, custom_objects={"RepeatElements": RepeatElements}, compile=False
     )
     mosaic = MightyMosaic.from_array(img, (256, 256), overlap_factor=2)
-    # print("inicio aplicar modelo")
     prediction1 = mosaic.apply(
         lambda x: model1.predict(x, verbose=0), progress_bar=False, batch_size=2
     )
-    # print("final aplicar modelo")
     final_prediction1 = prediction1.get_fusion()
 
     # Create the new filename with "_processed" suffix
     directory, filename = os.path.split(input_image)
     new_filename = os.path.join(
-        directory, f"{os.path.splitext(filename)[0]}_prediction.tif"
+        directory, f"{os.path.splitext(filename)[0]}_prediction{suffix}.tif"
     )
 
     output = save_prediction_prob(
         input_image, np.squeeze(final_prediction1), new_filename
     )
-    # output = 'test'
     return output

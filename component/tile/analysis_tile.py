@@ -1,4 +1,4 @@
-from sepal_ui import sepalwidgets as sw
+from sepal_ui import color, sepalwidgets as sw
 from sepal_ui import aoi
 from sepal_ui.mapping import SepalMap
 from sepal_ui.mapping.draw_control import DrawControl
@@ -15,8 +15,8 @@ from component.message import cm
 from component.scripts.alert_filter_helper import convert_to_geopandas
 from component.scripts.mosaics_helper import *
 from component.scripts.report_builder import *
-from component.scripts.recipe_helper import update_actual_id
-from component.widget.custom_sw import CustomDrawControl, CustomSlideGroup
+from component.scripts.recipe_helper import update_saved_dictionary
+from component.widget.custom_sw import CustomDrawControl, CustomSlideGroup, CustomBtnWithLoader
 
 import os
 import numpy as np
@@ -51,75 +51,38 @@ class AnalysisTile(sw.Layout):
         self.analyzed_alerts_model = analyzed_alerts_model
         self.app_tile_model = app_tile_model
 
-        self.apply_DL_model_button = sw.Btn("Auto", color="primary", outlined=True)
-        self.edit_layer_button = sw.Btn("Edit", color="primary", outlined=True)
+    
+        self.dl_button1 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='DL 1')
+        self.dl_button2 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='DL 2')
         self.alert_draw_alert = sw.Alert().hide()
-        self.add_defo_prediction_map = su.loading_button(
-            alert=self.alert_draw_alert, button=self.apply_DL_model_button
-        )(self.add_defo_prediction_map)
-        self.edit_defo_prediction_map = su.loading_button(
-            alert=self.alert_draw_alert, button=self.edit_layer_button
-        )(self.edit_defo_prediction_map)
-
-        self.defo_dl_layer = None
-        self.actual_bb = None
-        self.selected_img_before = None
-        self.selected_img_after = None
-        self.selected_img_before_info_list = None
-        self.selected_img_after_info_list = None
+        self.run_dl_model_1 = su.loading_button(alert=self.alert_draw_alert, button=self.dl_button1)(self.run_dl_model_1)
+        self.run_dl_model_2 = su.loading_button(alert=self.alert_draw_alert, button=self.dl_button2)(self.run_dl_model_2)
 
         self.initialize_layout()
 
         ## Observe changes in selected_alerts_model and update tile when it changes
-        self.selected_alerts_model.observe(self.update_gdf, "alerts_bbs")
-        self.selected_alerts_model.observe(self.add_gdf, "alerts_total_bbs")
+        self.selected_alerts_model.observe(self.update_gdf_partial, "alerts_bbs")
+        self.selected_alerts_model.observe(self.update_gdf_full, "alerts_total_bbs")
         self.analyzed_alerts_model.observe(self.view_actual_alert, "actual_alert_id")
         self.analyzed_alerts_model.observe(self.slider_s2_before, "before_s2_images_time")
         self.analyzed_alerts_model.observe(self.slider_s2_after, "after_s2_images_time")
-
+        self.analyzed_alerts_model.observe(self.add_defo_layer, "defo_dl_layer")
+        self.analyzed_alerts_model.observe(self.enable_dl1, "model1_prediction_file")
+        self.analyzed_alerts_model.observe(self.enable_dl2, "model2_prediction_file")
+        
         # Queue for communication between main and worker threads
-        self.file_queue = queue.Queue()
-        self.result_queue = queue.Queue()
+        self.file_queue1 = queue.Queue()
+        self.result_queue1 = queue.Queue()
+        self.file_queue2 = queue.Queue()
+        self.result_queue2 = queue.Queue()
 
         # Start the worker thread
-        worker_thread = threading.Thread(target=self.worker)
-        worker_thread.start()
+        worker1_thread = threading.Thread(target=self.worker_m1)
+        worker1_thread.start()
+        worker2_thread = threading.Thread(target=self.worker_m2)
+        worker2_thread.start()
 
         super().__init__()
-
-    def worker(self):
-        import os
-        import rasterio
-        import numpy as np
-        import tensorflow as tf
-        from tensorflow.keras import layers, models
-        from tensorflow.keras import backend as K
-        from MightyMosaic import MightyMosaic
-
-        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-        from component.scripts.model_worker import apply_dl_model, save_prediction_prob
-
-        """Worker thread that processes files from the file_queue."""
-        while True:
-            file_path = self.file_queue.get()  # Get a file path from the queue
-            if file_path == "exit":  # Stop the thread if "exit" command is received
-                break
-            # Process the file and put the result in the result_queue
-            processed_file = apply_dl_model(file_path, "utils/model2.h5")
-            self.result_queue.put(processed_file)
-            self.file_queue.task_done()
-
-    def send_file_for_processing(self, file_path):
-        """Function to send a file path to the worker and retrieve the result."""
-        # Put the file path in the queue for the worker to process
-        self.file_queue.put(file_path)
-
-        # Wait for the worker to process the file and return the result
-        processed_file = (
-            self.result_queue.get()
-        )  # Blocking wait until result is available
-        self.result_queue.task_done()
-        return processed_file
 
     def initialize_layout(self):
         display(
@@ -130,11 +93,26 @@ class AnalysisTile(sw.Layout):
                 width: 100% !important;
                 height: 55vh !important;
                 }
+             .v-text-field .v-input__control .v-input__slot {
+                min-height: auto !important;
+                min-width: 40px,
+                max-width: 40px,
+                display: flex !important;
+                align-items: center !important;
+              }
         </style>
         """
             )
         )
-
+        #Create Variables
+        self.actual_bb = None
+        self.selected_img_before = None
+        self.selected_img_after = None
+        self.selected_img_before_info_list = None
+        self.selected_img_after_info_list = None
+        self.active_before_button = None
+        self.active_after_button = None
+        
         # Create map
         self.map_31 = SepalMap()
         self.map_31.add_class("custom-map-class2")
@@ -147,13 +125,9 @@ class AnalysisTile(sw.Layout):
         # Link the center and zoom between both maps
         center_link = link((self.map_31, "center"), (self.map_32, "center"))
         zoom_link = link((self.map_31, "zoom"), (self.map_32, "zoom"))
-
         
-        # slider_before_planet = sw.SlideGroup(show_arrows=True)
-        # slider_before_s2 = sw.SlideGroup(show_arrows=True)
-
         slider_before_planet = CustomSlideGroup()
-        slider_before_s2 = CustomSlideGroup()      
+        slider_before_s2 = CustomSlideGroup(style_="max-width: 80vh")      
 
         selected_img_before_info = v.Html(
             tag="div", children=["Source: Date: Cloud Cover:"]
@@ -170,11 +144,8 @@ class AnalysisTile(sw.Layout):
             ]
         )
 
-        # slider_after_planet = sw.SlideGroup(show_arrows=True)
-        # slider_after_s2 = sw.SlideGroup(show_arrows=True)
-        
         slider_after_planet = CustomSlideGroup()
-        slider_after_s2 = CustomSlideGroup()        
+        slider_after_s2 = CustomSlideGroup(style_="max-width: 80vh")      
         
         selected_img_after_info = v.Html(
             tag="div", children=["Source: Date: Cloud Cover:"]
@@ -207,47 +178,38 @@ class AnalysisTile(sw.Layout):
 
         link((self.draw_alerts1, "data"), (self.draw_alerts2, "data"))
 
-        label31 = v.CardTitle(class_="pa-1 ma-1", children=["Navigation Bar"])
-        prev_button = sw.Btn(
+        label31 = v.CardTitle(class_="pa-0 ma-1", children=["Navigation Bar"])
+        self.prev_button = sw.Btn(
             icon="fa-solid fa-backward-step",
             color="primary",
             outlined=True,
             value=-1,
             small=True,
         )
-        next_button = sw.Btn(
+        self.next_button = sw.Btn(
             icon="fa-solid fa-forward-step",
             color="primary",
             outlined=True,
             value=1,
             small=True,
         )
-        self.alert_id_button = sw.TextField(
+        self.alert_id_button = v.TextField(
             v_model=self.analyzed_alerts_model.actual_alert_id,
             outlined=True,
-            dense=True,
             single_line=True,
-            style_="width:5%, height:10px",
+            #class_="ma-0 pa-n6",
+            #style_ = "max-width:50px",
         )
-        go_to_alert_button = sw.Btn(
+        self.go_to_alert_button = sw.Btn(
             "Go", color="primary", outlined=True, value=0, small=True
         )
 
-        prev_button.on_event("click", self.navigate)
-        next_button.on_event("click", self.navigate)
-        go_to_alert_button.on_event("click", self.navigate)
+        self.prev_button.on_event("click", self.navigate)
+        self.next_button.on_event("click", self.navigate)
+        self.go_to_alert_button.on_event("click", self.navigate)
 
         section_title = v.CardTitle(class_="pa-1 ma-1", children=["Alert revision"])
-        card01 = v.Card(
-            class_="pa-3 ma-3 d-flex justify-center",
-            hover=True,
-            children=[
-                prev_button,
-                next_button,
-                self.alert_id_button,
-                go_to_alert_button,
-            ],
-        )
+
         self.selected_alert_info = v.Html(
             tag="div",
             children=[
@@ -256,14 +218,8 @@ class AnalysisTile(sw.Layout):
                 # v.Html(tag='br'),
                 v.Html(tag="strong", children=["Last Date: "]),
                 "",
-            ],
-        )
-        card02 = v.Card(
-            class_="pa-3 ma-3",
-            hover=True,
-            children=[
-                v.CardTitle(class_="pa-1 ma-1", children=["Alert info"]),
-                self.selected_alert_info,
+                v.Html(tag="strong", children=["Status: "]),
+                "",
             ],
         )
 
@@ -271,65 +227,158 @@ class AnalysisTile(sw.Layout):
             items=["Yes", "No", "Need further revision"],
             v_model="Yes",
             # label="Is this a true alert?",
+            small=True,
             multiple=False,
             clearable=True,
             chips=True,
         )
 
+        label33 = v.CardTitle(class_="pa-1 ma-1", children=["Alert drawing"])
+        self.start_edit_button = v.Btn(class_='pa-1 ma-1', color = color.primary, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-pen'])])
+        self.clear_button = v.Btn(class_='pa-1 ma-1', color = color.error, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-trash'])], disabled = True)
+        self.save_edit_button = v.Btn(class_='pa-1 ma-1', color = color.primary, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-floppy-disk'])], disabled = True)
+        self.stop_edit_button = v.Btn(class_='pa-1 ma-1', color = color.secondary, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-x'])], disabled = True)
+
+
+        self.start_edit_button.on_event("click", self.start_edition_function)
+        self.clear_button.on_event("click", self.clear_edition_function)
+        self.save_edit_button.on_event("click", self.save_edition_function)
+        self.stop_edit_button.on_event("click", self.stop_edition_function)
+
+
+        tooltip1 = sw.Tooltip(self.start_edit_button, tooltip ='Start Drawing', top=True, open_delay=100, close_delay = 100)
+        tooltip2 = sw.Tooltip(self.clear_button, tooltip ='Clear all', top=True, open_delay=100, close_delay = 100)
+        tooltip3 = sw.Tooltip(self.save_edit_button, tooltip ='Save', top=True, open_delay=100, close_delay = 100)
+        tooltip4 = sw.Tooltip(self.stop_edit_button, tooltip ='Stop Drawing', top=True, open_delay=100, close_delay = 100)
+
+        self.toolBarEdition = v.Toolbar(class_="px-3 d-flex align-center",children = [tooltip1, tooltip3, tooltip4])
+
+        #self.dl_button1 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 1'])
+        self.dl_button1_add = v.Btn(class_='pa-1 ma-1', color = color.primary, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-plus'])], disabled = True)
+        self.dl_button1_remove = v.Btn(class_='pa-1 ma-1', color = color.error, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-minus',])], disabled = True)
+
+        self.dl_button1.on_event("click", self.run_dl_model_1)
+        self.dl_button1_add.on_event("click", self.add_model1_prediction)
+        self.dl_button1_remove.on_event("click", self.remove_model1_prediction)
+
+        tooltip5 = sw.Tooltip(self.dl_button1, tooltip ='Smaller and Faster DL Model', top=True, open_delay=100, close_delay = 100)
+        tooltip6 = sw.Tooltip(self.dl_button1_add, tooltip ='Add to map', top=True, open_delay=100, close_delay = 100)
+        tooltip7 = sw.Tooltip(self.dl_button1_remove, tooltip ='Remove from map', top=True, open_delay=100, close_delay = 100)
+        
+        self.toolBarDL1 = sw.Toolbar(children = [tooltip5,  tooltip6, tooltip7]).hide()
+
+        
+        #self.dl_button2 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 2'])
+        self.dl_button2_add = v.Btn(class_='pa-1 ma-1', color = color.primary, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-plus'])], disabled = True)
+        self.dl_button2_remove = v.Btn(class_='pa-1 ma-1', color = color.error, small=True, children=[v.Icon(color = color.bg, children=['fa-solid fa-minus',])], disabled = True)
+
+        self.dl_button2.on_event("click", self.run_dl_model_2)
+        self.dl_button2_add.on_event("click", self.add_model2_prediction)
+        self.dl_button2_remove.on_event("click", self.remove_model2_prediction)
+
+        tooltip8 = sw.Tooltip(self.dl_button2, tooltip ='Larger but slower DL Model', top=True, open_delay=100, close_delay = 100)
+        tooltip9 = sw.Tooltip(self.dl_button2_add, tooltip ='Add to map', top=True, open_delay=100, close_delay = 100)
+        tooltip10 = sw.Tooltip(self.dl_button2_remove, tooltip ='Remove from map', top=True, open_delay=100, close_delay = 100)
+        
+        self.toolBarDL2 = sw.Toolbar(children = [tooltip8, tooltip9, tooltip10]).hide()
+
+        
+        # self.alert_polygon_selection = v.BtnToggle(children=[
+        #             sw.Btn(msg="DL", value="DL", color="primary", outlined=True, small=True,),
+        #             sw.Btn(msg="Manual", value="Manual", color="primary", outlined=True, small=True,),
+        #             ],
+        #             v_model='DL',  # This will hold the value of the selected button
+        #             mandatory = True,
+        #             color="primary", outlined=True,
+        #         )
+
+
+        label34 = v.CardTitle(class_="pa-1 ma-1", children=["Loss driver"])
+        defo_drivers = ['Agriculture expansion','Livestock grazing','Logging', 'Urban expansion', 'Shifting cultivation', 'Mining','Forest fires', 'Hurricanes', 'Other']
+        self.comments_input = sw.Combobox( items= defo_drivers,
+                                v_model=['Other'],
+                                label="Analyze cause of deforestation",
+                                multiple=True,
+                                clearable=True,
+                                chips=True,
+                              )
+        
+        label35 = v.CardTitle(class_="pa-1 ma-1", children=["Save and Export"])
+        save_btn = sw.Btn("Save", color="primary", outlined=True, small = True)
+        save_btn.on_event("click", self.save_attributes_to_gdf)
+        self.download_alert_data_btn = sw.Btn("Download", color="primary", outlined=True, small = True, disabled = True)
+        self.download_alert_data_btn.on_event("click", self.download_data)
+        self.files_dwn_btn = sw.DownloadBtn(text="Files", small = True)
+        self.report_dwn_btn = sw.DownloadBtn(text="Report", small = True)
+        
+        self.toolBarSaveExport = sw.Toolbar(children = [save_btn,  self.download_alert_data_btn])
+        self.toolBarDownloads = sw.Toolbar(children = [self.files_dwn_btn,  self.report_dwn_btn]).hide()
+
+        #Layout
+        
+        card01 = v.Card(
+            class_="pa-3 ma-3 d-flex justify-center",
+            hover=True,
+            children=[self.prev_button, self.next_button, v.Html(tag = 'body',style_ = 'height: auto, width: 40px', children = [self.alert_id_button]),self.go_to_alert_button],
+        )          
+        card02 = v.Card(
+            class_="pa-3 ma-3",
+            hover=True,
+            children=[
+                v.CardTitle(class_="pa-0 ma-1", children=["Alert info"]),
+                self.selected_alert_info,
+            ],
+        )
+        
         card03 = v.Card(
             class_="pa-3 ma-3",
             hover=True,
             children=[
-                v.CardTitle(class_="pa-1 ma-1", children=["Is this a true alert?"]),
+                v.CardTitle(class_="pa-0 ma-1", children=["Is this a true alert?"]),
                 self.boton_confirmacion,
             ],
         )
 
-        label33 = v.CardTitle(class_="pa-1 ma-1", children=["Alert drawing"])
-        self.apply_DL_model_button.on_event("click", self.add_defo_prediction_map)
-        self.edit_layer_button.on_event("click", self.edit_defo_prediction_map)
-
+        card35 = v.Card(
+            class_="pa-3 ma-3",
+            hover=True,
+            children=[
+                v.CardTitle(class_="pa-0 ma-1", children=["Is this a true alert?"]),
+                self.boton_confirmacion,
+                label34, 
+                self.comments_input,
+            ],
+        )
+      
         card04 = v.Card(
             class_="pa-3 ma-3",
             hover=True,
             children=[
                 label33,
-                self.apply_DL_model_button,
-                self.edit_layer_button,
+                self.toolBarEdition,
+                self.toolBarDL1,
+                self.toolBarDL2,
                 self.alert_draw_alert,
             ],
         )
-
-        label34 = v.CardTitle(class_="pa-1 ma-1", children=["Description Field"])
-        self.comments_input = sw.TextField(label="Enter text here", v_model="")
-
+        
         card05 = v.Card(
-            class_="pa-3 ma-3", hover=True, children=[label34, self.comments_input]
+            class_="pa-3 ma-3", 
+            hover=True, 
+            children=[label34, self.comments_input],
         )
-
-        save_btn = sw.Btn("Save", color="primary", outlined=True)
-        save_btn.on_event("click", self.save_attributes_to_gdf)
-        download_alert_data_btn = sw.Btn("Download", color="primary", outlined=True)
-        download_alert_data_btn.on_event("click", self.download_data)
-        self.files_dwn_btn = sw.DownloadBtn(text="Files")
-        self.report_dwn_btn = sw.DownloadBtn(text="Report")
 
         card06 = v.Card(
-            class_="pa-3 ma-5 d-flex justify-center",
+            class_="pa-3 ma-3",
             fluid=True,
             hover=True,
-            children=[save_btn, download_alert_data_btn],
-        )
-        card07 = v.Card(
-            class_="pa-3 ma-5 d-flex justify-center",
-            fluid=True,
-            hover=True,
-            children=[self.files_dwn_btn, self.report_dwn_btn],
+            children=[label35, self.toolBarSaveExport, self.toolBarDownloads],
         )
 
         card00 = v.Card(
             class_="py-2",
-            children=[card02, card01, card03, card04, card05, card06, card07],
+            overflow_y = 'auto',
+            children=[card02, card01, card35, card04, card06],
         )
 
         # Layout de la aplicación
@@ -344,46 +393,9 @@ class AnalysisTile(sw.Layout):
         )
         self.children = [layout]
 
-    def create_gdf(self):
-        print("Ejecutando create gdf")
-        if self.selected_alerts_model.alerts_bbs is None:
-            print("opcion 1, no gdf", len(self.selected_alerts_model.alerts_bbs))
-            self.analyzed_alerts_model.alerts_gdf = None
-        else:
-            print("opcion 2 , Creando GDF")
-            alertas_gdf = convert_to_geopandas(self.selected_alerts_model.alerts_bbs)
-            self.analyzed_alerts_model.alerts_gdf = alertas_gdf
-            self.analyzed_alerts_model.actual_alert_id = 0
-            self.analyzed_alerts_model.max_alert_id = len(alertas_gdf)+1
-            # alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
-            #     self.analyzed_alerts_model.actual_alert_id
-            # ]
-            # self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
 
-    def add_gdf(self, change):
-        print("Full bbs received", len(self.selected_alerts_model.alerts_total_bbs))
-        total_alertas_gdf = convert_to_geopandas(
-            self.selected_alerts_model.alerts_total_bbs
-        )
-        analyzed_temp_alerts = self.analyzed_alerts_model.alerts_gdf[
-            self.analyzed_alerts_model.alerts_gdf["status"] != "Not reviewed"
-        ]
-        unique_values = analyzed_temp_alerts["bounding_box"].unique()
-        if len(unique_values) == 0:
-            filtered_total = total_alertas_gdf
-        else:
-            filtered_total = total_alertas_gdf[
-                ~total_alertas_gdf["bounding_box"].isin(unique_values)
-            ].reset_index(drop=True)
-
-        combined_gdf = gpd.GeoDataFrame(
-            pd.concat([analyzed_temp_alerts, filtered_total])
-        )
-        self.analyzed_alerts_model.alerts_gdf = combined_gdf
-        self.analyzed_alerts_model.max_alert_id = len(combined_gdf)+1
-        # Save gdf to app_tile_model.recipe_folder_path
-        self.save_alerts_to_gdf()
-
+    # Saving alerts to gdf functions
+    
     def save_alerts_to_gdf(self):
         alertas_gdf = self.analyzed_alerts_model.alerts_gdf
 
@@ -394,31 +406,124 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_csv(
             alert_db_name
         )  # Save as CSV
-
-    def update_gdf(self, change):
+    
+    def create_gdf_partial(self):
+        """
+        Determines the value of `x` based on the conditions of `partial` and `complete`.
+    
+        Args:
+            partial: A variable that can be None or set to a value.
+            complete: A variable that can be None or set to a value.
+    
+        Returns:
+            The value of `x` based on the given conditions.
+        """
+        partial = self.selected_alerts_model.alerts_bbs
+        data = self.analyzed_alerts_model.alerts_gdf
+    
+        if partial is None:
+            print('nothing arrived yet')
+            self.analyzed_alerts_model.alerts_gdf = None
+            
+        elif data is None and partial is not None:
+            print('partial arrived first')
+            alertas_gdf = convert_to_geopandas(partial)
+            self.analyzed_alerts_model.alerts_gdf = alertas_gdf
+            self.analyzed_alerts_model.actual_alert_id = 0
+            self.analyzed_alerts_model.max_alert_id = len(alertas_gdf)
+            recipe_dictionary_path = self.app_tile_model.recipe_folder_path + '/recipe_parameters.json'       
+            update_saved_dictionary(recipe_dictionary_path ,'max_alert_id',self.analyzed_alerts_model.max_alert_id)
+        
+        elif data is not None and partial is not None:
+            print('partial arrived after')
+            pass
+            
+    def create_gdf_full(self):
+        """
+        Determines the value of `x` based on the conditions of `partial` and `complete`.
+    
+        Args:
+            partial: A variable that can be None or set to a value.
+            complete: A variable that can be None or set to a value.
+    
+        Returns:
+            The value of `x` based on the given conditions.
+        """
+        complete = self.selected_alerts_model.alerts_total_bbs
+        data = self.analyzed_alerts_model.alerts_gdf
+    
+        if complete is None:
+            print('nothing arrived yet')
+            self.analyzed_alerts_model.alerts_gdf = None
+                      
+        elif data is None and complete is not None:
+            print('complete arrived first')       
+            alertas_gdf = convert_to_geopandas(complete)
+            self.analyzed_alerts_model.alerts_gdf = alertas_gdf
+            self.analyzed_alerts_model.actual_alert_id = 0
+            self.analyzed_alerts_model.max_alert_id = len(alertas_gdf)
+            recipe_dictionary_path = self.app_tile_model.recipe_folder_path + '/recipe_parameters.json'       
+            update_saved_dictionary(recipe_dictionary_path ,'max_alert_id',self.analyzed_alerts_model.max_alert_id)
+            self.save_alerts_to_gdf()
+    
+        elif data is not None and complete is not None:
+            print('merging complete data to analyzed partial')
+            total_alertas_gdf = convert_to_geopandas(complete)
+            analyzed_temp_alerts = data[data["status"] != "Not reviewed"]
+            unique_values = analyzed_temp_alerts["bounding_box"].unique()
+            
+            if len(unique_values) == 0:
+                filtered_total = total_alertas_gdf
+            else:
+                filtered_total = total_alertas_gdf[
+                    ~total_alertas_gdf["bounding_box"].isin(unique_values)
+                ].reset_index(drop=True)
+    
+            combined_gdf = gpd.GeoDataFrame(
+                pd.concat([analyzed_temp_alerts, filtered_total])
+            )
+            self.analyzed_alerts_model.alerts_gdf = combined_gdf
+            self.analyzed_alerts_model.max_alert_id = len(combined_gdf)
+            recipe_dictionary_path = self.app_tile_model.recipe_folder_path + '/recipe_parameters.json'       
+            update_saved_dictionary(recipe_dictionary_path ,'max_alert_id',self.analyzed_alerts_model.max_alert_id)
+            self.save_alerts_to_gdf()    
+    
+    def update_gdf_partial(self, change):
         print("cambio detectado en selected_Alerts, ejecutando create gdf")
-        # Update the tile when selected alert centroids changes
-        self.create_gdf()
+        self.create_gdf_partial()
+    
+    def update_gdf_full(self, change):
+        print("cambio detectado en selected_Alerts, ejecutando create gdf")
+        self.create_gdf_full()
 
+
+    # Navigation functions
+    
     def navigate(self, widget, event, data):
-        # widget.loading = True  # Set button to loading state
-        # widget.disabled = True  # Disable button to prevent further clicks
-
+        self.prev_button.disabled = True
+        self.next_button.disabled = True
+        self.alert_id_button.disabled = True
+        self.go_to_alert_button.disabled = True
+        
         if widget.value == 0:
             self.analyzed_alerts_model.actual_alert_id = int(
                 self.alert_id_button.v_model
             )
         else:
+            max_value = self.analyzed_alerts_model.max_alert_id+1
             self.analyzed_alerts_model.actual_alert_id = (
-                (self.analyzed_alerts_model.actual_alert_id + widget.value) % self.analyzed_alerts_model.max_alert_id
+                (self.analyzed_alerts_model.actual_alert_id + widget.value) % max_value
             )
 
         self.files_dwn_btn.set_url()
         self.report_dwn_btn.set_url()
 
-        # widget.loading = False  # Remove loading state
-        # widget.disabled = False  # Re-enable the button
+        self.prev_button.disabled = False
+        self.next_button.disabled = False
+        self.alert_id_button.disabled = False
+        self.go_to_alert_button.disabled = False
 
+    #Function for image sliders
     def create_horizontal_slide_group(
         self,
         data_list,
@@ -434,6 +539,7 @@ class AnalysisTile(sw.Layout):
         map_element = main_component.children[0]
         info_element = main_component.children[1].children[1]
         slide_group = main_component.children[1].children[3]
+        slide_group_secondary = main_component.children[1].children[5]
 
         # Sort data by 'milis' attribute
         sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
@@ -452,7 +558,8 @@ class AnalysisTile(sw.Layout):
         # Initialize slide_group as a v-slide-group
         #slide_group.slide_group.children = []  # Clear any previous content
         #slide_group.mandatory = True
-        #slide_group.show_arrows = True  # Show arrows for navigation if needed
+        slide_group.show_arrows = True  # Show arrows for navigation if needed
+        slide_group.defaul_child_color =  "green"
         # slide_group.style_="max-width: 90%;"
 
         # Helper function to create a button for each item
@@ -487,6 +594,15 @@ class AnalysisTile(sw.Layout):
             widget.loading = True  # Set button to loading state
             widget.disabled = True  # Disable button to prevent further clicks
 
+            selected_item = date_indices[widget.value]
+            img_source = selected_item["source"]
+           
+            slide_group.reset_default_color()
+            slide_group_secondary.reset_default_color()
+        
+            #Change color of selected wigdet
+            widget.color = color_map.get("selected")
+            
             # Call the callbacks with the selected item
             selected_item = date_indices[widget.value]
             callback(selected_item, map_element, model_att1)
@@ -502,6 +618,7 @@ class AnalysisTile(sw.Layout):
 
         if fire_callback == True:
             #Set the initial slide callback
+            slide_group.slide_group.children[default_v_model].color = color_map.get("selected")
             selected_item = date_indices[slide_group.slide_group.children[default_v_model].value]
             callback(selected_item, map_element, model_att1)
             callback2(selected_item, info_element, model_att2)
@@ -521,6 +638,7 @@ class AnalysisTile(sw.Layout):
         map_element = main_component.children[0]
         info_element = main_component.children[1].children[1]
         slide_group = main_component.children[1].children[5]
+        slide_group_secondary = main_component.children[1].children[3]
 
         # Sort data by 'milis' attribute
         sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
@@ -538,15 +656,24 @@ class AnalysisTile(sw.Layout):
         }
         # Initialize slide_group as a v-slide-group
         slide_group.children = []  # Clear any previous content
-        slide_group.mandatory = True
         slide_group.show_arrows = True  # Show arrows for navigation if needed
+        slide_group.defaul_child_color =  "blue"
         # slide_group.style_="max-width: 90%;"
 
         # Helper function to create a button for each item
         def create_slide_button(i, item):
             # Get the color based on source, or use default if source is undefined
             img_source = item["source"]
+            cloud_cover = float(item["cloud_cover"])
             button_color = color_map.get(img_source, "lightgray")
+
+            # Determine the icon based on the cloud cover range
+            if 0 <= cloud_cover <= 30:
+                icon = 'mdi-weather-sunny'
+            elif 30 < cloud_cover <= 60:
+                icon = 'mdi-cloud-outline'
+            elif 60 < cloud_cover <= 100:
+                icon = 'mdi-cloud'
 
             if img_source == "Planet NICFI":
                 date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
@@ -559,7 +686,8 @@ class AnalysisTile(sw.Layout):
 
             # Button representing each slide showing 'milis'
             button = sw.Btn(
-                text=date_string,
+                msg=date_string,
+                gliph = icon,
                 color=button_color,
                 class_="ma-1",
                 value=i,
@@ -574,6 +702,15 @@ class AnalysisTile(sw.Layout):
             widget.loading = True  # Set button to loading state
             widget.disabled = True  # Disable button to prevent further clicks
 
+            selected_item = date_indices[widget.value]
+            img_source = selected_item["source"]
+
+            slide_group.reset_default_color()
+            slide_group_secondary.reset_default_color()
+            
+            #Change color of selected wigdet
+            widget.color = color_map.get("selected")
+            
             # Call the callbacks with the selected item
             selected_item = date_indices[widget.value]
             callback(selected_item, map_element, model_att1)
@@ -588,8 +725,6 @@ class AnalysisTile(sw.Layout):
         slide_group.set_loading_state(False)
         
     def image_slider_map_callback(self, selected_item, map_element, model_att):
-        et1 = time.time()
-        print('Add image to map callback')
         geom = self.actual_alert_grid
         image_id = selected_item["image_id"]
         img_source = selected_item["source"]
@@ -619,11 +754,9 @@ class AnalysisTile(sw.Layout):
         orig_alert = ee.Image(self.selected_alerts_model.filtered_alert_raster).clip(
             self.actual_bb.geometry()
         )
-        et2 = time.time()
-        print('images created ', et2- et1)
 
-        map_element.addLayer(img, vis1, "True Color", False)
-        map_element.addLayer(img, vis2, "False Color", True)
+        map_element.addLayer(img, vis1, "True Color", True)
+        map_element.addLayer(img, vis2, "False Color", False)
         map_element.addLayer(
             orig_alert.select("alert"),
             {"min": 1, "max": 2, "palette": ["orange", "purple"]},
@@ -631,8 +764,6 @@ class AnalysisTile(sw.Layout):
             False,
             0.5,
         )
-        et3 = time.time()
-        print('Images addde to map', et3- et2)
 
     def image_slider_info_callback(self, selected_item, info_element, model_att):
         info_element.loading = True
@@ -642,23 +773,49 @@ class AnalysisTile(sw.Layout):
         )
         info3 = selected_item["cloud_cover"]
         info4 = selected_item["value"]
-        lista = [info1, info2, info3, info4]
+        info5 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime(
+            "_%d%m%y"
+        )
+        lista = [info1, info2, info3, info4,info5]
         if model_att == 0:
             self.selected_img_before_info_list = lista
         elif model_att == 1:
             self.selected_img_after_info_list = lista
         info_element.loading = False
+        # info_element.children = [
+        #     f"Source: {info1}, Date: {info2}, Cloud Cover: {info3}"
+        # ]
         info_element.children = [
-            f"Source: {info1}, Date: {info2}, Cloud Cover: {info3}"
+            v.Html(tag="strong", children=["Source: "]),
+            info1,
+            v.Html(tag="strong", children=[", Date: "]),
+            info2,
+            v.Html(tag="strong", children=[", Cloud Cover: "]),
+            info3,
         ]
 
+    #Process for each alert
+    
     def view_actual_alert(self, change):
         print("cambiando alerta", self.analyzed_alerts_model.actual_alert_id)
 
         recipe_dictionary_path = self.app_tile_model.recipe_folder_path + '/recipe_parameters.json'
         
-        update_actual_id(recipe_dictionary_path ,self.analyzed_alerts_model.actual_alert_id)
-        
+        update_saved_dictionary(recipe_dictionary_path ,'actual_alert_id',self.analyzed_alerts_model.actual_alert_id)
+
+        #Reset ui elements
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = True
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = True
+        self.clear_button.disabled = True
+        self.stop_edit_button.disabled = True
+        self.start_edit_button.disabled = False
+        self.toolBarDL1.hide()
+        self.toolBarDL2.hide()
+        self.download_alert_data_btn.disabled = True
+        self.toolBarDownloads.hide()
+
         # Select alert
         alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
             self.analyzed_alerts_model.actual_alert_id
@@ -666,35 +823,52 @@ class AnalysisTile(sw.Layout):
         #Obtener fechas de la alerta 
         fecha1 = convert_julian_to_date(alerta["alert_date_min"])
         fecha2 = convert_julian_to_date(alerta["alert_date_max"])
-
         
         #Cambio en boton de navegacion
         self.alert_id_button.v_model = self.analyzed_alerts_model.actual_alert_id
-        
+               
         #Cambio en alert info
+        if alerta["status"] != 'Not reviewed':
+            alert_st = 'Reviewed'
+        else:
+            alert_st = 'Not reviewed'
+
         self.selected_alert_info.children = [
             v.Html(tag="strong", children=["First Date: "]),
             fecha1,
             v.Html(tag="br"),
             v.Html(tag="strong", children=[" Last Date: "]),
             fecha2,
-        ]
+            v.Html(tag="br"),
+            v.Html(tag="strong", children=["Status: "]),
+            alert_st,
+      ]
         self.map31.children[1].children[5].set_loading_state(True)
         self.map32.children[1].children[5].set_loading_state(True)
         
-        #Reset del mapa
-        self.map_31.remove_all()
-        self.map_32.remove_all()
-
+        # Cambio en boton de confirmacion
+        status_dict_reverse = {
+            "Confirmed": "Yes",
+            "False Positive": "No",
+            "Maybe":"Need further revision",
+        }
+        if alerta["status"] != 'Not reviewed':
+            self.boton_confirmacion.v_model = status_dict_reverse[alerta["status"]]
+            self.comments_input.v_model = parse_formatted_string(alerta["description"])
+        
         # Clean previous draw elements
         self.draw_alerts1.hide()
         self.draw_alerts2.hide()
+        
         # Zoom to alert bb
         alerta_bb_geojson = alerta["bounding_box"].__geo_interface__
         self.map_31.center = (alerta.point.y, alerta.point.x)
         self.map_31.zoom = 16
-        #self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
-        #self.map_31.zoom_bounds(alerta["bounding_box"].bounds)
+
+        #Reset del mapa
+        self.map_31.remove_all()
+        self.map_32.remove_all()
+        
         ##Add bounding box
         geojson_layer = GeoJSON(
             data=alerta_bb_geojson,
@@ -710,6 +884,10 @@ class AnalysisTile(sw.Layout):
         )
         self.map_31.add_layer(geojson_layer)
         self.map_32.add_layer(geojson_layer)
+
+        #Agregar defo layer si ya fue revisado
+        if alerta["status"] in {"Confirmed", "maybe"} and alerta["alert_polygon"] is not None:
+            self.analyzed_alerts_model.defo_dl_layer = multipolygon_to_geodataframe(alerta["alert_polygon"]).set_crs(epsg="4326", allow_override=True, inplace=True)
 
         # Create gee feature
         alerta_bb_geojson_ee = ee.Feature(alerta_bb_geojson).buffer(100, 1).bounds(1)
@@ -748,77 +926,259 @@ class AnalysisTile(sw.Layout):
         )
 
         # Obtener imagenes
-        et6 = time.time()
         sentinel2_mosaics_dates = get_sentinel2_dates(fecha1, fecha2)
         self.start_s2_dictionary_thread(gridDescargaBounds, sentinel2_mosaics_dates[0], sentinel2_mosaics_dates[1], self.assign_s2_before_dictionary)
         self.start_s2_dictionary_thread(gridDescargaBounds, sentinel2_mosaics_dates[2], sentinel2_mosaics_dates[3], self.assign_s2_after_dictionary)
-        et7 = time.time()
-        print("imagenes S2 seleccionadas", et7 - et6)
-        #s2ind_images_dict_before = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[0], sentinel2_mosaics_dates[1])
-        #s2ind_images_dict_after = getIndividualS2(gridDescargaBounds, sentinel2_mosaics_dates[2], sentinel2_mosaics_dates[3])
-        #print(s2ind_images_dict_before, s2ind_images_dict_after)
-        
-        # et7 = time.time()
-        # print("imagenes S2 seleccionadas", et7 - et6)
 
-        # self.create_horizontal_slide_group_s2(
-        #     s2ind_images_dict_before,
-        #     self.map31,
-        #     0,
-        #     self.image_slider_map_callback,
-        #     0,
-        #     self.image_slider_info_callback,
-        #     0,
-        #     #False,
-        # )
-        # self.create_horizontal_slide_group_s2(
-        #     s2ind_images_dict_after,
-        #     self.map32,
-        #     1,
-        #     self.image_slider_map_callback,
-        #     1,
-        #     self.image_slider_info_callback,
-        #     1,
-        #     #False,
-        # )
-        
-    def download_images_button(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
-        image_name = (
+    ###### DL MODEL SECTION #######
+
+    def worker_m1(self):
+        import os
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+        import rasterio
+        import numpy as np
+        import tensorflow as tf
+        from tensorflow.keras import layers, models
+        from tensorflow.keras import backend as K
+        from MightyMosaic import MightyMosaic
+
+        from component.scripts.model_worker import apply_dl_model, save_prediction_prob
+
+        """Worker thread that processes files from the file_queue."""
+        while True:
+            input_list = self.file_queue1.get()  # Get a file path from the queue
+            file_path = input_list[0]
+            model_option = input_list[1]
+            file_suffix = input_list[2]
+
+            
+            if file_path == "exit":  # Stop the thread if "exit" command is received
+                break
+            # Process the file and put the result in the result_queue
+            prediction_name = (
             self.app_tile_model.recipe_folder_path
             + "/alert_"
             + str(self.analyzed_alerts_model.actual_alert_id)
-            + ".tif"
+            + "_prediction"+ file_suffix +".tif"
         )
-        source1 = self.selected_img_before_info_list[0]
-        source2 = self.selected_img_after_info_list[0]
+            processed_file = apply_dl_model(file_path, model_option, file_suffix)
+            self.result_queue1.put(processed_file)
+            self.file_queue1.task_done()
+            
+    def worker_m2(self):
+        import os
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+        import rasterio
+        import numpy as np
+        import tensorflow as tf
+        from tensorflow.keras import layers, models
+        from tensorflow.keras import backend as K
+        from MightyMosaic import MightyMosaic
 
-        download_both_images(
-            self.selected_img_before,
-            self.selected_img_after,
-            image_name,
-            source1,
-            source2,
-            self.actual_alert_grid,
+        from component.scripts.model_worker import apply_dl_model, save_prediction_prob
+
+        """Worker thread that processes files from the file_queue."""
+        while True:
+            input_list = self.file_queue2.get()  # Get a file path from the queue
+            file_path = input_list[0]
+            model_option = input_list[1]
+            file_suffix = input_list[2]
+
+            
+            if file_path == "exit":  # Stop the thread if "exit" command is received
+                break
+            # Process the file and put the result in the result_queue
+            prediction_name = (
+            self.app_tile_model.recipe_folder_path
+            + "/alert_"
+            + str(self.analyzed_alerts_model.actual_alert_id)
+            + "_prediction"+ file_suffix +".tif"
         )
+            processed_file = apply_dl_model(file_path, model_option,file_suffix)
+            self.result_queue2.put(processed_file)
+            self.file_queue2.task_done()
+    
+    def process_file1(self, file_path):
+        # Put the file path in the queue for the worker to process
+        self.file_queue1.put(file_path)
+
+        # Wait for the worker to process the file and return the result
+        processed_file = self.result_queue1.get()  # Blocking wait in worker thread
+        self.result_queue1.task_done()
+
+        # Call the callback function with the result
+        print('callback1 called')
+        self.analyzed_alerts_model.model1_prediction_file = processed_file
+        
+    def process_file2(self, file_path):
+        # Put the file path in the queue for the worker to process
+        self.file_queue2.put(file_path)
+
+        # Wait for the worker to process the file and return the result
+        processed_file = self.result_queue2.get()  # Blocking wait in worker thread
+        self.result_queue2.task_done()
+
+        # Call the callback function with the result
+        print('callback2 called')
+        self.analyzed_alerts_model.model2_prediction_file = processed_file
+
+
+    def send_file_for_processing_m1_v2(self, file_path, function):
+        """
+        Function to send a file path to the worker and process the result asynchronously.
+        
+        Args:
+            file_path: The file path to be sent to the worker.
+            function: A function to call with the processed file once available.
+        """
+        print('model1 started')
+        # Start a new thread to handle file processing
+        processing_thread1 = threading.Thread(target=function(file_path), daemon=True)
+        processing_thread1.start()
+
+    def send_file_for_processing_m2_v2(self, file_path, function):
+        """
+        Function to send a file path to the worker and process the result asynchronously.
+        
+        Args:
+            file_path: The file path to be sent to the worker.
+            function: A function to call with the processed file once available.
+        """
+        print('model2 started')
+        # Start a new thread to handle file processing
+        processing_thread2 = threading.Thread(target=function(file_path), daemon=True)
+        processing_thread2.start()
+
+    ##Edition creation functions
+    
+    def start_edition_function(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
+        self.draw_alerts1.show()
+        self.draw_alerts2.show()
+        if self.analyzed_alerts_model.defo_dl_layer is not None:
+           self.draw_alerts2.data = convertir_formato2(self.analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"], 'blue')
+        self.clear_button.disabled = False
+        self.save_edit_button.disabled = False
+        self.stop_edit_button.disabled = False
+        self.toolBarDL1.show()
+        self.toolBarDL2.show()
+        widget.loading = False  # Remove loading state
+
+    def save_edition_function(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
+
+        ##function to save draw items to gdf
+        geometries = self.draw_alerts1.to_json()['features']
+        if len(geometries) > 0: 
+            self.analyzed_alerts_model.defo_dl_layer = geojson_to_geodataframe(self.draw_alerts1.to_json()).set_crs(epsg="4326", allow_override=True, inplace=True)
+        
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
 
-    def add_defo_prediction_map(self, widget, event, data):
+
+    def stop_edition_function(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
+
+        self.draw_alerts1.hide()
+        self.draw_alerts2.hide()
+        
+        self.toolBarDL1.hide()
+        self.toolBarDL2.hide()
+        
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = True
+        self.dl_button2_add.disabled = True
+        self.dl_button2_remove.disabled = True
+
+        self.save_edit_button.disabled = True
+        self.clear_button.disabled = True
+        self.start_edit_button.disabled = False
+        widget.loading = False  # Remove loading state
+        
+    def clear_edition_function(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
+        self.draw_alerts1.clear()
+        self.draw_alerts2.clear()
+        #self.draw_alerts1.data = filter_features_by_color(self.draw_alerts1.data,'blue')
+        widget.loading = False  # Remove loading state
+        widget.disabled = False  # Re-enable the button
+
+    def enable_dl1(self, change):
+        # self.dl_button1.loading = False
+        # self.dl_button1.disabled = False
+        self.dl_button1_add.disabled = False
+        self.dl_button1_remove.disabled = False
+
+    def enable_dl2(self, change):
+        # self.dl_button2.loading = False
+        # self.dl_button2.disabled = False
+        self.dl_button2_add.disabled = False
+        self.dl_button2_remove.disabled = False
+
+    def add_model1_prediction(self, widget, event, data):
+        defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model1_prediction_file, "4326", 0.20)
+        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 20)
+        orig_features = self.draw_alerts1.data
+        test_features = convertir_formato2(edit_layer, 'green')
+        self.draw_alerts1.clear()
+        self.draw_alerts2.clear()
+        self.draw_alerts1.data = orig_features + test_features
+        self.draw_alerts2.data = orig_features + test_features
+
+        
+    def add_model2_prediction(self, widget, event, data):
+        defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model2_prediction_file, "4326", 0.20)
+        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 20)
+        orig_features = self.draw_alerts1.data
+        test_features = convertir_formato2(edit_layer, 'purple')
+        self.draw_alerts1.clear()
+        self.draw_alerts2.clear()
+        self.draw_alerts1.data = orig_features + test_features
+        self.draw_alerts2.data = orig_features + test_features
+        
+    def remove_model1_prediction(self, widget, event, data):
+        orig_features = self.draw_alerts1.data
+        self.draw_alerts1.clear()
+        self.draw_alerts2.clear()
+        self.draw_alerts1.data = filter_features_by_color(orig_features,'green')
+        self.draw_alerts2.data = filter_features_by_color(orig_features,'green')
+
+        
+    def remove_model2_prediction(self, widget, event, data):
+        orig_features = self.draw_alerts1.data
+        self.draw_alerts1.clear()
+        self.draw_alerts2.clear()
+        self.draw_alerts1.data = filter_features_by_color(orig_features,'purple')
+        self.draw_alerts2.data = filter_features_by_color(orig_features,'purple')
+        
+    def add_defo_layer(self, change):
+        if self.analyzed_alerts_model.defo_dl_layer is not None:
+            geo_json_layer = GeoData(geo_dataframe=self.analyzed_alerts_model.defo_dl_layer, name="Defo Layer", style = {'color':'orange', "fillOpacity": "0"})
+            self.map_31.add_layer(geo_json_layer)
+            self.map_32.add_layer(geo_json_layer)
+
+    def run_dl_model_1(self, widget, event, data):
         # widget.loading = True  # Set button to loading state
         # widget.disabled = True  # Disable button to prevent further clicks
-
-        print("Inicio modelo")
+        widget.indeterminate_state(True)
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = True
+        
         image_name = (
             self.app_tile_model.recipe_folder_path
             + "/alert_"
             + str(self.analyzed_alerts_model.actual_alert_id)
+            + self.selected_img_before_info_list[4]
+            + self.selected_img_after_info_list[4]
             + ".tif"
         )
         source1 = self.selected_img_before_info_list[0]
         source2 = self.selected_img_after_info_list[0]
-
+        
         download_both_images(
             self.selected_img_before,
             self.selected_img_after,
@@ -827,40 +1187,48 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
+        model = "utils/Model1.h5"
+        self.send_file_for_processing_m1_v2([image_name, model,'_m1'], self.process_file1)
 
-        prediction_name = self.send_file_for_processing(image_name)
 
-        defo_gdf_layer = raster_to_gdf(prediction_name, "4326", 0.20)
-
-        self.defo_dl_layer = defo_gdf_layer
-        geo_json_layer = GeoData(geo_dataframe=self.defo_dl_layer, name="Defo DL")
-
-        self.map_31.add_layer(geo_json_layer)
-        self.map_32.add_layer(geo_json_layer)
-
-        # widget.loading = False  # Remove loading state
-        # widget.disabled = False  # Re-enable the button
-
-    def edit_defo_prediction_map(self, widget, event, data):
+    def run_dl_model_2(self, widget, event, data):
         # widget.loading = True  # Set button to loading state
         # widget.disabled = True  # Disable button to prevent further clicks
-
-        self.draw_alerts1.clear()
-        self.draw_alerts2.clear()
-
-        # Simplify polygon for edition
-        edit_layer = simplify_and_extract_features(self.defo_dl_layer, "geometry", 20)
-        self.draw_alerts1.data = convertir_formato2(edit_layer)
-
-        self.draw_alerts1.show()
-        self.draw_alerts2.show()
-
-        # widget.loading = False  # Remove loading state
-        # widget.disabled = False  # Re-enable the button
+        widget.indeterminate_state(True)
+        self.dl_button2_add.disabled = True
+        self.dl_button2_remove.disabled = True
+        
+        image_name = (
+            self.app_tile_model.recipe_folder_path
+            + "/alert_"
+            + str(self.analyzed_alerts_model.actual_alert_id)
+            + self.selected_img_before_info_list[4]
+            + self.selected_img_after_info_list[4]
+            + ".tif"
+        )
+        source1 = self.selected_img_before_info_list[0]
+        source2 = self.selected_img_after_info_list[0]
+        
+        download_both_images(
+            self.selected_img_before,
+            self.selected_img_after,
+            image_name,
+            source1,
+            source2,
+            self.actual_alert_grid,
+        )
+        model = "utils/Model2.keras"
+        self.send_file_for_processing_m2_v2([image_name, model,'_m2'], self.process_file2)
+     
+   
+  ##Process to save results
 
     def save_attributes_to_gdf(self, widget, event, data):
         widget.loading = True  # Set button to loading state
         widget.disabled = True  # Disable button to prevent further clicks
+
+        self.download_alert_data_btn.disabled = False
+        
         alertas_gdf = self.analyzed_alerts_model.alerts_gdf
         actual_alert_id = self.analyzed_alerts_model.actual_alert_id
         alerta = self.analyzed_alerts_model.alerts_gdf.iloc[actual_alert_id]
@@ -873,7 +1241,12 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "status"] = status_dict[
             self.boton_confirmacion.v_model
         ]
-        alertas_gdf.at[actual_alert_id, "description"] = self.comments_input.v_model
+
+        #Save alert driver/description
+        drivers_list = ensure_list(self.comments_input.v_model)
+        alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
+
+        #Save before and after img name
         alertas_gdf.at[
             actual_alert_id, "before_img"
         ] = self.selected_img_before_info_list[3]
@@ -881,7 +1254,11 @@ class AnalysisTile(sw.Layout):
             actual_alert_id, "after_img"
         ] = self.selected_img_after_info_list[3]
 
-
+        ##Create dictionary of alert sources      
+        alertas_gdf.at[
+            actual_alert_id, "alert_sources"
+        ] = format_list(self.selected_alerts_model.selected_alert_sources)
+        
         #Get adminstrative location attributes
         adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
         selected_admin = adminL2.filterBounds(self.actual_bb.geometry())
@@ -911,18 +1288,15 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "admin1"] = st1.getInfo()[:-1]
         alertas_gdf.at[actual_alert_id, "admin2"] = st2.getInfo()[:-1]
         alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
-
+        alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
+        
         if self.boton_confirmacion.v_model != "Yes":
             alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
             alertas_gdf.at[actual_alert_id, "area_ha"] = 0
-        else:
-            # Add deforestation geometry to gdf
-            alertas_gdf.at[actual_alert_id, "alert_polygon"] = self.defo_dl_layer[
-                "geometry"
-            ].union_all()
-            alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(
-                self.defo_dl_layer
-            )
+        elif self.boton_confirmacion.v_model == "Yes":
+            alertas_gdf.at[actual_alert_id, "alert_polygon"] = self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
+            alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(self.analyzed_alerts_model.defo_dl_layer)           
+
         self.save_alerts_to_gdf()
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
@@ -959,6 +1333,8 @@ class AnalysisTile(sw.Layout):
             self.app_tile_model.recipe_folder_path
             + "/alert_"
             + str(self.analyzed_alerts_model.actual_alert_id)
+            + self.selected_img_before_info_list[4]
+            + self.selected_img_after_info_list[4]
             + ".tif"
         )
         prediction_name = (
@@ -974,7 +1350,7 @@ class AnalysisTile(sw.Layout):
             + ".zip"
         )
 
-        add_files_to_zip(zipfile_name, image_name, prediction_name, gpkg_name)
+        add_files_to_zip(zipfile_name, image_name, gpkg_name)
         zip_path = os.path.abspath(zipfile_name)
         self.files_dwn_btn.set_url(path=zip_path)
 
@@ -998,10 +1374,15 @@ class AnalysisTile(sw.Layout):
         report_path = os.path.abspath(output_report_path)
         self.report_dwn_btn.set_url(path=report_path)
 
+        self.toolBarDownloads.show()
+
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
         # self.analyzed_alerts_model.actual_alert_id = self.analyzed_alerts_model.actual_alert_id + 1
      
+
+    ## Create Sentinel 2 dictionary
+    
     def assign_s2_before_dictionary(self, json):
         self.analyzed_alerts_model.before_s2_images = json
         self.analyzed_alerts_model.before_s2_images_time = datetime.today().timestamp()
@@ -1030,7 +1411,6 @@ class AnalysisTile(sw.Layout):
         thread.start()
 
     def slider_s2_before(self, change):
-        print(self.analyzed_alerts_model.before_s2_images, self.analyzed_alerts_model.before_s2_images_time)
         self.create_horizontal_slide_group_s2(
             self.analyzed_alerts_model.before_s2_images,
             self.map31,
@@ -1043,14 +1423,13 @@ class AnalysisTile(sw.Layout):
         )
     
     def slider_s2_after(self, change):
-        print(self.analyzed_alerts_model.after_s2_images, self.analyzed_alerts_model.after_s2_images_time)
         self.create_horizontal_slide_group_s2(
             self.analyzed_alerts_model.after_s2_images,
             self.map32,
-            0,
+            1,
             self.image_slider_map_callback,
-            0,
+            1,
             self.image_slider_info_callback,
-            0,
+            1,
             #False,
         )

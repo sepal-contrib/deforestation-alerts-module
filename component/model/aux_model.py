@@ -1,5 +1,5 @@
 from sepal_ui import model
-from traitlets import Any
+from traitlets import Any, Unicode
 
 from component import parameter as cp
 from component.message import cm

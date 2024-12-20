@@ -16,6 +16,35 @@ from pathlib import Path
 from component.parameter import directory
 
 
+def ensure_list(input_data):
+    if isinstance(input_data, str):
+        return [input_data]  # Convert string to list
+    elif isinstance(input_data, list):
+        return input_data    # Return the list as is
+    else:
+        raise ValueError("Input must be a string or a list")  # Handle invalid input
+
+def format_list(items):
+    if not items:  # Handle empty list
+        return ""
+    if len(items) == 1:
+        return str(items[0])
+    elif len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    else:
+        return f"{', '.join(map(str, items[:-1]))} and {items[-1]}"
+        
+def parse_formatted_string(formatted_string):
+    if not formatted_string:  # Handle empty string
+        return []
+    if " and " not in formatted_string:  # Only one item
+        return [formatted_string]
+    parts = formatted_string.rsplit(" and ", 1)
+    if ", " in parts[0]:  # Multiple items
+        return parts[0].split(", ") + [parts[1]]
+    else:  # Two items
+        return parts
+
 def plot_tiff_with_overlay(
     tiff_path, output_path, bands=(1, 2, 3), vector_overlay=None, overlay_color="red"
 ):
@@ -146,10 +175,7 @@ def generate_deforestation_report_with_word_template(
         "confirmation_date": datetime.now().strftime("%Y-%m-%d"),
         "before_img": gdf_row["before_img"],
         "after_img": gdf_row["after_img"],
-        # "alert_system_a": gdf_row["AlertSystemA"],
-        "alert_system_a": "GLAD Landsat",
-        # "alert_system_b": gdf_row["AlertSystemB"],
-        "alert_system_b": "CCDC",
+        "alert_system": gdf_row["alert_sources"],
         "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
     }
 
@@ -180,7 +206,7 @@ def generate_deforestation_report_with_word_template(
         overlay_color="red",
     )
 
-    # Process Image 2
+    # Process Image 3
     img3_path_jpg = folder_temp + "/output_image3.jpg"
     plot_tiff_with_overlay(
         image_path,
@@ -190,6 +216,37 @@ def generate_deforestation_report_with_word_template(
         overlay_color="red",
     )
 
+    # Process Image 1
+    folder_temp = os.path.abspath(directory.module_dir / "temp")
+    img4_path_jpg = folder_temp + "/output_image4.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img4_path_jpg),
+        bands=(3, 2, 1),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 2
+    img5_path_jpg = folder_temp + "/output_image5.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img5_path_jpg),
+        bands=(7, 6, 5),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 2
+    img6_path_jpg = folder_temp + "/output_image6.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img6_path_jpg),
+        bands=(7, 6, 5),
+        vector_overlay=geodataframe,
+        overlay_color="red",
+    ) 
+    
     # Insert images in place of placeholders
     for para in doc.paragraphs:
         if "[Placeholder for Image 1]" in para.text:
@@ -207,6 +264,21 @@ def generate_deforestation_report_with_word_template(
             run = para.add_run()
             run.add_picture(img3_path_jpg, width=Pt(250))
 
+        if "[Placeholder for Image 4]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img4_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 5]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img5_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 6]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img6_path_jpg, width=Pt(250))
+
     # Save the report as a Word document
     doc.save(output_path)
-    print(f"Report generated successfully: {output_path}")
+    #print(f"Report generated successfully: {output_path}")

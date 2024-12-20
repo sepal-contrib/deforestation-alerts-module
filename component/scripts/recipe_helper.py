@@ -73,7 +73,7 @@ def save_model_parameters_to_json(
     model_parameters = a | b | c | d | e
     # model_parameters = {key: value for d in (a, b, c, d, e) for key, value in d.items()}
 
-    print(a, b, c, d, e, model_parameters)
+    #print(a, b, c, d, e, model_parameters)
 
     ##File path to save the JSON file
     file_path = file_name
@@ -143,6 +143,75 @@ def load_parameters_from_json(
     analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
 
+def load_parameters_from_json_btn_state(
+    btn,
+    file_name,
+    aux_model,
+    aoi_date_model,
+    selected_alerts_model,
+    analyzed_alerts_model,
+    app_tile_model,
+    aoi_tile,
+    alert_filter_tile,
+):
+    """
+    Loads variables (parameters) from a JSON file and applies them to the models.
+
+    Args:
+        models (dict): A dictionary where keys are model names (str) and values are model objects.
+        file_name (str): The name of the JSON file to load parameters from.
+
+    Returns:
+        None
+    """
+
+    # Read JSON file
+    with open(file_name, "r") as json_file:
+        model_parameters = json.load(json_file)
+    btn.set_loader_text('Loading AOI...')
+    #btn.set_loader_percentage(10)
+    aux_model.import_from_dictionary(model_parameters)
+    aoi_tile.load_saved_parameters(model_parameters)
+    btn.set_loader_text('Loading Alerts...')
+    #btn.set_loader_percentage(30)
+    aoi_tile.process_alerts_silent()
+    btn.set_loader_text('Loading Filters...')
+    #btn.set_loader_percentage(60)
+    alert_filter_tile.load_saved_parameters(model_parameters)
+    (
+        alert_source,
+        user_min_alert_size,
+        alert_area_selection,
+        alert_sorting_method,
+        user_max_number_alerts,
+        user_selection_polygon,
+    ) = check_alert_filter_inputs(alert_filter_tile)
+    analyzed_alerts_model.before_planet_monthly_images, analyzed_alerts_model.after_planet_monthly_images = alert_filter_tile.create_planet_images_dictionary(
+        aoi_date_model.feature_collection,
+        aoi_date_model.start_date,
+        aoi_date_model.end_date,
+    )
+    btn.set_loader_text('Waiting GEE...')
+    #btn.set_loader_percentage(70)
+    selected_alerts_model.filtered_alert_raster = alert_filter_tile.create_filtered_alert_raster(
+        alert_source,
+        user_min_alert_size,
+        alert_area_selection,
+        alert_sorting_method,
+        user_max_number_alerts,
+        user_selection_polygon,
+    )
+    btn.set_loader_text('Loading Alerts DB...')
+    #btn.set_loader_percentage(90)
+    app_tile_model.import_from_dictionary(model_parameters)
+    analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
+        app_tile_model.recipe_folder_path + "/alert_db.csv",
+        ["bounding_box", "point", "alert_polygon"]
+    )
+    btn.set_loader_text('Loading last alert...')
+    #btn.set_loader_percentage(100)
+    analyzed_alerts_model.import_from_dictionary(model_parameters)
+    app_tile_model.current_page_view = "analysis_tile"
 
 def load_gdf_from_csv (csv_file, geometry_columns_list):
     # load encoded dataframe
@@ -156,7 +225,7 @@ def load_gdf_from_csv (csv_file, geometry_columns_list):
     return gdf
 
 
-def update_actual_id(json_file_path, new_value):
+def update_saved_dictionary(json_file_path, key ,new_value):
     """
     Updates the value of the 'actual_id' key in a JSON file and rewrites the file.
 
@@ -177,13 +246,13 @@ def update_actual_id(json_file_path, new_value):
             raise ValueError("JSON content must be a dictionary.")
         
         # Update the 'actual_id' key
-        data['actual_alert_id'] = new_value
+        data[key] = new_value
         
         # Write the updated content back to the same file
         with open(json_file_path, 'w') as file:
             json.dump(data, file)
         
-        print(f"'actual_id' successfully updated to {new_value}.")
+        print(f"'key' successfully updated to {new_value}.")
     except FileNotFoundError:
         print(f"Error: File '{json_file_path}' not found.")
     except json.JSONDecodeError:

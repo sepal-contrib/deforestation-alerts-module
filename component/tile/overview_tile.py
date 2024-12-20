@@ -4,7 +4,7 @@ from sepal_ui.mapping import SepalMap
 from component.message import cm
 import ipyvuetify as v
 from IPython.display import display, HTML
-from ipyleaflet import WidgetControl
+from ipyleaflet import WidgetControl, LayersControl as ipyLayersControl
 
 from sepal_ui.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
@@ -31,7 +31,16 @@ class OverviewTile(sw.Layout):
         self.selected_alerts_model = selected_alerts_model
         self.aoi_date_model = aoi_date_model
         self.app_tile_model = app_tile_model
+        self.initialize_layout()
+        self.update_layout()
 
+        ## Observe changes and update tile when it changes
+        analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
+
+        super().__init__()
+
+    def initialize_layout(self):
+        #Set default table values
         self.listaNumeros = [0, 0, 0, 0, 0]
         # Side information table using v-simple-table
         self.info_table = v.SimpleTable(
@@ -40,18 +49,7 @@ class OverviewTile(sw.Layout):
                 v.Html(tag="tbody", children=create_table_rows(self.listaNumeros))
             ],
         )
-
-        self.initialize_layout()
-        self.update_layout()
-
-        ## Observe changes and update tile when it changes
-        analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
-        # analyzed_alerts_model.observe(self.update_tile,'actual_alert_id')
-
-        super().__init__()
-
-    def initialize_layout(self):
-
+        
         # 1. Crear el mapa para seleccionar el área de estudio
         # Inject CSS to style the custom class
         display(
@@ -60,7 +58,7 @@ class OverviewTile(sw.Layout):
         <style>
             .custom-map-class {
                 width: 100% !important;
-                height: 85vh !important;
+                height: 80vh !important;
                 }
         </style>
         """
@@ -75,6 +73,7 @@ class OverviewTile(sw.Layout):
         )
         refresh_map_button.on_event("click", self.update_button)
         self.map_1.add(self.widget_refresh)
+        #self.map_1.add(ipyLayersControl(position='topright'))
         menu_control = MenuControl(
             icon_content="mdi-layers",
             position="topright",
@@ -123,18 +122,13 @@ class OverviewTile(sw.Layout):
         ):
             self.children = self.children
         else:
-            center = self.map_1.center
-            zoom = self.map_1.zoom
             self.map_1.remove_all()
             self.map_1.remove(self.map_1.controls[-1])
             self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
-            self.map_1.center = center
-            self.map_1.zoom = zoom
-            #self.map_1.add(self.widget_refresh)
-            
+          
             # Add centroids
             centroides_gdf = self.analyzed_alerts_model.alerts_gdf
-            markers_dictionary = create_markers(
+            markers_dictionary = create_markers_ipyvuetify(
                 centroides_gdf,
                 "point",
                 ["alert_date_min", "alert_date_max"],
@@ -168,6 +162,10 @@ class OverviewTile(sw.Layout):
         widget.disabled = False  # Re-enable the button
 
     # Function to change actual alert id and move to analysis tile
-    def on_go_button_click(self, index):
-        self.analyzed_alerts_model.actual_alert_id = int(index)
+    def on_go_button_click(self, widget, event, data):
+        widget.loading = True  # Set button to loading state
+        widget.disabled = True  # Disable button to prevent further clicks
+        self.analyzed_alerts_model.actual_alert_id = int(widget.value)
         self.app_tile_model.current_page_view = "analysis_tile"
+        widget.loading = False  # Remove loading state
+        widget.disabled = False  # Re-enable the button
