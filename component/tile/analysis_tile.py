@@ -52,8 +52,8 @@ class AnalysisTile(sw.Layout):
         self.app_tile_model = app_tile_model
 
     
-        self.dl_button1 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='DL 1')
-        self.dl_button2 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='DL 2')
+        self.dl_button1 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='M 1')
+        self.dl_button2 = CustomBtnWithLoader(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, text='M 2')
         self.alert_draw_alert = sw.Alert().hide()
         self.run_dl_model_1 = su.loading_button(alert=self.alert_draw_alert, button=self.dl_button1)(self.run_dl_model_1)
         self.run_dl_model_2 = su.loading_button(alert=self.alert_draw_alert, button=self.dl_button2)(self.run_dl_model_2)
@@ -261,7 +261,7 @@ class AnalysisTile(sw.Layout):
         self.dl_button1_add.on_event("click", self.add_model1_prediction)
         self.dl_button1_remove.on_event("click", self.remove_model1_prediction)
 
-        tooltip5 = sw.Tooltip(self.dl_button1, tooltip ='Smaller and Faster DL Model', top=True, open_delay=100, close_delay = 100)
+        tooltip5 = sw.Tooltip(self.dl_button1, tooltip ='Smaller and faster model', top=True, open_delay=100, close_delay = 100)
         tooltip6 = sw.Tooltip(self.dl_button1_add, tooltip ='Add to map', top=True, open_delay=100, close_delay = 100)
         tooltip7 = sw.Tooltip(self.dl_button1_remove, tooltip ='Remove from map', top=True, open_delay=100, close_delay = 100)
         
@@ -276,7 +276,7 @@ class AnalysisTile(sw.Layout):
         self.dl_button2_add.on_event("click", self.add_model2_prediction)
         self.dl_button2_remove.on_event("click", self.remove_model2_prediction)
 
-        tooltip8 = sw.Tooltip(self.dl_button2, tooltip ='Larger but slower DL Model', top=True, open_delay=100, close_delay = 100)
+        tooltip8 = sw.Tooltip(self.dl_button2, tooltip ='Larger but slower model', top=True, open_delay=100, close_delay = 100)
         tooltip9 = sw.Tooltip(self.dl_button2_add, tooltip ='Add to map', top=True, open_delay=100, close_delay = 100)
         tooltip10 = sw.Tooltip(self.dl_button2_remove, tooltip ='Remove from map', top=True, open_delay=100, close_delay = 100)
         
@@ -809,6 +809,7 @@ class AnalysisTile(sw.Layout):
         self.dl_button1_add.disabled = True
         self.dl_button1_remove.disabled = True
         self.clear_button.disabled = True
+        self.save_edit_button.disabled = True
         self.stop_edit_button.disabled = True
         self.start_edit_button.disabled = False
         self.toolBarDL1.hide()
@@ -1108,44 +1109,45 @@ class AnalysisTile(sw.Layout):
         widget.disabled = False  # Re-enable the button
 
     def enable_dl1(self, change):
-        # self.dl_button1.loading = False
-        # self.dl_button1.disabled = False
         self.dl_button1_add.disabled = False
-        self.dl_button1_remove.disabled = False
 
     def enable_dl2(self, change):
-        # self.dl_button2.loading = False
-        # self.dl_button2.disabled = False
         self.dl_button2_add.disabled = False
-        self.dl_button2_remove.disabled = False
 
     def add_model1_prediction(self, widget, event, data):
         defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model1_prediction_file, "4326", 0.20)
-        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 20)
+        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato2(edit_layer, 'green')
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
-        self.draw_alerts2.data = orig_features + test_features
+        #self.draw_alerts2.data = orig_features + test_features
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = False
 
         
     def add_model2_prediction(self, widget, event, data):
         defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model2_prediction_file, "4326", 0.20)
-        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 20)
+        edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato2(edit_layer, 'purple')
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
-        self.draw_alerts2.data = orig_features + test_features
+        #self.draw_alerts2.data = orig_features + test_features
+        self.dl_button2_add.disabled = True
+        self.dl_button2_remove.disabled = False
+
         
     def remove_model1_prediction(self, widget, event, data):
         orig_features = self.draw_alerts1.data
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = filter_features_by_color(orig_features,'green')
-        self.draw_alerts2.data = filter_features_by_color(orig_features,'green')
+        #self.draw_alerts2.data = filter_features_by_color(orig_features,'green')
+        self.dl_button1_add.disabled = False
+        self.dl_button1_remove.disabled = True
 
         
     def remove_model2_prediction(self, widget, event, data):
@@ -1153,7 +1155,9 @@ class AnalysisTile(sw.Layout):
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = filter_features_by_color(orig_features,'purple')
-        self.draw_alerts2.data = filter_features_by_color(orig_features,'purple')
+        #self.draw_alerts2.data = filter_features_by_color(orig_features,'purple')
+        self.dl_button2_add.disabled = False
+        self.dl_button2_remove.disabled = True
         
     def add_defo_layer(self, change):
         if self.analyzed_alerts_model.defo_dl_layer is not None:
