@@ -19,6 +19,10 @@ def save_prediction_prob(original_img, prediction, output_path):
     - prediction (object)
     - output_path (str): Output raster file path.
     """
+    # If the output file already exists, remove it.
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    
     # Open the input rasters
     src1 = rasterio.open(original_img)
 

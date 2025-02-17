@@ -1058,7 +1058,7 @@ class AnalysisTile(sw.Layout):
         self.draw_alerts1.show()
         self.draw_alerts2.show()
         if self.analyzed_alerts_model.defo_dl_layer is not None:
-           self.draw_alerts2.data = convertir_formato2(self.analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"], 'blue')
+           self.draw_alerts2.data = convertir_formato3(self.analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"], 'blue')
         self.clear_button.disabled = False
         self.save_edit_button.disabled = False
         self.stop_edit_button.disabled = False
@@ -1118,7 +1118,7 @@ class AnalysisTile(sw.Layout):
         defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model1_prediction_file, "4326", 0.20)
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
-        test_features = convertir_formato2(edit_layer, 'green')
+        test_features = convertir_formato3(edit_layer, 'green')
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
@@ -1131,7 +1131,7 @@ class AnalysisTile(sw.Layout):
         defo_gdf_layer = raster_to_gdf(self.analyzed_alerts_model.model2_prediction_file, "4326", 0.20)
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
-        test_features = convertir_formato2(edit_layer, 'purple')
+        test_features = convertir_formato3(edit_layer, 'purple')
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features

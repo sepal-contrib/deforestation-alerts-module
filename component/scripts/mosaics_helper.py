@@ -366,7 +366,8 @@ def convertir_formato(features):
 # Función que convierte el formato de los elementos de una lista de features
 def convertir_formato2(features, color = '#2196F3'):
     # Estructura de estilo que se añadirá a las nuevas features
-    nuevo_estilo = {"style": {"color": color, "pane": "overlayPane"}}
+    nuevo_estilo = {'style': {'color': color, 'pane': 'overlayPane', 'attribution': None,}}
+
 
     # Convertir cada feature al nuevo formato
     nuevas_features = []
@@ -375,11 +376,71 @@ def convertir_formato2(features, color = '#2196F3'):
         nueva_feature = {
             "type": "Feature",
             "properties": nuevo_estilo,
-            "geometry": feature["geometry"],  # Mantener la geometría original
+            "geometry": feature["geometry"]  # Mantener la geometría original
         }
         nuevas_features.append(nueva_feature)
 
     return nuevas_features
+
+
+def convertir_formato3(input_features, color="#2196F3"):
+    """
+    Convert a list of features from the input format to the output format,
+    allowing the user to define the style color.
+
+    Parameters:
+        input_features (list): A list of feature dictionaries in the input format.
+        color (str): Hex code for the stroke color (default: "#2196F3").
+
+    Returns:
+        list: A list of feature dictionaries in the target format.
+    """
+    style = {
+        'pane': 'overlayPane',
+        'attribution': None,
+        'bubblingMouseEvents': True,
+        'fill': True,
+        'smoothFactor': 1,
+        'noClip': False,
+        'stroke': True,
+        'color': color,
+        'weight': 4,
+        'opacity': 0.5,
+        'lineCap': 'round',
+        'lineJoin': 'round',
+        'dashArray': None,
+        'dashOffset': None,
+        'fillColor': None,
+        'fillOpacity': 0.2,
+        'fillRule': 'evenodd',
+        'interactive': True,
+        'clickable': True
+    }
+
+    def to_list(item):
+        """
+        Recursively convert tuples (or lists) to lists.
+        """
+        if isinstance(item, (tuple, list)):
+            return [to_list(sub) for sub in item]
+        return item
+
+    converted_features = []
+    for input_feature in input_features:
+        geometry = input_feature.get('geometry', {})
+        geom_type = geometry.get('type', 'Polygon')
+        coords = geometry.get('coordinates', [])
+        coords_converted = to_list(coords)
+
+        new_feature = {
+            'type': 'Feature',
+            'properties': {'style': style},
+            'geometry': {'type': geom_type, 'coordinates': coords_converted}
+        }
+        converted_features.append(new_feature)
+    
+    return converted_features
+
 
 
 def save_prediction(original_img, prediction, threshold, output_path):
