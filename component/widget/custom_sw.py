@@ -1,6 +1,7 @@
 from sepal_ui import color, model, sepalwidgets as sw
 from traitlets import Any, HasTraits, Unicode, link, observe
-from component.message import cm
+
+# from component.message import cm
 import time
 from sepal_ui.frontend.resize_trigger import rt
 from copy import deepcopy
@@ -9,6 +10,12 @@ from ipyleaflet import DrawControl, GeomanDrawControl
 from shapely import geometry as sg
 import ipyvuetify as v
 from sepal_ui.sepalwidgets.sepalwidget import SepalWidget
+from sepal_ui.translator import Translator
+import json
+from configparser import ConfigParser
+from pathlib import Path
+from typing import List, Tuple, Union
+from box import Box
 
 
 class CustomApp(sw.App):
@@ -22,7 +29,7 @@ class CustomApp(sw.App):
         self.show_tile_2(self.app_tile_model.current_page_view)
 
     def update_recipe_name_text(self, change):
-        if self.app_tile_model.recipe_name != '':
+        if self.app_tile_model.recipe_name != "":
             self.appBar.set_recipe(self.app_tile_model.recipe_name)
 
     def show_tile_2(self, name: str):
@@ -83,8 +90,10 @@ class CustomAppBar(v.AppBar, SepalWidget):
 
         self.locale = sw.LocaleSelect(translator=translator)
         self.theme = sw.ThemeSelect()
-        #self.recipe_name = v.Html(tag="div", children=[""])
-        self.recipe_name = sw.Btn(msg = "", color= color.accent, class_="ma-2 pa-n6").hide()
+        # self.recipe_name = v.Html(tag="div", children=[""])
+        self.recipe_name = sw.Btn(
+            msg="", color=color.accent, class_="ma-2 pa-n6"
+        ).hide()
         self.save_button = v.Btn(
             icon=True,
             children=[
@@ -102,7 +111,7 @@ class CustomAppBar(v.AppBar, SepalWidget):
             self.title,
             v.Spacer(),
             self.recipe_name,
-            #self.save_button,
+            # self.save_button,
             self.locale,
             self.theme,
         ]
@@ -138,7 +147,7 @@ class CustomAppBar(v.AppBar, SepalWidget):
         # self.recipe_name.children = [title, recipe]
         self.recipe_name.msg = recipe
         self.recipe_name.show()
-        
+
         return self
 
 
@@ -157,8 +166,8 @@ class CustomDrawControl(GeomanDrawControl):
     def __init__(self, m, **kwargs):
 
         # set some default parameters
-        #options = {"shapeOptions": {"color": color.info}}
-        options = {"shapeOptions": {"color": 'blue'}}
+        # options = {"shapeOptions": {"color": color.info}}
+        options = {"shapeOptions": {"color": "blue"}}
         kwargs["marker"] = kwargs.pop("marker", {})
         kwargs["circlemarker"] = kwargs.pop("circlemarker", {})
         kwargs["polyline"] = kwargs.pop("polyline", {})
@@ -237,12 +246,12 @@ class CustomDrawControl(GeomanDrawControl):
 
 
 class CustomSlideGroup(v.Card):
-    def __init__(self, slide_items=None, defaul_child_color = "green", **kwargs):
+    def __init__(self, slide_items=None, defaul_child_color="green", **kwargs):
         # Set default properties for the v.Card
-        kwargs.setdefault("flat", True)       # Make the card flat
-        kwargs.setdefault("elevation", 0)    # Remove elevation
-        kwargs.setdefault("outlined", False) # Remove outline
-        
+        kwargs.setdefault("flat", True)  # Make the card flat
+        kwargs.setdefault("elevation", 0)  # Remove elevation
+        kwargs.setdefault("outlined", False)  # Remove outline
+
         # Initialize base class v.Card
         super().__init__(**kwargs)
         flat = True
@@ -250,22 +259,19 @@ class CustomSlideGroup(v.Card):
         self.defaul_child_color = defaul_child_color
         self.slide_group = v.SlideGroup(children=slide_items or [])
         self.loading_spinner = v.ProgressCircular(
-            indeterminate=True,
-            color="primary",
-            size=24,
-            class_="mx-4"
+            indeterminate=True, color="primary", size=24, class_="mx-4"
         )
-        
+
         # Set the initial state to show the slide group
         self.children = [self.slide_group]
-    
+
     def set_loading_state(self, is_loading):
         """Set the loading state of the component."""
         self.children = [self.loading_spinner] if is_loading else [self.slide_group]
 
     def reset_default_color(self):
         for button in self.slide_group.children:
-            if hasattr(button, 'color') and button.color != self.defaul_child_color:
+            if hasattr(button, "color") and button.color != self.defaul_child_color:
                 button.color = self.defaul_child_color
 
 
@@ -275,7 +281,7 @@ class CustomBtnWithLoader(v.Btn):
         kwargs["children"] = [text]
         # Initialize parent class
         super().__init__(**kwargs)
-        
+
         # Define loader based on loader_type
         self.loader_type = loader_type
         self.loading = False
@@ -285,18 +291,29 @@ class CustomBtnWithLoader(v.Btn):
         self.loader = self._create_loader(loader_type)
 
         # Add loader to slots
-        self.v_slots = [{'name': 'loader', 'children': [self.loader]}]
+        self.v_slots = [{"name": "loader", "children": [self.loader]}]
 
     def _create_loader(self, loader_type):
         """Create loader element based on loader_type."""
         if loader_type == "circular":
-            return v.ProgressCircular(color = "primary", size=40, v_model=0, rotate=-90, children=["0"])
+            return v.ProgressCircular(
+                color="primary", size=40, v_model=0, rotate=-90, children=["0"]
+            )
         elif loader_type == "linear":
-            return v.ProgressLinear(color = "primary", height=10, v_model=0, children=["0"])
+            return v.ProgressLinear(
+                color="primary", height=10, v_model=0, children=["0"]
+            )
         elif loader_type == "text":
-            return v.Html(color= 'gray', tag="div", children=["Loading..."], style={"fontSize": "8px", "background-color": "transparent"})
+            return v.Html(
+                color="gray",
+                tag="div",
+                children=["Loading..."],
+                style={"fontSize": "8px", "background-color": "transparent"},
+            )
         else:
-            raise ValueError("Invalid loader_type. Choose 'circular', 'linear', or 'text'.")
+            raise ValueError(
+                "Invalid loader_type. Choose 'circular', 'linear', or 'text'."
+            )
 
     def set_loader_percentage(self, percentage):
         """Update loader percentage for circular or linear loader."""
@@ -304,7 +321,9 @@ class CustomBtnWithLoader(v.Btn):
             self.loader.v_model = percentage
             self.loader.children = [f"{percentage}%"]
         else:
-            raise ValueError("set_loader_percentage only works with 'circular' or 'linear' loader types.")
+            raise ValueError(
+                "set_loader_percentage only works with 'circular' or 'linear' loader types."
+            )
 
     def set_loader_text(self, text):
         """Update loader text for text-based loader."""
@@ -312,7 +331,7 @@ class CustomBtnWithLoader(v.Btn):
             self.loader.children = [text]
         else:
             raise ValueError("set_loader_text only works with 'text' loader type.")
-    
+
     def simulate_progress(self, total_time):
         """Simulate progress updates every 10% over a total time."""
         if self.loader_type in ["circular", "linear"]:
@@ -325,8 +344,8 @@ class CustomBtnWithLoader(v.Btn):
         """Set a indeterminate loader with no text inside"""
         if self.loader_type in ["circular", "linear"]:
             self.loader.indeterminate = boolean
-            self.loader.children= [""]
-    
+            self.loader.children = [""]
+
     def toggle_loading(self):
         """Toggle between loading and enabled states."""
         self.loading = not self.loading
@@ -335,23 +354,25 @@ class CustomBtnWithLoader(v.Btn):
     def update_button_with_messages(self, messages, stop_model, stop_variable, pause=6):
         """
         Updates a button's text with a series of messages, pausing between changes. Stops if stop_variable is not None.
-    
+
         Args:
             button (v.Btn): The button to update.
             messages (list): List of messages to display.
             stop_variable (HasTraits): A traitlet-based object whose traits are observed.
             pause (int): Time (in seconds) to pause between updates (default is 10).
         """
-        stop_flag = {"should_stop": False}  # A mutable flag shared with the observer callback
-        
+        stop_flag = {
+            "should_stop": False
+        }  # A mutable flag shared with the observer callback
+
         def stop_callback(change):
             """Observer callback to set the stop flag."""
             if change["new"]:  # Stop when the observed trait changes to `True`
                 stop_flag["should_stop"] = True
-        
+
         # Observe the `is_done` trait
-        stop_model.observe(stop_callback, names=stop_variable)     
-        
+        stop_model.observe(stop_callback, names=stop_variable)
+
         while not stop_flag["should_stop"]:
             for message in messages:
                 if stop_flag["should_stop"]:
@@ -362,7 +383,7 @@ class CustomBtnWithLoader(v.Btn):
     # def update_button_with_messages(self, messages, stop_variables, pause=6):
     #     """
     #     Updates a button's text with a series of messages, pausing between changes. Stops if stop_variable is not None.
-    
+
     #     Args:
     #         button (v.Btn): The button to update.
     #         messages (list): List of messages to display.
@@ -375,7 +396,147 @@ class CustomBtnWithLoader(v.Btn):
     #                 break
     #             self.set_loader_text(message)
     #             time.sleep(pause)
-        
 
 
+class CustomTranslator(Translator):
 
+    def __init__(
+        self, json_folder: Union[str, Path], target: str = "", default: str = "en"
+    ) -> None:
+        """Python ``Box`` of ``Box`` representing all the nested translation key, value pairs.
+
+        It reads 2 Json files, the first one being the source language (usually English) and the second one the target language.
+        It will replace in the source dictionary every key that exist in both json dictionaries. Following this procedure, every message that is not translated can still be accessed in the source language.
+        To access the dictionary keys, instead of using [], you can simply use key name as in an object ex: translator.first_key.secondary_key.
+        There are no depth limits, just respect the snake_case convention when naming your keys in the .json files.
+        5 internal keys are created upon initialization (there name cannot be used as keys in the translation message):
+
+        -   (str) _default : the default locale of the translator
+        -   (str) _targeted : the initially requested language. Use to display debug information to the user agent
+        -   (str) _target : the target locale of the translator
+        -   (bool) _match : if the target language match the one requested one by user, used to trigger information in appBar
+        -   (str) _folder : the path to the l10n folder
+
+        Args:
+            json_folder: The folder where the dictionaries are stored
+            target: The language code (IETF BCP 47) of the target lang (it should be the same as the target dictionary). Default to either the language specified in the parameter file or the default one.
+            default: The language code (IETF BCP 47) of the source lang. default to "en" (it should be the same as the source dictionary)
+        """
+        # the name of the 5 variables that cannot be used as init keys
+        FORBIDDEN_KEYS = ["_folder", "_default", "_target", "_targeted", "_match"]
+
+        # init the box with the folder
+        folder = Path(json_folder)
+
+        # reading the default dict
+        default_dict = self.merge_dict(folder / default)
+
+        # create a dictionary in the target language
+        targeted, target = self.find_target(folder, target)
+        target = target or default
+        target_dict = self.merge_dict(folder / target)
+
+        # evaluate the matching of requested and obtained values
+        match = targeted == target
+
+        # create the composite dictionary
+        ms_dict = self._update(default_dict, target_dict)
+
+        # check if forbidden keys are being used
+        # this will raise an error if any
+        [self.search_key(ms_dict, k) for k in FORBIDDEN_KEYS + self._protected_keys]
+
+        # # unpack the json as a simple namespace
+        ms_json = json.dumps(ms_dict, ensure_ascii=False)
+        ms_boxes = json.loads(ms_json, object_hook=lambda d: Box(**d, frozen_box=True))
+
+        private_keys = {
+            "_folder": str(folder),
+            "_default": default,
+            "_targeted": targeted,
+            "_target": target,
+            "_match": match,
+        }
+
+        # the final box is not frozen
+        # waiting for an answer here: https://github.com/cdgriffith/Box/issues/223
+        # it the meantime it's easy to call the translator using a frozen_box argument
+        super(Box, self).__init__(**private_keys, **ms_boxes)
+
+    @classmethod
+    def merge_dict(cls, folder: Path) -> dict:
+        """Gather all the .json file in the provided l10n folder as 1 single json dict.
+
+        The json dict will be sanityzed and the key will be used as if they were coming from 1 single file.
+        be careful with duplication. empty string keys will be removed.
+
+        Args:
+            folder: the folder where all the .json files are stored
+
+        Returns:
+            the json dict with all the keys
+        """
+        final_json = {}
+        for f in folder.glob("*.json"):
+            tmp_dict = cls.delete_empty(json.loads(f.read_text(encoding="utf-8")))
+            # Custom logic here, e.g., you can modify how keys are merged or add additional processing
+            final_json.update(tmp_dict)  # Using update instead of unpacking
+
+        return cls.sanitize(final_json)
+
+    def key_use(self, folder: Path, name: str) -> List[str]:
+        """Parse all the files in the folder and check if keys are all used at least once.
+
+        Return the unused key names.
+
+        .. warning::
+
+            Don't forget that there are many ways of calling Translator variables
+            (getattr, save.cm.xxx in another variable etc...) SO don't forget to check
+            manually the variables suggested by this method before deleting them
+
+        Args:
+            folder: The application folder using this translator data
+            name: the name use by the translator in this app (usually "cm")
+
+        Returns:
+            the list of unused keys
+        """
+        # cannot set FORBIDDEN_KEY in the Box as it would lock another key
+        FORBIDDEN_KEYS = ["_folder", "_default", "_target", "_targeted", "_match"]
+
+        # sanitize folder
+        folder = Path(folder)
+
+        # get all the python files recursively
+        py_files = []
+        all_files = [f for f in folder.glob("**/*") if f.suffix in [".py", ".ipynb"]]
+        for f in all_files:
+            generated_files = [".ipynb_checkpoints", "__pycache__"]
+            if all([err not in str(f) for err in generated_files]):
+                py_files.append(f)
+
+        # get the flat version of all keys
+        keys = list(set(pd.json_normalize(self).columns) ^ set(FORBIDDEN_KEYS))
+
+        # init the unused keys list
+        unused_keys = []
+
+        for k in keys:
+
+            # by default we consider that the is never used
+            is_present = False
+
+            # read each python file and search for the pattern of the key
+            # if it's find change status of the counter and exit the search
+            for f in py_files:
+                tmp = f.read_text(encoding="utf-8")
+                if f"{name}.{k}" in tmp:
+                    is_present = True
+                    break
+
+            # if nothing is find, the value is still False and the key can be
+            # added to the list
+            is_present or unused_keys.append(k)
+
+        return unused_keys

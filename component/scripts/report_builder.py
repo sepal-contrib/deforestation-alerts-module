@@ -20,9 +20,10 @@ def ensure_list(input_data):
     if isinstance(input_data, str):
         return [input_data]  # Convert string to list
     elif isinstance(input_data, list):
-        return input_data    # Return the list as is
+        return input_data  # Return the list as is
     else:
         raise ValueError("Input must be a string or a list")  # Handle invalid input
+
 
 def format_list(items):
     if not items:  # Handle empty list
@@ -33,7 +34,8 @@ def format_list(items):
         return f"{items[0]} and {items[1]}"
     else:
         return f"{', '.join(map(str, items[:-1]))} and {items[-1]}"
-        
+
+
 def parse_formatted_string(formatted_string):
     if not formatted_string:  # Handle empty string
         return []
@@ -44,6 +46,7 @@ def parse_formatted_string(formatted_string):
         return parts[0].split(", ") + [parts[1]]
     else:  # Two items
         return parts
+
 
 def plot_tiff_with_overlay(
     tiff_path, output_path, bands=(1, 2, 3), vector_overlay=None, overlay_color="red"
@@ -245,8 +248,8 @@ def generate_deforestation_report_with_word_template(
         bands=(7, 6, 5),
         vector_overlay=geodataframe,
         overlay_color="red",
-    ) 
-    
+    )
+
     # Insert images in place of placeholders
     for para in doc.paragraphs:
         if "[Placeholder for Image 1]" in para.text:
@@ -281,4 +284,4 @@ def generate_deforestation_report_with_word_template(
 
     # Save the report as a Word document
     doc.save(output_path)
-    #print(f"Report generated successfully: {output_path}")
+    # print(f"Report generated successfully: {output_path}")

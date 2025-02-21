@@ -10,7 +10,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def save_prediction_prob(original_img, prediction, output_path):
-
     """
     Save prediction as geotiff .
 
@@ -22,7 +21,7 @@ def save_prediction_prob(original_img, prediction, output_path):
     # If the output file already exists, remove it.
     if os.path.exists(output_path):
         os.remove(output_path)
-    
+
     # Open the input rasters
     src1 = rasterio.open(original_img)
 

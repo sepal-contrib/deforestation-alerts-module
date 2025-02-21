@@ -1,17 +1,13 @@
-from datetime import date, datetime
-from math import floor, ceil
-
+import time
+import json
 import ee
 import pandas as pd
 import geopandas as gpd
-
-
+from datetime import date, datetime
+from math import floor, ceil
 from component.message import cm
 from shapely.geometry import Point, Polygon
-import json
 from sepal_ui.scripts import utils as su
-
-import time
 
 
 def check_integer(text, exception_text):
@@ -19,7 +15,7 @@ def check_integer(text, exception_text):
         if isinstance(text, list):
             text = text[0]
         # If the input is 'All', return float(0)
-        if text == 'All':
+        if text == cm.filter_tile.max_number_of_alerts_option1:
             return float(0)
         # Try to convert the text to a float
         return float(text)
@@ -28,18 +24,21 @@ def check_integer(text, exception_text):
         raise Exception(exception_text)
 
 
-
 def check_alert_filter_inputs(self):
     """Check inputs and raise error if inputs are not set or set incorrectly."""
     su.check_input(self.alert_source_select.v_model, "Select at least one alert source")
     check_integer(self.min_area_input.v_model, "Min area has to be a number")
     su.check_input(
-        self.alert_selection_method_select.v_model, " Alert area selection method cannot be empty"
+        self.alert_selection_method_select.v_model,
+        " Alert area selection method cannot be empty",
     )
     su.check_input(
         self.alert_sorting_select.v_model, "Alert sorting method cannot be empty"
     )
-    if self.alert_selection_method_select.v_model == "Chose by drawn polygon":
+    if (
+        self.alert_selection_method_select.v_model
+        == cm.filter_tile.area_selection_method_label1
+    ):
         su.check_input(self.drawn_item.to_json(), "No drawn polygons")
     su.check_input(self.number_of_alerts.v_model, "Number of alerts cannot be empty")
     max_n = check_integer(
@@ -80,13 +79,16 @@ def evaluate_with_retry(ee_object, max_retries=5, delay=3):
             # Check if the exception is a timeout
             if "Computation timed out" in str(e):
                 attempt += 1
-                print(f"Attempt {attempt} failed due to timeout. Retrying in {delay} seconds...")
+                print(
+                    f"Attempt {attempt} failed due to timeout. Retrying in {delay} seconds..."
+                )
                 time.sleep(delay)
             else:
                 # Re-raise the exception if it's not a timeout
                 raise
     raise Exception(f"All {max_retries} attempts failed due to timeout.")
-    
+
+
 def custom_reduce_image_collection(image_collection):
     """
     Reduces an ee.ImageCollection with custom reducers for specific bands.
@@ -102,13 +104,16 @@ def custom_reduce_image_collection(image_collection):
     min_date_reducer = ee.Reducer.min()
 
     # Apply the reducers to the ImageCollection
-    reduced_alerts = image_collection.select('alert').reduce(max_alerts_reducer)
-    reduced_date = image_collection.select('date').reduce(min_date_reducer)
+    reduced_alerts = image_collection.select("alert").reduce(max_alerts_reducer)
+    reduced_date = image_collection.select("date").reduce(min_date_reducer)
 
     # Combine the reduced results into a single image
-    combined_image = reduced_alerts.rename('alert').addBands(reduced_date.rename('date'))
+    combined_image = reduced_alerts.rename("alert").addBands(
+        reduced_date.rename("date")
+    )
 
     return combined_image
+
 
 def obtener_datos_gee_parcial_map(
     aoi,
@@ -152,7 +157,7 @@ def obtener_datos_gee_parcial_map(
         max_elementos = 30
     else:
         max_elementos = max_elementos
-    
+
     aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", 50000)
 
     elementos_filtrados = aoi_grid.limit(20).map(procesar_elemento)
@@ -161,13 +166,13 @@ def obtener_datos_gee_parcial_map(
     resultados = ee.FeatureCollection(elementos_filtrados).flatten()
 
     # Sort and convert to list
-    if sorting == "Prioritize bigger area alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label1:
         bb_sorted = resultados.sort("count", False)
-    if sorting == "Prioritize smaller area alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label2:
         bb_sorted = resultados.sort("count", True)
-    if sorting == "Prioritize recent alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label3:
         bb_sorted = resultados.sort("alert_date_max", False)
-    if sorting == "Prioritize older alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label4:
         bb_sorted = resultados.sort("alert_date_max", True)
 
     resultados2 = bb_sorted.toList(max_elementos)
@@ -194,18 +199,19 @@ def obtener_datos_gee_total_v2(
     num_elements = bounding_boxes.size().min(max_elements)
 
     # Sort and convert to list
-    if sorting == "Prioritize bigger area alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label1:
         bb_sorted = bounding_boxes.sort("count", False)
-    if sorting == "Prioritize smaller area alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label2:
         bb_sorted = bounding_boxes.sort("count", True)
-    if sorting == "Prioritize recent alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label3:
         bb_sorted = bounding_boxes.sort("alert_date_max", False)
-    if sorting == "Prioritize older alerts":
+    if sorting == cm.filter_tile.alert_sorting_method_label4:
         bb_sorted = bounding_boxes.sort("alert_date_max", True)
 
     sorted_bb_list = bb_sorted.toList(num_elements)
 
     return evaluate_with_retry(sorted_bb_list)
+
 
 # Function to convert list of polygons to geodataframe
 def convert_to_geopandas(polygon_features):

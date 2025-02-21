@@ -18,25 +18,39 @@ class AuxTile(sw.Layout):
         self.initialize_layout()
 
         super().__init__()
-        
+
     def initialize_layout(self):
 
-        #Components
-        title1 = v.CardTitle(class_="pa-1 ma-1", children=["CCDC Alerts Asset"])
-        ccdc_alerts_input = sw.inputs.AssetSelect(types=["IMAGE", "IMAGE_COLLECTION"], label = 'Select alerts generated with ccdc change alert recipe')
-        title2 = v.CardTitle(class_="pa-1 ma-1", children=["Mask Asset"])
-        fnf_input = sw.inputs.AssetSelect(types=["IMAGE"], label = 'Select a mask to apply to alerts, for example a Forest/No Forest mask')
-        title3 = v.CardTitle(class_="pa-1 ma-1", children=["Auxiliary Asset"])
-        aux_input = sw.inputs.AssetSelect(types=["IMAGE"], label = 'Select an auxiliary raster that can be useful while analyzing alerts' )
-        aux_viz = sw.TextField(
-            label="Auxiliary Asset Visualization Parameters", v_model=None
+        # Components
+        title1 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aux_tile.ccdc_alerts_title]
         )
-        title4 = v.CardTitle(class_="pa-1 ma-1", children=["Report template"])
-        form_input = sw.inputs.FileInput(extensions= ['.docx'], )
-        title5 = v.CardTitle(class_="pa-1 ma-1", children=["Planet Login Data"])
+        ccdc_alerts_input = sw.inputs.AssetSelect(
+            types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.ccdc_alerts_hint
+        )
+        title2 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aux_tile.mask_asset_title]
+        )
+        fnf_input = sw.inputs.AssetSelect(
+            types=["IMAGE"], label=cm.aux_tile.mask_asset_hint
+        )
+        title3 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.aux_asset_title])
+        aux_input = sw.inputs.AssetSelect(
+            types=["IMAGE"], label=cm.aux_tile.aux_asset_hint
+        )
+        aux_viz = sw.TextField(label=cm.aux_tile.aux_viz, v_model=None)
+        title4 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aux_tile.report_template_title]
+        )
+        form_input = sw.inputs.FileInput(
+            extensions=[".docx"],
+        )
+        title5 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aux_tile.planet_login_title]
+        )
         planet_view = PlanetView()
 
-        #Layout
+        # Layout
         card1 = v.Card(
             class_="pa-3 ma-5", hover=True, children=[title1, ccdc_alerts_input]
         )

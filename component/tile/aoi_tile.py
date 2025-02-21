@@ -33,7 +33,9 @@ class AoiTile(sw.Layout):
         aux_model.observe(self.update_dictionary_ccdc, "ccdc_layer")
 
         # Create search button and functions
-        self.search_button = CustomBtnWithLoader(text="Search alerts", loader_type="text")
+        self.search_button = CustomBtnWithLoader(
+            text=cm.aoi_tile.search_button, loader_type="text"
+        )
         self.search_button_alert = sw.Alert().hide()
         self.process_alerts = su.loading_button(
             alert=self.search_button_alert, button=self.search_button
@@ -42,7 +44,7 @@ class AoiTile(sw.Layout):
         self.initialize_layout()
 
         super().__init__()
-    
+
     def initialize_layout(self):
         # Map Style
         display(
@@ -64,23 +66,37 @@ class AoiTile(sw.Layout):
 
         # Create user interface components
         # Create AOI selection widget
-        section_title1 = v.CardTitle(class_="pa-1 ma-1", children=["AOI selection"])
-        self.aoi_view = aoi.AoiView(gee=True, map_=self.map_1, methods= ['ADMIN1', 'ADMIN2', 'SHAPE', 'DRAW', 'ASSET'])
+        section_title1 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aoi_tile.aoi_selection_title]
+        )
+        self.aoi_view = aoi.AoiView(
+            gee=True,
+            map_=self.map_1,
+            methods=["ADMIN1", "ADMIN2", "SHAPE", "DRAW", "ASSET"],
+        )
         self.aoi_view.flat = True
-        
+
         # Create widget for date selection
-        section_title2 = v.CardTitle(class_="pa-1 ma-1", children=["Date selection"])
-        self.start_date = sw.DatePicker(label="Start date", class_="pa-1 ma-1",)
-        self.end_date = sw.DatePicker(label="End date", class_="pa-1 ma-1",)
-               
+        section_title2 = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.aoi_tile.date_selection_title]
+        )
+        self.start_date = sw.DatePicker(
+            label=cm.aoi_tile.start_date_label,
+            class_="pa-1 ma-1",
+        )
+        self.end_date = sw.DatePicker(
+            label=cm.aoi_tile.end_date_label,
+            class_="pa-1 ma-1",
+        )
+
         # Define search button function
         self.search_button.on_event("click", self.process_alerts)
-        
+
         # Tile Layout
         card1 = v.Card(
             class_="pa-3 ma-5",
             hover=True,
-            dense= True,
+            dense=True,
             children=[
                 section_title1,
                 self.aoi_view,
@@ -89,7 +105,7 @@ class AoiTile(sw.Layout):
         card2 = v.Card(
             class_="pa-3 ma-5",
             hover=True,
-            dense= True,
+            dense=True,
             children=[
                 section_title2,
                 self.start_date,
@@ -108,7 +124,6 @@ class AoiTile(sw.Layout):
 
         self.children = [layout]
 
-
     def update_dictionary_ccdc(self, change):
         # Update the alerts dictionary when ccdc model changes
         if self.aux_model.ccdc_layer:
@@ -120,12 +135,12 @@ class AoiTile(sw.Layout):
 
     def process_alerts(self, widget, event, data):
         # Check inputs
-        widget.set_loader_text('Checking inputs...')
+        widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text1)
         aoi, date1, date2 = check_aoi_inputs(self)
         dictionary = self.alert_filter_model.alerts_dictionary
 
         # Save data to model
-        widget.set_loader_text('Saving inputs...')
+        widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text2)
         self.aoi_date_model.admin = self.aoi_view.model.admin
         self.aoi_date_model.asset_name = self.aoi_view.model.asset_name
         self.aoi_date_model.method = self.aoi_view.model.method
@@ -138,20 +153,20 @@ class AoiTile(sw.Layout):
 
         if self.aoi_view.model.method in ["ADMIN0", "ADMIN1", "ADMIN2"]:
             self.aoi_date_model._from_admin(self.aoi_view.model.admin)
-        elif  self.aoi_view.model.method == "SHAPE":
+        elif self.aoi_view.model.method == "SHAPE":
             self.aoi_date_model._from_vector(self.aoi_view.model.vector_json)
         elif self.aoi_view.model.method == "DRAW":
             self.aoi_date_model._from_geo_json(self.aoi_view.model.geo_json)
         elif self.aoi_view.model.method == "ASSET":
             self.aoi_date_model._from_asset(self.aoi_view.model.sset_json)
-        
-        widget.set_loader_text('Searching alerts...')
+
+        widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text3)
         # Generate list of available names and dictionary of filtered rasters
         self.alert_filter_model.available_alerts_list = (
             create_available_alert_dictionary(dictionary, aoi, date1, date2)
         )
-        
-        widget.set_loader_text('Creating rasters...')
+
+        widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text4)
         self.alert_filter_model.available_alerts_raster_list = (
             create_filtered_alert_raster_dictionary(
                 self.alert_filter_model.available_alerts_list,
@@ -161,8 +176,8 @@ class AoiTile(sw.Layout):
                 self.aux_model.ccdc_layer,
             )
         )
-        
-        widget.set_loader_text('Completed!')
+
+        widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text5)
         self.app_tile_model.current_page_view = "filter_alerts"
 
     def process_alerts_silent(self):
@@ -183,13 +198,13 @@ class AoiTile(sw.Layout):
 
         if self.aoi_view.model.method in ["ADMIN0", "ADMIN1", "ADMIN2"]:
             self.aoi_date_model._from_admin(self.aoi_view.model.admin)
-        elif  self.aoi_view.model.method == "SHAPE":
+        elif self.aoi_view.model.method == "SHAPE":
             self.aoi_date_model._from_vector(self.aoi_view.model.vector_json)
         elif self.aoi_view.model.method == "DRAW":
             self.aoi_date_model._from_geo_json(self.aoi_view.model.geo_json)
         elif self.aoi_view.model.method == "ASSET":
             self.aoi_date_model._from_asset(self.aoi_view.model.sset_json)
-            
+
         # Generate list of available names and dictionary of filtered rasters
         self.alert_filter_model.available_alerts_list = (
             create_available_alert_dictionary(dictionary, aoi, date1, date2)
@@ -222,8 +237,9 @@ class AoiTile(sw.Layout):
         elif self.aoi_view.model.method == "ASSET":
             self.aoi_view.model._from_asset(self.aoi_view.model.asset_json)
 
-        #self.aoi_view.model.set_object()
-        self.map_1.addLayer(ee_object = self.aoi_view.model.feature_collection, name= 'aoi')
+        # self.aoi_view.model.set_object()
+        self.map_1.addLayer(
+            ee_object=self.aoi_view.model.feature_collection, name="aoi"
+        )
         self.start_date.v_model = data.get("start_date")
         self.end_date.v_model = data.get("end_date")
-        

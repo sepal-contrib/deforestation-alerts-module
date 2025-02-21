@@ -1,0 +1,139 @@
+{
+    "recipe_tile": {
+            "button_new_recipe": "Créer",
+            "button_load_recipe": "Charger",
+            "input_hint_set_recipe_name": "Définir le nom de la recette",
+            "card_title_new_recipe": "Nouvelle Recette",
+            "card_title_load_recipe": "Charger une Recette",
+            "alert_done_message": "Terminé",
+            "loader_creating_recipe": "Création de la recette...",
+            "loader_resetting_models": "Réinitialisation des modèles...",
+            "loader_resetting_tiles": "Réinitialisation des tuiles...",
+            "loader_loading_aoi": "Chargement de l'AOI...",
+            "loader_loading_alerts": "Chargement des alertes...",
+            "loader_loading_filters": "Chargement des filtres...",
+            "loader_waiting_gee": "En attente de GEE...",
+            "loader_loading_alert_db": "Chargement de la base de données d'alertes...",
+            "loader_loading_last_alert": "Chargement de la dernière alerte..."
+        },
+
+    "aux_tile": {
+            "ccdc_alerts_title": "Asset d'alertes CCDC",
+            "ccdc_alerts_hint": "Sélectionnez les alertes générées avec la recette d'alerte de changement CCDC",
+            "mask_asset_title": "Asset Masque", 
+            "mask_asset_hint": "Sélectionnez un masque à appliquer aux alertes, par exemple un masque Forêt/Non Forêt",
+            "aux_asset_title": "Asset Accessoire",
+            "aux_asset_hint": "Sélectionnez un raster accessoire qui peut être utile lors de l'analyse des alertes",
+            "aux_viz": "Paramètres de Visualisation de l'Actif Accessoire", 
+            "report_template_title": "Modèle de Rapport",
+            "planet_login_title": "Données de Connexion Planet"
+        },
+
+    "aoi_tile": {
+            "search_button": "Rechercher des alertes",
+            "aoi_selection_title":"Sélection de l'AOI", 
+            "date_selection_title": "Sélection de la Date", 
+            "start_date_label": "Date de début", 
+            "end_date_label": "Date de fin", 
+            "search_button_alerts_text": {
+                "loader_text1": "Vérification des entrées...",
+                "loader_text2": "Enregistrement des entrées...",
+                "loader_text3": "Recherche des alertes...",
+                "loader_text4": "Création des rasters...",
+                "loader_text5": "Terminé !"}
+        },
+    
+    "filter_tile": {
+            "analyze_alerts_button": "Analyser les alertes",
+            "available_alerts_title": "Alertes disponibles",
+            "no_alerts_message": "Aucune alerte n'est disponible pour la date/la zone sélectionnée",
+            "available_alerts_hint": "Sélectionnez une ou plusieurs sources d'alerte",
+            "set_min_alert_siz_title": "Taille minimale de l'alerte (ha)",
+            "area_selection_method_title": "Sélection de la Zone des Alertes",
+            "area_selection_method_label1": "Choisir par polygone dessiné",
+            "area_selection_method_label2": "Zone entière",
+            "alert_sorting_method_title": "Tri des Alertes",
+            "alert_sorting_method_label1": "Prioriser les alertes de zone plus grande",
+            "alert_sorting_method_label2": "Prioriser les alertes de zone plus petite",
+            "alert_sorting_method_label3": "Prioriser les alertes récentes",
+            "alert_sorting_method_label4": "Prioriser les alertes anciennes",
+            "max_number_of_alerts_title": "Nombre d'Alertes", 
+            "max_number_of_alerts_option1": "Toutes",
+            "max_number_of_alerts_hint": "Analyser toutes les alertes ou définir un nombre maximum",
+            "layer_date_helper1": " date",
+            "layer_aux_name": "Couche auxiliaire",
+            "layer_mask_name": "Couche de Masque"
+
+    },
+    
+    "overview_tile": {
+            "title": "Vue D'Ensemble Générale",
+            "total":"Total des Alertes", 
+            "reviewed": "Alertes Examinnées", 
+            "confirmed": "Alertes Confirmées", 
+            "false_positives": "Faux Positifs", 
+            "revision": "Nécessite une révision supplémentaire",
+            "alerts_db_label": "Base de Données d'Alertes",
+            "summary_button_label": "Résumé"
+    },
+    
+    "analysis_tile": {
+            "img_selection": {
+                "actual_image_info": "Info de l'image actuelle",
+                "selected_img_info": "Source : Date : Couverture nuageuse :",
+                "selected_img_info_source": "Source : ",
+                "selected_img_info_date": "Date : ",
+                "selected_img_info_cloud": "Couverture nuageuse : ",
+                "planet_monthly_mosaics": "Mosaïques Mensuelles de Planet",
+                "sentinel2_images": "Images Sentinel 2"
+            },
+            "alert_info": {
+                "card_title": "Info d'Alerte",
+                "first_date": "Première Date : ",
+                "last_date": "Dernière Date : ",
+                "status": "Statut : "
+            },
+            "questionarie": {
+                "confirmation_q": "Est-ce une véritable alerte ?",
+                "confirmation_yes": "Oui",
+                "confirmation_no": "Non",
+                "confirmation_revision": "Nécessite une révision supplémentaire",
+                "loss_driver_label": "Facteur de perte",
+                "loss_driver_hint": "Analyser la cause de la déforestation",
+                "loss_driver1": "Expansion agricole",
+                "loss_driver2": "Élevage des animaux",
+                "loss_driver3": "Bûcherie",
+                "loss_driver4": "Expansion urbaine",
+                "loss_driver5": "Culture en rotation",
+                "loss_driver6": "Minage",
+                "loss_driver7": "Feux de forêt",
+                "loss_driver8": "Ouragans",
+                "loss_driver9": "Autre"
+            },
+            "nav_labels": {
+                "prev_button_label": "Précédent",
+                "next_button_label": "Suivant",
+                "go_to_alert_button_label": "Aller à"
+            },
+            "edition_labels": {
+                "edit_title": "Dessin d'Alerte",
+                "start_edit_button": "Commencer à dessiner",
+                "clear_button": "Effacer tout",
+                "save_edit_button": "Sauvegarder",
+                "stop_edit_button": "Arrêter de dessiner"
+            },
+            "model_labels": {
+                "dl_button1": "Modèle plus petit et rapide",
+                "dl_button2": "Modèle plus grand mais plus lent",
+                "dl_button_add": "Ajouter à la carte",
+                "dl_button_remove": "Retirer de la carte"
+            },
+            "export_labels": {
+                "export_title": "Sauvegarder et exporter",
+                "save_btn": "Sauvegarder",
+                "download_alert_data_btn": "Télécharger",
+                "files_dwn_btn": "Fichiers",
+                "report_dwn_btn": "Rapport"
+        }
+    }
+}

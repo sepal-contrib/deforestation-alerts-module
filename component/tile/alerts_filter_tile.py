@@ -65,18 +65,19 @@ class AlertsFilterTile(sw.Layout):
         self.card01 = None
 
         # Create analyze button and functions
-        self.analyze_button = CustomBtnWithLoader(text="Analyze alerts", loader_type="text")
+        self.analyze_button = CustomBtnWithLoader(
+            text=cm.filter_tile.analyze_alerts_button, loader_type="text"
+        )
         self.analyze_alert = sw.Alert().hide()
         self.analyze_alerts_function = su.loading_button(
             alert=self.analyze_alert, button=self.analyze_button
         )(self.analyze_alerts_function)
 
-        
         self.initialize_layout()
 
         ## Observe changes in alert_model and update tile when it changes
         alert_filter_model.observe(self.update_tile, "available_alerts_raster_list")
-        
+
         super().__init__()
 
     def initialize_layout(self):
@@ -103,25 +104,23 @@ class AlertsFilterTile(sw.Layout):
         self.drawn_item.hide()
 
         # No alerts message
-        main_title = v.CardTitle(children=["Available alerts"])
-        mkd = sw.Markdown("No alerts are available for the date/area selected")
-        
-        self.card00 = SepalCard(
-            class_="pa-2", children= [main_title, mkd]
-        )
+        main_title = v.CardTitle(children=[cm.filter_tile.available_alerts_title])
+        mkd = sw.Markdown(cm.filter_tile.no_alerts_message)
+
+        self.card00 = SepalCard(class_="pa-2", children=[main_title, mkd])
 
         # Create user interface components
-        # Create alert source select component      
+        # Create alert source select component
         self.alert_source_select = sw.Select(
             items=self.alert_filter_model.available_alerts_list,
             v_model=self.alert_filter_model.available_alerts_list,
-            label="Select one or multiple alert sources",
+            label=cm.filter_tile.available_alerts_hint,
             multiple=True,
             clearable=True,
             chips=True,
-        )      
+        )
         self.alert_source_select.on_event("change", self.link_checkbox_map_btn)
-        
+
         self.card01 = SepalCard(
             class_="pa-2",
             children=[
@@ -131,19 +130,24 @@ class AlertsFilterTile(sw.Layout):
         )
 
         # Create min alert area input
-        min_area_title = v.CardTitle(children=["Min alert size (ha)"])
+        min_area_title = v.CardTitle(children=[cm.filter_tile.set_min_alert_siz_title])
         self.min_area_input = sw.TextField(v_model=0.5)
         self.card02 = SepalCard(
             class_="pa-2",
             children=[min_area_title, self.min_area_input],
         )
 
-        #Create Area selection method component
-        area_selection_title = v.CardTitle(children=["Alert area selection"])
-        alert_selection_method_list = ["Chose by drawn polygon", "Whole area"]
+        # Create Area selection method component
+        area_selection_title = v.CardTitle(
+            children=[cm.filter_tile.area_selection_method_title]
+        )
+        alert_selection_method_list = [
+            cm.filter_tile.area_selection_method_label1,
+            cm.filter_tile.area_selection_method_label2,
+        ]
         self.alert_selection_method_select = sw.Select(
             items=alert_selection_method_list,
-            v_model="Whole area",
+            v_model=cm.filter_tile.area_selection_method_label2,
             multiple=False,
             clearable=True,
             chips=True,
@@ -155,23 +159,25 @@ class AlertsFilterTile(sw.Layout):
                 self.alert_selection_method_select,
             ],
         )
-        
-        #Create alert sorting method component
-        alert_sorting_title = v.CardTitle(children=["Alert sorting"])
+
+        # Create alert sorting method component
+        alert_sorting_title = v.CardTitle(
+            children=[cm.filter_tile.alert_sorting_method_title]
+        )
         alert_sorting_method_list = [
-            "Prioritize bigger area alerts",
-            "Prioritize smaller area alerts",
-            "Prioritize recent alerts",
-            "Prioritize older alerts",
+            cm.filter_tile.alert_sorting_method_label1,
+            cm.filter_tile.alert_sorting_method_label2,
+            cm.filter_tile.alert_sorting_method_label3,
+            cm.filter_tile.alert_sorting_method_label4,
         ]
         self.alert_sorting_select = sw.Select(
             items=alert_sorting_method_list,
-            v_model="Prioritize bigger area alerts",
+            v_model=cm.filter_tile.alert_sorting_method_label1,
             multiple=False,
             clearable=True,
             chips=True,
         )
-        
+
         self.card06 = SepalCard(
             class_="pa-2",
             children=[
@@ -179,29 +185,33 @@ class AlertsFilterTile(sw.Layout):
                 self.alert_sorting_select,
             ],
         )
+
         # Define the callback function that will be triggered
         def prior_option(widget, event, data):
-            if data == "Whole area":
+            if data == cm.filter_tile.area_selection_method_label2:
                 self.card04.show()
                 self.drawn_item.hide()
             else:
                 self.card04.hide()
                 self.drawn_item.show()
 
-        self.alert_sorting_select.on_event("change", prior_option)
+        self.alert_selection_method_select.on_event("change", prior_option)
 
-        #Create max number of alerts component
-        max_number_title = v.CardTitle(children=["Number of alerts"])
-        self.number_of_alerts = sw.Combobox( items= ['All'],
-                                        v_model=['All'],
-                                        label="Analyze all alerts or define a max number",
-                                        multiple=False,
-                                        clearable=True,
-                                        chips=True,
-                                      )
+        # Create max number of alerts component
+        max_number_title = v.CardTitle(
+            children=[cm.filter_tile.max_number_of_alerts_title]
+        )
+        self.number_of_alerts = sw.Combobox(
+            items=[cm.filter_tile.max_number_of_alerts_option1],
+            v_model=[cm.filter_tile.max_number_of_alerts_option1],
+            label=cm.filter_tile.max_number_of_alerts_hint,
+            multiple=False,
+            clearable=True,
+            chips=True,
+        )
         self.card04 = SepalCard(
             class_="pa-2",
-            children=[max_number_title,  self.number_of_alerts],
+            children=[max_number_title, self.number_of_alerts],
         )
 
         # Define analyze button function
@@ -238,10 +248,9 @@ class AlertsFilterTile(sw.Layout):
         )
 
         self.children = [layout]
-    
-    
+
     ## User interface functions
-    
+
     def update_layout(self):
 
         alerts_names_list = self.alert_filter_model.available_alerts_list
@@ -258,7 +267,7 @@ class AlertsFilterTile(sw.Layout):
         else:
             self.alert_source_select.items = alerts_names_list
             self.alert_source_select.v_model = [alerts_names_list[0]]
-            
+
             self.card00.hide()
             self.card01.show()
             self.card02.show()
@@ -285,7 +294,7 @@ class AlertsFilterTile(sw.Layout):
                     alerts_raster_dictionary[nombre]["alert_raster"].select("date")
                     # .selfMask()
                     .randomVisualizer(),
-                    name=nombre + " date",
+                    name=nombre + cm.filter_tile.layer_date_helper1,
                     shown=False,
                 )
             if self.aux_model.aux_layer:
@@ -295,24 +304,23 @@ class AlertsFilterTile(sw.Layout):
                     vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
                 self.map_1.add_ee_layer(
                     ee.Image(self.aux_model.aux_layer).selfMask(),
-                    name="Auxiliary Layer",
+                    name=cm.filter_tile.layer_aux_name,
                     vis_params=vis_aux,
                 )
 
             if self.aux_model.mask_layer:
                 self.map_1.add_ee_layer(
                     ee.Image(self.aux_model.mask_layer).selfMask(),
-                    name="Mask Layer",
+                    name=cm.filter_tile.layer_mask_name,
                     # vis_params=self.aux_model.aux_layer_vis,
                     vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
                 )
             self.link_checkbox_map()
 
-
     def update_tile(self, change):
         # Update the tile when aoi_date_model changes
         self.update_layout()  # Reinitialize the layout with the new data
-    
+
     def link_checkbox_map_btn(self, widget, event, data):
         self.link_checkbox_map()
 
@@ -320,17 +328,17 @@ class AlertsFilterTile(sw.Layout):
         """
         Updates the visibility of EELayers on the given ipyleaflet map
         based on the value of the v_model.
-    
+
         Parameters:
         - v_model (str): The value of the ipyvuetify element to match layer names.
         - map_element (Map): The ipyleaflet map containing the layers.
-    
-        The function will make visible all layers with names matching the v_model 
+
+        The function will make visible all layers with names matching the v_model
         value while hiding other EELayers.
         """
         map_element = self.map_1
         check_box_v_model = self.alert_source_select.v_model
-        
+
         # Iterate over layers in the map
         for layer in map_element.layers:
             # Check if the layer is an EELayer and if its name matches the v_model
@@ -339,20 +347,19 @@ class AlertsFilterTile(sw.Layout):
                 if layer.name in check_box_v_model:
                     layer.visible = True
                 # Disable all other EELayers
-                elif "Google Earth Engine" in layer.attribution and layer.name !=  'AOI':
+                elif "Google Earth Engine" in layer.attribution and layer.name != "AOI":
                     layer.visible = False
-      
-    
-     ## Processing functions   
-        
+
+    ## Processing functions
+
     def assign_bb_partial(self, json):
         self.selected_alerts_model.alerts_bbs = json
-        self.selected_alerts_model.received_alerts = 'Yes'
+        self.selected_alerts_model.received_alerts = "Yes"
         print(self.selected_alerts_model.received_alerts)
-    
+
     def assign_bb_full(self, json):
         self.selected_alerts_model.alerts_total_bbs = json
-        self.selected_alerts_model.received_alerts = 'Yes'
+        self.selected_alerts_model.received_alerts = "Yes"
         print(self.selected_alerts_model.received_alerts)
 
     def start_thread_full(
@@ -440,52 +447,62 @@ class AlertsFilterTile(sw.Layout):
             mask_alert = alerta
 
         # Cortar si existe poligono y alert selection es by drawn polygon
-        if alert_area_selection == "Chose by drawn polygon":
-            clip_alert = mask_alert.clip(ee.FeatureCollection(user_selection_polygon).geometry())
+        if alert_area_selection == cm.filter_tile.area_selection_method_label1:
+            clip_alert = mask_alert.clip(
+                ee.FeatureCollection(user_selection_polygon).geometry()
+            )
         else:
             user_selection_polygon = None
             clip_alert = mask_alert
-            
+
         return clip_alert
 
-    def create_vector_download_params(self, aoi, user_selection_polygon, clip_alert, alert_source, user_min_alert_size, alert_area_selection):
-        
+    def create_vector_download_params(
+        self,
+        aoi,
+        user_selection_polygon,
+        clip_alert,
+        alert_source,
+        user_min_alert_size,
+        alert_area_selection,
+    ):
+
         # Generar 3 bandas para las alertas de todo el area
         i = clip_alert.select("alert").gt(0).rename("mask_alert")
         a = clip_alert.select("alert")
         d = clip_alert.select("date")
         # alertarea = i.multiply(ee.Image.pixelArea()).rename('area');
-    
+
         alerta_reducir = i.addBands(i).addBands(a).addBands(d)
-    
+
         # Definir tamaño de pixel
         pixel_landsat = 30
         pixel_sentinel = 10
-    
+
         if set(["GLAD-S2", "RADD"]).intersection(alert_source):
             pixel_size = pixel_sentinel
         else:
             pixel_size = pixel_landsat
-    
+
         # Definir numero minimo de pixels para alertas
         min_size_hectareas = float(user_min_alert_size) * 10000
         min_size_pixels = math.ceil(min_size_hectareas / (pixel_size**2))
-    
+
         # Crear reducer a aplicar sobre las alertas
         custom_reducer = (
             ee.Reducer.count()
             .combine(ee.Reducer.mean().unweighted(), "alert_type_")
             .combine(ee.Reducer.minMax(), "alert_date_")
         )
-    
+
         # Generar poligono de area de estudio considerando alert_area_selection
-        if alert_area_selection == "Chose by drawn polygon":
+        if alert_area_selection == cm.filter_tile.area_selection_method_label1:
             poly = ee.FeatureCollection(user_selection_polygon)
         else:
             poly = aoi
-    
+
         return poly, alerta_reducir, pixel_landsat, min_size_pixels
-    
+
     def create_planet_images_dictionary(self, polygon, date1, date2):
         planet_mosaics_dates = get_planet_dates(date1, date2)
         planet_images_dict_before = getPlanetMonthly(
@@ -497,12 +514,13 @@ class AlertsFilterTile(sw.Layout):
 
         return planet_images_dict_before, planet_images_dict_after
 
-
     def create_recipe_directory(self):
         if self.app_tile_model.recipe_name == "":
             self.app_tile_model.recipe_name = self.app_tile_model.temporary_recipe_name
-            
-        self.app_tile_model.recipe_folder_path = create_directory(self.app_tile_model.recipe_name)
+
+        self.app_tile_model.recipe_folder_path = create_directory(
+            self.app_tile_model.recipe_name
+        )
 
     def save_recipe_parameters(self):
         json_save_filename = (
@@ -520,7 +538,7 @@ class AlertsFilterTile(sw.Layout):
 
     def analyze_alerts_function(self, widget, event, data):
 
-        widget.set_loader_text('Checking inputs...')
+        widget.set_loader_text("Checking inputs...")
 
         # Check User inputs
         (
@@ -531,7 +549,7 @@ class AlertsFilterTile(sw.Layout):
             user_max_number_alerts,
             user_selection_polygon,
         ) = check_alert_filter_inputs(self)
-        widget.set_loader_text('Saving inputs...')
+        widget.set_loader_text("Saving inputs...")
 
         # Bind variables to models
         self.selected_alerts_model.selected_alert_sources = alert_source
@@ -540,37 +558,63 @@ class AlertsFilterTile(sw.Layout):
         self.selected_alerts_model.min_area = float(user_min_alert_size)
         self.selected_alerts_model.max_number_alerts = int(user_max_number_alerts)
         self.selected_alerts_model.alert_selection_polygons = user_selection_polygon
-        
-        #Create directory in case it does not exist
+
+        # Numeric values for exporting dictionary
+        alert_selection_dict_n = {
+            cm.filter_tile.area_selection_method_label1: 1,
+            cm.filter_tile.area_selection_method_label2: 2,
+        }
+
+        self.selected_alerts_model.alert_selection_area_n = alert_selection_dict_n.get(
+            alert_area_selection, 0
+        )
+
+        alert_sorting_method_dict_n = {
+            cm.filter_tile.alert_sorting_method_label1: 1,
+            cm.filter_tile.alert_sorting_method_label2: 2,
+            cm.filter_tile.alert_sorting_method_label3: 3,
+            cm.filter_tile.alert_sorting_method_label4: 4,
+        }
+
+        self.selected_alerts_model.alert_sorting_method_n = (
+            alert_sorting_method_dict_n.get(alert_sorting_method, 0)
+        )
+
+        # Create directory in case it does not exist
         self.create_recipe_directory()
 
-        widget.set_loader_text('Getting images...')
-        #Create planet dictionaries
-        self.analyzed_alerts_model.before_planet_monthly_images, self.analyzed_alerts_model.after_planet_monthly_images = self.create_planet_images_dictionary(
+        widget.set_loader_text("Getting images...")
+        # Create planet dictionaries
+        (
+            self.analyzed_alerts_model.before_planet_monthly_images,
+            self.analyzed_alerts_model.after_planet_monthly_images,
+        ) = self.create_planet_images_dictionary(
             self.aoi_date_model.feature_collection,
             self.aoi_date_model.start_date,
             self.aoi_date_model.end_date,
         )
 
-        #Save recipe parameters
+        # Save recipe parameters
         self.save_recipe_parameters()
 
-        widget.set_loader_text('Creating filtered rasters...')
+        widget.set_loader_text("Creating filtered rasters...")
 
-        #Create filtered alerts raster
-        
-        self.selected_alerts_model.filtered_alert_raster = self.create_filtered_alert_raster(
-            alert_source,
-            user_min_alert_size,
-            alert_area_selection,
-            alert_sorting_method,
-            user_max_number_alerts,
-            user_selection_polygon,
+        # Create filtered alerts raster
+
+        self.selected_alerts_model.filtered_alert_raster = (
+            self.create_filtered_alert_raster(
+                alert_source,
+                user_min_alert_size,
+                alert_area_selection,
+                alert_sorting_method,
+                user_max_number_alerts,
+                user_selection_polygon,
+            )
         )
-        widget.set_loader_text('Creating alerts vectors...')
+        widget.set_loader_text("Creating alerts vectors...")
 
-        #Create vector download required variables
-        
+        # Create vector download required variables
+
         # Crear reducer a aplicar sobre las alertas
         custom_reducer = (
             ee.Reducer.count()
@@ -578,11 +622,19 @@ class AlertsFilterTile(sw.Layout):
             .combine(ee.Reducer.minMax(), "alert_date_")
         )
         max_number_alerts = int(user_max_number_alerts)
-        
-        poly, alerta_reducir, pixel_size, min_size_pixels = self.create_vector_download_params(self.aoi_date_model.feature_collection, user_selection_polygon, self.selected_alerts_model.filtered_alert_raster,alert_source, user_min_alert_size, alert_area_selection)
 
-        
-        #Create partial vector alerts
+        poly, alerta_reducir, pixel_size, min_size_pixels = (
+            self.create_vector_download_params(
+                self.aoi_date_model.feature_collection,
+                user_selection_polygon,
+                self.selected_alerts_model.filtered_alert_raster,
+                alert_source,
+                user_min_alert_size,
+                alert_area_selection,
+            )
+        )
+
+        # Create partial vector alerts
         self.start_thread_partial(
             poly,
             alerta_reducir,
@@ -592,8 +644,8 @@ class AlertsFilterTile(sw.Layout):
             max_number_alerts,
             alert_sorting_method,
         )
-        
-        #Create complete vector alerts
+
+        # Create complete vector alerts
         self.start_thread_full(
             poly,
             alerta_reducir,
@@ -604,31 +656,45 @@ class AlertsFilterTile(sw.Layout):
             alert_sorting_method,
         )
 
-        wait_messages = ['Processing...', 'Just 1 minute...', 'Drink some water...','We are almost done...']
-        
-        widget.update_button_with_messages(wait_messages,  self.selected_alerts_model, 'received_alerts')
+        wait_messages = [
+            "Processing...",
+            "Just 1 minute...",
+            "Drink some water...",
+            "We are almost done...",
+        ]
+
+        widget.update_button_with_messages(
+            wait_messages, self.selected_alerts_model, "received_alerts"
+        )
         self.app_tile_model.current_page_view = "analysis_tile"
 
-        
     def load_saved_parameters(self, data):
-        self.alert_source_select.v_model = data.get(
-            "selected_alert_sources"
-        )
+        self.alert_source_select.v_model = data.get("selected_alert_sources")
         self.min_area_input.v_model = data.get("min_area")
-        self.alert_selection_method_select.v_model = data.get(
-            "alert_selection_area"
-        )
-        self.alert_sorting_select.v_model = data.get(
-            "alert_sorting_method"
-        )
-        drawn_selection_polygons = data.get(
-            "alert_selection_polygons")
+        drawn_selection_polygons = data.get("alert_selection_polygons")
         self.drawn_item.data = drawn_selection_polygons.get(
             "features", self.drawn_item.data
         )
-        max_number = data.get(
-            "max_number_alerts")
-        if max_number == 0:
-            self.number_of_alerts.v_model = ['All']
-        else:
-            self.number_of_alerts.v_model = str(max_number)
+        max_number = data.get("max_number_alerts")
+        self.number_of_alerts.v_model = (
+            cm.filter_tile.max_number_of_alerts_option1
+            if (max_number := data.get("max_number_alerts")) == 0
+            else str(max_number)
+        )
+        alert_selection_dict = {
+            1: cm.filter_tile.area_selection_method_label1,
+            2: cm.filter_tile.area_selection_method_label2,
+        }
+        self.alert_selection_method_select.v_model = alert_selection_dict.get(
+            data.get("alert_selection_area"), ""
+        )
+
+        alert_sorting_method_dict = {
+            1: cm.filter_tile.alert_sorting_method_label1,
+            2: cm.filter_tile.alert_sorting_method_label2,
+            3: cm.filter_tile.alert_sorting_method_label3,
+            4: cm.filter_tile.alert_sorting_method_label4,
+        }
+        self.alert_sorting_select.v_model = alert_sorting_method_dict.get(
+            data.get("alert_sorting_method"), ""
+        )

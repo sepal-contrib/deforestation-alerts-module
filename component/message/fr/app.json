@@ -1,0 +1,16 @@
+{
+    "app": {
+        "title": "Analyse des alertes de perte forestière",
+        "footer": "SEPAL \u00a9 {}",
+        "banner": "Ceci est ma première application :)",
+        "drawer_item": {
+            "about": "À propos",
+            "recipes": "Recettes",
+            "aux": "Fichiers optionnels",
+            "aoi": "AOI/Date",
+            "filter": "Filtrer",
+            "overview": "Aperçu",
+            "analysis": "Analyse"
+        }
+    }
+}

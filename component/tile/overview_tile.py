@@ -40,16 +40,26 @@ class OverviewTile(sw.Layout):
         super().__init__()
 
     def initialize_layout(self):
-        #Set default table values
+        # Set default table values
         self.listaNumeros = [0, 0, 0, 0, 0]
+        self.alert_labels = [
+            cm.overview_tile.total,
+            cm.overview_tile.reviewed,
+            cm.overview_tile.confirmed,
+            cm.overview_tile.false_positives,
+            cm.overview_tile.revision,
+        ]
         # Side information table using v-simple-table
         self.info_table = v.SimpleTable(
             dense=False,
             children=[
-                v.Html(tag="tbody", children=create_table_rows(self.listaNumeros))
+                v.Html(
+                    tag="tbody",
+                    children=create_table_rows(self.listaNumeros, self.alert_labels),
+                )
             ],
         )
-        
+
         # 1. Crear el mapa para seleccionar el área de estudio
         # Inject CSS to style the custom class
         display(
@@ -73,22 +83,28 @@ class OverviewTile(sw.Layout):
         )
         refresh_map_button.on_event("click", self.update_button)
         self.map_1.add(self.widget_refresh)
-        #self.map_1.add(ipyLayersControl(position='topright'))
+        # self.map_1.add(ipyLayersControl(position='topright'))
         menu_control = MenuControl(
             icon_content="mdi-layers",
             position="topright",
             card_content=v.CardTitle(class_="pa-1 ma-1", children=["Cluster Control"]),
             card_title="Marker Control",
-            )
+        )
         menu_control.set_size(
             min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
         )
         self.map_1.add(menu_control)
 
         # Side information labels
-        section_title = v.CardTitle(class_="pa-1 ma-1", children=["General Overview"])
-        self.dwn_all_btn = sw.DownloadBtn(text="AlertsDB", small=True)
-        self.dwn_summary_btn = sw.DownloadBtn(text="Summary", small=True)
+        section_title = v.CardTitle(
+            class_="pa-1 ma-1", children=[cm.overview_tile.title]
+        )
+        self.dwn_all_btn = sw.DownloadBtn(
+            text=cm.overview_tile.alerts_db_label, small=True
+        )
+        self.dwn_summary_btn = sw.DownloadBtn(
+            text=cm.overview_tile.summary_button_label, small=True
+        )
         gpkg_name = self.app_tile_model.recipe_folder_path + "/alert_db.csv"
         self.dwn_all_btn.set_url(path=gpkg_name)
 
@@ -125,7 +141,7 @@ class OverviewTile(sw.Layout):
             self.map_1.remove_all()
             self.map_1.remove(self.map_1.controls[-1])
             self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
-          
+
             # Add centroids
             centroides_gdf = self.analyzed_alerts_model.alerts_gdf
             markers_dictionary = create_markers_ipyvuetify(
@@ -139,15 +155,19 @@ class OverviewTile(sw.Layout):
 
             if (
                 self.selected_alerts_model.alert_selection_area
-                == "Chose by drawn polygon"
+                == cm.filter_tile.area_selection_method_label1
             ):
                 draw_selection = ee.FeatureCollection(
                     self.selected_alerts_model.alert_selection_polygons
                 )
                 self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
 
-            self.listaNumeros = calculateAlertClasses(centroides_gdf)
-            self.info_table.children[0].children = create_table_rows(self.listaNumeros)
+            self.listaNumeros = calculate_alert_classes(
+                centroides_gdf, "Confirmed", "False Positive", "Maybe"
+            )
+            self.info_table.children[0].children = create_table_rows(
+                self.listaNumeros, self.alert_labels
+            )
 
     def update_tile(self, change):
         # Update the tile when aoi_date_model changes

@@ -49,7 +49,7 @@ class AppTileModel(model.Model):
             print(f"Error loading JSON file: {e}")
 
     def reset_model(self):
-        self.current_page_view = 'recipe_tile'
+        self.current_page_view = "recipe_tile"
         self.temporary_recipe_name = ""
         self.recipe_name = ""
         self.recipe_folder_path = ""

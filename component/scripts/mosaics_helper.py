@@ -85,13 +85,12 @@ def get_planet_dates(input_date1, input_date2):
     # 6. First day of 1 month before first detection date
     prev_1month = first_day_current_month + relativedelta(months=-1)
 
-
     return [
         prev_month5.strftime("%Y-%m-%d"),
         next_month.strftime("%Y-%m-%d"),
         first_day_current_month.strftime("%Y-%m-%d"),
         next_3month.strftime("%Y-%m-%d"),
-        prev_1month.strftime("%Y-%m-%d")
+        prev_1month.strftime("%Y-%m-%d"),
     ]
 
 
@@ -220,7 +219,14 @@ def download_both_images(image1, image2, image_name, source1, source2, region):
     if os.path.exists(image_name):
         pass
     else:
-        download_ee_image(rimage1.addBands(rimage2), image_name, scale=4.77, crs="EPSG:3857", region= region, overwrite=True)
+        download_ee_image(
+            rimage1.addBands(rimage2),
+            image_name,
+            scale=4.77,
+            crs="EPSG:3857",
+            region=region,
+            overwrite=True,
+        )
 
     return image_name
 
@@ -364,10 +370,15 @@ def convertir_formato(features):
 
 
 # Función que convierte el formato de los elementos de una lista de features
-def convertir_formato2(features, color = '#2196F3'):
+def convertir_formato2(features, color="#2196F3"):
     # Estructura de estilo que se añadirá a las nuevas features
-    nuevo_estilo = {'style': {'color': color, 'pane': 'overlayPane', 'attribution': None,}}
-
+    nuevo_estilo = {
+        "style": {
+            "color": color,
+            "pane": "overlayPane",
+            "attribution": None,
+        }
+    }
 
     # Convertir cada feature al nuevo formato
     nuevas_features = []
@@ -376,7 +387,7 @@ def convertir_formato2(features, color = '#2196F3'):
         nueva_feature = {
             "type": "Feature",
             "properties": nuevo_estilo,
-            "geometry": feature["geometry"]  # Mantener la geometría original
+            "geometry": feature["geometry"],  # Mantener la geometría original
         }
         nuevas_features.append(nueva_feature)
 
@@ -396,25 +407,25 @@ def convertir_formato3(input_features, color="#2196F3"):
         list: A list of feature dictionaries in the target format.
     """
     style = {
-        'pane': 'overlayPane',
-        'attribution': None,
-        'bubblingMouseEvents': True,
-        'fill': True,
-        'smoothFactor': 1,
-        'noClip': False,
-        'stroke': True,
-        'color': color,
-        'weight': 4,
-        'opacity': 0.5,
-        'lineCap': 'round',
-        'lineJoin': 'round',
-        'dashArray': None,
-        'dashOffset': None,
-        'fillColor': None,
-        'fillOpacity': 0.2,
-        'fillRule': 'evenodd',
-        'interactive': True,
-        'clickable': True
+        "pane": "overlayPane",
+        "attribution": None,
+        "bubblingMouseEvents": True,
+        "fill": True,
+        "smoothFactor": 1,
+        "noClip": False,
+        "stroke": True,
+        "color": color,
+        "weight": 4,
+        "opacity": 0.5,
+        "lineCap": "round",
+        "lineJoin": "round",
+        "dashArray": None,
+        "dashOffset": None,
+        "fillColor": None,
+        "fillOpacity": 0.2,
+        "fillRule": "evenodd",
+        "interactive": True,
+        "clickable": True,
     }
 
     def to_list(item):
@@ -427,20 +438,19 @@ def convertir_formato3(input_features, color="#2196F3"):
 
     converted_features = []
     for input_feature in input_features:
-        geometry = input_feature.get('geometry', {})
-        geom_type = geometry.get('type', 'Polygon')
-        coords = geometry.get('coordinates', [])
+        geometry = input_feature.get("geometry", {})
+        geom_type = geometry.get("type", "Polygon")
+        coords = geometry.get("coordinates", [])
         coords_converted = to_list(coords)
 
         new_feature = {
-            'type': 'Feature',
-            'properties': {'style': style},
-            'geometry': {'type': geom_type, 'coordinates': coords_converted}
+            "type": "Feature",
+            "properties": {"style": style},
+            "geometry": {"type": geom_type, "coordinates": coords_converted},
         }
         converted_features.append(new_feature)
-    
-    return converted_features
 
+    return converted_features
 
 
 def save_prediction(original_img, prediction, threshold, output_path):
@@ -753,7 +763,7 @@ def getPlanetMonthly(geometry, date1, date2):
             elements.append(dictionary)
 
     elif len(image_ids) == 0 and is_future_date(date2):
-        
+
         last_two_imgs = selected_planet.sort("system:time_end", False).limit(2)
         image_ids_2 = last_two_imgs.aggregate_array("system:id").getInfo()
         # Process each image ID to format the name
@@ -832,7 +842,6 @@ def getIndividualS2(geometry, date1, date2):
     return elements
 
 
-
 def geojson_to_geodataframe(geojson):
     from shapely.geometry import shape
 
@@ -848,18 +857,19 @@ def geojson_to_geodataframe(geojson):
     Raises:
         ValueError: If the input has no features.
     """
-    if not geojson.get('features'):
+    if not geojson.get("features"):
         raise ValueError("The input GeoJSON has no features.")
 
     # Extract features and convert to GeoDataFrame
-    features = geojson['features']
-    geometries = [shape(feature['geometry']) for feature in features]
-    properties = [feature['properties'] for feature in features]
+    features = geojson["features"]
+    geometries = [shape(feature["geometry"]) for feature in features]
+    properties = [feature["properties"] for feature in features]
 
     # Create the GeoDataFrame
     gdf = gpd.GeoDataFrame(properties, geometry=geometries)
 
     return gdf
+
 
 def multipolygon_to_geodataframe(geometry):
     """
@@ -889,6 +899,7 @@ def multipolygon_to_geodataframe(geometry):
     gdf = gpd.GeoDataFrame(geometry=polygons)
 
     return gdf
+
 
 def filter_features_by_color(features, color_to_remove):
     """

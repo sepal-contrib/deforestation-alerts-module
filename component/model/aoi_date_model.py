@@ -4,7 +4,6 @@ from traitlets import Any, Unicode
 from component.message import cm
 
 
-
 class AoiDateModel(AoiModel):
     """
     Extend the AoiModel class to include start_date and end_date attributes
@@ -22,15 +21,16 @@ class AoiDateModel(AoiModel):
     end_date: str
         The end date of the retrieved alerts (format: YYYY-MM-DD).
     """
+
     def export_dictionary(self):
         dictionary = {
-            'aoi_admin' : self.admin,
-            'aoi_asset_name' : self.asset_name,
-            'aoi_name' : self.name,
-            'aoi_method' : self.method,
-            'aoi_asset_json' : self.asset_json,
-            'aoi_vector_json' : self.vector_json,
-            'aoi_geo_json' : self.geo_json,
+            "aoi_admin": self.admin,
+            "aoi_asset_name": self.asset_name,
+            "aoi_name": self.name,
+            "aoi_method": self.method,
+            "aoi_asset_json": self.asset_json,
+            "aoi_vector_json": self.vector_json,
+            "aoi_geo_json": self.geo_json,
             "start_date": self.start_date,
             "end_date": self.end_date,
         }
@@ -68,7 +68,7 @@ class AoiDateModel(AoiModel):
 
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Error loading JSON file: {e}")
-            
+
     def reset_model(self):
         self.aoi_admin = ""
         self.aoi_asset_name = ""
@@ -76,4 +76,3 @@ class AoiDateModel(AoiModel):
         self.aoi_asset_json = ""
         self.start_date = ""
         self.end_date = ""
-    

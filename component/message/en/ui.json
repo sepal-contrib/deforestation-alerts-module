@@ -1,0 +1,138 @@
+{
+    "recipe_tile": {
+            "button_new_recipe": "Create",
+            "button_load_recipe": " Load ",
+            "input_hint_set_recipe_name": "Set the recipe name",
+            "card_title_new_recipe": "New Recipe",
+            "card_title_load_recipe": "Load Recipe",
+            "alert_done_message": "Done",
+            "loader_creating_recipe": "Creating recipe...",
+            "loader_resetting_models": "Resetting models...",
+            "loader_resetting_tiles": "Resetting tiles...",
+            "loader_loading_aoi": "Loading AOI...",
+            "loader_loading_alerts": "Loading Alerts...",
+            "loader_loading_filters": "Loading Filters...",
+            "loader_waiting_gee": "Waiting GEE...",
+            "loader_loading_alert_db": "Loading Alerts DB...",
+            "loader_loading_last_alert": "Loading last alert..."
+        },
+
+    "aux_tile": {
+            "ccdc_alerts_title": "CCDC Alerts Asset",
+            "ccdc_alerts_hint": "Select alerts generated with ccdc change alert recipe",
+            "mask_asset_title": "Mask Asset", 
+            "mask_asset_hint": "Select a mask to apply to alerts, for example a Forest/No Forest mask",
+            "aux_asset_title": "Auxiliary Asset",
+            "aux_asset_hint": "Select an auxiliary raster that can be useful while analyzing alerts",
+            "aux_viz": "Auxiliary Asset Visualization Parameters", 
+            "report_template_title": "Report Template",
+            "planet_login_title": "Planet Login Data"
+        },
+
+    "aoi_tile": {
+            "search_button": "Search alerts",
+            "aoi_selection_title":"AOI selection", 
+            "date_selection_title": "Date selection", 
+            "start_date_label": "Start date", 
+            "end_date_label": "End date", 
+            "search_button_alerts_text": {
+                "loader_text1": "Checking inputs...",
+                "loader_text2": "Saving inputs...",
+                "loader_text3": "Searching alerts...",
+                "loader_text4": "Creating rasters...",
+                "loader_text5": "Completed!"}
+        },
+    
+    "filter_tile": {
+            "analyze_alerts_button": "Analyze alerts",
+            "available_alerts_title": "Available alerts",
+            "no_alerts_message": "No alerts are available for the date/area selected",
+            "available_alerts_hint": "Select one or multiple alert sources",
+            "set_min_alert_siz_title": "Min alert size (ha)",
+            "area_selection_method_title": "Alert area selection",
+            "area_selection_method_label1": "Choose by drawn polygon",
+            "area_selection_method_label2": "Whole area",
+            "alert_sorting_method_title": "Alert sorting",
+            "alert_sorting_method_label1": "Prioritize bigger area alerts",
+            "alert_sorting_method_label2": "Prioritize smaller area alerts",
+            "alert_sorting_method_label3": "Prioritize recent alerts",
+            "alert_sorting_method_label4": "Prioritize older alerts",
+            "max_number_of_alerts_title": "Number of alerts", 
+            "max_number_of_alerts_option1": "All",
+            "max_number_of_alerts_hint": "Analyze all alerts or define a max number",
+            "layer_date_helper1": " date",
+            "layer_aux_name": "Auxiliary Layer",
+            "layer_mask_name": "Mask Layer"
+    },
+
+    "overview_tile": {
+            "title": "General Overview",
+            "total":"Total Alerts", 
+            "reviewed": "Reviewed Alerts", 
+            "confirmed": "Confirmed Alerts", 
+            "false_positives": "False Positives", 
+            "revision": "Need further revision",
+            "alerts_db_label": "Alerts DB",
+            "summary_button_label": "Summary"
+    },
+
+    "analysis_tile": {
+            "img_selection": {
+                "actual_image_info": "Actual image info",
+                "selected_img_info": "Source: Date: Cloud Cover:",
+                "selected_img_info_source": "Source: ",
+                "selected_img_info_date": "Date: ",
+                "selected_img_info_cloud": "Cloud Cover: ",
+                "planet_monthly_mosaics": "Planet Monthly Mosaics",
+                "sentinel2_images": "Sentinel 2 Images"
+            },
+            "alert_info": {
+                "card_title": "Alert info",
+                "first_date": "First Date: ",
+                "last_date": "Last Date: ",
+                "status": "Status: "
+            },
+            "questionarie": {
+                "confirmation_q": "Is this a true alert?",
+                "confirmation_yes": "Yes",
+                "confirmation_no": "No",
+                "confirmation_revision": "Need further revision",
+                "loss_driver_label": "Loss driver",
+                "loss_driver_hint": "Analyze cause of deforestation",
+                "loss_driver1": "Agriculture expansion",
+                "loss_driver2": "Livestock grazing",
+                "loss_driver3": "Logging",
+                "loss_driver4": "Urban expansion",
+                "loss_driver5": "Shifting cultivation",
+                "loss_driver6": "Mining",
+                "loss_driver7": "Forest fires",
+                "loss_driver8": "Hurricanes",
+                "loss_driver9": "Other"
+            },
+            "nav_labels": {
+                "prev_button_label": "Previous",
+                "next_button_label": "Next",
+                "go_to_alert_button_label": "Go"
+            },
+            "edition_labels": {
+                "edit_title": "Alert drawing",
+                "start_edit_button": "Start Drawing",
+                "clear_button": "Clear all",
+                "save_edit_button": "Save",
+                "stop_edit_button": "Stop Drawing"
+            },
+            "model_labels": {
+                "dl_button1": "Smaller and faster model",
+                "dl_button2": "Larger but slower model",
+                "dl_button_add": "Add to map",
+                "dl_button_remove": "Remove from map"
+            },
+            "export_labels": {
+                "export_title": "Save and Export",
+                "save_btn": "Save",
+                "download_alert_data_btn": "Download",
+                "files_dwn_btn": "Files",
+                "report_dwn_btn": "Report"
+        }
+    }
+}

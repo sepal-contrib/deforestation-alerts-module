@@ -1,0 +1,139 @@
+{
+    "recipe_tile": {
+            "button_new_recipe": "Crear ",
+            "button_load_recipe": "Cargar",
+            "input_hint_set_recipe_name": "Definir el nombre del proyecto",
+            "card_title_new_recipe": "Nuevo Proyecto",
+            "card_title_load_recipe": "Cargar Proyecto",
+            "alert_done_message": "Hecho",
+            "loader_creating_recipe": "Creando proyecto...",
+            "loader_resetting_models": "Reinciando modelos...",
+            "loader_resetting_tiles": "Reinciando tiles...",
+            "loader_loading_aoi": "Cargando AOI...",
+            "loader_loading_alerts": "Cargando Alertas...",
+            "loader_loading_filters": "Cargando Filtros...",
+            "loader_waiting_gee": "Esperando a GEE...",
+            "loader_loading_alert_db": "Cargando BD de Alertas...",
+            "loader_loading_last_alert": "Cargando última alerta..."
+        },
+
+    "aux_tile": {
+            "ccdc_alerts_title": "Asset de alertas CCDC",
+            "ccdc_alerts_hint": "Selecciona alertas generadas con la herramienta de alertas de cambios ccdc",
+            "mask_asset_title": "Asset de Enmascaramiento", 
+            "mask_asset_hint": "Selecciona una máscara para aplicar a las alertas, por ejemplo una máscara de Bosque/No Bosque",
+            "aux_asset_title": "Asset Auxiliar",
+            "aux_asset_hint": "Selecciona un raster auxiliar que pueda ser útil durante el análisis de las alertas",
+            "aux_viz": "Parametros de Visualizacion del Asset Auxiliar", 
+            "report_template_title": "Plantilla de Reporte",
+            "planet_login_title": "Planet Login Data"
+        },
+
+    "aoi_tile": {
+            "search_button": "Buscar alertas",
+            "aoi_selection_title":"Selección de AOI", 
+            "date_selection_title": "Selección de fecha", 
+            "start_date_label": "Fecha incial", 
+            "end_date_label": "Fecha final", 
+            "search_button_alerts_text": {
+                "loader_text1": "Comprobando datos...",
+                "loader_text2": "Guardando datos...",
+                "loader_text3": "Buscando alertas...",
+                "loader_text4": "Creando rasters...",
+                "loader_text5": "Hecho!"}
+        },
+    
+    "filter_tile": {
+            "analyze_alerts_button": "Analizar alertas",
+            "available_alerts_title": "Alertas disponibles",
+            "no_alerts_message": "No hay alertas disponibles en el área o las fechas seleccionadas",
+            "available_alerts_hint": "Selecciona una o múltiples fuentes de alertas",
+            "set_min_alert_siz_title": "Área mínima (ha)",
+            "area_selection_method_title": "Área de análisis",
+            "area_selection_method_label1": "Elegir por polígono dibujado",
+            "area_selection_method_label2": "Área completa",
+            "alert_sorting_method_title": "Prioridad de alertas",
+            "alert_sorting_method_label1": "Priorizar alertas grandes",
+            "alert_sorting_method_label2": "Priorizar alertas pequenas",
+            "alert_sorting_method_label3": "Priorizar alertas recientes",
+            "alert_sorting_method_label4": "Priorizar alertas antiguas",
+            "max_number_of_alerts_title": "Número de alertas", 
+            "max_number_of_alerts_option1": "Todas",
+            "max_number_of_alerts_hint": "Analizar todas las alertas o definir un número máximo",
+            "layer_date_helper1": " fecha",
+            "layer_aux_name": "Capa Auxiliar",
+            "layer_mask_name": "Capa de Máscara"
+
+    },
+
+    "overview_tile": {
+            "title": "Resumen General",
+            "total":"Total de Alertas", 
+            "reviewed": "Alertas Revisadas", 
+            "confirmed": "Alertas Confirmadas", 
+            "false_positives": "Falsos Positivos", 
+            "revision": "Necesitan revisión adicional",
+            "alerts_db_label": "BD de Alertas",
+            "summary_button_label": "Resumen"
+    },
+
+    "analysis_tile": {
+            "img_selection": {
+                "actual_image_info": "Información de la imagen actual",
+                "selected_img_info": "Fuente: Fecha: Cobertura de nubes:",
+                "selected_img_info_source": "Fuente: ",
+                "selected_img_info_date": "Fecha: ",
+                "selected_img_info_cloud": "Cobertura de nubes: ",
+                "planet_monthly_mosaics": "Mosaicos mensuales de Planet",
+                "sentinel2_images": "Imágenes de Sentinel 2"
+            },
+            "alert_info": {
+                "card_title": "Información de la alerta",
+                "first_date": "Primera fecha: ",
+                "last_date": "Última fecha: ",
+                "status": "Estado: "
+            },
+            "questionarie": {
+                "confirmation_q": "¿Es verdadera la alerta?",
+                "confirmation_yes": "Sí",
+                "confirmation_no": "No",
+                "confirmation_revision": "Necesita revisión adicional",
+                "loss_driver_label": "Causa de la perdida",
+                "loss_driver_hint": "Analizar causa de la pérdida",
+                "loss_driver1": "Expansión agricola",
+                "loss_driver2": "Pastoreo ganadero",
+                "loss_driver3": "Tala",
+                "loss_driver4": "Expansión urbana",
+                "loss_driver5": "Cultivo transitorio",
+                "loss_driver6": "Minería",
+                "loss_driver7": "Incendios forestales",
+                "loss_driver8": "Huracanes",
+                "loss_driver9": "Otra"
+            },
+            "nav_labels": {
+                "prev_button_label": "Anterior",
+                "next_button_label": "Siguiente",
+                "go_to_alert_button_label": "Ir"
+            },
+            "edition_labels": {
+                "edit_title": "Dibujo de la alerta",
+                "start_edit_button": "Comenzar dibujo",
+                "clear_button": "Borrar todo",
+                "save_edit_button": "Guardar",
+                "stop_edit_button": "Detener dibujo"
+            },
+            "model_labels": {
+                "dl_button1": "Modelo pequeño y rápido",
+                "dl_button2": "Modelo grande pero más lento",
+                "dl_button_add": "Agregar al mapa",
+                "dl_button_remove": "Quitar del mapa"
+            },
+            "export_labels": {
+                "export_title": "Guardar y exportar",
+                "save_btn": "Guardar",
+                "download_alert_data_btn": "Descargar",
+                "files_dwn_btn": "Archivos",
+                "report_dwn_btn": "Informe"
+        }
+    }
+}

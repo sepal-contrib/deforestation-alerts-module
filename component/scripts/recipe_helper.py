@@ -73,7 +73,7 @@ def save_model_parameters_to_json(
     model_parameters = a | b | c | d | e
     # model_parameters = {key: value for d in (a, b, c, d, e) for key, value in d.items()}
 
-    #print(a, b, c, d, e, model_parameters)
+    # print(a, b, c, d, e, model_parameters)
 
     ##File path to save the JSON file
     file_path = file_name
@@ -138,10 +138,11 @@ def load_parameters_from_json(
     app_tile_model.import_from_dictionary(model_parameters)
     analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
         app_tile_model.recipe_folder_path + "/alert_db.csv",
-        ["bounding_box", "point", "alert_polygon"]
+        ["bounding_box", "point", "alert_polygon"],
     )
     analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
+
 
 def load_parameters_from_json_btn_state(
     btn,
@@ -168,15 +169,15 @@ def load_parameters_from_json_btn_state(
     # Read JSON file
     with open(file_name, "r") as json_file:
         model_parameters = json.load(json_file)
-    btn.set_loader_text('Loading AOI...')
-    #btn.set_loader_percentage(10)
+    btn.set_loader_text("Loading AOI...")
+    # btn.set_loader_percentage(10)
     aux_model.import_from_dictionary(model_parameters)
     aoi_tile.load_saved_parameters(model_parameters)
-    btn.set_loader_text('Loading Alerts...')
-    #btn.set_loader_percentage(30)
+    btn.set_loader_text("Loading Alerts...")
+    # btn.set_loader_percentage(30)
     aoi_tile.process_alerts_silent()
-    btn.set_loader_text('Loading Filters...')
-    #btn.set_loader_percentage(60)
+    btn.set_loader_text("Loading Filters...")
+    # btn.set_loader_percentage(60)
     alert_filter_tile.load_saved_parameters(model_parameters)
     (
         alert_source,
@@ -186,72 +187,80 @@ def load_parameters_from_json_btn_state(
         user_max_number_alerts,
         user_selection_polygon,
     ) = check_alert_filter_inputs(alert_filter_tile)
-    analyzed_alerts_model.before_planet_monthly_images, analyzed_alerts_model.after_planet_monthly_images = alert_filter_tile.create_planet_images_dictionary(
+    (
+        analyzed_alerts_model.before_planet_monthly_images,
+        analyzed_alerts_model.after_planet_monthly_images,
+    ) = alert_filter_tile.create_planet_images_dictionary(
         aoi_date_model.feature_collection,
         aoi_date_model.start_date,
         aoi_date_model.end_date,
     )
-    btn.set_loader_text('Waiting GEE...')
-    #btn.set_loader_percentage(70)
-    selected_alerts_model.filtered_alert_raster = alert_filter_tile.create_filtered_alert_raster(
-        alert_source,
-        user_min_alert_size,
-        alert_area_selection,
-        alert_sorting_method,
-        user_max_number_alerts,
-        user_selection_polygon,
+    btn.set_loader_text("Waiting GEE...")
+    # btn.set_loader_percentage(70)
+    selected_alerts_model.filtered_alert_raster = (
+        alert_filter_tile.create_filtered_alert_raster(
+            alert_source,
+            user_min_alert_size,
+            alert_area_selection,
+            alert_sorting_method,
+            user_max_number_alerts,
+            user_selection_polygon,
+        )
     )
-    btn.set_loader_text('Loading Alerts DB...')
-    #btn.set_loader_percentage(90)
+    btn.set_loader_text("Loading Alerts DB...")
+    # btn.set_loader_percentage(90)
     app_tile_model.import_from_dictionary(model_parameters)
     analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
         app_tile_model.recipe_folder_path + "/alert_db.csv",
-        ["bounding_box", "point", "alert_polygon"]
+        ["bounding_box", "point", "alert_polygon"],
     )
-    btn.set_loader_text('Loading last alert...')
-    #btn.set_loader_percentage(100)
+    btn.set_loader_text("Loading last alert...")
+    # btn.set_loader_percentage(100)
     analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
 
-def load_gdf_from_csv (csv_file, geometry_columns_list):
+
+def load_gdf_from_csv(csv_file, geometry_columns_list):
     # load encoded dataframe
     df = pd.read_csv(csv_file)
     # decode geometry columns as strings back into shapely objects
     for c in geometry_columns_list:
-        df[c] = df[c].apply(lambda x: wkt.loads(x) if pd.notnull(x) and x != '' else None)
-    
+        df[c] = df[c].apply(
+            lambda x: wkt.loads(x) if pd.notnull(x) and x != "" else None
+        )
+
     # finally reconstruct geodataframe
     gdf = gpd.GeoDataFrame(df)
     return gdf
 
 
-def update_saved_dictionary(json_file_path, key ,new_value):
+def update_saved_dictionary(json_file_path, key, new_value):
     """
     Updates the value of the 'actual_id' key in a JSON file and rewrites the file.
 
     Args:
         json_file_path (str): Path to the JSON file.
         new_value (any): New value to assign to the 'actual_id' key.
-    
+
     Returns:
         None
     """
     try:
         # Read the JSON file
-        with open(json_file_path, 'r') as file:
+        with open(json_file_path, "r") as file:
             data = json.load(file)
-        
+
         # Ensure the content is a dictionary
         if not isinstance(data, dict):
             raise ValueError("JSON content must be a dictionary.")
-        
+
         # Update the 'actual_id' key
         data[key] = new_value
-        
+
         # Write the updated content back to the same file
-        with open(json_file_path, 'w') as file:
+        with open(json_file_path, "w") as file:
             json.dump(data, file)
-        
+
         print(f"'key' successfully updated to {new_value}.")
     except FileNotFoundError:
         print(f"Error: File '{json_file_path}' not found.")

@@ -18,11 +18,12 @@ class AlertFilterModel(model.Model):
 
     available_alerts_raster_list = Any("").tag(sync=True)
     "Dictionary of alert rasters in the aoi and dates selected by the users"
-    
+
     def reset_model(self):
         self.alerts_dictionary = ""
         self.available_alerts_list = ""
         self.available_alerts_raster_list = ""
+
 
 class SelectedAlertsModel(model.Model):
 
@@ -44,8 +45,14 @@ class SelectedAlertsModel(model.Model):
     alert_selection_area = Any(None).tag(sync=True)
     "User alerts selection methond for selecting alerts"
 
+    alert_selection_area_n = Int(0).tag(sync=True)
+    "User alerts selection methond for selecting alerts, numeric so we can save to dictionary and keep it language independant"
+
     alert_sorting_method = Any(None).tag(sync=True)
     "User alerts selection methond for ordering alerts"
+
+    alert_sorting_method_n = Int(0).tag(sync=True)
+    "User alerts selection methond for ordering alerts, numeric so we can save to dictionary and keep it language independant"
 
     filtered_alert_raster = Any(None).tag(sync=True)
     "Alert raster image with all user filters applied"
@@ -57,18 +64,18 @@ class SelectedAlertsModel(model.Model):
     alerts_bbs = Any(None).tag(sync=True)
     "Feature Collection that cointains bounding boxes of first x filtered alerts, they may or may not have a priority field"
     "List of needed fields, valid, before_img, after_img, min_date, max_date, alert_polygon_dir, area, description"
-    
+
     received_alerts = Any(None).tag(sync=True)
     "Variable used to indicate that alerts in json format where received"
-    
+
     def export_dictionary(self):
         dictionary = {
             "selected_alert_sources": self.selected_alert_sources,
             "alert_selection_polygons": self.alert_selection_polygons,
             "min_area": self.min_area,
             "max_number_alerts": self.max_number_alerts,
-            "alert_selection_area": self.alert_selection_area,
-            "alert_sorting_method": self.alert_sorting_method,
+            "alert_selection_area": self.alert_selection_area_n,
+            "alert_sorting_method": self.alert_sorting_method_n,
         }
         return dictionary
 

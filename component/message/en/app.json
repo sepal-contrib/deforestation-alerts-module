@@ -1,10 +1,16 @@
 {
     "app": {
-        "title": "Deforestation Alerts Analysis",
+        "title": "Forest Loss Alerts Analysis",
         "footer": "SEPAL \u00a9 {}",
         "banner": "This is my first app :)",
         "drawer_item": {
-            "about": "About"
+            "about": "About",
+            "recipes": "Recipes",
+            "aux": "Optional files",
+            "aoi": "AOI/Date",
+            "filter": "Filter",
+            "overview": "Overview",
+            "analysis": "Analysis"
         }
     }
 }
