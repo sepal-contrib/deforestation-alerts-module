@@ -1,7 +1,7 @@
 import ee
 from sepal_ui.scripts import utils as su
 from sepal_ui.scripts.utils import init_ee
-from datetime import datetime
+from datetime import datetime, date
 from math import floor, ceil
 import geopandas as gpd
 import ee
@@ -309,13 +309,21 @@ def _from_glad_l(start, end, aoi):
         tmp = periods.pop()
     periods.append(tmp)
 
+    collection = ee.ImageCollection("projects/glad/alert/UpdResult")
+    first_image = collection.first()
+    bands = first_image.bandNames().getInfo()
+    alert_date_bands = [band for band in bands if band.startswith("alertDate")]
+    modified_list = [element.replace("alertDate", "") for element in alert_date_bands]
+    numeric_values = [int(value) for value in modified_list]
+    lowest_digit = 2000 + min(numeric_values)
+
     images = []
     for period in periods:
         year = period[0].year
         start = period[0].timetuple().tm_yday
         end = period[1].timetuple().tm_yday
 
-        if year < 2024:
+        if year < lowest_digit:
             source = f"projects/glad/alert/{year}final"
         else:
             source = "projects/glad/alert/UpdResult"
@@ -469,7 +477,9 @@ def _from_glad_s(start, end, aoi):
     ).rename("alert")
 
     # change the date format
-    date_band2 = to_date(date_band).toFloat().rename("date").updateMask(alert_band.mask())
+    date_band2 = (
+        to_date(date_band).toFloat().rename("date").updateMask(alert_band.mask())
+    )
 
     # create the composit image
     all_alerts = alert_band.addBands(ee.Image(date_band2).toFloat())
