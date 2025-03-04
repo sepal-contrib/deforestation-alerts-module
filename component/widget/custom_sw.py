@@ -399,7 +399,6 @@ class CustomBtnWithLoader(v.Btn):
 
 
 class CustomTranslator(Translator):
-
     def __init__(
         self, json_folder: Union[str, Path], target: str = "", default: str = "en"
     ) -> None:
