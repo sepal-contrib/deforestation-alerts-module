@@ -114,7 +114,7 @@ class OverviewTile(sw.Layout):
         card02 = v.Card(
             class_="pa-3 ma-5 d-flex justify-center",
             hover=True,
-            children=[self.dwn_all_btn, self.dwn_summary_btn],
+            children=[self.dwn_all_btn],  # , self.dwn_summary_btn],
         )
         card0 = v.Card(class_="py-2", children=[card01, card02])
 
@@ -160,7 +160,7 @@ class OverviewTile(sw.Layout):
                 draw_selection = ee.FeatureCollection(
                     self.selected_alerts_model.alert_selection_polygons
                 )
-                self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
+                # self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
 
             self.listaNumeros = calculate_alert_classes(
                 centroides_gdf, "Confirmed", "False Positive", "Maybe"
