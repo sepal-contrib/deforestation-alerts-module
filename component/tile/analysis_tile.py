@@ -488,13 +488,13 @@ class AnalysisTile(sw.Layout):
         label35 = v.CardTitle(
             class_="pa-1 ma-1", children=[cm.analysis_tile.export_labels.export_title]
         )
-        save_btn = sw.Btn(
+        self.save_btn = sw.Btn(
             cm.analysis_tile.export_labels.save_btn,
             color="primary",
             outlined=True,
             small=True,
         )
-        save_btn.on_event("click", self.save_attributes_to_gdf)
+        self.save_btn.on_event("click", self.save_attributes_to_gdf)
         self.download_alert_data_btn = sw.Btn(
             cm.analysis_tile.export_labels.download_alert_data_btn,
             color="primary",
@@ -511,7 +511,7 @@ class AnalysisTile(sw.Layout):
         )
 
         self.toolBarSaveExport = sw.Toolbar(
-            children=[save_btn, self.download_alert_data_btn]
+            children=[self.save_btn, self.download_alert_data_btn]
         )
         self.toolBarDownloads = sw.Toolbar(
             children=[self.files_dwn_btn, self.report_dwn_btn]
@@ -1091,9 +1091,9 @@ class AnalysisTile(sw.Layout):
 
         # Cambio en alert info
         if alerta["status"] != "Not reviewed":
-            alert_st = "Reviewed"
+            alert_st = cm.analysis_tile.alert_info.status_reviewed
         else:
-            alert_st = "Not reviewed"
+            alert_st = cm.analysis_tile.alert_info.status_not_reviewed
 
         self.selected_alert_info.children = [
             v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
@@ -1345,6 +1345,7 @@ class AnalysisTile(sw.Layout):
         self.stop_edit_button.disabled = False
         self.toolBarDL1.show()
         self.toolBarDL2.show()
+        self.save_btn.disabled = True
         widget.loading = False  # Remove loading state
 
     def save_edition_function(self, widget, event, data):
@@ -1379,6 +1380,7 @@ class AnalysisTile(sw.Layout):
         self.save_edit_button.disabled = True
         self.clear_button.disabled = True
         self.start_edit_button.disabled = False
+        self.save_btn.disabled = False
         widget.loading = False  # Remove loading state
 
     def clear_edition_function(self, widget, event, data):
@@ -1540,12 +1542,12 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
 
         # Save before and after img name
-        alertas_gdf.at[actual_alert_id, "before_img"] = (
-            self.selected_img_before_info_list[3]
-        )
-        alertas_gdf.at[actual_alert_id, "after_img"] = (
-            self.selected_img_after_info_list[3]
-        )
+        alertas_gdf.at[
+            actual_alert_id, "before_img"
+        ] = self.selected_img_before_info_list[3]
+        alertas_gdf.at[
+            actual_alert_id, "after_img"
+        ] = self.selected_img_after_info_list[3]
 
         ##Create dictionary of alert sources
         alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
@@ -1593,9 +1595,9 @@ class AnalysisTile(sw.Layout):
             self.boton_confirmacion.v_model
             == cm.analysis_tile.questionarie.confirmation_yes
         ):
-            alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
-                self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
-            )
+            alertas_gdf.at[
+                actual_alert_id, "alert_polygon"
+            ] = self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
             alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(
                 self.analyzed_alerts_model.defo_dl_layer
             )
