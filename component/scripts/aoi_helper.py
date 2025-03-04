@@ -352,6 +352,7 @@ def _from_glad_l(start, end, aoi):
         alert_band = (
             alerts.select(f"conf{year%100}")
             .remap([0, 1, 2, 3], [0, 0, 2, 1])
+            .toInt16()
             .rename("alert")
         )
 
@@ -408,7 +409,10 @@ def _from_radd(start, end, aoi):
 
     # create a unique alert band
     alert_band = (
-        alerts.select("Alert").remap([0, 1, 2, 3], [0, 0, 2, 1]).rename("alert")
+        alerts.select("Alert")
+        .remap([0, 1, 2, 3], [0, 0, 20, 10])
+        .toInt16()
+        .rename("alert")
     )
 
     # change the date format
@@ -435,15 +439,17 @@ def _from_nrt(aoi, asset):
     alert_band = (
         alerts.select("detection_count").updateMask(mask).rename("alert").uint16()
     )
-    alert_band = alert_band.where(alert_band.gte(1).And(alert_band.lt(3)), 2).where(
-        alert_band.gte(3), 1
+    alert_band = (
+        alert_band.where(alert_band.gte(1).And(alert_band.lt(3)), 2000)
+        .where(alert_band.gte(3), 1000)
+        .toInt16()
     )
 
     # create a unique date band
     date_band = alerts.select("first_detection_date").mask(mask)
     year = date_band.floor()
     day = date_band.subtract(year).multiply(365)
-    date_band = year.add(day.divide(1000)).rename("date")
+    date_band = year.add(day.divide(1000)).toFloat().rename("date")
 
     # create the composit image
     all_alerts = alert_band.addBands(date_band)
@@ -473,8 +479,14 @@ def _from_glad_s(start, end, aoi):
 
     # remap the alerts and mask the alerts
     alert_band = (
-        alert_band.remap([0, 1, 2, 3, 4], [0, 2, 2, 1, 1]).updateMask(date_band.mask())
-    ).rename("alert")
+        (
+            alert_band.remap([0, 1, 2, 3, 4], [0, 200, 200, 100, 100]).updateMask(
+                date_band.mask()
+            )
+        )
+        .toInt16()
+        .rename("alert")
+    )
 
     # change the date format
     date_band2 = (

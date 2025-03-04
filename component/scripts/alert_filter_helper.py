@@ -100,11 +100,11 @@ def custom_reduce_image_collection(image_collection):
         ee.Image: A single reduced image with the max of 'alerts' and min of 'date'.
     """
     # Define reducers for the bands
-    max_alerts_reducer = ee.Reducer.max()
+    sum_alerts_reducer = ee.Reducer.sum()
     min_date_reducer = ee.Reducer.min()
 
     # Apply the reducers to the ImageCollection
-    reduced_alerts = image_collection.select("alert").reduce(max_alerts_reducer)
+    reduced_alerts = image_collection.select("alert").reduce(sum_alerts_reducer)
     reduced_date = image_collection.select("date").reduce(min_date_reducer)
 
     # Combine the reduced results into a single image
@@ -123,22 +123,20 @@ def obtener_datos_gee_parcial_map(
     min_alert_size_pixels,
     max_elementos,
     sorting,
+    grid_size,
+    max_retries=3,
 ):
     def get_bb(feature):
         grid_geometry = ee.Feature(feature).geometry()
         bounding_boxes = alert_raster.clip(grid_geometry).reduceToVectors(
-            ee_reducer,
-            grid_geometry,
-            pixel_size,
-            "bb",
-            True,
-            None,
-            None,
-            None,
-            True,
-            1e13,
-            1,
+            reducer=ee_reducer,
+            geometry=grid_geometry,
+            scale=pixel_size,
+            geometryType="bb",
+            eightConnected=True,
+            maxPixels=1e13,
         )
+
         # Filter clusters with at least `min_alert_size_pixels`
         bb_cleaned = bounding_boxes.filter(
             ee.Filter.gte("count", min_alert_size_pixels)
@@ -158,26 +156,52 @@ def obtener_datos_gee_parcial_map(
     else:
         max_elementos = max_elementos
 
-    aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", 50000)
+    aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", grid_size)
 
-    elementos_filtrados = aoi_grid.limit(20).map(procesar_elemento)
+    elementos_filtrados = aoi_grid.limit(40).map(procesar_elemento)
 
     # Convert the resulting list of lists to a flat list
     resultados = ee.FeatureCollection(elementos_filtrados).flatten()
 
+    # Function to apply distinct to the 'list' property of each feature
+    def apply_distinct(fc, property_name, new_property_name):
+        """
+        Apply distinct to a list property in each feature of a FeatureCollection.
+
+        Args:
+            fc (ee.FeatureCollection): The input FeatureCollection.
+            property_name (str): The name of the property containing the list.
+            new_property_name (str): The name of the new property to store the distinct list.
+
+        Returns:
+            ee.FeatureCollection: A new FeatureCollection with distinct values in the new property.
+        """
+        fc2 = fc.map(
+            lambda feature: feature.set(
+                new_property_name, ee.List(feature.get(property_name)).distinct()
+            )
+        )
+        return fc2.map(
+            lambda feature: ee.Feature(feature.geometry()).copyProperties(
+                source=feature, exclude=[property_name]
+            )
+        )
+
+    resultados2 = apply_distinct(resultados, "alert_type_list", "alert_type_unique")
+
     # Sort and convert to list
     if sorting == cm.filter_tile.alert_sorting_method_label1:
-        bb_sorted = resultados.sort("count", False)
+        bb_sorted = resultados2.sort("count", False)
     if sorting == cm.filter_tile.alert_sorting_method_label2:
-        bb_sorted = resultados.sort("count", True)
+        bb_sorted = resultados2.sort("count", True)
     if sorting == cm.filter_tile.alert_sorting_method_label3:
-        bb_sorted = resultados.sort("alert_date_max", False)
+        bb_sorted = resultados2.sort("alert_date_max", False)
     if sorting == cm.filter_tile.alert_sorting_method_label4:
-        bb_sorted = resultados.sort("alert_date_max", True)
+        bb_sorted = resultados2.sort("alert_date_max", True)
 
-    resultados2 = bb_sorted.toList(max_elementos)
+    resultados3 = bb_sorted.toList(max_elementos)
 
-    return evaluate_with_retry(resultados2)
+    return evaluate_with_retry(resultados3, max_retries)
 
 
 def obtener_datos_gee_total_v2(
@@ -191,26 +215,251 @@ def obtener_datos_gee_total_v2(
 ):
     # Apply reducer and filter to minimum alert size
     bounding_boxes = alert_raster.reduceToVectors(
-        ee_reducer, aoi, pixel_size, "bb", True, None, None, None, True, 1e13, 1
+        reducer=ee_reducer,
+        geometry=aoi,
+        scale=pixel_size,
+        geometryType="bb",
+        eightConnected=True,
+        maxPixels=1e13,
     ).filter(ee.Filter.gte("count", min_alert_size_pixels))
+
+    # Function to apply distinct to the 'list' property of each feature
+    def apply_distinct(fc, property_name, new_property_name):
+        """
+        Apply distinct to a list property in each feature of a FeatureCollection.
+
+        Args:
+            fc (ee.FeatureCollection): The input FeatureCollection.
+            property_name (str): The name of the property containing the list.
+            new_property_name (str): The name of the new property to store the distinct list.
+
+        Returns:
+            ee.FeatureCollection: A new FeatureCollection with distinct values in the new property.
+        """
+        fc2 = fc.map(
+            lambda feature: feature.set(
+                new_property_name, ee.List(feature.get(property_name)).distinct()
+            )
+        )
+        return fc2.map(
+            lambda feature: ee.Feature(feature.geometry()).copyProperties(
+                source=feature, exclude=[property_name]
+            )
+        )
+
+    bounding_boxes_2 = apply_distinct(
+        bounding_boxes, "alert_type_list", "alert_type_unique"
+    )
 
     # Calculate the export limit on GEE side
     max_elements = ee.Number(5000) if max_elementos <= 0 else ee.Number(max_elementos)
-    num_elements = bounding_boxes.size().min(max_elements)
+    num_elements = bounding_boxes_2.size().min(max_elements)
 
     # Sort and convert to list
     if sorting == cm.filter_tile.alert_sorting_method_label1:
-        bb_sorted = bounding_boxes.sort("count", False)
+        bb_sorted = bounding_boxes_2.sort("count", False)
     if sorting == cm.filter_tile.alert_sorting_method_label2:
-        bb_sorted = bounding_boxes.sort("count", True)
+        bb_sorted = bounding_boxes_2.sort("count", True)
     if sorting == cm.filter_tile.alert_sorting_method_label3:
-        bb_sorted = bounding_boxes.sort("alert_date_max", False)
+        bb_sorted = bounding_boxes_2.sort("alert_date_max", False)
     if sorting == cm.filter_tile.alert_sorting_method_label4:
-        bb_sorted = bounding_boxes.sort("alert_date_max", True)
+        bb_sorted = bounding_boxes_2.sort("alert_date_max", True)
 
     sorted_bb_list = bb_sorted.toList(num_elements)
 
-    return evaluate_with_retry(sorted_bb_list)
+    return sorted_bb_list
+
+
+def obtener_datos_gee_parcial_map_2(
+    aoi,
+    alert_raster,
+    ee_reducer,
+    pixel_size,
+    min_alert_size_pixels,
+    max_elementos,
+    sorting,
+    grid_size,
+):
+    def get_bb(feature):
+        grid_geometry = ee.Feature(feature).geometry()
+        bounding_boxes = alert_raster.clip(grid_geometry).reduceToVectors(
+            reducer=ee_reducer,
+            geometry=grid_geometry,
+            scale=pixel_size,
+            geometryType="bb",
+            eightConnected=True,
+            maxPixels=1e13,
+        )
+
+        # Filter clusters with at least `min_alert_size_pixels`
+        bb_cleaned = bounding_boxes.filter(
+            ee.Filter.gte("count", min_alert_size_pixels)
+        )
+        return bb_cleaned
+
+    def procesar_elemento(elemento):
+        bb = get_bb(elemento)
+        conteo = bb.size()  # Keep this as an EE object
+
+        # Only fetch info if we have elements
+        return ee.Algorithms.If(conteo.gte(1), bb, ee.FeatureCollection([]))
+
+    aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", grid_size)
+
+    elementos_filtrados = aoi_grid.map(procesar_elemento)
+
+    # Convert the resulting list of lists to a flat list
+    resultados = ee.FeatureCollection(elementos_filtrados).flatten()
+
+    # Function to apply distinct to the 'list' property of each feature
+    def apply_distinct(fc, property_name, new_property_name):
+        """
+        Apply distinct to a list property in each feature of a FeatureCollection.
+
+        Args:
+            fc (ee.FeatureCollection): The input FeatureCollection.
+            property_name (str): The name of the property containing the list.
+            new_property_name (str): The name of the new property to store the distinct list.
+
+        Returns:
+            ee.FeatureCollection: A new FeatureCollection with distinct values in the new property.
+        """
+        fc2 = fc.map(
+            lambda feature: feature.set(
+                new_property_name, ee.List(feature.get(property_name)).distinct()
+            )
+        )
+        return fc2.map(
+            lambda feature: ee.Feature(feature.geometry()).copyProperties(
+                source=feature, exclude=[property_name]
+            )
+        )
+
+    resultados2 = apply_distinct(resultados, "alert_type_list", "alert_type_unique")
+
+    # Sort and convert to list
+    if sorting == cm.filter_tile.alert_sorting_method_label1:
+        bb_sorted = resultados2.sort("count", False)
+    if sorting == cm.filter_tile.alert_sorting_method_label2:
+        bb_sorted = resultados2.sort("count", True)
+    if sorting == cm.filter_tile.alert_sorting_method_label3:
+        bb_sorted = resultados2.sort("alert_date_max", False)
+    if sorting == cm.filter_tile.alert_sorting_method_label4:
+        bb_sorted = resultados2.sort("alert_date_max", True)
+
+    # Use `map()` to batch-process elements in `aoi_grid`, limiting to `max_elementos`
+    if max_elementos == 0:
+        max_elementos = bb_sorted.size()
+    else:
+        max_elementos = max_elementos
+
+    resultados3 = bb_sorted.toList(max_elementos)
+
+    return resultados3
+
+
+def obtener_datos_gee_total_v3(
+    aoi,
+    alert_raster,
+    ee_reducer,
+    pixel_size,
+    min_alert_size_pixels,
+    max_elementos,
+    sorting,
+):
+    # Attempt to run the total method first
+    try:
+        return evaluate_with_retry(
+            obtener_datos_gee_total_v2(
+                aoi,
+                alert_raster,
+                ee_reducer,
+                pixel_size,
+                min_alert_size_pixels,
+                max_elementos,
+                sorting,
+            ),
+            max_retries=1,
+        )
+    except Exception as e:
+        print(
+            "Initial call to obtener_datos_gee_total_v2 failed. Retrying with obtener_datos_gee_parcial_map..."
+        )
+
+    # Try running with grid size 150,000
+    try:
+        return evaluate_with_retry(
+            obtener_datos_gee_parcial_map_2(
+                aoi,
+                alert_raster,
+                ee_reducer,
+                pixel_size,
+                min_alert_size_pixels,
+                max_elementos,
+                sorting,
+                150000,
+            ),
+            max_retries=1,
+        )
+    except Exception as e:
+        print(
+            "Call to obtener_datos_gee_parcial_map with grid size 150,000 failed. Retrying with grid size 100,000..."
+        )
+
+    # Try running with grid size 100,000
+    try:
+        return evaluate_with_retry(
+            obtener_datos_gee_parcial_map_2(
+                aoi,
+                alert_raster,
+                ee_reducer,
+                pixel_size,
+                min_alert_size_pixels,
+                max_elementos,
+                sorting,
+                100000,
+            ),
+            max_retries=1,
+        )
+    except Exception as e:
+        print(
+            "Call to obtener_datos_gee_parcial_map with grid size 100,000 failed. Retrying with grid size 40,000..."
+        )
+
+    # Try running with grid size 40,000
+    try:
+        return evaluate_with_retry(
+            obtener_datos_gee_parcial_map_2(
+                aoi,
+                alert_raster,
+                ee_reducer,
+                pixel_size,
+                min_alert_size_pixels,
+                max_elementos,
+                sorting,
+                40000,
+            ),
+            max_retries=1,
+        )
+    except Exception as e:
+        print(
+            "Call to obtener_datos_gee_parcial_map with grid size 40,000 failed. Retrying with grid size 20,000..."
+        )
+
+    # Try running with grid size 100,000
+    return evaluate_with_retry(
+        obtener_datos_gee_parcial_map_2(
+            aoi,
+            alert_raster,
+            ee_reducer,
+            pixel_size,
+            min_alert_size_pixels,
+            max_elementos,
+            sorting,
+            20000,
+        ),
+        max_retries=1,
+    )
 
 
 # Function to convert list of polygons to geodataframe
