@@ -352,13 +352,13 @@ class AlertsFilterTile(sw.Layout):
 
     ## Processing functions
 
-    def assign_bb_partial(self, json):
-        self.selected_alerts_model.alerts_bbs = json
+    def assign_bb_partial(self, json_file):
+        self.selected_alerts_model.alerts_bbs = json_file
         self.selected_alerts_model.received_alerts = "Yes"
         print(self.selected_alerts_model.received_alerts)
 
-    def assign_bb_full(self, json):
-        self.selected_alerts_model.alerts_total_bbs = json
+    def assign_bb_full(self, json_file):
+        self.selected_alerts_model.alerts_total_bbs = json_file
         self.selected_alerts_model.received_alerts = "Yes"
         print(self.selected_alerts_model.received_alerts)
 
@@ -374,7 +374,7 @@ class AlertsFilterTile(sw.Layout):
     ):
         thread = threading.Thread(
             target=lambda: self.assign_bb_full(
-                obtener_datos_gee_total_v2(
+                obtener_datos_gee_total_v3(
                     poly,
                     alerta_reducir,
                     custom_reducer,
@@ -396,6 +396,7 @@ class AlertsFilterTile(sw.Layout):
         min_size_pixels,
         max_number_alerts,
         sorting,
+        grid_size,
     ):
         thread2 = threading.Thread(
             target=lambda: self.assign_bb_partial(
@@ -407,6 +408,7 @@ class AlertsFilterTile(sw.Layout):
                     min_size_pixels,
                     max_number_alerts,
                     sorting,
+                    grid_size,
                 )
             )
         )
@@ -476,24 +478,19 @@ class AlertsFilterTile(sw.Layout):
         alerta_reducir = i.addBands(i).addBands(a).addBands(d)
 
         # Definir tamaño de pixel
-        pixel_landsat = 30
+        pixel_landsat = 28
         pixel_sentinel = 10
 
         if set(["GLAD-S2", "RADD"]).intersection(alert_source):
             pixel_size = pixel_sentinel
+            grid_size = 20000
         else:
             pixel_size = pixel_landsat
+            grid_size = 20000
 
         # Definir numero minimo de pixels para alertas
         min_size_hectareas = float(user_min_alert_size) * 10000
         min_size_pixels = math.ceil(min_size_hectareas / (pixel_size**2))
-
-        # Crear reducer a aplicar sobre las alertas
-        custom_reducer = (
-            ee.Reducer.count()
-            .combine(ee.Reducer.mean().unweighted(), "alert_type_")
-            .combine(ee.Reducer.minMax(), "alert_date_")
-        )
 
         # Generar poligono de area de estudio considerando alert_area_selection
         if alert_area_selection == cm.filter_tile.area_selection_method_label1:
@@ -501,7 +498,7 @@ class AlertsFilterTile(sw.Layout):
         else:
             poly = aoi
 
-        return poly, alerta_reducir, pixel_landsat, min_size_pixels
+        return poly, alerta_reducir, pixel_size, min_size_pixels, grid_size
 
     def create_planet_images_dictionary(self, polygon, date1, date2):
         planet_mosaics_dates = get_planet_dates(date1, date2)
@@ -618,20 +615,24 @@ class AlertsFilterTile(sw.Layout):
         # Crear reducer a aplicar sobre las alertas
         custom_reducer = (
             ee.Reducer.count()
-            .combine(ee.Reducer.mean().unweighted(), "alert_type_")
-            .combine(ee.Reducer.minMax(), "alert_date_")
+            .combine(ee.Reducer.toList().unweighted(), "alert_type_")
+            .combine(ee.Reducer.minMax().unweighted(), "alert_date_")
         )
         max_number_alerts = int(user_max_number_alerts)
 
-        poly, alerta_reducir, pixel_size, min_size_pixels = (
-            self.create_vector_download_params(
-                self.aoi_date_model.feature_collection,
-                user_selection_polygon,
-                self.selected_alerts_model.filtered_alert_raster,
-                alert_source,
-                user_min_alert_size,
-                alert_area_selection,
-            )
+        (
+            poly,
+            alerta_reducir,
+            pixel_size,
+            min_size_pixels,
+            grid_size,
+        ) = self.create_vector_download_params(
+            self.aoi_date_model.feature_collection,
+            user_selection_polygon,
+            self.selected_alerts_model.filtered_alert_raster,
+            alert_source,
+            user_min_alert_size,
+            alert_area_selection,
         )
 
         # Create partial vector alerts
@@ -643,6 +644,7 @@ class AlertsFilterTile(sw.Layout):
             min_size_pixels,
             max_number_alerts,
             alert_sorting_method,
+            grid_size,
         )
 
         # Create complete vector alerts
