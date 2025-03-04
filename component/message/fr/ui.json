@@ -91,7 +91,9 @@
                 "card_title": "Info d'Alerte",
                 "first_date": "Première Date : ",
                 "last_date": "Dernière Date : ",
-                "status": "Statut : "
+                "status": "Statut : ",
+                "status_not_reviewed" : "Non évalué",
+                "status_reviewed" : "Révisé"
             },
             "questionarie": {
                 "confirmation_q": "Est-ce une véritable alerte ?",

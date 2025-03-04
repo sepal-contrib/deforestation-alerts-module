@@ -90,7 +90,9 @@
                 "card_title": "Alert info",
                 "first_date": "First Date: ",
                 "last_date": "Last Date: ",
-                "status": "Status: "
+                "status": "Status: ",
+                "status_not_reviewed" : "Not reviewed",
+                "status_reviewed" : "Reviewed"
             },
             "questionarie": {
                 "confirmation_q": "Is this a true alert?",

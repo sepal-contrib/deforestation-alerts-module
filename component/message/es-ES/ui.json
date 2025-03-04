@@ -23,8 +23,8 @@
             "mask_asset_title": "Asset de Enmascaramiento", 
             "mask_asset_hint": "Selecciona una máscara para aplicar a las alertas, por ejemplo una máscara de Bosque/No Bosque",
             "aux_asset_title": "Asset Auxiliar",
-            "aux_asset_hint": "Selecciona un raster auxiliar que pueda ser útil durante el análisis de las alertas",
-            "aux_viz": "Parametros de Visualizacion del Asset Auxiliar", 
+            "aux_asset_hint": "Selecciona un ráster auxiliar que pueda ser útil durante el análisis de las alertas",
+            "aux_viz": "Parámetros de Visualización del Asset Auxiliar", 
             "report_template_title": "Plantilla de Reporte",
             "planet_login_title": "Planet Login Data"
         },
@@ -63,7 +63,6 @@
             "layer_date_helper1": " fecha",
             "layer_aux_name": "Capa Auxiliar",
             "layer_mask_name": "Capa de Máscara"
-
     },
 
     "overview_tile": {
@@ -88,17 +87,19 @@
                 "sentinel2_images": "Imágenes de Sentinel 2"
             },
             "alert_info": {
-                "card_title": "Información de la alerta",
+                "card_title": "Información de alerta",
                 "first_date": "Primera fecha: ",
                 "last_date": "Última fecha: ",
-                "status": "Estado: "
+                "status": "Estado: ",
+                "status_not_reviewed" : "No revisada",
+                "status_reviewed" : "Revisada"
             },
             "questionarie": {
                 "confirmation_q": "¿Es verdadera la alerta?",
                 "confirmation_yes": "Sí",
                 "confirmation_no": "No",
                 "confirmation_revision": "Necesita revisión adicional",
-                "loss_driver_label": "Causa de la perdida",
+                "loss_driver_label": "Causa de la pérdida",
                 "loss_driver_hint": "Analizar causa de la pérdida",
                 "loss_driver1": "Expansión agricola",
                 "loss_driver2": "Pastoreo ganadero",
