@@ -18,6 +18,7 @@ from component.scripts.alert_filter_helper import check_alert_filter_inputs
 from component.parameter import directory
 import json
 import time
+import os
 
 from component.model.aoi_date_model import AoiDateModel
 from component.model.aux_model import AuxModel
@@ -187,8 +188,12 @@ class RecipeTile(sw.Layout):
         alert_filter_tile = self.alert_filter_tile
 
         # Read JSON file
+        if not os.path.exists(file_name):
+            raise Exception(cm.recipe_tile.input_hint_load_recipe_name)
+        
         with open(file_name, "r") as json_file:
             model_parameters = json.load(json_file)
+        
         widget.set_loader_text(cm.recipe_tile.loader_loading_aoi)
         # widget.set_loader_percentage(10)
         aux_model.import_from_dictionary(model_parameters)

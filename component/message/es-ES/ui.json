@@ -4,6 +4,7 @@
             "button_load_recipe": "Cargar",
             "input_hint_set_recipe_name": "Definir el nombre del proyecto",
             "card_title_new_recipe": "Nuevo Proyecto",
+            "input_hint_load_recipe_name": "Selecciona un proyecto guardado",
             "card_title_load_recipe": "Cargar Proyecto",
             "alert_done_message": "Hecho",
             "loader_creating_recipe": "Creando proyecto...",

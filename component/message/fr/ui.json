@@ -4,6 +4,7 @@
             "button_load_recipe": "Charger",
             "input_hint_set_recipe_name": "Définir le nom de la recette",
             "card_title_new_recipe": "Nouvelle Recette",
+            "input_hint_load_recipe_name": "Sélectionnez un fichier de recette",
             "card_title_load_recipe": "Charger une Recette",
             "alert_done_message": "Terminé",
             "loader_creating_recipe": "Création de la recette...",
