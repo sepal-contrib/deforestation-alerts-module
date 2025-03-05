@@ -8,6 +8,7 @@ earthengine-api @ git+https://github.com/openforis/earthengine-api.git@89b62662f
 fiona==1.10.1
 geemap==0.35.0
 geopandas==1.0.1
+huggingface_hub
 ipyleaflet==0.19.2
 ipyvuetify==1.10.0
 ipywidgets==8.1.5
@@ -19,7 +20,6 @@ pandas==2.2.2
 rasterio==1.3.10
 sepal_ui==2.22.1
 shapely==2.0.6
-shapely-geojson==0.0.1
 tensorflow==2.17.0
 traitlets==5.14.3
 

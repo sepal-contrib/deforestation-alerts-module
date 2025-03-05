@@ -1220,7 +1220,9 @@ class AnalysisTile(sw.Layout):
         from MightyMosaic import MightyMosaic
 
         from component.scripts.model_worker import apply_dl_model, save_prediction_prob
-
+        from huggingface_hub import hf_hub_download
+        hf_hub_download(repo_id="joseserafinig/forest_cover_change_cnn_m1", filename="Model1.h5", local_dir= '/tmp')
+        
         """Worker thread that processes files from the file_queue."""
         while True:
             input_list = self.file_queue1.get()  # Get a file path from the queue
@@ -1255,6 +1257,8 @@ class AnalysisTile(sw.Layout):
         from MightyMosaic import MightyMosaic
 
         from component.scripts.model_worker import apply_dl_model, save_prediction_prob
+        from huggingface_hub import hf_hub_download
+        hf_hub_download(repo_id="joseserafinig/forest_cover_change_cnn_m2", filename="Model2.keras", local_dir= '/tmp')
 
         """Worker thread that processes files from the file_queue."""
         while True:
@@ -1480,7 +1484,8 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        model = "utils/Model1.h5"
+        #model = "utils/Model1.h5"
+        model = '/tmp/Model1.h5'
         self.send_file_for_processing_m1_v2(
             [image_name, model, "_m1"], self.process_file1
         )
@@ -1511,7 +1516,8 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        model = "utils/Model2.keras"
+        #model = "utils/Model2.keras"
+        model = "/tmp/Model2.keras"
         self.send_file_for_processing_m2_v2(
             [image_name, model, "_m2"], self.process_file2
         )
