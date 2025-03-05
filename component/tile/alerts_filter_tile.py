@@ -1,5 +1,6 @@
 from sepal_ui import sepalwidgets as sw
 from sepal_ui import aoi
+from sepal_ui import color
 from sepal_ui.mapping import SepalMap
 from sepal_ui.mapping.draw_control import DrawControl
 from sepal_ui.mapping.layers_control import LayersControl
@@ -672,11 +673,7 @@ class AlertsFilterTile(sw.Layout):
 
     def load_saved_parameters(self, data):
         self.alert_source_select.v_model = data.get("selected_alert_sources")
-        self.min_area_input.v_model = data.get("min_area")
-        drawn_selection_polygons = data.get("alert_selection_polygons")
-        self.drawn_item.data = drawn_selection_polygons.get(
-            "features", self.drawn_item.data
-        )
+        self.min_area_input.v_model = data.get("min_area")      
         max_number = data.get("max_number_alerts")
         self.number_of_alerts.v_model = (
             cm.filter_tile.max_number_of_alerts_option1
@@ -690,7 +687,14 @@ class AlertsFilterTile(sw.Layout):
         self.alert_selection_method_select.v_model = alert_selection_dict.get(
             data.get("alert_selection_area"), ""
         )
-
+        drawn_selection_polygons = data.get("alert_selection_polygons").get("features")
+        if drawn_selection_polygons:
+            self.drawn_item.data = convertir_formato3(drawn_selection_polygons, color.info)
+            self.drawn_item.show()
+        else:
+            self.drawn_item.data = self.drawn_item.data
+            self.drawn_item.hide()
+        
         alert_sorting_method_dict = {
             1: cm.filter_tile.alert_sorting_method_label1,
             2: cm.filter_tile.alert_sorting_method_label2,
