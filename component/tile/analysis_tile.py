@@ -119,7 +119,7 @@ class AnalysisTile(sw.Layout):
                 min-width: 40px;
                 display: flex !important;
                 align-items: center !important;
-                background-color: transparent !important;
+                background-color: {color.background} !important;
               }
         </style>
         """
