@@ -190,7 +190,7 @@ class RecipeTile(sw.Layout):
         # Read JSON file
         if not os.path.exists(file_name):
             raise Exception(cm.recipe_tile.input_hint_load_recipe_name)
-        
+
         with open(file_name, "r") as json_file:
             model_parameters = json.load(json_file)
         
@@ -235,7 +235,8 @@ class RecipeTile(sw.Layout):
         widget.set_loader_text(cm.recipe_tile.loader_loading_alert_db)
         # widget.set_loader_percentage(90)
         app_tile_model.import_from_dictionary(model_parameters)
-
+        app_tile_model.recipe_folder_path = os.path.dirname(os.path.abspath(file_name))
+        
         if not os.path.exists(app_tile_model.recipe_folder_path + "/alert_db.csv"):
             widget.set_loader_text(cm.recipe_tile.loader_loading_last_alert)
             app_tile_model.current_page_view = "filter_alerts"
