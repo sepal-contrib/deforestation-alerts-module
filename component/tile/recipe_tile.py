@@ -235,11 +235,16 @@ class RecipeTile(sw.Layout):
         widget.set_loader_text(cm.recipe_tile.loader_loading_alert_db)
         # widget.set_loader_percentage(90)
         app_tile_model.import_from_dictionary(model_parameters)
-        analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
-            app_tile_model.recipe_folder_path + "/alert_db.csv",
-            ["bounding_box", "point", "alert_polygon"],
-        )
-        widget.set_loader_text(cm.recipe_tile.loader_loading_last_alert)
-        # widget.set_loader_percentage(100)
-        analyzed_alerts_model.import_from_dictionary(model_parameters)
-        app_tile_model.current_page_view = "analysis_tile"
+
+        if not os.path.exists(app_tile_model.recipe_folder_path + "/alert_db.csv"):
+            widget.set_loader_text(cm.recipe_tile.loader_loading_last_alert)
+            app_tile_model.current_page_view = "filter_alerts"
+        elif os.path.exists(app_tile_model.recipe_folder_path + "/alert_db.csv"):      
+            analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
+                app_tile_model.recipe_folder_path + "/alert_db.csv",
+                ["bounding_box", "point", "alert_polygon"],
+            )
+            widget.set_loader_text(cm.recipe_tile.loader_loading_last_alert)
+            # widget.set_loader_percentage(100)
+            analyzed_alerts_model.import_from_dictionary(model_parameters)
+            app_tile_model.current_page_view = "analysis_tile"
