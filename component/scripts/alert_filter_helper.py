@@ -150,19 +150,6 @@ def obtener_datos_gee_parcial_map(
         # Only fetch info if we have elements
         return ee.Algorithms.If(conteo.gte(1), bb, ee.FeatureCollection([]))
 
-    # Use `map()` to batch-process elements in `aoi_grid`, limiting to `max_elementos`
-    if max_elementos == 0 or max_elementos > 30:
-        max_elementos = 30
-    else:
-        max_elementos = max_elementos
-
-    aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", grid_size)
-
-    elementos_filtrados = aoi_grid.limit(40).map(procesar_elemento)
-
-    # Convert the resulting list of lists to a flat list
-    resultados = ee.FeatureCollection(elementos_filtrados).flatten()
-
     # Function to apply distinct to the 'list' property of each feature
     def apply_distinct(fc, property_name, new_property_name):
         """
@@ -187,8 +174,40 @@ def obtener_datos_gee_parcial_map(
             )
         )
 
-    resultados2 = apply_distinct(resultados, "alert_type_list", "alert_type_unique")
+    # Use `map()` to batch-process elements in `aoi_grid`, limiting to `max_elementos`
+    if max_elementos == 0 or max_elementos > 30:
+        max_elementos = 30
+    else:
+        max_elementos = max_elementos
 
+    aoi_grid = aoi.geometry().coveringGrid("EPSG:4326", grid_size)
+    aoi_grid_size = aoi_grid.size().getInfo()
+    
+    # Initial limit value and increment step
+    limit_value = 40
+    increment_step = 20
+
+    while True:
+        # Ensure limit_value does not exceed total_elements
+        if limit_value > aoi_grid_size:
+            limit_value = aoi_grid_size
+    
+        elementos_filtrados = aoi_grid.limit(limit_value).map(procesar_elemento)
+        resultados_pre = ee.FeatureCollection(elementos_filtrados).flatten()
+    
+        # Get the number of elements in the FeatureCollection
+        num_elements = resultados_pre.size().getInfo()
+        #print(f"Quick run found {num_elements} alerts, with {limit_value}/{aoi_grid_size} cells")
+
+        if num_elements >= max_elementos or limit_value == aoi_grid_size:
+            resultados = resultados_pre
+            break
+            
+        # Increase the limit value by the increment step and try again
+        limit_value += increment_step
+
+    resultados2 = apply_distinct(resultados, "alert_type_list", "alert_type_unique")
+    
     # Sort and convert to list
     if sorting == cm.filter_tile.alert_sorting_method_label1:
         bb_sorted = resultados2.sort("count", False)
