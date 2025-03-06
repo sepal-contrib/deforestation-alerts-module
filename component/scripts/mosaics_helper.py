@@ -83,14 +83,14 @@ def get_planet_dates(input_date1, input_date2):
         first_day_current_month2 + relativedelta(months=3) + relativedelta(days=+1)
     )
     # 6. First day of 1 month before first detection date
-    prev_1month = first_day_current_month + relativedelta(months=-1)
+    prev_2month = first_day_current_month + relativedelta(months=-2)
 
     return [
         prev_month5.strftime("%Y-%m-%d"),
         next_month.strftime("%Y-%m-%d"),
         first_day_current_month.strftime("%Y-%m-%d"),
         next_3month.strftime("%Y-%m-%d"),
-        prev_1month.strftime("%Y-%m-%d"),
+        prev_2month.strftime("%Y-%m-%d"),
     ]
 
 
@@ -111,7 +111,7 @@ def get_sentinel2_dates(input_date1, input_date2):
     )
 
     # 4. First day of 3 month before
-    prev_month3 = first_day_current_month + relativedelta(months=-2)
+    prev_month3 = first_day_current_month + relativedelta(months=-3)
 
     # 5. First day of final detection date
     first_day_current_month2 = input_date2.replace(day=1)
@@ -120,11 +120,13 @@ def get_sentinel2_dates(input_date1, input_date2):
     next_3month = (
         first_day_current_month2 + relativedelta(months=2) + relativedelta(days=+1)
     )
+    # 6. First day of 1 month before first detection date
+    prev_1month = first_day_current_month2 + relativedelta(months=-1)
 
     return [
         prev_month3.strftime("%Y-%m-%d"),
         input_date1.strftime("%Y-%m-%d"),
-        first_day_current_month2.strftime("%Y-%m-%d"),
+        prev_1month.strftime("%Y-%m-%d"),
         next_3month.strftime("%Y-%m-%d"),
     ]
 
