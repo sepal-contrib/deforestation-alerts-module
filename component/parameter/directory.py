@@ -6,4 +6,4 @@ from pathlib import Path
 # please make sure that any result that you produce is embedded inside this folder
 # create a folder adapted to your need inside this folder to save anything in sepal
 module_dir = Path.home() / "module_results" / "deforestation_alerts"
-module_dir.mkdir(exist_ok=True)
+module_dir.mkdir(parents=True, exist_ok=True)
