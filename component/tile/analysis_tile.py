@@ -119,7 +119,6 @@ class AnalysisTile(sw.Layout):
                 min-width: 40px;
                 display: flex !important;
                 align-items: center !important;
-                background-color: {color.background} !important;
               }
         </style>
         """
@@ -525,11 +524,7 @@ class AnalysisTile(sw.Layout):
             children=[
                 self.prev_button,
                 self.next_button,
-                v.Html(
-                    tag="body",
-                    style_="height: auto, width: 40px",
-                    children=[self.alert_id_button],
-                ),
+                self.alert_id_button,
                 self.go_to_alert_button,
             ],
         )
