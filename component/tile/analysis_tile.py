@@ -1111,7 +1111,7 @@ class AnalysisTile(sw.Layout):
         status_dict_reverse = {
             "Confirmed": cm.analysis_tile.questionarie.confirmation_yes,
             "False Positive": cm.analysis_tile.questionarie.confirmation_no,
-            "Maybe": cm.analysis_tile.questionarie.confirmation_revision,
+            "Need revision": cm.analysis_tile.questionarie.confirmation_revision,
         }
         if alerta["status"] != "Not reviewed":
             self.boton_confirmacion.v_model = status_dict_reverse[alerta["status"]]
@@ -1148,7 +1148,7 @@ class AnalysisTile(sw.Layout):
 
         # Agregar defo layer si ya fue revisado
         if (
-            alerta["status"] in {"Confirmed", "maybe"}
+            alerta["status"] in {"Confirmed", "Need revision"}
             and alerta["alert_polygon"] is not None
         ):
             self.analyzed_alerts_model.defo_dl_layer = multipolygon_to_geodataframe(
@@ -1536,7 +1536,7 @@ class AnalysisTile(sw.Layout):
         status_dict = {
             cm.analysis_tile.questionarie.confirmation_yes: "Confirmed",
             cm.analysis_tile.questionarie.confirmation_no: "False Positive",
-            cm.analysis_tile.questionarie.confirmation_revision: "maybe",
+            cm.analysis_tile.questionarie.confirmation_revision: "Need revision",
         }
         alertas_gdf.at[actual_alert_id, "status"] = status_dict[
             self.boton_confirmacion.v_model

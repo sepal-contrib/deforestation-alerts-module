@@ -163,7 +163,7 @@ class OverviewTile(sw.Layout):
                 # self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
 
             self.listaNumeros = calculate_alert_classes(
-                centroides_gdf, "Confirmed", "False Positive", "Maybe"
+                centroides_gdf, "Confirmed", "False Positive", "Need revision"
             )
             self.info_table.children[0].children = create_table_rows(
                 self.listaNumeros, self.alert_labels

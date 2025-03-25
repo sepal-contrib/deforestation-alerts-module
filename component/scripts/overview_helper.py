@@ -23,7 +23,7 @@ from sepal_ui.mapping.menu_control import MenuControl
 def calculateAlertClasses(gpdf):
     x = len(gpdf.loc[gpdf["status"] == "Confirmed"])
     y = len(gpdf.loc[gpdf["status"] == "False Positive"])
-    xy = len(gpdf.loc[gpdf["status"] == "Maybe"])
+    xy = len(gpdf.loc[gpdf["status"] == "Need revision"])
     z = len(gpdf)
     r = x + y + xy
     result = list([z, r, x, y, xy])
@@ -35,7 +35,7 @@ def calculate_alert_classes(
     gpdf,
     confirmed_label="Confirmed",
     false_positive_label="False Positive",
-    maybe_label="Maybe",
+    maybe_label="Need revision",
 ):
     status_counts = gpdf["status"].value_counts().to_dict()
 
@@ -91,7 +91,7 @@ def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_functi
         "Confirmed": AwesomeIcon(
             name="fa-check-circle", marker_color="red", icon_color="white"
         ),
-        "Maybe": AwesomeIcon(
+        "Need revision": AwesomeIcon(
             name="fa-flag-o", marker_color="orange", icon_color="white"
         ),
         "False Positive": AwesomeIcon(
@@ -181,7 +181,7 @@ def create_markers_ipyvuetify(
         "Confirmed": AwesomeIcon(
             name="fa-check-circle", marker_color="red", icon_color="white"
         ),
-        "Maybe": AwesomeIcon(
+        "Need revision": AwesomeIcon(
             name="fa-flag-o", marker_color="orange", icon_color="white"
         ),
         "False Positive": AwesomeIcon(
