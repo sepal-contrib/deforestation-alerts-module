@@ -1,5 +1,5 @@
-## v_1.1.1 (2023-09-26)
+## v_1.0 (2025-03-25)
 
 ### Feature
 
-- create a dummy changelog
+- Initial release
