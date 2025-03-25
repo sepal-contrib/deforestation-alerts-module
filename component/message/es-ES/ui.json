@@ -89,6 +89,7 @@
             },
             "alert_info": {
                 "card_title": "Información de alerta",
+                "alert_source": "Fuente: ",
                 "first_date": "Primera fecha: ",
                 "last_date": "Última fecha: ",
                 "status": "Estado: ",

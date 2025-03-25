@@ -1080,6 +1080,7 @@ class AnalysisTile(sw.Layout):
         # Obtener fechas de la alerta
         fecha1 = convert_julian_to_date(alerta["alert_date_min"])
         fecha2 = convert_julian_to_date(alerta["alert_date_max"])
+        alert_source = format_list(get_unique_alerts(ast.literal_eval(alerta["alert_type_unique"])))
 
         # Cambio en boton de navegacion
         self.alert_id_button.v_model = self.analyzed_alerts_model.actual_alert_id
@@ -1091,6 +1092,9 @@ class AnalysisTile(sw.Layout):
             alert_st = cm.analysis_tile.alert_info.status_not_reviewed
 
         self.selected_alert_info.children = [
+            v.Html(tag="strong", children=[cm.analysis_tile.alert_info.alert_source]),
+            alert_source,
+            v.Html(tag="br"),
             v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
             fecha1,
             v.Html(tag="br"),
@@ -1551,9 +1555,9 @@ class AnalysisTile(sw.Layout):
         ] = self.selected_img_after_info_list[3]
 
         ##Create dictionary of alert sources
-        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
-            self.selected_alerts_model.selected_alert_sources
-        )
+        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(get_unique_alerts(ast.literal_eval(
+            alertas_gdf.loc[actual_alert_id, "alert_type_unique"]
+        )))
 
         # Get adminstrative location attributes
         adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")

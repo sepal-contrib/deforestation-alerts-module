@@ -285,3 +285,49 @@ def generate_deforestation_report_with_word_template(
     # Save the report as a Word document
     doc.save(output_path)
     # print(f"Report generated successfully: {output_path}")
+
+
+def get_unique_alerts(alert_list):
+    """
+    Given a list of integers representing sums of alert values,
+    return a list of unique alert types found.
+
+    The alert values are constructed by summing contributions from:
+    - GLAD-L: ones digit (1 or 2 if triggered)
+    - RADD: tens digit (10 or 20 → digit 1 or 2 if triggered)
+    - GLAD-S2: hundreds digit (100 or 200 → digit 1 or 2 if triggered)
+    - CCDC: thousands digit (1000 or 2000 → digit 1 or 2 if triggered)
+
+    Parameters:
+        alert_list (list): A list of integers (or strings representing numbers).
+
+    Returns:
+        List[str]: Unique alert type names found in the list.
+    """
+    unique_alerts = set()
+
+    for value in alert_list:
+        # Ensure value is an integer
+        try:
+            value = int(value)  # Convert to int if it's a string
+        except ValueError:
+            continue  # Skip invalid entries
+
+        # Check GLAD-L (ones digit)
+        if value % 10 in [1, 2]:
+            unique_alerts.add("GLAD-L")
+        
+        # Check RADD (tens digit)
+        if (value % 100) // 10 in [1, 2]:
+            unique_alerts.add("RADD")
+        
+        # Check GLAD-S2 (hundreds digit)
+        if (value % 1000) // 100 in [1, 2]:
+            unique_alerts.add("GLAD-S2")
+        
+        # Check CCDC (thousands digit)
+        if value // 1000 in [1, 2]:
+            unique_alerts.add("CCDC")
+
+    return list(unique_alerts)
+

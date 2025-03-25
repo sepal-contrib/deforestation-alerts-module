@@ -90,6 +90,7 @@
             },
             "alert_info": {
                 "card_title": "Info d'Alerte",
+                "alert_source": "Source: ",
                 "first_date": "Première Date : ",
                 "last_date": "Dernière Date : ",
                 "status": "Statut : ",
