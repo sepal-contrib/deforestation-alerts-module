@@ -6,7 +6,7 @@ from sepal_ui.mapping.layers_control import LayersControl
 from sepal_ui.mapping.inspector_control import InspectorControl
 from sepal_ui.mapping.aoi_control import AoiControl
 from sepal_ui.scripts import utils as su
-from traitlets import Any, HasTraits, Unicode, link, observe
+from traitlets import link, observe
 import ipyvuetify as v
 from IPython.display import display, HTML
 
@@ -1336,6 +1336,13 @@ class AnalysisTile(sw.Layout):
     def start_edition_function(self, widget, event, data):
         widget.loading = True  # Set button to loading state
         widget.disabled = True  # Disable button to prevent further clicks
+        self.map_31.find_layer('Alert BB').visible = False
+        self.map_32.find_layer('Alert BB').visible = False
+
+        if self.map_31.find_layer('Defo Layer', none_ok = True) is not None:
+            self.map_31.find_layer('Defo Layer').visible = False
+            self.map_32.find_layer('Defo Layer').visible = False
+
         self.draw_alerts1.show()
         self.draw_alerts2.show()
         if self.analyzed_alerts_model.defo_dl_layer is not None:
@@ -1371,7 +1378,14 @@ class AnalysisTile(sw.Layout):
 
         self.draw_alerts1.hide()
         self.draw_alerts2.hide()
+        
+        self.map_31.find_layer('Alert BB').visible = True
+        self.map_32.find_layer('Alert BB').visible = True
 
+        if self.map_31.find_layer('Defo Layer', none_ok = True) is not None:
+            self.map_31.find_layer('Defo Layer').visible = True
+            self.map_32.find_layer('Defo Layer').visible = True
+        
         self.toolBarDL1.hide()
         self.toolBarDL2.hide()
 
