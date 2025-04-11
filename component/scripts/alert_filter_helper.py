@@ -502,20 +502,23 @@ def convert_to_geopandas(polygon_features):
 
     # Add additional columns with default values
     gdf["status"] = "Not reviewed"
-    gdf["alert_sources"] = pd.Series(dtype="object")
-    gdf["before_img"] = pd.Series(dtype="object")
-    gdf["before_img_info"] = pd.Series(dtype="object")
-    gdf["after_img"] = pd.Series(dtype="object")
-    gdf["after_img_info"] = pd.Series(dtype="object")
-    gdf["alert_polygon"] = pd.Series(dtype="object")
-    gdf["area_ha"] = pd.Series(dtype="float")
-    gdf["description"] = pd.Series(dtype="object")
-    gdf["admin1"] = pd.Series(dtype="object")
-    gdf["admin2"] = pd.Series(dtype="object")
-    gdf["admin3"] = pd.Series(dtype="object")
+    gdf["alert_sources"] = pd.Series([],dtype="object")
+    gdf["before_img"] = pd.Series([],dtype="str")
+    gdf["before_img_info"] = pd.Series([],dtype="object")
+    gdf["after_img"] = pd.Series([],dtype="str")
+    gdf["after_img_info"] = pd.Series([],dtype="object")
+    gdf["alert_polygon"] = pd.Series([],dtype="object")
+    gdf["area_ha"] = pd.Series([],dtype="float")
+    gdf["description"] = pd.Series([],dtype="str")
+    gdf["admin1"] = pd.Series([],dtype="str")
+    gdf["admin2"] = pd.Series([],dtype="str")
+    gdf["admin3"] = pd.Series([],dtype="str")
 
     # Save gdf to file
     # gdf.set_crs(epsg = '4326', allow_override=True, inplace=True).to_file(gpkg_name, driver='GPKG')
+
+    #Drop unnecessary columns
+    gdf.drop('label', axis=1, inplace=True)
 
     # Check result
     return gdf

@@ -619,7 +619,8 @@ class AnalysisTile(sw.Layout):
         alert_db_name = self.app_tile_model.recipe_folder_path + "/alert_db.csv"
         # Export to GPKG (GeoPackage)
         alertas_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_csv(
-            alert_db_name
+            alert_db_name,
+            index=False
         )  # Save as CSV
 
     def create_gdf_partial(self):
@@ -767,6 +768,8 @@ class AnalysisTile(sw.Layout):
         model_att2,
         fire_callback,
     ):
+        if data_list[0].get("value") == "User does not have access to Planet imagery":
+            return
 
         map_element = main_component.children[0]
         info_element = main_component.children[1].children[1]
@@ -958,6 +961,16 @@ class AnalysisTile(sw.Layout):
         slides = [create_slide_button(i, item) for i, item in enumerate(sorted_data)]
         slide_group.slide_group.children = slides
         slide_group.set_loading_state(False)
+        if len(slide_group_secondary.slide_group.children) == 0:
+            # Set the initial slide callback
+            slide_group.slide_group.children[default_v_model].color = color_map.get(
+                "selected"
+            )
+            selected_item = date_indices[
+                slide_group.slide_group.children[default_v_model].value
+            ]
+            callback(selected_item, map_element, model_att1)
+            callback2(selected_item, info_element, model_att2)
 
     def image_slider_map_callback(self, selected_item, map_element, model_att):
         geom = self.actual_alert_grid
@@ -1080,7 +1093,7 @@ class AnalysisTile(sw.Layout):
         # Obtener fechas de la alerta
         fecha1 = convert_julian_to_date(alerta["alert_date_min"])
         fecha2 = convert_julian_to_date(alerta["alert_date_max"])
-        alert_source = format_list(get_unique_alerts(ast.literal_eval(alerta["alert_type_unique"])))
+        alert_source = format_list(get_unique_alerts(alerta["alert_type_unique"]))
 
         # Cambio en boton de navegacion
         self.alert_id_button.v_model = self.analyzed_alerts_model.actual_alert_id
@@ -1569,9 +1582,9 @@ class AnalysisTile(sw.Layout):
         ] = self.selected_img_after_info_list[3]
 
         ##Create dictionary of alert sources
-        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(get_unique_alerts(ast.literal_eval(
+        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(get_unique_alerts(
             alertas_gdf.loc[actual_alert_id, "alert_type_unique"]
-        )))
+        ))
 
         # Get adminstrative location attributes
         adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")

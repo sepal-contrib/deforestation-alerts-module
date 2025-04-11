@@ -304,6 +304,9 @@ def get_unique_alerts(alert_list):
     Returns:
         List[str]: Unique alert type names found in the list.
     """
+    if not isinstance(alert_list, list):
+        alert_list = [alert_list]
+    
     unique_alerts = set()
 
     for value in alert_list:

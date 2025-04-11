@@ -650,155 +650,185 @@ def add_files_to_zip(zip_filename, file1, file2):
 
 
 def getPlanetMonthly(geometry, date1, date2):
+    # Define the no-access result dictionary
+    no_access = [{
+        "value": "User does not have access to Planet imagery",
+        "image_id": "Not available",
+        "milis": "Not available",
+        "source": "Planet NICFI",
+        "cloud_cover": "Not available",
+    }]
+
+    # Helper function to check if a collection is accessible
+    def has_access(collection):
+        try:
+            collection.getInfo()  # This will throw an EEException if access denied
+            return True
+        except Exception as e:
+            print(f"Access check failed for collection: {e}")
+            return False
+
+    # Define the Planet ImageCollections
     planetSA = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/americas")
     planetAF = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/africa")
     planetAS = ee.ImageCollection("projects/planet-nicfi/assets/basemaps/asia")
 
+    # List of Asian countries for footprint determination
     lista2 = [
-        "American Samoa",
-        "Arunachal Pradesh",
-        "Ashmore and Cartier Islands",
-        "Baker Island",
-        "Bangladesh",
-        "Bhutan",
-        "British Indian Ocean Territory",
-        "Brunei Darussalam",
-        "Cambodia",
-        "Christmas Island",
-        "Cocos (Keeling) Islands",
-        "Cook Islands",
-        "Fiji",
-        "French Polynesia",
-        "Guam",
-        "Howland Island",
-        "India",
-        "Indonesia",
-        "Jarvis Island",
-        "Johnston Atoll",
-        "Kingman Reef",
-        "Kiribati",
-        "Lao People's Democratic Republic",
-        "Malaysia",
-        "Maldives",
-        "Marshall Islands",
-        "Micronesia (Federated States of)",
-        "Myanmar",
-        "Nauru",
-        "Nepal",
-        "Niue",
-        "Northern Mariana Islands",
-        "Palau",
-        "Palmyra Atoll",
-        "Papua New Guinea",
-        "Paracel Islands",
-        "Philippines",
-        "Samoa",
-        "Scarborough Reef",
-        "Singapore",
-        "Solomon Islands",
-        "Spratly Islands",
-        "Sri Lanka",
-        "Thailand",
-        "Timor-Leste",
-        "Tokelau",
-        "Tonga",
-        "Tuvalu",
-        "Vanuatu",
-        "Viet Nam",
-        "Wake Island",
-        "Wallis and Futuna",
-    ]
+            "American Samoa",
+            "Arunachal Pradesh",
+            "Ashmore and Cartier Islands",
+            "Baker Island",
+            "Bangladesh",
+            "Bhutan",
+            "British Indian Ocean Territory",
+            "Brunei Darussalam",
+            "Cambodia",
+            "Christmas Island",
+            "Cocos (Keeling) Islands",
+            "Cook Islands",
+            "Fiji",
+            "French Polynesia",
+            "Guam",
+            "Howland Island",
+            "India",
+            "Indonesia",
+            "Jarvis Island",
+            "Johnston Atoll",
+            "Kingman Reef",
+            "Kiribati",
+            "Lao People's Democratic Republic",
+            "Malaysia",
+            "Maldives",
+            "Marshall Islands",
+            "Micronesia (Federated States of)",
+            "Myanmar",
+            "Nauru",
+            "Nepal",
+            "Niue",
+            "Northern Mariana Islands",
+            "Palau",
+            "Palmyra Atoll",
+            "Papua New Guinea",
+            "Paracel Islands",
+            "Philippines",
+            "Samoa",
+            "Scarborough Reef",
+            "Singapore",
+            "Solomon Islands",
+            "Spratly Islands",
+            "Sri Lanka",
+            "Thailand",
+            "Timor-Leste",
+            "Tokelau",
+            "Tonga",
+            "Tuvalu",
+            "Vanuatu",
+            "Viet Nam",
+            "Wake Island",
+            "Wallis and Futuna",
+        ]
 
-    footprint_asia = (
-        ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0")
-        .filter(ee.Filter.inList("ADM0_NAME", lista2))
-        .geometry()
-    )
-    test = ee.Algorithms.If(
-        footprint_asia.intersects(geometry, 10),
-        # True case
-        planetAS,
-        # False case
-        planetSA.merge(planetAF),
-    )
-    selected_planet = ee.ImageCollection(test)
+    try:
+        # Create a FeatureCollection from the list of Asian countries
+        asia_feature = (
+            ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0")
+            .filter(ee.Filter.inList("ADM0_NAME", lista2))
+            .geometry()
+        )
 
-    planet_filtered_collection = selected_planet.filterDate(date1, date2).filterBounds(
-        geometry
-    )
+        # Check if the provided geometry intersects with the Asian countries' footprint
+        intersects = asia_feature.intersects(geometry, 10).getInfo()
 
-    # Retrieve all image IDs with a single getInfo call
-    image_ids = planet_filtered_collection.aggregate_array("system:id").getInfo()
+    except Exception as e:
+        print(f"Error creating or checking intersection: {e}")
+        return no_access
+
+    # Determine which collections to use based on intersection result
+    try:
+        if 'features' in intersects and len(intersects['features']) > 0:
+            # Use planetAS if there's an intersection with Asia
+            if not has_access(planetAS):
+                return no_access
+            selected_planet = planetAS
+        else:
+            # Use a combination of planetSA and planetAF otherwise
+            if not (has_access(planetSA) and has_access(planetAF)):
+                return no_access
+            selected_planet = planetSA.merge(planetAF)
+    except Exception as e:
+        print(f"Error determining which collection to use: {e}")
+        return no_access
+
+    # Filter the selected collection based on date and geometry
+    try:
+        planet_filtered_collection = (
+            selected_planet
+            .filterDate(date1, date2)
+            .filterBounds(geometry)
+        )
+    except Exception as e:
+        print(f"Error filtering collection: {e}")
+        return no_access
+
+    # Retrieve image IDs from the filtered collection
+    try:
+        image_ids = planet_filtered_collection.aggregate_array("system:id").getInfo()
+    except Exception as e:
+        print(f"Error retrieving image IDs: {e}")
+        return no_access
+
     elements = []
 
+    def process_image(image_id):
+        parts = image_id.split("/")
+        region_part = parts[-2].title()
+        date_part = parts[-1].split("_")[-2]
+        year = date_part[:4]
+        month = int(date_part[5:7])
+
+        date_str = f"{year}-{month:02d}-01"
+        try:
+            # Convert the date string to a formatted string like "Jan YYYY"
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            date_str2 = date_obj.strftime("%b %Y")
+        except ValueError:
+            date_str2 = "Invalid Date"
+
+        name = f"Planet Monthly {region_part} {date_str2}"
+        try:
+            planet_clip = ee.Image(image_id)
+            t2 = ee.Number(planet_clip.get("system:time_end"))
+            t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
+            return {
+                "value": name,
+                "image_id": image_id,
+                "milis": t3,
+                "source": "Planet NICFI",
+                "cloud_cover": "Not available",
+            }
+        except Exception as e:
+            print(f"Error processing image {image_id}: {e}")
+            return None
+
+    # Process each image ID
     if len(image_ids) > 0:
-        # Process each image ID to format the name
         for image_id in image_ids:
-            # Split the image ID into parts
-            parts = image_id.split("/")
-            # Extract region and date parts
-            region_part = parts[-2].title()
-            date_part = parts[-1].split("_")[-2]
-            # Parse year and month
-            year = date_part[:4]
-            month = int(date_part[5:7])
-
-            date_str = date_part + "-01"
-            date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
-
-            # Format the name
-            name = f"Planet Monthly {region_part} {date_str2}"
-            # Create image to display
-            planet_clip = ee.Image(image_id)  ##.clip(geometry)
-
-            # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
-            t2 = ee.Number(planet_clip.get("system:time_end"))
-            t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
-
-            dictionary = {
-                "value": name,
-                "image_id": image_id,
-                "milis": t3,
-                "source": "Planet NICFI",
-                "cloud_cover": "Not available",
-            }
-            elements.append(dictionary)
-
-    elif len(image_ids) == 0 and is_future_date(date2):
-
-        last_two_imgs = selected_planet.sort("system:time_end", False).limit(2)
-        image_ids_2 = last_two_imgs.aggregate_array("system:id").getInfo()
-        # Process each image ID to format the name
-        for image_id in image_ids_2:
-            # Split the image ID into parts
-            parts = image_id.split("/")
-            # Extract region and date parts
-            region_part = parts[-2].title()
-            date_part = parts[-1].split("_")[-2]
-            # Parse year and month
-            year = date_part[:4]
-            month = int(date_part[5:7])
-
-            date_str = date_part + "-01"
-            date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
-
-            # Format the name
-            name = f"Planet Monthly {region_part} {date_str2}"
-            # Create image to display
-            planet_clip = ee.Image(image_id)  ##.clip(geometry)
-
-            # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
-            t2 = ee.Number(planet_clip.get("system:time_end"))
-            t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
-
-            dictionary = {
-                "value": name,
-                "image_id": image_id,
-                "milis": t3,
-                "source": "Planet NICFI",
-                "cloud_cover": "Not available",
-            }
-            elements.append(dictionary)
+            element = process_image(image_id)
+            if element:
+                elements.append(element)
+    else:
+        # If no images found, check if the end date is in the future and fetch recent images
+        if is_future_date(date2):
+            try:
+                last_two_imgs = selected_planet.sort("system:time_end", False).limit(2)
+                image_ids_2 = last_two_imgs.aggregate_array("system:id").getInfo()
+                for image_id in image_ids_2:
+                    element = process_image(image_id)
+                    if element:
+                        elements.append(element)
+            except Exception as e:
+                print(f"Error retrieving recent images: {e}")
 
     return elements
 
@@ -932,3 +962,5 @@ def filter_features_by_color(features, color_to_remove):
             filtered_features.append(feature)
 
     return filtered_features
+
+

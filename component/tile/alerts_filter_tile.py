@@ -9,7 +9,6 @@ from sepal_ui.mapping.map_btn import MapBtn
 from sepal_ui.scripts import utils as su
 import ipyvuetify as v
 from IPython.display import display, HTML
-from traitlets import Any, HasTraits, Unicode, link, observe
 from ipyleaflet import TileLayer
 
 from component.message import cm
