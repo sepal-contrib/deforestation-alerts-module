@@ -768,7 +768,7 @@ class AnalysisTile(sw.Layout):
         model_att2,
         fire_callback,
     ):
-        if data_list[0].get("value") == "User does not have access to Planet imagery":
+        if data_list[0].get("value") == "Not available":
             return
 
         map_element = main_component.children[0]
