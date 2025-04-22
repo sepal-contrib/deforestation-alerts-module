@@ -1,7 +1,6 @@
 from sepal_ui import color, model, sepalwidgets as sw
 from traitlets import Any, HasTraits, Unicode, link, observe
-
-# from component.message import cm
+from sepal_ui.scripts import utils as su
 import time
 from sepal_ui.frontend.resize_trigger import rt
 from copy import deepcopy
@@ -16,6 +15,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from typing import List, Tuple, Union
 from box import Box
+from component.parameter import module_dir
+import zipfile
 
 
 class CustomApp(sw.App):
@@ -66,6 +67,79 @@ class CustomDrawerItem(sw.DrawerItem):
         return self
 
 
+class ShareBtn(v.Btn, SepalWidget):  
+    def __init__(self, icon= 'fa-solid fa-share-nodes', path: Union[str, Path] = "#",**kwargs) -> None:
+        # set the btn parameters
+        kwargs.setdefault("x_small", True)
+        kwargs.setdefault("fab", True)
+        kwargs.setdefault("class_", "mx-2 px-2")
+        kwargs["children"] = [v.Icon(children=[icon])]
+        super().__init__(**kwargs)
+        
+        self.set_url(path)
+
+    def set_url(self, path: Union[str, Path] = "#"):
+        """Set the URL of the download btn. and unable it.
+
+        If nothing is provided the btn is disabled.
+
+        Args:
+            path: the absolute path to a downloadable content
+        """
+        # set the url
+        url = su.create_download_link(path)
+        self.href = url
+
+        # unable or disable the btn
+        self.disabled = str(path) == "#"
+
+        # set the download attribute
+        name = None if str(path) == "#" else Path(path).name
+        self.attributes = {"download": name}
+
+        return self
+
+
+class RecipeBtn(sw.Btn):  
+    def __init__(self, download_button, msg: str = "", gliph: str = "" ,**kwargs) -> None:
+        kwargs.setdefault("small", True)
+        self.download_button = download_button
+        super().__init__(msg=msg, gliph=gliph, **kwargs)
+        self.on_event("click", self.zip_set_url)
+        
+    def zip_set_url(self, widget, event, data):
+        """Set the URL of the download btn. and unable it.
+
+        If nothing is provided the btn is disabled.
+
+        Args:
+            path: the absolute path to a downloadable content
+        """
+        """Create a zip file from specified files in a directory."""
+        # List of files to include in the zip file
+        files = ['alert_db.csv', 'recipe_parameters.json']
+    
+        directory = module_dir/ self.msg
+        # Ensure the directory exists and contains the required files
+        if not all((directory / file).exists() for file in files):
+            print([str(file) for file in directory.iterdir()], "Required files are missing from the specified directory.")
+            return None
+        
+        # Create a zip file with the name of the folder
+        project_name = directory.parts[-1]
+        zip_filename = f"{directory}/{project_name}.zip"
+        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+            for file in files:
+                fullpath = directory / file
+                zipf.write(fullpath, arcname=file)
+            
+        # Create URL
+        #url = su.create_download_link(zip_filename)
+        #Set download url to donwload button
+        self.download_button.set_url(path=zip_filename)
+        self.download_button.show()
+        return self
+
 class CustomAppBar(v.AppBar, SepalWidget):
     toogle_button = None
     "v.Btn: The btn to display or hide the drawer to the user"
@@ -90,16 +164,10 @@ class CustomAppBar(v.AppBar, SepalWidget):
 
         self.locale = sw.LocaleSelect(translator=translator)
         self.theme = sw.ThemeSelect()
-        # self.recipe_name = v.Html(tag="div", children=[""])
-        self.recipe_name = sw.Btn(
-            msg="", color=color.accent, class_="ma-2 pa-n6"
+        self.save_button = ShareBtn().hide()
+        self.recipe_name = RecipeBtn(
+            msg="", color=color.accent, class_="ma-2 pa-n6", download_button = self.save_button,
         ).hide()
-        self.save_button = v.Btn(
-            icon=True,
-            children=[
-                v.Icon(class_="white--text", children=["fa-solid fa-floppy-disk"])
-            ],
-        )
 
         # set the default parameters
         kwargs["color"] = kwargs.pop("color", color.main)
@@ -111,7 +179,7 @@ class CustomAppBar(v.AppBar, SepalWidget):
             self.title,
             v.Spacer(),
             self.recipe_name,
-            # self.save_button,
+            self.save_button,
             self.locale,
             self.theme,
         ]
@@ -143,8 +211,6 @@ class CustomAppBar(v.AppBar, SepalWidget):
         Return:
             self
         """
-        # title = v.Html(tag="strong", children=["Recipe: "])
-        # self.recipe_name.children = [title, recipe]
         self.recipe_name.msg = recipe
         self.recipe_name.show()
 
