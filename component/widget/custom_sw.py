@@ -67,15 +67,17 @@ class CustomDrawerItem(sw.DrawerItem):
         return self
 
 
-class ShareBtn(v.Btn, SepalWidget):  
-    def __init__(self, icon= 'fa-solid fa-share-nodes', path: Union[str, Path] = "#",**kwargs) -> None:
+class ShareBtn(v.Btn, SepalWidget):
+    def __init__(
+        self, icon="fa-solid fa-share-nodes", path: Union[str, Path] = "#", **kwargs
+    ) -> None:
         # set the btn parameters
         kwargs.setdefault("x_small", True)
         kwargs.setdefault("fab", True)
         kwargs.setdefault("class_", "mx-2 px-2")
         kwargs["children"] = [v.Icon(children=[icon])]
         super().__init__(**kwargs)
-        
+
         self.set_url(path)
 
     def set_url(self, path: Union[str, Path] = "#"):
@@ -100,13 +102,15 @@ class ShareBtn(v.Btn, SepalWidget):
         return self
 
 
-class RecipeBtn(sw.Btn):  
-    def __init__(self, download_button, msg: str = "", gliph: str = "" ,**kwargs) -> None:
+class RecipeBtn(sw.Btn):
+    def __init__(
+        self, download_button, msg: str = "", gliph: str = "", **kwargs
+    ) -> None:
         kwargs.setdefault("small", True)
         self.download_button = download_button
         super().__init__(msg=msg, gliph=gliph, **kwargs)
         self.on_event("click", self.zip_set_url)
-        
+
     def zip_set_url(self, widget, event, data):
         """Set the URL of the download btn. and unable it.
 
@@ -117,28 +121,32 @@ class RecipeBtn(sw.Btn):
         """
         """Create a zip file from specified files in a directory."""
         # List of files to include in the zip file
-        files = ['alert_db.csv', 'recipe_parameters.json']
-    
-        directory = module_dir/ self.msg
+        files = ["alert_db.csv", "recipe_parameters.json"]
+
+        directory = module_dir / self.msg
         # Ensure the directory exists and contains the required files
         if not all((directory / file).exists() for file in files):
-            print([str(file) for file in directory.iterdir()], "Required files are missing from the specified directory.")
+            print(
+                [str(file) for file in directory.iterdir()],
+                "Required files are missing from the specified directory.",
+            )
             return None
-        
+
         # Create a zip file with the name of the folder
         project_name = directory.parts[-1]
         zip_filename = f"{directory}/{project_name}.zip"
-        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+        with zipfile.ZipFile(zip_filename, "w") as zipf:
             for file in files:
                 fullpath = directory / file
                 zipf.write(fullpath, arcname=file)
-            
+
         # Create URL
-        #url = su.create_download_link(zip_filename)
-        #Set download url to donwload button
+        # url = su.create_download_link(zip_filename)
+        # Set download url to donwload button
         self.download_button.set_url(path=zip_filename)
         self.download_button.show()
         return self
+
 
 class CustomAppBar(v.AppBar, SepalWidget):
     toogle_button = None
@@ -166,7 +174,10 @@ class CustomAppBar(v.AppBar, SepalWidget):
         self.theme = sw.ThemeSelect()
         self.save_button = ShareBtn().hide()
         self.recipe_name = RecipeBtn(
-            msg="", color=color.accent, class_="ma-2 pa-n6", download_button = self.save_button,
+            msg="",
+            color=color.accent,
+            class_="ma-2 pa-n6",
+            download_button=self.save_button,
         ).hide()
 
         # set the default parameters
@@ -311,21 +322,31 @@ class CustomDrawControl(GeomanDrawControl):
         return output
 
 
-class CustomSlideGroup(v.Card):
+class CustomSlideGroup(sw.SepalWidget, v.Card):
     def __init__(self, slide_items=None, defaul_child_color="green", **kwargs):
         # Set default properties for the v.Card
-        kwargs.setdefault("flat", True)  # Make the card flat
-        kwargs.setdefault("elevation", 0)  # Remove elevation
-        kwargs.setdefault("outlined", False)  # Remove outline
+        # kwargs.setdefault("flat", True)  # Make the card flat
+        # kwargs.setdefault("elevation", 0)  # Remove elevation
+        # kwargs.setdefault("outlined", False)  # Remove outline
 
         # Initialize base class v.Card
         super().__init__(**kwargs)
-        flat = True
+        # flat = True
         # Initialize slide group and loading spinner
         self.defaul_child_color = defaul_child_color
         self.slide_group = v.SlideGroup(children=slide_items or [])
-        self.loading_spinner = v.ProgressCircular(
-            indeterminate=True, color="primary", size=24, class_="mx-4"
+        self.loading_spinner = v.Card(
+            children=[
+                v.Row(
+                    class_="d-flex align-center",
+                    children=[
+                        v.ProgressCircular(
+                            indeterminate=True, color="primary", size=24, class_="mx-4"
+                        ),
+                        "Searching images..",
+                    ],
+                )
+            ]
         )
 
         # Set the initial state to show the slide group

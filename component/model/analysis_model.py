@@ -37,6 +37,18 @@ class AlertAnalysisModel(model.Model):
     after_s2_images_time = Float(None).tag(sync=True)
     "Time when after images from sentinel 2 were set"
 
+    before_landsat_images = Any(None).tag(sync=True)
+    "List of available before images from landsat, just for current alert"
+
+    before_landsat_images_time = Float(None).tag(sync=True)
+    "Time when before images from landsat were set"
+
+    after_landsat_images = Any(None).tag(sync=True)
+    "List of available after images from landsat, just for current alert"
+
+    after_landsat_images_time = Float(None).tag(sync=True)
+    "Time when after images from landsat were set"
+
     before_img = Any(None).tag(sync=True)
     "Path to downloaded before img"
 
@@ -89,6 +101,10 @@ class AlertAnalysisModel(model.Model):
         self.before_s2_images_time = None
         self.after_s2_images = None
         self.after_s2_images_time = None
+        self.before_landsat_images = None
+        self.before_landsat_images_time = None
+        self.after_landsat_images = None
+        self.after_landsat_images_time = None
         self.before_img = None
         self.after_img = None
         self.model1_prediction_file = None

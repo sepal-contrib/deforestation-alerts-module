@@ -40,7 +40,6 @@ su.init_ee()
 
 class SepalCard(sw.SepalWidget, v.Card):
     def __init__(self, **kwargs):
-
         super().__init__(**kwargs)
 
 
@@ -87,6 +86,12 @@ class AnalysisTile(sw.Layout):
             self.slider_s2_before, "before_s2_images_time"
         )
         self.analyzed_alerts_model.observe(self.slider_s2_after, "after_s2_images_time")
+        self.analyzed_alerts_model.observe(
+            self.slider_landsat_before, "before_landsat_images_time"
+        )
+        self.analyzed_alerts_model.observe(
+            self.slider_landsat_after, "after_landsat_images_time"
+        )
         self.analyzed_alerts_model.observe(self.add_defo_layer, "defo_dl_layer")
         self.analyzed_alerts_model.observe(self.enable_dl1, "model1_prediction_file")
         self.analyzed_alerts_model.observe(self.enable_dl2, "model2_prediction_file")
@@ -146,70 +151,222 @@ class AnalysisTile(sw.Layout):
         center_link = link((self.map_31, "center"), (self.map_32, "center"))
         zoom_link = link((self.map_31, "zoom"), (self.map_32, "zoom"))
 
+        #
         slider_before_planet = CustomSlideGroup()
         slider_before_s2 = CustomSlideGroup(style_="max-width: 80vh")
 
         selected_img_before_info = v.Html(
             tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
         )
-        imgSelection1 = v.Card(
-            # class_="pa-3 ma-5",
+
+        imgInfo1 = v.Card(
             children=[
                 v.CardTitle(
                     class_="pa-1 ma-1",
                     children=[cm.analysis_tile.img_selection.actual_image_info],
                 ),
                 selected_img_before_info,
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.planet_monthly_mosaics],
-                ),
-                slider_before_planet,
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.sentinel2_images],
-                ),
-                slider_before_s2,
             ]
         )
+
+        # imgSelection1= v.Card(children=[])
+
+        # Create the Tab headers
+        tabs = v.Tabs(
+            v_model=1,
+            children=[
+                v.Tab(children=["Planet"]),
+                v.Tab(children=["Sentinel-2"]),
+                v.Tab(children=["Landsat"]),
+            ],
+            background_color=color.main,
+            dark=True,
+        )
+
+        # Define the content for each tab
+        tab_items = v.TabsItems(
+            v_model=1,
+            children=[
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Planet"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Planet"]),
+                                CustomSlideGroup(),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Sentinel-2"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Sentinel-2"]),
+                                CustomSlideGroup(style_="max-width: 70vh"),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Landsat"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Landsat"]),
+                                CustomSlideGroup(style_="max-width: 70vh"),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+            ],
+        )
+        # Link the tab headers with their respective content
+        link((tabs, "v_model"), (tab_items, "v_model"))
+
+        # Arrange and display the Tab component
+        self.imgSelection1 = sw.Col(children=[tabs, tab_items])
 
         slider_after_planet = CustomSlideGroup()
         slider_after_s2 = CustomSlideGroup(style_="max-width: 80vh")
 
         selected_img_after_info = v.Html(
-            tag="div",
-            children=[
-                cm.analysis_tile.img_selection.selected_img_info_source
-                + cm.analysis_tile.img_selection.selected_img_info_date
-                + cm.analysis_tile.img_selection.selected_img_info_cloud
-            ],
+            tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
         )
-        imgSelection2 = v.Card(
-            # class_="pa-3 ma-5",
+
+        imgInfo2 = v.Card(
             children=[
                 v.CardTitle(
                     class_="pa-1 ma-1",
                     children=[cm.analysis_tile.img_selection.actual_image_info],
                 ),
                 selected_img_after_info,
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.planet_monthly_mosaics],
-                ),
-                slider_after_planet,
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.sentinel2_images],
-                ),
-                slider_after_s2,
             ]
         )
 
+        # Create the Tab headers
+        tabs2 = v.Tabs(
+            v_model=1,
+            children=[
+                v.Tab(children=["Planet"]),
+                v.Tab(children=["Sentinel-2"]),
+                v.Tab(children=["Landsat"]),
+            ],
+            background_color=color.main,
+            dark=True,
+        )
+
+        # Define the content for each tab
+        tab_items2 = v.TabsItems(
+            v_model=1,
+            children=[
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Planet"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Planet"]),
+                                CustomSlideGroup(),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Sentinel-2"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Sentinel-2"]),
+                                CustomSlideGroup(style_="max-width: 70vh"),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+                v.TabItem(
+                    children=[
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Landsat"]),
+                                v.CardText(
+                                    children=[
+                                        "No images available for your area of interest and/or dates selected.",
+                                    ]
+                                ),
+                            ],
+                            class_="ma-4",
+                        ),
+                        SepalCard(
+                            children=[
+                                v.CardTitle(children=["Landsat"]),
+                                CustomSlideGroup(style_="max-width: 70vh"),
+                            ]
+                        ).hide(),
+                    ]
+                ),
+            ],
+        )
+        # Link the tab headers with their respective content
+        link((tabs2, "v_model"), (tab_items2, "v_model"))
+
+        # Arrange and display the Tab component
+        self.imgSelection2 = sw.Col(children=[tabs2, tab_items2])
+
         # Create map with buttons1
-        self.map31 = sw.Col(children=[self.map_31, imgSelection1])
+        self.map31 = sw.Col(children=[self.map_31, imgInfo1])
 
         # Create map with buttons2
-        self.map32 = sw.Col(children=[self.map_32, imgSelection2])
+        self.map32 = sw.Col(children=[self.map_32, imgInfo1])
 
         # Create drawer control and add to maps
         self.draw_alerts1 = DrawControl(self.map_31)
@@ -602,8 +759,8 @@ class AnalysisTile(sw.Layout):
         layout = sw.Row(
             dense=True,
             children=[
-                sw.Col(cols=5, children=[self.map31]),
-                sw.Col(cols=5, children=[self.map32]),
+                sw.Col(cols=5, children=[self.map31, self.imgSelection1]),
+                sw.Col(cols=5, children=[self.map32, self.imgSelection2]),
                 sw.Col(cols=2, children=[card00]),
             ],
         )
@@ -619,8 +776,7 @@ class AnalysisTile(sw.Layout):
         alert_db_name = self.app_tile_model.recipe_folder_path + "/alert_db.csv"
         # Export to GPKG (GeoPackage)
         alertas_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_csv(
-            alert_db_name,
-            index=False
+            alert_db_name, index=False
         )  # Save as CSV
 
     def create_gdf_partial(self):
@@ -756,221 +912,7 @@ class AnalysisTile(sw.Layout):
         self.alert_id_button.disabled = False
         self.go_to_alert_button.disabled = False
 
-    # Function for image sliders
-    def create_horizontal_slide_group(
-        self,
-        data_list,
-        main_component,
-        default_v_model,
-        callback,
-        model_att1,
-        callback2,
-        model_att2,
-        fire_callback,
-    ):
-        if data_list[0].get("value") == "Not available":
-            return
-
-        map_element = main_component.children[0]
-        info_element = main_component.children[1].children[1]
-        slide_group = main_component.children[1].children[3]
-        slide_group_secondary = main_component.children[1].children[5]
-
-        # Sort data by 'milis' attribute
-        sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
-        date_indices = {i: item for i, item in enumerate(sorted_data)}
-        if default_v_model == 1:
-            default_v_model = len(sorted_data) - 1
-        else:
-            default_v_model = len(sorted_data) - 3
-
-        # Assign colors based on source attribute
-        color_map = {
-            "Sentinel 2": "blue",
-            "Planet NICFI": "green",
-            "selected": "orange",
-        }
-        # Initialize slide_group as a v-slide-group
-        # slide_group.slide_group.children = []  # Clear any previous content
-        # slide_group.mandatory = True
-        slide_group.show_arrows = True  # Show arrows for navigation if needed
-        slide_group.defaul_child_color = "green"
-        # slide_group.style_="max-width: 90%;"
-
-        # Helper function to create a button for each item
-        def create_slide_button(i, item):
-            # Get the color based on source, or use default if source is undefined
-            img_source = item["source"]
-            button_color = color_map.get(img_source, "lightgray")
-
-            if img_source == "Planet NICFI":
-                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
-                    "%b"
-                )
-            elif img_source == "Sentinel 2":
-                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
-                    "%b %d"
-                )
-
-            # Button representing each slide showing 'milis'
-            button = sw.Btn(
-                text=date_string,
-                color=button_color,
-                class_="ma-1",
-                value=i,
-                style_="min-width: 40px; min-height: 40px;",
-                # Use a default argument in lambda to capture the current index
-            )
-            button.on_event("click", on_slide_button_click)
-            return button
-
-        # Function to handle button click triggering callbacks
-        def on_slide_button_click(widget, event, data):
-            widget.loading = True  # Set button to loading state
-            widget.disabled = True  # Disable button to prevent further clicks
-
-            selected_item = date_indices[widget.value]
-            img_source = selected_item["source"]
-
-            slide_group.reset_default_color()
-            slide_group_secondary.reset_default_color()
-
-            # Change color of selected wigdet
-            widget.color = color_map.get("selected")
-
-            # Call the callbacks with the selected item
-            selected_item = date_indices[widget.value]
-            callback(selected_item, map_element, model_att1)
-            callback2(selected_item, info_element, model_att2)
-
-            widget.loading = False  # Remove loading state
-            widget.disabled = False  # Re-enable the button
-
-        # Create buttons for each item and add to slide group
-        slides = [create_slide_button(i, item) for i, item in enumerate(sorted_data)]
-        slide_group.slide_group.children = slides
-        slide_group.set_loading_state(False)
-
-        if fire_callback == True:
-            # Set the initial slide callback
-            slide_group.slide_group.children[default_v_model].color = color_map.get(
-                "selected"
-            )
-            selected_item = date_indices[
-                slide_group.slide_group.children[default_v_model].value
-            ]
-            callback(selected_item, map_element, model_att1)
-            callback2(selected_item, info_element, model_att2)
-
-    def create_horizontal_slide_group_s2(
-        self,
-        data_list,
-        main_component,
-        default_v_model,
-        callback,
-        model_att1,
-        callback2,
-        model_att2,
-    ):
-
-        map_element = main_component.children[0]
-        info_element = main_component.children[1].children[1]
-        slide_group = main_component.children[1].children[5]
-        slide_group_secondary = main_component.children[1].children[3]
-
-        # Sort data by 'milis' attribute
-        sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
-        date_indices = {i: item for i, item in enumerate(sorted_data)}
-        if default_v_model == 1:
-            default_v_model = len(sorted_data) - 1
-        else:
-            default_v_model = len(sorted_data) - 3
-
-        # Assign colors based on source attribute
-        color_map = {
-            "Sentinel 2": "blue",
-            "Planet NICFI": "green",
-            "selected": "orange",
-        }
-        # Initialize slide_group as a v-slide-group
-        slide_group.children = []  # Clear any previous content
-        slide_group.show_arrows = True  # Show arrows for navigation if needed
-        slide_group.defaul_child_color = "blue"
-        # slide_group.style_="max-width: 90%;"
-
-        # Helper function to create a button for each item
-        def create_slide_button(i, item):
-            # Get the color based on source, or use default if source is undefined
-            img_source = item["source"]
-            cloud_cover = float(item["cloud_cover"])
-            button_color = color_map.get(img_source, "lightgray")
-
-            # Determine the icon based on the cloud cover range
-            if 0 <= cloud_cover <= 30:
-                icon = "mdi-weather-sunny"
-            elif 30 < cloud_cover <= 60:
-                icon = "mdi-cloud-outline"
-            elif 60 < cloud_cover <= 100:
-                icon = "mdi-cloud"
-
-            if img_source == "Planet NICFI":
-                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
-                    "%b"
-                )
-            elif img_source == "Sentinel 2":
-                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
-                    "%b %d"
-                )
-
-            # Button representing each slide showing 'milis'
-            button = sw.Btn(
-                msg=date_string,
-                gliph=icon,
-                color=button_color,
-                class_="ma-1",
-                value=i,
-                style_="min-width: 40px; min-height: 40px;",
-                # Use a default argument in lambda to capture the current index
-            )
-            button.on_event("click", on_slide_button_click)
-            return button
-
-        # Function to handle button click triggering callbacks
-        def on_slide_button_click(widget, event, data):
-            widget.loading = True  # Set button to loading state
-            widget.disabled = True  # Disable button to prevent further clicks
-
-            selected_item = date_indices[widget.value]
-            img_source = selected_item["source"]
-
-            slide_group.reset_default_color()
-            slide_group_secondary.reset_default_color()
-
-            # Change color of selected wigdet
-            widget.color = color_map.get("selected")
-
-            # Call the callbacks with the selected item
-            selected_item = date_indices[widget.value]
-            callback(selected_item, map_element, model_att1)
-            callback2(selected_item, info_element, model_att2)
-
-            widget.loading = False  # Remove loading state
-            widget.disabled = False  # Re-enable the button
-
-        # Create buttons for each item and add to slide group
-        slides = [create_slide_button(i, item) for i, item in enumerate(sorted_data)]
-        slide_group.slide_group.children = slides
-        slide_group.set_loading_state(False)
-        if len(slide_group_secondary.slide_group.children) == 0:
-            # Set the initial slide callback
-            slide_group.slide_group.children[default_v_model].color = color_map.get(
-                "selected"
-            )
-            selected_item = date_indices[
-                slide_group.slide_group.children[default_v_model].value
-            ]
-            callback(selected_item, map_element, model_att1)
-            callback2(selected_item, info_element, model_att2)
+    ##Image sliders function
 
     def image_slider_map_callback(self, selected_item, map_element, model_att):
         geom = self.actual_alert_grid
@@ -997,6 +939,44 @@ class AnalysisTile(sw.Layout):
             vis1 = vis1p
             vis2 = vis2p
             img = ee.Image(image_id).clip(geom)
+
+        elif img_source == "Landsat":
+            vis1 = vis1s
+            vis2 = vis2s
+
+            # Filter Landsat SR
+            l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+            l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+            landsat = l8.merge(l9)
+            landsat_filtered = (
+                landsat.filterBounds(geom)
+                .filter(ee.Filter.lt("CLOUD_COVER", 90))
+                .filter(ee.Filter.eq("LANDSAT_SCENE_ID", image_id))
+            ).first()
+
+            # Filter Landsat TOA
+            l8_toa = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA")
+            l9_toa = ee.ImageCollection("LANDSAT/LC09/C02/T1_TOA")
+            landsat_toa = l8_toa.merge(l9_toa)
+            landsat_toa_filtered = (
+                landsat_toa.filterBounds(geom)
+                .filter(ee.Filter.lt("CLOUD_COVER", 90))
+                .filter(ee.Filter.eq("LANDSAT_SCENE_ID", image_id))
+            ).first()
+
+            print(
+                landsat_filtered.bandNames().getInfo(),
+                landsat_toa_filtered.bandNames().getInfo(),
+            )
+            # Pansharpening
+            landsat_sr_img = landsat_filtered.select(
+                ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"]
+            )
+            landsat_toa_img = landsat_toa_filtered.select("B8")
+            pan_sharp = SFIM_pan_sharpen(landsat_sr_img, landsat_toa_img)
+            # Harmonize
+            harmonized_img = harmonizeL8ToS2_scaled(pan_sharp).clip(geom)
+            img = harmonized_img
 
         if model_att == 0:
             self.selected_img_before = img
@@ -1034,9 +1014,6 @@ class AnalysisTile(sw.Layout):
         elif model_att == 1:
             self.selected_img_after_info_list = lista
         info_element.loading = False
-        # info_element.children = [
-        #     f"Source: {info1}, Date: {info2}, Cloud Cover: {info3}"
-        # ]
         info_element.children = [
             v.Html(
                 tag="strong",
@@ -1057,8 +1034,151 @@ class AnalysisTile(sw.Layout):
             info3,
         ]
 
-    # Process for each alert
+    def create_horizontal_slide_group_v3(
+        self,
+        data_list,
+        map_component,
+        image_slider_component,
+        default_v_model,
+        callback,
+        model_att1,
+        callback2,
+        model_att2,
+        fire_callback=False,  # Added default value for fire_callback
+    ):
+        """Creates a horizontal slide group component."""
+        map_element = map_component.children[0]
+        info_element = map_component.children[1].children[1]
 
+        # Define the mappings based on source type
+        source_to_index = {"Planet NICFI": 0, "Sentinel 2": 1, "Landsat": 2}
+
+        # Determine which tab and child tabs to use based on the first item's source
+        if data_list:
+            source_type = data_list[0].get("source")
+            if source_type in source_to_index:
+                index = source_to_index[source_type]
+                main_tab_index = index
+                child_tabs_indices = [(index + i) % 3 for i in range(1, 3)]
+
+                # Update the indices to cycle through tabs correctly
+                main_tab = image_slider_component.children[1].children[main_tab_index]
+                child_tabs = [
+                    image_slider_component.children[1].children[i]
+                    for i in child_tabs_indices
+                ]
+            else:
+                raise ValueError(f"Unknown source type: {source_type}")
+        else:
+            raise ValueError("data_list is empty")
+
+        slide_group = main_tab.children[1].children[1]
+        child_slide1_group = child_tabs[0].children[1].children[1]
+        child_slide2_group = child_tabs[1].children[1].children[1]
+
+        if data_list[0].get("value") == "Not available":
+            print(f'No images for {data_list[0].get("source")}')
+            slide_group.set_loading_state(False)
+            main_tab.children[1].hide()
+            main_tab.children[0].show()
+            return
+        # Sort data by 'milis' attribute
+        sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
+        date_indices = {i: item for i, item in enumerate(sorted_data)}
+
+        # Determine default v-model index
+        default_v_model = (
+            len(sorted_data) - 1 if default_v_model == 1 else len(sorted_data) - 3
+        )
+
+        color_map = {
+            "Sentinel 2": "blue",
+            "Planet NICFI": "green",
+            "Landsat": "blue-grey",
+            "selected": "orange",
+        }
+
+        slide_group.show_arrows = True  # Show arrows for navigation if needed
+        slide_group.defaul_child_color = color_map.get(
+            data_list[0].get("source"), "lightgray"
+        )
+
+        def create_and_configure_slide_button(i, item):
+            """Creates and configures a slide button."""
+            img_source = item["source"]
+            button_color = color_map.get(img_source, "lightgray")
+
+            if img_source == "Planet NICFI":
+                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
+                    "%b"
+                )
+            elif img_source != "Planet NICFI":
+                date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
+                    "%b %d"
+                )
+
+            icon = ""  # Initialize with no icon
+            if img_source != "Planet NICFI" and "cloud_cover" in item:
+                cloud_cover = float(item["cloud_cover"])
+                if 0 <= cloud_cover <= 30:
+                    icon = "mdi-weather-sunny"
+                elif 30 < cloud_cover <= 60:
+                    icon = "mdi-cloud-outline"
+                elif 60 < cloud_cover <= 100:
+                    icon = "mdi-cloud"
+
+            button = sw.Btn(
+                text=date_string,
+                gliph=icon,  # Use the icon if it's available
+                color=button_color,
+                class_="ma-1",
+                value=i,
+                style_="min-width: 40px; min-height: 40px;",
+            )
+            button.on_event("click", on_slide_button_click)
+            return button
+
+        def on_slide_button_click(widget, event, data):
+            """Handles the click event for a slide button."""
+            widget.loading = True
+            widget.disabled = True
+
+            selected_item = date_indices[widget.value]
+            img_source = selected_item["source"]
+
+            slide_group.reset_default_color()
+            child_slide1_group.reset_default_color()
+            child_slide2_group.reset_default_color()
+
+            widget.color = color_map.get("selected")
+
+            callback(selected_item, map_element, model_att1)
+            callback2(selected_item, info_element, model_att2)
+
+            widget.loading = False
+            widget.disabled = False
+
+        slides = [
+            create_and_configure_slide_button(i, item)
+            for i, item in enumerate(sorted_data)
+        ]
+        slide_group.slide_group.children = slides  # Assign directly to children
+
+        slide_group.set_loading_state(False)
+        main_tab.children[0].hide()
+        main_tab.children[1].show()
+
+        if fire_callback:
+            slide_group.slide_group.children[default_v_model].color = color_map.get(
+                "selected"
+            )
+            selected_item = date_indices[
+                slide_group.slide_group.children[default_v_model].value
+            ]
+            callback(selected_item, map_element, model_att1)
+            callback2(selected_item, info_element, model_att2)
+
+    # Process for each alert
     def view_actual_alert(self, change):
         print("cambiando alerta", self.analyzed_alerts_model.actual_alert_id)
 
@@ -1117,8 +1237,37 @@ class AnalysisTile(sw.Layout):
             v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
             alert_st,
         ]
-        self.map31.children[1].children[5].set_loading_state(True)
-        self.map32.children[1].children[5].set_loading_state(True)
+        # self.imgSelection1.children[1].children[0].children[0].show()
+        # self.imgSelection1.children[1].children[1].children[0].show()
+        # self.imgSelection1.children[1].children[2].children[0].show()
+        # self.imgSelection1.children[1].children[0].children[1].hide()
+        # self.imgSelection1.children[1].children[1].children[1].hide()
+        # self.imgSelection1.children[1].children[2].children[1].hide()
+        # self.imgSelection2.children[1].children[0].children[0].show()
+        # self.imgSelection2.children[1].children[1].children[0].show()
+        # self.imgSelection2.children[1].children[2].children[0].show()
+        # self.imgSelection2.children[1].children[0].children[1].hide()
+        # self.imgSelection2.children[1].children[1].children[1].hide()
+        # self.imgSelection2.children[1].children[2].children[1].hide()
+
+        self.imgSelection1.children[1].children[0].children[1].children[
+            1
+        ].set_loading_state(True)
+        self.imgSelection1.children[1].children[1].children[1].children[
+            1
+        ].set_loading_state(True)
+        self.imgSelection1.children[1].children[2].children[1].children[
+            1
+        ].set_loading_state(True)
+        self.imgSelection2.children[1].children[0].children[1].children[
+            1
+        ].set_loading_state(True)
+        self.imgSelection2.children[1].children[1].children[1].children[
+            1
+        ].set_loading_state(True)
+        self.imgSelection2.children[1].children[2].children[1].children[
+            1
+        ].set_loading_state(True)
 
         # Cambio en boton de confirmacion
         status_dict_reverse = {
@@ -1182,9 +1331,10 @@ class AnalysisTile(sw.Layout):
         self.actual_alert_grid = gridDescargaBounds
 
         # Actualizar slider de imagenes
-        self.create_horizontal_slide_group(
+        self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.before_planet_monthly_images,
             self.map31,
+            self.imgSelection1,
             0,
             self.image_slider_map_callback,
             0,
@@ -1192,9 +1342,10 @@ class AnalysisTile(sw.Layout):
             0,
             True,
         )
-        self.create_horizontal_slide_group(
+        self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.after_planet_monthly_images,
             self.map32,
+            self.imgSelection2,
             1,
             self.image_slider_map_callback,
             1,
@@ -1218,6 +1369,19 @@ class AnalysisTile(sw.Layout):
             self.assign_s2_after_dictionary,
         )
 
+        self.start_landsat_dictionary_thread(
+            gridDescargaBounds,
+            sentinel2_mosaics_dates[0],
+            sentinel2_mosaics_dates[1],
+            self.assign_landsat_before_dictionary,
+        )
+        self.start_landsat_dictionary_thread(
+            gridDescargaBounds,
+            sentinel2_mosaics_dates[2],
+            sentinel2_mosaics_dates[3],
+            self.assign_landsat_after_dictionary,
+        )
+
     ###### DL MODEL SECTION #######
 
     def worker_m1(self):
@@ -1233,8 +1397,13 @@ class AnalysisTile(sw.Layout):
 
         from component.scripts.model_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
-        hf_hub_download(repo_id="joseserafinig/forest_cover_change_cnn_m1", filename="Model1.h5", local_dir= '/tmp')
-        
+
+        hf_hub_download(
+            repo_id="joseserafinig/forest_cover_change_cnn_m1",
+            filename="Model1.h5",
+            local_dir="/tmp",
+        )
+
         """Worker thread that processes files from the file_queue."""
         while True:
             input_list = self.file_queue1.get()  # Get a file path from the queue
@@ -1270,7 +1439,12 @@ class AnalysisTile(sw.Layout):
 
         from component.scripts.model_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
-        hf_hub_download(repo_id="joseserafinig/forest_cover_change_cnn_m2", filename="Model2.keras", local_dir= '/tmp')
+
+        hf_hub_download(
+            repo_id="joseserafinig/forest_cover_change_cnn_m2",
+            filename="Model2.keras",
+            local_dir="/tmp",
+        )
 
         """Worker thread that processes files from the file_queue."""
         while True:
@@ -1349,12 +1523,12 @@ class AnalysisTile(sw.Layout):
     def start_edition_function(self, widget, event, data):
         widget.loading = True  # Set button to loading state
         widget.disabled = True  # Disable button to prevent further clicks
-        self.map_31.find_layer('Alert BB').visible = False
-        self.map_32.find_layer('Alert BB').visible = False
+        self.map_31.find_layer("Alert BB").visible = False
+        self.map_32.find_layer("Alert BB").visible = False
 
-        if self.map_31.find_layer('Defo Layer', none_ok = True) is not None:
-            self.map_31.find_layer('Defo Layer').visible = False
-            self.map_32.find_layer('Defo Layer').visible = False
+        if self.map_31.find_layer("Defo Layer", none_ok=True) is not None:
+            self.map_31.find_layer("Defo Layer").visible = False
+            self.map_32.find_layer("Defo Layer").visible = False
 
         self.draw_alerts1.show()
         self.draw_alerts2.show()
@@ -1391,14 +1565,14 @@ class AnalysisTile(sw.Layout):
 
         self.draw_alerts1.hide()
         self.draw_alerts2.hide()
-        
-        self.map_31.find_layer('Alert BB').visible = True
-        self.map_32.find_layer('Alert BB').visible = True
 
-        if self.map_31.find_layer('Defo Layer', none_ok = True) is not None:
-            self.map_31.find_layer('Defo Layer').visible = True
-            self.map_32.find_layer('Defo Layer').visible = True
-        
+        self.map_31.find_layer("Alert BB").visible = True
+        self.map_32.find_layer("Alert BB").visible = True
+
+        if self.map_31.find_layer("Defo Layer", none_ok=True) is not None:
+            self.map_31.find_layer("Defo Layer").visible = True
+            self.map_32.find_layer("Defo Layer").visible = True
+
         self.toolBarDL1.hide()
         self.toolBarDL2.hide()
 
@@ -1510,8 +1684,8 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        #model = "utils/Model1.h5"
-        model = '/tmp/Model1.h5'
+        # model = "utils/Model1.h5"
+        model = "/tmp/Model1.h5"
         self.send_file_for_processing_m1_v2(
             [image_name, model, "_m1"], self.process_file1
         )
@@ -1542,7 +1716,7 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        #model = "utils/Model2.keras"
+        # model = "utils/Model2.keras"
         model = "/tmp/Model2.keras"
         self.send_file_for_processing_m2_v2(
             [image_name, model, "_m2"], self.process_file2
@@ -1574,17 +1748,17 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
 
         # Save before and after img name
-        alertas_gdf.at[
-            actual_alert_id, "before_img"
-        ] = self.selected_img_before_info_list[3]
-        alertas_gdf.at[
-            actual_alert_id, "after_img"
-        ] = self.selected_img_after_info_list[3]
+        alertas_gdf.at[actual_alert_id, "before_img"] = (
+            self.selected_img_before_info_list[3]
+        )
+        alertas_gdf.at[actual_alert_id, "after_img"] = (
+            self.selected_img_after_info_list[3]
+        )
 
         ##Create dictionary of alert sources
-        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(get_unique_alerts(
-            alertas_gdf.loc[actual_alert_id, "alert_type_unique"]
-        ))
+        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
+            get_unique_alerts(alertas_gdf.loc[actual_alert_id, "alert_type_unique"])
+        )
 
         # Get adminstrative location attributes
         adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
@@ -1627,9 +1801,9 @@ class AnalysisTile(sw.Layout):
             self.boton_confirmacion.v_model
             == cm.analysis_tile.questionarie.confirmation_yes
         ):
-            alertas_gdf.at[
-                actual_alert_id, "alert_polygon"
-            ] = self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
+            alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
+                self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
+            )
             alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(
                 self.analyzed_alerts_model.defo_dl_layer
             )
@@ -1746,25 +1920,85 @@ class AnalysisTile(sw.Layout):
         thread.start()
 
     def slider_s2_before(self, change):
-        self.create_horizontal_slide_group_s2(
+        self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.before_s2_images,
             self.map31,
+            self.imgSelection1,
             0,
             self.image_slider_map_callback,
             0,
             self.image_slider_info_callback,
             0,
-            # False,
+            True,
         )
 
     def slider_s2_after(self, change):
-        self.create_horizontal_slide_group_s2(
+        self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.after_s2_images,
             self.map32,
+            self.imgSelection2,
             1,
             self.image_slider_map_callback,
             1,
             self.image_slider_info_callback,
             1,
-            # False,
+            True,
+        )
+
+    ## Create Landsat dictionary
+
+    def assign_landsat_before_dictionary(self, json):
+        self.analyzed_alerts_model.before_landsat_images = json
+        self.analyzed_alerts_model.before_landsat_images_time = (
+            datetime.today().timestamp()
+        )
+
+    def assign_landsat_after_dictionary(self, json):
+        self.analyzed_alerts_model.after_landsat_images = json
+        self.analyzed_alerts_model.after_landsat_images_time = (
+            datetime.today().timestamp()
+        )
+
+    def start_landsat_dictionary_thread(
+        self,
+        poly,
+        fecha1,
+        fecha2,
+        assign_function,
+    ):
+        thread = threading.Thread(
+            target=lambda: assign_function(
+                getIndividualLandsat(
+                    poly,
+                    fecha1,
+                    fecha2,
+                )
+            )
+        )
+        thread.start()
+
+    def slider_landsat_before(self, change):
+        self.create_horizontal_slide_group_v3(
+            self.analyzed_alerts_model.before_landsat_images,
+            self.map31,
+            self.imgSelection1,
+            0,
+            self.image_slider_map_callback,
+            0,
+            self.image_slider_info_callback,
+            0,
+            False,
+        )
+
+    def slider_landsat_after(self, change):
+        self.create_horizontal_slide_group_v3(
+            self.analyzed_alerts_model.after_landsat_images,
+            self.map32,
+            self.imgSelection2,
+            1,
+            self.image_slider_map_callback,
+            1,
+            self.image_slider_info_callback,
+            1,
+            False,
         )

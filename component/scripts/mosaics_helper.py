@@ -131,22 +131,6 @@ def get_sentinel2_dates(input_date1, input_date2):
     ]
 
 
-# def filter_older_dates(date_list, comparison_date):
-#     # Ensure comparison_date is a datetime object
-#     if isinstance(comparison_date, str):
-#         comparison_date = datetime.strptime(comparison_date, "%Y-%m-%d")
-
-#     # Convert the dates in the list to datetime objects if necessary
-#     date_list = [
-#         datetime.strptime(d, "%Y-%m-%d") if isinstance(d, str) else d for d in date_list
-#     ]
-
-#     # Filter out the dates that are older than the comparison_date
-#     older_dates = [d.strftime("%Y-%m-%d") for d in date_list if d < comparison_date]
-
-#     return older_dates
-
-
 def scalePlanet(image):
     rgb = image.select(["B", "G", "R"])
     nir = image.select(["N"])
@@ -208,12 +192,12 @@ def download_both_images(image1, image2, image_name, source1, source2, region):
     import ee
     import os
 
-    if source1 == "Sentinel 2":
+    if source1 in ["Sentinel 2", "Landsat"]:
         rimage1 = scaleS2v2(image1)
     elif source1 == "Planet NICFI":
         rimage1 = scalePlanet(image1)
 
-    if source2 == "Sentinel 2":
+    if source2 in ["Sentinel 2", "Landsat"]:
         rimage2 = scaleS2v2(image2)
     elif source2 == "Planet NICFI":
         rimage2 = scalePlanet(image2)
@@ -613,93 +597,95 @@ def add_files_to_zip(zip_filename, file1, file2):
         zipf.write(file2)
 
 
-
 def is_after_march_2025(target_date_str):
     """
     Check if the given date string is after 2025-03-31.
-    
+
     Parameters:
         target_date_str (str): The target date in the format 'YYYY-MM-DD'.
-        
+
     Returns:
         bool: True if the target date is after 2025-03-31, False otherwise.
     """
     # Define the specific date to compare against
     specific_date = datetime.strptime("2025-03-31", "%Y-%m-%d").date()
-    
+
     # Parse the target date string and convert it to a date object
     target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-    
+
     # Compare the target date with the specific date
     return target_date > specific_date
-    
+
 
 def check_planet_collection_access():
-    # Initialize the GEE account    
+    # Initialize the GEE account
     # Define the collection names and their corresponding regions
     collections = {
-        "americas": "projects/planet-nicfi/assets/basemaps/americas", 
-        "africa": "projects/planet-nicfi/assets/basemaps/africa", 
-        "asia": "projects/planet-nicfi/assets/basemaps/asia"
+        "americas": "projects/planet-nicfi/assets/basemaps/americas",
+        "africa": "projects/planet-nicfi/assets/basemaps/africa",
+        "asia": "projects/planet-nicfi/assets/basemaps/asia",
     }
-    
+
     # Initialize a dictionary to store the results
     access_status = {}
-    
+
     # Iterate over each collection and check its access status
     for region, collection in collections.items():
         try:
             # Load the image collection
             img_collection = ee.ImageCollection(collection)
-            
+
             # Get the size of the collection
             size = img_collection.size().getInfo()
-            
+
             # Check if the size is greater than 0 and update the access status dictionary accordingly
             if size > 0:
-                access_status[region] = 'has_access'
+                access_status[region] = "has_access"
             else:
-                access_status[region] = 'no_access'
+                access_status[region] = "no_access"
         except ee.EEException as e:
             # Handle the case where the collection does not exist or user doesn't have access
             if "not found" in str(e):
-                access_status[region] = 'no_access'
+                access_status[region] = "no_access"
             else:
                 raise  # Re-raise other EEException errors
-    
+
     # Return the dictionary containing the access status for each region
     return access_status
+
 
 def check_access(dictionary):
     """
     Check if all values in the given dictionary are 'no_access'.
-    
+
     Parameters:
         dictionary (dict): The dictionary to be checked.
-        
+
     Returns:
         bool: True if all values are 'no_access', False otherwise.
     """
     # Iterate through each value in the dictionary
     for value in dictionary.values():
         # Check if any value is 'has_access'
-        if value == 'has_access':
+        if value == "has_access":
             return False
-    
+
     # If no 'has_access' found, return True
     return True
+
 
 def getPlanetMonthly(geometry, date1, date2):
 
     # Define the no-access result dictionary
-    no_images= [{
-        "value": "Not available",
-        "image_id": "Not available",
-        "milis": "Not available",
-        "source": "Planet NICFI",
-        "cloud_cover": "Not available",
-    }]
-    
+    no_images = [
+        {
+            "value": "Not available",
+            "image_id": "Not available",
+            "milis": "Not available",
+            "source": "Planet NICFI",
+            "cloud_cover": "Not available",
+        }
+    ]
 
     access_status = check_planet_collection_access()
 
@@ -760,62 +746,66 @@ def getPlanetMonthly(geometry, date1, date2):
             "Wake Island",
             "Wallis and Futuna",
         ]
-        
+
         # Define the Asia footprint based on countries in lista2
         footprint_asia = (
             ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0")
             .filter(ee.Filter.inList("ADM0_NAME", lista2))
             .geometry()
         )
-        
+
         collections = {
-            "americas": "projects/planet-nicfi/assets/basemaps/americas", 
-            "africa": "projects/planet-nicfi/assets/basemaps/africa", 
-            "asia": "projects/planet-nicfi/assets/basemaps/asia"
+            "americas": "projects/planet-nicfi/assets/basemaps/americas",
+            "africa": "projects/planet-nicfi/assets/basemaps/africa",
+            "asia": "projects/planet-nicfi/assets/basemaps/asia",
         }
         # Initialize an empty image collection to store the merged results
         intersecting_images = ee.ImageCollection([])
 
         for region, status in access_status.items():
-            if status == 'has_access':
+            if status == "has_access":
                 try:
                     img_collection = ee.ImageCollection(collections[region])
-    
+
                     # Use footprint_asia for Asia and the general geometry for others
-                    if region == 'asia':
+                    if region == "asia":
                         # Check intersection with the specified geometry using ee.Algorithms.If
                         intersects_geometry = ee.Algorithms.If(
                             footprint_asia.intersects(geometry, 10),
                             img_collection,
-                            ee.ImageCollection([])
+                            ee.ImageCollection([]),
                         )
                     else:
                         # Check intersection with the specified geometry using ee.Algorithms.If
                         intersects_geometry = ee.Algorithms.If(
                             img_collection.first().geometry().intersects(geometry, 10),
                             img_collection,
-                            ee.ImageCollection([])
+                            ee.ImageCollection([]),
                         )
-                    
+
                     intersecting_images = intersecting_images.merge(intersects_geometry)
                 except ee.EEException as e:
                     if "not found" in str(e):
-                        print(f"{region} collection not found or user does not have access.")
-        
+                        print(
+                            f"{region} collection not found or user does not have access."
+                        )
+
         if intersecting_images.size().getInfo() == 0:
             return no_images
 
-        else:       
+        else:
             selected_planet = ee.ImageCollection(intersecting_images)
-        
-            planet_filtered_collection = selected_planet.filterDate(date1, date2).filterBounds(
-                geometry
-            )
-        
+
+            planet_filtered_collection = selected_planet.filterDate(
+                date1, date2
+            ).filterBounds(geometry)
+
             # Retrieve all image IDs with a single getInfo call
-            image_ids = planet_filtered_collection.aggregate_array("system:id").getInfo()
+            image_ids = planet_filtered_collection.aggregate_array(
+                "system:id"
+            ).getInfo()
             elements = []
-        
+
             if len(image_ids) > 0:
                 # Process each image ID to format the name
                 for image_id in image_ids:
@@ -827,19 +817,21 @@ def getPlanetMonthly(geometry, date1, date2):
                     # Parse year and month
                     year = date_part[:4]
                     month = int(date_part[5:7])
-        
+
                     date_str = date_part + "-01"
-                    date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
-        
+                    date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime(
+                        "%b %Y"
+                    )
+
                     # Format the name
                     name = f"Planet Monthly {region_part} {date_str2}"
                     # Create image to display
                     planet_clip = ee.Image(image_id)  ##.clip(geometry)
-        
+
                     # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
                     t2 = ee.Number(planet_clip.get("system:time_end"))
                     t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
-        
+
                     dictionary = {
                         "value": name,
                         "image_id": image_id,
@@ -848,9 +840,11 @@ def getPlanetMonthly(geometry, date1, date2):
                         "cloud_cover": "Not available",
                     }
                     elements.append(dictionary)
-        
-            elif len(image_ids) == 0 and (is_future_date(date2) or is_after_march_2025(date2)):
-        
+
+            elif len(image_ids) == 0 and (
+                is_future_date(date2) or is_after_march_2025(date2)
+            ):
+
                 last_two_imgs = selected_planet.sort("system:time_end", False).limit(2)
                 image_ids_2 = last_two_imgs.aggregate_array("system:id").getInfo()
                 # Process each image ID to format the name
@@ -863,19 +857,21 @@ def getPlanetMonthly(geometry, date1, date2):
                     # Parse year and month
                     year = date_part[:4]
                     month = int(date_part[5:7])
-        
+
                     date_str = date_part + "-01"
-                    date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %Y")
-        
+                    date_str2 = datetime.strptime(date_str, "%Y-%m-%d").strftime(
+                        "%b %Y"
+                    )
+
                     # Format the name
                     name = f"Planet Monthly {region_part} {date_str2}"
                     # Create image to display
                     planet_clip = ee.Image(image_id)  ##.clip(geometry)
-        
+
                     # t1 = ee.Number(planet_clip.get('system:time_start')).getInfo()
                     t2 = ee.Number(planet_clip.get("system:time_end"))
                     t3 = ee.Date(t2).advance(-1, "days").millis().getInfo()
-        
+
                     dictionary = {
                         "value": name,
                         "image_id": image_id,
@@ -925,6 +921,63 @@ def getIndividualS2(geometry, date1, date2):
                 "cloud_cover": mean_cloud,
             }
             elements.append(dictionary)
+
+    return elements
+
+
+def getIndividualLandsat(geometry, date1, date2):
+    l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+    l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+    landsat = l8.merge(l9)
+    landsat_filtered = (
+        landsat.filterDate(date1, date2)
+        .filterBounds(geometry)
+        .filter(ee.Filter.lt("CLOUD_COVER", 90))
+    )
+
+    # Retrieve all unique Generation time values
+    landsat_dates_list = (
+        landsat_filtered.aggregate_array("DATE_PRODUCT_GENERATED").distinct().getInfo()
+    )
+    elements = []
+
+    if len(landsat_dates_list) > 0:
+        # Process each unique Generation time to get the mosaic
+
+        for landsat_date in landsat_dates_list:
+            # Create image to display
+            landsat_img = landsat_filtered.filter(
+                ee.Filter.eq("DATE_PRODUCT_GENERATED", landsat_date)
+            ).first()
+
+            # Calculate properties of images
+            cloud_cover = (
+                ee.Number(landsat_img.get("CLOUD_COVER")).format("%.2f").getInfo()
+            )
+            scene_id = landsat_img.get("LANDSAT_SCENE_ID")
+            date = datetime.fromtimestamp(landsat_date / 1000).strftime("%Y-%m-%d")
+            name = f"Landsat {date} "
+
+            dictionary = {
+                "value": name,
+                "image_id": scene_id,
+                "milis": ee.Number(landsat_date).getInfo(),
+                "source": "Landsat",
+                "cloud_cover": cloud_cover,
+            }
+            elements.append(dictionary)
+
+    elif len(landsat_dates_list) == 0:
+        # Define the no-access result dictionary
+        elements = [
+            {
+                "value": "Not available",
+                "image_id": "Not available",
+                "milis": "Not available",
+                "source": "Planet NICFI",
+                "cloud_cover": "Not available",
+            }
+        ]
 
     return elements
 
@@ -1019,3 +1072,49 @@ def filter_features_by_color(features, color_to_remove):
     return filtered_features
 
 
+# Harmonize L8→S2, handling GEE scaling differences
+def harmonizeL8ToS2_scaled(oliL2):
+    # 1) Convert raw DN to float reflectance
+    refl = (
+        oliL2.select(
+            ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"],
+            ["B1", "B2", "B3", "B4", "B8", "B6", "B7"],
+        )
+        .multiply(0.0000275)
+        .add(-0.2)
+    )
+
+    # 2) Coeffs from HLS v2.0 Table 5 (Sentinel-2A → OLI), invert for OLI→S2
+    slopes = ee.Image.constant([0.9959, 0.9778, 1.0053, 0.9765, 0.9983, 0.9987, 1.003])
+    itcps = ee.Image.constant(
+        [-0.0002, -0.0040, -0.0009, 0.0009, -0.0001, -0.0011, -0.0012]
+    )
+
+    # 3) Apply (ρ_OLI – b) / a to get S2 reflectance
+    s2Refl = (
+        refl.subtract(itcps)
+        .divide(slopes)
+        .set("system:time_start", oliL2.get("system:time_start"))
+    )
+
+    # 4) (Optional) back to 0–10000 DN to match S2_SR scale
+    s2DN = s2Refl.multiply(10000).toShort()
+
+    # Re‐attach metadata
+    result = ee.Image(s2DN).copyProperties(oliL2)
+
+    return ee.Image(result)
+
+
+def SFIM_pan_sharpen(img, pan):
+    imgScale = img.projection().nominalScale()
+    panScale = pan.projection().nominalScale()
+
+    kernelWidth = imgScale.divide(panScale)
+    kernel = ee.Kernel.square(radius=kernelWidth.divide(2))
+
+    panSmooth = pan.reduceNeighborhood(reducer=ee.Reducer.mean(), kernel=kernel)
+
+    img = img.resample("bicubic")
+    sharp = img.multiply(pan).divide(panSmooth).reproject(pan.projection())
+    return sharp
