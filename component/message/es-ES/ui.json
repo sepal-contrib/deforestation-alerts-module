@@ -79,6 +79,8 @@
 
     "analysis_tile": {
             "img_selection": {
+                "prev_image_title": "Imagen Anterior",
+                "post_image_title": "Imagen Posterior",
                 "actual_image_info": "Información de la imagen actual",
                 "selected_img_info": "Fuente: Fecha: Cobertura de nubes:",
                 "selected_img_info_source": "Fuente: ",

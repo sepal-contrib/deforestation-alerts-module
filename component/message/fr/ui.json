@@ -80,6 +80,8 @@
     
     "analysis_tile": {
             "img_selection": {
+                "prev_image_title": "Image précédente",
+                "post_image_title": "Image postérieure",
                 "actual_image_info": "Info de l'image actuelle",
                 "selected_img_info": "Source : Date : Couverture nuageuse :",
                 "selected_img_info_source": "Source : ",

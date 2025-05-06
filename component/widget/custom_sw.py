@@ -334,7 +334,7 @@ class CustomSlideGroup(sw.SepalWidget, v.Card):
         # flat = True
         # Initialize slide group and loading spinner
         self.defaul_child_color = defaul_child_color
-        self.slide_group = v.SlideGroup(children=slide_items or [])
+        self.slide_group = v.SlideGroup(children=slide_items or [], center_active=True, show_arrows=True)
         self.loading_spinner = v.Card(
             children=[
                 v.Row(

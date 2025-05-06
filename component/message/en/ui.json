@@ -79,6 +79,8 @@
 
     "analysis_tile": {
             "img_selection": {
+                "prev_image_title": "Before image",
+                "post_image_title": "After image",
                 "actual_image_info": "Actual image info",
                 "selected_img_info": "Source: Date: Cloud Cover:",
                 "selected_img_info_source": "Source: ",

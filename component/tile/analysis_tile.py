@@ -151,21 +151,33 @@ class AnalysisTile(sw.Layout):
         center_link = link((self.map_31, "center"), (self.map_32, "center"))
         zoom_link = link((self.map_31, "zoom"), (self.map_32, "zoom"))
 
-        #
-        slider_before_planet = CustomSlideGroup()
-        slider_before_s2 = CustomSlideGroup(style_="max-width: 80vh")
-
+        #Maps title
+        map1_title = v.CardTitle(
+                    class_="pa-1 ma-1",
+                    children=[cm.analysis_tile.img_selection.prev_image_title],
+                )
+        map2_title = v.CardTitle(
+                    class_="pa-1 ma-1",
+                    children=[cm.analysis_tile.img_selection.post_image_title],
+                )       
+               
         selected_img_before_info = v.Html(
+            tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
+        )
+
+        selected_img_after_info = v.Html(
             tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
         )
 
         imgInfo1 = v.Card(
             children=[
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.actual_image_info],
-                ),
                 selected_img_before_info,
+            ]
+        )
+        
+        imgInfo2 = v.Card(
+            children=[
+                selected_img_after_info,
             ]
         )
 
@@ -173,7 +185,7 @@ class AnalysisTile(sw.Layout):
 
         # Create the Tab headers
         tabs = v.Tabs(
-            v_model=1,
+            v_model=0,
             children=[
                 v.Tab(children=["Planet"]),
                 v.Tab(children=["Sentinel-2"]),
@@ -185,7 +197,7 @@ class AnalysisTile(sw.Layout):
 
         # Define the content for each tab
         tab_items = v.TabsItems(
-            v_model=1,
+            v_model=0,
             children=[
                 v.TabItem(
                     children=[
@@ -224,7 +236,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 70vh"),
+                                CustomSlideGroup(style_="max-width: 75vh"),
                             ]
                         ).hide(),
                     ]
@@ -245,7 +257,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 70vh"),
+                                CustomSlideGroup(style_="max-width: 75vh"),
                             ]
                         ).hide(),
                     ]
@@ -258,26 +270,10 @@ class AnalysisTile(sw.Layout):
         # Arrange and display the Tab component
         self.imgSelection1 = sw.Col(children=[tabs, tab_items])
 
-        slider_after_planet = CustomSlideGroup()
-        slider_after_s2 = CustomSlideGroup(style_="max-width: 80vh")
-
-        selected_img_after_info = v.Html(
-            tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
-        )
-
-        imgInfo2 = v.Card(
-            children=[
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.img_selection.actual_image_info],
-                ),
-                selected_img_after_info,
-            ]
-        )
 
         # Create the Tab headers
         tabs2 = v.Tabs(
-            v_model=1,
+            v_model=0,
             children=[
                 v.Tab(children=["Planet"]),
                 v.Tab(children=["Sentinel-2"]),
@@ -289,7 +285,7 @@ class AnalysisTile(sw.Layout):
 
         # Define the content for each tab
         tab_items2 = v.TabsItems(
-            v_model=1,
+            v_model=0,
             children=[
                 v.TabItem(
                     children=[
@@ -328,7 +324,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 70vh"),
+                                CustomSlideGroup(style_="max-width: 75vh"),
                             ]
                         ).hide(),
                     ]
@@ -349,7 +345,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 70vh"),
+                                CustomSlideGroup(style_="max-width: 75vh"),
                             ]
                         ).hide(),
                     ]
@@ -363,10 +359,10 @@ class AnalysisTile(sw.Layout):
         self.imgSelection2 = sw.Col(children=[tabs2, tab_items2])
 
         # Create map with buttons1
-        self.map31 = sw.Col(children=[self.map_31, imgInfo1])
+        self.map31 = sw.Col(children=[map1_title, self.map_31, imgInfo1])
 
         # Create map with buttons2
-        self.map32 = sw.Col(children=[self.map_32, imgInfo1])
+        self.map32 = sw.Col(children=[map2_title, self.map_32, imgInfo1])
 
         # Create drawer control and add to maps
         self.draw_alerts1 = DrawControl(self.map_31)
@@ -1047,8 +1043,8 @@ class AnalysisTile(sw.Layout):
         fire_callback=False,  # Added default value for fire_callback
     ):
         """Creates a horizontal slide group component."""
-        map_element = map_component.children[0]
-        info_element = map_component.children[1].children[1]
+        map_element = map_component.children[1]
+        info_element = map_component.children[2].children[0]
 
         # Define the mappings based on source type
         source_to_index = {"Planet NICFI": 0, "Sentinel 2": 1, "Landsat": 2}
@@ -1098,7 +1094,6 @@ class AnalysisTile(sw.Layout):
             "selected": "orange",
         }
 
-        slide_group.show_arrows = True  # Show arrows for navigation if needed
         slide_group.defaul_child_color = color_map.get(
             data_list[0].get("source"), "lightgray"
         )
@@ -1237,18 +1232,6 @@ class AnalysisTile(sw.Layout):
             v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
             alert_st,
         ]
-        # self.imgSelection1.children[1].children[0].children[0].show()
-        # self.imgSelection1.children[1].children[1].children[0].show()
-        # self.imgSelection1.children[1].children[2].children[0].show()
-        # self.imgSelection1.children[1].children[0].children[1].hide()
-        # self.imgSelection1.children[1].children[1].children[1].hide()
-        # self.imgSelection1.children[1].children[2].children[1].hide()
-        # self.imgSelection2.children[1].children[0].children[0].show()
-        # self.imgSelection2.children[1].children[1].children[0].show()
-        # self.imgSelection2.children[1].children[2].children[0].show()
-        # self.imgSelection2.children[1].children[0].children[1].hide()
-        # self.imgSelection2.children[1].children[1].children[1].hide()
-        # self.imgSelection2.children[1].children[2].children[1].hide()
 
         self.imgSelection1.children[1].children[0].children[1].children[
             1
@@ -1330,6 +1313,16 @@ class AnalysisTile(sw.Layout):
 
         self.actual_alert_grid = gridDescargaBounds
 
+        # Definir que imagen cargar por defecto
+        self.show_image_collection = [True, False, False]
+        
+        if self.analyzed_alerts_model.before_planet_monthly_images[0].get("value") == "Not available":
+            self.imgSelection1.children[0].v_model = 1
+            self.show_image_collection = [False, True, False]
+        if self.analyzed_alerts_model.after_planet_monthly_images[0].get("value") == "Not available":
+            self.imgSelection2.children[0].v_model = 1
+            self.show_image_collection = [False, True, False]
+
         # Actualizar slider de imagenes
         self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.before_planet_monthly_images,
@@ -1340,7 +1333,7 @@ class AnalysisTile(sw.Layout):
             0,
             self.image_slider_info_callback,
             0,
-            True,
+            self.show_image_collection[0],
         )
         self.create_horizontal_slide_group_v3(
             self.analyzed_alerts_model.after_planet_monthly_images,
@@ -1351,7 +1344,7 @@ class AnalysisTile(sw.Layout):
             1,
             self.image_slider_info_callback,
             1,
-            True,
+            self.show_image_collection[0],
         )
 
         # Obtener imagenes
@@ -1929,7 +1922,7 @@ class AnalysisTile(sw.Layout):
             0,
             self.image_slider_info_callback,
             0,
-            True,
+            self.show_image_collection[1],
         )
 
     def slider_s2_after(self, change):
@@ -1942,7 +1935,7 @@ class AnalysisTile(sw.Layout):
             1,
             self.image_slider_info_callback,
             1,
-            True,
+            self.show_image_collection[1],
         )
 
     ## Create Landsat dictionary
