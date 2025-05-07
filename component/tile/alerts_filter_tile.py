@@ -34,9 +34,13 @@ su.init_ee()
 
 class SepalCard(sw.SepalWidget, v.Card):
     def __init__(self, **kwargs):
-
+        kwargs["class_"] = "pa-3 ma-5"
         super().__init__(**kwargs)
-
+        
+class SepalCardTitle(sw.SepalWidget, v.CardTitle):
+    def __init__(self, **kwargs):
+        kwargs["class_"] = "pa-1 ma-1"
+        super().__init__(**kwargs)
 
 class AlertsFilterTile(sw.Layout):
     def __init__(
@@ -104,10 +108,10 @@ class AlertsFilterTile(sw.Layout):
         self.drawn_item.hide()
 
         # No alerts message
-        main_title = v.CardTitle(children=[cm.filter_tile.available_alerts_title])
-        mkd = sw.Markdown(cm.filter_tile.no_alerts_message)
+        main_title = SepalCardTitle(children=[cm.filter_tile.available_alerts_title])
+        mkd = v.Html(tag="div", class_="pa-1 ma-2", children=[cm.filter_tile.no_alerts_message])
 
-        self.card00 = SepalCard(class_="pa-2", children=[main_title, mkd])
+        self.card00 = SepalCard(children=[main_title, mkd])
 
         # Create user interface components
         # Create alert source select component
@@ -122,7 +126,6 @@ class AlertsFilterTile(sw.Layout):
         self.alert_source_select.on_event("change", self.link_checkbox_map_btn)
 
         self.card01 = SepalCard(
-            class_="pa-2",
             children=[
                 main_title,
                 self.alert_source_select,
@@ -130,15 +133,14 @@ class AlertsFilterTile(sw.Layout):
         )
 
         # Create min alert area input
-        min_area_title = v.CardTitle(children=[cm.filter_tile.set_min_alert_siz_title])
-        self.min_area_input = sw.TextField(v_model=0.5)
+        min_area_title = SepalCardTitle(children=[cm.filter_tile.set_min_alert_siz_title])
+        self.min_area_input = sw.TextField(v_model=0.5, suffix= 'ha')
         self.card02 = SepalCard(
-            class_="pa-2",
             children=[min_area_title, self.min_area_input],
         )
 
         # Create Area selection method component
-        area_selection_title = v.CardTitle(
+        area_selection_title = SepalCardTitle(
             children=[cm.filter_tile.area_selection_method_title]
         )
         alert_selection_method_list = [
@@ -153,7 +155,6 @@ class AlertsFilterTile(sw.Layout):
             chips=True,
         )
         self.card03 = SepalCard(
-            class_="pa-2",
             children=[
                 area_selection_title,
                 self.alert_selection_method_select,
@@ -161,7 +162,7 @@ class AlertsFilterTile(sw.Layout):
         )
 
         # Create alert sorting method component
-        alert_sorting_title = v.CardTitle(
+        alert_sorting_title = SepalCardTitle(
             children=[cm.filter_tile.alert_sorting_method_title]
         )
         alert_sorting_method_list = [
@@ -176,10 +177,10 @@ class AlertsFilterTile(sw.Layout):
             multiple=False,
             clearable=True,
             chips=True,
+            small_chips =True,
         )
 
         self.card06 = SepalCard(
-            class_="pa-2",
             children=[
                 alert_sorting_title,
                 self.alert_sorting_select,
@@ -198,7 +199,7 @@ class AlertsFilterTile(sw.Layout):
         self.alert_selection_method_select.on_event("change", prior_option)
 
         # Create max number of alerts component
-        max_number_title = v.CardTitle(
+        max_number_title = SepalCardTitle(
             children=[cm.filter_tile.max_number_of_alerts_title]
         )
         self.number_of_alerts = sw.Combobox(
@@ -210,14 +211,13 @@ class AlertsFilterTile(sw.Layout):
             chips=True,
         )
         self.card04 = SepalCard(
-            class_="pa-2",
             children=[max_number_title, self.number_of_alerts],
         )
 
         # Define analyze button function
         self.analyze_button.on_event("click", self.analyze_alerts_function)
         self.card05 = SepalCard(
-            class_="pa-2", children=[self.analyze_button, self.analyze_alert]
+            children=[self.analyze_button, self.analyze_alert]
         )
 
         self.card00.show()
@@ -228,23 +228,20 @@ class AlertsFilterTile(sw.Layout):
         self.card05.hide()
         self.card06.hide()
 
-        layout = sw.Row(
+
+        # Two-panel layout using Flex
+        left_panel = v.Flex(
+            children=[self.map_1],
+            style_='flex: 1 1 auto ; overflow: hidden'
+        )
+        right_panel = v.Flex(
+            children=[self.card00, self.card01, self.card02, self.card03, self.card06, self.card04, self.card05],
+            style_='flex: 0 0 16rem ; overflow-y: auto'
+        )
+
+        layout = v.Row(
             dense=True,
-            children=[
-                sw.Col(cols=10, children=[self.map_1]),
-                sw.Col(
-                    cols=2,
-                    children=[
-                        self.card00,
-                        self.card01,
-                        self.card02,
-                        self.card03,
-                        self.card06,
-                        self.card04,
-                        self.card05,
-                    ],
-                ),
-            ],
+            children=[left_panel, right_panel],
         )
 
         self.children = [layout]

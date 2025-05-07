@@ -116,7 +116,7 @@ class AnalysisTile(sw.Layout):
                 """
         <style>
             .custom-map-class2 {
-                width: 100% !important;
+                width: 35vw !important;
                 height: 55vh !important;
                 }
              .v-text-field .v-input__control .v-input__slot {
@@ -162,11 +162,11 @@ class AnalysisTile(sw.Layout):
                 )       
                
         selected_img_before_info = v.Html(
-            tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
+            tag="div", class_="pa-1 ma-2", children=[cm.analysis_tile.img_selection.selected_img_info]
         )
 
         selected_img_after_info = v.Html(
-            tag="div", children=[cm.analysis_tile.img_selection.selected_img_info]
+            tag="div", class_="pa-1 ma-2", children=[cm.analysis_tile.img_selection.selected_img_info]
         )
 
         imgInfo1 = v.Card(
@@ -210,7 +210,7 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
@@ -231,12 +231,12 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 75vh"),
+                                CustomSlideGroup(style_="max-width: 35vw"),
                             ]
                         ).hide(),
                     ]
@@ -252,12 +252,12 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 75vh"),
+                                CustomSlideGroup(style_="max-width: 35vw"),
                             ]
                         ).hide(),
                     ]
@@ -266,9 +266,6 @@ class AnalysisTile(sw.Layout):
         )
         # Link the tab headers with their respective content
         link((tabs, "v_model"), (tab_items, "v_model"))
-
-        # Arrange and display the Tab component
-        self.imgSelection1 = sw.Col(children=[tabs, tab_items])
 
 
         # Create the Tab headers
@@ -298,7 +295,7 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
@@ -319,12 +316,12 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 75vh"),
+                                CustomSlideGroup(style_="max-width: 35vw"),
                             ]
                         ).hide(),
                     ]
@@ -340,12 +337,12 @@ class AnalysisTile(sw.Layout):
                                     ]
                                 ),
                             ],
-                            class_="ma-4",
+                            class_="ma-0",
                         ),
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 75vh"),
+                                CustomSlideGroup(style_="max-width: 35vw"),
                             ]
                         ).hide(),
                     ]
@@ -354,7 +351,10 @@ class AnalysisTile(sw.Layout):
         )
         # Link the tab headers with their respective content
         link((tabs2, "v_model"), (tab_items2, "v_model"))
-
+        
+        # Arrange and display the Tab component
+        self.imgSelection1 = sw.Col(children=[tabs, tab_items])
+        
         # Arrange and display the Tab component
         self.imgSelection2 = sw.Col(children=[tabs2, tab_items2])
 
@@ -393,6 +393,7 @@ class AnalysisTile(sw.Layout):
             v_model=self.analyzed_alerts_model.actual_alert_id,
             outlined=True,
             single_line=True,
+            hide_details = True,
             # class_="ma-0 pa-n6",
             # style_ = "max-width:50px",
         )
@@ -411,7 +412,6 @@ class AnalysisTile(sw.Layout):
             children=[
                 v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
                 "",
-                # v.Html(tag='br'),
                 v.Html(tag="strong", children=[cm.analysis_tile.alert_info.last_date]),
                 "",
                 v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
@@ -499,7 +499,7 @@ class AnalysisTile(sw.Layout):
         )
 
         self.toolBarEdition = v.Toolbar(
-            class_="px-3 d-flex align-center", children=[tooltip1, tooltip3, tooltip4]
+            class_="px-2 d-flex align-center", children=[tooltip1, tooltip3, tooltip4]
         )
 
         # self.dl_button1 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 1'])
@@ -663,10 +663,10 @@ class AnalysisTile(sw.Layout):
         )
 
         self.toolBarSaveExport = sw.Toolbar(
-            children=[self.save_btn, self.download_alert_data_btn]
+            class_="pa-1 ma-1", children=[self.save_btn, self.download_alert_data_btn]
         )
         self.toolBarDownloads = sw.Toolbar(
-            children=[self.files_dwn_btn, self.report_dwn_btn]
+            class_="pa-1 ma-1", children=[self.files_dwn_btn, self.report_dwn_btn]
         ).hide()
 
         # Layout
@@ -752,16 +752,50 @@ class AnalysisTile(sw.Layout):
 
         # Layout de la aplicación
 
-        layout = sw.Row(
-            dense=True,
+        # layout = sw.Row(
+        #     dense=True,
+        #     children=[
+        #         sw.Col(cols=5, children=[self.map31, self.imgSelection1]),
+        #         sw.Col(cols=5, children=[self.map32, self.imgSelection2]),
+        #         sw.Col(cols=2, children=[card00]),
+        #     ],
+        # )
+        # self.children = [layout]
+        # Two‐panel layout using Flex, with left panel split 50/50
+        
+        # build the left panel as a row of two equal‐width flex‐items
+        left_panel = v.Flex(
+            # two children, each taking exactly half of the left space
             children=[
-                sw.Col(cols=5, children=[self.map31, self.imgSelection1]),
-                sw.Col(cols=5, children=[self.map32, self.imgSelection2]),
-                sw.Col(cols=2, children=[card00]),
+                v.Flex(
+                    children=[self.map31, self.imgSelection1],
+                    style_="flex: 1 1 0;",
+                ),
+                v.Flex(
+                    children=[self.map32, self.imgSelection2],
+                    style_="flex: 1 1 0;",
+                ),
             ],
-        )
-        self.children = [layout]
+            # this makes the left_panel itself expand to fill remaining space
+            style_="flex: 1 1 auto; display: flex; overflow: hidden;",
+            #style_="flex: 1 1 auto; overflow: hidden;",
 
+        )
+        
+        # right panel fixed at 16rem
+        right_panel = v.Flex(
+            children=[card00],
+            style_="flex: 0 1 16rem;",
+            class_ = 'overflow-x-auto'
+        )
+        
+        # layout = v.Row(
+        #     #style_="max-height: 90vh; overflow: auto;",
+        #     dense=True,
+        #     children=[left_panel, right_panel],
+        # )
+        #self.children = [layout]
+        self.children = [left_panel, right_panel]
     # Saving alerts to gdf functions
 
     def save_alerts_to_gdf(self):

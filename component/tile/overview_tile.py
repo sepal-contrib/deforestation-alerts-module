@@ -116,19 +116,22 @@ class OverviewTile(sw.Layout):
             hover=True,
             children=[self.dwn_all_btn],  # , self.dwn_summary_btn],
         )
-        card0 = v.Card(class_="py-2", children=[card01, card02])
-
-        # Layout 6 de la aplicación
-        layout = sw.Row(
-            dense=True,
-            children=[
-                sw.Col(cols=10, children=[self.map_1]),
-                sw.Col(
-                    cols=2,
-                    children=[card0],
-                ),
-            ],
+        # Layout 
+        # Two-panel layout using Flex
+        left_panel = v.Flex(
+            children=[self.map_1],
+            style_='flex: 1 1 auto ; overflow: hidden'
         )
+        right_panel = v.Flex(
+            children=[card01, card02],
+            style_='flex: 0 0 16rem ; overflow: auto'
+        )
+
+        layout = v.Row(
+            dense=True,
+            children=[left_panel, right_panel],
+        )
+
         self.children = [layout]
 
     def update_layout(self):

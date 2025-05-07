@@ -114,12 +114,19 @@ class AoiTile(sw.Layout):
                 self.search_button_alert,
             ],
         )
-        layout = sw.Row(
+        # Two-panel layout using Flex
+        left_panel = v.Flex(
+            children=[self.map_1],
+            style_='flex: 1 1 auto ; overflow: hidden'
+        )
+        right_panel = v.Flex(
+            children=[card1,card2],
+            style_='flex: 0 0 16rem ; overflow: auto'
+        )
+
+        layout = v.Row(
             dense=True,
-            children=[
-                sw.Col(cols=10, children=[self.map_1]),
-                sw.Col(cols=2, children=[card1, card2]),
-            ],
+            children=[left_panel, right_panel],
         )
 
         self.children = [layout]

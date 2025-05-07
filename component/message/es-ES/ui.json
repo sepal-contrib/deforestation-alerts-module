@@ -49,7 +49,7 @@
             "available_alerts_title": "Alertas disponibles",
             "no_alerts_message": "No hay alertas disponibles en el área o las fechas seleccionadas",
             "available_alerts_hint": "Selecciona una o múltiples fuentes de alertas",
-            "set_min_alert_siz_title": "Área mínima (ha)",
+            "set_min_alert_siz_title": "Área mínima",
             "area_selection_method_title": "Área de análisis",
             "area_selection_method_label1": "Elegir por polígono dibujado",
             "area_selection_method_label2": "Área completa",

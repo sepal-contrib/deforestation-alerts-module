@@ -24,7 +24,8 @@ class CustomApp(sw.App):
         super().__init__(*args, **kwargs)
         self.app_tile_model = app_tile_model
         self.app_tile_model.observe(self.update_app_view, "current_page_view")
-        self.app_tile_model.observe(self.update_recipe_name_text, "recipe_name")
+        self.app_tile_model.observe(self.update_recipe_name_text, "recipe_name")     
+        #self.content.children[0].style_ =
 
     def update_app_view(self, change):
         self.show_tile_2(self.app_tile_model.current_page_view)
@@ -107,6 +108,8 @@ class RecipeBtn(sw.Btn):
         self, download_button, msg: str = "", gliph: str = "", **kwargs
     ) -> None:
         kwargs.setdefault("small", True)
+        kwargs.setdefault("color", color.menu)
+        kwargs.setdefault("class_", "ml-2")
         self.download_button = download_button
         super().__init__(msg=msg, gliph=gliph, **kwargs)
         self.on_event("click", self.zip_set_url)
