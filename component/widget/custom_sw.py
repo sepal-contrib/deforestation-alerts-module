@@ -328,16 +328,15 @@ class CustomDrawControl(GeomanDrawControl):
 class CustomSlideGroup(sw.SepalWidget, v.Card):
     def __init__(self, slide_items=None, defaul_child_color="green", **kwargs):
         # Set default properties for the v.Card
-        # kwargs.setdefault("flat", True)  # Make the card flat
-        # kwargs.setdefault("elevation", 0)  # Remove elevation
-        # kwargs.setdefault("outlined", False)  # Remove outline
+        kwargs.setdefault("flat", True)  # Make the card flat
+        kwargs.setdefault("elevation", 0)  # Remove elevation
+        kwargs.setdefault("width", '100%')  # Remove outline
 
         # Initialize base class v.Card
         super().__init__(**kwargs)
-        # flat = True
         # Initialize slide group and loading spinner
         self.defaul_child_color = defaul_child_color
-        self.slide_group = v.SlideGroup(children=slide_items or [], center_active=True, show_arrows=True)
+        self.slide_group = v.SlideGroup(class_="d-flex align-center", style_="width:100%",  center_active=True, show_arrows=True, children=slide_items or [])
         self.loading_spinner = v.Card(
             children=[
                 v.Row(

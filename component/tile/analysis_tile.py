@@ -116,8 +116,6 @@ class AnalysisTile(sw.Layout):
                 """
         <style>
             .custom-map-class2 {
-                min-width: 33vw !important;
-                max-width: 40vw !important;
                 height: 55vh !important;
                 }
              .v-text-field .v-input__control .v-input__slot {
@@ -237,7 +235,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
+                                CustomSlideGroup(),
                             ]
                         ).hide(),
                     ]
@@ -258,7 +256,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
+                                CustomSlideGroup(),
                             ]
                         ).hide(),
                     ]
@@ -322,7 +320,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
+                                CustomSlideGroup(),
                             ]
                         ).hide(),
                     ]
@@ -343,7 +341,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
+                                CustomSlideGroup(),
                             ]
                         ).hide(),
                     ]
@@ -354,16 +352,16 @@ class AnalysisTile(sw.Layout):
         link((tabs2, "v_model"), (tab_items2, "v_model"))
         
         # Arrange and display the Tab component
-        self.imgSelection1 = sw.Col(children=[tabs, tab_items])
+        self.imgSelection1 = v.Card(class_="pa-1 ma-1", flat = True, children=[tabs, tab_items])
         
         # Arrange and display the Tab component
-        self.imgSelection2 = sw.Col(children=[tabs2, tab_items2])
+        self.imgSelection2 = v.Card(class_="pa-1 ma-1", flat = True, children=[tabs2, tab_items2])
 
         # Create map with buttons1
-        self.map31 = sw.Col(children=[map1_title, self.map_31, imgInfo1])
+        self.map31 = v.Container(class_="pa-1 ma-1", children=[map1_title, self.map_31, imgInfo1])
 
         # Create map with buttons2
-        self.map32 = sw.Col(children=[map2_title, self.map_32, imgInfo1])
+        self.map32 = v.Container(class_="pa-1 ma-1", children=[map2_title, self.map_32, imgInfo1])
 
         # Create drawer control and add to maps
         self.draw_alerts1 = DrawControl(self.map_31)
@@ -752,11 +750,12 @@ class AnalysisTile(sw.Layout):
             children=[
                 v.Flex(
                     children=[self.map31, self.imgSelection1],
-                    style_="flex: 1 1 0;",
+                    style_="width:50%;",
+
                 ),
                 v.Flex(
                     children=[self.map32, self.imgSelection2],
-                    style_="flex: 1 1 0;",
+                    style_="width:50%;",
                 ),
             ],
             # this makes the left_panel itself expand to fill remaining space
@@ -768,8 +767,8 @@ class AnalysisTile(sw.Layout):
         # right panel fixed at 16rem
         right_panel = v.Flex(
             children=[card02, card01, card35, card04, card06],
-            style_="flex: 0 1 16rem;",
-            class_ = 'overflow-x-auto'
+            style_="flex: 0 0 16rem;",
+            class_ = 'overflow-y-auto'
         )
         
         self.children = [left_panel, right_panel]
@@ -922,6 +921,8 @@ class AnalysisTile(sw.Layout):
     ##Image sliders function
 
     def image_slider_map_callback(self, selected_item, map_element, model_att):
+        self.imgSelection1.disabled = True
+        self.imgSelection2.disabled = True
         geom = self.actual_alert_grid
         image_id = selected_item["image_id"]
         img_source = selected_item["source"]
@@ -1003,6 +1004,8 @@ class AnalysisTile(sw.Layout):
             False,
             0.5,
         )
+        self.imgSelection1.disabled = False
+        self.imgSelection2.disabled = False
 
     def image_slider_info_callback(self, selected_item, info_element, model_att):
         info_element.loading = True
@@ -1078,7 +1081,7 @@ class AnalysisTile(sw.Layout):
                 raise ValueError(f"Unknown source type: {source_type}")
         else:
             raise ValueError("data_list is empty")
-
+            
         slide_group = main_tab.children[1].children[1]
         child_slide1_group = child_tabs[0].children[1].children[1]
         child_slide2_group = child_tabs[1].children[1].children[1]
@@ -1089,6 +1092,7 @@ class AnalysisTile(sw.Layout):
             main_tab.children[1].hide()
             main_tab.children[0].show()
             return
+        
         # Sort data by 'milis' attribute
         sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
         date_indices = {i: item for i, item in enumerate(sorted_data)}
@@ -1547,6 +1551,9 @@ class AnalysisTile(sw.Layout):
         self.toolBarDL1.show()
         self.toolBarDL2.show()
         self.save_btn.disabled = True
+        self.imgSelection1.disabled = True
+        self.imgSelection2.disabled = True
+
         widget.loading = False  # Remove loading state
 
     def save_edition_function(self, widget, event, data):
@@ -1589,6 +1596,8 @@ class AnalysisTile(sw.Layout):
         self.clear_button.disabled = True
         self.start_edit_button.disabled = False
         self.save_btn.disabled = False
+        self.imgSelection1.disabled = False
+        self.imgSelection2.disabled = False
         widget.loading = False  # Remove loading state
 
     def clear_edition_function(self, widget, event, data):
