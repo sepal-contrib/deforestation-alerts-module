@@ -116,7 +116,8 @@ class AnalysisTile(sw.Layout):
                 """
         <style>
             .custom-map-class2 {
-                width: 35vw !important;
+                min-width: 33vw !important;
+                max-width: 40vw !important;
                 height: 55vh !important;
                 }
              .v-text-field .v-input__control .v-input__slot {
@@ -206,7 +207,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Planet"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -227,7 +228,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Sentinel-2"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -236,7 +237,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 35vw"),
+                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
                             ]
                         ).hide(),
                     ]
@@ -248,7 +249,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Landsat"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -257,7 +258,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 35vw"),
+                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
                             ]
                         ).hide(),
                     ]
@@ -291,7 +292,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Planet"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -312,7 +313,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Sentinel-2"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -321,7 +322,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Sentinel-2"]),
-                                CustomSlideGroup(style_="max-width: 35vw"),
+                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
                             ]
                         ).hide(),
                     ]
@@ -333,7 +334,7 @@ class AnalysisTile(sw.Layout):
                                 v.CardTitle(children=["Landsat"]),
                                 v.CardText(
                                     children=[
-                                        "No images available for your area of interest and/or dates selected.",
+                                        cm.analysis_tile.img_selection.no_images_msg,
                                     ]
                                 ),
                             ],
@@ -342,7 +343,7 @@ class AnalysisTile(sw.Layout):
                         SepalCard(
                             children=[
                                 v.CardTitle(children=["Landsat"]),
-                                CustomSlideGroup(style_="max-width: 35vw"),
+                                CustomSlideGroup(style_="min-width: 34vw; max-width: 37vw"),
                             ]
                         ).hide(),
                     ]
@@ -744,25 +745,7 @@ class AnalysisTile(sw.Layout):
             children=[label35, self.toolBarSaveExport, self.toolBarDownloads],
         )
 
-        card00 = v.Card(
-            class_="py-2",
-            overflow_y="auto",
-            children=[card02, card01, card35, card04, card06],
-        )
-
-        # Layout de la aplicación
-
-        # layout = sw.Row(
-        #     dense=True,
-        #     children=[
-        #         sw.Col(cols=5, children=[self.map31, self.imgSelection1]),
-        #         sw.Col(cols=5, children=[self.map32, self.imgSelection2]),
-        #         sw.Col(cols=2, children=[card00]),
-        #     ],
-        # )
-        # self.children = [layout]
-        # Two‐panel layout using Flex, with left panel split 50/50
-        
+       
         # build the left panel as a row of two equal‐width flex‐items
         left_panel = v.Flex(
             # two children, each taking exactly half of the left space
@@ -784,17 +767,11 @@ class AnalysisTile(sw.Layout):
         
         # right panel fixed at 16rem
         right_panel = v.Flex(
-            children=[card00],
+            children=[card02, card01, card35, card04, card06],
             style_="flex: 0 1 16rem;",
             class_ = 'overflow-x-auto'
         )
         
-        # layout = v.Row(
-        #     #style_="max-height: 90vh; overflow: auto;",
-        #     dense=True,
-        #     children=[left_panel, right_panel],
-        # )
-        #self.children = [layout]
         self.children = [left_panel, right_panel]
     # Saving alerts to gdf functions
 

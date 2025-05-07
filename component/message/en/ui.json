@@ -87,7 +87,8 @@
                 "selected_img_info_date": "Date: ",
                 "selected_img_info_cloud": "Cloud Cover: ",
                 "planet_monthly_mosaics": "Planet Monthly Mosaics",
-                "sentinel2_images": "Sentinel 2 Images"
+                "sentinel2_images": "Sentinel 2 Images",
+                "no_images_msg": "No images available for your area of interest and/or dates selected."
             },
             "alert_info": {
                 "card_title": "Alert info",

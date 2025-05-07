@@ -34,7 +34,7 @@ su.init_ee()
 
 class SepalCard(sw.SepalWidget, v.Card):
     def __init__(self, **kwargs):
-        kwargs["class_"] = "pa-3 ma-5"
+        kwargs["class_"] = "pa-3 ma-3"
         super().__init__(**kwargs)
         
 class SepalCardTitle(sw.SepalWidget, v.CardTitle):
@@ -239,12 +239,7 @@ class AlertsFilterTile(sw.Layout):
             style_='flex: 0 0 16rem ; overflow-y: auto'
         )
 
-        layout = v.Row(
-            dense=True,
-            children=[left_panel, right_panel],
-        )
-
-        self.children = [layout]
+        self.children = [left_panel, right_panel]
 
     ## User interface functions
 

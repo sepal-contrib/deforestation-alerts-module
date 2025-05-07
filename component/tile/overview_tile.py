@@ -109,10 +109,10 @@ class OverviewTile(sw.Layout):
         self.dwn_all_btn.set_url(path=gpkg_name)
 
         card01 = v.Card(
-            class_="pa-3 ma-5", hover=True, children=[section_title, self.info_table]
+            class_="pa-3 ma-3", hover=True, children=[section_title, self.info_table]
         )
         card02 = v.Card(
-            class_="pa-3 ma-5 d-flex justify-center",
+            class_="pa-3 ma-3 d-flex justify-center",
             hover=True,
             children=[self.dwn_all_btn],  # , self.dwn_summary_btn],
         )
@@ -127,12 +127,7 @@ class OverviewTile(sw.Layout):
             style_='flex: 0 0 16rem ; overflow: auto'
         )
 
-        layout = v.Row(
-            dense=True,
-            children=[left_panel, right_panel],
-        )
-
-        self.children = [layout]
+        self.children = [left_panel,right_panel]
 
     def update_layout(self):
         if (

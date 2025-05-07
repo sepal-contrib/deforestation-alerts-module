@@ -16,6 +16,16 @@ import ee
 
 su.init_ee()
 
+class SepalCard(sw.SepalWidget, v.Card):
+    def __init__(self, **kwargs):
+        kwargs["class_"] = "pa-3 ma-3"
+        super().__init__(**kwargs)
+        
+class SepalCardTitle(sw.SepalWidget, v.CardTitle):
+    def __init__(self, **kwargs):
+        kwargs["class_"] = "pa-1 ma-1"
+        super().__init__(**kwargs)
+
 
 class AoiTile(sw.Layout):
     def __init__(self, aoi_date_model, alert_filter_model, aux_model, app_tile_model):
@@ -66,8 +76,8 @@ class AoiTile(sw.Layout):
 
         # Create user interface components
         # Create AOI selection widget
-        section_title1 = v.CardTitle(
-            class_="pa-1 ma-1", children=[cm.aoi_tile.aoi_selection_title]
+        section_title1 = SepalCardTitle(
+            children=[cm.aoi_tile.aoi_selection_title]
         )
         self.aoi_view = aoi.AoiView(
             gee=True,
@@ -77,8 +87,8 @@ class AoiTile(sw.Layout):
         self.aoi_view.flat = True
 
         # Create widget for date selection
-        section_title2 = v.CardTitle(
-            class_="pa-1 ma-1", children=[cm.aoi_tile.date_selection_title]
+        section_title2 = SepalCardTitle(
+            children=[cm.aoi_tile.date_selection_title]
         )
         self.start_date = sw.DatePicker(
             label=cm.aoi_tile.start_date_label,
@@ -93,8 +103,7 @@ class AoiTile(sw.Layout):
         self.search_button.on_event("click", self.process_alerts)
 
         # Tile Layout
-        card1 = v.Card(
-            class_="pa-3 ma-5",
+        card1 = SepalCard(
             hover=True,
             dense=True,
             children=[
@@ -102,8 +111,7 @@ class AoiTile(sw.Layout):
                 self.aoi_view,
             ],
         )
-        card2 = v.Card(
-            class_="pa-3 ma-5",
+        card2 = SepalCard(
             hover=True,
             dense=True,
             children=[
@@ -124,12 +132,7 @@ class AoiTile(sw.Layout):
             style_='flex: 0 0 16rem ; overflow: auto'
         )
 
-        layout = v.Row(
-            dense=True,
-            children=[left_panel, right_panel],
-        )
-
-        self.children = [layout]
+        self.children = [left_panel, right_panel]
 
     def update_dictionary_ccdc(self, change):
         # Update the alerts dictionary when ccdc model changes

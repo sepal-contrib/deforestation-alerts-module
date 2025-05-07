@@ -88,7 +88,8 @@
                 "selected_img_info_date": "Date : ",
                 "selected_img_info_cloud": "Couverture nuageuse : ",
                 "planet_monthly_mosaics": "Mosaïques Mensuelles de Planet",
-                "sentinel2_images": "Images Sentinel 2"
+                "sentinel2_images": "Images Sentinel 2",
+                "no_images_msg": "Aucune image n'est disponible pour la date/la zone sélectionnée"
             },
             "alert_info": {
                 "card_title": "Info d'Alerte",
