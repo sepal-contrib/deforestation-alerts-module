@@ -108,8 +108,8 @@ class RecipeBtn(sw.Btn):
         self, download_button, msg: str = "", gliph: str = "", **kwargs
     ) -> None:
         kwargs.setdefault("small", True)
-        kwargs.setdefault("color", color.menu)
-        kwargs.setdefault("class_", "ml-2")
+        kwargs.setdefault("color", "menu")
+        kwargs.setdefault("class_", "ma-2 pa-n6")
         self.download_button = download_button
         super().__init__(msg=msg, gliph=gliph, **kwargs)
         self.on_event("click", self.zip_set_url)
@@ -178,8 +178,6 @@ class CustomAppBar(v.AppBar, SepalWidget):
         self.save_button = ShareBtn().hide()
         self.recipe_name = RecipeBtn(
             msg="",
-            color=color.accent,
-            class_="ma-2 pa-n6",
             download_button=self.save_button,
         ).hide()
 
@@ -368,6 +366,7 @@ class CustomBtnWithLoader(v.Btn):
     def __init__(self, text="Click", loader_type="circular", **kwargs):
         kwargs["color"] = kwargs.pop("color", "primary")
         kwargs["children"] = [text]
+        kwargs.setdefault("style_", "d-flex align-center justify-center")  # Center content
         # Initialize parent class
         super().__init__(**kwargs)
 
