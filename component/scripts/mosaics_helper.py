@@ -247,7 +247,7 @@ def raster_to_gdf(raster_path, output_epsg, threshold):
         
         features = []
         if len(filtered_shapes) > 0:
-            for geom, value in filtered_shapes:
+            for geom, value in shapes_gen:
                 if value == 1:  # We're interested in 1 values or positive mask areas
                     features.append(
                         {
