@@ -42,6 +42,12 @@ class SepalCard(sw.SepalWidget, v.Card):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+class EditionButtons(v.Btn, sw.SepalWidget,):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("small", True)
+        kwargs.setdefault("class_", "pa-1 ma-1")
+        kwargs.setdefault("disabled", True)
+        super().__init__(**kwargs)
 
 class AnalysisTile(sw.Layout):
     def __init__(
@@ -93,8 +99,8 @@ class AnalysisTile(sw.Layout):
             self.slider_landsat_after, "after_landsat_images_time"
         )
         self.analyzed_alerts_model.observe(self.add_defo_layer, "defo_dl_layer")
-        self.analyzed_alerts_model.observe(self.enable_dl1, "model1_prediction_file")
-        self.analyzed_alerts_model.observe(self.enable_dl2, "model2_prediction_file")
+        self.analyzed_alerts_model.observe(self.verify_model1_output, "model1_prediction_file")
+        self.analyzed_alerts_model.observe(self.verify_model2_output, "model2_prediction_file")
 
         # Queue for communication between main and worker threads
         self.file_queue1 = queue.Queue()
@@ -435,32 +441,22 @@ class AnalysisTile(sw.Layout):
         label33 = v.CardTitle(
             class_="pa-1 ma-1", children=[cm.analysis_tile.edition_labels.edit_title]
         )
-        self.start_edit_button = v.Btn(
-            class_="pa-1 ma-1",
+        self.start_edit_button = EditionButtons(
             color=color.primary,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-pen"])],
+            disabled=False,
         )
-        self.clear_button = v.Btn(
-            class_="pa-1 ma-1",
+        self.clear_button =EditionButtons(
             color=color.error,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-trash"])],
-            disabled=True,
         )
-        self.save_edit_button = v.Btn(
-            class_="pa-1 ma-1",
+        self.save_edit_button = EditionButtons(
             color=color.primary,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-floppy-disk"])],
-            disabled=True,
         )
-        self.stop_edit_button = v.Btn(
-            class_="pa-1 ma-1",
+        self.stop_edit_button = EditionButtons(
             color=color.secondary,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-x"])],
-            disabled=True,
         )
 
         self.start_edit_button.on_event("click", self.start_edition_function)
@@ -502,17 +498,12 @@ class AnalysisTile(sw.Layout):
         )
 
         # self.dl_button1 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 1'])
-        self.dl_button1_add = v.Btn(
-            class_="pa-1 ma-1",
+        self.dl_button1_add = EditionButtons(
             color=color.primary,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-plus"])],
-            disabled=True,
         )
-        self.dl_button1_remove = v.Btn(
-            class_="pa-1 ma-1",
+        self.dl_button1_remove = EditionButtons(
             color=color.error,
-            small=True,
             children=[
                 v.Icon(
                     color=color.bg,
@@ -521,9 +512,12 @@ class AnalysisTile(sw.Layout):
                     ],
                 )
             ],
-            disabled=True,
         )
-
+        self.dl_button1_msg = EditionButtons(
+            color=color.error,
+            children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
+            disabled = False,
+        ).hide()
         self.dl_button1.on_event("click", self.run_dl_model_1)
         self.dl_button1_add.on_event("click", self.add_model1_prediction)
         self.dl_button1_remove.on_event("click", self.remove_model1_prediction)
@@ -549,21 +543,22 @@ class AnalysisTile(sw.Layout):
             open_delay=100,
             close_delay=100,
         )
-
-        self.toolBarDL1 = sw.Toolbar(children=[tooltip5, tooltip6, tooltip7]).hide()
+        tooltip11 = sw.Tooltip(
+            self.dl_button1_msg,
+            tooltip=cm.analysis_tile.model_labels.dl_404,
+            top=True,
+            open_delay=100,
+            close_delay=100,
+        )
+        self.toolBarDL1 = sw.Toolbar(children=[tooltip5, tooltip6, tooltip7, tooltip11]).hide()
 
         # self.dl_button2 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 2'])
-        self.dl_button2_add = v.Btn(
-            class_="pa-1 ma-1",
+        self.dl_button2_add =EditionButtons(
             color=color.primary,
-            small=True,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-plus"])],
-            disabled=True,
         )
-        self.dl_button2_remove = v.Btn(
-            class_="pa-1 ma-1",
+        self.dl_button2_remove = EditionButtons(
             color=color.error,
-            small=True,
             children=[
                 v.Icon(
                     color=color.bg,
@@ -572,9 +567,12 @@ class AnalysisTile(sw.Layout):
                     ],
                 )
             ],
-            disabled=True,
         )
-
+        self.dl_button2_msg = EditionButtons(
+            color=color.error,
+            children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
+            disabled = False,
+        ).hide()
         self.dl_button2.on_event("click", self.run_dl_model_2)
         self.dl_button2_add.on_event("click", self.add_model2_prediction)
         self.dl_button2_remove.on_event("click", self.remove_model2_prediction)
@@ -600,17 +598,15 @@ class AnalysisTile(sw.Layout):
             open_delay=100,
             close_delay=100,
         )
+        tooltip12 = sw.Tooltip(
+            self.dl_button2_msg,
+            tooltip=cm.analysis_tile.model_labels.dl_404,
+            top=True,
+            open_delay=100,
+            close_delay=100,
+        )
+        self.toolBarDL2 = sw.Toolbar(children=[tooltip8, tooltip9, tooltip10, tooltip12]).hide()
 
-        self.toolBarDL2 = sw.Toolbar(children=[tooltip8, tooltip9, tooltip10]).hide()
-
-        # self.alert_polygon_selection = v.BtnToggle(children=[
-        #             sw.Btn(msg="DL", value="DL", color="primary", outlined=True, small=True,),
-        #             sw.Btn(msg="Manual", value="Manual", color="primary", outlined=True, small=True,),
-        #             ],
-        #             v_model='DL',  # This will hold the value of the selected button
-        #             mandatory = True,
-        #             color="primary", outlined=True,
-        #         )
 
         label34 = v.CardTitle(
             class_="pa-1 ma-1",
@@ -1584,6 +1580,8 @@ class AnalysisTile(sw.Layout):
             self.map_31.find_layer("Defo Layer").visible = True
             self.map_32.find_layer("Defo Layer").visible = True
 
+        self.enable_dl1(True)
+        self.enable_dl2(True)
         self.toolBarDL1.hide()
         self.toolBarDL2.hide()
 
@@ -1609,11 +1607,41 @@ class AnalysisTile(sw.Layout):
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
 
-    def enable_dl1(self, change):
-        self.dl_button1_add.disabled = False
+    def verify_model1_output(self, change):
+        verification1 = verify_raster(
+            self.analyzed_alerts_model.model1_prediction_file, 0.20
+        )
+        self.enable_dl1(verification1)
+ 
+    def verify_model2_output(self, change):
+        verification2 = verify_raster(
+            self.analyzed_alerts_model.model2_prediction_file, 0.20
+        )
+        self.enable_dl2(verification2)
+    
+    def enable_dl1(self, state):
+        if state == True:
+            self.dl_button1_msg.hide()
+            self.dl_button1_add.show()
+            self.dl_button1_remove.show()
+            self.dl_button1_add.disabled = False
 
-    def enable_dl2(self, change):
-        self.dl_button2_add.disabled = False
+        else:
+            self.dl_button1_msg.show()
+            self.dl_button1_add.hide()
+            self.dl_button1_remove.hide()
+            
+    def enable_dl2(self, state):
+        if state == True:
+            self.dl_button2_msg.hide()
+            self.dl_button2_add.show()
+            self.dl_button2_remove.show()
+            self.dl_button2_add.disabled = False
+
+        else:
+            self.dl_button2_msg.show()
+            self.dl_button2_add.hide()
+            self.dl_button2_remove.hide()
 
     def add_model1_prediction(self, widget, event, data):
         defo_gdf_layer = raster_to_gdf(
@@ -1622,6 +1650,7 @@ class AnalysisTile(sw.Layout):
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato3(edit_layer, "lime")
+        print(defo_gdf_layer, edit_layer, test_features)
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
@@ -1636,6 +1665,7 @@ class AnalysisTile(sw.Layout):
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato3(edit_layer, "purple")
+        print(defo_gdf_layer, edit_layer, test_features)
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
@@ -1697,7 +1727,6 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        # model = "utils/Model1.h5"
         model = "/tmp/Model1.h5"
         self.send_file_for_processing_m1_v2(
             [image_name, model, "_m1"], self.process_file1
@@ -1729,7 +1758,6 @@ class AnalysisTile(sw.Layout):
             source2,
             self.actual_alert_grid,
         )
-        # model = "utils/Model2.keras"
         model = "/tmp/Model2.keras"
         self.send_file_for_processing_m2_v2(
             [image_name, model, "_m2"], self.process_file2

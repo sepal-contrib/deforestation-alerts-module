@@ -132,7 +132,8 @@
                 "dl_button1": "Smaller and faster model",
                 "dl_button2": "Larger but slower model",
                 "dl_button_add": "Add to map",
-                "dl_button_remove": "Remove from map"
+                "dl_button_remove": "Remove from map",
+                "dl_404": "Model did not found forest loss polygons"
             },
             "export_labels": {
                 "export_title": "Save and Export",

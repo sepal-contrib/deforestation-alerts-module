@@ -241,11 +241,13 @@ def raster_to_gdf(raster_path, output_epsg, threshold):
         # Extract shapes (polygons) from the raster
         mask = None  # No mask, we're interested in all 0/1 values
         shapes_gen = list(shapes(band_reclassified, mask=mask, transform=src.transform))
-
-        # Convert the shapes generator into a list of geo-features
+        
+        # Filter out elements with value 0; only keep those with value 1
+        filtered_shapes = [geom for geom, val in shapes_gen if val == 1]
+        
         features = []
-        if len(shapes_gen) > 0:
-            for geom, value in shapes_gen:
+        if len(filtered_shapes) > 0:
+            for geom, value in filtered_shapes:
                 if value == 1:  # We're interested in 1 values or positive mask areas
                     features.append(
                         {
@@ -287,6 +289,27 @@ def raster_to_gdf(raster_path, output_epsg, threshold):
         # )
 
     return gdf
+
+
+#Funcion para verificar si el modelo de DL encontro poligonos de deforestacion
+def verify_raster(raster_path, threshold):
+    import rasterio
+    import numpy as np
+    from rasterio.features import shapes
+
+    with rasterio.open(raster_path) as src:
+        band = src.read(1)
+        band_reclassified = np.where(band > threshold, 1, 0).astype(np.uint8)
+
+        # Extract shapes (polygons) from the raster
+        shapes_gen = list(shapes(band_reclassified, transform=src.transform))
+        # Filter out elements with value 0; only keep those with value 1
+        filtered_shapes = [geom for geom, val in shapes_gen if val == 1]
+
+    if len(filtered_shapes) == 0 :
+        return False
+    else:
+        return True
 
 
 # Función que convierte el formato de los elementos de una lista de features

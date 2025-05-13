@@ -133,7 +133,8 @@
                 "dl_button1": "Modèle plus petit et rapide",
                 "dl_button2": "Modèle plus grand mais plus lent",
                 "dl_button_add": "Ajouter à la carte",
-                "dl_button_remove": "Retirer de la carte"
+                "dl_button_remove": "Retirer de la carte",
+                "dl_404": "Le modèle n'a trouvé aucune perte"
             },
             "export_labels": {
                 "export_title": "Sauvegarder et exporter",

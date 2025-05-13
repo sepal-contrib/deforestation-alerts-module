@@ -132,7 +132,8 @@
                 "dl_button1": "Modelo pequeño y rápido",
                 "dl_button2": "Modelo grande pero más lento",
                 "dl_button_add": "Agregar al mapa",
-                "dl_button_remove": "Quitar del mapa"
+                "dl_button_remove": "Quitar del mapa",
+                "dl_404": "El modelo no encontró pérdidas"
             },
             "export_labels": {
                 "export_title": "Guardar y exportar",
