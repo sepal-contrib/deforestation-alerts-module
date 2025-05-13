@@ -1,7 +1,9 @@
 from sepal_ui import color, model, sepalwidgets as sw
 from traitlets import Any, HasTraits, Unicode, link, observe
 from sepal_ui.scripts import utils as su
-import time
+from sepal_ui.scripts import decorator
+from functools import wraps
+from sepal_ui.message import ms
 from sepal_ui.frontend.resize_trigger import rt
 from copy import deepcopy
 import geopandas as gpd
@@ -17,6 +19,8 @@ from typing import List, Tuple, Union
 from box import Box
 from component.parameter import module_dir
 import zipfile
+from warnings import warn
+from typing import Any, Callable, List, Optional
 
 
 class CustomApp(sw.App):
@@ -627,3 +631,55 @@ class CustomTranslator(Translator):
             is_present or unused_keys.append(k)
 
         return unused_keys
+
+def decorator_loading_v2(
+    alert: Optional[v.Alert] = None,
+    button: Optional[v.Btn] = None,
+    debug: Optional[bool] = None,
+) -> Any:
+    """Decorator to execute try/except sentence and toggle loading button object.
+
+    Designed to work within the Tile object, or any object that have a self.btn and self.alert set.
+
+    Args:
+        button: Toggled button
+        alert: the alert to display the error message
+        debug: Whethers or not the exception should stop the execution. default to False
+
+    Returns:
+        The return statement of the decorated method
+    """
+    if debug is not None:
+        warn("debug argument defaults to `True`. It will be removed in v3.2")
+
+    def decorator_loading(func):
+        @wraps(func)
+        def wrapper_loading(self, *args, **kwargs):
+            # set btn and alert
+            # Change name of variable to assign it again in this scope
+            # check if they exist in the parent object if alert is not set manually
+            assert hasattr(self, "alert") or alert, ms.decorator.no_alert
+            assert hasattr(self, "btn") or button, ms.decorator.no_button
+            button_ = self.btn if not button else button
+            alert_ = self.alert if not alert else alert
+
+            # Clean previous loaded messages in alert
+            alert_.reset()
+            
+            button_.toggle_loading()  # Start loading
+
+            value = None
+
+            try:
+                # run the function using the catch_error decorator
+                value = decorator.catch_errors(alert=alert_)(func)(self, *args, **kwargs)
+
+            except Exception as e:
+                button_.toggle_loading()  # Start loading
+                raise e
+
+            return value
+
+        return wrapper_loading
+
+    return decorator_loading

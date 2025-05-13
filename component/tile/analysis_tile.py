@@ -20,6 +20,7 @@ from component.widget.custom_sw import (
     CustomDrawControl,
     CustomSlideGroup,
     CustomBtnWithLoader,
+    decorator_loading_v2
 )
 
 import os
@@ -75,12 +76,14 @@ class AnalysisTile(sw.Layout):
             text="M 2",
         )
         self.alert_draw_alert = sw.Alert().hide()
-        self.run_dl_model_1 = su.loading_button(
+        self.run_dl_model_1 = decorator_loading_v2(
             alert=self.alert_draw_alert, button=self.dl_button1
         )(self.run_dl_model_1)
-        self.run_dl_model_2 = su.loading_button(
+        self.run_dl_model_2 = decorator_loading_v2(
             alert=self.alert_draw_alert, button=self.dl_button2
         )(self.run_dl_model_2)
+        self.m1_btn_state = True
+        self.m2_btn_state = True
 
         self.initialize_layout()
 
@@ -99,8 +102,8 @@ class AnalysisTile(sw.Layout):
             self.slider_landsat_after, "after_landsat_images_time"
         )
         self.analyzed_alerts_model.observe(self.add_defo_layer, "defo_dl_layer")
-        self.analyzed_alerts_model.observe(self.verify_model1_output, "model1_prediction_file")
-        self.analyzed_alerts_model.observe(self.verify_model2_output, "model2_prediction_file")
+        self.analyzed_alerts_model.observe(self.verify_model1_output, "model1_prediction_time")
+        self.analyzed_alerts_model.observe(self.verify_model2_output, "model2_prediction_time")
 
         # Queue for communication between main and worker threads
         self.file_queue1 = queue.Queue()
@@ -113,7 +116,11 @@ class AnalysisTile(sw.Layout):
         worker1_thread.start()
         worker2_thread = threading.Thread(target=self.worker_m2)
         worker2_thread.start()
-
+        result_checker1_thread = threading.Thread(target=self.check_results1, daemon=True)
+        result_checker1_thread.start()
+        result_checker2_thread = threading.Thread(target=self.check_results2, daemon=True)
+        result_checker2_thread.start()
+        
         super().__init__()
 
     def initialize_layout(self):
@@ -1472,56 +1479,94 @@ class AnalysisTile(sw.Layout):
             self.result_queue2.put(processed_file)
             self.file_queue2.task_done()
 
-    def process_file1(self, file_path):
-        # Put the file path in the queue for the worker to process
-        self.file_queue1.put(file_path)
+    def check_results1(self):
+        """Check result queue periodically (e.g., from a separate thread or event loop)."""
+        while True:
+            try:
+                processed_file = self.result_queue1.get(timeout=2)
+                print("prediction 1 completed")
+                self.analyzed_alerts_model.model1_prediction_file = processed_file
+                self.analyzed_alerts_model.model1_prediction_time = int(time.time() * 1000)
+                self.dl_button1.toggle_loading() 
+                self.result_queue1.task_done()
+            except queue.Empty:
+                continue  
+                
+    def check_results2(self):
+        """Check result queue periodically (e.g., from a separate thread or event loop)."""
+        while True:
+            try:
+                processed_file = self.result_queue2.get(timeout=2)
+                print("prediction 2 completed")
+                self.analyzed_alerts_model.model2_prediction_file = processed_file
+                self.analyzed_alerts_model.model2_prediction_time = int(time.time() * 1000)
+                self.dl_button2.toggle_loading() 
+                self.result_queue2.task_done()
+            except queue.Empty:
+                continue   
 
-        # Wait for the worker to process the file and return the result
-        processed_file = self.result_queue1.get()  # Blocking wait in worker thread
-        self.result_queue1.task_done()
+    def run_dl_model_1(self, widget, event, data):
+        # widget.loading = True  # Set button to loading state
+        # widget.disabled = True  # Disable button to prevent further clicks
+        widget.indeterminate_state(True)
+        self.dl_button1_add.disabled = True
+        self.dl_button1_remove.disabled = True
 
-        # Call the callback function with the result
-        print("callback1 called")
-        self.analyzed_alerts_model.model1_prediction_file = processed_file
+        image_name = (
+            self.app_tile_model.recipe_folder_path
+            + "/alert_"
+            + str(self.analyzed_alerts_model.actual_alert_id)
+            + self.selected_img_before_info_list[4]
+            + self.selected_img_after_info_list[4]
+            + ".tif"
+        )
+        source1 = self.selected_img_before_info_list[0]
+        source2 = self.selected_img_after_info_list[0]
 
-    def process_file2(self, file_path):
-        # Put the file path in the queue for the worker to process
-        self.file_queue2.put(file_path)
+        download_both_images(
+            self.selected_img_before,
+            self.selected_img_after,
+            image_name,
+            source1,
+            source2,
+            self.actual_alert_grid,
+        )
+        model = "/tmp/Model1.h5"
+        # Send file to processing queue1
+        self.file_queue1.put([image_name, model, "_m1"])
 
-        # Wait for the worker to process the file and return the result
-        processed_file = self.result_queue2.get()  # Blocking wait in worker thread
-        self.result_queue2.task_done()
 
-        # Call the callback function with the result
-        print("callback2 called")
-        self.analyzed_alerts_model.model2_prediction_file = processed_file
+    def run_dl_model_2(self, widget, event, data):
+        # widget.loading = True  # Set button to loading state
+        # widget.disabled = True  # Disable button to prevent further clicks
+        widget.indeterminate_state(True)
+        self.dl_button2_add.disabled = True
+        self.dl_button2_remove.disabled = True
 
-    def send_file_for_processing_m1_v2(self, file_path, function):
-        """
-        Function to send a file path to the worker and process the result asynchronously.
+        image_name = (
+            self.app_tile_model.recipe_folder_path
+            + "/alert_"
+            + str(self.analyzed_alerts_model.actual_alert_id)
+            + self.selected_img_before_info_list[4]
+            + self.selected_img_after_info_list[4]
+            + ".tif"
+        )
+        source1 = self.selected_img_before_info_list[0]
+        source2 = self.selected_img_after_info_list[0]
 
-        Args:
-            file_path: The file path to be sent to the worker.
-            function: A function to call with the processed file once available.
-        """
-        print("model1 started")
-        # Start a new thread to handle file processing
-        processing_thread1 = threading.Thread(target=function(file_path), daemon=True)
-        processing_thread1.start()
+        download_both_images(
+            self.selected_img_before,
+            self.selected_img_after,
+            image_name,
+            source1,
+            source2,
+            self.actual_alert_grid,
+        )
+        model = "/tmp/Model2.keras"
+        # Send file to processing queue2
+        self.file_queue2.put([image_name, model, "_m2"])
 
-    def send_file_for_processing_m2_v2(self, file_path, function):
-        """
-        Function to send a file path to the worker and process the result asynchronously.
-
-        Args:
-            file_path: The file path to be sent to the worker.
-            function: A function to call with the processed file once available.
-        """
-        print("model2 started")
-        # Start a new thread to handle file processing
-        processing_thread2 = threading.Thread(target=function(file_path), daemon=True)
-        processing_thread2.start()
-
+    
     ##Edition creation functions
 
     def start_edition_function(self, widget, event, data):
@@ -1650,7 +1695,7 @@ class AnalysisTile(sw.Layout):
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato3(edit_layer, "lime")
-        print(defo_gdf_layer, edit_layer, test_features)
+        #print(defo_gdf_layer, edit_layer, test_features)
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
@@ -1665,7 +1710,7 @@ class AnalysisTile(sw.Layout):
         edit_layer = simplify_and_extract_features(defo_gdf_layer, "geometry", 15)
         orig_features = self.draw_alerts1.data
         test_features = convertir_formato3(edit_layer, "purple")
-        print(defo_gdf_layer, edit_layer, test_features)
+        #print(defo_gdf_layer, edit_layer, test_features)
         self.draw_alerts1.clear()
         self.draw_alerts2.clear()
         self.draw_alerts1.data = orig_features + test_features
@@ -1701,70 +1746,7 @@ class AnalysisTile(sw.Layout):
             self.map_31.add_layer(geo_json_layer)
             self.map_32.add_layer(geo_json_layer)
 
-    def run_dl_model_1(self, widget, event, data):
-        # widget.loading = True  # Set button to loading state
-        # widget.disabled = True  # Disable button to prevent further clicks
-        widget.indeterminate_state(True)
-        self.dl_button1_add.disabled = True
-        self.dl_button1_remove.disabled = True
-
-        image_name = (
-            self.app_tile_model.recipe_folder_path
-            + "/alert_"
-            + str(self.analyzed_alerts_model.actual_alert_id)
-            + self.selected_img_before_info_list[4]
-            + self.selected_img_after_info_list[4]
-            + ".tif"
-        )
-        source1 = self.selected_img_before_info_list[0]
-        source2 = self.selected_img_after_info_list[0]
-
-        download_both_images(
-            self.selected_img_before,
-            self.selected_img_after,
-            image_name,
-            source1,
-            source2,
-            self.actual_alert_grid,
-        )
-        model = "/tmp/Model1.h5"
-        self.send_file_for_processing_m1_v2(
-            [image_name, model, "_m1"], self.process_file1
-        )
-
-    def run_dl_model_2(self, widget, event, data):
-        # widget.loading = True  # Set button to loading state
-        # widget.disabled = True  # Disable button to prevent further clicks
-        widget.indeterminate_state(True)
-        self.dl_button2_add.disabled = True
-        self.dl_button2_remove.disabled = True
-
-        image_name = (
-            self.app_tile_model.recipe_folder_path
-            + "/alert_"
-            + str(self.analyzed_alerts_model.actual_alert_id)
-            + self.selected_img_before_info_list[4]
-            + self.selected_img_after_info_list[4]
-            + ".tif"
-        )
-        source1 = self.selected_img_before_info_list[0]
-        source2 = self.selected_img_after_info_list[0]
-
-        download_both_images(
-            self.selected_img_before,
-            self.selected_img_after,
-            image_name,
-            source1,
-            source2,
-            self.actual_alert_grid,
-        )
-        model = "/tmp/Model2.keras"
-        self.send_file_for_processing_m2_v2(
-            [image_name, model, "_m2"], self.process_file2
-        )
-
     ##Process to save results
-
     def save_attributes_to_gdf(self, widget, event, data):
         widget.loading = True  # Set button to loading state
         widget.disabled = True  # Disable button to prevent further clicks
