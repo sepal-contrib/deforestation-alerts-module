@@ -35,6 +35,7 @@ from operator import itemgetter
 from ipyleaflet import GeoData, GeoJSON
 import threading
 import queue
+import ast
 
 su.init_ee()
 
@@ -374,7 +375,7 @@ class AnalysisTile(sw.Layout):
         self.map31 = v.Container(class_="pa-1 ma-1", children=[map1_title, self.map_31, imgInfo1])
 
         # Create map with buttons2
-        self.map32 = v.Container(class_="pa-1 ma-1", children=[map2_title, self.map_32, imgInfo1])
+        self.map32 = v.Container(class_="pa-1 ma-1", children=[map2_title, self.map_32, imgInfo2])
 
         # Create drawer control and add to maps
         self.draw_alerts1 = DrawControl(self.map_31)
@@ -643,32 +644,36 @@ class AnalysisTile(sw.Layout):
             class_="pa-1 ma-1", children=[cm.analysis_tile.export_labels.export_title]
         )
         self.save_btn = sw.Btn(
-            cm.analysis_tile.export_labels.save_btn,
+            msg = cm.analysis_tile.export_labels.save_btn,
             color="primary",
             outlined=True,
             small=True,
+            class_="pa-1 ma-2",
         )
         self.save_btn.on_event("click", self.save_attributes_to_gdf)
         self.download_alert_data_btn = sw.Btn(
-            cm.analysis_tile.export_labels.download_alert_data_btn,
+            msg = cm.analysis_tile.export_labels.download_alert_data_btn,
             color="primary",
             outlined=True,
             small=True,
             disabled=True,
+            class_="pa-1 ma-2",
         )
         self.download_alert_data_btn.on_event("click", self.download_data)
         self.files_dwn_btn = sw.DownloadBtn(
+            class_="pa-1 ma-2",
             text=cm.analysis_tile.export_labels.files_dwn_btn, small=True
         )
         self.report_dwn_btn = sw.DownloadBtn(
+            class_="pa-1 ma-2",
             text=cm.analysis_tile.export_labels.report_dwn_btn, small=True
         )
 
         self.toolBarSaveExport = sw.Toolbar(
-            class_="pa-1 ma-1", children=[self.save_btn, self.download_alert_data_btn]
+            class_="pa-1 ma-1 d-flex justify-space-around", children=[self.save_btn, self.download_alert_data_btn]
         )
         self.toolBarDownloads = sw.Toolbar(
-            class_="pa-1 ma-1", children=[self.files_dwn_btn, self.report_dwn_btn]
+            class_="pa-1 ma-1 d-flex justify-space-around", children=[self.files_dwn_btn, self.report_dwn_btn]
         ).hide()
 
         # Layout
@@ -1227,7 +1232,8 @@ class AnalysisTile(sw.Layout):
         fecha1 = convert_julian_to_date(alerta["alert_date_min"])
         fecha2 = convert_julian_to_date(alerta["alert_date_max"])
         alert_source = format_list(get_unique_alerts(alerta["alert_type_unique"]))
-
+        alert_source = alerta["alert_sources"]
+        
         # Cambio en boton de navegacion
         self.alert_id_button.v_model = self.analyzed_alerts_model.actual_alert_id
 
@@ -1779,9 +1785,9 @@ class AnalysisTile(sw.Layout):
         )
 
         ##Create dictionary of alert sources
-        alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
-            get_unique_alerts(alertas_gdf.loc[actual_alert_id, "alert_type_unique"])
-        )
+        # alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
+        #     get_unique_alerts(alertas_gdf.loc[actual_alert_id, "alert_type_unique"])
+        # )
 
         # Get adminstrative location attributes
         adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")

@@ -21,7 +21,7 @@ from component.parameter import module_dir
 import zipfile
 from warnings import warn
 from typing import Any, Callable, List, Optional
-
+import time
 
 class CustomApp(sw.App):
     def __init__(self, app_tile_model, *args, **kwargs):
