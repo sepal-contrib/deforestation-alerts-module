@@ -25,7 +25,6 @@ class OverviewTile(sw.Layout):
         selected_alerts_model,
         app_tile_model,
     ):
-        self.fluid = True
         self._metadata = {"mount_id": "overview_tile"}
         self.analyzed_alerts_model = analyzed_alerts_model
         self.selected_alerts_model = selected_alerts_model
@@ -35,7 +34,9 @@ class OverviewTile(sw.Layout):
         self.update_layout()
 
         ## Observe changes and update tile when it changes
-        analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
+        self.analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
+        self.analyzed_alerts_model.observe(self.update_table, "actual_alert_id")
+        
 
         super().__init__()
 
@@ -160,16 +161,18 @@ class OverviewTile(sw.Layout):
                 )
                 # self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
 
-            self.listaNumeros = calculate_alert_classes(
-                centroides_gdf, "Confirmed", "False Positive", "Need revision"
-            )
-            self.info_table.children[0].children = create_table_rows(
-                self.listaNumeros, self.alert_labels
-            )
-
     def update_tile(self, change):
         # Update the tile when aoi_date_model changes
         self.update_layout()  # Reinitialize the layout with the new data
+
+    def update_table(self, change):
+        # Update the tile when aoi_date_model changes
+        self.listaNumeros = calculate_alert_classes(
+                self.analyzed_alerts_model.alerts_gdf, "Confirmed", "False Positive", "Need revision"
+            )
+        self.info_table.children[0].children = create_table_rows(
+                self.listaNumeros, self.alert_labels
+            )
 
     def update_button(self, widget, event, data):
         widget.loading = True  # Set button to loading state
