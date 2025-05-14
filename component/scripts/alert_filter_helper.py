@@ -1,6 +1,7 @@
 import time
 import json
 import ee
+import ast
 import pandas as pd
 import geopandas as gpd
 from datetime import date, datetime
@@ -8,7 +9,7 @@ from math import floor, ceil
 from component.message import cm
 from shapely.geometry import Point, Polygon
 from sepal_ui.scripts import utils as su
-
+from component.scripts.report_builder import get_unique_alerts, format_list
 
 def check_integer(text, exception_text):
     try:
@@ -502,7 +503,8 @@ def convert_to_geopandas(polygon_features):
 
     # Add additional columns with default values
     gdf["status"] = "Not reviewed"
-    gdf["alert_sources"] = pd.Series([],dtype="object")
+    #gdf["alert_sources"] = pd.Series([],dtype="str")
+    gdf["alert_sources"] = gdf["alert_type_unique"].apply(lambda x: format_list(get_unique_alerts(x)))
     gdf["before_img"] = pd.Series([],dtype="str")
     gdf["before_img_info"] = pd.Series([],dtype="object")
     gdf["after_img"] = pd.Series([],dtype="str")

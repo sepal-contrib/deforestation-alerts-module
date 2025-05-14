@@ -14,7 +14,7 @@ import cartopy.io.img_tiles as cimgt
 from shapely.geometry import box
 from pathlib import Path
 from component.parameter import directory
-
+import ast
 
 def ensure_list(input_data):
     if isinstance(input_data, str):
@@ -304,6 +304,15 @@ def get_unique_alerts(alert_list):
     Returns:
         List[str]: Unique alert type names found in the list.
     """
+
+     # If input is a string, attempt to convert it into a Python literal
+    if isinstance(alert_list, str):
+        try:
+            alert_list = ast.literal_eval(alert_list)
+        except (ValueError, SyntaxError):
+            # If invalid, treat as an empty list for safety
+            alert_list = []
+
     if not isinstance(alert_list, list):
         alert_list = [alert_list]
     
