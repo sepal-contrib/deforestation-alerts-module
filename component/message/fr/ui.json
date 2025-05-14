@@ -63,7 +63,12 @@
             "max_number_of_alerts_hint": "Analyser toutes les alertes ou définir un nombre maximum",
             "layer_date_helper1": " date",
             "layer_aux_name": "Couche auxiliaire",
-            "layer_mask_name": "Couche de Masque"
+            "layer_mask_name": "Couche de Masque",
+            "filter_button_alerts_text": {
+                "loader_text1": "Traitement en cours...",
+                "loader_text2": "Un instant, s'il vous plaît...",
+                "loader_text3": "Buvez un peu d'eau...",
+                "loader_text4": "Presque fini..."}
 
     },
     

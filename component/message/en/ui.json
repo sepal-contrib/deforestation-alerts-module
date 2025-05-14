@@ -22,7 +22,7 @@
             "ccdc_alerts_title": "CCDC Alerts Asset",
             "ccdc_alerts_hint": "Select alerts generated with ccdc change alert recipe",
             "mask_asset_title": "Mask Asset", 
-            "mask_asset_hint": "Select a mask to apply to alerts, for example a Forest/No Forest mask",
+            "mask_asset_hint": "Select a mask to apply to alerts, for example, a Forest/No Forest mask",
             "aux_asset_title": "Auxiliary Asset",
             "aux_asset_hint": "Select an auxiliary raster that can be useful while analyzing alerts",
             "aux_viz": "Auxiliary Asset Visualization Parameters", 
@@ -63,7 +63,12 @@
             "max_number_of_alerts_hint": "Analyze all alerts or define a max number",
             "layer_date_helper1": " date",
             "layer_aux_name": "Auxiliary Layer",
-            "layer_mask_name": "Mask Layer"
+            "layer_mask_name": "Mask Layer",
+            "filter_button_alerts_text": {
+                "loader_text1": "Processing...",
+                "loader_text2": "Just some minutes...",
+                "loader_text3": "Drink some water...",
+                "loader_text4": "Almost done..."}
     },
 
     "overview_tile": {
@@ -133,7 +138,7 @@
                 "dl_button2": "Larger but slower model",
                 "dl_button_add": "Add to map",
                 "dl_button_remove": "Remove from map",
-                "dl_404": "Model did not found forest loss polygons"
+                "dl_404": "Model did not find forest loss polygons"
             },
             "export_labels": {
                 "export_title": "Save and Export",

@@ -63,7 +63,12 @@
             "max_number_of_alerts_hint": "Analizar todas las alertas o definir un número máximo",
             "layer_date_helper1": " fecha",
             "layer_aux_name": "Capa Auxiliar",
-            "layer_mask_name": "Capa de Máscara"
+            "layer_mask_name": "Capa de Máscara",
+            "filter_button_alerts_text": {
+                "loader_text1": "Procesando...",
+                "loader_text2": "Solo unos minutos...",
+                "loader_text3": "Bebe un poco de agua...",
+                "loader_text4": "Casi listo..."}
     },
 
     "overview_tile": {

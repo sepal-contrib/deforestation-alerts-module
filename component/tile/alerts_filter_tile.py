@@ -651,10 +651,10 @@ class AlertsFilterTile(sw.Layout):
         )
 
         wait_messages = [
-            "Processing...",
-            "Just 1 minute...",
-            "Drink some water...",
-            "We are almost done...",
+            cm.filter_tile.filter_button_alerts_text.loader_text1,
+            cm.filter_tile.filter_button_alerts_text.loader_text2,
+            cm.filter_tile.filter_button_alerts_text.loader_text3,
+            cm.filter_tile.filter_button_alerts_text.loader_text4,
         ]
 
         widget.update_button_with_messages(
