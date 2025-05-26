@@ -6,6 +6,7 @@ from ipyleaflet import (
     MarkerCluster,
     WidgetControl,
     LayerGroup,
+    GeoData,
 )
 import ipywidgets as widgets
 from ipywidgets import HTML, HBox, VBox, Label, Button, Layout
@@ -18,6 +19,7 @@ from ipyevents import Event
 import ipyleaflet
 import ipyvuetify as v
 from sepal_ui.mapping.menu_control import MenuControl
+from component.message import cm
 
 
 def calculateAlertClasses(gpdf):
@@ -393,48 +395,85 @@ def add_marker_clusters_as_LayerGroup(map_object, data_dict):
         marker_clusters[category] = marker_cluster
         map_object.add_layer(marker_clusters[category])
 
+def add_colored_layers(gdf, column_name, color_dict, leaflet_map, on_click_function):
+    """
+    Adds GeoData layers to a Leaflet map with colors defined by a dictionary.
+
+    Parameters:
+        gdf (GeoDataFrame): The input GeoDataFrame.
+        column_name (str): Column name in the GeoDataFrame used for filtering.
+        color_dict (dict): Dictionary mapping values from the column to colors.
+        leaflet_map (folium.Map): Leaflet map object to add layers to.
+    """
+
+    def build_popup(event, feature, **kwargs):
+        # Extract feature properties and id from event
+        props = feature.get("properties", {})
+        alert_date_min = props.get("alert_date_min")
+        alert_date_max = props.get("alert_date_max")
+        feature_id = feature.get("id")  # Get the ID from the feature object
+        geometry = feature.get("geometry", {})
+        coordinates_x = geometry.get("coordinates")[1]
+        coordinates_y = geometry.get("coordinates")[0]
+        
+        # Convert Julian dates to human-readable format
+        start_date = convert_julian_to_date(alert_date_min) if alert_date_min else "N/A"
+        end_date = convert_julian_to_date(alert_date_max) if alert_date_max else "N/A"
+    
+        # Build HTML message components with Vuetify
+        message = v.Html(tag="div", children=[])
+        message.children = ([
+            v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date + " "]),
+            start_date,
+            v.Html(tag="strong", children=[" " + cm.analysis_tile.alert_info.last_date]),
+            end_date,
+            v.Html(tag="strong", children=[" ID: "]),
+            str(feature_id) if feature_id else "N/A",
+        ])
+    
+        # Create a "Go" button with on_click handler
+        go_button = v.Btn(
+            children=["Go"],
+            color="primary",
+            value=feature_id,
+            small=True,
+            outlined=True
+        )
+        go_button.on_event("click", on_click_function)
+    
+        # Build and return the Vuetify card with message + button
+        popup_content = v.Card(
+            class_="pa-1 ma-1 d-flex justify-space-between",
+            min_width=300,
+            max_height=300,
+            flat=True,
+            children=[message, go_button],
+            #style_="minpadding: 0px; border-radius: 4px;"
+        )
+    
+        info_popup = Popup(location= (coordinates_x, coordinates_y), child=popup_content, max_width=500, max_height=200, auto_pan=False, close_button=True)
+        leaflet_map.add(info_popup)
+
+
+    for key, color in color_dict.items():
+        # Filter the GeoDataFrame based on the current key
+        filtered_gdf = gdf[gdf[column_name] == key]
+
+        if len(filtered_gdf) > 0:
+            # Create a GeoData layer with specified point style and CRS
+            geo_data_layer = GeoData(
+                geo_dataframe=filtered_gdf,
+                point_style={'radius': 6, 'color': color, 'fillOpacity': 1, 'weight': 1.5},
+                hover_style={'color': 'cyan'},
+                crs="EPSG:4326",
+                name=key,
+            )
+            
+            # Add the layer to the Leaflet map
+            geo_data_layer.on_click(build_popup)
+            leaflet_map.add(geo_data_layer)
 
 # Function to create the table rows based on a list of 4 numbers
-def create_table_rows_o(listaNumeros):
-    return [
-        v.Html(
-            tag="tr",
-            children=[
-                v.Html(tag="td", children=["Total Alerts"]),
-                v.Html(tag="td", children=[str(listaNumeros[0])]),
-            ],
-        ),
-        v.Html(
-            tag="tr",
-            children=[
-                v.Html(tag="td", children=["Reviewed Alerts"]),
-                v.Html(tag="td", children=[str(listaNumeros[1])]),
-            ],
-        ),
-        v.Html(
-            tag="tr",
-            children=[
-                v.Html(tag="td", children=["Confirmed Alerts"]),
-                v.Html(tag="td", children=[str(listaNumeros[2])]),
-            ],
-        ),
-        v.Html(
-            tag="tr",
-            children=[
-                v.Html(tag="td", children=["False Positives"]),
-                v.Html(tag="td", children=[str(listaNumeros[3])]),
-            ],
-        ),
-        v.Html(
-            tag="tr",
-            children=[
-                v.Html(tag="td", children=["Need further revision"]),
-                v.Html(tag="td", children=[str(listaNumeros[4])]),
-            ],
-        ),
-    ]
-
-
 def create_table_rows(data, labels):
     return [
         v.Html(

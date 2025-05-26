@@ -9,6 +9,7 @@ import ast
 import numpy as np
 from datetime import datetime
 import json
+import threading
 from shapely import wkt
 from component.parameter import directory
 from component.scripts.alert_filter_helper import check_alert_filter_inputs
@@ -261,7 +262,7 @@ def update_saved_dictionary(json_file_path, key, new_value):
         with open(json_file_path, "w") as file:
             json.dump(data, file)
 
-        print(f"'key' successfully updated to {new_value}.")
+        #print(f"'key' successfully updated to {new_value}.")
     except FileNotFoundError:
         print(f"Error: File '{json_file_path}' not found.")
     except json.JSONDecodeError:

@@ -19,7 +19,7 @@ from component.parameter import directory
 import json
 import time
 import os
-
+import threading
 from component.model.aoi_date_model import AoiDateModel
 from component.model.aux_model import AuxModel
 from component.model.alerts_model import AlertFilterModel, SelectedAlertsModel

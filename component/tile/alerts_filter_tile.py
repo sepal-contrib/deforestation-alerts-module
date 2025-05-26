@@ -217,6 +217,7 @@ class AlertsFilterTile(sw.Layout):
         # Define analyze button function
         self.analyze_button.on_event("click", self.analyze_alerts_function)
         self.card05 = SepalCard(
+            class_="pa-3 ma-3 d-flex justify-space-around",
             children=[self.analyze_button, self.analyze_alert]
         )
 
@@ -347,12 +348,12 @@ class AlertsFilterTile(sw.Layout):
     def assign_bb_partial(self, json_file):
         self.selected_alerts_model.alerts_bbs = json_file
         self.selected_alerts_model.received_alerts = "Yes"
-        print(self.selected_alerts_model.received_alerts)
+        #print(self.selected_alerts_model.received_alerts)
 
     def assign_bb_full(self, json_file):
         self.selected_alerts_model.alerts_total_bbs = json_file
         self.selected_alerts_model.received_alerts = "Yes"
-        print(self.selected_alerts_model.received_alerts)
+        #print(self.selected_alerts_model.received_alerts)
 
     def start_thread_full(
         self,
@@ -568,7 +569,6 @@ class AlertsFilterTile(sw.Layout):
         self.selected_alerts_model.alert_sorting_method_n = (
             alert_sorting_method_dict_n.get(alert_sorting_method, 0)
         )
-
         # Create directory in case it does not exist
         self.create_recipe_directory()
 

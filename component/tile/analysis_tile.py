@@ -502,7 +502,7 @@ class AnalysisTile(sw.Layout):
         )
 
         self.toolBarEdition = v.Toolbar(
-            class_="px-2 d-flex align-center", children=[tooltip1, tooltip3, tooltip4]
+            class_="px-1 d-flex justify-space-around", children=[tooltip1, tooltip3, tooltip4]
         )
 
         # self.dl_button1 = v.Btn(class_='pa-1 ma-1', color = color.secondary, rounded=True, small=True, children=['DL 1'])
@@ -647,39 +647,35 @@ class AnalysisTile(sw.Layout):
             msg = cm.analysis_tile.export_labels.save_btn,
             color="primary",
             outlined=True,
-            small=True,
-            class_="pa-1 ma-2",
+            class_="pa-1 ma-1",
         )
         self.save_btn.on_event("click", self.save_attributes_to_gdf)
         self.download_alert_data_btn = sw.Btn(
             msg = cm.analysis_tile.export_labels.download_alert_data_btn,
             color="primary",
             outlined=True,
-            small=True,
             disabled=True,
-            class_="pa-1 ma-2",
+            class_="pa-1 ma-1",
         )
         self.download_alert_data_btn.on_event("click", self.download_data)
         self.files_dwn_btn = sw.DownloadBtn(
-            class_="pa-1 ma-2",
-            text=cm.analysis_tile.export_labels.files_dwn_btn, small=True
-        )
+            class_="pa-1 ma-1",
+            text=cm.analysis_tile.export_labels.files_dwn_btn)
         self.report_dwn_btn = sw.DownloadBtn(
-            class_="pa-1 ma-2",
-            text=cm.analysis_tile.export_labels.report_dwn_btn, small=True
-        )
+            class_="pa-1 ma-1",
+            text=cm.analysis_tile.export_labels.report_dwn_btn)
 
         self.toolBarSaveExport = sw.Toolbar(
-            class_="pa-1 ma-1 d-flex justify-space-around", children=[self.save_btn, self.download_alert_data_btn]
+            class_="pa-1 ma-1 d-flex justify-space-between", children=[self.save_btn, self.download_alert_data_btn]
         )
         self.toolBarDownloads = sw.Toolbar(
-            class_="pa-1 ma-1 d-flex justify-space-around", children=[self.files_dwn_btn, self.report_dwn_btn]
+            class_="pa-1 ma-1 d-flex justify-space-between", children=[self.files_dwn_btn, self.report_dwn_btn]
         ).hide()
 
         # Layout
 
         card01 = v.Card(
-            class_="pa-3 ma-3 d-flex justify-center",
+            class_="pa-2 ma-2 d-flex justify-center",
             hover=True,
             children=[
                 self.prev_button,
@@ -689,7 +685,7 @@ class AnalysisTile(sw.Layout):
             ],
         )
         card02 = v.Card(
-            class_="pa-3 ma-3",
+            class_="pa-2 ma-2",
             hover=True,
             children=[
                 v.CardTitle(
@@ -701,7 +697,7 @@ class AnalysisTile(sw.Layout):
         )
 
         card03 = v.Card(
-            class_="pa-3 ma-3",
+            class_="pa-2 ma-2",
             hover=True,
             children=[
                 v.CardTitle(
@@ -713,7 +709,7 @@ class AnalysisTile(sw.Layout):
         )
 
         card35 = v.Card(
-            class_="pa-3 ma-3",
+            class_="pa-2 ma-2",
             hover=True,
             children=[
                 v.CardTitle(
@@ -727,7 +723,7 @@ class AnalysisTile(sw.Layout):
         )
 
         card04 = v.Card(
-            class_="pa-3 ma-3",
+            class_="pa-2 ma-2",
             hover=True,
             children=[
                 label33,
@@ -739,14 +735,13 @@ class AnalysisTile(sw.Layout):
         )
 
         card05 = v.Card(
-            class_="pa-3 ma-3",
+            class_="pa-2 ma-2",
             hover=True,
             children=[label34, self.comments_input],
         )
 
         card06 = v.Card(
-            class_="pa-3 ma-3",
-            fluid=True,
+            class_="pa-2 ma-2",
             hover=True,
             children=[label35, self.toolBarSaveExport, self.toolBarDownloads],
         )
@@ -907,7 +902,7 @@ class AnalysisTile(sw.Layout):
         self.next_button.disabled = True
         self.alert_id_button.disabled = True
         self.go_to_alert_button.disabled = True
-
+        print('number of current threads is ', threading.active_count())
         if widget.value == 0:
             self.analyzed_alerts_model.actual_alert_id = int(
                 self.alert_id_button.v_model
@@ -925,7 +920,6 @@ class AnalysisTile(sw.Layout):
         self.next_button.disabled = False
         self.alert_id_button.disabled = False
         self.go_to_alert_button.disabled = False
-
     ##Image sliders function
 
     def image_slider_map_callback(self, selected_item, map_element, model_att):
@@ -980,11 +974,7 @@ class AnalysisTile(sw.Layout):
                 .filter(ee.Filter.eq("LANDSAT_SCENE_ID", image_id))
             ).first()
 
-            print(
-                landsat_filtered.bandNames().getInfo(),
-                landsat_toa_filtered.bandNames().getInfo(),
-            )
-            # Pansharpening
+             # Pansharpening
             landsat_sr_img = landsat_filtered.select(
                 ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"]
             )
@@ -1838,6 +1828,7 @@ class AnalysisTile(sw.Layout):
             )
 
         self.save_alerts_to_gdf()
+        self.analyzed_alerts_model.last_save_time = datetime.today().timestamp()
         widget.loading = False  # Remove loading state
         widget.disabled = False  # Re-enable the button
 

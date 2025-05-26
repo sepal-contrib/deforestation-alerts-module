@@ -4,7 +4,7 @@ from sepal_ui.mapping import SepalMap
 from component.message import cm
 import ipyvuetify as v
 from IPython.display import display, HTML
-from ipyleaflet import WidgetControl, LayersControl as ipyLayersControl
+from ipyleaflet import WidgetControl, GeoData, LayersControl as ipyLayersControl
 
 from sepal_ui.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
@@ -31,12 +31,12 @@ class OverviewTile(sw.Layout):
         self.aoi_date_model = aoi_date_model
         self.app_tile_model = app_tile_model
         self.initialize_layout()
-        self.update_layout()
-
-        ## Observe changes and update tile when it changes
-        self.analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
-        self.analyzed_alerts_model.observe(self.update_table, "actual_alert_id")
+        self.update_table()
+        self.update_map()
         
+        ## Observe changes and update tile when it changes
+        self.analyzed_alerts_model.observe(self.update_tile, "last_save_time")
+        self.analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
 
         super().__init__()
 
@@ -78,12 +78,6 @@ class OverviewTile(sw.Layout):
         self.map_1 = SepalMap()
         self.map_1.add_class("custom-map-class")
         self.map_1.add_basemap("SATELLITE")
-        refresh_map_button = MapBtn("fa-light fa-rotate-right")
-        self.widget_refresh = WidgetControl(
-            widget=refresh_map_button, position="bottomright"
-        )
-        refresh_map_button.on_event("click", self.update_button)
-        self.map_1.add(self.widget_refresh)
         # self.map_1.add(ipyLayersControl(position='topright'))
         menu_control = MenuControl(
             icon_content="mdi-layers",
@@ -130,7 +124,8 @@ class OverviewTile(sw.Layout):
 
         self.children = [left_panel,right_panel]
 
-    def update_layout(self):
+
+    def update_map(self):
         if (
             self.analyzed_alerts_model.alerts_gdf is None
             or len(self.analyzed_alerts_model.alerts_gdf) == 0
@@ -140,17 +135,17 @@ class OverviewTile(sw.Layout):
             self.map_1.remove_all()
             self.map_1.remove(self.map_1.controls[-1])
             self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
+           
+            color_dictionary = {
+                "Not reviewed": "lightgrey",
+                "Confirmed": "red",
+                "Need revision": "orange",
+                "False Positive": "green"
+            }
+            newgdf = self.analyzed_alerts_model.alerts_gdf.drop(columns=['bounding_box','alert_polygon'])
+            alerts_db = newgdf.set_geometry('point')
+            add_colored_layers(alerts_db, 'status', color_dictionary, self.map_1, self.on_go_button_click)
 
-            # Add centroids
-            centroides_gdf = self.analyzed_alerts_model.alerts_gdf
-            markers_dictionary = create_markers_ipyvuetify(
-                centroides_gdf,
-                "point",
-                ["alert_date_min", "alert_date_max"],
-                "status",
-                self.on_go_button_click,
-            )
-            add_marker_clusters_with_menucontrol(self.map_1, markers_dictionary)
 
             if (
                 self.selected_alerts_model.alert_selection_area
@@ -161,26 +156,19 @@ class OverviewTile(sw.Layout):
                 )
                 # self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
 
+    def update_table(self):
+        if self.analyzed_alerts_model.alerts_gdf is not None:
+            self.listaNumeros = calculate_alert_classes(
+                    self.analyzed_alerts_model.alerts_gdf, "Confirmed", "False Positive", "Need revision"
+                )
+            self.info_table.children[0].children = create_table_rows(
+                    self.listaNumeros, self.alert_labels
+                )
     def update_tile(self, change):
         # Update the tile when aoi_date_model changes
-        self.update_layout()  # Reinitialize the layout with the new data
-
-    def update_table(self, change):
-        # Update the tile when aoi_date_model changes
-        self.listaNumeros = calculate_alert_classes(
-                self.analyzed_alerts_model.alerts_gdf, "Confirmed", "False Positive", "Need revision"
-            )
-        self.info_table.children[0].children = create_table_rows(
-                self.listaNumeros, self.alert_labels
-            )
-
-    def update_button(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
-        # Update the tile when aoi_date_model changes
-        self.update_layout()  # Reinitialize the layout with the new data
-        widget.loading = False  # Remove loading state
-        widget.disabled = False  # Re-enable the button
+        self.update_table()
+        self.update_map()
+            
 
     # Function to change actual alert id and move to analysis tile
     def on_go_button_click(self, widget, event, data):
