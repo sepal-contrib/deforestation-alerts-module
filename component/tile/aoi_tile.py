@@ -168,7 +168,7 @@ class AoiTile(sw.Layout):
         elif self.aoi_view.model.method == "DRAW":
             self.aoi_date_model._from_geo_json(self.aoi_view.model.geo_json)
         elif self.aoi_view.model.method == "ASSET":
-            self.aoi_date_model._from_asset(self.aoi_view.model.sset_json)
+            self.aoi_date_model._from_asset(self.aoi_view.model.asset_json)
 
         widget.set_loader_text(cm.aoi_tile.search_button_alerts_text.loader_text3)
         # Generate list of available names and dictionary of filtered rasters
