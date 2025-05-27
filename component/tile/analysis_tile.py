@@ -862,7 +862,9 @@ class AnalysisTile(sw.Layout):
         elif data is not None and complete is not None:
             print("merging complete data to analyzed partial")
             total_alertas_gdf = convert_to_geopandas(complete)
-            analyzed_temp_alerts = data[data["status"] != "Not reviewed"]
+            mask = (data["status"] != "Not reviewed") | (data.index == self.analyzed_alerts_model.actual_alert_id)         
+            analyzed_temp_alerts = data[mask]
+            #analyzed_temp_alerts = data[data["status"] != "Not reviewed"]
             unique_values = analyzed_temp_alerts["bounding_box"].unique()
 
             if len(unique_values) == 0:
@@ -874,7 +876,7 @@ class AnalysisTile(sw.Layout):
 
             combined_gdf = gpd.GeoDataFrame(
                 pd.concat([analyzed_temp_alerts, filtered_total])
-            )
+            ).reset_index(drop=True)
             self.analyzed_alerts_model.alerts_gdf = combined_gdf
             self.analyzed_alerts_model.max_alert_id = len(combined_gdf)
             recipe_dictionary_path = (
@@ -1185,7 +1187,7 @@ class AnalysisTile(sw.Layout):
             ]
             callback(selected_item, map_element, model_att1)
             callback2(selected_item, info_element, model_att2)
-
+            
     # Process for each alert
     def view_actual_alert(self, change):
         print("cambiando alerta", self.analyzed_alerts_model.actual_alert_id)
@@ -1221,7 +1223,7 @@ class AnalysisTile(sw.Layout):
         # Obtener fechas de la alerta
         fecha1 = convert_julian_to_date(alerta["alert_date_min"])
         fecha2 = convert_julian_to_date(alerta["alert_date_max"])
-        alert_source = format_list(get_unique_alerts(alerta["alert_type_unique"]))
+        #alert_source = format_list(get_unique_alerts(alerta["alert_type_unique"]))
         alert_source = alerta["alert_sources"]
         
         # Cambio en boton de navegacion
