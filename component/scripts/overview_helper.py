@@ -471,6 +471,7 @@ def add_colored_layers(gdf, column_name, color_dict, leaflet_map, on_click_funct
             
             # Add the layer to the Leaflet map
             geo_data_layer.on_click(build_popup)
+            geo_data_layer.key= key
             leaflet_map.add(geo_data_layer)
 
 # Function to create the table rows based on a list of 4 numbers
