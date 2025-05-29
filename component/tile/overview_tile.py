@@ -80,18 +80,7 @@ class OverviewTile(sw.Layout):
         self.map_1 = SepalMap()
         self.map_1.add_class("custom-map-class")
         self.map_1.add_basemap("SATELLITE")
-        # self.map_1.add(ipyLayersControl(position='topright'))
-        menu_control = MenuControl(
-            icon_content="mdi-layers",
-            position="topright",
-            card_content=v.CardTitle(class_="pa-1 ma-1", children=["Cluster Control"]),
-            card_title="Marker Control",
-        )
-        menu_control.set_size(
-            min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
-        )
-        self.map_1.add(menu_control)
-
+        
         # Side information labels
         section_title = v.CardTitle(
             class_="pa-1 ma-1", children=[cm.overview_tile.title]
@@ -135,7 +124,6 @@ class OverviewTile(sw.Layout):
             self.children = self.children
         else:
             self.map_1.remove_all()
-            self.map_1.remove(self.map_1.controls[-1])
             self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
            
             color_dictionary = {
