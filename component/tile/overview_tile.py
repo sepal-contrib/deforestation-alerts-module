@@ -23,9 +23,11 @@ class OverviewTile(sw.Layout):
         aoi_date_model,
         analyzed_alerts_model,
         selected_alerts_model,
+        aux_model,
         app_tile_model,
     ):
         self._metadata = {"mount_id": "overview_tile"}
+        self.aux_model = aux_model
         self.analyzed_alerts_model = analyzed_alerts_model
         self.selected_alerts_model = selected_alerts_model
         self.aoi_date_model = aoi_date_model
@@ -146,15 +148,28 @@ class OverviewTile(sw.Layout):
             alerts_db = newgdf.set_geometry('point')
             add_colored_layers(alerts_db, 'status', color_dictionary, self.map_1, self.on_go_button_click)
 
-
-            if (
-                self.selected_alerts_model.alert_selection_area
-                == cm.filter_tile.area_selection_method_label1
-            ):
+            if self.selected_alerts_model.alert_selection_area_n == 1:
                 draw_selection = ee.FeatureCollection(
                     self.selected_alerts_model.alert_selection_polygons
                 )
-                # self.map_1.add_ee_layer(draw_selection, name="Drawn Item")
+                self.map_1.add_ee_layer(draw_selection, name="Drawn Item", vis_params = {'color':'7eb9e8'})
+            if self.aux_model.mask_layer:
+                self.map_1.add_ee_layer(
+                    ee.Image(self.aux_model.mask_layer).selfMask(),
+                    name=cm.filter_tile.layer_mask_name,
+                    # vis_params=self.aux_model.aux_layer_vis,
+                    vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
+                )
+            if self.aux_model.aux_layer:
+                if self.aux_model.aux_layer_vis:
+                    vis_aux = {self.aux_model.aux_layer_vis}
+                else:
+                    vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
+                self.map_1.add_ee_layer(
+                    ee.Image(self.aux_model.aux_layer).selfMask(),
+                    name=cm.filter_tile.layer_aux_name,
+                    vis_params=vis_aux,
+                )
 
     def update_table(self):
         if self.analyzed_alerts_model.alerts_gdf is not None:

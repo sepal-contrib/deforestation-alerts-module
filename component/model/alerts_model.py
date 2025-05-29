@@ -85,6 +85,7 @@ class SelectedAlertsModel(model.Model):
         self.min_area = None
         self.max_number_alerts = 0
         self.alert_selection_area = None
+        self.alert_selection_area_n = 0
         self.alert_sorting_method = None
         self.filtered_alert_raster = None
         self.alerts_total_bbs = None

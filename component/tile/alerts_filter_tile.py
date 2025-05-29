@@ -192,9 +192,12 @@ class AlertsFilterTile(sw.Layout):
             if data == cm.filter_tile.area_selection_method_label2:
                 self.card04.show()
                 self.drawn_item.hide()
-            else:
+            elif data == cm.filter_tile.area_selection_method_label1:
                 self.card04.hide()
                 self.drawn_item.show()
+            else:
+                self.card04.show()
+                self.drawn_item.hide()
 
         self.alert_selection_method_select.on_event("change", prior_option)
 
@@ -437,7 +440,7 @@ class AlertsFilterTile(sw.Layout):
         # Enmascarar si existe capa mask
         if self.aux_model.mask_layer:
             mask_layer = ee.Image(self.aux_model.mask_layer)
-            mask_alert = alerta.where(mask_layer.eq(0), 0)
+            mask_alert = alerta.updateMask(mask_layer).selfMask()
         else:
             mask_alert = alerta
 
@@ -675,13 +678,17 @@ class AlertsFilterTile(sw.Layout):
             1: cm.filter_tile.area_selection_method_label1,
             2: cm.filter_tile.area_selection_method_label2,
         }
+        self.selected_alerts_model.alert_selection_area_n = data.get("alert_selection_area")
         self.alert_selection_method_select.v_model = alert_selection_dict.get(
             data.get("alert_selection_area"), ""
         )
         drawn_selection_polygons = data.get("alert_selection_polygons").get("features")
+        
         if drawn_selection_polygons:
             self.drawn_item.data = convertir_formato3(drawn_selection_polygons, color.info)
             self.drawn_item.show()
+            self.selected_alerts_model.alert_selection_polygons = data.get("alert_selection_polygons")
+
         else:
             self.drawn_item.data = self.drawn_item.data
             self.drawn_item.hide()
