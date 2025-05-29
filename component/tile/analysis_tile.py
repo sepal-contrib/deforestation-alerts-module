@@ -87,6 +87,17 @@ class AnalysisTile(sw.Layout):
         self.m1_btn_state = True
         self.m2_btn_state = True
 
+        self.save_btn = sw.Btn(
+            msg = cm.analysis_tile.export_labels.save_btn,
+            color="primary",
+            outlined=True,
+            class_="pa-1 ma-1",
+        )
+        self.alert_save = sw.Alert().hide()
+        self.save_attributes_to_gdf = su.loading_button(
+            alert=self.alert_save, button=self.save_btn
+        )(self.save_attributes_to_gdf)
+        
         self.initialize_layout()
 
         ## Observe changes in selected_alerts_model and update tile when it changes
@@ -644,12 +655,12 @@ class AnalysisTile(sw.Layout):
         label35 = v.CardTitle(
             class_="pa-1 ma-1", children=[cm.analysis_tile.export_labels.export_title]
         )
-        self.save_btn = sw.Btn(
-            msg = cm.analysis_tile.export_labels.save_btn,
-            color="primary",
-            outlined=True,
-            class_="pa-1 ma-1",
-        )
+        # self.save_btn = sw.Btn(
+        #     msg = cm.analysis_tile.export_labels.save_btn,
+        #     color="primary",
+        #     outlined=True,
+        #     class_="pa-1 ma-1",
+        # )
         self.save_btn.on_event("click", self.save_attributes_to_gdf)
         self.download_alert_data_btn = sw.Btn(
             msg = cm.analysis_tile.export_labels.download_alert_data_btn,
@@ -744,7 +755,7 @@ class AnalysisTile(sw.Layout):
         card06 = v.Card(
             class_="pa-2 ma-2",
             hover=True,
-            children=[label35, self.toolBarSaveExport, self.toolBarDownloads],
+            children=[label35, self.toolBarSaveExport, self.toolBarDownloads, self.alert_save],
         )
 
        
@@ -1747,8 +1758,8 @@ class AnalysisTile(sw.Layout):
 
     ##Process to save results
     def save_attributes_to_gdf(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
+        #widget.loading = True  # Set button to loading state
+        #widget.disabled = True  # Disable button to prevent further clicks
 
         self.download_alert_data_btn.disabled = False
 
@@ -1818,16 +1829,13 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
         alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
 
-        if (
-            self.boton_confirmacion.v_model
-            != cm.analysis_tile.questionarie.confirmation_yes or self.analyzed_alerts_model.defo_dl_layer is None
-        ):
+        if self.boton_confirmacion.v_model == cm.analysis_tile.questionarie.confirmation_no and self.analyzed_alerts_model.defo_dl_layer is not None:
+            raise Exception(cm.analysis_tile.questionarie.confirmation_q)
+
+        if self.analyzed_alerts_model.defo_dl_layer is None:
             alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
             alertas_gdf.at[actual_alert_id, "area_ha"] = 0
-        elif (
-            self.boton_confirmacion.v_model
-            == cm.analysis_tile.questionarie.confirmation_yes
-        ):
+        else:
             alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
                 self.analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
             )
@@ -1837,8 +1845,8 @@ class AnalysisTile(sw.Layout):
 
         self.save_alerts_to_gdf()
         self.analyzed_alerts_model.last_save_time = datetime.today().timestamp()
-        widget.loading = False  # Remove loading state
-        widget.disabled = False  # Re-enable the button
+        #widget.loading = False  # Remove loading state
+        #widget.disabled = False  # Re-enable the button
 
     def download_data(self, widget, event, data):
         widget.loading = True  # Set button to loading state
