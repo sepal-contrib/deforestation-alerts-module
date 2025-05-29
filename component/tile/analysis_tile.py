@@ -36,6 +36,7 @@ from ipyleaflet import GeoData, GeoJSON
 import threading
 import queue
 import ast
+from pathlib import Path
 
 su.init_ee()
 
@@ -904,7 +905,7 @@ class AnalysisTile(sw.Layout):
         self.next_button.disabled = True
         self.alert_id_button.disabled = True
         self.go_to_alert_button.disabled = True
-        print('number of current threads is ', threading.active_count())
+        #print('number of current threads is ', threading.active_count())
         if widget.value == 0:
             self.analyzed_alerts_model.actual_alert_id = int(
                 self.alert_id_button.v_model
@@ -1010,9 +1011,7 @@ class AnalysisTile(sw.Layout):
     def image_slider_info_callback(self, selected_item, info_element, model_att):
         info_element.loading = True
         info1 = selected_item["source"]
-        info2 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime(
-            "%Y-%m-%d"
-        )
+        info2 = selected_item["milis"]
         info3 = selected_item["cloud_cover"]
         info4 = selected_item["value"]
         info5 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime(
@@ -1034,7 +1033,9 @@ class AnalysisTile(sw.Layout):
                 tag="strong",
                 children=[", " + cm.analysis_tile.img_selection.selected_img_info_date],
             ),
-            info2,
+            datetime.utcfromtimestamp(info2 / 1000).strftime(
+            "%Y-%m-%d"
+            ),
             v.Html(
                 tag="strong",
                 children=[
@@ -1215,7 +1216,7 @@ class AnalysisTile(sw.Layout):
         self.toolBarDL2.hide()
         self.download_alert_data_btn.disabled = True
         self.toolBarDownloads.hide()
-
+        self.analyzed_alerts_model.defo_dl_layer = None
         # Select alert
         alerta = self.analyzed_alerts_model.alerts_gdf.iloc[
             self.analyzed_alerts_model.actual_alert_id
@@ -1775,7 +1776,12 @@ class AnalysisTile(sw.Layout):
         alertas_gdf.at[actual_alert_id, "after_img"] = (
             self.selected_img_after_info_list[3]
         )
-
+        alertas_gdf.at[actual_alert_id, "before_img_info"] = (
+            self.selected_img_before_info_list[1]
+        )
+        alertas_gdf.at[actual_alert_id, "after_img_info"] = (
+            self.selected_img_after_info_list[1]
+        )
         ##Create dictionary of alert sources
         # alertas_gdf.at[actual_alert_id, "alert_sources"] = format_list(
         #     get_unique_alerts(alertas_gdf.loc[actual_alert_id, "alert_type_unique"])
@@ -1814,7 +1820,7 @@ class AnalysisTile(sw.Layout):
 
         if (
             self.boton_confirmacion.v_model
-            != cm.analysis_tile.questionarie.confirmation_yes
+            != cm.analysis_tile.questionarie.confirmation_yes or self.analyzed_alerts_model.defo_dl_layer is None
         ):
             alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
             alertas_gdf.at[actual_alert_id, "area_ha"] = 0
@@ -1850,7 +1856,10 @@ class AnalysisTile(sw.Layout):
         # Convert it to a GeoDataFrame (since a single row becomes a Series)
         selected_gdf = gpd.GeoDataFrame([selected_element], columns=alertas_gdf.columns)
         # Set the geometry column if necessary (optional, if it is not already set)
-        selected_gdf.set_geometry("alert_polygon", inplace=True)
+        if not selected_gdf['alert_polygon'].isnull().all():
+            selected_gdf.set_geometry("alert_polygon", inplace=True)
+        else:
+            selected_gdf.set_geometry("bounding_box", inplace=True)
         gpkg_name = (
             self.app_tile_model.recipe_folder_path
             + "/alert_"
@@ -1870,6 +1879,17 @@ class AnalysisTile(sw.Layout):
             + self.selected_img_after_info_list[4]
             + ".tif"
         )
+        
+        if not Path(image_name).exists():
+            download_both_images(
+                self.selected_img_before,
+                self.selected_img_after,
+                image_name,
+                self.selected_img_before_info_list[0],
+                self.selected_img_after_info_list[0],
+                self.actual_alert_grid,
+            )
+        
         prediction_name = (
             self.app_tile_model.recipe_folder_path
             + "/alert_"
