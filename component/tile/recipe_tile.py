@@ -175,6 +175,7 @@ class RecipeTile(sw.Layout):
         self.load_recipe_input.v_model = ""
         widget.set_loader_text(cm.recipe_tile.alert_done_message)
         time.sleep(1)
+        self.app_tile_model.current_page_view = "aux_tile"
 
     def load_recipe_button(self, widget, event, data):
 
