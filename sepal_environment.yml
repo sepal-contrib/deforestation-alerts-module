@@ -5,36 +5,37 @@ channels:
 
 dependencies:
   - python=3.10
-  - pyproj
-  - gdal=3.8.3
-  - tensorflow
-  - tensorflow-probability
-  - pandas
-  - tf-keras
-  - pip
+  - cartopy==0.24.1
   - fiona==1.10.1
+  - gdal=3.8.3
   - geemap==0.35.0
   - geopandas==1.0.1
+  - ipyevents==2.0.2
   - ipyleaflet==0.19.2
+  - ipython==8.12.3
   - ipyvuetify==1.10.0
   - ipywidgets==8.1.5
-  - ipyevents==2.0.2
-  - ipython==8.12.3
   - matplotlib==3.9.2
   - numpy==1.26.4
+  - pandas==2.2.2
+  - pyproj
   - rasterio<=1.4.3 # keep conda version, pip fallback below
+  - sepal_ui==2.22.1
   - shapely==2.0.6
+  - tensorflow==2.17.0
+  - tensorflow-probability
+  - tf-keras
   - traitlets==5.14.3
-  - cartopy==0.24.1
+  - pip
   - pip:
-      - sepal_ui==2.21.0
-      - git+https://github.com/openforis/earthengine-api.git@v1.1.5rc0#egg=earthengine-api&subdirectory=python
-      - rasterio==1.3.10 # fallback for pip install if conda version not compatible
-      - voila==0.5.8
-      - tomli==2.0.2
       - dateutils==0.6.12
-      - huggingface_hub
-      - MightyMosaic==1.2.3
+      - git+https://github.com/openforis/earthengine-api.git@v1.1.5rc0#egg=earthengine-api&subdirectory=python
       - geedim==1.8.1
-      - python-docx==1.1.2
+      - huggingface_hub
       - matplotlib-scalebar==0.8.1
+      - MightyMosaic==1.2.3
+      - python-docx==1.1.2
+      - rasterio==1.3.10 # fallback for pip install if conda version not compatible
+      - sepal_ui==2.21.0
+      - tomli==2.0.2
+      - voila==0.5.8
