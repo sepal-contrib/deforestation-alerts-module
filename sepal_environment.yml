@@ -37,3 +37,4 @@ dependencies:
       - sepal_ui==2.22.1
       - tomli==2.0.2
       - voila==0.5.8
+      - pygaul<=4
