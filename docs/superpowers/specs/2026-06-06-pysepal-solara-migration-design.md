@@ -68,6 +68,7 @@ CNN refinement, overview, reporting, recipes).
 | D8 | State management | Keep **serializable domain models** (`recipe`, `alerts`) as `pysepal.model.Model` for `export_data`/`import_data`; add a **`gui/store/state_manager.py` `AppState`** (`solara.reactive`) for ephemeral UI/navigation state, holding references to the domain models. | Mirrors se.plan; cleanly separates "what gets saved" from "what the UI tracks." |
 | D9 | Alert sources | **Keep all four** (GLAD-L, GLAD-S2, RADD, CCDC). Flag CCDC's user-asset path as the most bespoke; candidate for later simplification, not removal now. | No feature loss; revisit if it complicates the raster path. |
 | D10 | Recipe back-compat | **Support loading existing recipes.** Add a back-compat loader; adopt se.plan's JSON-schema validation. The `bbox` column (D2) keeps `alert_db.csv` consumers working. | D2 was chosen partly for compatibility; honor it. |
+| D11 | Cluster-size filter | **Required step** in `vectorize.py`: pixel-connectivity `sieve` before polygonizing + optional `area_ha` drop after. Reuses the existing `min_size_pixels` threshold. *Open:* keep the user-facing unit as **pixels** (default) or expose **hectares**. | Preserves current behavior (discard small alert clusters); §6.2/§6.3. |
 
 ---
 
@@ -198,24 +199,42 @@ Stage A,B (KEEP): build + merge ee.Image  → SelectedAlertsModel.filtered_alert
    local GeoTIFF
         │  optional: metric-CRS reproject for area_ha  (srm geo_utils.calculate_utm_rioxarray)
         ▼  scripts/vectorize.py  (NEW)
-   rasterio.features.sieve(min_size_pixels)  →  rasterio.features.shapes  →  shapely polygons
+   CLUSTER-SIZE FILTER (D11, first-class):
+     rasterio.features.sieve(raster, size=min_cluster_pixels, connectivity)
+       └─ drops connected alert clusters smaller than the user threshold (speckle)
+   → rasterio.features.shapes  →  shapely polygons (one per surviving cluster)
+   → optional second-pass area filter: drop polygons with area_ha < min_cluster_ha
         │   ← block-wise read for large rasters (srm optimal_block_shape pattern, D4)
         │   ← template already in mosaics_helper.raster_to_gdf (line 220)
         ▼
    convert_to_geopandas(...)  ← REUSE (alert_filter_helper.py:486), re-pointed to local shapes
         │   produces geometry=polygon (D2) + bbox column + point(centroid)
-        │   + alert_sources/date columns, preserving the integer alert-code decoding
+        │   + alert_sources/date columns + area_ha, preserving the integer alert-code decoding
         ▼
    AlertAnalysisModel.alerts_gdf   (downstream consumers unchanged)
 ```
+
+The **cluster-size filter is a required step, not an optimization** (D11): the new
+pipeline must reproduce the current app's ability to discard alert clusters below a
+minimum size. It runs in two complementary places — a pixel-connectivity `sieve`
+*before* polygonizing (cheap, removes raster speckle by connected-component size),
+and an optional area-based drop *after* polygonizing (so the threshold can be
+expressed in hectares once geometry exists). The threshold is the existing
+user-controlled parameter (`min_size_pixels`, computed in
+`create_vector_download_params`); D11 records whether the user-facing unit stays
+pixels or becomes hectares.
 
 ### 6.3 Reusable functions
 
 - **Download:** `download_ee_image(...)` from `/tmp/srm/spatialrisk/gee/ee_raster_export.py`
   (uses `image.gd.prepareForExport(...)` + `img.gd.toGeoTIFF(...)`). Copy near-verbatim.
-- **Vectorize:** generalize your own `mosaics_helper.raster_to_gdf` (already
-  `rasterio.features.shapes`); add `features.sieve` for `min_size_pixels`
-  (already computed in `create_vector_download_params`).
+- **Vectorize + cluster-size filter (D11):** generalize your own
+  `mosaics_helper.raster_to_gdf` (already `rasterio.features.shapes`); add
+  `features.sieve(size=min_cluster_pixels, connectivity=…)` as a **required**
+  pre-polygonize cluster filter, plus an optional post-polygonize `area_ha`
+  drop. Threshold reuses `min_size_pixels` from `create_vector_download_params`.
+  The `vectorize.py` service signature exposes `min_cluster_size` and
+  `connectivity` as parameters so the view can bind the existing UI control.
 - **gdf assembly:** reuse `convert_to_geopandas` (`alert_filter_helper.py:486`),
   re-pointed to local shapes; add the `bbox` column (D2).
 - **Block/metric helpers (D4):** `srm/spatialrisk/geo_utils.py`
@@ -242,6 +261,10 @@ Stage A,B (KEEP): build + merge ee.Image  → SelectedAlertsModel.filtered_alert
 - New geometry is true polygons (D2), not bboxes; the `bbox` column reproduces the
   old shape for back-compat. Downstream area/report logic validated against a
   fixture gdf.
+- **Cluster-size filter (D11):** a fixture raster with clusters straddling the
+  threshold asserts that sub-threshold clusters are dropped and supra-threshold
+  ones survive, for both pixel-`sieve` and `area_ha` paths, at the chosen
+  connectivity.
 
 ---
 
