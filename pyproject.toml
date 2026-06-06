@@ -27,3 +27,9 @@ convention = "google"
 
 [tool.codespell]
 skip = 'component/message/**/*.json'
+
+[tool.pytest.ini_options]
+# Put the repo root on sys.path so `import component...` works without installing the app.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra"
