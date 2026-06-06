@@ -25,6 +25,12 @@ jobs:
           python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.1.5rc0', 'Expected fork 1.1.5rc0, got ' + v"
 
 
+      - name: Run unit tests
+        shell: micromamba-shell {0}
+        run: |
+          pip install pytest
+          pytest tests/ -v
+
       - name: Verify notebook kernelspec
         run: |
           kernel_name=$(python3 -c "import json; nb=json.load(open('ui.ipynb')); print(nb['metadata']['kernelspec']['name'])")
