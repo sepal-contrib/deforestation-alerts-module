@@ -6,7 +6,7 @@ from math import floor, ceil
 import geopandas as gpd
 import ee
 import pandas as pd
-from component.message import cm
+from deforestation_alerts.message import cm
 
 init_ee()
 

@@ -1,14 +1,14 @@
 from pysepal import sepalwidgets as sw
 from pysepal import aoi
 from pysepal.mapping import SepalMap
-from component.message import cm
+from deforestation_alerts.message import cm
 import ipyvuetify as v
 from IPython.display import display, HTML
 from ipyleaflet import WidgetControl, GeoData, LayersControl as ipyLayersControl
 
 from pysepal.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
-from component.scripts.overview_helper import *
+from deforestation_alerts.scripts.overview_helper import *
 from pysepal.mapping.layers_control import LayersControl
 from pysepal.mapping.menu_control import MenuControl
 from pysepal.mapping.map_btn import MapBtn

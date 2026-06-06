@@ -17,7 +17,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from typing import List, Tuple, Union
 from box import Box
-from component.parameter import module_dir
+from deforestation_alerts.parameter import module_dir
 import zipfile
 from warnings import warn
 from typing import Any, Callable, List, Optional

@@ -2,7 +2,7 @@
 
 import pytest
 
-from component.scripts.report_builder import (
+from deforestation_alerts.scripts.report_builder import (
     get_unique_alerts,
     format_list,
     parse_formatted_string,

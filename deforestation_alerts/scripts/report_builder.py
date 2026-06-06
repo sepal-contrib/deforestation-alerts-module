@@ -8,12 +8,12 @@ import numpy as np
 from matplotlib_scalebar.scalebar import ScaleBar
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
-from component.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.mosaics_helper import *
 from datetime import datetime
 import cartopy.io.img_tiles as cimgt
 from shapely.geometry import box
 from pathlib import Path
-from component.parameter import directory
+from deforestation_alerts.parameter import directory
 import ast
 
 def ensure_list(input_data):

@@ -11,15 +11,15 @@ import ipyvuetify as v
 from IPython.display import display, HTML
 from ipyleaflet import TileLayer
 
-from component.message import cm
-from component.scripts.alert_filter_helper import *
-from component.scripts.mosaics_helper import *
-from component.scripts.recipe_helper import (
+from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.alert_filter_helper import *
+from deforestation_alerts.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.recipe_helper import (
     create_directory,
     save_model_parameters_to_json,
 )
 
-from component.widget.custom_sw import CustomDrawControl, CustomBtnWithLoader
+from gui.widget.custom_sw import CustomDrawControl, CustomBtnWithLoader
 
 import math
 import ee

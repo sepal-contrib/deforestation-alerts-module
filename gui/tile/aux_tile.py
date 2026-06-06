@@ -1,7 +1,7 @@
 from pysepal import sepalwidgets as sw
 from pysepal import aoi
 from pysepal.mapping import SepalMap
-from component.message import cm
+from deforestation_alerts.message import cm
 import ipyvuetify as v
 from pysepal.scripts.utils import init_ee
 from traitlets import Any, Unicode, link

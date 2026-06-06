@@ -1,8 +1,8 @@
 from pysepal import model
 from traitlets import Any, Unicode
 
-from component import parameter as cp
-from component.message import cm
+from deforestation_alerts import parameter as cp
+from deforestation_alerts.message import cm
 
 
 class AuxModel(model.Model):

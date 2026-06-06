@@ -1,6 +1,6 @@
 from pysepal import model
 from traitlets import Any, Unicode
-from component.message import cm
+from deforestation_alerts.message import cm
 
 
 class AppTileModel(model.Model):

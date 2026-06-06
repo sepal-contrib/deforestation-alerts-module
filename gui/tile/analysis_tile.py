@@ -11,12 +11,12 @@ import ipyvuetify as v
 from IPython.display import display, HTML
 
 
-from component.message import cm
-from component.scripts.alert_filter_helper import convert_to_geopandas
-from component.scripts.mosaics_helper import *
-from component.scripts.report_builder import *
-from component.scripts.recipe_helper import update_saved_dictionary
-from component.widget.custom_sw import (
+from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.alert_filter_helper import convert_to_geopandas
+from deforestation_alerts.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.report_builder import *
+from deforestation_alerts.scripts.recipe_helper import update_saved_dictionary
+from gui.widget.custom_sw import (
     CustomDrawControl,
     CustomSlideGroup,
     CustomBtnWithLoader,
@@ -1416,7 +1416,7 @@ class AnalysisTile(sw.Layout):
         from tensorflow.keras import backend as K
         from MightyMosaic import MightyMosaic
 
-        from component.scripts.model_worker import apply_dl_model, save_prediction_prob
+        from deforestation_alerts.scripts.model_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
 
         hf_hub_download(
@@ -1458,7 +1458,7 @@ class AnalysisTile(sw.Layout):
         from tensorflow.keras import backend as K
         from MightyMosaic import MightyMosaic
 
-        from component.scripts.model_worker import apply_dl_model, save_prediction_prob
+        from deforestation_alerts.scripts.model_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
 
         hf_hub_download(

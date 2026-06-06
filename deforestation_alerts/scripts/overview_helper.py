@@ -19,7 +19,7 @@ from ipyevents import Event
 import ipyleaflet
 import ipyvuetify as v
 from pysepal.mapping.menu_control import MenuControl
-from component.message import cm
+from deforestation_alerts.message import cm
 
 
 def calculateAlertClasses(gpdf):

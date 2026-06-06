@@ -11,8 +11,8 @@ from datetime import datetime
 import json
 import threading
 from shapely import wkt
-from component.parameter import directory
-from component.scripts.alert_filter_helper import check_alert_filter_inputs
+from deforestation_alerts.parameter import directory
+from deforestation_alerts.scripts.alert_filter_helper import check_alert_filter_inputs
 
 
 def generate_recipe_string():

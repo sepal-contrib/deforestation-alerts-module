@@ -5,7 +5,7 @@ from pathlib import Path
 
 from shapely.geometry import Point
 
-from component.scripts.recipe_helper import (
+from deforestation_alerts.scripts.recipe_helper import (
     load_gdf_from_csv,
     update_saved_dictionary,
 )
@@ -35,11 +35,11 @@ def test_update_saved_dictionary_overwrites_and_adds_keys(tmp_path):
     assert data["recipe_name"] == "recipe_test"  # added
 
 
-from component.model.aux_model import AuxModel
-from component.model.alerts_model import SelectedAlertsModel
-from component.model.analysis_model import AlertAnalysisModel
-from component.model.app_model import AppTileModel
-from component.scripts.recipe_helper import save_model_parameters_to_json
+from deforestation_alerts.model.aux_model import AuxModel
+from deforestation_alerts.model.alerts_model import SelectedAlertsModel
+from deforestation_alerts.model.analysis_model import AlertAnalysisModel
+from deforestation_alerts.model.app_model import AppTileModel
+from deforestation_alerts.scripts.recipe_helper import save_model_parameters_to_json
 
 
 class _AoiDateStub:

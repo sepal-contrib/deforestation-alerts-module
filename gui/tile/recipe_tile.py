@@ -1,30 +1,30 @@
 from pysepal import sepalwidgets as sw
-from component.message import cm
+from deforestation_alerts.message import cm
 import ipyvuetify as v
-from component.widget.custom_sw import CustomBtnWithLoader
+from gui.widget.custom_sw import CustomBtnWithLoader
 from pysepal.scripts import utils as su
 from traitlets import Any, Unicode, link
 from pysepal.planetapi import PlanetView
 import pandas as pd
 import geopandas as gpd
 from datetime import datetime
-from component.scripts.recipe_helper import (
+from deforestation_alerts.scripts.recipe_helper import (
     generate_recipe_string,
     create_directory,
     load_parameters_from_json_btn_state,
     load_gdf_from_csv,
 )
-from component.scripts.alert_filter_helper import check_alert_filter_inputs
-from component.parameter import directory
+from deforestation_alerts.scripts.alert_filter_helper import check_alert_filter_inputs
+from deforestation_alerts.parameter import directory
 import json
 import time
 import os
 import threading
-from component.model.aoi_date_model import AoiDateModel
-from component.model.aux_model import AuxModel
-from component.model.alerts_model import AlertFilterModel, SelectedAlertsModel
-from component.model.analysis_model import AlertAnalysisModel
-from component.model.app_model import AppTileModel
+from deforestation_alerts.model.aoi_date_model import AoiDateModel
+from deforestation_alerts.model.aux_model import AuxModel
+from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
+from deforestation_alerts.model.analysis_model import AlertAnalysisModel
+from deforestation_alerts.model.app_model import AppTileModel
 
 
 su.init_ee()

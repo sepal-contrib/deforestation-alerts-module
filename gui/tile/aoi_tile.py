@@ -2,15 +2,15 @@ from pysepal import sepalwidgets as sw
 from pysepal import aoi
 from pysepal.mapping import SepalMap
 import ipyvuetify as v
-from component.widget.custom_sw import CustomBtnWithLoader
+from gui.widget.custom_sw import CustomBtnWithLoader
 from IPython.display import display, HTML
 
 from pysepal.scripts import utils as su
-from component.message import cm
+from deforestation_alerts.message import cm
 
 from traitlets import Any, Unicode, link
 
-from component.scripts.aoi_helper import *
+from deforestation_alerts.scripts.aoi_helper import *
 
 import ee
 

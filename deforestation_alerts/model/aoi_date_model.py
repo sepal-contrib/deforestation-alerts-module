@@ -1,7 +1,7 @@
 from pysepal import model
 from pysepal.aoi.aoi_model import AoiModel
 from traitlets import Any, Unicode
-from component.message import cm
+from deforestation_alerts.message import cm
 
 
 class AoiDateModel(AoiModel):

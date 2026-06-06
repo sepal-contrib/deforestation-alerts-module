@@ -6,10 +6,10 @@ import pandas as pd
 import geopandas as gpd
 from datetime import date, datetime
 from math import floor, ceil
-from component.message import cm
+from deforestation_alerts.message import cm
 from shapely.geometry import Point, Polygon
 from pysepal.scripts import utils as su
-from component.scripts.report_builder import get_unique_alerts, format_list
+from deforestation_alerts.scripts.report_builder import get_unique_alerts, format_list
 
 def check_integer(text, exception_text):
     try:

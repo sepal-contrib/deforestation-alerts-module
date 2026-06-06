@@ -1,9 +1,9 @@
 """Characterization tests for model export/import dictionaries (GEE-free models)."""
 
-from component.model.app_model import AppTileModel
-from component.model.aux_model import AuxModel
-from component.model.alerts_model import SelectedAlertsModel
-from component.model.analysis_model import AlertAnalysisModel
+from deforestation_alerts.model.app_model import AppTileModel
+from deforestation_alerts.model.aux_model import AuxModel
+from deforestation_alerts.model.alerts_model import SelectedAlertsModel
+from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 
 
 def test_app_tile_model_roundtrip():
