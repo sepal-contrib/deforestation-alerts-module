@@ -34,7 +34,7 @@ dependencies:
       - matplotlib-scalebar==0.8.1
       - MightyMosaic==1.2.3
       - python-docx==1.1.2
-      - sepal_ui==2.22.1
+      - pysepal==3.6.1
       - tomli==2.0.2
       - voila==0.5.8
       - pygaul<=4
