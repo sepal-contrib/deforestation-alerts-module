@@ -1,11 +1,11 @@
-from sepal_ui import sepalwidgets as sw
-from sepal_ui import aoi
-from sepal_ui.mapping import SepalMap
+from pysepal import sepalwidgets as sw
+from pysepal import aoi
+from pysepal.mapping import SepalMap
 from component.message import cm
 import ipyvuetify as v
-from sepal_ui.scripts.utils import init_ee
+from pysepal.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
-from sepal_ui.planetapi import PlanetView
+from pysepal.planetapi import PlanetView
 
 init_ee()
 

@@ -1,5 +1,5 @@
-from sepal_ui import model
-from sepal_ui.aoi.aoi_model import AoiModel
+from pysepal import model
+from pysepal.aoi.aoi_model import AoiModel
 from traitlets import Any, Unicode
 from component.message import cm
 

@@ -1,10 +1,10 @@
-from sepal_ui import sepalwidgets as sw
+from pysepal import sepalwidgets as sw
 from component.message import cm
 import ipyvuetify as v
 from component.widget.custom_sw import CustomBtnWithLoader
-from sepal_ui.scripts import utils as su
+from pysepal.scripts import utils as su
 from traitlets import Any, Unicode, link
-from sepal_ui.planetapi import PlanetView
+from pysepal.planetapi import PlanetView
 import pandas as pd
 import geopandas as gpd
 from datetime import datetime

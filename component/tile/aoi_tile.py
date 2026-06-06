@@ -1,11 +1,11 @@
-from sepal_ui import sepalwidgets as sw
-from sepal_ui import aoi
-from sepal_ui.mapping import SepalMap
+from pysepal import sepalwidgets as sw
+from pysepal import aoi
+from pysepal.mapping import SepalMap
 import ipyvuetify as v
 from component.widget.custom_sw import CustomBtnWithLoader
 from IPython.display import display, HTML
 
-from sepal_ui.scripts import utils as su
+from pysepal.scripts import utils as su
 from component.message import cm
 
 from traitlets import Any, Unicode, link

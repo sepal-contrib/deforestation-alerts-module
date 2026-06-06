@@ -8,7 +8,7 @@ from datetime import date, datetime
 from math import floor, ceil
 from component.message import cm
 from shapely.geometry import Point, Polygon
-from sepal_ui.scripts import utils as su
+from pysepal.scripts import utils as su
 from component.scripts.report_builder import get_unique_alerts, format_list
 
 def check_integer(text, exception_text):

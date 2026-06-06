@@ -1,17 +1,17 @@
-from sepal_ui import color, model, sepalwidgets as sw
+from pysepal import color, model, sepalwidgets as sw
 from traitlets import Any, HasTraits, Unicode, link, observe
-from sepal_ui.scripts import utils as su
-from sepal_ui.scripts import decorator
+from pysepal.scripts import utils as su
+from pysepal.scripts import decorator
 from functools import wraps
-from sepal_ui.message import ms
-from sepal_ui.frontend.resize_trigger import rt
+from pysepal.message import ms
+from pysepal.frontend.resize_trigger import rt
 from copy import deepcopy
 import geopandas as gpd
 from ipyleaflet import DrawControl, GeomanDrawControl
 from shapely import geometry as sg
 import ipyvuetify as v
-from sepal_ui.sepalwidgets.sepalwidget import SepalWidget
-from sepal_ui.translator import Translator
+from pysepal.sepalwidgets.sepalwidget import SepalWidget
+from pysepal.translator import Translator
 import json
 from configparser import ConfigParser
 from pathlib import Path

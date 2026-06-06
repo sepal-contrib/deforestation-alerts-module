@@ -1,11 +1,11 @@
-from sepal_ui import color, sepalwidgets as sw
-from sepal_ui import aoi
-from sepal_ui.mapping import SepalMap
-from sepal_ui.mapping.draw_control import DrawControl
-from sepal_ui.mapping.layers_control import LayersControl
-from sepal_ui.mapping.inspector_control import InspectorControl
-from sepal_ui.mapping.aoi_control import AoiControl
-from sepal_ui.scripts import utils as su
+from pysepal import color, sepalwidgets as sw
+from pysepal import aoi
+from pysepal.mapping import SepalMap
+from pysepal.mapping.draw_control import DrawControl
+from pysepal.mapping.layers_control import LayersControl
+from pysepal.mapping.inspector_control import InspectorControl
+from pysepal.mapping.aoi_control import AoiControl
+from pysepal.scripts import utils as su
 from traitlets import link, observe
 import ipyvuetify as v
 from IPython.display import display, HTML

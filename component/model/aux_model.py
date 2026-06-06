@@ -1,4 +1,4 @@
-from sepal_ui import model
+from pysepal import model
 from traitlets import Any, Unicode
 
 from component import parameter as cp

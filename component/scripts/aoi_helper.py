@@ -1,6 +1,6 @@
 import ee
-from sepal_ui.scripts import utils as su
-from sepal_ui.scripts.utils import init_ee
+from pysepal.scripts import utils as su
+from pysepal.scripts.utils import init_ee
 from datetime import datetime, date
 from math import floor, ceil
 import geopandas as gpd

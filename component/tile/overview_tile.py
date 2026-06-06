@@ -1,17 +1,17 @@
-from sepal_ui import sepalwidgets as sw
-from sepal_ui import aoi
-from sepal_ui.mapping import SepalMap
+from pysepal import sepalwidgets as sw
+from pysepal import aoi
+from pysepal.mapping import SepalMap
 from component.message import cm
 import ipyvuetify as v
 from IPython.display import display, HTML
 from ipyleaflet import WidgetControl, GeoData, LayersControl as ipyLayersControl
 
-from sepal_ui.scripts.utils import init_ee
+from pysepal.scripts.utils import init_ee
 from traitlets import Any, Unicode, link
 from component.scripts.overview_helper import *
-from sepal_ui.mapping.layers_control import LayersControl
-from sepal_ui.mapping.menu_control import MenuControl
-from sepal_ui.mapping.map_btn import MapBtn
+from pysepal.mapping.layers_control import LayersControl
+from pysepal.mapping.menu_control import MenuControl
+from pysepal.mapping.map_btn import MapBtn
 import ee
 
 init_ee()

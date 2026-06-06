@@ -18,7 +18,7 @@ from ipyevents import Event
 
 import ipyleaflet
 import ipyvuetify as v
-from sepal_ui.mapping.menu_control import MenuControl
+from pysepal.mapping.menu_control import MenuControl
 from component.message import cm
 
 
