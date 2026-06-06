@@ -13,6 +13,10 @@ def test_app_tile_model_roundtrip():
     m.temporary_recipe_name = "tmp"
     exported = m.export_dictionary()
     assert exported["recipe_name"] == "recipe_test"
+    assert set(exported) == {
+        "current_page_view", "temporary_recipe_name",
+        "recipe_name", "recipe_folder_path",
+    }
 
     loaded = AppTileModel()
     loaded.import_from_dictionary(exported)
@@ -71,3 +75,15 @@ def test_analysis_model_export_defaults_and_id_clamp():
     assert m.actual_alert_id == 7
     assert m.max_alert_id == 9
     assert m.last_save_time == 123.0
+
+
+def test_analysis_model_export_max_alert_id_mirrors_actual_alert_id():
+    # CHARACTERIZATION QUIRK: export_dictionary derives "max_alert_id" from
+    # actual_alert_id, NOT from max_alert_id (component/model/analysis_model.py).
+    # We pin this so a later refactor must change it consciously.
+    m = AlertAnalysisModel()
+    m.actual_alert_id = 7
+    m.max_alert_id = 9
+    exported = m.export_dictionary()
+    assert exported["actual_alert_id"] == 7
+    assert exported["max_alert_id"] == 7  # mirrors actual_alert_id, NOT 9
