@@ -1924,7 +1924,7 @@ class AnalysisTile(sw.Layout):
         )
 
         if self.aux_model.custom_report_template == "":
-            report_template = "utils/report_template.docx"
+            report_template = "data/report_template.docx"
         else:
             report_template = self.aux_model.custom_report_template
 

@@ -26,7 +26,7 @@ convention = "google"
 "*/__init__.py" = ["F403"] # unable to detect undefined names | hide internal structure
 
 [tool.codespell]
-skip = 'component/message/**/*.json'
+skip = 'deforestation_alerts/message/**/*.json'
 
 [tool.pytest.ini_options]
 # Put the repo root on sys.path so `import component...` works without installing the app.
