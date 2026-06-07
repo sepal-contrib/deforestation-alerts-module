@@ -21,3 +21,22 @@ def sample_wkt_csv(tmp_path):
         "1,\n"  # empty geometry -> should decode to None
     )
     return csv_path
+
+
+@pytest.fixture(scope="session")
+def gee():
+    """Initialize Earth Engine once; skip the module if unauthenticated."""
+    try:
+        from pysepal.scripts.utils import init_ee
+        init_ee()
+        import ee
+        ee.Number(1).getInfo()  # force a round-trip to confirm creds
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Earth Engine unavailable: {exc}")
+    return True
+
+
+@pytest.fixture
+def tiny_aoi(gee):
+    import ee
+    return ee.Geometry.Rectangle([-55.10, -10.10, -55.00, -10.00])  # ~Amazon
