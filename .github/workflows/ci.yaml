@@ -25,6 +25,8 @@ jobs:
           python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.1.5rc0', 'Expected fork 1.1.5rc0, got ' + v"
 
 
+      # Tier-1 tests run fully offline; the Tier-2 raster-pipeline integration tests
+      # run when EARTHENGINE_TOKEN is set (above) and otherwise skip cleanly.
       - name: Run unit tests
         shell: micromamba-shell {0}
         run: |
