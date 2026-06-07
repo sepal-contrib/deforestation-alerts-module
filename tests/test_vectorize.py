@@ -1,9 +1,19 @@
 """Tier-1 tests for the local raster→vector pipeline (no GEE, no UI)."""
 
+import inspect
+
+from deforestation_alerts.scripts import raster_export
 from deforestation_alerts.scripts.geo_utils import (
     get_utm_proj_str_from_lat_lon,
     optimal_block_shape,
 )
+
+
+def test_download_ee_image_exposes_expected_params():
+    sig = inspect.signature(raster_export.download_ee_image)
+    for p in ("image", "filename", "region", "scale", "crs",
+              "unmask_value", "nodata_value"):
+        assert p in sig.parameters, f"download_ee_image missing param {p}"
 
 
 def test_utm_proj_northern_and_southern():
