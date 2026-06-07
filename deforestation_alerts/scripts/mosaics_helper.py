@@ -1,7 +1,6 @@
 import pandas as pd
 import geopandas as gpd
 import ee
-import geemap
 import os
 import pathlib
 import zipfile
@@ -188,7 +187,7 @@ def scaleS2v2(image):
 
 
 def download_both_images(image1, image2, image_name, source1, source2, region):
-    from geemap import download_ee_image
+    from deforestation_alerts.scripts.raster_export import download_ee_image
     import ee
     import os
 
