@@ -29,7 +29,7 @@ dependencies:
   - pip:
       - dateutils==0.6.12
       - git+https://github.com/openforis/earthengine-api.git@v1.1.5rc0#egg=earthengine-api&subdirectory=python
-      - geedim==1.8.1
+      - geedim>=2.0.0
       - huggingface_hub
       - matplotlib-scalebar==0.8.1
       - MightyMosaic==1.2.3
