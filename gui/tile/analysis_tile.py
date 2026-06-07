@@ -801,15 +801,12 @@ class AnalysisTile(sw.Layout):
         )  # Save as CSV
 
     def create_gdf_partial(self):
-        """
-        Determines the value of `x` based on the conditions of `partial` and `complete`.
+        """Build/refresh alerts_gdf from the partial (quick-view) alert set.
 
-        Args:
-            partial: A variable that can be None or set to a value.
-            complete: A variable that can be None or set to a value.
-
-        Returns:
-            The value of `x` based on the given conditions.
+        `alerts_bbs` is now a local-vectorize GeoDataFrame (the first N clusters),
+        consumed by the re-pointed `convert_to_geopandas` (Phase 3). Under the
+        current publish order (full set first) this usually hits the "arrived after"
+        no-op; kept for the case where the partial set is observed first.
         """
         partial = self.selected_alerts_model.alerts_bbs
         data = self.analyzed_alerts_model.alerts_gdf
@@ -838,15 +835,12 @@ class AnalysisTile(sw.Layout):
             pass
 
     def create_gdf_full(self):
-        """
-        Determines the value of `x` based on the conditions of `partial` and `complete`.
+        """Build/refresh alerts_gdf from the full alert set.
 
-        Args:
-            partial: A variable that can be None or set to a value.
-            complete: A variable that can be None or set to a value.
-
-        Returns:
-            The value of `x` based on the given conditions.
+        `alerts_total_bbs` is now a local-vectorize GeoDataFrame (Phase 3), consumed
+        by the re-pointed `convert_to_geopandas` to produce the polygon-geometry
+        alerts_gdf (+ back-compat `bounding_box`/`point`). The merge branch and its
+        cross-thread race are intentionally unchanged here (Phase 4 use_task rework).
         """
         complete = self.selected_alerts_model.alerts_total_bbs
         data = self.analyzed_alerts_model.alerts_gdf

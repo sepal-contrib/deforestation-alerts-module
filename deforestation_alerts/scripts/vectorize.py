@@ -30,7 +30,9 @@ def _date_stats(date_arr, transform, geom, nodata):
 def _records_from_arrays(alert, date, transform, *, min_cluster_size,
                          connectivity, nodata):
     """Sieve the alert mask, polygonize surviving clusters, return raw records."""
-    mask = (alert > 0).astype(np.uint8)
+    # Exclude the nodata fill: the download unmasks masked pixels to `nodata`
+    # (255) in both bands, and 255 > 0 would otherwise be read as alert code 255.
+    mask = ((alert > 0) & (alert != nodata)).astype(np.uint8)
     cleaned = features.sieve(mask, size=int(min_cluster_size),
                              connectivity=connectivity)
     alert_clean = np.where(cleaned > 0, alert, 0).astype(alert.dtype)

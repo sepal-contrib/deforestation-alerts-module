@@ -348,67 +348,47 @@ class AlertsFilterTile(sw.Layout):
 
     ## Processing functions
 
-    def assign_bb_partial(self, json_file):
-        self.selected_alerts_model.alerts_bbs = json_file
-        self.selected_alerts_model.received_alerts = "Yes"
-        #print(self.selected_alerts_model.received_alerts)
-
-    def assign_bb_full(self, json_file):
-        self.selected_alerts_model.alerts_total_bbs = json_file
-        self.selected_alerts_model.received_alerts = "Yes"
-        #print(self.selected_alerts_model.received_alerts)
-
-    def start_thread_full(
-        self,
-        poly,
-        alerta_reducir,
-        custom_reducer,
-        pixel_size,
-        min_size_pixels,
-        max_number_alerts,
-        sorting,
+    def run_local_vectorize(
+        self, image, region, scale, min_size_pixels, max_number_alerts
     ):
-        thread = threading.Thread(
-            target=lambda: self.assign_bb_full(
-                obtener_datos_gee_total_v3(
-                    poly,
-                    alerta_reducir,
-                    custom_reducer,
-                    pixel_size,
-                    min_size_pixels,
-                    max_number_alerts,
-                    sorting,
-                )
-            )
-        )
-        thread.start()
+        """Download the filtered alert raster, vectorize locally, publish alerts.
 
-    def start_thread_partial(
-        self,
-        poly,
-        alerta_reducir,
-        custom_reducer,
-        pixel_size,
-        min_size_pixels,
-        max_number_alerts,
-        sorting,
-        grid_size,
-    ):
-        thread2 = threading.Thread(
-            target=lambda: self.assign_bb_partial(
-                obtener_datos_gee_parcial_map(
-                    poly,
-                    alerta_reducir,
-                    custom_reducer,
-                    pixel_size,
-                    min_size_pixels,
-                    max_number_alerts,
-                    sorting,
-                    grid_size,
-                )
+        Runs on a worker thread (kept for the traitlets phase; Phase 4 -> use_task).
+        """
+        import threading
+
+        def _work():
+            from deforestation_alerts.scripts.raster_export import download_ee_image
+            from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
+            from deforestation_alerts.parameter import module_dir
+
+            # geedim exports over an ee.Geometry; the AOI / drawn poly is a
+            # FeatureCollection, so pass its geometry.
+            export_region = (
+                region.geometry()
+                if isinstance(region, ee.FeatureCollection)
+                else region
             )
-        )
-        thread2.start()
+            out_tif = str(module_dir / "filtered_alerts.tif")
+            # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255
+            download_ee_image(
+                image.select(["alert", "date"]),
+                out_tif,
+                region=export_region,
+                scale=scale,
+                crs="EPSG:4326",
+                unmask_value=255,
+                nodata_value=255,
+            )
+            gdf = vectorize_alert_raster(
+                out_tif, min_cluster_size=min_size_pixels, connectivity=8,
+            )
+            # publish: full set, plus the first N for the "partial" quick view
+            self.selected_alerts_model.alerts_total_bbs = gdf
+            self.selected_alerts_model.alerts_bbs = gdf.head(int(max_number_alerts))
+            self.selected_alerts_model.received_alerts = True
+
+        threading.Thread(target=_work, daemon=True).start()
 
     def create_filtered_alert_raster(
         self,
@@ -606,21 +586,14 @@ class AlertsFilterTile(sw.Layout):
         widget.set_loader_text("Creating alerts vectors...")
 
         # Create vector download required variables
-
-        # Crear reducer a aplicar sobre las alertas
-        custom_reducer = (
-            ee.Reducer.count()
-            .combine(ee.Reducer.toList().unweighted(), "alert_type_")
-            .combine(ee.Reducer.minMax().unweighted(), "alert_date_")
-        )
         max_number_alerts = int(user_max_number_alerts)
 
         (
             poly,
-            alerta_reducir,
+            alerta_reducir,  # unused now (was the GEE reducer band stack); kept for the tuple shape
             pixel_size,
             min_size_pixels,
-            grid_size,
+            grid_size,  # unused now (was the GEE coveringGrid size)
         ) = self.create_vector_download_params(
             self.aoi_date_model.feature_collection,
             user_selection_polygon,
@@ -630,27 +603,16 @@ class AlertsFilterTile(sw.Layout):
             alert_area_selection,
         )
 
-        # Create partial vector alerts
-        self.start_thread_partial(
-            poly,
-            alerta_reducir,
-            custom_reducer,
-            pixel_size,
-            min_size_pixels,
-            max_number_alerts,
-            alert_sorting_method,
-            grid_size,
-        )
-
-        # Create complete vector alerts
-        self.start_thread_full(
-            poly,
-            alerta_reducir,
-            custom_reducer,
-            pixel_size,
-            min_size_pixels,
-            max_number_alerts,
-            alert_sorting_method,
+        # Download the filtered alert raster and vectorize it locally (replaces the
+        # two GEE reduceToVectors threads). The cluster-size sieve (min_size_pixels)
+        # is the primary filter now (D11); sorting and the max-count cap on the full
+        # set are no longer applied here (deferred to Phase 4 review/use_task).
+        self.run_local_vectorize(
+            image=self.selected_alerts_model.filtered_alert_raster,
+            region=poly,
+            scale=pixel_size,
+            min_size_pixels=min_size_pixels,
+            max_number_alerts=max_number_alerts,
         )
 
         wait_messages = [

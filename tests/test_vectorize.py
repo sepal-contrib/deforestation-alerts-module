@@ -114,6 +114,22 @@ def test_empty_raster_returns_empty_gdf(tmp_path):
     assert "area_ha" in gdf.columns
 
 
+def test_nodata_fill_is_not_read_as_an_alert(tmp_path):
+    # The download unmasks masked pixels to 255 (== nodata) in BOTH bands. A block
+    # of 255s in the alert band must be treated as background, not as code-255 alerts.
+    alert = np.zeros((6, 6), dtype="float32")
+    alert[0:2, 0:2] = 255                 # masked-out fill (nodata) -> not an alert
+    alert[3:5, 3:5] = 10                  # a real 4-pixel cluster
+    date = np.full((6, 6), 255, dtype="float32")
+    date[3:5, 3:5] = 2023.100
+    path = _write_two_band(tmp_path, alert, date)
+
+    gdf = vectorize_alert_raster(path, min_cluster_size=1, connectivity=8)
+
+    assert len(gdf) == 1
+    assert int(gdf.iloc[0]["alert_type_unique"][0]) == 10
+
+
 def test_blockwise_stitches_cluster_across_block_boundary(tmp_path):
     # one 4x2 cluster (code 1) spanning rows 3-6; force a block split at row 4
     alert = np.zeros((8, 4), dtype="float32")
