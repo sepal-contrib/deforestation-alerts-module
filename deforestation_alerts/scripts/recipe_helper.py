@@ -137,9 +137,11 @@ def load_parameters_from_json(
         user_selection_polygon,
     )
     app_tile_model.import_from_dictionary(model_parameters)
-    analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
-        app_tile_model.recipe_folder_path + "/alert_db.csv",
-        ["bounding_box", "point", "alert_polygon"],
+    analyzed_alerts_model.alerts_gdf = backfill_geometry(
+        load_gdf_from_csv(
+            app_tile_model.recipe_folder_path + "/alert_db.csv",
+            ["geometry", "bounding_box", "point", "alert_polygon"],
+        )
     )
     analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
@@ -211,9 +213,11 @@ def load_parameters_from_json_btn_state(
     btn.set_loader_text("Loading Alerts DB...")
     # btn.set_loader_percentage(90)
     app_tile_model.import_from_dictionary(model_parameters)
-    analyzed_alerts_model.alerts_gdf = load_gdf_from_csv(
-        app_tile_model.recipe_folder_path + "/alert_db.csv",
-        ["bounding_box", "point", "alert_polygon"],
+    analyzed_alerts_model.alerts_gdf = backfill_geometry(
+        load_gdf_from_csv(
+            app_tile_model.recipe_folder_path + "/alert_db.csv",
+            ["geometry", "bounding_box", "point", "alert_polygon"],
+        )
     )
     btn.set_loader_text("Loading last alert...")
     # btn.set_loader_percentage(100)
@@ -224,14 +228,42 @@ def load_parameters_from_json_btn_state(
 def load_gdf_from_csv(csv_file, geometry_columns_list):
     # load encoded dataframe
     df = pd.read_csv(csv_file)
-    # decode geometry columns as strings back into shapely objects
+    # decode geometry columns (any WKT type: Point, Polygon, ...) into shapely
+    # objects. Tolerate columns absent from older recipes (e.g. the polygon
+    # `geometry` column added in Phase 3) so requesting it never KeyErrors.
     for c in geometry_columns_list:
+        if c not in df.columns:
+            continue
         df[c] = df[c].apply(
             lambda x: wkt.loads(x) if pd.notnull(x) and x != "" else None
         )
 
     # finally reconstruct geodataframe
     gdf = gpd.GeoDataFrame(df)
+    return gdf
+
+
+def save_gdf_to_csv(gdf, path, geometry_cols):
+    """Write a gdf to CSV, encoding each named geometry column as WKT."""
+    out = pd.DataFrame(gdf).copy()
+    for col in geometry_cols:
+        if col in out.columns:
+            out[col] = out[col].apply(lambda g: g.wkt if g is not None else "")
+    out.to_csv(path, index=False)
+    return path
+
+
+def backfill_geometry(gdf):
+    """Ensure a polygon `geometry` column and make it the active geometry.
+
+    Old (pre-Phase-3) recipes stored only `point`/`bounding_box`; fill the new
+    polygon `geometry` from `bounding_box` when it is missing (D10 back-compat).
+    """
+    if "geometry" not in gdf.columns and "bounding_box" in gdf.columns:
+        gdf = gdf.copy()
+        gdf["geometry"] = gdf["bounding_box"]
+    if "geometry" in gdf.columns:
+        gdf = gpd.GeoDataFrame(gdf, geometry="geometry")
     return gdf
 
 
