@@ -138,3 +138,6 @@ test/
 outputs/
 utils/model2.h5
 CLAUDE.md
+
+# Local Claude Code session data
+.claude/
