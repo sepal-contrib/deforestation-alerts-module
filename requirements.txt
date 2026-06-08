@@ -1,6 +1,7 @@
 # these libs are requested to build application env
 jupyter
 voila==0.5.8
+solara==1.57.4
 tomli==2.0.2
 
 dateutils==0.6.12

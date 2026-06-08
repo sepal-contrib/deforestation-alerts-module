@@ -32,4 +32,4 @@ skip = 'deforestation_alerts/message/**/*.json'
 # Put the repo root on sys.path so `import component...` works without installing the app.
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
