@@ -1,27 +1,29 @@
-"""AlertCnnPanel sub-component STUB (Task 9.4).
+"""AlertCnnPanel: the review questionnaire (confirmation + loss-driver).
 
-Architecture layer: view. Ports the OLD ``AnalysisTile`` confirmation + driver +
-edit-DL question card area (``card35`` in the OLD ``initialize_layout``): the
-"Is this a true alert?" select (``boton_confirmacion``) and the loss-driver
-combobox (``comments_input``). The OLD tile also ran the CNN models from the
-edit toolbar (``run_dl_model_1/2`` -> ``cnn_worker.apply_dl_model``); that model
-execution is owned by Task 9.4 and is NOT wired here.
+Architecture layer: view. Ports the OLD ``AnalysisTile`` confirmation + driver
+question card area (``card35`` in the OLD ``initialize_layout``): the "Is this a
+true alert?" select (``boton_confirmacion``) and the loss-driver combobox
+(``comments_input``). This panel owns ONLY the review questionnaire.
 
-For the FOUNDATION this renders the *static* confirmation card with the question
-select + driver combobox present but with NO behavior wired (the OLD save flow
-read ``boton_confirmacion.v_model`` / ``comments_input.v_model`` — that lives in
-AlertExport / Task 9.5).
+The CNN model execution (``run_dl_model_1/2`` -> ``cnn_worker.apply_dl_model``)
+and the polygon draw/edit live in ``edit_tools.py`` (``AlertEditTools``), since the
+DL toolbars share the draw controls and are only shown during edit mode — they are
+NOT wired here. This panel only renders the static confirmation card with the
+question select + driver combobox; the save flow that reads
+``confirmation_select.v_model`` / ``driver_combobox.v_model`` lives in AlertExport
+(Task 9.5), so the selections are stashed on ``widgets`` for it to read.
 
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets + scratch (the CNN run reads selected images from here).
+    Shared heavy widgets + scratch; the confirmation/driver selections are stashed
+    here for AlertExport to read.
 app_state : AppState
     Navigation + alerts source of truth.
 analyzed_alerts_model : AlertAnalysisModel
-    Holds ``model1_prediction_file`` / ``model2_prediction_file`` (CNN outputs).
+    Reserved per-alert scratch state (unused by this questionnaire panel).
 app_tile_model : AppTileModel
-    ``recipe_folder_path`` for prediction output paths.
+    Reserved (output paths) — unused by this questionnaire panel.
 """
 
 import ipyvuetify as v
@@ -38,7 +40,11 @@ def AlertCnnPanel(
     analyzed_alerts_model,
     app_tile_model,
 ):
-    """STUB. Renders the static confirmation + loss-driver card (no behavior)."""
+    """Renders the review questionnaire card (confirmation + loss-driver).
+
+    CNN model execution and polygon draw/edit are owned by ``AlertEditTools``
+    (``edit_tools.py``), not this panel.
+    """
     confirmation_select = solara.use_memo(
         lambda: sw.Select(
             items=[
@@ -103,7 +109,6 @@ def AlertCnnPanel(
         ),
         dependencies=[],
     )
-    # TODO(Task 9.4 AlertCnnPanel): wire run_dl_model_1/2 (cnn_worker.apply_dl_model
-    # with a FILE-PATH model arg, e.g. "/tmp/Model1.h5") + verify/add/remove
-    # prediction handlers.
+    # CNN run + verify/add/remove prediction handlers live in AlertEditTools
+    # (edit_tools.py), since the DL toolbars share the draw controls.
     solara.display(card)

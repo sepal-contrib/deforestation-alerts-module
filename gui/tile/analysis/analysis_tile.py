@@ -346,6 +346,7 @@ def AnalysisTile(
                 widgets=widgets,
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,
+                app_tile_model=app_tile_model,
             )
             AlertExport(
                 widgets=widgets,
