@@ -42,6 +42,7 @@ from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
 from gui.tile.alerts_filter_tile import AlertsFilterTile
+from gui.tile.analysis import AnalysisTile
 from gui.tile.aux_tile import AuxTile
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.recipe_tile import RecipeTile
@@ -178,6 +179,24 @@ def Page():
         dependencies=[],
     )
 
+    # Analysis tile: render_fixed so its hooks (memoized AnalysisWidgets + the
+    # view_actual_alert use_effect keyed on app_state.actual_alert_id) are
+    # preserved while MapApp gets a concrete DOMWidget. The effect early-returns
+    # when no alerts are loaded, so the render_fixed double-mount is safe.
+    analysis_widget = solara.use_memo(
+        lambda: solara.render_fixed(
+            AnalysisTile(
+                aux_model=aux_model,
+                selected_alerts_model=selected_alerts_model,
+                analyzed_alerts_model=analyzed_alerts_model,
+                app_tile_model=app_tile_model,
+                app_state=app_state,
+                gee_interface=gee_interface,
+            )
+        )[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -223,6 +242,13 @@ def Page():
             "icon": "mdi-folder-open",
             "display": "step",
             "content": recipe_widget,
+        },
+        {
+            "id": 7,
+            "name": cm.app.drawer_item.analysis,
+            "icon": "mdi-image-search",
+            "display": "step",
+            "content": analysis_widget,
         },
     ]
 
