@@ -33,8 +33,10 @@ from pysepal.solara import (
 )
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.model.aux_model import AuxModel
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
+from gui.tile.aux_tile import AuxTile
 from gui.tile.overview_tile import OverviewTile
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -55,12 +57,29 @@ def on_kernel_start():
 def Page():
     setup_theme_colors()
 
+    # MapApp renders the main map with `fullscreen=True`, which gives its leaflet
+    # container `position: fixed; z-index: 800` over the whole viewport. The
+    # step-content panel (where "step" tiles render) sits at z-index 0, so the
+    # map bleeds through any gaps in a form tile (e.g. Aux). The panel only exists
+    # while a step is active, so lifting it above the map is safe and fixes every
+    # step tile at once; map-backed tiles render their own map inside the panel.
+    solara.Style(".step-content-container { z-index: 801 !important; }")
+
     gee_interface = get_current_gee_interface()
     get_current_sepal_client()
     theme_state = get_current_theme_state()
 
-    # Ephemeral UI/nav state (passed to tiles as they are ported in Tasks 8-9).
-    app_state = AppState()  # noqa: F841
+    # Ephemeral UI/nav state — memoized so it is not re-created on every
+    # Page re-render (which would discard all reactive values mid-session).
+    app_state = solara.use_memo(lambda: AppState(), dependencies=[])
+
+    # -----------------------------------------------------------------------
+    # Domain model creation — session-stable, shared across tiles.
+    # This is the shared-domain-model creation point: later tiles (AOI,
+    # Filter, Recipe) will add their own domain models here in the same
+    # use_memo pattern.
+    # -----------------------------------------------------------------------
+    aux_model = solara.use_memo(lambda: AuxModel(), dependencies=[])
 
     map_ = SepalMap(
         gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
@@ -84,6 +103,12 @@ def Page():
         dependencies=[],
     )
 
+    # Aux tile: memoized so the widget tree + .bind() chain are created once.
+    aux_widget = solara.use_memo(
+        lambda: solara.render_fixed(AuxTile(aux_model=aux_model))[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -101,6 +126,13 @@ def Page():
             # (panel over the map) or "dialog"; an empty display renders nowhere.
             "display": "step",
             "content": overview_widget,
+        },
+        {
+            "id": 3,
+            "name": cm.app.drawer_item.aux,
+            "icon": "mdi-layers-plus",
+            "display": "step",
+            "content": aux_widget,
         },
     ]
 
