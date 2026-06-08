@@ -10,9 +10,15 @@ class AoiDateModel(AoiModel):
     for specifying the date range of retrieved alerts.
     """
 
-    # Add start_date and end_date attributes
-    start_date = Unicode("").tag(sync=True)
-    end_date = Unicode("").tag(sync=True)
+    # Add start_date and end_date attributes.
+    # allow_none=True mirrors the base AoiModel string traits (name/admin/method/
+    # asset_name are all Unicode(allow_none=True)). This is required when an
+    # AoiView is constructed with this model as its `model=`: AoiView.__init__
+    # calls model.clear_attributes(), which setattr(None) on EVERY trait. With a
+    # plain Unicode("") these two raised TraitError(None) and the AOI tile failed
+    # to render. allow_none keeps them consistent with the rest of the AOI model.
+    start_date = Unicode("", allow_none=True).tag(sync=True)
+    end_date = Unicode("", allow_none=True).tag(sync=True)
 
     # Optional: Add docstrings or comments for clarity
     """

@@ -33,9 +33,12 @@ from pysepal.solara import (
 )
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.model.aoi_date_model import AoiDateModel
+from deforestation_alerts.model.alerts_model import AlertFilterModel
 from deforestation_alerts.model.aux_model import AuxModel
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
+from gui.tile.aoi_tile import AoiTile
 from gui.tile.aux_tile import AuxTile
 from gui.tile.overview_tile import OverviewTile
 
@@ -80,6 +83,8 @@ def Page():
     # use_memo pattern.
     # -----------------------------------------------------------------------
     aux_model = solara.use_memo(lambda: AuxModel(), dependencies=[])
+    aoi_date_model = solara.use_memo(lambda: AoiDateModel(), dependencies=[])
+    alert_filter_model = solara.use_memo(lambda: AlertFilterModel(), dependencies=[])
 
     map_ = SepalMap(
         gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
@@ -109,6 +114,21 @@ def Page():
         dependencies=[],
     )
 
+    # AOI tile: render_fixed so its hooks (memoized map/AoiView, ccdc observer,
+    # search use_task) are preserved while MapApp gets a concrete DOMWidget.
+    aoi_widget = solara.use_memo(
+        lambda: solara.render_fixed(
+            AoiTile(
+                aoi_date_model=aoi_date_model,
+                alert_filter_model=alert_filter_model,
+                aux_model=aux_model,
+                app_state=app_state,
+                gee_interface=gee_interface,
+            )
+        )[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -133,6 +153,13 @@ def Page():
             "icon": "mdi-layers-plus",
             "display": "step",
             "content": aux_widget,
+        },
+        {
+            "id": 4,
+            "name": cm.app.drawer_item.aoi,
+            "icon": "mdi-map-marker",
+            "display": "step",
+            "content": aoi_widget,
         },
     ]
 
