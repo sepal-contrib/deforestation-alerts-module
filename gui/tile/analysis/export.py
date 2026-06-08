@@ -83,6 +83,7 @@ from deforestation_alerts.scripts.report_builder import (
     format_list,
     generate_deforestation_report_with_word_template,
 )
+from gui.tile.analysis.paths import alert_image_name
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -239,14 +240,13 @@ def _download_data(widgets, app_state, aux_model, app_tile_model):
         gpkg_name, driver="GPKG"
     )
 
-    # Before/after image GeoTIFF (download only if not already present).
-    image_name = (
-        recipe_folder
-        + "/alert_"
-        + str(actual_alert_id)
-        + widgets.selected_img_before_info_list[4]
-        + widgets.selected_img_after_info_list[4]
-        + ".tif"
+    # Before/after image GeoTIFF (download only if not already present). Built via
+    # the shared helper so it matches the path the CNN run (edit_tools) wrote.
+    image_name = alert_image_name(
+        recipe_folder,
+        actual_alert_id,
+        widgets.selected_img_before_info_list,
+        widgets.selected_img_after_info_list,
     )
     if not Path(image_name).exists():
         download_both_images(

@@ -77,6 +77,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     simplify_and_extract_features,
     verify_raster,
 )
+from gui.tile.analysis.paths import alert_image_name
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -122,13 +123,8 @@ def _run_cnn_model(model_repo, model_file, suffix, widgets, app_state, app_tile_
     before_info = widgets.selected_img_before_info_list
     after_info = widgets.selected_img_after_info_list
 
-    image_name = (
-        recipe_folder
-        + "/alert_"
-        + str(actual_alert_id)
-        + before_info[4]
-        + after_info[4]
-        + ".tif"
+    image_name = alert_image_name(
+        recipe_folder, actual_alert_id, before_info, after_info
     )
     source1 = before_info[0]
     source2 = after_info[0]
