@@ -14,6 +14,10 @@ from IPython.display import display, HTML
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.alert_filter_helper import convert_to_geopandas
 from deforestation_alerts.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.imagery_service import (
+    getIndividualS2,
+    getIndividualLandsat,
+)
 from deforestation_alerts.scripts.report_builder import *
 from deforestation_alerts.scripts.recipe_helper import update_saved_dictionary
 from gui.widget.custom_sw import (

@@ -14,6 +14,7 @@ from ipyleaflet import TileLayer
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.alert_filter_helper import *
 from deforestation_alerts.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.imagery_service import getPlanetMonthly
 from deforestation_alerts.scripts.recipe_helper import (
     create_directory,
     save_model_parameters_to_json,
