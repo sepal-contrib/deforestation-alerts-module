@@ -34,11 +34,13 @@ from pysepal.solara import (
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
-from deforestation_alerts.model.alerts_model import AlertFilterModel
+from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
+from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.model.aux_model import AuxModel
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
+from gui.tile.alerts_filter_tile import AlertsFilterTile
 from gui.tile.aux_tile import AuxTile
 from gui.tile.overview_tile import OverviewTile
 
@@ -85,6 +87,12 @@ def Page():
     aux_model = solara.use_memo(lambda: AuxModel(), dependencies=[])
     aoi_date_model = solara.use_memo(lambda: AoiDateModel(), dependencies=[])
     alert_filter_model = solara.use_memo(lambda: AlertFilterModel(), dependencies=[])
+    selected_alerts_model = solara.use_memo(
+        lambda: SelectedAlertsModel(), dependencies=[]
+    )
+    analyzed_alerts_model = solara.use_memo(
+        lambda: AlertAnalysisModel(), dependencies=[]
+    )
 
     map_ = SepalMap(
         gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
@@ -129,6 +137,24 @@ def Page():
         dependencies=[],
     )
 
+    # Filter tile: render_fixed so its hooks (memoized map/draw control/form
+    # widgets, the available_alerts_raster_list observer, the analyze use_task)
+    # are preserved while MapApp gets a concrete DOMWidget.
+    filter_widget = solara.use_memo(
+        lambda: solara.render_fixed(
+            AlertsFilterTile(
+                aoi_date_model=aoi_date_model,
+                aux_model=aux_model,
+                alert_filter_model=alert_filter_model,
+                selected_alerts_model=selected_alerts_model,
+                analyzed_alerts_model=analyzed_alerts_model,
+                app_state=app_state,
+                gee_interface=gee_interface,
+            )
+        )[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -160,6 +186,13 @@ def Page():
             "icon": "mdi-map-marker",
             "display": "step",
             "content": aoi_widget,
+        },
+        {
+            "id": 5,
+            "name": cm.app.drawer_item.filter,
+            "icon": "mdi-filter",
+            "display": "step",
+            "content": filter_widget,
         },
     ]
 

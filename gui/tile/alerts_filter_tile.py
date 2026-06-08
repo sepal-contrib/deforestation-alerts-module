@@ -1,520 +1,464 @@
-from pysepal import sepalwidgets as sw
-from pysepal import aoi
-from pysepal import color
+"""Filter (alert) tile as a Solara component (Phase 4 port of the old ipyvuetify class).
+
+Architecture layer: view — imports solara + ipyvuetify/pysepal/ipyleaflet for UI
+only. The EE-orchestration + raster-export + local-vectorize work runs in
+``solara.lab.use_task(prefer_threaded=True)``; the EE helpers themselves are
+module-level functions taking explicit args (no ``self``) so the Recipe tile can
+reuse them later.
+
+Key port decisions (see Phase 4 plan, Step 5):
+
+* **The 1 traitlets observer is kept as a traitlets observer.** The OLD tile did
+  ``alert_filter_model.observe(self.update_tile, "available_alerts_raster_list")``
+  — when AOI's search populates the raster dict, the source-select items + the map
+  layers refresh. A Solara ``use_effect`` keyed on the trait would NOT fire
+  (traitlets mutations don't trigger Solara re-renders), so we register a real
+  ``alert_filter_model.observe`` exactly once via ``use_effect([])`` and tear it
+  down on unmount. Same pattern AOI used for its ccdc observer.
+* **Heavy widgets are memoized once** (``dependencies=[]``): the own ``SepalMap`` +
+  ``DrawControl`` + ``InspectorControl``, and all the form widgets (source select,
+  size/area/sorting inputs, max-count combobox). Identities are stable across
+  re-renders so the observer can mutate ``.items``/``.v_model`` in place and the
+  draw control stays attached to its map. The map fills the panel (like AOI /
+  Overview) so the fullscreen main map does not bleed through.
+* **The "Analyze" flow is a button-triggered ``use_task``, not auto-run.**
+  ``use_task(dependencies=None)`` only runs when called, so it never fires on
+  mount (which would hit EE with no AOI/alerts). The task validates inputs via the
+  shared ``check_alert_filter_inputs`` (through a thin ``_InputsShim`` around the
+  memoized widgets — same approach as AOI), saves selections onto
+  ``selected_alerts_model``, builds the filtered EE image, exports it with
+  ``download_ee_image``, vectorizes locally with ``vectorize_alert_raster``, and
+  publishes the assembled ``alerts_gdf`` to ``app_state.alerts_gdf.value`` (what
+  Overview + the future analysis tile consume).
+
+Deferred (with TODO comments) — intertwined with the Recipe tile (next task) and
+the analysis tile (Task 9):
+
+* Planet-imagery dictionaries / recipe-folder creation / save-recipe-parameters:
+  these need ``app_tile_model.recipe_folder_path`` plumbing that is not wired into
+  the Solara ``Page()`` until the Recipe tile is ported. See the TODOs in the task.
+* Post-analyze navigation to the analysis tile: set ``current_page_view`` only;
+  driving ``MapApp.current_step`` is a separate cross-tile navigation concern.
+* ``load_saved_parameters``: belongs to the Recipe tile; not ported here.
+"""
+
+import logging
+import math
+
+import ee
+import ipyvuetify as v
+import solara
+from ipyleaflet import TileLayer
 from pysepal.mapping import SepalMap
 from pysepal.mapping.draw_control import DrawControl
-from pysepal.mapping.layers_control import LayersControl
 from pysepal.mapping.inspector_control import InspectorControl
-from pysepal.mapping.map_btn import MapBtn
-from pysepal.scripts import utils as su
-import ipyvuetify as v
-from IPython.display import display, HTML
-from ipyleaflet import TileLayer
 
 from deforestation_alerts.message import cm
-from deforestation_alerts.scripts.alert_filter_helper import *
-from deforestation_alerts.scripts.mosaics_helper import *
-from deforestation_alerts.scripts.imagery_service import getPlanetMonthly
-from deforestation_alerts.scripts.recipe_helper import (
-    create_directory,
-    save_model_parameters_to_json,
+from deforestation_alerts.parameter import module_dir
+from deforestation_alerts.scripts.alert_filter_helper import (
+    check_alert_filter_inputs,
+    convert_to_geopandas,
+    custom_reduce_image_collection,
 )
+from deforestation_alerts.scripts.raster_export import download_ee_image
+from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
 
-from gui.widget.custom_sw import CustomDrawControl, CustomBtnWithLoader
+logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
 
-import math
-import ee
-import time
-import threading
-import logging
-from shapely.geometry import Point, Polygon
+# Alert-raster visualization (same as the OLD tile's self.lista_vis_params[0]).
+_ALERT_VIS_PARAMS = {"min": 1, "max": 2, "palette": ["orange", "purple"]}
 
 
-su.init_ee()
+class _InputsShim:
+    """Adapter exposing the attribute shape ``check_alert_filter_inputs`` expects.
 
+    The service helper ``check_alert_filter_inputs(self)`` reads, on the OLD
+    widget-class ``self``:
+      * ``self.alert_source_select.v_model``
+      * ``self.min_area_input.v_model``
+      * ``self.alert_selection_method_select.v_model``
+      * ``self.alert_sorting_select.v_model``
+      * ``self.number_of_alerts.v_model``
+      * ``self.drawn_item.to_json()`` (only when the "by drawn polygon" method is
+        selected)
+    Rather than fork the still-shared helper, we hand it this thin shim around the
+    memoized widgets so the validation logic stays in one place (same approach as
+    the AOI tile's ``_InputsShim`` for ``check_aoi_inputs``).
+    """
 
-class SepalCard(sw.SepalWidget, v.Card):
-    def __init__(self, **kwargs):
-        kwargs["class_"] = "pa-3 ma-3"
-        super().__init__(**kwargs)
-        
-class SepalCardTitle(sw.SepalWidget, v.CardTitle):
-    def __init__(self, **kwargs):
-        kwargs["class_"] = "pa-1 ma-1"
-        super().__init__(**kwargs)
-
-class AlertsFilterTile(sw.Layout):
     def __init__(
         self,
-        aoi_date_model,
-        aux_model,
-        alert_filter_model,
-        selected_alerts_model,
-        analyzed_alerts_model,
-        app_tile_model,
+        alert_source_select,
+        min_area_input,
+        alert_selection_method_select,
+        alert_sorting_select,
+        number_of_alerts,
+        drawn_item,
     ):
+        self.alert_source_select = alert_source_select
+        self.min_area_input = min_area_input
+        self.alert_selection_method_select = alert_selection_method_select
+        self.alert_sorting_select = alert_sorting_select
+        self.number_of_alerts = number_of_alerts
+        self.drawn_item = drawn_item
 
-        self._metadata = {"mount_id": "filter_alerts"}
-        self.aoi_date_model = aoi_date_model
-        self.aux_model = aux_model
-        self.alert_filter_model = alert_filter_model
-        self.selected_alerts_model = selected_alerts_model
-        self.analyzed_alerts_model = analyzed_alerts_model
-        self.app_tile_model = app_tile_model
 
-        # Variables to describe collections
-        self.lista_vis_params = [{"min": 1, "max": 2, "palette": ["orange", "purple"]}]
+def create_filtered_alert_raster(
+    alerts_raster_dictionary,
+    mask_layer,
+    alert_source,
+    alert_area_selection,
+    user_selection_polygon,
+):
+    """Build a single filtered alert ``ee.Image`` from the selected sources.
 
-        # user interface elements
-        self.card00 = None
-        self.card01 = None
+    Module-level (no ``self``) so the Recipe tile can reuse it. Logic is identical
+    to the OLD ``AlertsFilterTile.create_filtered_alert_raster`` — only the model
+    accesses are now explicit args:
 
-        # Create analyze button and functions
-        self.analyze_button = CustomBtnWithLoader(
-            text=cm.filter_tile.analyze_alerts_button, loader_type="text"
+    * ``alerts_raster_dictionary`` <- ``alert_filter_model.available_alerts_raster_list``
+    * ``mask_layer`` <- ``aux_model.mask_layer``
+
+    Unioning multiple sources uses ``custom_reduce_image_collection`` (sum of
+    alerts, min of date). When the area method is "drawn polygon" the result is
+    clipped to that polygon; otherwise the AOI clip happens downstream at export.
+    """
+    if len(alert_source) == 1:
+        alert_union = ee.Image(
+            alerts_raster_dictionary[alert_source[0]]["alert_raster"]
         )
-        self.analyze_alert = sw.Alert().hide()
-        self.analyze_alerts_function = su.loading_button(
-            alert=self.analyze_alert, button=self.analyze_button
-        )(self.analyze_alerts_function)
-
-        self.initialize_layout()
-
-        ## Observe changes in alert_model and update tile when it changes
-        alert_filter_model.observe(self.update_tile, "available_alerts_raster_list")
-
-        super().__init__()
-
-    def initialize_layout(self):
-        # Map Style
-        display(
-            HTML(
-                """
-        <style>
-            .custom-map-class {
-                width: 100% !important;
-                height: 80vh !important;
-                }
-        </style>
-        """
+    else:
+        selected_alert_list = []
+        for label in alert_source:
+            selected_alert_list.append(
+                alerts_raster_dictionary[label]["alert_raster"]
             )
-        )
-        # Create map
-        self.map_1 = SepalMap()
-        self.map_1.add_class("custom-map-class")
-        self.map_1.add_basemap("SATELLITE")
-        self.drawn_item = DrawControl(self.map_1)
-        self.map_1.add(self.drawn_item)
-        self.map_1.add(InspectorControl(self.map_1))
-        self.drawn_item.hide()
+        img_collection_alertas = ee.ImageCollection.fromImages(selected_alert_list)
+        alert_union = custom_reduce_image_collection(img_collection_alertas)
 
-        # No alerts message
-        main_title = SepalCardTitle(children=[cm.filter_tile.available_alerts_title])
-        mkd = v.Html(tag="div", class_="pa-1 ma-2", children=[cm.filter_tile.no_alerts_message])
+    alerta = alert_union
 
-        self.card00 = SepalCard(children=[main_title, mkd])
+    # Mask out if a forest/no-forest (or other) mask layer exists.
+    if mask_layer:
+        mask_layer_img = ee.Image(mask_layer)
+        mask_alert = alerta.updateMask(mask_layer_img).selfMask()
+    else:
+        mask_alert = alerta
 
-        # Create user interface components
-        # Create alert source select component
-        self.alert_source_select = sw.Select(
-            items=self.alert_filter_model.available_alerts_list,
-            v_model=self.alert_filter_model.available_alerts_list,
-            label=cm.filter_tile.available_alerts_hint,
-            multiple=True,
-            clearable=True,
-            chips=True,
+    # Clip to the drawn polygon only when that area-selection method is chosen.
+    if alert_area_selection == cm.filter_tile.area_selection_method_label1:
+        clip_alert = mask_alert.clip(
+            ee.FeatureCollection(user_selection_polygon).geometry()
         )
-        self.alert_source_select.on_event("change", self.link_checkbox_map_btn)
+    else:
+        clip_alert = mask_alert
 
-        self.card01 = SepalCard(
-            children=[
-                main_title,
-                self.alert_source_select,
-            ],
-        )
+    return clip_alert
 
-        # Create min alert area input
-        min_area_title = SepalCardTitle(children=[cm.filter_tile.set_min_alert_siz_title])
-        self.min_area_input = sw.TextField(v_model=0.5, suffix= 'ha')
-        self.card02 = SepalCard(
-            children=[min_area_title, self.min_area_input],
-        )
 
-        # Create Area selection method component
-        area_selection_title = SepalCardTitle(
-            children=[cm.filter_tile.area_selection_method_title]
-        )
-        alert_selection_method_list = [
-            cm.filter_tile.area_selection_method_label1,
-            cm.filter_tile.area_selection_method_label2,
-        ]
-        self.alert_selection_method_select = sw.Select(
-            items=alert_selection_method_list,
-            v_model=cm.filter_tile.area_selection_method_label2,
-            multiple=False,
-            clearable=True,
-            chips=True,
-        )
-        self.card03 = SepalCard(
-            children=[
-                area_selection_title,
-                self.alert_selection_method_select,
-            ],
-        )
+def create_vector_download_params(
+    aoi,
+    user_selection_polygon,
+    clip_alert,
+    alert_source,
+    user_min_alert_size,
+    alert_area_selection,
+):
+    """Compute export region + pixel size + min cluster-size in pixels.
 
-        # Create alert sorting method component
-        alert_sorting_title = SepalCardTitle(
-            children=[cm.filter_tile.alert_sorting_method_title]
-        )
-        alert_sorting_method_list = [
-            cm.filter_tile.alert_sorting_method_label1,
-            cm.filter_tile.alert_sorting_method_label2,
-            cm.filter_tile.alert_sorting_method_label3,
-            cm.filter_tile.alert_sorting_method_label4,
-        ]
-        self.alert_sorting_select = sw.Select(
-            items=alert_sorting_method_list,
-            v_model=cm.filter_tile.alert_sorting_method_label1,
-            multiple=False,
-            clearable=True,
-            chips=True,
-            small_chips =True,
-        )
+    Module-level (no ``self``) so the Recipe tile can reuse it. Logic is identical
+    to the OLD ``AlertsFilterTile.create_vector_download_params``. Returns the
+    5-tuple the OLD caller expected; ``alerta_reducir`` / ``grid_size`` are kept
+    for tuple-shape parity but are unused since the move to local vectorization.
+    """
+    # Reproduce the GEE band stack (unused downstream now, kept for parity).
+    i = clip_alert.select("alert").gt(0).rename("mask_alert")
+    a = clip_alert.select("alert")
+    d = clip_alert.select("date")
+    alerta_reducir = i.addBands(i).addBands(a).addBands(d)
 
-        self.card06 = SepalCard(
-            children=[
-                alert_sorting_title,
-                self.alert_sorting_select,
-            ],
-        )
+    # Pixel size by sensor family (Sentinel sources are finer).
+    pixel_landsat = 28
+    pixel_sentinel = 10
 
-        # Define the callback function that will be triggered
-        def prior_option(widget, event, data):
-            if data == cm.filter_tile.area_selection_method_label2:
-                self.card04.show()
-                self.drawn_item.hide()
-            elif data == cm.filter_tile.area_selection_method_label1:
-                self.card04.hide()
-                self.drawn_item.show()
+    if set(["GLAD-S2", "RADD"]).intersection(alert_source):
+        pixel_size = pixel_sentinel
+        grid_size = 20000
+    else:
+        pixel_size = pixel_landsat
+        grid_size = 20000
+
+    # Minimum cluster size in pixels from the user's min hectares.
+    min_size_hectareas = float(user_min_alert_size) * 10000
+    min_size_pixels = math.ceil(min_size_hectareas / (pixel_size**2))
+
+    # Export region: drawn polygon when chosen, else the whole AOI.
+    if alert_area_selection == cm.filter_tile.area_selection_method_label1:
+        poly = ee.FeatureCollection(user_selection_polygon)
+    else:
+        poly = aoi
+
+    return poly, alerta_reducir, pixel_size, min_size_pixels, grid_size
+
+
+def _refresh_layout(
+    map_widget,
+    drawn_item,
+    alert_source_select,
+    cards,
+    aoi_date_model,
+    aux_model,
+    alert_filter_model,
+):
+    """Refresh the source-select items + map layers from the alert dictionaries.
+
+    Module-level so the traitlets observer handler can call it. Mirrors the OLD
+    tile's ``update_layout``: when no alerts are available, show only the "no
+    alerts" card; otherwise populate the select, reveal the form cards, and
+    rebuild the map (AOI + each alert source's alert/date layers + optional
+    aux/mask layers). ``cards`` is a dict of the show/hide-able cards.
+    """
+    alerts_names_list = alert_filter_model.available_alerts_list
+    alerts_raster_dictionary = alert_filter_model.available_alerts_raster_list
+
+    if not alerts_names_list or len(alerts_names_list) == 0:
+        cards["no_alerts"].show()
+        for key in ("source", "min_area", "area_method", "sorting", "max_number"):
+            cards[key].hide()
+        return
+
+    alert_source_select.items = alerts_names_list
+    alert_source_select.v_model = [alerts_names_list[0]]
+
+    cards["no_alerts"].hide()
+    for key in ("source", "min_area", "area_method", "sorting", "max_number"):
+        cards[key].show()
+
+    # Rebuild the map content.
+    try:
+        map_widget.remove_all()
+        map_widget.add_ee_layer(aoi_date_model.feature_collection, name="AOI")
+
+        for nombre in alerts_raster_dictionary:
+            map_widget.add_ee_layer(
+                alerts_raster_dictionary[nombre]["alert_raster"].select("alert"),
+                name=nombre,
+                vis_params=_ALERT_VIS_PARAMS,
+                shown=False,
+            )
+            map_widget.add_ee_layer(
+                alerts_raster_dictionary[nombre]["alert_raster"]
+                .select("date")
+                .randomVisualizer(),
+                name=nombre + cm.filter_tile.layer_date_helper1,
+                shown=False,
+            )
+
+        if aux_model.aux_layer:
+            if aux_model.aux_layer_vis:
+                vis_aux = {aux_model.aux_layer_vis}
             else:
-                self.card04.show()
-                self.drawn_item.hide()
-
-        self.alert_selection_method_select.on_event("change", prior_option)
-
-        # Create max number of alerts component
-        max_number_title = SepalCardTitle(
-            children=[cm.filter_tile.max_number_of_alerts_title]
-        )
-        self.number_of_alerts = sw.Combobox(
-            items=[cm.filter_tile.max_number_of_alerts_option1],
-            v_model=[cm.filter_tile.max_number_of_alerts_option1],
-            label=cm.filter_tile.max_number_of_alerts_hint,
-            multiple=False,
-            clearable=True,
-            chips=True,
-        )
-        self.card04 = SepalCard(
-            children=[max_number_title, self.number_of_alerts],
-        )
-
-        # Define analyze button function
-        self.analyze_button.on_event("click", self.analyze_alerts_function)
-        self.card05 = SepalCard(
-            class_="pa-3 ma-3 d-flex justify-space-around",
-            children=[self.analyze_button, self.analyze_alert]
-        )
-
-        self.card00.show()
-        self.card01.hide()
-        self.card02.hide()
-        self.card03.hide()
-        self.card04.hide()
-        self.card05.hide()
-        self.card06.hide()
-
-
-        # Two-panel layout using Flex
-        left_panel = v.Flex(
-            children=[self.map_1],
-            style_='flex: 1 1 auto ; overflow: hidden'
-        )
-        right_panel = v.Flex(
-            children=[self.card00, self.card01, self.card02, self.card03, self.card06, self.card04, self.card05],
-            style_='flex: 0 0 16rem ; overflow-y: auto'
-        )
-
-        self.children = [left_panel, right_panel]
-
-    ## User interface functions
-
-    def update_layout(self):
-
-        alerts_names_list = self.alert_filter_model.available_alerts_list
-        alerts_raster_dictionary = self.alert_filter_model.available_alerts_raster_list
-
-        if not alerts_names_list or len(alerts_names_list) == 0:
-            self.card00.show()
-            self.card01.hide()
-            self.card02.hide()
-            self.card03.hide()
-            self.card04.hide()
-            self.card05.hide()
-            self.card06.hide()
-        else:
-            self.alert_source_select.items = alerts_names_list
-            self.alert_source_select.v_model = [alerts_names_list[0]]
-
-            self.card00.hide()
-            self.card01.show()
-            self.card02.show()
-            self.card03.show()
-            self.card04.show()
-            self.card05.show()
-            self.card06.show()
-
-            # Reset map content
-            self.map_1.remove_all()
-            # Add content to map
-            self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
-            # self.map_1.centerObject(self.aoi_date_model.feature_collection)
-
-            for nombre in alerts_raster_dictionary:
-                self.map_1.add_ee_layer(
-                    alerts_raster_dictionary[nombre]["alert_raster"].select("alert"),
-                    # .selfMask(),
-                    name=nombre,
-                    vis_params=self.lista_vis_params[0],
-                    shown=False,
-                )
-                self.map_1.add_ee_layer(
-                    alerts_raster_dictionary[nombre]["alert_raster"].select("date")
-                    # .selfMask()
-                    .randomVisualizer(),
-                    name=nombre + cm.filter_tile.layer_date_helper1,
-                    shown=False,
-                )
-            if self.aux_model.aux_layer:
-                if self.aux_model.aux_layer_vis:
-                    vis_aux = {self.aux_model.aux_layer_vis}
-                else:
-                    vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
-                self.map_1.add_ee_layer(
-                    ee.Image(self.aux_model.aux_layer).selfMask(),
-                    name=cm.filter_tile.layer_aux_name,
-                    vis_params=vis_aux,
-                )
-
-            if self.aux_model.mask_layer:
-                self.map_1.add_ee_layer(
-                    ee.Image(self.aux_model.mask_layer).selfMask(),
-                    name=cm.filter_tile.layer_mask_name,
-                    # vis_params=self.aux_model.aux_layer_vis,
-                    vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
-                )
-            self.link_checkbox_map()
-
-    def update_tile(self, change):
-        # Update the tile when aoi_date_model changes
-        self.update_layout()  # Reinitialize the layout with the new data
-
-    def link_checkbox_map_btn(self, widget, event, data):
-        self.link_checkbox_map()
-
-    def link_checkbox_map(self):
-        """
-        Updates the visibility of EELayers on the given ipyleaflet map
-        based on the value of the v_model.
-
-        Parameters:
-        - v_model (str): The value of the ipyvuetify element to match layer names.
-        - map_element (Map): The ipyleaflet map containing the layers.
-
-        The function will make visible all layers with names matching the v_model
-        value while hiding other EELayers.
-        """
-        map_element = self.map_1
-        check_box_v_model = self.alert_source_select.v_model
-
-        # Iterate over layers in the map
-        for layer in map_element.layers:
-            # Check if the layer is an EELayer and if its name matches the v_model
-            if isinstance(layer, TileLayer) and hasattr(layer, "name"):
-                # Enable layers with the same name as the v_model
-                if layer.name in check_box_v_model:
-                    layer.visible = True
-                # Disable all other EELayers
-                elif "Google Earth Engine" in layer.attribution and layer.name != "AOI":
-                    layer.visible = False
-
-    ## Processing functions
-
-    def run_local_vectorize(
-        self, image, region, scale, min_size_pixels, max_number_alerts
-    ):
-        """Download the filtered alert raster, vectorize locally, publish alerts.
-
-        Runs on a worker thread (kept for the traitlets phase; Phase 4 -> use_task).
-        """
-        import threading
-
-        def _work():
-            from deforestation_alerts.scripts.raster_export import download_ee_image
-            from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
-            from deforestation_alerts.parameter import module_dir
-
-            # geedim exports over an ee.Geometry; the AOI / drawn poly is a
-            # FeatureCollection, so pass its geometry.
-            export_region = (
-                region.geometry()
-                if isinstance(region, ee.FeatureCollection)
-                else region
+                vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
+            map_widget.add_ee_layer(
+                ee.Image(aux_model.aux_layer).selfMask(),
+                name=cm.filter_tile.layer_aux_name,
+                vis_params=vis_aux,
             )
-            out_tif = str(module_dir / "filtered_alerts.tif")
-            # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255
-            download_ee_image(
-                image.select(["alert", "date"]),
-                out_tif,
-                region=export_region,
-                scale=scale,
-                crs="EPSG:4326",
-                unmask_value=255,
-                nodata_value=255,
+
+        if aux_model.mask_layer:
+            map_widget.add_ee_layer(
+                ee.Image(aux_model.mask_layer).selfMask(),
+                name=cm.filter_tile.layer_mask_name,
+                vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
             )
-            gdf = vectorize_alert_raster(
-                out_tif, min_cluster_size=min_size_pixels, connectivity=8,
+        # Sync layer visibility only after a successful rebuild, so a partial
+        # failure above doesn't toggle visibility on an inconsistent layer set.
+        _link_checkbox_map(map_widget, alert_source_select)
+    except Exception:
+        logger.exception("Filter: failed to refresh map layers")
+
+
+def _link_checkbox_map(map_widget, alert_source_select):
+    """Show only the EE layers whose name matches the source-select v_model.
+
+    Identical logic to the OLD tile's ``link_checkbox_map``: enable layers named
+    in the select's value, hide every other GEE layer except the AOI.
+    """
+    check_box_v_model = alert_source_select.v_model or []
+    for layer in map_widget.layers:
+        if isinstance(layer, TileLayer) and hasattr(layer, "name"):
+            if layer.name in check_box_v_model:
+                layer.visible = True
+            elif (
+                "Google Earth Engine" in (layer.attribution or "")
+                and layer.name != "AOI"
+            ):
+                layer.visible = False
+
+
+def _run_local_vectorize(image, region, scale, min_size_pixels):
+    """Export the filtered alert raster to a local GeoTIFF, then vectorize it.
+
+    Body of the OLD ``run_local_vectorize._work`` (minus the threading — the
+    caller is already on the use_task worker thread) and minus the model writes,
+    which the task does. Returns the raw vectorize GeoDataFrame.
+    """
+    # geedim exports over an ee.Geometry; the AOI / drawn poly is a
+    # FeatureCollection, so pass its geometry.
+    export_region = (
+        region.geometry() if isinstance(region, ee.FeatureCollection) else region
+    )
+    out_tif = str(module_dir / "filtered_alerts.tif")
+    # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
+    download_ee_image(
+        image.select(["alert", "date"]),
+        out_tif,
+        region=export_region,
+        scale=scale,
+        crs="EPSG:4326",
+        unmask_value=255,
+        nodata_value=255,
+    )
+    return vectorize_alert_raster(
+        out_tif, min_cluster_size=min_size_pixels, connectivity=8
+    )
+
+
+@solara.component
+def AlertsFilterTile(
+    aoi_date_model,
+    aux_model,
+    alert_filter_model,
+    selected_alerts_model,
+    analyzed_alerts_model,
+    app_state,
+    gee_interface,
+):
+    """Solara port of the old AlertsFilterTile ipyvuetify widget.
+
+    Parameters
+    ----------
+    aoi_date_model : AoiDateModel
+        Recipe domain model providing ``feature_collection`` (the AOI) used as the
+        default export region.
+    aux_model : AuxModel
+        Auxiliary model; ``mask_layer`` masks the alert raster, ``aux_layer`` /
+        ``mask_layer`` add reference layers to the map.
+    alert_filter_model : AlertFilterModel
+        Holds ``available_alerts_list`` / ``available_alerts_raster_list`` (set by
+        the AOI search). The observer on the raster list drives this tile.
+    selected_alerts_model : SelectedAlertsModel
+        Where the user's filter selections + the resulting vectorized alert sets
+        are written (parity with the old tile).
+    analyzed_alerts_model : AlertAnalysisModel
+        Reserved for the deferred planet-imagery dictionaries (see TODOs).
+    app_state : AppState
+        Shared ephemeral reactive store. The assembled ``alerts_gdf`` is published
+        to ``app_state.alerts_gdf`` (Overview + analysis tile consume it).
+    gee_interface : GEEInterface
+        Session GEE interface, forwarded to the map.
+    """
+    # ------------------------------------------------------------------
+    # Memoized map + draw control + inspector. The map fills the panel so the
+    # fullscreen main map does not bleed through (same as AOI / Overview).
+    # ------------------------------------------------------------------
+    map_widget = solara.use_memo(lambda: _build_map(gee_interface), dependencies=[])
+    drawn_item = solara.use_memo(
+        lambda: _build_draw_control(map_widget), dependencies=[]
+    )
+
+    # ------------------------------------------------------------------
+    # Memoized form widgets. Created once so identities are stable: the observer
+    # mutates the source select's .items/.v_model in place, and the draw control
+    # toggles its own visibility from the area-method callback. (Raw ipyvuetify,
+    # not reacton rv.*, on purpose — a reacton element is rebuilt each render and
+    # can't be imperatively mutated; same rationale as overview_tile's SimpleTable.)
+    # ------------------------------------------------------------------
+    widgets = solara.use_memo(
+        lambda: _build_form_widgets(alert_filter_model, drawn_item), dependencies=[]
+    )
+    (
+        alert_source_select,
+        min_area_input,
+        alert_selection_method_select,
+        alert_sorting_select,
+        number_of_alerts,
+        cards,
+    ) = widgets
+
+    # Initial show/hide is established by _build_form_widgets (only the
+    # "no alerts" card visible, like the OLD __init__). If a search already
+    # populated the alerts before this tile mounted, sync once on mount so the
+    # form + map reflect that state (the observer only fires on *future* changes).
+    def _sync_on_mount():
+        if alert_filter_model.available_alerts_list:
+            _refresh_layout(
+                map_widget,
+                drawn_item,
+                alert_source_select,
+                cards,
+                aoi_date_model,
+                aux_model,
+                alert_filter_model,
             )
-            # publish: full set, plus the first N for the "partial" quick view
-            self.selected_alerts_model.alerts_total_bbs = gdf
-            self.selected_alerts_model.alerts_bbs = gdf.head(int(max_number_alerts))
-            self.selected_alerts_model.received_alerts = True
 
-        threading.Thread(target=_work, daemon=True).start()
+    solara.use_effect(_sync_on_mount, dependencies=[])
 
-    def create_filtered_alert_raster(
-        self,
-        alert_source,
-        user_min_alert_size,
-        alert_area_selection,
-        alert_sorting_method,
-        user_max_number_alerts,
-        user_selection_polygon,
-    ):
-        # Process alerts comming from different sources, retun a single image
-        filtered_alert_dictionary = self.alert_filter_model.available_alerts_raster_list
-
-        if len(alert_source) == 1:
-            alert_union = ee.Image(
-                filtered_alert_dictionary[alert_source[0]]["alert_raster"]
+    # ------------------------------------------------------------------
+    # The 1 traitlets observer — registered exactly once, torn down on unmount.
+    # (A Solara use_effect keyed on the trait would NOT fire: traitlets mutations
+    # don't trigger Solara re-renders.) Refreshes the select items + map layers
+    # when AOI's search populates available_alerts_raster_list.
+    # ------------------------------------------------------------------
+    def _register_observer():
+        def handler(change):
+            _refresh_layout(
+                map_widget,
+                drawn_item,
+                alert_source_select,
+                cards,
+                aoi_date_model,
+                aux_model,
+                alert_filter_model,
             )
-        else:
-            selected_alert_list = []
-            for label in alert_source:
-                selected_alert_list.append(
-                    filtered_alert_dictionary[label]["alert_raster"]
-                )
-            img_collection_alertas = ee.ImageCollection.fromImages(selected_alert_list)
-            alert_union = custom_reduce_image_collection(img_collection_alertas)
 
-        alerta = alert_union
-
-        # Enmascarar si existe capa mask
-        if self.aux_model.mask_layer:
-            mask_layer = ee.Image(self.aux_model.mask_layer)
-            mask_alert = alerta.updateMask(mask_layer).selfMask()
-        else:
-            mask_alert = alerta
-
-        # Cortar si existe poligono y alert selection es by drawn polygon
-        if alert_area_selection == cm.filter_tile.area_selection_method_label1:
-            clip_alert = mask_alert.clip(
-                ee.FeatureCollection(user_selection_polygon).geometry()
-            )
-        else:
-            user_selection_polygon = None
-            clip_alert = mask_alert
-
-        return clip_alert
-
-    def create_vector_download_params(
-        self,
-        aoi,
-        user_selection_polygon,
-        clip_alert,
-        alert_source,
-        user_min_alert_size,
-        alert_area_selection,
-    ):
-
-        # Generar 3 bandas para las alertas de todo el area
-        i = clip_alert.select("alert").gt(0).rename("mask_alert")
-        a = clip_alert.select("alert")
-        d = clip_alert.select("date")
-        # alertarea = i.multiply(ee.Image.pixelArea()).rename('area');
-
-        alerta_reducir = i.addBands(i).addBands(a).addBands(d)
-
-        # Definir tamaño de pixel
-        pixel_landsat = 28
-        pixel_sentinel = 10
-
-        if set(["GLAD-S2", "RADD"]).intersection(alert_source):
-            pixel_size = pixel_sentinel
-            grid_size = 20000
-        else:
-            pixel_size = pixel_landsat
-            grid_size = 20000
-
-        # Definir numero minimo de pixels para alertas
-        min_size_hectareas = float(user_min_alert_size) * 10000
-        min_size_pixels = math.ceil(min_size_hectareas / (pixel_size**2))
-
-        # Generar poligono de area de estudio considerando alert_area_selection
-        if alert_area_selection == cm.filter_tile.area_selection_method_label1:
-            poly = ee.FeatureCollection(user_selection_polygon)
-        else:
-            poly = aoi
-
-        return poly, alerta_reducir, pixel_size, min_size_pixels, grid_size
-
-    def create_planet_images_dictionary(self, polygon, date1, date2):
-        planet_mosaics_dates = get_planet_dates(date1, date2)
-        planet_images_dict_before = getPlanetMonthly(
-            polygon, planet_mosaics_dates[0], planet_mosaics_dates[1]
-        )
-        planet_images_dict_after = getPlanetMonthly(
-            polygon, planet_mosaics_dates[4], planet_mosaics_dates[3]
+        alert_filter_model.observe(handler, "available_alerts_raster_list")
+        return lambda: alert_filter_model.unobserve(
+            handler, "available_alerts_raster_list"
         )
 
-        return planet_images_dict_before, planet_images_dict_after
+    solara.use_effect(_register_observer, dependencies=[])
 
-    def create_recipe_directory(self):
-        if self.app_tile_model.recipe_name == "":
-            self.app_tile_model.recipe_name = self.app_tile_model.temporary_recipe_name
+    # ------------------------------------------------------------------
+    # Source-select "change" -> sync visible map layers (OLD link_checkbox_map_btn).
+    # Wired once here (not in the builder) because it needs the map widget. The
+    # callback only reads/sets layer.visible, so registering it more than once
+    # would be harmless, but we guard with use_effect([]) for cleanliness.
+    # ------------------------------------------------------------------
+    def _register_source_change():
+        def on_change(widget, event, data):
+            _link_checkbox_map(map_widget, alert_source_select)
 
-        self.app_tile_model.recipe_folder_path = create_directory(
-            self.app_tile_model.recipe_name
+        alert_source_select.on_event("change", on_change)
+        return lambda: alert_source_select.on_event("change", on_change, remove=True)
+
+    solara.use_effect(_register_source_change, dependencies=[])
+
+    # ------------------------------------------------------------------
+    # Analyze task. dependencies=None => never auto-runs; only fires when the
+    # click handler calls analyze_task(). Does the EE-orchestration + export +
+    # local vectorize on a worker thread and publishes the assembled gdf.
+    # ------------------------------------------------------------------
+    def _run_analyze():
+        # 1. Validate inputs via the shared helper through the shim.
+        shim = _InputsShim(
+            alert_source_select,
+            min_area_input,
+            alert_selection_method_select,
+            alert_sorting_select,
+            number_of_alerts,
+            drawn_item,
         )
-
-    def save_recipe_parameters(self):
-        json_save_filename = (
-            self.app_tile_model.recipe_folder_path + "/recipe_parameters.json"
-        )
-        save_model_parameters_to_json(
-            json_save_filename,
-            self.aux_model,
-            self.aoi_date_model,
-            self.alert_filter_model,
-            self.selected_alerts_model,
-            self.analyzed_alerts_model,
-            self.app_tile_model,
-        )
-
-    def analyze_alerts_function(self, widget, event, data):
-
-        widget.set_loader_text("Checking inputs...")
-
-        # Check User inputs
         (
             alert_source,
             user_min_alert_size,
@@ -522,146 +466,301 @@ class AlertsFilterTile(sw.Layout):
             alert_sorting_method,
             user_max_number_alerts,
             user_selection_polygon,
-        ) = check_alert_filter_inputs(self)
-        widget.set_loader_text("Saving inputs...")
+        ) = check_alert_filter_inputs(shim)
 
-        # Bind variables to models
-        self.selected_alerts_model.selected_alert_sources = alert_source
-        self.selected_alerts_model.alert_selection_area = alert_area_selection
-        self.selected_alerts_model.alert_sorting_method = alert_sorting_method
-        self.selected_alerts_model.min_area = float(user_min_alert_size)
-        self.selected_alerts_model.max_number_alerts = int(user_max_number_alerts)
-        self.selected_alerts_model.alert_selection_polygons = user_selection_polygon
+        # 2. Save the user selections onto selected_alerts_model (parity).
+        # NOTE: this runs on the use_task worker thread (prefer_threaded=True), so
+        # any traitlets `.observe` callbacks on selected_alerts_model fire on THIS
+        # thread (traitlets, unlike Solara reactives, has no scope marshaling).
+        # When the analysis tile is ported (Task 9), its observers on this model
+        # must not mutate ipyvuetify widgets directly from here.
+        selected_alerts_model.selected_alert_sources = alert_source
+        selected_alerts_model.alert_selection_area = alert_area_selection
+        selected_alerts_model.alert_sorting_method = alert_sorting_method
+        selected_alerts_model.min_area = float(user_min_alert_size)
+        selected_alerts_model.max_number_alerts = int(user_max_number_alerts)
+        selected_alerts_model.alert_selection_polygons = user_selection_polygon
 
-        # Numeric values for exporting dictionary
         alert_selection_dict_n = {
             cm.filter_tile.area_selection_method_label1: 1,
             cm.filter_tile.area_selection_method_label2: 2,
         }
-
-        self.selected_alerts_model.alert_selection_area_n = alert_selection_dict_n.get(
+        selected_alerts_model.alert_selection_area_n = alert_selection_dict_n.get(
             alert_area_selection, 0
         )
-
         alert_sorting_method_dict_n = {
             cm.filter_tile.alert_sorting_method_label1: 1,
             cm.filter_tile.alert_sorting_method_label2: 2,
             cm.filter_tile.alert_sorting_method_label3: 3,
             cm.filter_tile.alert_sorting_method_label4: 4,
         }
-
-        self.selected_alerts_model.alert_sorting_method_n = (
+        selected_alerts_model.alert_sorting_method_n = (
             alert_sorting_method_dict_n.get(alert_sorting_method, 0)
         )
-        # Create directory in case it does not exist
-        self.create_recipe_directory()
 
-        widget.set_loader_text("Getting images...")
-        # Create planet dictionaries
-        (
-            self.analyzed_alerts_model.before_planet_monthly_images,
-            self.analyzed_alerts_model.after_planet_monthly_images,
-        ) = self.create_planet_images_dictionary(
-            self.aoi_date_model.feature_collection,
-            self.aoi_date_model.start_date,
-            self.aoi_date_model.end_date,
+        # TODO(Recipe tile): the OLD tile also created the recipe directory
+        # (create_recipe_directory) and saved recipe parameters
+        # (save_recipe_parameters) here, plus built the before/after Planet
+        # monthly-image dictionaries (create_planet_images_dictionary) onto
+        # analyzed_alerts_model. Those pull in app_tile_model.recipe_folder_path
+        # plumbing that is not wired into the Solara Page() yet, so they are
+        # deferred to the Recipe tile task. The alerts_gdf publish below does not
+        # need them.
+
+        # 3. Build the filtered alert raster (EE image).
+        filtered_alert_raster = create_filtered_alert_raster(
+            alert_filter_model.available_alerts_raster_list,
+            aux_model.mask_layer,
+            alert_source,
+            alert_area_selection,
+            user_selection_polygon,
         )
+        selected_alerts_model.filtered_alert_raster = filtered_alert_raster
 
-        # Save recipe parameters
-        self.save_recipe_parameters()
-
-        widget.set_loader_text("Creating filtered rasters...")
-
-        # Create filtered alerts raster
-
-        self.selected_alerts_model.filtered_alert_raster = (
-            self.create_filtered_alert_raster(
-                alert_source,
-                user_min_alert_size,
-                alert_area_selection,
-                alert_sorting_method,
-                user_max_number_alerts,
-                user_selection_polygon,
-            )
-        )
-        widget.set_loader_text("Creating alerts vectors...")
-
-        # Create vector download required variables
-        max_number_alerts = int(user_max_number_alerts)
-
+        # 4. Export region + pixel size + min cluster-size in pixels.
         (
             poly,
-            alerta_reducir,  # unused now (was the GEE reducer band stack); kept for the tuple shape
+            _alerta_reducir,  # unused (legacy GEE band stack)
             pixel_size,
             min_size_pixels,
-            grid_size,  # unused now (was the GEE coveringGrid size)
-        ) = self.create_vector_download_params(
-            self.aoi_date_model.feature_collection,
+            _grid_size,  # unused (legacy GEE covering grid)
+        ) = create_vector_download_params(
+            aoi_date_model.feature_collection,
             user_selection_polygon,
-            self.selected_alerts_model.filtered_alert_raster,
+            filtered_alert_raster,
             alert_source,
             user_min_alert_size,
             alert_area_selection,
         )
 
-        # Download the filtered alert raster and vectorize it locally (replaces the
-        # two GEE reduceToVectors threads). The cluster-size sieve (min_size_pixels)
-        # is the primary filter now (D11); sorting and the max-count cap on the full
-        # set are no longer applied here (deferred to Phase 4 review/use_task).
-        self.run_local_vectorize(
-            image=self.selected_alerts_model.filtered_alert_raster,
+        # 5. Download + vectorize locally (replaces the OLD GEE reduceToVectors).
+        gdf = _run_local_vectorize(
+            image=filtered_alert_raster,
             region=poly,
             scale=pixel_size,
             min_size_pixels=min_size_pixels,
-            max_number_alerts=max_number_alerts,
         )
 
-        wait_messages = [
-            cm.filter_tile.filter_button_alerts_text.loader_text1,
-            cm.filter_tile.filter_button_alerts_text.loader_text2,
-            cm.filter_tile.filter_button_alerts_text.loader_text3,
-            cm.filter_tile.filter_button_alerts_text.loader_text4,
+        # Parity: publish the raw vectorize sets onto selected_alerts_model
+        # (the OLD tile set these; the still-traitlets analysis tile reads them).
+        max_number_alerts = int(user_max_number_alerts)
+        selected_alerts_model.alerts_total_bbs = gdf
+        selected_alerts_model.alerts_bbs = gdf.head(max_number_alerts)
+        selected_alerts_model.received_alerts = True
+
+        # 6. Assemble the alerts_gdf (status/point/alert_sources/... columns) and
+        # publish it — this is what Overview + the future analysis tile consume.
+        app_state.alerts_gdf.value = convert_to_geopandas(gdf)
+
+        # Preserve the OLD tile's intent to jump to the analysis tile.
+        # TODO(navigation foundation): wiring app_state.current_page_view ->
+        # MapApp.current_step (so the step panel actually switches) is a separate
+        # cross-tile navigation concern not yet wired in this app; deferred (same
+        # as AOI). Driving MapApp.current_step from a tile risks a controlled/
+        # uncontrolled sync loop.
+        app_state.current_page_view.value = "analysis_tile"
+        return True
+
+    analyze_task = solara.lab.use_task(
+        _run_analyze, dependencies=None, prefer_threaded=True, raise_error=False
+    )
+
+    def _on_analyze_click(*_):
+        analyze_task()
+
+    # ------------------------------------------------------------------
+    # Render layout: map fills the left, controls scroll on the right.
+    # ------------------------------------------------------------------
+    with solara.Row(style="height: 100%; gap: 0;"):
+        with solara.Column(style="flex: 1 1 auto; min-width: 0; overflow: hidden;"):
+            solara.display(map_widget)
+
+        with solara.Column(style="flex: 0 0 18rem; overflow: auto; padding: 0;"):
+            solara.display(cards["no_alerts"])
+            solara.display(cards["source"])
+            solara.display(cards["min_area"])
+            solara.display(cards["area_method"])
+            solara.display(cards["sorting"])
+            solara.display(cards["max_number"])
+            solara.Button(
+                label=cm.filter_tile.analyze_alerts_button,
+                on_click=_on_analyze_click,
+                loading=analyze_task.pending,
+                disabled=analyze_task.pending,
+                color="primary",
+                class_="ma-3",
+            )
+            if analyze_task.error:
+                solara.Error(
+                    f"Analysis failed: {analyze_task.exception}", class_="ma-3"
+                )
+
+
+def _build_map(gee_interface):
+    """Build the filter map once (inside use_memo), with the SATELLITE basemap."""
+    map_widget = SepalMap(gee_interface=gee_interface)
+    try:
+        map_widget.add_basemap("SATELLITE")
+    except Exception:
+        logger.exception("Failed to add SATELLITE basemap to filter map")
+    try:
+        map_widget.add(InspectorControl(map_widget))
+    except Exception:
+        logger.exception("Failed to add InspectorControl to filter map")
+    return map_widget
+
+
+def _build_draw_control(map_widget):
+    """Build the DrawControl once and attach it (hidden) to the map.
+
+    Kept as pysepal ``DrawControl`` — there is no native Solara equivalent for an
+    on-map polygon editor. ``check_alert_filter_inputs`` reads ``.to_json()`` and
+    the area-method callback toggles ``.show()``/``.hide()``. It starts hidden
+    (the default area method is "Whole area").
+    """
+    drawn_item = DrawControl(map_widget)
+    map_widget.add(drawn_item)
+    drawn_item.hide()
+    return drawn_item
+
+
+def _build_form_widgets(alert_filter_model, drawn_item):
+    """Build all the right-panel form widgets + cards once (inside use_memo).
+
+    Returns the 5 input widgets + a dict of show/hide-able cards. The OLD tile
+    used SepalCard/SepalCardTitle subclasses (``sw.SepalWidget`` + ``v.Card``);
+    pysepal's ``sw.Card`` already mixes ``SepalWidget`` into ``v.Card`` so it has
+    the imperative ``.show()/.hide()`` API directly, with the same ``pa-3 ma-3``
+    styling.
+    """
+    from pysepal import sepalwidgets as sw
+
+    def _card(children, extra_class=""):
+        return sw.Card(
+            class_=f"pa-3 ma-3 {extra_class}".strip(), children=children
+        )
+
+    def _title(text):
+        return v.CardTitle(class_="pa-1 ma-1", children=[text])
+
+    main_title = _title(cm.filter_tile.available_alerts_title)
+
+    # "No alerts" card.
+    no_alerts_card = _card(
+        [
+            main_title,
+            v.Html(
+                tag="div",
+                class_="pa-1 ma-2",
+                children=[cm.filter_tile.no_alerts_message],
+            ),
         ]
+    )
 
-        widget.update_button_with_messages(
-            wait_messages, self.selected_alerts_model, "received_alerts"
-        )
-        self.app_tile_model.current_page_view = "analysis_tile"
+    # Alert source select (grouped multi-select with chips).
+    alert_source_select = sw.Select(
+        items=alert_filter_model.available_alerts_list or [],
+        v_model=alert_filter_model.available_alerts_list or [],
+        label=cm.filter_tile.available_alerts_hint,
+        multiple=True,
+        clearable=True,
+        chips=True,
+    )
+    source_card = _card(
+        [_title(cm.filter_tile.available_alerts_title), alert_source_select]
+    )
 
-    def load_saved_parameters(self, data):
-        self.alert_source_select.v_model = data.get("selected_alert_sources")
-        self.min_area_input.v_model = data.get("min_area")      
-        max_number = data.get("max_number_alerts")
-        self.number_of_alerts.v_model = (
-            cm.filter_tile.max_number_of_alerts_option1
-            if (max_number := data.get("max_number_alerts")) == 0
-            else str(max_number)
-        )
-        alert_selection_dict = {
-            1: cm.filter_tile.area_selection_method_label1,
-            2: cm.filter_tile.area_selection_method_label2,
-        }
-        self.selected_alerts_model.alert_selection_area_n = data.get("alert_selection_area")
-        self.alert_selection_method_select.v_model = alert_selection_dict.get(
-            data.get("alert_selection_area"), ""
-        )
-        drawn_selection_polygons = data.get("alert_selection_polygons").get("features")
-        
-        if drawn_selection_polygons:
-            self.drawn_item.data = convertir_formato3(drawn_selection_polygons, color.info)
-            self.drawn_item.show()
-            self.selected_alerts_model.alert_selection_polygons = data.get("alert_selection_polygons")
+    # Min alert area.
+    min_area_input = sw.TextField(v_model=0.5, suffix="ha")
+    min_area_card = _card(
+        [_title(cm.filter_tile.set_min_alert_siz_title), min_area_input]
+    )
 
+    # Area selection method.
+    alert_selection_method_select = sw.Select(
+        items=[
+            cm.filter_tile.area_selection_method_label1,
+            cm.filter_tile.area_selection_method_label2,
+        ],
+        v_model=cm.filter_tile.area_selection_method_label2,
+        multiple=False,
+        clearable=True,
+        chips=True,
+    )
+    area_method_card = _card(
+        [_title(cm.filter_tile.area_selection_method_title), alert_selection_method_select]
+    )
+
+    # Alert sorting method.
+    alert_sorting_select = sw.Select(
+        items=[
+            cm.filter_tile.alert_sorting_method_label1,
+            cm.filter_tile.alert_sorting_method_label2,
+            cm.filter_tile.alert_sorting_method_label3,
+            cm.filter_tile.alert_sorting_method_label4,
+        ],
+        v_model=cm.filter_tile.alert_sorting_method_label1,
+        multiple=False,
+        clearable=True,
+        chips=True,
+        small_chips=True,
+    )
+    sorting_card = _card(
+        [_title(cm.filter_tile.alert_sorting_method_title), alert_sorting_select]
+    )
+
+    # Max number of alerts.
+    number_of_alerts = sw.Combobox(
+        items=[cm.filter_tile.max_number_of_alerts_option1],
+        v_model=[cm.filter_tile.max_number_of_alerts_option1],
+        label=cm.filter_tile.max_number_of_alerts_hint,
+        multiple=False,
+        clearable=True,
+        chips=True,
+    )
+    max_number_card = _card(
+        [_title(cm.filter_tile.max_number_of_alerts_title), number_of_alerts]
+    )
+
+    # The Analyze button lives in the render tree as a Solara Button (its
+    # loading state is the loader), so there is no analyze card here.
+
+    # Area-method callback: reveal max-count + hide draw control for "Whole area",
+    # or hide max-count + show draw control for "drawn polygon" (OLD prior_option).
+    def _prior_option(widget, event, data):
+        if data == cm.filter_tile.area_selection_method_label1:
+            max_number_card.hide()
+            drawn_item.show()
         else:
-            self.drawn_item.data = self.drawn_item.data
-            self.drawn_item.hide()
-        
-        alert_sorting_method_dict = {
-            1: cm.filter_tile.alert_sorting_method_label1,
-            2: cm.filter_tile.alert_sorting_method_label2,
-            3: cm.filter_tile.alert_sorting_method_label3,
-            4: cm.filter_tile.alert_sorting_method_label4,
-        }
-        self.alert_sorting_select.v_model = alert_sorting_method_dict.get(
-            data.get("alert_sorting_method"), ""
-        )
+            max_number_card.show()
+            drawn_item.hide()
+
+    alert_selection_method_select.on_event("change", _prior_option)
+
+    # NOTE: the source-select "change" handler (which re-syncs which map layers
+    # are visible via _link_checkbox_map) needs the map, which is not available in
+    # this builder. The component wires it once via use_effect([]) after the map +
+    # select both exist.
+
+    cards = {
+        "no_alerts": no_alerts_card,
+        "source": source_card,
+        "min_area": min_area_card,
+        "area_method": area_method_card,
+        "sorting": sorting_card,
+        "max_number": max_number_card,
+    }
+
+    # Initial visibility: only the no-alerts card (OLD __init__).
+    no_alerts_card.show()
+    for c in (source_card, min_area_card, area_method_card, sorting_card, max_number_card):
+        c.hide()
+
+    return (
+        alert_source_select,
+        min_area_input,
+        alert_selection_method_select,
+        alert_sorting_select,
+        number_of_alerts,
+        cards,
+    )
