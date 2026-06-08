@@ -22,10 +22,12 @@ ipyvuetify for its `create_table_rows` and `add_colored_layers` helpers.
 """
 
 import logging
+import os
 
 import ipyvuetify as v
 import reacton.ipyvuetify as rv
 import solara
+from pysepal import sepalwidgets as sw
 from pysepal.mapping import SepalMap
 
 from deforestation_alerts.message import cm
@@ -108,6 +110,9 @@ def OverviewTile(app_state):
     # and `analyzed_alerts_model.observe(…, "last_save_time")` observers.
     # --------------------------------------------------------------------------
     alerts_gdf = app_state.alerts_gdf.value
+    # Folder of the loaded recipe (set by RecipeTile load). Read reactively so
+    # the download button appears once a recipe is loaded.
+    recipe_folder = app_state.recipe_folder_path.value
 
     # Callback: "Go" button in a map popup → navigate to that alert. Thin: read
     # widget value → write reactive state. Defined before _sync_overview because
@@ -198,9 +203,22 @@ def OverviewTile(app_state):
             style="flex: 0 0 18rem; overflow: auto; padding: 0;"
         ):
             solara.display(info_card)
-            # TODO(Step 4 – Recipe tile): the old tile also showed a "download
-            # alerts DB" button (sw.DownloadBtn → recipe_folder_path/alert_db.csv).
-            # It is intentionally deferred, not dropped: its URL needs
-            # recipe_folder_path from the domain app_tile_model, which is not wired
-            # into the Solara Page() until the Recipe tile is ported. Re-add here
-            # once that path is available via app_state / a domain model.
+            # Download-alerts-DB button (old tile's dwn_all_btn). Shown only when a
+            # recipe is loaded (recipe_folder_path set by RecipeTile) AND the saved
+            # alert_db.csv exists. recipe_folder_path is now wired through app_state
+            # by the Recipe load task. Built declaratively (not memoized) so its URL
+            # reflects the current folder; sw.DownloadBtn.set_url() builds the link.
+            alert_db_path = (
+                os.path.join(recipe_folder, "alert_db.csv") if recipe_folder else ""
+            )
+            if alert_db_path and os.path.exists(alert_db_path):
+                download_btn = sw.DownloadBtn(
+                    text=cm.overview_tile.alerts_db_label, small=True
+                )
+                download_btn.set_url(path=alert_db_path)
+                download_card = v.Card(
+                    class_="pa-3 ma-3 d-flex justify-center",
+                    hover=True,
+                    children=[download_btn],
+                )
+                solara.display(download_card)

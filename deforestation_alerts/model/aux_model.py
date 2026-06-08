@@ -1,3 +1,5 @@
+import json
+
 from pysepal import model
 from traitlets import Any, Unicode
 

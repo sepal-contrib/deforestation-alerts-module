@@ -79,6 +79,39 @@ class SelectedAlertsModel(model.Model):
         }
         return dictionary
 
+    def import_from_dictionary(self, data):
+        """Restore the saved filter selections (inverse of export_dictionary).
+
+        Mirrors export_dictionary: the numeric (language-independent) codes are
+        read back into the ``*_n`` traits. The non-numeric area/sorting labels
+        are reconstructed by the Filter UI on render, so only the codes are
+        restored here.
+
+        Assignments are guarded with ``key in data`` (not ``data.get(key,
+        self.x)``): ``min_area`` is a ``Float(None)`` whose default cannot be
+        read on a fresh model under the installed traitlets (it raises
+        TraitError), so referencing ``self.min_area`` as a get() default would
+        crash even when the key is present. ``import json`` makes the except
+        clause reachable without a NameError (same fix as the other importers).
+        """
+        import json
+
+        try:
+            if "selected_alert_sources" in data:
+                self.selected_alert_sources = data["selected_alert_sources"]
+            if "alert_selection_polygons" in data:
+                self.alert_selection_polygons = data["alert_selection_polygons"]
+            if data.get("min_area") is not None:
+                self.min_area = data["min_area"]
+            if "max_number_alerts" in data:
+                self.max_number_alerts = data["max_number_alerts"]
+            if "alert_selection_area" in data:
+                self.alert_selection_area_n = data["alert_selection_area"]
+            if "alert_sorting_method" in data:
+                self.alert_sorting_method_n = data["alert_sorting_method"]
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error loading JSON file: {e}")
+
     def reset_model(self):
         self.selected_alert_sources = None
         self.alert_selection_polygons = None

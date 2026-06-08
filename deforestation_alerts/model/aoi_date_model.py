@@ -1,3 +1,5 @@
+import json
+
 from pysepal import model
 from pysepal.aoi.aoi_model import AoiModel
 from traitlets import Any, Unicode
@@ -58,8 +60,8 @@ class AoiDateModel(AoiModel):
             self.method = data.get("aoi_method", self.method)
             self.name = data.get("aoi_name", self.name)
             self.asset_json = data.get("aoi_asset_json", self.asset_json)
-            self.vector_json = data.get("geo_json", self.vector_json)
-            self.geo_json = data.get("geo_json", self.geo_json)
+            self.vector_json = data.get("aoi_vector_json", self.vector_json)
+            self.geo_json = data.get("aoi_geo_json", self.geo_json)
             self.start_date = data.get("start_date", self.start_date)
             self.end_date = data.get("end_date", self.end_date)
 
@@ -76,9 +78,13 @@ class AoiDateModel(AoiModel):
             print(f"Error loading JSON file: {e}")
 
     def reset_model(self):
-        self.aoi_admin = ""
-        self.aoi_asset_name = ""
-        self.aoi_method = ""
-        self.aoi_asset_json = ""
+        # Delegate to AoiModel.clear_attributes() — the same reset AoiView uses —
+        # so EVERY AOI trait is cleared, including the geometry ones
+        # (vector_json / geo_json / point_json / feature_collection) and the
+        # cached gdf. An earlier explicit reset left those stale, so creating a
+        # new recipe after a SHAPE/DRAW session could leak the old geometry into
+        # the next saved recipe. clear_attributes() nulls the date traits too, so
+        # restore the "" string defaults the rest of the app expects.
+        self.clear_attributes()
         self.start_date = ""
         self.end_date = ""

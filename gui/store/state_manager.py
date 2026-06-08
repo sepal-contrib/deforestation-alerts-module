@@ -18,6 +18,9 @@ class AppState:
         self.loading = solara.reactive(False)
         self.error_message = solara.reactive(None)
         self.recipe_name = solara.reactive("")
+        # folder of the currently-loaded recipe (set by RecipeTile load); used by
+        # the Overview download button to locate <folder>/alert_db.csv.
+        self.recipe_folder_path = solara.reactive("")
 
     @property
     def max_alert_id(self):

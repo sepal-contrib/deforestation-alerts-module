@@ -1,3 +1,5 @@
+import json
+
 from pysepal import model
 from traitlets import Any, Unicode
 from deforestation_alerts.message import cm

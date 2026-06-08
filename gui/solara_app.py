@@ -36,6 +36,7 @@ from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
 from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
+from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
@@ -43,6 +44,7 @@ from gui.tile.aoi_tile import AoiTile
 from gui.tile.alerts_filter_tile import AlertsFilterTile
 from gui.tile.aux_tile import AuxTile
 from gui.tile.overview_tile import OverviewTile
+from gui.tile.recipe_tile import RecipeTile
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -93,6 +95,7 @@ def Page():
     analyzed_alerts_model = solara.use_memo(
         lambda: AlertAnalysisModel(), dependencies=[]
     )
+    app_tile_model = solara.use_memo(lambda: AppTileModel(), dependencies=[])
 
     map_ = SepalMap(
         gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
@@ -155,6 +158,26 @@ def Page():
         dependencies=[],
     )
 
+    # Recipe tile: render_fixed so its hooks (memoized widgets + .bind() chain,
+    # the load use_task) are preserved while MapApp gets a concrete DOMWidget.
+    # The orchestration nexus — re-architected around the shared models/services
+    # (it no longer calls other tiles' methods; see recipe_tile.py docstring).
+    recipe_widget = solara.use_memo(
+        lambda: solara.render_fixed(
+            RecipeTile(
+                aux_model=aux_model,
+                aoi_date_model=aoi_date_model,
+                alert_filter_model=alert_filter_model,
+                selected_alerts_model=selected_alerts_model,
+                analyzed_alerts_model=analyzed_alerts_model,
+                app_tile_model=app_tile_model,
+                app_state=app_state,
+                gee_interface=gee_interface,
+            )
+        )[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -193,6 +216,13 @@ def Page():
             "icon": "mdi-filter",
             "display": "step",
             "content": filter_widget,
+        },
+        {
+            "id": 6,
+            "name": cm.app.drawer_item.recipes,
+            "icon": "mdi-folder-open",
+            "display": "step",
+            "content": recipe_widget,
         },
     ]
 
