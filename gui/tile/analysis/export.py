@@ -47,7 +47,7 @@ Props
 -----
 widgets : AnalysisWidgets
     Shared heavy widgets + scratch. Read here: ``confirmation_select`` /
-    ``driver_combobox`` (stashed by AlertCnnPanel), ``selected_img_before_info_list``
+    ``driver_combobox`` (stashed by AlertReviewPanel), ``selected_img_before_info_list``
     / ``selected_img_after_info_list`` ([0]=source, [1]=milis, [3]=value/name,
     [4]=date-suffix), ``selected_img_before`` / ``selected_img_after`` (ee.Image),
     ``actual_alert_grid``, ``actual_bb``.

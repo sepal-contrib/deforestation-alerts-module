@@ -22,8 +22,12 @@ Key port decisions (see Phase 4 plan, Step 2):
   only runs when called, so it never fires on mount (which would hit EE with no
   inputs); the click handler calls ``search_task()`` and the button shows
   ``search_task.pending`` as its loader.
-* **Map + AoiView + DatePickers are memoized once** (``dependencies=[]``) so the
-  widget identities and the ``.bind()`` chain are stable across re-renders.
+* **AoiView + DatePickers are memoized once** (``dependencies=[]``) so the widget
+  identities and the ``.bind()`` chain are stable across re-renders. The AoiView
+  is attached to the **single shared map** (``map_``) passed in from
+  ``solara_app.Page`` — this tile does NOT create its own map (pysepal single-map
+  model). AOI selection draws on the shared map; the tile renders only its
+  controls (a right-panel section).
 """
 
 import logging
@@ -32,7 +36,6 @@ import ipyvuetify as v
 import solara
 from pysepal import aoi
 from pysepal import sepalwidgets as sw
-from pysepal.mapping import SepalMap
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.aoi_helper import (
@@ -86,7 +89,9 @@ def _update_dictionary_ccdc(aux_model, alert_filter_model):
 
 
 @solara.component
-def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interface):
+def AoiTile(
+    aoi_date_model, alert_filter_model, aux_model, app_state, gee_interface, map_
+):
     """Solara port of the old AoiTile ipyvuetify widget.
 
     Parameters
@@ -103,6 +108,8 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
         Shared ephemeral reactive store (used for post-search navigation intent).
     gee_interface : GEEInterface
         Session GEE interface, forwarded to the AoiView.
+    map_ : SepalMap
+        The single shared map; the AoiView draws AOI selection on it.
     """
     # ------------------------------------------------------------------
     # Initialize the alerts dictionary + available lists exactly once.
@@ -123,16 +130,12 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
     solara.use_memo(_init_models, dependencies=[])
 
     # ------------------------------------------------------------------
-    # Memoized map + AoiView. The map fills the panel (like Overview) so the
-    # fullscreen main map does not bleed through. AoiView's model IS the recipe
-    # model, so selection writes straight into aoi_date_model.
+    # Memoized AoiView, attached to the single shared map. AoiView's model IS
+    # the recipe model, so selection writes straight into aoi_date_model and the
+    # AOI is drawn on the shared map.
     # ------------------------------------------------------------------
-    map_widget = solara.use_memo(
-        lambda: _build_map(gee_interface), dependencies=[]
-    )
-
     aoi_view = solara.use_memo(
-        lambda: _build_aoi_view(aoi_date_model, map_widget, gee_interface),
+        lambda: _build_aoi_view(aoi_date_model, map_, gee_interface),
         dependencies=[],
     )
 
@@ -157,6 +160,23 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
         return lambda: aux_model.unobserve(handler, "ccdc_layer")
 
     solara.use_effect(_register_ccdc_observer, dependencies=[])
+
+    # ------------------------------------------------------------------
+    # Single shared map -> per-tile isolation. Show the AOI outline only while
+    # this tile is active; clear it when navigating away so it doesn't persist
+    # over Filter / Overview. Keyed on the reactive current_page_view so it
+    # re-runs on navigation; returning re-adds the layer from the model. Selection
+    # while already active is handled by AoiView itself (active doesn't change).
+    # ------------------------------------------------------------------
+    active = app_state.current_page_view.value == "aoi_tile"
+
+    def _sync_active():
+        if active:
+            _redraw_aoi_layer(aoi_view, map_)
+        else:
+            _clear_aoi_layer(map_)
+
+    solara.use_effect(_sync_active, dependencies=[active])
 
     # ------------------------------------------------------------------
     # Search task. dependencies=None => never auto-runs; only fires when the
@@ -191,12 +211,8 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
             )
         )
 
-        # Preserve the OLD tile's intent to jump to the Filter tile.
-        # TODO(navigation foundation): wiring app_state.current_page_view ->
-        # MapApp.current_step (so the step panel actually switches when this is
-        # set) is a separate cross-tile navigation concern not yet wired in this
-        # app. Driving MapApp.current_step from a tile risks a controlled/
-        # uncontrolled sync loop, so it is deferred to a dedicated follow-up.
+        # Jump to the Filter tile (as the OLD tile did). The shell's _NavBridge
+        # translates this current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "filter_alerts"
         return True
 
@@ -209,7 +225,8 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
         search_task()
 
     # ------------------------------------------------------------------
-    # Render layout: controls on the right, AOI map filling the left.
+    # Render layout: controls only (this widget IS the right-panel section
+    # content). AOI selection is drawn on the single shared map.
     # ------------------------------------------------------------------
     aoi_card = v.Card(
         class_="pa-3 ma-3",
@@ -233,41 +250,47 @@ def AoiTile(aoi_date_model, alert_filter_model, aux_model, app_state, gee_interf
         ],
     )
 
-    with solara.Row(style="height: 100%; gap: 0;"):
-        # Left: AOI map (fills remaining space)
-        with solara.Column(style="flex: 1 1 auto; min-width: 0; overflow: hidden;"):
-            solara.display(map_widget)
-
-        # Right: AOI + date selection + search
-        with solara.Column(style="flex: 0 0 22rem; overflow: auto; padding: 0;"):
-            solara.display(aoi_card)
-            solara.display(date_card)
-            solara.Button(
-                label=cm.aoi_tile.search_button,
-                on_click=_on_search_click,
-                loading=search_task.pending,
-                disabled=search_task.pending,
-                color="primary",
-                class_="ma-3",
+    with solara.Column(style="padding: 0;"):
+        solara.display(aoi_card)
+        solara.display(date_card)
+        solara.Button(
+            label=cm.aoi_tile.search_button,
+            on_click=_on_search_click,
+            loading=search_task.pending,
+            disabled=search_task.pending,
+            color="primary",
+            class_="ma-3",
+        )
+        if search_task.error:
+            solara.Error(
+                f"Search failed: {search_task.exception}", class_="ma-3"
             )
-            if search_task.error:
-                solara.Error(
-                    f"Search failed: {search_task.exception}", class_="ma-3"
-                )
 
 
-def _build_map(gee_interface):
-    """Build the AOI map once (inside use_memo), with the SATELLITE basemap.
-
-    The OLD tile called ``map_1.add_basemap("SATELLITE")``; we keep that for
-    visual parity. Guarded so a basemap-load failure does not crash the memo.
+def _clear_aoi_layer(map_widget):
+    """Remove only the AoiView-managed AOI layer (named ``"aoi"``) from the shared
+    map. Single-map isolation: called when the AOI tile is deactivated so the AOI
+    outline doesn't persist over Filter / Overview. Never ``remove_all()``.
     """
-    map_widget = SepalMap(gee_interface=gee_interface)
-    try:
-        map_widget.add_basemap("SATELLITE")
-    except Exception:
-        logger.exception("Failed to add SATELLITE basemap to AOI map")
-    return map_widget
+    map_widget.remove_layer("aoi", none_ok=True)
+
+
+def _redraw_aoi_layer(aoi_view, map_widget):
+    """Re-add the AOI layer from the current model when returning to the AOI tile.
+
+    Mirrors the map step of ``AoiView._update_aoi`` (aoi_view.py:380-386) — re-add
+    by name from ``model.feature_collection`` — WITHOUT re-running selection or
+    re-zooming. No-op when no AOI is selected. Couples to the stable AoiView layer
+    name (``"aoi"``) + ``.gee`` / ``.map_style`` attributes.
+    """
+    map_widget.remove_layer("aoi", none_ok=True)
+    model = aoi_view.model
+    if getattr(model, "feature_collection", None) is None:
+        return
+    if aoi_view.gee:
+        map_widget.add_ee_layer(model.feature_collection, {}, "aoi")
+    else:
+        map_widget.add_layer(model.get_ipygeojson(aoi_view.map_style), "aoi")
 
 
 def _build_aoi_view(aoi_date_model, map_widget, gee_interface):

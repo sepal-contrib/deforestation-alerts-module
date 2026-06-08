@@ -1,38 +1,45 @@
-"""Recipe tile as a Solara component (Phase 4 port of the old ipyvuetify class).
+"""Recipe tile — raw ipyvuetify widget handed straight to MapApp (Phase 4).
 
-Architecture layer: view — imports solara + ipyvuetify/pysepal for UI only.
+Architecture layer: view — ipyvuetify/pysepal for UI only.
 
-The OLD Recipe tile was the orchestration nexus: its two button handlers
-imperatively called OTHER tiles' methods (``aoi_tile.process_alerts_silent``,
-``alert_filter_tile.create_filtered_alert_raster``, ``*.initialize_layout`` ...)
-and re-linked maps. That pattern does not translate to Solara components (there
-are no long-lived tile objects to call into; components re-render from model
-state). So this port is re-architected around the shared **models + services**:
+WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders a
+``dialog`` tile's content with ``v-if``, so it DESTROYS the dialog DOM on close
+and REBUILDS it on reopen. A widget captured via ``solara.display`` lives inside
+an ``Output`` whose view is NOT recreated on that rebuild — so the cards vanish
+the 2nd time the dialog is opened (the buttons, being reacton-managed, survived,
+which is exactly the symptom that was reported). A plain ipyvuetify widget tree
+is re-viewed from its model on reopen like any ipywidget, so it survives. ``Page``
+builds this once via ``use_memo`` and hands it to MapApp as the dialog content —
+same pattern as ``aux_tile.build_aux_layout``.
+
+The async **load** that the earlier Solara port ran via ``solara.lab.use_task``
+is here a daemon thread that toggles the Load button's spinner and surfaces
+errors on an inline ``sw.Alert`` (the original ipyvuetify tile did the same).
+
+The three handlers are re-architected around the shared **models + services**
+(unchanged from the Solara port):
 
 * **New recipe** writes ``app_tile_model.recipe_name`` and (if alerts are loaded)
-  resets every domain model + clears ``app_state.alerts_gdf``. The old code also
-  re-init'd tiles and re-linked maps — unnecessary here: every ported tile
-  re-renders from its model, so clearing the models is the whole job.
+  resets every domain model + clears ``app_state.alerts_gdf``; tiles re-render
+  from their models, so clearing the models is the whole job.
 * **Load recipe** reads the recipe JSON, imports it into the models via their
   ``import_from_dictionary`` services, sets ``recipe_folder_path``, and (if the
   saved ``alert_db.csv`` exists) loads the alert gdf into ``app_state.alerts_gdf``
   so Overview shows the loaded alerts. The EE/analysis pipeline re-run the old
-  load did (alert re-discovery, filtered-raster + planet-image reconstruction)
-  is DEFERRED — it rebuilds EE/analysis-tile state and the analysis tile is not
-  ported yet (Task 9). Cross-tile navigation is likewise deferred (we set
-  ``app_state.current_page_view`` only; wiring it to MapApp.current_step is a
-  separate navigation-foundation concern, same as in aoi_tile.py).
-
-Heavy/file work runs in ``solara.lab.use_task(prefer_threaded=True)``; widgets
-are memoized once (dependencies=[]) so the ``.bind()`` chain is stable — same
-pattern as aoi_tile.py / aux_tile.py.
+  load did is DEFERRED (Task 9); navigation sets ``app_state.current_page_view``,
+  which the shell's ``_NavBridge`` translates into the ``MapApp`` step change.
+* **Save recipe** persists every model to ``<recipe_folder>/recipe_parameters.json``
+  via ``save_model_parameters_to_json``. It writes to an EXISTING recipe folder
+  only, so the Save card stays hidden until ``app_state.recipe_folder_path`` is
+  set (driven reactively via ``.subscribe``). This replaces the old header
+  ``RecipeBtn``/``ShareBtn`` custom widget.
 """
 
 import logging
 import os
+import threading
 
 import ipyvuetify as v
-import solara
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
@@ -41,6 +48,7 @@ from deforestation_alerts.scripts.recipe_helper import (
     backfill_geometry,
     generate_recipe_string,
     load_gdf_from_csv,
+    save_model_parameters_to_json,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.recipe")
@@ -51,8 +59,7 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.recipe")
 _ALERT_DB_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
 
 
-@solara.component
-def RecipeTile(
+def build_recipe_layout(
     aux_model,
     aoi_date_model,
     alert_filter_model,
@@ -60,50 +67,128 @@ def RecipeTile(
     analyzed_alerts_model,
     app_tile_model,
     app_state,
-    gee_interface,
+    gee_interface=None,
 ):
-    """Solara port of the old RecipeTile ipyvuetify widget.
+    """Build the raw ipyvuetify recipe layout (New recipe + Load recipe).
+
+    Returns the outermost ipyvuetify widget; ``Page`` hands it to MapApp as the
+    Recipes dialog content. Built once (no re-render), so the ``.bind()`` chain
+    is attached exactly once and entered/loaded values survive dialog reopen.
 
     Parameters
     ----------
     aux_model, aoi_date_model, alert_filter_model, selected_alerts_model,
     analyzed_alerts_model, app_tile_model : pysepal.model.Model
-        The shared recipe domain models. New-recipe resets them; load-recipe
-        imports the saved JSON into them.
+        Shared recipe domain models. New-recipe resets them; load-recipe imports
+        the saved JSON into them.
     app_state : AppState
-        Shared ephemeral reactive store. The load task writes
-        ``alerts_gdf`` / ``recipe_folder_path`` and both handlers set
-        ``current_page_view`` (navigation wiring deferred).
-    gee_interface : GEEInterface
-        Session GEE interface (accepted for signature parity with the other
-        tiles; the deferred EE pipeline re-run will use it — see TODOs below).
+        Shared ephemeral reactive store (``alerts_gdf`` / ``recipe_folder_path``
+        / ``current_page_view``).
+    gee_interface : GEEInterface, optional
+        Accepted for signature parity with the other tiles; the deferred EE
+        pipeline re-run (Task 9) will use it.
     """
+    # --- New-recipe input: pre-filled generated name, bound once to the model.
+    new_recipe_input = sw.TextField(
+        class_="pa-1 ma-1 d-flex align-center",
+        v_model=generate_recipe_string(),
+        hint=cm.recipe_tile.input_hint_set_recipe_name,
+        persistent_hint=True,
+    )
+    app_tile_model.bind(new_recipe_input, "temporary_recipe_name")
 
-    # ------------------------------------------------------------------
-    # Memoized widgets. New-recipe TextField is pre-filled with a generated
-    # name and bound once to app_tile_model.temporary_recipe_name; the load
-    # FileInput exposes the chosen path via .v_model. Built inside use_memo so
-    # the .bind() chain is attached exactly once and entered values survive
-    # re-renders (same rationale as aux_tile.py).
-    # ------------------------------------------------------------------
-    new_recipe_input = solara.use_memo(
-        lambda: _build_new_recipe_input(app_tile_model), dependencies=[]
+    # --- Load-recipe input: choose the recipe JSON; .v_model is the chosen path.
+    load_recipe_input = sw.FileInput(
+        class_="pa-1 ma-1 d-flex align-center",
+        large=True,
+        extensions=[".json"],
+        folder=directory.module_dir,
     )
-    load_recipe_input = solara.use_memo(
-        lambda: sw.FileInput(
-            class_="pa-1 ma-1 d-flex align-center",
-            large=True,
-            extensions=[".json"],
-            folder=directory.module_dir,
-        ),
-        dependencies=[],
+
+    create_btn = sw.Btn(
+        msg=cm.recipe_tile.button_new_recipe,
+        color="primary",
+        class_="ma-5",
     )
+    load_btn = sw.Btn(
+        msg=cm.recipe_tile.button_load_recipe,
+        color="primary",
+        class_="ma-5",
+    )
+    save_btn = sw.Btn(
+        msg=cm.recipe_tile.button_save_recipe,
+        color="primary",
+        class_="ma-5",
+    )
+    # Inline error surface for the load (hidden until something fails).
+    alert = sw.Alert().hide()
+    # Inline success/error surface for the save (hidden until something happens).
+    save_alert = sw.Alert().hide()
+
+    new_card = v.Card(
+        class_="pa-3 ma-5",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-1 ma-1", children=[cm.recipe_tile.card_title_new_recipe]
+            ),
+            v.CardSubtitle(
+                class_="pa-1 ma-1",
+                children=[cm.recipe_tile.card_subtitle_new_recipe],
+            ),
+            new_recipe_input,
+            v.CardActions(class_="justify-end", children=[create_btn]),
+        ],
+    )
+    load_card = v.Card(
+        class_="pa-3 ma-5",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-1 ma-1", children=[cm.recipe_tile.card_title_load_recipe]
+            ),
+            v.CardSubtitle(
+                class_="pa-1 ma-1",
+                children=[cm.recipe_tile.card_subtitle_load_recipe],
+            ),
+            load_recipe_input,
+            v.CardActions(class_="justify-end", children=[load_btn]),
+            alert,
+        ],
+    )
+    # Save card — written to the EXISTING recipe folder only, so it stays hidden
+    # (display:none, not child-swap, so it survives dialog reopen) until a recipe
+    # folder exists. Visibility is driven reactively below.
+    save_card = v.Card(
+        class_="pa-3 ma-5",
+        style_="display:none;",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-1 ma-1", children=[cm.recipe_tile.card_title_save_recipe]
+            ),
+            v.CardSubtitle(
+                class_="pa-1 ma-1",
+                children=[cm.recipe_tile.card_subtitle_save_recipe],
+            ),
+            v.CardActions(class_="justify-end", children=[save_btn]),
+            save_alert,
+        ],
+    )
+
+    # Show the Save card only once a recipe folder exists (set by load today;
+    # by the analysis/export folder-creation flow later). Subscribed once — the
+    # layout is memoized for the session, so the leaked cancel handle is fine.
+    def _sync_save_visibility(folder):
+        save_card.style_ = "" if folder else "display:none;"
+
+    app_state.recipe_folder_path.subscribe(_sync_save_visibility)
+    _sync_save_visibility(app_state.recipe_folder_path.value)
 
     # ------------------------------------------------------------------
     # New-recipe handler. Thin: if alerts are already loaded, reset every model
-    # + clear the shared gdf (the old code also re-init'd tiles + re-linked maps
-    # — not applicable in Solara, components re-render from model state); then
-    # set the recipe name and signal navigation to the Aux step.
+    # + clear the shared gdf (tiles re-render from model state); then set the
+    # recipe name and signal navigation to the Aux step.
     # ------------------------------------------------------------------
     def _on_create_click(*_):
         if app_state.alerts_gdf.value is not None:
@@ -116,22 +201,19 @@ def RecipeTile(
             app_state.alerts_gdf.value = None
 
         app_tile_model.recipe_name = new_recipe_input.v_model
-        # TODO(navigation foundation): wiring app_state.current_page_view ->
-        # MapApp.current_step (so the step panel actually switches) is a separate
-        # cross-tile navigation concern not yet wired in this app (same deferral
-        # as aoi_tile.py). Set the intent only.
+        # Jump to the Aux (Optional files) tile; the shell's _NavBridge translates
+        # this current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "aux_tile"
 
+    create_btn.on_event("click", _on_create_click)
+
     # ------------------------------------------------------------------
-    # Load task. dependencies=None => never auto-runs; fires only when the click
-    # handler calls load_task(). Reads the JSON, imports it across the models,
-    # and (if present) loads the saved alert gdf so Overview shows it. The EE
-    # pipeline re-run + navigation are deferred (see module docstring).
+    # Load. File/IO + model round-trip + gdf load run on a daemon thread so the
+    # UI stays responsive; the button shows a spinner and errors land on `alert`.
     # ------------------------------------------------------------------
     def _run_load():
         file_name = load_recipe_input.v_model
         if not file_name or not os.path.exists(file_name):
-            # Surfaced via solara.Error (raise_error=False keeps the task alive).
             raise FileNotFoundError(cm.recipe_tile.input_hint_load_recipe_name)
 
         import json
@@ -160,103 +242,82 @@ def RecipeTile(
             )
 
         # TODO(Task 9 – analysis tile): the OLD load also re-ran the EE pipeline
-        # here — alert re-discovery (aoi_tile.process_alerts_silent), the
-        # filtered alert raster (alert_filter_tile.create_filtered_alert_raster)
-        # and the planet before/after image dictionaries
-        # (create_planet_images_dictionary). Those reconstruct EE + analysis-tile
-        # state, and the analysis tile is not ported yet, so they are deferred to
-        # Task 9. The model round-trip + loading the saved alert gdf above is the
-        # scope of this step.
-        # TODO(navigation foundation): the OLD load navigated to the analysis
-        # tile. Set the intent only (same deferral as _on_create_click / aoi_tile).
+        # here (alert re-discovery, filtered alert raster, planet before/after
+        # image dictionaries). Deferred until the analysis tile is wired.
+        # Jump to the analysis tile; the shell's _NavBridge translates this
+        # current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "analysis_tile"
-        return True
-
-    load_task = solara.lab.use_task(
-        _run_load, dependencies=None, prefer_threaded=True, raise_error=False
-    )
 
     def _on_load_click(*_):
-        load_task()
+        alert.reset()
+        load_btn.loading = True
+        load_btn.disabled = True
 
-    # ------------------------------------------------------------------
-    # Layout: two cards (New recipe / Load recipe), memoized builder.
-    # ------------------------------------------------------------------
-    cards = solara.use_memo(
-        lambda: _build_cards(new_recipe_input, load_recipe_input),
-        dependencies=[],
-    )
-    new_card, load_card = cards
-
-    with solara.Column(style="padding: 0;"):
-        with solara.Div():
-            solara.display(new_card)
-            solara.Button(
-                label=cm.recipe_tile.button_new_recipe,
-                on_click=_on_create_click,
-                color="primary",
-                large=True,
-                class_="ma-5",
-            )
-        with solara.Div():
-            solara.display(load_card)
-            solara.Button(
-                label=cm.recipe_tile.button_load_recipe,
-                on_click=_on_load_click,
-                loading=load_task.pending,
-                disabled=load_task.pending,
-                color="primary",
-                large=True,
-                class_="ma-5",
-            )
-            if load_task.error:
-                solara.Error(
-                    f"{cm.recipe_tile.input_hint_load_recipe_name}: "
-                    f"{load_task.exception}",
-                    class_="ma-5",
+        def _worker():
+            try:
+                _run_load()
+            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                logger.exception("Recipe load failed")
+                alert.add_msg(
+                    f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}", "error"
                 )
+            finally:
+                load_btn.loading = False
+                load_btn.disabled = False
 
+        threading.Thread(target=_worker, daemon=True).start()
 
-def _build_new_recipe_input(app_tile_model):
-    """Build the pre-filled new-recipe TextField and bind it once.
+    load_btn.on_event("click", _on_load_click)
 
-    Pre-fills a generated ``recipe_YYYY-MM-DD-HHMMSS`` name (same as the old
-    tile) and binds it to ``app_tile_model.temporary_recipe_name``.
-    """
-    field = sw.TextField(
-        class_="pa-1 ma-1 d-flex align-center",
-        v_model=generate_recipe_string(),
-        hint=cm.recipe_tile.input_hint_set_recipe_name,
-        persistent_hint=True,
+    # ------------------------------------------------------------------
+    # Save. Persist every model to <recipe_folder>/recipe_parameters.json via
+    # the shared service. Requires an existing recipe folder (the card is hidden
+    # until one exists; the guard is a safety net). Runs on a daemon thread for
+    # parity with load; the button spins and success/errors land on `save_alert`.
+    # ------------------------------------------------------------------
+    def _run_save():
+        folder = app_state.recipe_folder_path.value
+        if not folder or not os.path.isdir(folder):
+            raise FileNotFoundError(cm.recipe_tile.input_hint_save_recipe_error)
+
+        file_path = os.path.join(folder, "recipe_parameters.json")
+        save_model_parameters_to_json(
+            file_path,
+            aux_model,
+            aoi_date_model,
+            alert_filter_model,
+            selected_alerts_model,
+            analyzed_alerts_model,
+            app_tile_model,
+        )
+
+    def _on_save_click(*_):
+        save_alert.reset()
+        save_btn.loading = True
+        save_btn.disabled = True
+
+        def _worker():
+            try:
+                _run_save()
+                save_alert.add_msg(cm.recipe_tile.alert_save_recipe_done, "success")
+            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                logger.exception("Recipe save failed")
+                save_alert.add_msg(
+                    f"{cm.recipe_tile.input_hint_save_recipe_error}: {e}", "error"
+                )
+            finally:
+                save_btn.loading = False
+                save_btn.disabled = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    save_btn.on_event("click", _on_save_click)
+
+    # Layout: three cards, each containing its own action button (errors surface
+    # on the inline alert inside the relevant card). The Save card is hidden
+    # until a recipe folder exists (see _sync_save_visibility above).
+    return v.Container(
+        fluid=True,
+        class_="pa-0",
+        children=[new_card, load_card, save_card],
     )
-    app_tile_model.bind(field, "temporary_recipe_name")
-    return field
-
-
-def _build_cards(new_recipe_input, load_recipe_input):
-    """Build the two v.Card layouts once (inside use_memo).
-
-    Recipe is a form tile (no map); the step panel's opaque background covers the
-    fullscreen main map (z-index rule in solara_app.py), so no backdrop is needed.
-    """
-    new_card = v.Card(
-        class_="pa-3 ma-5",
-        hover=True,
-        children=[
-            v.CardTitle(
-                class_="pa-1 ma-1", children=[cm.recipe_tile.card_title_new_recipe]
-            ),
-            new_recipe_input,
-        ],
-    )
-    load_card = v.Card(
-        class_="pa-3 ma-5",
-        hover=True,
-        children=[
-            v.CardTitle(
-                class_="pa-1 ma-1", children=[cm.recipe_tile.card_title_load_recipe]
-            ),
-            load_recipe_input,
-        ],
-    )
-    return new_card, load_card

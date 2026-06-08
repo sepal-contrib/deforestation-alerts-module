@@ -20,6 +20,7 @@ import ipyleaflet
 import ipyvuetify as v
 from pysepal.mapping.menu_control import MenuControl
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 
 
 def calculateAlertClasses(gpdf):
@@ -57,19 +58,6 @@ def calculate_alert_classes(
         false_positives,
         need_revision,
     ]
-
-
-def convert_julian_to_date(julian_date):
-    # Split the input string into year and julian day
-    julian_date_str = "%.3f" % julian_date
-    year_str, julian_str = julian_date_str.split(".")
-    year = int(year_str)
-
-    # Calculate the date by adding the julian day to the beginning of the year
-    date = datetime(year, 1, 1) + timedelta(days=int(julian_str) - 1)
-
-    # Return the formatted date string
-    return date.strftime("%Y-%m-%d")
 
 
 def create_markers(gdf, point_col, title_cols, group_by_col, marker_popup_function):

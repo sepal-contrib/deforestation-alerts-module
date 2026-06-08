@@ -2,7 +2,7 @@
 
 Exports the parent ``AnalysisTile`` component. See ``analysis_tile.py`` for the
 foundation architecture + the inter-component contract handed to the (currently
-stub) sub-components in ``imagery.py`` / ``cnn_panel.py`` / ``edit_tools.py`` /
+stub) sub-components in ``imagery.py`` / ``review_panel.py`` / ``edit_tools.py`` /
 ``export.py``.
 """
 

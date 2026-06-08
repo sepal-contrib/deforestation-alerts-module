@@ -51,7 +51,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     multipolygon_to_geodataframe,
 )
 from deforestation_alerts.scripts.recipe_helper import update_saved_dictionary
-from gui.tile.analysis.cnn_panel import AlertCnnPanel
+from gui.tile.analysis.review_panel import AlertReviewPanel
 from gui.tile.analysis.edit_tools import AlertEditTools
 from gui.tile.analysis.export import AlertExport
 from gui.tile.analysis.imagery import AlertImagery
@@ -336,7 +336,7 @@ def AnalysisTile(
                 )
             )
             AlertNavigator(app_state=app_state, id_field=id_field)
-            AlertCnnPanel(
+            AlertReviewPanel(
                 widgets=widgets,
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,

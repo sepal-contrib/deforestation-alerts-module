@@ -15,7 +15,7 @@ imperatively mutated, so we use raw widgets — same rationale as the Filter and
 Overview tile ports.
 
 This object IS the inter-component contract: the future sub-components
-(AlertImagery, AlertCnnPanel, AlertEditTools, AlertExport — Tasks 9.2+) receive
+(AlertImagery, AlertReviewPanel, AlertEditTools, AlertExport — Tasks 9.2+) receive
 this ``AnalysisWidgets`` instance and read/mutate the widgets + scratch slots on
 it. The foundation only wires up the widgets and the per-alert scratch slots; the
 behavior that drives them lands in the later tasks.

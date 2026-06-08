@@ -36,18 +36,24 @@ def AuxTile(aux_model):
     # so bindings are attached exactly once.
     # ------------------------------------------------------------------
     layout_widget = solara.use_memo(
-        lambda: _build_layout(aux_model),
+        lambda: build_aux_layout(aux_model),
         dependencies=[],
     )
 
     solara.display(layout_widget)
 
 
-def _build_layout(aux_model):
+def build_aux_layout(aux_model):
     """Build the full card layout and bind widgets to aux_model traits.
 
-    Called exactly once (inside use_memo).  Returns the outermost layout
-    widget so solara.display() can render it.
+    Returns the outermost ipyvuetify layout widget. ``Page`` hands this RAW
+    widget straight to MapApp as the dialog content (no ``solara.display`` /
+    ``render_fixed`` wrapper): a widget captured via ``solara.display`` lives
+    inside an ``Output`` whose view is NOT recreated when MapApp destroys the
+    dialog DOM (v-if) on close and rebuilds it on reopen — the card content
+    vanishes on the 2nd open. A raw ipyvuetify widget tree is re-viewed from its
+    model on reopen like any ipywidget, so it survives. (The ``AuxTile``
+    component above keeps the solara.display form for any standalone use.)
     """
     # Card 1 — CCDC alerts asset
     title1 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.ccdc_alerts_title])

@@ -15,12 +15,18 @@ Key port decisions (see Phase 4 plan, Step 5):
   (traitlets mutations don't trigger Solara re-renders), so we register a real
   ``alert_filter_model.observe`` exactly once via ``use_effect([])`` and tear it
   down on unmount. Same pattern AOI used for its ccdc observer.
-* **Heavy widgets are memoized once** (``dependencies=[]``): the own ``SepalMap`` +
-  ``DrawControl`` + ``InspectorControl``, and all the form widgets (source select,
-  size/area/sorting inputs, max-count combobox). Identities are stable across
-  re-renders so the observer can mutate ``.items``/``.v_model`` in place and the
-  draw control stays attached to its map. The map fills the panel (like AOI /
-  Overview) so the fullscreen main map does not bleed through.
+* **This tile does NOT create its own map** (pysepal single-map model): the
+  ``DrawControl`` + ``InspectorControl`` are attached to the **single shared**
+  ``map_`` passed in from ``solara_app.Page``, the alert/AOI/aux layers are added
+  to it, and the tile renders only its form cards (a right-panel section). It
+  manages ONLY its own layers on the shared map — tracked by name so a refresh
+  removes just this tile's layers (never ``map_.remove_all()``, which would wipe
+  other tiles' layers + the basemap).
+* **Heavy widgets are memoized once** (``dependencies=[]``): the ``DrawControl`` +
+  ``InspectorControl`` and all the form widgets (source select, size/area/sorting
+  inputs, max-count combobox). Identities are stable across re-renders so the
+  observer can mutate ``.items``/``.v_model`` in place and the draw control stays
+  attached to the shared map.
 * **The "Analyze" flow is a button-triggered ``use_task``, not auto-run.**
   ``use_task(dependencies=None)`` only runs when called, so it never fires on
   mount (which would hit EE with no AOI/alerts). The task validates inputs via the
@@ -37,8 +43,8 @@ the analysis tile (Task 9):
 * Planet-imagery dictionaries / recipe-folder creation / save-recipe-parameters:
   these need ``app_tile_model.recipe_folder_path`` plumbing that is not wired into
   the Solara ``Page()`` until the Recipe tile is ported. See the TODOs in the task.
-* Post-analyze navigation to the analysis tile: set ``current_page_view`` only;
-  driving ``MapApp.current_step`` is a separate cross-tile navigation concern.
+* Post-analyze navigation to the analysis tile: set ``current_page_view``; the
+  shell's ``_NavBridge`` translates that into the ``MapApp`` step change.
 * ``load_saved_parameters``: belongs to the Recipe tile; not ported here.
 """
 
@@ -49,7 +55,6 @@ import ee
 import ipyvuetify as v
 import solara
 from ipyleaflet import TileLayer
-from pysepal.mapping import SepalMap
 from pysepal.mapping.draw_control import DrawControl
 from pysepal.mapping.inspector_control import InspectorControl
 
@@ -201,6 +206,18 @@ def create_vector_download_params(
     return poly, alerta_reducir, pixel_size, min_size_pixels, grid_size
 
 
+def _clear_filter_layers(map_widget, tracked):
+    """Remove only THIS tile's layers from the shared map, by tracked name.
+
+    Single-map isolation: called when the Filter tile is deactivated so its
+    AOI / alert-raster / aux layers don't bleed into AOI / Overview. Never
+    ``remove_all()`` (that would wipe other tiles' layers + the basemap).
+    """
+    for name in tracked["names"]:
+        map_widget.remove_layer(name, none_ok=True)
+    tracked["names"] = []
+
+
 def _refresh_layout(
     map_widget,
     drawn_item,
@@ -209,6 +226,7 @@ def _refresh_layout(
     aoi_date_model,
     aux_model,
     alert_filter_model,
+    tracked,
 ):
     """Refresh the source-select items + map layers from the alert dictionaries.
 
@@ -217,6 +235,11 @@ def _refresh_layout(
     alerts" card; otherwise populate the select, reveal the form cards, and
     rebuild the map (AOI + each alert source's alert/date layers + optional
     aux/mask layers). ``cards`` is a dict of the show/hide-able cards.
+
+    ``map_widget`` is the SINGLE shared map, so we must NOT ``remove_all()`` (that
+    wipes other tiles' layers + the basemap). ``tracked`` is a ``{"names": [...]}``
+    holder of the layer names THIS tile last added; we remove exactly those before
+    adding the new set, leaving every other tile's layers intact.
     """
     alerts_names_list = alert_filter_model.available_alerts_list
     alerts_raster_dictionary = alert_filter_model.available_alerts_raster_list
@@ -234,23 +257,29 @@ def _refresh_layout(
     for key in ("source", "min_area", "area_method", "sorting", "max_number"):
         cards[key].show()
 
-    # Rebuild the map content.
+    # Rebuild ONLY this tile's layers on the shared map.
     try:
-        map_widget.remove_all()
-        map_widget.add_ee_layer(aoi_date_model.feature_collection, name="AOI")
+        # Drop the layers this tile added last time, then track + add the new set.
+        _clear_filter_layers(map_widget, tracked)
+
+        def _add(ee_object, name, **kw):
+            map_widget.add_ee_layer(ee_object, name=name, **kw)
+            tracked["names"].append(name)
+
+        _add(aoi_date_model.feature_collection, "AOI")
 
         for nombre in alerts_raster_dictionary:
-            map_widget.add_ee_layer(
+            _add(
                 alerts_raster_dictionary[nombre]["alert_raster"].select("alert"),
-                name=nombre,
+                nombre,
                 vis_params=_ALERT_VIS_PARAMS,
                 shown=False,
             )
-            map_widget.add_ee_layer(
+            _add(
                 alerts_raster_dictionary[nombre]["alert_raster"]
                 .select("date")
                 .randomVisualizer(),
-                name=nombre + cm.filter_tile.layer_date_helper1,
+                nombre + cm.filter_tile.layer_date_helper1,
                 shown=False,
             )
 
@@ -259,16 +288,16 @@ def _refresh_layout(
                 vis_aux = {aux_model.aux_layer_vis}
             else:
                 vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
-            map_widget.add_ee_layer(
+            _add(
                 ee.Image(aux_model.aux_layer).selfMask(),
-                name=cm.filter_tile.layer_aux_name,
+                cm.filter_tile.layer_aux_name,
                 vis_params=vis_aux,
             )
 
         if aux_model.mask_layer:
-            map_widget.add_ee_layer(
+            _add(
                 ee.Image(aux_model.mask_layer).selfMask(),
-                name=cm.filter_tile.layer_mask_name,
+                cm.filter_tile.layer_mask_name,
                 vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
             )
         # Sync layer visibility only after a successful rebuild, so a partial
@@ -333,6 +362,7 @@ def AlertsFilterTile(
     analyzed_alerts_model,
     app_state,
     gee_interface,
+    map_,
 ):
     """Solara port of the old AlertsFilterTile ipyvuetify widget.
 
@@ -357,15 +387,21 @@ def AlertsFilterTile(
         to ``app_state.alerts_gdf`` (Overview + analysis tile consume it).
     gee_interface : GEEInterface
         Session GEE interface, forwarded to the map.
+    map_ : SepalMap
+        The single shared map; this tile attaches its draw/inspector controls and
+        alert/AOI/aux layers to it.
     """
     # ------------------------------------------------------------------
-    # Memoized map + draw control + inspector. The map fills the panel so the
-    # fullscreen main map does not bleed through (same as AOI / Overview).
+    # Attach this tile's draw + inspector controls to the SHARED map (no own map),
+    # and track the layer names this tile adds so a refresh removes only its own
+    # layers (never remove_all on the shared map).
     # ------------------------------------------------------------------
-    map_widget = solara.use_memo(lambda: _build_map(gee_interface), dependencies=[])
+    map_widget = map_
     drawn_item = solara.use_memo(
         lambda: _build_draw_control(map_widget), dependencies=[]
     )
+    solara.use_memo(lambda: _add_inspector(map_widget), dependencies=[])
+    tracked = solara.use_memo(lambda: {"names": []}, dependencies=[])
 
     # ------------------------------------------------------------------
     # Memoized form widgets. Created once so identities are stable: the observer
@@ -386,12 +422,17 @@ def AlertsFilterTile(
         cards,
     ) = widgets
 
-    # Initial show/hide is established by _build_form_widgets (only the
-    # "no alerts" card visible, like the OLD __init__). If a search already
-    # populated the alerts before this tile mounted, sync once on mount so the
-    # form + map reflect that state (the observer only fires on *future* changes).
-    def _sync_on_mount():
-        if alert_filter_model.available_alerts_list:
+    # Single shared map -> per-tile isolation. Initial show/hide is established by
+    # _build_form_widgets (only the "no alerts" card visible). Draw this tile's
+    # layers (AOI + alert rasters) on the shared map ONLY while it is the active
+    # tile, and clear them when navigating away, so they don't bleed into AOI /
+    # Overview. Keyed on the reactive current_page_view so it re-runs on every nav:
+    # on mount it clears (a no-op), and in the AOI-search flow (search populates
+    # the model, then navigates here) it draws on the main thread.
+    active = app_state.current_page_view.value == "filter_alerts"
+
+    def _sync_active():
+        if active:
             _refresh_layout(
                 map_widget,
                 drawn_item,
@@ -400,9 +441,12 @@ def AlertsFilterTile(
                 aoi_date_model,
                 aux_model,
                 alert_filter_model,
+                tracked,
             )
+        else:
+            _clear_filter_layers(map_widget, tracked)
 
-    solara.use_effect(_sync_on_mount, dependencies=[])
+    solara.use_effect(_sync_active, dependencies=[active])
 
     # ------------------------------------------------------------------
     # The 1 traitlets observer — registered exactly once, torn down on unmount.
@@ -412,6 +456,12 @@ def AlertsFilterTile(
     # ------------------------------------------------------------------
     def _register_observer():
         def handler(change):
+            # Single-map isolation: only touch the shared map while this tile is
+            # active. Otherwise (e.g. AOI's search populates the raster list while
+            # the user is still on AOI) skip — the activation effect above redraws
+            # from the model when the tile becomes active, on the main thread.
+            if app_state.current_page_view.value != "filter_alerts":
+                return
             _refresh_layout(
                 map_widget,
                 drawn_item,
@@ -420,6 +470,7 @@ def AlertsFilterTile(
                 aoi_date_model,
                 aux_model,
                 alert_filter_model,
+                tracked,
             )
 
         alert_filter_model.observe(handler, "available_alerts_raster_list")
@@ -552,12 +603,8 @@ def AlertsFilterTile(
         # publish it — this is what Overview + the future analysis tile consume.
         app_state.alerts_gdf.value = convert_to_geopandas(gdf)
 
-        # Preserve the OLD tile's intent to jump to the analysis tile.
-        # TODO(navigation foundation): wiring app_state.current_page_view ->
-        # MapApp.current_step (so the step panel actually switches) is a separate
-        # cross-tile navigation concern not yet wired in this app; deferred (same
-        # as AOI). Driving MapApp.current_step from a tile risks a controlled/
-        # uncontrolled sync loop.
+        # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
+        # translates this current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "analysis_tile"
         return True
 
@@ -569,45 +616,41 @@ def AlertsFilterTile(
         analyze_task()
 
     # ------------------------------------------------------------------
-    # Render layout: map fills the left, controls scroll on the right.
+    # Render layout: controls only (this widget IS the right-panel section
+    # content). The alert/AOI/aux layers are drawn on the single shared map.
     # ------------------------------------------------------------------
-    with solara.Row(style="height: 100%; gap: 0;"):
-        with solara.Column(style="flex: 1 1 auto; min-width: 0; overflow: hidden;"):
-            solara.display(map_widget)
-
-        with solara.Column(style="flex: 0 0 18rem; overflow: auto; padding: 0;"):
-            solara.display(cards["no_alerts"])
-            solara.display(cards["source"])
-            solara.display(cards["min_area"])
-            solara.display(cards["area_method"])
-            solara.display(cards["sorting"])
-            solara.display(cards["max_number"])
-            solara.Button(
-                label=cm.filter_tile.analyze_alerts_button,
-                on_click=_on_analyze_click,
-                loading=analyze_task.pending,
-                disabled=analyze_task.pending,
-                color="primary",
-                class_="ma-3",
+    with solara.Column(style="padding: 0;"):
+        solara.display(cards["no_alerts"])
+        solara.display(cards["source"])
+        solara.display(cards["min_area"])
+        solara.display(cards["area_method"])
+        solara.display(cards["sorting"])
+        solara.display(cards["max_number"])
+        solara.Button(
+            label=cm.filter_tile.analyze_alerts_button,
+            on_click=_on_analyze_click,
+            loading=analyze_task.pending,
+            disabled=analyze_task.pending,
+            color="primary",
+            class_="ma-3",
+        )
+        if analyze_task.error:
+            solara.Error(
+                f"Analysis failed: {analyze_task.exception}", class_="ma-3"
             )
-            if analyze_task.error:
-                solara.Error(
-                    f"Analysis failed: {analyze_task.exception}", class_="ma-3"
-                )
 
 
-def _build_map(gee_interface):
-    """Build the filter map once (inside use_memo), with the SATELLITE basemap."""
-    map_widget = SepalMap(gee_interface=gee_interface)
-    try:
-        map_widget.add_basemap("SATELLITE")
-    except Exception:
-        logger.exception("Failed to add SATELLITE basemap to filter map")
+def _add_inspector(map_widget):
+    """Attach an InspectorControl to the shared map once (inside use_memo).
+
+    The OLD per-tile map added this in ``_build_map``; on the shared map we add it
+    once when the Filter tile mounts. Guarded so a failure does not crash the memo.
+    """
     try:
         map_widget.add(InspectorControl(map_widget))
     except Exception:
-        logger.exception("Failed to add InspectorControl to filter map")
-    return map_widget
+        logger.exception("Failed to add InspectorControl to the shared map")
+    return True
 
 
 def _build_draw_control(map_widget):

@@ -1,9 +1,10 @@
-"""AlertCnnPanel: the review questionnaire (confirmation + loss-driver).
+"""AlertReviewPanel: the review questionnaire (confirmation + loss-driver).
 
 Architecture layer: view. Ports the OLD ``AnalysisTile`` confirmation + driver
 question card area (``card35`` in the OLD ``initialize_layout``): the "Is this a
 true alert?" select (``boton_confirmacion``) and the loss-driver combobox
-(``comments_input``). This panel owns ONLY the review questionnaire.
+(``comments_input``). This panel owns ONLY the review questionnaire — the
+confirmation select and the loss-driver combobox.
 
 The CNN model execution (``run_dl_model_1/2`` -> ``cnn_worker.apply_dl_model``)
 and the polygon draw/edit live in ``edit_tools.py`` (``AlertEditTools``), since the
@@ -34,7 +35,7 @@ from deforestation_alerts.message import cm
 
 
 @solara.component
-def AlertCnnPanel(
+def AlertReviewPanel(
     widgets,
     app_state,
     analyzed_alerts_model,

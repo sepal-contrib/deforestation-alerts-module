@@ -113,7 +113,6 @@ def load_parameters_from_json(
 
     aux_model.import_from_dictionary(model_parameters)
     aoi_tile.load_saved_parameters(model_parameters)
-    aoi_tile.process_alerts2()
     alert_filter_tile.load_saved_parameters(model_parameters)
     (
         alert_source,

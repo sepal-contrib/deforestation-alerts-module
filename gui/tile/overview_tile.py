@@ -1,14 +1,23 @@
 """Overview tile as a Solara component (Phase 4 port of the old ipyvuetify class).
 
 Architecture layer: view — imports solara and ipyvuetify (via reacton) for UI only.
-No GEE calls here; map-layer updates use pure ipyleaflet/pysepal APIs on a memoized
-SepalMap widget.
+No GEE calls here; map-layer updates use pure ipyleaflet/pysepal APIs on the
+**single shared** ``SepalMap`` passed in from ``solara_app.Page`` (the same map
+``MapApp`` renders fullscreen). This tile does NOT create its own map: per the
+pysepal single-map model every tile draws on the one shared map and renders its
+controls as a right-panel section / map popups (see the migration memory).
+
+Layer ownership on the shared map: the tile only adds/removes its OWN layers —
+the colored alert-status ``GeoData`` layers (named by ``_COLOR_DICT`` key) and the
+click ``Popup``s. It must never call ``map_.remove_all()`` (that would wipe other
+tiles' layers + the basemap); ``_clear_overview_layers`` removes just this tile's
+layers by name before each refresh.
 
 Scope note: the old tile also drew the AOI / forest-mask / aux / drawn-selection
 layers, which were `ee.*` calls in the view. Those are intentionally omitted from
-this map (GEE in the view layer is disallowed); the Overview map shows only the
-colored alert-status layers. The alert-DB download button is likewise deferred
-(see the TODO in the render layout).
+this tile (GEE in the view layer is disallowed); the Overview shows only the
+colored alert-status layers. The alert-DB download button is rendered in the
+right-panel card.
 
 Known service-layer concern: overview_helper.py (a *service* module) still imports
 ipyvuetify for its `create_table_rows` and `add_colored_layers` helpers.
@@ -27,8 +36,8 @@ import os
 import ipyvuetify as v
 import reacton.ipyvuetify as rv
 import solara
+from ipyleaflet import Popup
 from pysepal import sepalwidgets as sw
-from pysepal.mapping import SepalMap
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.overview_helper import (
@@ -75,24 +84,41 @@ def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
     ]
 
 
+def _clear_overview_layers(map_) -> None:
+    """Remove only THIS tile's layers from the shared map.
+
+    The overview owns the colored alert-status ``GeoData`` layers (named by a
+    ``_COLOR_DICT`` key) and any click ``Popup``s. Everything else on the shared
+    map (basemap, AOI, alert rasters from other tiles) is left untouched. Never
+    use ``map_.remove_all()`` on the shared map.
+    """
+    for layer in list(map_.layers):
+        if getattr(layer, "base", False):
+            continue
+        if isinstance(layer, Popup) or getattr(layer, "name", None) in _COLOR_DICT:
+            try:
+                map_.remove_layer(layer)
+            except Exception:
+                logger.exception("Overview: failed to remove a layer during clear")
+
+
 @solara.component
-def OverviewTile(app_state):
+def OverviewTile(app_state, map_):
     """Solara port of the old OverviewTile ipyvuetify widget.
+
+    Renders the alert-status summary card (+ download button) as a right-panel
+    section; the colored alert-status points + their "Go" popups are drawn on the
+    single shared map.
 
     Parameters
     ----------
     app_state : AppState
         The shared ephemeral reactive store.  The component reacts to
         ``app_state.alerts_gdf`` via a ``use_effect``.
+    map_ : SepalMap
+        The single shared map (the same instance ``MapApp`` renders fullscreen).
+        Layers + popups are added/removed on this map.
     """
-    # --------------------------------------------------------------------------
-    # Memoized map widget — one instance per kernel, stable across re-renders.
-    # --------------------------------------------------------------------------
-    map_widget = solara.use_memo(
-        lambda: SepalMap(),
-        dependencies=[],
-    )
-
     # --------------------------------------------------------------------------
     # Summary table body — held in a Ref so use_effect can mutate it in place.
     # --------------------------------------------------------------------------
@@ -113,6 +139,11 @@ def OverviewTile(app_state):
     # Folder of the loaded recipe (set by RecipeTile load). Read reactively so
     # the download button appears once a recipe is loaded.
     recipe_folder = app_state.recipe_folder_path.value
+    # Single shared map -> per-tile layer isolation: this tile draws its alert
+    # points only while it is the active tile, and clears them otherwise (so they
+    # don't bleed into AOI/Filter). Read reactively so the effect re-runs on
+    # navigation.
+    active = app_state.current_page_view.value == "overview_tile"
 
     # Callback: "Go" button in a map popup → navigate to that alert. Thin: read
     # widget value → write reactive state. Defined before _sync_overview because
@@ -125,18 +156,26 @@ def OverviewTile(app_state):
             logger.exception("Overview: on_go_click failed")
 
     def _sync_overview():
-        """Called on mount and every time alerts_gdf changes."""
-        if alerts_gdf is not None and len(alerts_gdf) > 0:
-            # Update summary counts
+        """Refresh the summary table + this tile's map layers.
+
+        Runs on mount and whenever ``alerts_gdf`` changes OR this tile is
+        activated/deactivated. The summary table (right-panel only) always tracks
+        the data; the colored alert points are drawn on the shared map ONLY while
+        this tile is active, and cleared otherwise (single-map isolation).
+        """
+        has_data = alerts_gdf is not None and len(alerts_gdf) > 0
+        if has_data:
             counts = calculate_alert_classes(
                 alerts_gdf, "Confirmed", "False Positive", "Need revision"
             )
             tbody_ref.children = _make_summary_rows(counts, _ALERT_LABELS)
+        else:
+            tbody_ref.children = _make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)
 
-            # Refresh map layers
-            try:
-                map_widget.remove_all()
-                map_widget.add_basemap("SATELLITE")
+        # Always start by removing only THIS tile's layers (idempotent, by name).
+        try:
+            _clear_overview_layers(map_)
+            if active and has_data:
                 gdf_points = alerts_gdf.drop(
                     columns=[
                         c
@@ -148,21 +187,13 @@ def OverviewTile(app_state):
                     gdf_points,
                     "status",
                     _COLOR_DICT,
-                    map_widget,
+                    map_,
                     _on_go_click,
                 )
-            except Exception:
-                logger.exception("Overview: failed to update map layers")
-        else:
-            # No data: reset table to zeros, clear map
-            tbody_ref.children = _make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)
-            try:
-                map_widget.remove_all()
-                map_widget.add_basemap("SATELLITE")
-            except Exception:
-                logger.exception("Overview: failed to clear map")
+        except Exception:
+            logger.exception("Overview: failed to refresh map layers")
 
-    solara.use_effect(_sync_overview, [alerts_gdf])
+    solara.use_effect(_sync_overview, [alerts_gdf, active])
 
     # --------------------------------------------------------------------------
     # Info table (stable ipyvuetify widget; tbody_ref is mutated by use_effect)
@@ -180,7 +211,8 @@ def OverviewTile(app_state):
     )
 
     # --------------------------------------------------------------------------
-    # Render layout (declarative, no .show()/.hide())
+    # Render layout — controls ONLY (this widget IS the right-panel section
+    # content). No map here: the single shared map shows the alert points.
     # --------------------------------------------------------------------------
     section_title = rv.CardTitle(
         class_="pa-1 ma-1",
@@ -193,32 +225,23 @@ def OverviewTile(app_state):
         children=[section_title, info_table],
     )
 
-    with solara.Row(style="height: 100%; gap: 0;"):
-        # Left: map (fills remaining space)
-        with solara.Column(style="flex: 1 1 auto; min-width: 0; overflow: hidden;"):
-            solara.display(map_widget)
-
-        # Right: stats panel
-        with solara.Column(
-            style="flex: 0 0 18rem; overflow: auto; padding: 0;"
-        ):
-            solara.display(info_card)
-            # Download-alerts-DB button (old tile's dwn_all_btn). Shown only when a
-            # recipe is loaded (recipe_folder_path set by RecipeTile) AND the saved
-            # alert_db.csv exists. recipe_folder_path is now wired through app_state
-            # by the Recipe load task. Built declaratively (not memoized) so its URL
-            # reflects the current folder; sw.DownloadBtn.set_url() builds the link.
-            alert_db_path = (
-                os.path.join(recipe_folder, "alert_db.csv") if recipe_folder else ""
+    with solara.Column(style="padding: 0;"):
+        solara.display(info_card)
+        # Download-alerts-DB button (old tile's dwn_all_btn). Shown only when a
+        # recipe is loaded (recipe_folder_path set by RecipeTile) AND the saved
+        # alert_db.csv exists. Built declaratively (not memoized) so its URL
+        # reflects the current folder; sw.DownloadBtn.set_url() builds the link.
+        alert_db_path = (
+            os.path.join(recipe_folder, "alert_db.csv") if recipe_folder else ""
+        )
+        if alert_db_path and os.path.exists(alert_db_path):
+            download_btn = sw.DownloadBtn(
+                text=cm.overview_tile.alerts_db_label, small=True
             )
-            if alert_db_path and os.path.exists(alert_db_path):
-                download_btn = sw.DownloadBtn(
-                    text=cm.overview_tile.alerts_db_label, small=True
-                )
-                download_btn.set_url(path=alert_db_path)
-                download_card = v.Card(
-                    class_="pa-3 ma-3 d-flex justify-center",
-                    hover=True,
-                    children=[download_btn],
-                )
-                solara.display(download_card)
+            download_btn.set_url(path=alert_db_path)
+            download_card = v.Card(
+                class_="pa-3 ma-3 d-flex justify-center",
+                hover=True,
+                children=[download_btn],
+            )
+            solara.display(download_card)
