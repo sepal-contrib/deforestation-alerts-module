@@ -35,6 +35,7 @@ from pysepal.solara import (
 from deforestation_alerts.message import cm
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
+from gui.tile.overview_tile import OverviewTile
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -74,6 +75,15 @@ def Page():
         lambda: solara.render_fixed(AboutTile())[0], dependencies=[]
     )
 
+    # Overview tile: render_fixed so reactivity (use_effect on alerts_gdf) is
+    # preserved while handing MapApp a concrete DOMWidget.  render_fixed leaves a
+    # stale duplicate widget in the DOM — use_effect side-effects are idempotent so
+    # double-mount is safe.
+    overview_widget = solara.use_memo(
+        lambda: solara.render_fixed(OverviewTile(app_state=app_state))[0],
+        dependencies=[],
+    )
+
     steps_data = [
         {
             "id": 1,
@@ -82,6 +92,15 @@ def Page():
             "display": "dialog",
             "content": about_widget,
             "width": 1300,
+        },
+        {
+            "id": 2,
+            "name": cm.app.drawer_item.overview,
+            "icon": "mdi-chart-box-outline",
+            # MapApp.vue renders step content only when display is "step"
+            # (panel over the map) or "dialog"; an empty display renders nowhere.
+            "display": "step",
+            "content": overview_widget,
         },
     ]
 

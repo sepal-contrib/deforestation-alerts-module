@@ -1,183 +1,206 @@
-from pysepal import sepalwidgets as sw
-from pysepal import aoi
-from pysepal.mapping import SepalMap
-from deforestation_alerts.message import cm
+"""Overview tile as a Solara component (Phase 4 port of the old ipyvuetify class).
+
+Architecture layer: view — imports solara and ipyvuetify (via reacton) for UI only.
+No GEE calls here; map-layer updates use pure ipyleaflet/pysepal APIs on a memoized
+SepalMap widget.
+
+Scope note: the old tile also drew the AOI / forest-mask / aux / drawn-selection
+layers, which were `ee.*` calls in the view. Those are intentionally omitted from
+this map (GEE in the view layer is disallowed); the Overview map shows only the
+colored alert-status layers. The alert-DB download button is likewise deferred
+(see the TODO in the render layout).
+
+Known service-layer concern: overview_helper.py (a *service* module) still imports
+ipyvuetify for its `create_table_rows` and `add_colored_layers` helpers.
+- `calculate_alert_classes` is pure (no UI imports) — used directly here.
+- `create_table_rows` uses `v.Html` — reproduced locally as `_make_summary_rows` to
+  avoid pulling ipyvuetify widgets through the service layer into this component.
+  The helper version is left untouched; refactoring overview_helper is deferred to a
+  later task.
+- `add_colored_layers` uses `v.Html`/`v.Btn`/`v.Card` for ipyleaflet popup children
+  only (they are never Solara reacton children), so calling it here is safe.
+"""
+
+import logging
+
 import ipyvuetify as v
-from IPython.display import display, HTML
-from ipyleaflet import WidgetControl, GeoData, LayersControl as ipyLayersControl
+import reacton.ipyvuetify as rv
+import solara
+from pysepal.mapping import SepalMap
 
-from pysepal.scripts.utils import init_ee
-from traitlets import Any, Unicode, link
-from deforestation_alerts.scripts.overview_helper import *
-from pysepal.mapping.layers_control import LayersControl
-from pysepal.mapping.menu_control import MenuControl
-from pysepal.mapping.map_btn import MapBtn
-import ee
+from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.overview_helper import (
+    add_colored_layers,
+    calculate_alert_classes,
+)
 
-init_ee()
+logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
+
+# Alert status → map dot colour (same as old tile)
+_COLOR_DICT = {
+    "Not reviewed": "lightgrey",
+    "Confirmed": "red",
+    "Need revision": "orange",
+    "False Positive": "green",
+}
+
+# Summary-table row labels (matches old tile order)
+_ALERT_LABELS = [
+    cm.overview_tile.total,
+    cm.overview_tile.reviewed,
+    cm.overview_tile.confirmed,
+    cm.overview_tile.false_positives,
+    cm.overview_tile.revision,
+]
 
 
-class OverviewTile(sw.Layout):
-    def __init__(
-        self,
-        aoi_date_model,
-        analyzed_alerts_model,
-        selected_alerts_model,
-        aux_model,
-        app_tile_model,
-    ):
-        self._metadata = {"mount_id": "overview_tile"}
-        self.aux_model = aux_model
-        self.analyzed_alerts_model = analyzed_alerts_model
-        self.selected_alerts_model = selected_alerts_model
-        self.aoi_date_model = aoi_date_model
-        self.app_tile_model = app_tile_model
-        self.initialize_layout()
-        self.update_table()
-        self.update_map()
-        
-        ## Observe changes and update tile when it changes
-        self.analyzed_alerts_model.observe(self.update_tile, "last_save_time")
-        self.analyzed_alerts_model.observe(self.update_tile, "alerts_gdf")
+def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
+    """Return ipyvuetify <tr> widgets for the summary table.
 
-        super().__init__()
-
-    def initialize_layout(self):
-        # Set default table values
-        self.listaNumeros = [0, 0, 0, 0, 0]
-        self.alert_labels = [
-            cm.overview_tile.total,
-            cm.overview_tile.reviewed,
-            cm.overview_tile.confirmed,
-            cm.overview_tile.false_positives,
-            cm.overview_tile.revision,
-        ]
-        # Side information table using v-simple-table
-        self.info_table = v.SimpleTable(
-            dense=False,
+    Local copy of the pure UI part of overview_helper.create_table_rows, kept
+    here so the service module's ipyvuetify dependency does not leak into this
+    component through a function call.  The service version is left unchanged.
+    """
+    return [
+        v.Html(
+            tag="tr",
             children=[
-                v.Html(
-                    tag="tbody",
-                    children=create_table_rows(self.listaNumeros, self.alert_labels),
-                )
+                v.Html(tag="td", children=[label]),
+                v.Html(tag="td", children=[str(value)]),
             ],
         )
+        for label, value in zip(labels, counts)
+    ]
 
-        # 1. Crear el mapa para seleccionar el área de estudio
-        # Inject CSS to style the custom class
-        display(
-            HTML(
-                """
-        <style>
-            .custom-map-class {
-                width: 100% !important;
-                height: 80vh !important;
-                }
-        </style>
-        """
+
+@solara.component
+def OverviewTile(app_state):
+    """Solara port of the old OverviewTile ipyvuetify widget.
+
+    Parameters
+    ----------
+    app_state : AppState
+        The shared ephemeral reactive store.  The component reacts to
+        ``app_state.alerts_gdf`` via a ``use_effect``.
+    """
+    # --------------------------------------------------------------------------
+    # Memoized map widget — one instance per kernel, stable across re-renders.
+    # --------------------------------------------------------------------------
+    map_widget = solara.use_memo(
+        lambda: SepalMap(),
+        dependencies=[],
+    )
+
+    # --------------------------------------------------------------------------
+    # Summary table body — held in a Ref so use_effect can mutate it in place.
+    # --------------------------------------------------------------------------
+    tbody_ref = solara.use_memo(
+        lambda: v.Html(
+            tag="tbody",
+            children=_make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS),
+        ),
+        dependencies=[],
+    )
+
+    # --------------------------------------------------------------------------
+    # Reactive effect: refresh map layers + summary table whenever alerts_gdf
+    # changes.  Replaces the old `analyzed_alerts_model.observe(…, "alerts_gdf")`
+    # and `analyzed_alerts_model.observe(…, "last_save_time")` observers.
+    # --------------------------------------------------------------------------
+    alerts_gdf = app_state.alerts_gdf.value
+
+    # Callback: "Go" button in a map popup → navigate to that alert. Thin: read
+    # widget value → write reactive state. Defined before _sync_overview because
+    # the effect hands it to add_colored_layers.
+    def _on_go_click(widget, event, data):
+        try:
+            app_state.actual_alert_id.value = int(widget.value)
+            app_state.current_page_view.value = "analysis_tile"
+        except Exception:
+            logger.exception("Overview: on_go_click failed")
+
+    def _sync_overview():
+        """Called on mount and every time alerts_gdf changes."""
+        if alerts_gdf is not None and len(alerts_gdf) > 0:
+            # Update summary counts
+            counts = calculate_alert_classes(
+                alerts_gdf, "Confirmed", "False Positive", "Need revision"
             )
-        )
-        self.map_1 = SepalMap()
-        self.map_1.add_class("custom-map-class")
-        self.map_1.add_basemap("SATELLITE")
-        
-        # Side information labels
-        section_title = v.CardTitle(
-            class_="pa-1 ma-1", children=[cm.overview_tile.title]
-        )
-        self.dwn_all_btn = sw.DownloadBtn(
-            text=cm.overview_tile.alerts_db_label, small=True
-        )
-        self.dwn_summary_btn = sw.DownloadBtn(
-            text=cm.overview_tile.summary_button_label, small=True
-        )
-        gpkg_name = self.app_tile_model.recipe_folder_path + "/alert_db.csv"
-        self.dwn_all_btn.set_url(path=gpkg_name)
+            tbody_ref.children = _make_summary_rows(counts, _ALERT_LABELS)
 
-        card01 = v.Card(
-            class_="pa-3 ma-3", hover=True, children=[section_title, self.info_table]
-        )
-        card02 = v.Card(
-            class_="pa-3 ma-3 d-flex justify-center",
-            hover=True,
-            children=[self.dwn_all_btn],  # , self.dwn_summary_btn],
-        )
-        # Layout 
-        # Two-panel layout using Flex
-        left_panel = v.Flex(
-            children=[self.map_1],
-            style_='flex: 1 1 auto ; overflow: hidden'
-        )
-        right_panel = v.Flex(
-            children=[card01, card02],
-            style_='flex: 0 0 16rem ; overflow: auto'
-        )
-
-        self.children = [left_panel,right_panel]
-
-
-    def update_map(self):
-        if (
-            self.analyzed_alerts_model.alerts_gdf is None
-            or len(self.analyzed_alerts_model.alerts_gdf) == 0
-        ):
-            self.children = self.children
+            # Refresh map layers
+            try:
+                map_widget.remove_all()
+                map_widget.add_basemap("SATELLITE")
+                gdf_points = alerts_gdf.drop(
+                    columns=[
+                        c
+                        for c in ["bounding_box", "alert_polygon"]
+                        if c in alerts_gdf.columns
+                    ]
+                ).set_geometry("point")
+                add_colored_layers(
+                    gdf_points,
+                    "status",
+                    _COLOR_DICT,
+                    map_widget,
+                    _on_go_click,
+                )
+            except Exception:
+                logger.exception("Overview: failed to update map layers")
         else:
-            self.map_1.remove_all()
-            self.map_1.add_ee_layer(self.aoi_date_model.feature_collection, name="AOI")
-           
-            color_dictionary = {
-                "Not reviewed": "lightgrey",
-                "Confirmed": "red",
-                "Need revision": "orange",
-                "False Positive": "green"
-            }
-            newgdf = self.analyzed_alerts_model.alerts_gdf.drop(columns=['bounding_box','alert_polygon'])
-            alerts_db = newgdf.set_geometry('point')
-            add_colored_layers(alerts_db, 'status', color_dictionary, self.map_1, self.on_go_button_click)
+            # No data: reset table to zeros, clear map
+            tbody_ref.children = _make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)
+            try:
+                map_widget.remove_all()
+                map_widget.add_basemap("SATELLITE")
+            except Exception:
+                logger.exception("Overview: failed to clear map")
 
-            if self.selected_alerts_model.alert_selection_area_n == 1:
-                draw_selection = ee.FeatureCollection(
-                    self.selected_alerts_model.alert_selection_polygons
-                )
-                self.map_1.add_ee_layer(draw_selection, name="Drawn Item", vis_params = {'color':'7eb9e8'})
-            if self.aux_model.mask_layer:
-                self.map_1.add_ee_layer(
-                    ee.Image(self.aux_model.mask_layer).selfMask(),
-                    name=cm.filter_tile.layer_mask_name,
-                    # vis_params=self.aux_model.aux_layer_vis,
-                    vis_params={"min": 0, "max": 1, "palette": ["white", "gray"]},
-                )
-            if self.aux_model.aux_layer:
-                if self.aux_model.aux_layer_vis:
-                    vis_aux = {self.aux_model.aux_layer_vis}
-                else:
-                    vis_aux = {"min": 0, "max": 1, "palette": ["white", "brown"]}
-                self.map_1.add_ee_layer(
-                    ee.Image(self.aux_model.aux_layer).selfMask(),
-                    name=cm.filter_tile.layer_aux_name,
-                    vis_params=vis_aux,
-                )
+    solara.use_effect(_sync_overview, [alerts_gdf])
 
-    def update_table(self):
-        if self.analyzed_alerts_model.alerts_gdf is not None:
-            self.listaNumeros = calculate_alert_classes(
-                    self.analyzed_alerts_model.alerts_gdf, "Confirmed", "False Positive", "Need revision"
-                )
-            self.info_table.children[0].children = create_table_rows(
-                    self.listaNumeros, self.alert_labels
-                )
-    def update_tile(self, change):
-        # Update the tile when aoi_date_model changes
-        self.update_table()
-        self.update_map()
-            
+    # --------------------------------------------------------------------------
+    # Info table (stable ipyvuetify widget; tbody_ref is mutated by use_effect)
+    # --------------------------------------------------------------------------
+    # NOTE: raw ipyvuetify `v.SimpleTable` (not reacton `rv.*`) on purpose — the
+    # effect mutates `tbody_ref.children` in place, which requires a concrete
+    # widget instance. Do not "simplify" this to `rv.SimpleTable`: a reacton
+    # element is rebuilt each render and can't be imperatively mutated.
+    info_table = solara.use_memo(
+        lambda: v.SimpleTable(
+            dense=False,
+            children=[tbody_ref],
+        ),
+        dependencies=[],
+    )
 
-    # Function to change actual alert id and move to analysis tile
-    def on_go_button_click(self, widget, event, data):
-        widget.loading = True  # Set button to loading state
-        widget.disabled = True  # Disable button to prevent further clicks
-        self.analyzed_alerts_model.actual_alert_id = int(widget.value)
-        self.app_tile_model.current_page_view = "analysis_tile"
-        widget.loading = False  # Remove loading state
-        widget.disabled = False  # Re-enable the button
+    # --------------------------------------------------------------------------
+    # Render layout (declarative, no .show()/.hide())
+    # --------------------------------------------------------------------------
+    section_title = rv.CardTitle(
+        class_="pa-1 ma-1",
+        children=[cm.overview_tile.title],
+    )
+
+    info_card = rv.Card(
+        class_="pa-3 ma-3",
+        hover=True,
+        children=[section_title, info_table],
+    )
+
+    with solara.Row(style="height: 100%; gap: 0;"):
+        # Left: map (fills remaining space)
+        with solara.Column(style="flex: 1 1 auto; min-width: 0; overflow: hidden;"):
+            solara.display(map_widget)
+
+        # Right: stats panel
+        with solara.Column(
+            style="flex: 0 0 18rem; overflow: auto; padding: 0;"
+        ):
+            solara.display(info_card)
+            # TODO(Step 4 – Recipe tile): the old tile also showed a "download
+            # alerts DB" button (sw.DownloadBtn → recipe_folder_path/alert_db.csv).
+            # It is intentionally deferred, not dropped: its URL needs
+            # recipe_folder_path from the domain app_tile_model, which is not wired
+            # into the Solara Page() until the Recipe tile is ported. Re-add here
+            # once that path is available via app_state / a domain model.
