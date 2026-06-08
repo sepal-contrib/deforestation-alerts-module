@@ -45,6 +45,7 @@ Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts)
 """
 
 import ipyvuetify as v
+import solara
 from traitlets import link
 from pysepal import color, sepalwidgets as sw
 from pysepal.mapping import SepalMap
@@ -220,3 +221,12 @@ class AnalysisWidgets:
         self.selected_img_before_info_list = None
         self.selected_img_after_info_list = None
         self.show_image_collection = [True, False, False]
+
+        # ------------------------------------------------------------------
+        # Per-alert imagery handoff (Task 9.2). ``view_actual_alert`` publishes a
+        # context dict here (alert id / grid / dates / planet dicts / show flags)
+        # and ``AlertImagery`` keys its slide-group builds + S2/Landsat use_tasks on
+        # it, so the EE fetches only run once a fresh alert context exists. ``None``
+        # while no alert is active (dormant at smoke time).
+        # ------------------------------------------------------------------
+        self.imagery_ctx = solara.reactive(None)

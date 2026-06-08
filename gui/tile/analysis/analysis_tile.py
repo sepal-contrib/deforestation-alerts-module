@@ -190,13 +190,21 @@ def view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model,
         if after_planet and after_planet[0].get("value") == "Not available":
             widgets.show_image_collection = [False, True, False]
 
-        # TODO(Task 9.2 AlertImagery): rebuild the Planet slide groups
-        # (create_horizontal_slide_group_v3) and kick off the S2/Landsat
-        # dictionary tasks (start_s2_dictionary_thread / start_landsat_...)
-        # off the per-alert grid + dates computed above. Also restore the OLD
-        # auto-switch of the visible tab to Sentinel-2 when Planet is "Not
-        # available" (OLD set imgSelection{1,2}.children[0].v_model = 1); the
-        # foundation only sets the show_image_collection flags above.
+        # Task 9.2 (AlertImagery) handoff: publish the per-alert imagery context.
+        # AlertImagery keys its Planet slide-group build + S2/Landsat use_tasks on
+        # this reactive, so the slide-group rebuilds and EE fetches only run once a
+        # fresh context exists (and the auto-switch to the Sentinel-2 tab when
+        # Planet is "Not available" lands there). The grid/bbox/dates computed above
+        # are passed through so the worker tasks never re-touch this thread's state.
+        widgets.imagery_ctx.value = {
+            "alert_id": alert_id,
+            "grid": widgets.actual_alert_grid,
+            "fecha1": fecha1,
+            "fecha2": fecha2,
+            "before_planet": before_planet,
+            "after_planet": after_planet,
+            "show": list(widgets.show_image_collection),
+        }
     except Exception:
         logger.exception("Analysis: view_actual_alert map update failed")
 

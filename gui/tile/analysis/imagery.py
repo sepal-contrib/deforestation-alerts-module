@@ -1,34 +1,449 @@
-"""AlertImagery sub-component STUB (Task 9.2).
+"""AlertImagery sub-component (Task 9.2 — dual-map Planet/S2/Landsat selectors).
 
-Architecture layer: view. In the OLD ``AnalysisTile`` god-class the imagery
-behavior was the bulk of the work: ``image_slider_map_callback`` /
-``image_slider_info_callback`` / ``create_horizontal_slide_group_v3`` and the
-S2 / Landsat dictionary threads (``start_s2_dictionary_thread`` etc.) driven by
-the ``before/after_s2_images_time`` / ``before/after_landsat_images_time``
-traitlets observers.
+Architecture layer: view. This is the imagery slice of the OLD ``AnalysisTile``
+god-class port. It drives the two image-selector cards (``imgSelection1/2`` on
+``widgets``) and their date-button slide groups: Planet (synchronous, from the
+recipe-built monthly dicts) plus Sentinel-2 and Landsat (fetched lazily off EE).
 
-For the FOUNDATION this is a pass-through: the two map panes + the two 3-tab
-image-selector cards already live on ``widgets`` (built in ``widgets.py``) and
-are rendered by the parent's left panel directly. This component exists to FIX
-THE INTER-COMPONENT CONTRACT so Task 9.2 can fill it in without changing the
-parent. It currently renders nothing of its own (the panes are in the parent's
-left panel); Task 9.2 will move the slide-group orchestration here and react to
-the per-alert context the parent stores on ``widgets`` /
-``analyzed_alerts_model``.
+Key port decisions (FIXED by the migration contract; the plan's reference code is
+unreliable):
+
+* **Per-alert handoff via ``widgets.imagery_ctx``.** The parent's
+  ``view_actual_alert`` computes the alert grid / dates / planet dicts and
+  publishes a context dict to ``widgets.imagery_ctx.value`` (a solara reactive).
+  This component keys every effect/task on that ctx, so the slide-group builds and
+  the EE fetches only run once the parent has published a fresh context — which
+  guarantees the grid/dates exist before any imagery work starts. When no alert is
+  active (``imagery_ctx.value is None``) everything no-ops (safe at smoke time).
+
+* **EE fetches run on a worker thread via ``use_task(prefer_threaded=True)``.**
+  ``getIndividualS2`` / ``getIndividualLandsat`` call blocking ``.getInfo()``;
+  ``prefer_threaded=True`` (same as the Filter tile) keeps that off the asyncio
+  event loop. The task body does ONLY the EE fetch and returns the ``list[dict]``.
+
+* **No widget mutation on the worker thread.** The OLD code mutated ipyvuetify
+  widgets from the fetch thread via traitlets observers — that anti-pattern is
+  removed here. The slide-group REBUILD (which mutates widgets) happens on the main
+  thread in a ``use_effect`` keyed on the task's ``value``, never inside the task.
+
+* **Imperative helpers ported as module-level functions** (no ``self``):
+  ``image_slider_map_callback`` / ``image_slider_info_callback`` /
+  ``create_horizontal_slide_group_v3``. Logic is byte-faithful to the OLD methods
+  (the nested-children indexing into the selector tree, the color maps, the
+  ``milis`` sort, the cloud-cover icons, the Landsat pansharpen+harmonize).
+
+* The maps + selector cards themselves are built/displayed by
+  ``AnalysisWidgets`` / the parent's left panel. This component renders nothing
+  visible — it is a pure logic/effect component placed in the parent's left panel.
 
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets (maps, imgSelection1/2, scratch slots).
+    Shared heavy widgets (maps, imgSelection1/2, map31/32, scratch slots, and the
+    ``imagery_ctx`` reactive published by the parent).
 app_state : AppState
-    Navigation + alerts source of truth.
+    Navigation + alerts source of truth (unused directly; kept for contract parity).
 selected_alerts_model : SelectedAlertsModel
     Holds ``filtered_alert_raster`` (the original-alert overlay layer source).
 analyzed_alerts_model : AlertAnalysisModel
-    Per-alert imagery dicts (before/after S2/Landsat/Planet) + their *_time traits.
+    Per-alert imagery dicts (before/after S2/Landsat/Planet); unused directly now
+    that the per-alert handoff goes through ``widgets.imagery_ctx`` (kept for parity).
 """
 
+import logging
+from datetime import datetime
+from operator import itemgetter
+
+import ee
+import ipyvuetify as v
 import solara
+from pysepal import sepalwidgets as sw
+
+from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.imagery_service import (
+    getIndividualLandsat,
+    getIndividualS2,
+)
+from deforestation_alerts.scripts.mosaics_helper import (
+    SFIM_pan_sharpen,
+    get_sentinel2_dates,
+    harmonizeL8ToS2_scaled,
+)
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
+
+# Map source -> the selector card's main tab index (Planet/S2/Landsat order).
+_SOURCE_TO_INDEX = {"Planet NICFI": 0, "Sentinel 2": 1, "Landsat": 2}
+
+_COLOR_MAP = {
+    "Sentinel 2": "blue",
+    "Planet NICFI": "green",
+    "Landsat": "blue-grey",
+    "selected": "orange",
+}
+
+
+# ---------------------------------------------------------------------------
+# Imperative helpers — ported verbatim from the OLD god-class as module-level
+# functions (no ``self``); explicit args replace the former instance attributes.
+# ---------------------------------------------------------------------------
+def image_slider_map_callback(
+    selected_item, map_element, model_att, widgets, selected_alerts_model
+):
+    """Add the chosen image's True/False-color + original-alert layers to a map.
+
+    Ports OLD ``AnalysisTile.image_slider_map_callback`` byte-faithfully. Reads the
+    per-alert grid / bbox from ``widgets`` and the original-alert raster from
+    ``selected_alerts_model``. Stores the chosen ee.Image back on ``widgets`` per
+    pane (``model_att`` 0 = before, 1 = after).
+    """
+    widgets.imgSelection1.disabled = True
+    widgets.imgSelection2.disabled = True
+    geom = widgets.actual_alert_grid
+    image_id = selected_item["image_id"]
+    img_source = selected_item["source"]
+    vis1p = {"min": 0, "max": 1600, "bands": ["R", "G", "B"]}
+    vis2p = {"min": 0, "max": [6500, 1600, 1600], "bands": ["N", "R", "G"]}
+
+    vis1s = {"min": 0, "max": 3000, "bands": ["B4", "B3", "B2"]}
+    vis2s = {"min": 0, "max": [6500, 3000, 3000], "bands": ["B8", "B4", "B3"]}
+
+    if img_source == "Sentinel 2":
+        vis1 = vis1s
+        vis2 = vis2s
+        s2 = (
+            ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+            .filterBounds(geom)
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 90))
+        )
+        s2_same_date = s2.filter(ee.Filter.eq("GENERATION_TIME", image_id))
+        img = s2_same_date.mosaic().clip(geom)
+
+    elif img_source == "Planet NICFI":
+        vis1 = vis1p
+        vis2 = vis2p
+        img = ee.Image(image_id).clip(geom)
+
+    elif img_source == "Landsat":
+        vis1 = vis1s
+        vis2 = vis2s
+
+        # Filter Landsat SR
+        l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+        l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+        landsat = l8.merge(l9)
+        landsat_filtered = (
+            landsat.filterBounds(geom)
+            .filter(ee.Filter.lt("CLOUD_COVER", 90))
+            .filter(ee.Filter.eq("LANDSAT_SCENE_ID", image_id))
+        ).first()
+
+        # Filter Landsat TOA
+        l8_toa = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA")
+        l9_toa = ee.ImageCollection("LANDSAT/LC09/C02/T1_TOA")
+        landsat_toa = l8_toa.merge(l9_toa)
+        landsat_toa_filtered = (
+            landsat_toa.filterBounds(geom)
+            .filter(ee.Filter.lt("CLOUD_COVER", 90))
+            .filter(ee.Filter.eq("LANDSAT_SCENE_ID", image_id))
+        ).first()
+
+        # Pansharpening
+        landsat_sr_img = landsat_filtered.select(
+            ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"]
+        )
+        landsat_toa_img = landsat_toa_filtered.select("B8")
+        pan_sharp = SFIM_pan_sharpen(landsat_sr_img, landsat_toa_img)
+        # Harmonize
+        harmonized_img = harmonizeL8ToS2_scaled(pan_sharp).clip(geom)
+        img = harmonized_img
+
+    if model_att == 0:
+        widgets.selected_img_before = img
+    elif model_att == 1:
+        widgets.selected_img_after = img
+
+    orig_alert = ee.Image(selected_alerts_model.filtered_alert_raster).clip(
+        widgets.actual_bb.geometry()
+    )
+
+    map_element.addLayer(img, vis1, "True Color", True)
+    map_element.addLayer(img, vis2, "False Color", False)
+    map_element.addLayer(
+        orig_alert.select("alert"),
+        {"min": 1, "max": 2, "palette": ["orange", "purple"]},
+        "Original Alert",
+        False,
+        0.5,
+    )
+    widgets.imgSelection1.disabled = False
+    widgets.imgSelection2.disabled = False
+
+
+def image_slider_info_callback(selected_item, info_element, model_att, widgets):
+    """Update the selected-image info card + store the per-pane info list.
+
+    Ports OLD ``AnalysisTile.image_slider_info_callback`` byte-faithfully; the
+    per-pane info list lands on ``widgets.selected_img_before/after_info_list``.
+    """
+    info_element.loading = True
+    info1 = selected_item["source"]
+    info2 = selected_item["milis"]
+    info3 = selected_item["cloud_cover"]
+    info4 = selected_item["value"]
+    info5 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime("_%d%m%y")
+    lista = [info1, info2, info3, info4, info5]
+    if model_att == 0:
+        widgets.selected_img_before_info_list = lista
+    elif model_att == 1:
+        widgets.selected_img_after_info_list = lista
+    info_element.loading = False
+    info_element.children = [
+        v.Html(
+            tag="strong",
+            children=[cm.analysis_tile.img_selection.selected_img_info_source],
+        ),
+        info1,
+        v.Html(
+            tag="strong",
+            children=[", " + cm.analysis_tile.img_selection.selected_img_info_date],
+        ),
+        datetime.utcfromtimestamp(info2 / 1000).strftime("%Y-%m-%d"),
+        v.Html(
+            tag="strong",
+            children=[", " + cm.analysis_tile.img_selection.selected_img_info_cloud],
+        ),
+        info3,
+    ]
+
+
+def create_horizontal_slide_group_v3(
+    data_list,
+    map_component,
+    image_slider_component,
+    default_v_model,
+    map_cb,
+    model_att1,
+    info_cb,
+    model_att2,
+    fire_callback,
+    widgets,
+    selected_alerts_model,
+):
+    """Build the date-button slide group inside a selector tab + wire clicks.
+
+    Ports OLD ``AnalysisTile.create_horizontal_slide_group_v3`` byte-faithfully.
+    ``map_cb`` / ``info_cb`` are the (now module-level) map/info callbacks; they are
+    invoked with the extra ``widgets`` (and ``selected_alerts_model`` for the map
+    callback) explicit args the OLD ``self.``-bound versions carried implicitly.
+    The nested-children indexing into ``map_component`` / ``image_slider_component``
+    matches the ``AnalysisWidgets`` selector tree exactly.
+    """
+    map_element = map_component.children[1]
+    info_element = map_component.children[2].children[0]
+
+    # Determine which tab + child tabs to use based on the first item's source.
+    if data_list:
+        source_type = data_list[0].get("source")
+        if source_type in _SOURCE_TO_INDEX:
+            index = _SOURCE_TO_INDEX[source_type]
+            main_tab_index = index
+            child_tabs_indices = [(index + i) % 3 for i in range(1, 3)]
+
+            main_tab = image_slider_component.children[1].children[main_tab_index]
+            child_tabs = [
+                image_slider_component.children[1].children[i]
+                for i in child_tabs_indices
+            ]
+        else:
+            raise ValueError(f"Unknown source type: {source_type}")
+    else:
+        raise ValueError("data_list is empty")
+
+    slide_group = main_tab.children[1].children[1]
+    child_slide1_group = child_tabs[0].children[1].children[1]
+    child_slide2_group = child_tabs[1].children[1].children[1]
+
+    if data_list[0].get("value") == "Not available":
+        logger.info("No images for %s", data_list[0].get("source"))
+        slide_group.set_loading_state(False)
+        main_tab.children[1].hide()
+        main_tab.children[0].show()
+        return
+
+    # Sort data by 'milis' attribute.
+    sorted_data = sorted(data_list, key=itemgetter("milis"), reverse=False)
+    date_indices = {i: item for i, item in enumerate(sorted_data)}
+
+    # Determine default v-model index.
+    default_v_model = (
+        len(sorted_data) - 1 if default_v_model == 1 else len(sorted_data) - 3
+    )
+
+    slide_group.defaul_child_color = _COLOR_MAP.get(
+        data_list[0].get("source"), "lightgray"
+    )
+
+    def create_and_configure_slide_button(i, item):
+        """Creates and configures a slide button."""
+        img_source = item["source"]
+        button_color = _COLOR_MAP.get(img_source, "lightgray")
+
+        if img_source == "Planet NICFI":
+            date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime("%b")
+        elif img_source != "Planet NICFI":
+            date_string = datetime.utcfromtimestamp(item["milis"] / 1000).strftime(
+                "%b %d"
+            )
+
+        icon = ""  # Initialize with no icon
+        if img_source != "Planet NICFI" and "cloud_cover" in item:
+            cloud_cover = float(item["cloud_cover"])
+            if 0 <= cloud_cover <= 30:
+                icon = "mdi-weather-sunny"
+            elif 30 < cloud_cover <= 60:
+                icon = "mdi-cloud-outline"
+            elif 60 < cloud_cover <= 100:
+                icon = "mdi-cloud"
+
+        button = sw.Btn(
+            text=date_string,
+            gliph=icon,  # Use the icon if it's available
+            color=button_color,
+            class_="ma-1",
+            value=i,
+            style_="min-width: 40px; min-height: 40px;",
+        )
+        button.on_event("click", on_slide_button_click)
+        return button
+
+    def on_slide_button_click(widget, event, data):
+        """Handles the click event for a slide button."""
+        widget.loading = True
+        widget.disabled = True
+
+        selected_item = date_indices[widget.value]
+
+        slide_group.reset_default_color()
+        child_slide1_group.reset_default_color()
+        child_slide2_group.reset_default_color()
+
+        widget.color = _COLOR_MAP.get("selected")
+
+        map_cb(selected_item, map_element, model_att1, widgets, selected_alerts_model)
+        info_cb(selected_item, info_element, model_att2, widgets)
+
+        widget.loading = False
+        widget.disabled = False
+
+    slides = [
+        create_and_configure_slide_button(i, item)
+        for i, item in enumerate(sorted_data)
+    ]
+    slide_group.slide_group.children = slides  # Assign directly to children
+
+    slide_group.set_loading_state(False)
+    main_tab.children[0].hide()
+    main_tab.children[1].show()
+
+    if fire_callback:
+        slide_group.slide_group.children[default_v_model].color = _COLOR_MAP.get(
+            "selected"
+        )
+        selected_item = date_indices[
+            slide_group.slide_group.children[default_v_model].value
+        ]
+        map_cb(selected_item, map_element, model_att1, widgets, selected_alerts_model)
+        info_cb(selected_item, info_element, model_att2, widgets)
+
+
+def _set_all_loading(widgets):
+    """Show the per-source slide-group spinners on both selector cards.
+
+    Mirrors the OLD ``view_actual_alert`` block that called ``set_loading_state(True)``
+    on every Planet/S2/Landsat slide group of both cards before the rebuilds. The
+    selector-tree indexing (``children[1].children[<tab>].children[1].children[1]``)
+    matches the ``AnalysisWidgets`` layout.
+    """
+    for selector in (widgets.imgSelection1, widgets.imgSelection2):
+        for tab in range(3):
+            try:
+                selector.children[1].children[tab].children[1].children[
+                    1
+                ].set_loading_state(True)
+            except Exception:
+                logger.exception("Analysis imagery: failed to set loading state")
+
+
+def _normalize_source_data(data, source):
+    """Coerce an empty / missing fetch result into the "Not available" sentinel.
+
+    ``getIndividualS2`` returns a bare ``[]`` when no scenes exist (and the Planet
+    dicts are ``None`` until the recipe builds them), but
+    ``create_horizontal_slide_group_v3`` needs ``data_list[0]["source"]`` to resolve
+    which selector tab to clear. Without this, an empty list raised
+    ``ValueError("data_list is empty")`` (swallowed upstream) and left the spinner
+    stuck. Returning the source-tagged "Not available" sentinel routes empties
+    through the existing branch that clears loading + shows the no-images card.
+    """
+    if data:
+        return data
+    return [
+        {
+            "value": "Not available",
+            "source": source,
+            "milis": 0,
+            "cloud_cover": "Not available",
+        }
+    ]
+
+
+def _rebuild_groups(
+    data_before,
+    data_after,
+    default_before,
+    default_after,
+    widgets,
+    selected_alerts_model,
+):
+    """Rebuild the before/after slide groups for one source (main-thread only).
+
+    Wraps the two ``create_horizontal_slide_group_v3`` calls (left/right pane) in a
+    try/except so a transient EE/geometry failure does not break the render. Called
+    from the ctx/task effects, never from a worker thread.
+    """
+    try:
+        create_horizontal_slide_group_v3(
+            data_before,
+            widgets.map31,
+            widgets.imgSelection1,
+            0,
+            image_slider_map_callback,
+            0,
+            image_slider_info_callback,
+            0,
+            default_before,
+            widgets,
+            selected_alerts_model,
+        )
+    except Exception:
+        logger.exception("Analysis imagery: before slide group rebuild failed")
+    try:
+        create_horizontal_slide_group_v3(
+            data_after,
+            widgets.map32,
+            widgets.imgSelection2,
+            1,
+            image_slider_map_callback,
+            1,
+            image_slider_info_callback,
+            1,
+            default_after,
+            widgets,
+            selected_alerts_model,
+        )
+    except Exception:
+        logger.exception("Analysis imagery: after slide group rebuild failed")
 
 
 @solara.component
@@ -38,14 +453,133 @@ def AlertImagery(
     selected_alerts_model,
     analyzed_alerts_model,
 ):
-    """STUB. See module docstring. Renders nothing standalone in the foundation.
+    """Imagery slice: Planet (sync) + S2/Landsat (use_task) slide-group drivers.
 
-    The maps + image selectors are rendered by the parent's left panel directly
-    from ``widgets``; Task 9.2 (AlertImagery) implements the slide-group build,
-    the image map/info callbacks, and the S2/Landsat dictionary tasks here.
+    Renders nothing visible. Registers, all keyed on ``widgets.imagery_ctx.value``:
+
+    * a ``use_effect`` that (on a fresh ctx) shows the slide-group spinners, builds
+      the Planet slide groups synchronously from ``ctx["before/after_planet"]``, and
+      restores the OLD auto-switch of the visible tab to Sentinel-2 when Planet is
+      "Not available";
+    * two ``use_task(prefer_threaded=True)`` that fetch the S2 and Landsat dicts off
+      ``ctx["grid"]`` + the four ``get_sentinel2_dates`` windows;
+    * two ``use_effect`` (keyed on each task's value) that rebuild that source's
+      slide groups on the main thread once the fetch returns.
+
+    Everything no-ops while ``imagery_ctx.value is None`` (no alert active), so it is
+    dormant at smoke time and the EE fetches never fire on mount.
     """
-    # TODO(Task 9.2 AlertImagery): port image_slider_map_callback,
-    # image_slider_info_callback, create_horizontal_slide_group_v3, and the
-    # S2/Landsat dictionary threads (now use_tasks) reacting to the per-alert
-    # context the parent stores on widgets/analyzed_alerts_model.
+    ctx = widgets.imagery_ctx.value
+
+    # ------------------------------------------------------------------
+    # Planet slide groups: synchronous (the recipe already built the monthly
+    # dicts). Rebuilt whenever the parent publishes a fresh ctx. Also shows the
+    # per-source spinners up front (the S2/Landsat fetches replace them later) and
+    # restores the OLD auto-switch to the Sentinel-2 tab when Planet is unavailable.
+    # ------------------------------------------------------------------
+    def _build_planet():
+        if ctx is None:
+            return
+        _set_all_loading(widgets)
+
+        before_planet = ctx.get("before_planet")
+        after_planet = ctx.get("after_planet")
+        show = ctx.get("show") or [True, False, False]
+
+        # OLD auto-switch: when Planet is "Not available", flip the visible tab to
+        # Sentinel-2 (children[0] is the Tabs widget; v_model is the active tab).
+        try:
+            if before_planet and before_planet[0].get("value") == "Not available":
+                widgets.imgSelection1.children[0].v_model = 1
+            if after_planet and after_planet[0].get("value") == "Not available":
+                widgets.imgSelection2.children[0].v_model = 1
+        except Exception:
+            logger.exception("Analysis imagery: failed to auto-switch to S2 tab")
+
+        # When the Planet monthly dicts are absent (the recipe has not built them
+        # yet), route the empties through the "Not available" branch so the Planet
+        # spinner is cleared + the no-images card shown, instead of spinning forever.
+        _rebuild_groups(
+            _normalize_source_data(before_planet, "Planet NICFI"),
+            _normalize_source_data(after_planet, "Planet NICFI"),
+            show[0],
+            show[0],
+            widgets,
+            selected_alerts_model,
+        )
+
+    solara.use_effect(_build_planet, dependencies=[ctx])
+
+    # ------------------------------------------------------------------
+    # Sentinel-2 fetches: ONE task fetching both before+after windows on a worker
+    # thread (blocking .getInfo()). Returns (before_list, after_list); never touches
+    # widgets. Keyed on ctx so it only runs once the parent published a fresh one.
+    # ------------------------------------------------------------------
+    def _fetch_s2():
+        if ctx is None:
+            return None
+        dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
+        grid = ctx["grid"]
+        before = getIndividualS2(grid, dates[0], dates[1])
+        after = getIndividualS2(grid, dates[2], dates[3])
+        return {"before": before, "after": after}
+
+    s2_task = solara.lab.use_task(
+        _fetch_s2, dependencies=[ctx], prefer_threaded=True, raise_error=False
+    )
+
+    # ------------------------------------------------------------------
+    # Landsat fetches: same shape as S2.
+    # ------------------------------------------------------------------
+    def _fetch_landsat():
+        if ctx is None:
+            return None
+        dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
+        grid = ctx["grid"]
+        before = getIndividualLandsat(grid, dates[0], dates[1])
+        after = getIndividualLandsat(grid, dates[2], dates[3])
+        return {"before": before, "after": after}
+
+    landsat_task = solara.lab.use_task(
+        _fetch_landsat, dependencies=[ctx], prefer_threaded=True, raise_error=False
+    )
+
+    # ------------------------------------------------------------------
+    # Main-thread rebuilds: keyed on each task's value so the widget mutation runs
+    # on the render thread after the fetch returns (NOT inside the task body). S2
+    # fires its default callback when Planet was unavailable (show[1]); Landsat
+    # never fires by default (OLD slider_landsat_* passed False).
+    # ------------------------------------------------------------------
+    s2_result = s2_task.value
+    landsat_result = landsat_task.value
+
+    def _rebuild_s2():
+        if ctx is None or not s2_result:
+            return
+        show = ctx.get("show") or [True, False, False]
+        _rebuild_groups(
+            _normalize_source_data(s2_result["before"], "Sentinel 2"),
+            _normalize_source_data(s2_result["after"], "Sentinel 2"),
+            show[1],
+            show[1],
+            widgets,
+            selected_alerts_model,
+        )
+
+    solara.use_effect(_rebuild_s2, dependencies=[s2_result])
+
+    def _rebuild_landsat():
+        if ctx is None or not landsat_result:
+            return
+        _rebuild_groups(
+            _normalize_source_data(landsat_result["before"], "Landsat"),
+            _normalize_source_data(landsat_result["after"], "Landsat"),
+            False,
+            False,
+            widgets,
+            selected_alerts_model,
+        )
+
+    solara.use_effect(_rebuild_landsat, dependencies=[landsat_result])
+
     return
