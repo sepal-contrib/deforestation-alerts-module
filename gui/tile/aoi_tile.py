@@ -31,6 +31,7 @@ Key port decisions (see Phase 4 plan, Step 2):
 """
 
 import logging
+from datetime import date
 
 import ipyvuetify as v
 import solara
@@ -40,11 +41,13 @@ from pysepal import sepalwidgets as sw
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.aoi_helper import (
     add_ccdc_alerts_dictionary,
+    add_custom_alerts_dictionary,
     check_aoi_inputs,
     create_available_alert_dictionary,
     create_basic_alerts_dictionary,
     create_filtered_alert_raster_dictionary,
     remove_ccdc_alerts_dictionary,
+    remove_custom_alerts_dictionary,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.aoi")
@@ -86,6 +89,31 @@ def _update_dictionary_ccdc(aux_model, alert_filter_model):
             remove_ccdc_alerts_dictionary(dictionary)
     except Exception:
         logger.exception("Failed to update CCDC entry in alerts_dictionary")
+
+
+def _update_dictionary_custom(aux_model, alert_filter_model):
+    """Add/remove the user-defined custom alert entry in ``alerts_dictionary``.
+
+    Mirrors ``_update_dictionary_ccdc`` for the custom (RADD-shaped) source. Both a
+    name AND an asset are required to register it (a partial config registers
+    nothing); clearing either removes it. The entry uses a wide date range so the
+    availability check passes — the real date filtering happens in ``_from_custom``.
+    """
+    dictionary = alert_filter_model.alerts_dictionary
+    if not isinstance(dictionary, dict):
+        logger.warning("custom observer fired before alerts_dictionary was a dict")
+        return
+    try:
+        name = aux_model.custom_alert_name
+        asset = aux_model.custom_alert_layer
+        if name and asset:
+            add_custom_alerts_dictionary(
+                dictionary, name, asset, "2015-01-01", date.today().strftime("%Y-%m-%d")
+            )
+        else:
+            remove_custom_alerts_dictionary(dictionary)
+    except Exception:
+        logger.exception("Failed to update custom entry in alerts_dictionary")
 
 
 @solara.component
@@ -162,6 +190,21 @@ def AoiTile(
     solara.use_effect(_register_ccdc_observer, dependencies=[])
 
     # ------------------------------------------------------------------
+    # custom-alert traitlets observer — same pattern as ccdc, observing both the
+    # asset and the name (either change re-syncs the single custom dictionary entry).
+    # ------------------------------------------------------------------
+    def _register_custom_observer():
+        def handler(change):
+            _update_dictionary_custom(aux_model, alert_filter_model)
+
+        aux_model.observe(handler, ["custom_alert_layer", "custom_alert_name"])
+        return lambda: aux_model.unobserve(
+            handler, ["custom_alert_layer", "custom_alert_name"]
+        )
+
+    solara.use_effect(_register_custom_observer, dependencies=[])
+
+    # ------------------------------------------------------------------
     # Single shared map -> per-tile isolation. Show the AOI outline only while
     # this tile is active; clear it when navigating away so it doesn't persist
     # over Filter / Overview. Keyed on the reactive current_page_view so it
@@ -208,6 +251,7 @@ def AoiTile(
                 date1,
                 date2,
                 aux_model.ccdc_layer,
+                full_dictionary=dictionary,
             )
         )
 
@@ -263,7 +307,7 @@ def AoiTile(
         )
         if search_task.error:
             solara.Error(
-                f"Search failed: {search_task.exception}", class_="ma-3"
+                f"Search failed: {search_task.exception}", classes=["ma-3"]
             )
 
 

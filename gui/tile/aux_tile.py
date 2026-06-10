@@ -64,6 +64,24 @@ def build_aux_layout(aux_model):
         class_="pa-3 ma-5", hover=True, children=[title1, ccdc_alerts_input]
     )
 
+    # Card 1b — Custom alert source (RADD-shaped), placed right after CCDC. A named
+    # GEE asset (Alert + Date bands, RADD encoding) added as a selectable alert
+    # source in the Filter tile.
+    title_custom = v.CardTitle(
+        class_="pa-1 ma-1", children=[cm.aux_tile.custom_alerts_title]
+    )
+    custom_name_input = sw.TextField(
+        label=cm.aux_tile.custom_alerts_name_hint, v_model=None
+    )
+    custom_alerts_input = sw.inputs.AssetSelect(
+        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.custom_alerts_hint
+    )
+    card_custom = v.Card(
+        class_="pa-3 ma-5",
+        hover=True,
+        children=[title_custom, custom_name_input, custom_alerts_input],
+    )
+
     # Card 2 — Forest mask asset
     title2 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.mask_asset_title])
     fnf_input = sw.inputs.AssetSelect(
@@ -103,7 +121,7 @@ def build_aux_layout(aux_model):
     # solara_app.py), so no extra backdrop is needed here.
     layout = sw.Row(
         children=[
-            sw.Col(children=[card1, card2, card3, card4]),
+            sw.Col(children=[card1, card_custom, card2, card3, card4]),
             sw.Col(children=[card5]),
         ],
     )
@@ -111,6 +129,8 @@ def build_aux_layout(aux_model):
     # Bind widgets to model traits (traitlets linking; stable because this
     # function runs exactly once inside use_memo).
     aux_model.bind(ccdc_alerts_input, "ccdc_layer").bind(
+        custom_name_input, "custom_alert_name"
+    ).bind(custom_alerts_input, "custom_alert_layer").bind(
         fnf_input, "mask_layer"
     ).bind(aux_input, "aux_layer").bind(aux_viz, "aux_layer_vis").bind(
         form_input, "custom_report_template"

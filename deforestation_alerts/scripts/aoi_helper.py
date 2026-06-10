@@ -164,10 +164,53 @@ def remove_ccdc_alerts_dictionary(alert_metadata):
     return alert_metadata
 
 
+def _custom_alert_keys(alert_metadata):
+    """Keys of any user-defined custom alert entries (kind == 'CUSTOM')."""
+    return [
+        k
+        for k, v in alert_metadata.items()
+        if isinstance(v, dict) and v.get("kind") == "CUSTOM"
+    ]
+
+
+def add_custom_alerts_dictionary(alert_metadata, name, asset, start_date, end_date):
+    """Add (or replace) the single user-defined custom alert source.
+
+    There is exactly one custom source, so any existing ``kind == "CUSTOM"`` entry
+    is evicted first — this handles a rename without tracking the previous name.
+    The entry is RADD-shaped and dispatched by its ``kind`` marker (see
+    ``get_alerts``); ``name`` is the dictionary key shown in the Filter source-select.
+    """
+    for key in _custom_alert_keys(alert_metadata):
+        del alert_metadata[key]
+    alert_metadata[name] = {
+        "collection": asset,
+        "kind": "CUSTOM",
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    return alert_metadata
+
+
+def remove_custom_alerts_dictionary(alert_metadata):
+    """Remove the custom alert source entry (whatever its current name)."""
+    for key in _custom_alert_keys(alert_metadata):
+        del alert_metadata[key]
+    return alert_metadata
+
+
 def create_available_alert_dictionary(dataset, aoi, date1, date2):
     """Perform test over alert collection to check date and aoi availability"""
     result = []
     for name, data in dataset.items():
+        # The user-defined custom source is explicitly configured for this run, and
+        # its asset may be an IMAGE or IMAGE_COLLECTION (so the wrapping below is
+        # ambiguous). Treat it as always available; the date mask + AOI clip in
+        # ``_from_custom`` handle correctness (an out-of-area asset just yields no
+        # alerts).
+        if isinstance(data, dict) and data.get("kind") == "CUSTOM":
+            result.append(name)
+            continue
         start_date = data["start_date"]
         end_date = data["end_date"]
         if name == "CCDC":
@@ -186,12 +229,25 @@ def create_available_alert_dictionary(dataset, aoi, date1, date2):
 
 
 def create_filtered_alert_raster_dictionary(
-    dataset, aoi, start_date, end_date, ccdc_asset
+    dataset, aoi, start_date, end_date, ccdc_asset, full_dictionary=None
 ):
-    """Return dictionary of filtered available alert rasters"""
+    """Return dictionary of filtered available alert rasters.
+
+    ``dataset`` is the list of available source names. ``full_dictionary`` (the
+    complete alerts_dictionary) lets a user-defined custom source (``kind ==
+    "CUSTOM"``) be dispatched by its kind and built from its own asset id, rather
+    than by matching its user-given name against the built-in dispatch.
+    """
+    full_dictionary = full_dictionary or {}
     result = {}
     for nombre in dataset:
-        raster = get_alerts(nombre, start_date, end_date, aoi, ccdc_asset)
+        entry = full_dictionary.get(nombre, {})
+        if isinstance(entry, dict) and entry.get("kind") == "CUSTOM":
+            raster = get_alerts(
+                "CUSTOM", start_date, end_date, aoi, entry["collection"]
+            )
+        else:
+            raster = get_alerts(nombre, start_date, end_date, aoi, ccdc_asset)
         result[nombre] = {"alert_raster": raster}
     return result
 
@@ -226,6 +282,8 @@ def get_alerts(collection, start, end, aoi, asset):
         alerts = _from_nrt(aoi, asset)
     elif collection == "GLAD-S2":
         alerts = _from_glad_s(start, end, aoi)
+    elif collection == "CUSTOM":
+        alerts = _from_custom(start, end, aoi, asset)
     else:
         raise Exception("Collection not supported")
 
@@ -419,6 +477,51 @@ def _from_radd(start, end, aoi):
     date_band = alerts.select("Date").divide(1000).add(2000).toFloat().rename("date")
 
     # create the composit image
+    all_alerts = alert_band.addBands(date_band)
+
+    return all_alerts.clip(aoi)
+
+
+def _from_custom(start, end, aoi, asset):
+    """Reformat a user-defined custom alert raster (RADD-shaped) for the module.
+
+    The asset is assumed to use RADD's raw encoding: an ``Alert`` band with values
+    ``0/1/2/3`` and a ``Date`` band as ``days/1000 + 2000`` (the "RADD-identical raw"
+    contract). It is normalized exactly like RADD, except the alert codes target the
+    **ten-thousands** slot (``10000``/``20000``) instead of RADD's tens slot — this
+    keeps the custom source distinct in the multi-source union sum and lets it decode
+    to its own user-given name (see ``report_builder.get_unique_alerts``).
+
+    Accepts an IMAGE or IMAGE_COLLECTION asset.
+    """
+    start = datetime.strptime(start, "%Y-%m-%d")
+    end = datetime.strptime(end, "%Y-%m-%d")
+
+    # The asset may be a single IMAGE or an IMAGE_COLLECTION (the AssetSelect allows
+    # both); build a single image either way.
+    if ee.data.getAsset(asset)["type"] == "IMAGE_COLLECTION":
+        alerts = ee.ImageCollection(asset).filterBounds(aoi).mosaic().uint16()
+    else:
+        alerts = ee.Image(asset).uint16()
+
+    # filter the alert dates (RADD-style julian yyddd encoding)
+    start = int(start.strftime("%y%j"))
+    end = int(end.strftime("%y%j"))
+    alerts = alerts.updateMask(
+        alerts.select("Date").gt(start).And(alerts.select("Date").lt(end))
+    )
+
+    # unique alert band in the ten-thousands slot (10000=potential, 20000=confirmed)
+    alert_band = (
+        alerts.select("Alert")
+        .remap([0, 1, 2, 3], [0, 0, 20000, 10000])
+        .toInt16()
+        .rename("alert")
+    )
+
+    # change the date format (YYYY.ddd), same as RADD
+    date_band = alerts.select("Date").divide(1000).add(2000).toFloat().rename("date")
+
     all_alerts = alert_band.addBands(date_band)
 
     return all_alerts.clip(aoi)

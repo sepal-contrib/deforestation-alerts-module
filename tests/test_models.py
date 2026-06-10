@@ -31,9 +31,12 @@ def test_aux_model_roundtrip():
     m = AuxModel()
     m.aux_layer = "projects/x/aux"
     m.aux_layer_vis = {"palette": ["#000000"]}
+    m.custom_alert_layer = "projects/x/custom"
+    m.custom_alert_name = "MyAlerts"
     exported = m.export_dictionary()
     assert set(exported) == {
-        "ccdc_layer", "mask_layer", "aux_layer", "aux_layer_vis",
+        "ccdc_layer", "custom_alert_layer", "custom_alert_name",
+        "mask_layer", "aux_layer", "aux_layer_vis",
         "custom_report_template",
     }
 
@@ -41,6 +44,8 @@ def test_aux_model_roundtrip():
     loaded.import_from_dictionary(exported)
     assert loaded.aux_layer == "projects/x/aux"
     assert loaded.aux_layer_vis == {"palette": ["#000000"]}
+    assert loaded.custom_alert_layer == "projects/x/custom"
+    assert loaded.custom_alert_name == "MyAlerts"
 
 
 def test_selected_alerts_model_export_keys_and_numeric_codes():

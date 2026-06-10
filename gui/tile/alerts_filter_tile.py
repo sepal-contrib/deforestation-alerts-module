@@ -325,12 +325,15 @@ def _link_checkbox_map(map_widget, alert_source_select):
                 layer.visible = False
 
 
-def _run_local_vectorize(image, region, scale, min_size_pixels):
+def _run_local_vectorize(image, region, scale, min_size_pixels, on_status=None):
     """Export the filtered alert raster to a local GeoTIFF, then vectorize it.
 
     Body of the OLD ``run_local_vectorize._work`` (minus the threading — the
     caller is already on the use_task worker thread) and minus the model writes,
     which the task does. Returns the raw vectorize GeoDataFrame.
+
+    ``on_status`` (optional) is called with a short user-facing label before each
+    of the two slow stages (download, vectorize) so the tile can surface progress.
     """
     # geedim exports over an ee.Geometry; the AOI / drawn poly is a
     # FeatureCollection, so pass its geometry.
@@ -339,6 +342,8 @@ def _run_local_vectorize(image, region, scale, min_size_pixels):
     )
     out_tif = str(module_dir / "filtered_alerts.tif")
     # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
+    if on_status:
+        on_status(cm.filter_tile.analyze_status_downloading)
     download_ee_image(
         image.select(["alert", "date"]),
         out_tif,
@@ -348,6 +353,8 @@ def _run_local_vectorize(image, region, scale, min_size_pixels):
         unmask_value=255,
         nodata_value=255,
     )
+    if on_status:
+        on_status(cm.filter_tile.analyze_status_vectorizing)
     return vectorize_alert_raster(
         out_tif, min_cluster_size=min_size_pixels, connectivity=8
     )
@@ -402,6 +409,12 @@ def AlertsFilterTile(
     )
     solara.use_memo(lambda: _add_inspector(map_widget), dependencies=[])
     tracked = solara.use_memo(lambda: {"names": []}, dependencies=[])
+
+    # Reactive status line for the Analyze flow. Set from the use_task worker
+    # thread (safe for reactives — same as the app_state writes below; distinct
+    # from the "no widget mutation in a task body" rule, which is about ipyvuetify
+    # .items/.v_model).
+    analyze_status = solara.use_reactive("")
 
     # ------------------------------------------------------------------
     # Memoized form widgets. Created once so identities are stable: the observer
@@ -558,6 +571,11 @@ def AlertsFilterTile(
         # deferred to the Recipe tile task. The alerts_gdf publish below does not
         # need them.
 
+        # Progress: "joining" = unioning the selected sources into one raster.
+        analyze_status.value = cm.filter_tile.analyze_status_joining.format(
+            n=len(alert_source)
+        )
+
         # 3. Build the filtered alert raster (EE image).
         filtered_alert_raster = create_filtered_alert_raster(
             alert_filter_model.available_alerts_raster_list,
@@ -585,12 +603,15 @@ def AlertsFilterTile(
         )
 
         # 5. Download + vectorize locally (replaces the OLD GEE reduceToVectors).
+        # on_status surfaces the "downloading" / "vectorizing" stages.
         gdf = _run_local_vectorize(
             image=filtered_alert_raster,
             region=poly,
             scale=pixel_size,
             min_size_pixels=min_size_pixels,
+            on_status=analyze_status.set,
         )
+        analyze_status.value = cm.filter_tile.analyze_status_found.format(n=len(gdf))
 
         # Parity: publish the raw vectorize sets onto selected_alerts_model
         # (the OLD tile set these; the still-traitlets analysis tile reads them).
@@ -601,7 +622,11 @@ def AlertsFilterTile(
 
         # 6. Assemble the alerts_gdf (status/point/alert_sources/... columns) and
         # publish it — this is what Overview + the future analysis tile consume.
-        app_state.alerts_gdf.value = convert_to_geopandas(gdf)
+        # custom_name labels the user-defined source (ten-thousands code slot) in
+        # the decoded alert_sources column.
+        app_state.alerts_gdf.value = convert_to_geopandas(
+            gdf, custom_name=aux_model.custom_alert_name
+        )
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
@@ -634,9 +659,11 @@ def AlertsFilterTile(
             color="primary",
             class_="ma-3",
         )
+        if analyze_task.pending and analyze_status.value:
+            solara.Info(analyze_status.value, classes=["ma-3"])
         if analyze_task.error:
             solara.Error(
-                f"Analysis failed: {analyze_task.exception}", class_="ma-3"
+                f"Analysis failed: {analyze_task.exception}", classes=["ma-3"]
             )
 
 

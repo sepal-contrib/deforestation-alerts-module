@@ -28,7 +28,10 @@
     "aux_tile": {
             "ccdc_alerts_title": "Asset d'alertes CCDC",
             "ccdc_alerts_hint": "Sélectionnez les alertes générées avec la recette d'alerte de changement CCDC",
-            "mask_asset_title": "Asset Masque", 
+            "custom_alerts_title": "Asset d'alertes personnalisé",
+            "custom_alerts_name_hint": "Nom de cette source d'alertes personnalisée",
+            "custom_alerts_hint": "Sélectionnez un asset d'alertes au format RADD (bandes Alert + Date)",
+            "mask_asset_title": "Asset Masque",
             "mask_asset_hint": "Sélectionnez un masque à appliquer aux alertes, par exemple un masque Forêt/Non Forêt",
             "aux_asset_title": "Asset Accessoire",
             "aux_asset_hint": "Sélectionnez un raster accessoire qui peut être utile lors de l'analyse des alertes",
@@ -53,6 +56,10 @@
     
     "filter_tile": {
             "analyze_alerts_button": "Analyser les alertes",
+            "analyze_status_joining": "Fusion de {n} source(s) d'alertes…",
+            "analyze_status_downloading": "Téléchargement du raster d'alertes…",
+            "analyze_status_vectorizing": "Vectorisation des agrégats…",
+            "analyze_status_found": "{n} alertes trouvées — assemblage…",
             "available_alerts_title": "Alertes disponibles",
             "no_alerts_message": "Aucune alerte n'est disponible pour la date/la zone sélectionnée",
             "available_alerts_hint": "Sélectionnez une ou plusieurs sources d'alerte",

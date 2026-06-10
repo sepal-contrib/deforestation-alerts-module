@@ -37,6 +37,28 @@ def test_convert_decodes_alert_sources():
     assert set(parts) == {"RADD", "GLAD-S2"}
 
 
+def _custom_coded_gdf():
+    poly = Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])
+    return gpd.GeoDataFrame(
+        {
+            "alert_type_unique": [[10000], [10001]],  # custom only ; custom + GLAD-L
+            "count": [4, 4],
+            "alert_date_min": [2022.1, 2022.1],
+            "alert_date_max": [2022.3, 2022.3],
+            "area_ha": [0.5, 0.5],
+            "geometry": [poly, poly],
+        },
+        geometry="geometry", crs="EPSG:4326",
+    )
+
+
+def test_convert_threads_custom_name_into_alert_sources():
+    out = convert_to_geopandas(_custom_coded_gdf(), custom_name="MyAlerts")
+    assert out["alert_sources"].iloc[0] == "MyAlerts"
+    parts = out["alert_sources"].iloc[1].replace(" and ", ", ").split(", ")
+    assert set(parts) == {"GLAD-L", "MyAlerts"}
+
+
 def test_convert_adds_empty_review_columns():
     gdf = convert_to_geopandas(_vectorized_gdf())
     for col in ("status", "before_img", "after_img", "alert_polygon",

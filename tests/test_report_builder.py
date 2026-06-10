@@ -26,6 +26,25 @@ def test_get_unique_alerts_decodes_digit_encoding(value, expected):
     assert set(get_unique_alerts([value])) == expected
 
 
+@pytest.mark.parametrize(
+    "value, custom_name, expected",
+    [
+        (10000, "MyAlerts", {"MyAlerts"}),                 # ten-thousands, code 1
+        (20000, "MyAlerts", {"MyAlerts"}),                 # ten-thousands, code 2
+        (10001, "MyAlerts", {"GLAD-L", "MyAlerts"}),       # union with GLAD-L
+        (11000, "MyAlerts", {"CCDC", "MyAlerts"}),         # union w/ CCDC (position-bounded)
+        (1, "MyAlerts", {"GLAD-L"}),                       # custom slot empty -> name absent
+    ],
+)
+def test_get_unique_alerts_decodes_custom_tenthousands(value, custom_name, expected):
+    assert set(get_unique_alerts([value], custom_name=custom_name)) == expected
+
+
+def test_get_unique_alerts_custom_defaults_to_generic_label():
+    # No name supplied -> a generic "Custom" label rather than nothing.
+    assert set(get_unique_alerts([10000])) == {"Custom"}
+
+
 def test_get_unique_alerts_accepts_stringified_list():
     # Recipe storage round-trips this column as a string; the decoder must parse it.
     assert set(get_unique_alerts("[1, 10]")) == {"GLAD-L", "RADD"}

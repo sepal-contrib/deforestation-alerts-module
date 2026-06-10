@@ -28,7 +28,10 @@
     "aux_tile": {
             "ccdc_alerts_title": "CCDC Alerts Asset",
             "ccdc_alerts_hint": "Select alerts generated with ccdc change alert recipe",
-            "mask_asset_title": "Mask Asset", 
+            "custom_alerts_title": "Custom Alerts Asset",
+            "custom_alerts_name_hint": "Name for this custom alert source",
+            "custom_alerts_hint": "Select a RADD-shaped alert asset (Alert + Date bands)",
+            "mask_asset_title": "Mask Asset",
             "mask_asset_hint": "Select a mask to apply to alerts, for example, a Forest/No Forest mask",
             "aux_asset_title": "Auxiliary Asset",
             "aux_asset_hint": "Select an auxiliary raster that can be useful while analyzing alerts",
@@ -53,6 +56,10 @@
     
     "filter_tile": {
             "analyze_alerts_button": "Analyze alerts",
+            "analyze_status_joining": "Joining {n} alert source(s)…",
+            "analyze_status_downloading": "Downloading alert raster…",
+            "analyze_status_vectorizing": "Vectorizing clusters…",
+            "analyze_status_found": "Found {n} alerts — assembling…",
             "available_alerts_title": "Available alerts",
             "no_alerts_message": "No alerts are available for the date/area selected",
             "available_alerts_hint": "Select one or multiple alert sources",

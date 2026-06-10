@@ -287,7 +287,7 @@ def generate_deforestation_report_with_word_template(
     # print(f"Report generated successfully: {output_path}")
 
 
-def get_unique_alerts(alert_list):
+def get_unique_alerts(alert_list, custom_name=None):
     """
     Given a list of integers representing sums of alert values,
     return a list of unique alert types found.
@@ -297,9 +297,12 @@ def get_unique_alerts(alert_list):
     - RADD: tens digit (10 or 20 → digit 1 or 2 if triggered)
     - GLAD-S2: hundreds digit (100 or 200 → digit 1 or 2 if triggered)
     - CCDC: thousands digit (1000 or 2000 → digit 1 or 2 if triggered)
+    - custom: ten-thousands digit (10000 or 20000 → digit 1 or 2 if triggered)
 
     Parameters:
         alert_list (list): A list of integers (or strings representing numbers).
+        custom_name (str | None): label for the user-defined custom alert source
+            (the ten-thousands slot). Falls back to "Custom" when not provided.
 
     Returns:
         List[str]: Unique alert type names found in the list.
@@ -337,9 +340,14 @@ def get_unique_alerts(alert_list):
         if (value % 1000) // 100 in [1, 2]:
             unique_alerts.add("GLAD-S2")
         
-        # Check CCDC (thousands digit)
-        if value // 1000 in [1, 2]:
+        # Check CCDC (thousands digit) — position-bounded so a non-zero
+        # ten-thousands (custom) digit does not break the CCDC extraction.
+        if (value % 10000) // 1000 in [1, 2]:
             unique_alerts.add("CCDC")
+
+        # Check custom source (ten-thousands digit)
+        if (value % 100000) // 10000 in [1, 2]:
+            unique_alerts.add(custom_name or "Custom")
 
     return list(unique_alerts)
 
