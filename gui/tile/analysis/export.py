@@ -1,6 +1,7 @@
-"""AlertExport sub-component (Task 9.4): save attributes + gpkg/zip + Word report.
+"""build_export sub-component (Task 9.4 / B3): save attributes + gpkg/zip + Word report.
 
-Architecture layer: view. Ports the OLD ``AnalysisTile`` export card (``card06`` +
+Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports the
+OLD ``AnalysisTile`` export card (``card06`` +
 ``label35``/``toolBarSaveExport``/``toolBarDownloads``):
 
 * The **Save** button (``save_btn``) ran the OLD ``save_attributes_to_gdf`` —
@@ -13,26 +14,34 @@ Architecture layer: view. Ports the OLD ``AnalysisTile`` export card (``card06``
   ``toolBarDownloads`` that is hidden until a download completes, then get their
   URLs set to the zip / report and are revealed.
 
-Design (FIXED by the task contract — same shape as the rest of Task 9):
+WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
+Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
+on reopen. Content captured via ``solara.display`` lives inside an ``Output`` whose
+view is NOT recreated on that rebuild, so it vanishes the 2nd time the dialog is
+opened. A plain ipyvuetify widget tree is re-viewed from its model on reopen, so it
+survives. ``build_export`` builds the card once and RETURNS it; the parent hands it
+to MapApp as dialog content — same pattern as ``navigator`` / ``review_panel`` /
+``edit_tools`` and ``recipe_tile.build_recipe_layout``.
 
-* **Save + Download are each a button-triggered**
-  ``solara.lab.use_task(dependencies=None, prefer_threaded=True)`` (both do blocking
-  GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the buttons'
-  ``loading`` reflects ``task.pending``.
-* **No widget mutation inside the task bodies.** The save task does the gdf mutation
-  + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The download
-  task does the gpkg/image/zip/report (IO only) and RETURNS
-  ``{"zip_path": ..., "report_path": ...}``. All widget mutation — enabling the
-  download button, ``set_url(...)``, showing ``toolBarDownloads``, surfacing errors —
-  happens in ``use_effect``s keyed on the task value/state (main thread).
-* The buttons + toolbars are **memoized once** (``use_memo([])``) so the imperative
-  ``.show()/.hide()/.disabled``/``.set_url()`` calls port unchanged; the download
-  buttons start in a hidden ``toolBarDownloads`` and the "Download alert data" button
-  starts disabled (enabled by the save effect).
-* Task errors are surfaced on a ``sw.Alert`` (like the edit-tools ``alert``) — e.g.
-  the OLD "confirmation==No but a polygon is drawn" guard, or a save/report failure —
-  keyed on ``[task.finished, task.error]`` so the effect fires on the ERROR
-  transition too (the task value stays ``None`` on error).
+Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recipe_tile``):
+
+* **Save + Download each run button-triggered on a daemon ``threading.Thread``** (both
+  do blocking GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the
+  click handler resets the alert, toggles that button's ``.loading``/``.disabled``,
+  and starts the worker; the worker runs the blocking work in ``try/except/finally``.
+* **No widget mutation inside the blocking bodies.** The save body does the gdf
+  mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
+  download body does the gpkg/image/zip/report (IO only) and RETURNS
+  ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
+  the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
+  END of the corresponding worker's success path with that returned value. Errors are
+  logged + surfaced on the inline ``sw.Alert`` in the worker's ``except``. ipywidgets
+  trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
+  (recipe_tile / edit_tools do exactly this).
+* The buttons + toolbars are **built once** (the builder runs once per build) so the
+  imperative ``.show()/.hide()/.disabled``/``.set_url()`` calls port unchanged; the
+  download buttons start in a hidden ``toolBarDownloads`` and the "Download alert data"
+  button starts disabled (enabled by the save worker's success path).
 
 Source-of-truth adaptation (Task 9): OLD read/wrote
 ``self.analyzed_alerts_model.alerts_gdf``; in the new architecture that GeoDataFrame
@@ -63,13 +72,13 @@ app_tile_model : AppTileModel
 
 import logging
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
 import ee
 import geopandas as gpd
 import ipyvuetify as v
-import solara
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
@@ -277,21 +286,20 @@ def _download_data(widgets, app_state, aux_model, app_tile_model):
     return {"zip_path": zip_path, "report_path": report_path}
 
 
-@solara.component
-def AlertExport(
+def build_export(
     widgets,
     app_state,
     aux_model,
     analyzed_alerts_model,
     app_tile_model,
 ):
-    """Renders the export card (OLD ``card06``) with the save + download flow."""
+    """Build and return the export card (OLD ``card06``) with the save + download flow."""
 
     # ------------------------------------------------------------------
-    # Memoized buttons + toolbars (created once so the imperative
+    # Buttons + toolbars (created once so the imperative
     # .show()/.hide()/.disabled/.set_url() calls port unchanged). The download
     # buttons start in a hidden toolBarDownloads; the "Download alert data" button
-    # starts disabled (enabled by the save effect).
+    # starts disabled (enabled by the save worker's success path).
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
@@ -330,128 +338,115 @@ def AlertExport(
 
         return ns
 
-    ns = solara.use_memo(_build_widgets, dependencies=[])
+    ns = _build_widgets()
 
     # ------------------------------------------------------------------
-    # Save task: button-triggered (dependencies=None) so it never auto-runs. Does
-    # gdf mutation + GEE admin lookup + CSV write only; returns True. Widget
-    # mutation (enable download btn, surface errors) is in the effect below.
+    # Post-save apply (OLD save effect, success path) — enable the download button
+    # + poke the alerts_gdf reactive. Runs at the END of the save worker's success
+    # path (main thread previously; trait sets / reactive rebind from the worker
+    # thread are fine). The OLD error branch becomes the worker's except.
     # ------------------------------------------------------------------
-    def _run_save():
-        return _save_attributes(
-            widgets, app_state, analyzed_alerts_model, app_tile_model
-        )
-
-    save_task = solara.lab.use_task(
-        _run_save, dependencies=None, prefer_threaded=True, raise_error=False
-    )
-
-    # ------------------------------------------------------------------
-    # Download task: button-triggered. Builds gpkg/image/zip/report (IO only) and
-    # RETURNS the zip/report paths; the effect sets the DownloadBtn URLs + reveals
-    # toolBarDownloads (main thread).
-    # ------------------------------------------------------------------
-    def _run_download():
-        return _download_data(widgets, app_state, aux_model, app_tile_model)
-
-    download_task = solara.lab.use_task(
-        _run_download, dependencies=None, prefer_threaded=True, raise_error=False
-    )
+    def _apply_save():
+        ns["alert"].hide()
+        ns["download_alert_data_btn"].disabled = False
+        # Poke the alerts_gdf reactive so dependents refresh. The save mutated
+        # the gdf in place (.at[id, col]) which does NOT change the reactive's
+        # object identity, so Overview (whose refresh effect keys on
+        # app_state.alerts_gdf) would otherwise show stale review counts/markers
+        # until the next reassign. Rebinding to a copy forces a new identity.
+        gdf = app_state.alerts_gdf.value
+        if gdf is not None:
+            app_state.alerts_gdf.value = gdf.copy()
 
     # ------------------------------------------------------------------
-    # Post-save effect: enable the download button on success, surface errors.
-    # Keyed on finished+error so it fires on the ERROR transition too (the task
-    # value stays None on error, so keying on .value alone would miss it).
+    # Post-download apply (OLD download effect, success path) — set the two
+    # DownloadBtn URLs + reveal the toolbar with the worker's computed paths. The
+    # OLD error branch becomes the worker's except.
     # ------------------------------------------------------------------
-    def _on_save_done():
-        if save_task.finished and save_task.value:
-            ns["alert"].hide()
-            ns["download_alert_data_btn"].disabled = False
-            # Poke the alerts_gdf reactive so dependents refresh. The save mutated
-            # the gdf in place (.at[id, col]) which does NOT change the reactive's
-            # object identity, so Overview (whose refresh effect keys on
-            # app_state.alerts_gdf) would otherwise show stale review counts/markers
-            # until the next reassign. Rebinding to a copy forces a new identity.
-            gdf = app_state.alerts_gdf.value
-            if gdf is not None:
-                app_state.alerts_gdf.value = gdf.copy()
-        elif save_task.error:
-            logger.error("Analysis: save attributes failed", exc_info=save_task.exception)
-            ns["alert"].add_msg(str(save_task.exception), "error")
-
-    solara.use_effect(
-        _on_save_done, dependencies=[save_task.finished, save_task.error]
-    )
+    def _apply_download(result):
+        ns["alert"].hide()
+        ns["files_dwn_btn"].set_url(path=result["zip_path"])
+        ns["report_dwn_btn"].set_url(path=result["report_path"])
+        ns["toolbar_downloads"].show()
 
     # ------------------------------------------------------------------
-    # Post-download effect: set the two DownloadBtn URLs + reveal the toolbar on
-    # success, surface errors.
+    # Save handler: button-triggered daemon thread (blocking GEE .getInfo() / CSV
+    # write; never auto-run). The button spins for the duration; on success the
+    # worker applies the OLD save effect, on failure it logs + surfaces the error
+    # (incl. the OLD "confirmation==No but a polygon is drawn" guard) on the alert.
     # ------------------------------------------------------------------
-    def _on_download_done():
-        if download_task.finished and download_task.value:
-            result = download_task.value
-            ns["alert"].hide()
-            ns["files_dwn_btn"].set_url(path=result["zip_path"])
-            ns["report_dwn_btn"].set_url(path=result["report_path"])
-            ns["toolbar_downloads"].show()
-        elif download_task.error:
-            logger.error(
-                "Analysis: download data failed", exc_info=download_task.exception
-            )
-            ns["alert"].add_msg(str(download_task.exception), "error")
+    def _on_save(*_):
+        ns["alert"].reset()
+        ns["save_btn"].loading = True
+        ns["save_btn"].disabled = True
 
-    solara.use_effect(
-        _on_download_done,
-        dependencies=[download_task.finished, download_task.error],
-    )
+        def _worker():
+            try:
+                saved = _save_attributes(
+                    widgets, app_state, analyzed_alerts_model, app_tile_model
+                )
+                if saved:
+                    _apply_save()
+            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                logger.error("Analysis: save attributes failed", exc_info=e)
+                ns["alert"].add_msg(str(e), "error")
+            finally:
+                ns["save_btn"].loading = False
+                ns["save_btn"].disabled = False
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # Wire click handlers once (identities stable via use_memo([])). The buttons
-    # trigger the tasks; loading state is reflected below.
+    # Download handler: button-triggered daemon thread (heavy report generation /
+    # IO). On success the worker applies the OLD download effect with the returned
+    # zip/report paths; on failure it logs + surfaces the error on the alert.
+    # ------------------------------------------------------------------
+    def _on_download(*_):
+        ns["alert"].reset()
+        ns["download_alert_data_btn"].loading = True
+        ns["download_alert_data_btn"].disabled = True
+
+        def _worker():
+            try:
+                result = _download_data(
+                    widgets, app_state, aux_model, app_tile_model
+                )
+                if result is not None:
+                    _apply_download(result)
+            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                logger.error("Analysis: download data failed", exc_info=e)
+                ns["alert"].add_msg(str(e), "error")
+            finally:
+                ns["download_alert_data_btn"].loading = False
+                ns["download_alert_data_btn"].disabled = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Wire click handlers once (the widgets are built once per build). The buttons
+    # start their workers; loading state is toggled inside the handlers.
     # ------------------------------------------------------------------
     def _register_handlers():
-        def _on_save(*_):
-            save_task()
-
-        def _on_download(*_):
-            download_task()
-
         ns["save_btn"].on_event("click", _on_save)
         ns["download_alert_data_btn"].on_event("click", _on_download)
 
-        def _teardown():
-            for key in ("save_btn", "download_alert_data_btn"):
-                try:
-                    ns[key].on_event("click", None, remove=True)
-                except Exception:
-                    pass
-
-        return _teardown
-
-    solara.use_effect(_register_handlers, dependencies=[])
-
-    # Reflect the running tasks on their buttons (OLD widget.loading toggles).
-    ns["save_btn"].loading = save_task.pending
-    ns["download_alert_data_btn"].loading = download_task.pending
+    _register_handlers()
 
     # ------------------------------------------------------------------
     # Layout: OLD card06 = export title + toolBarSaveExport + toolBarDownloads
     # (hidden) + the error alert.
     # ------------------------------------------------------------------
-    card = solara.use_memo(
-        lambda: v.Card(
-            class_="pa-2 ma-2",
-            hover=True,
-            children=[
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.export_labels.export_title],
-                ),
-                ns["toolbar_save_export"],
-                ns["toolbar_downloads"],
-                ns["alert"],
-            ],
-        ),
-        dependencies=[],
+    card = v.Card(
+        class_="pa-2 ma-2",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-1 ma-1",
+                children=[cm.analysis_tile.export_labels.export_title],
+            ),
+            ns["toolbar_save_export"],
+            ns["toolbar_downloads"],
+            ns["alert"],
+        ],
     )
-    solara.display(card)
+    return card
