@@ -33,25 +33,8 @@ jobs:
           pip install pytest
           pytest tests/ -v
 
-      - name: Verify notebook kernelspec
+      - name: Solara app compile + import
+        shell: micromamba-shell {0}
         run: |
-          kernel_name=$(python3 -c "import json; nb=json.load(open('ui.ipynb')); print(nb['metadata']['kernelspec']['name'])")
-          expected="venv-deforestation-alerts-module"
-          if [ "$kernel_name" != "$expected" ]; then
-            echo "ERROR: kernelspec name '$kernel_name' != expected '$expected'"
-            echo "SEPAL's update-app.sh installs kernels as 'venv-<app_name>'. Update ui.ipynb metadata."
-            exit 1
-          fi
-          echo "kernelspec name OK: $kernel_name"
-
-      - name: Install test deps
-        shell: micromamba-shell {0}
-        run: pip install pytest nbmake ipykernel
-
-      - name: Register kernel
-        shell: micromamba-shell {0}
-        run: python -m ipykernel install --user --name=test-kernel
-
-      - name: Test UI notebook
-        shell: micromamba-shell {0}
-        run: pytest --nbmake ui.ipynb --nbmake-timeout=600 --nbmake-kernel=test-kernel
+          python -m compileall -q gui deforestation_alerts
+          python -c "import gui.solara_app; print('solara app import ok')"
