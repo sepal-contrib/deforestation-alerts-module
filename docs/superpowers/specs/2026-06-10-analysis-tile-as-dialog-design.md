@@ -78,6 +78,25 @@ Run the app with a recipe loaded (so an alert is selected) and:
 4. Smoke: `solara_driver.py smoke --mode dialog --step-id 7 --expect "Alert info"`
    (Analysis is now a dialog, not a step). Confirm existing pytest suite still passes.
 
+## Outcome of Approach A (2026-06-10)
+
+Implemented A and ran the verify gate. Result:
+- ✅ The dialog renders correctly on FIRST open and the stray top-left "Basemaps"
+  bleed-through is GONE (the dialog scrim covers the main map). Confirmed by smoke
+  + screenshot.
+- ❌ Close→reopen FAILED: the dialog rebuilds empty (0 maps / 0 cards). MapApp's
+  `v-dialog` has no `eager`, so it destroys its subtree on close; AnalysisTile's
+  `solara.display(...)`-captured content is not recreated on the v-if rebuild
+  (the documented Recipe/Aux vanish bug). NOTE: the "keep-mounted display:none
+  wrapper" fallback does NOT work for a dialog (the v-dialog tears down its whole
+  subtree regardless of an inner wrapper) — that fallback is panel-only.
+
+**Decision (user, 2026-06-10): escalate to Approach B** — rebuild the Analysis
+layout as a raw ipyvuetify widget tree (the Recipe/Aux pattern) so it survives
+reopen. Tracked in docs/superpowers/plans/2026-06-10-analysis-tile-raw-rebuild.md.
+The Task-2 dialog flip (display/width/height) and the Task-1/Task-3 changes STAY;
+B only replaces how the dialog's `content` widget is built.
+
 ## Out of scope
 
 - The "maps don't center on alert" and "No images available" behaviors (separate, not
