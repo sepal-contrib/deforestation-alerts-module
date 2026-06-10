@@ -1,8 +1,18 @@
-"""AlertEditTools sub-component (Task 9.3): draw-edit + CNN models.
+"""build_edit_tools sub-component (Task 9.3 / B2): draw-edit + CNN models.
 
-Architecture layer: view. Ports the OLD ``AnalysisTile`` ``card04`` interaction as
-ONE coherent unit, because the polygon draw/edit controls and the two CNN models
-share the draw controls and the DL toolbars are only shown during edit mode.
+Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports
+the OLD ``AnalysisTile`` ``card04`` interaction as ONE coherent unit, because the
+polygon draw/edit controls and the two CNN models share the draw controls and the
+DL toolbars are only shown during edit mode.
+
+WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
+Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS
+it on reopen. Content captured via ``solara.display`` lives inside an ``Output``
+whose view is NOT recreated on that rebuild, so it vanishes the 2nd time the dialog
+is opened. A plain ipyvuetify widget tree is re-viewed from its model on reopen, so
+it survives. ``build_edit_tools`` builds the card once and RETURNS it; the parent
+hands it to MapApp as dialog content — same pattern as ``navigator`` /
+``review_panel`` and ``recipe_tile.build_recipe_layout``.
 
 Ported OLD handlers:
 
@@ -19,31 +29,29 @@ Ported OLD handlers:
 * ``add_defo_layer`` — observes ``analyzed_alerts_model.defo_dl_layer`` and adds a
   "Defo Layer" GeoData layer to both maps.
 
-Design (FIXED by the task contract):
+Threading (FIXED by the task contract):
 
-* Each CNN model runs as a button-triggered ``solara.lab.use_task(dependencies=
-  None, prefer_threaded=True)`` (CPU/IO-bound; never auto-run). The task body
+* Each CNN model runs button-triggered on a daemon ``threading.Thread`` (CPU/IO-bound;
+  never auto-run) — same pattern as ``recipe_tile``'s load/save workers. The worker
   builds the image name, downloads both images, pulls the HF model (idempotent /
-  cached), and runs ``apply_dl_model`` -> returns the prediction ``.tif`` path. It
-  mutates NO widget. This consolidates the OLD 4-thread / 4-queue worker machinery
-  (file_queue1/2 + result_queue1/2 + the model-download worker startup) into 2
-  use_tasks.
-* The verify/enable step runs in a ``use_effect`` keyed on the task value (main
-  thread), replacing the OLD ``model*_prediction_time`` traitlets observer.
+  cached), runs ``apply_dl_model`` -> the prediction ``.tif`` path, and then (still on
+  the worker thread, in the success path) runs the OLD ``verify_model*_output`` /
+  ``enable_dl*`` apply step with that path: stores ``predN_path`` /
+  ``analyzed_alerts_model.modelN_prediction_file`` and shows the add/remove buttons.
+  The run button spins (``.loading``/``.disabled``) for the duration and errors are
+  logged + surfaced on the inline alert. ipywidgets trait sets from the worker thread
+  are fine (recipe_tile does exactly this).
 * add/remove prediction are main-thread click handlers reading the stored
   prediction path.
-* The edit + DL toolbars + buttons are memoized once (``use_memo([])``) so the OLD
-  ``.show()/.hide()/.disabled`` imperative calls port unchanged (same rationale as
-  the Filter tile's memoized widgets).
+* The edit + DL toolbars + buttons are built once so the OLD ``.show()/.hide()/
+  .disabled`` imperative calls port unchanged.
 * ``add_defo_layer`` is a real ``analyzed_alerts_model.observe(..., "defo_dl_layer")``
-  registered once via ``use_effect([])`` with teardown — a Solara use_effect keyed
-  on a ``.value`` would not fire on a traitlets mutation.
+  registered once — a ``.value``-keyed hook would not fire on a traitlets mutation.
 
 Guards: everything no-ops safely with no alert loaded (smoke time): buttons render
 but the CNN/edit click paths are not exercised, and the defo-layer observer is
 registered but ``defo_dl_layer`` stays ``None``. EE / raster / file failures are
-caught and surfaced on the ``alert_draw_alert`` (or logged) so a failure never
-breaks the render.
+caught and surfaced on the ``alert`` (or logged) so a failure never breaks render.
 
 Props
 -----
@@ -60,6 +68,7 @@ app_tile_model : AppTileModel
 """
 
 import logging
+import threading
 
 import ipyvuetify as v
 import solara
@@ -113,7 +122,8 @@ def _run_cnn_model(model_repo, model_file, suffix, widgets, app_state, app_tile_
     Builds the image name from the recipe folder + alert id + the two selected
     images' suffixes, downloads both images, pulls the HF model (cached), runs
     ``apply_dl_model``, and returns the prediction ``.tif`` path. Runs on the
-    use_task worker thread, so it must not touch ipyvuetify widgets.
+    daemon worker thread; the widget mutation (verify/enable, add/remove) happens
+    separately, never inside this function.
     """
     from huggingface_hub import hf_hub_download
 
@@ -144,19 +154,18 @@ def _run_cnn_model(model_repo, model_file, suffix, widgets, app_state, app_tile_
     return apply_dl_model(image_name, model_path, suffix)
 
 
-@solara.component
-def AlertEditTools(
+def build_edit_tools(
     widgets,
     app_state,
     analyzed_alerts_model,
     app_tile_model,
 ):
-    """Edit-tools + CNN card (OLD ``card04``)."""
+    """Build and return the edit-tools + CNN card (OLD ``card04``)."""
 
     # ------------------------------------------------------------------
-    # Memoized widgets (created once so the OLD .show()/.hide()/.disabled
-    # imperative toggles port unchanged). Bundle them in a small namespace so the
-    # handlers below can mutate them in place across renders.
+    # Widgets (created once so the OLD .show()/.hide()/.disabled imperative
+    # toggles port unchanged). Bundled in a small namespace so the handlers below
+    # can mutate them in place.
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
@@ -263,33 +272,11 @@ def AlertEditTools(
 
         return ns
 
-    ns = solara.use_memo(_build_widgets, dependencies=[])
+    ns = _build_widgets()
 
-    # Stored prediction paths (set by the verify effect, read by add/remove).
-    pred1_path = solara.use_reactive(None)
-    pred2_path = solara.use_reactive(None)
-
-    # ------------------------------------------------------------------
-    # CNN tasks: button-triggered (dependencies=None) so they never auto-run.
-    # Each returns the prediction .tif path. Widget mutation happens in the verify
-    # effect + add/remove handlers (main thread), never in the task body.
-    # ------------------------------------------------------------------
-    def _run_model1():
-        return _run_cnn_model(
-            _MODEL1_REPO, _MODEL1_FILE, "_m1", widgets, app_state, app_tile_model
-        )
-
-    def _run_model2():
-        return _run_cnn_model(
-            _MODEL2_REPO, _MODEL2_FILE, "_m2", widgets, app_state, app_tile_model
-        )
-
-    model1_task = solara.lab.use_task(
-        _run_model1, dependencies=None, prefer_threaded=True, raise_error=False
-    )
-    model2_task = solara.lab.use_task(
-        _run_model2, dependencies=None, prefer_threaded=True, raise_error=False
-    )
+    # Stored prediction paths (set by the verify apply step, read by add/remove).
+    pred1_path = solara.reactive(None)
+    pred2_path = solara.reactive(None)
 
     # ------------------------------------------------------------------
     # enable_dl1 / enable_dl2 (OLD) — show/hide the add/remove/msg buttons.
@@ -317,51 +304,27 @@ def AlertEditTools(
             ns["dl2_remove"].hide()
 
     # ------------------------------------------------------------------
-    # verify_model*_output (OLD) — runs on the main thread keyed on the task value
-    # (replaces the OLD model*_prediction_time observer).
+    # verify_model*_output (OLD) — applied at the END of the worker's success
+    # path with the worker's computed prediction path (replaces the OLD
+    # model*_prediction_time observer / the use_task-value effect).
     # ------------------------------------------------------------------
-    def _verify_model1():
-        if model1_task.finished and model1_task.value:
-            try:
-                pred1_path.value = model1_task.value
-                analyzed_alerts_model.model1_prediction_file = model1_task.value
-                _enable_dl1(verify_raster(model1_task.value, _PRED_THRESHOLD))
-            except Exception:
-                logger.exception("Analysis: model 1 verify failed")
-                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
-        elif model1_task.error:
-            # The run task failed (e.g. clicking "M 1" before picking before/after
-            # images leaves selected_img_*_info_list None). Surface it instead of
-            # leaving the user with only a stopped spinner.
-            logger.error(
-                "Analysis: model 1 run failed", exc_info=model1_task.exception
-            )
+    def _apply_model1(pred_path):
+        try:
+            pred1_path.value = pred_path
+            analyzed_alerts_model.model1_prediction_file = pred_path
+            _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
+        except Exception:
+            logger.exception("Analysis: model 1 verify failed")
             ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
 
-    # Keyed on finished+error so the effect also fires on the ERROR transition
-    # (task.value stays None on error, so keying on .value alone would miss it).
-    solara.use_effect(
-        _verify_model1, dependencies=[model1_task.finished, model1_task.error]
-    )
-
-    def _verify_model2():
-        if model2_task.finished and model2_task.value:
-            try:
-                pred2_path.value = model2_task.value
-                analyzed_alerts_model.model2_prediction_file = model2_task.value
-                _enable_dl2(verify_raster(model2_task.value, _PRED_THRESHOLD))
-            except Exception:
-                logger.exception("Analysis: model 2 verify failed")
-                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
-        elif model2_task.error:
-            logger.error(
-                "Analysis: model 2 run failed", exc_info=model2_task.exception
-            )
+    def _apply_model2(pred_path):
+        try:
+            pred2_path.value = pred_path
+            analyzed_alerts_model.model2_prediction_file = pred_path
+            _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
+        except Exception:
+            logger.exception("Analysis: model 2 verify failed")
             ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
-
-    solara.use_effect(
-        _verify_model2, dependencies=[model2_task.finished, model2_task.error]
-    )
 
     # ------------------------------------------------------------------
     # add/remove prediction (OLD) — main-thread click handlers mutating
@@ -491,23 +454,65 @@ def AlertEditTools(
             widget.disabled = False
 
     # ------------------------------------------------------------------
-    # Wire all click handlers once (identities stable via use_memo([])).
+    # CNN run handlers: button-triggered daemon threads (CPU/IO-bound; never
+    # auto-run). The worker runs _run_cnn_model -> prediction path, then on the
+    # success path applies the OLD verify/enable step with that path. The run
+    # button spins for the duration; errors are logged + surfaced on the alert.
+    # ------------------------------------------------------------------
+    def _on_dl1_run(*_):
+        ns["alert"].reset()
+        ns["dl1_add"].disabled = True
+        ns["dl1_remove"].disabled = True
+        ns["dl1_run"].loading = True
+        ns["dl1_run"].disabled = True
+
+        def _worker():
+            try:
+                pred_path = _run_cnn_model(
+                    _MODEL1_REPO, _MODEL1_FILE, "_m1",
+                    widgets, app_state, app_tile_model,
+                )
+                _apply_model1(pred_path)
+            except Exception:  # noqa: BLE001 — surfaced on the alert
+                logger.exception("Analysis: model 1 run failed")
+                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+            finally:
+                ns["dl1_run"].loading = False
+                ns["dl1_run"].disabled = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_dl2_run(*_):
+        ns["alert"].reset()
+        ns["dl2_add"].disabled = True
+        ns["dl2_remove"].disabled = True
+        ns["dl2_run"].loading = True
+        ns["dl2_run"].disabled = True
+
+        def _worker():
+            try:
+                pred_path = _run_cnn_model(
+                    _MODEL2_REPO, _MODEL2_FILE, "_m2",
+                    widgets, app_state, app_tile_model,
+                )
+                _apply_model2(pred_path)
+            except Exception:  # noqa: BLE001 — surfaced on the alert
+                logger.exception("Analysis: model 2 run failed")
+                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+            finally:
+                ns["dl2_run"].loading = False
+                ns["dl2_run"].disabled = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Wire all click handlers once (the widgets are built once per build).
     # ------------------------------------------------------------------
     def _register_handlers():
         ns["start_btn"].on_event("click", _start_edition)
         ns["save_btn"].on_event("click", _save_edition)
         ns["stop_btn"].on_event("click", _stop_edition)
         ns["clear_btn"].on_event("click", _clear_edition)
-
-        def _on_dl1_run(*_):
-            ns["dl1_add"].disabled = True
-            ns["dl1_remove"].disabled = True
-            model1_task()
-
-        def _on_dl2_run(*_):
-            ns["dl2_add"].disabled = True
-            ns["dl2_remove"].disabled = True
-            model2_task()
 
         def _on_dl1_add(*_):
             _add_model_prediction(pred1_path.value, "lime", ns["dl1_add"], ns["dl1_remove"])
@@ -528,30 +533,12 @@ def AlertEditTools(
         ns["dl2_add"].on_event("click", _on_dl2_add)
         ns["dl2_remove"].on_event("click", _on_dl2_remove)
 
-        def _teardown():
-            for key, evt in (
-                ("start_btn", "click"), ("save_btn", "click"),
-                ("stop_btn", "click"), ("clear_btn", "click"),
-                ("dl1_run", "click"), ("dl1_add", "click"), ("dl1_remove", "click"),
-                ("dl2_run", "click"), ("dl2_add", "click"), ("dl2_remove", "click"),
-            ):
-                try:
-                    ns[key].on_event(evt, None, remove=True)
-                except Exception:
-                    pass
-
-        return _teardown
-
-    solara.use_effect(_register_handlers, dependencies=[])
-
-    # Reflect the running CNN tasks on the run buttons (OLD indeterminate_state).
-    ns["dl1_run"].loading = model1_task.pending
-    ns["dl2_run"].loading = model2_task.pending
+    _register_handlers()
 
     # ------------------------------------------------------------------
     # add_defo_layer (OLD) — registered as a real traitlets observer once (a
-    # Solara use_effect keyed on a .value would not fire on a traitlets mutation).
-    # Adds the "Defo Layer" GeoData to both maps whenever defo_dl_layer is set.
+    # .value-keyed hook would not fire on a traitlets mutation). Adds the
+    # "Defo Layer" GeoData to both maps whenever defo_dl_layer is set.
     # ------------------------------------------------------------------
     def _register_defo_observer():
         def handler(change):
@@ -568,28 +555,24 @@ def AlertEditTools(
                 logger.exception("Analysis: add_defo_layer failed")
 
         analyzed_alerts_model.observe(handler, "defo_dl_layer")
-        return lambda: analyzed_alerts_model.unobserve(handler, "defo_dl_layer")
 
-    solara.use_effect(_register_defo_observer, dependencies=[])
+    _register_defo_observer()
 
     # ------------------------------------------------------------------
     # Layout: OLD card04 = edit title + toolBarEdition + toolBarDL1/2 + alert.
     # ------------------------------------------------------------------
-    card = solara.use_memo(
-        lambda: v.Card(
-            class_="pa-2 ma-2",
-            hover=True,
-            children=[
-                v.CardTitle(
-                    class_="pa-1 ma-1",
-                    children=[cm.analysis_tile.edition_labels.edit_title],
-                ),
-                ns["toolbar_edition"],
-                ns["toolbar_dl1"],
-                ns["toolbar_dl2"],
-                ns["alert"],
-            ],
-        ),
-        dependencies=[],
+    card = v.Card(
+        class_="pa-2 ma-2",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-1 ma-1",
+                children=[cm.analysis_tile.edition_labels.edit_title],
+            ),
+            ns["toolbar_edition"],
+            ns["toolbar_dl1"],
+            ns["toolbar_dl2"],
+            ns["alert"],
+        ],
     )
-    solara.display(card)
+    return card
