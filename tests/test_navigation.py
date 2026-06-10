@@ -15,9 +15,10 @@ from gui.store.navigation import (
     resolve_navigation,
 )
 
-# The real app layout (solara_app.py steps_data): About/Recipes/Aux are dialogs,
-# AOI/Filter/Overview are right-panel tiles, Analysis is a full step.
-STEP_DISPLAY = {1: "dialog", 2: "dialog", 3: "dialog", 4: "panel", 5: "panel", 6: "panel", 7: "step"}
+# The real app layout (solara_app.py steps_data): About/Recipes/Aux AND Analysis
+# are dialogs, AOI/Filter/Overview are right-panel tiles. (Analysis is the wide
+# before/after dual-map review popup; it used to be a full "step" page.)
+STEP_DISPLAY = {1: "dialog", 2: "dialog", 3: "dialog", 4: "panel", 5: "panel", 6: "panel", 7: "dialog"}
 
 
 def test_mapping_covers_all_seven_tiles():
@@ -54,12 +55,13 @@ def test_resolve_panel_target_opens_panel_and_clears_dialog():
     assert action.close_dialog is True  # ensure no dialog lingers over the panel
 
 
-def test_resolve_step_target_closes_panel_and_dialog():
-    # Filter analyze lands on Analysis (step 7, a full step).
+def test_resolve_analysis_dialog_target_keeps_dialog_open():
+    # Filter "analyze" lands on Analysis (step 7, now a wide modal dialog): the
+    # dialog must open/stay (close_dialog False) and the right panel must close.
     action = resolve_navigation("analysis_tile", STEP_DISPLAY)
     assert action.step_id == 7
     assert action.panel_action == "close"
-    assert action.close_dialog is True
+    assert action.close_dialog is False
 
 
 def test_resolve_dialog_target_closes_panel_keeps_dialog_open():
@@ -109,11 +111,11 @@ def test_apply_panel_target_opens_panel_dismisses_dialog_sets_step():
     assert nav.current_step == 5
 
 
-def test_apply_step_target_closes_panel_and_dialog():
+def test_apply_analysis_dialog_target_leaves_dialog_open():
     mapapp, nav = _FakeMapApp(), _FakeNav()
     apply_navigation(mapapp, nav, resolve_navigation("analysis_tile", STEP_DISPLAY))
     assert mapapp.panel_calls == ["close"]
-    assert mapapp.step_open is False
+    assert mapapp.step_open is True  # close_dialog False -> dialog left to open
     assert nav.current_step == 7
 
 
