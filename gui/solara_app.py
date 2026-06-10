@@ -412,13 +412,15 @@ def Page():
     # the list order; ids are sequential so they read top-to-bottom.
     #
     # display types under the single-map model:
-    #   "dialog" → modal popup over the visible map (About, Recipes, Optional
-    #              files — occasional config/IO forms; do NOT hide the map behind
-    #              an opaque full panel).
+    #   "dialog" → modal popup over the (dimmed) main map. Config/IO forms (About,
+    #              Recipes, Optional files) AND Analysis — the wide before/after
+    #              dual-map review popup (width/height "95%"/"90%"). The dialog
+    #              scrim hides the shared main map + its layer-control menu, so
+    #              nothing bleeds through.
     #   "panel"  → right-panel card over the visible+interactive map (AOI, Filter,
     #              Overview — the map-interactive workflow tiles).
-    #   "step"   → opaque full panel (Analysis only — it owns its before/after maps
-    #              inside, handled separately).
+    #   "step"   → opaque full panel. No tile uses this now; the lifted-z-index
+    #              rule in Page()'s solara.Style stays for any future step tile.
     steps_data = [
         {
             "id": 1,
@@ -483,7 +485,15 @@ def Page():
             "id": 7,
             "name": cm.app.drawer_item.analysis,
             "icon": "mdi-image-search",
-            "display": "step",
+            # Wide modal dialog (popup) over the dimmed main map -- NOT an opaque
+            # "step" full page. width/height are percentage strings consumed by
+            # MapApp.vue's dialogWidthComputed/dialogHeightComputed (capped to the
+            # viewport minus the drawer), so the before/after dual-map layout gets
+            # near-fullscreen room while the dialog scrim hides the shared main
+            # map + its layer-control menu (was bleeding through at top-left).
+            "display": "dialog",
+            "width": "95%",
+            "height": "90%",
             "content": analysis_widget,
             "right_panel_action": "close",
         },
