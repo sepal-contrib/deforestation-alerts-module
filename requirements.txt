@@ -1,8 +1,5 @@
 # these libs are requested to build application env
-jupyter
-voila==0.5.8
 solara==1.57.4
-tomli==2.0.2
 
 dateutils==0.6.12
 earthengine-api @ git+https://github.com/openforis/earthengine-api.git@89b62662f9396a6a1397845bb551ed5c55be6272#subdirectory=python

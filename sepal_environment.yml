@@ -36,6 +36,5 @@ dependencies:
       - python-docx==1.1.2
       - pysepal==3.6.1
       - tomli==2.0.2
-      - voila==0.5.8
       - solara==1.57.4
       - pygaul<=4
