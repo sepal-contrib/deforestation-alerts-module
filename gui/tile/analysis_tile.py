@@ -1414,7 +1414,7 @@ class AnalysisTile(sw.Layout):
         from tensorflow.keras import backend as K
         from MightyMosaic import MightyMosaic
 
-        from deforestation_alerts.scripts.model_worker import apply_dl_model, save_prediction_prob
+        from deforestation_alerts.scripts.cnn_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
 
         hf_hub_download(
@@ -1456,7 +1456,7 @@ class AnalysisTile(sw.Layout):
         from tensorflow.keras import backend as K
         from MightyMosaic import MightyMosaic
 
-        from deforestation_alerts.scripts.model_worker import apply_dl_model, save_prediction_prob
+        from deforestation_alerts.scripts.cnn_worker import apply_dl_model, save_prediction_prob
         from huggingface_hub import hf_hub_download
 
         hf_hub_download(
