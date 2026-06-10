@@ -1,15 +1,32 @@
-"""Analysis tile parent component (Phase-4 Solara port of the OLD god-class).
+"""Analysis tile parent — raw ipyvuetify layout builder (Phase-4 Solara port).
 
-Architecture layer: view. This is the FOUNDATION slice (Task 9.1) of porting the
-2052-line ipyvuetify ``AnalysisTile`` god-class. It establishes:
+Architecture layer: view (raw-widget builder, no ``@solara.component``). This is
+the parent slice of porting the 2052-line ipyvuetify ``AnalysisTile`` god-class.
+It establishes:
 
-  * the shared heavy widgets (``AnalysisWidgets``, built once via use_memo),
+  * the shared heavy widgets (``AnalysisWidgets``, built once),
   * the two-map left panel + control right panel layout (ports OLD
-    ``initialize_layout``),
-  * the per-alert orchestration ``view_actual_alert`` as a ``use_effect`` keyed
-    on ``app_state.actual_alert_id``,
-  * the navigation row (``AlertNavigator``),
-  * and the sub-component slots (imagery / cnn / edit / export — stubs for now).
+    ``initialize_layout``), as a raw ipyvuetify ``v.Container`` tree,
+  * the per-alert orchestration ``view_actual_alert`` registered as a
+    ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
+    plus one immediate call so a pre-selected alert renders on first build,
+  * the navigation row (``build_navigator``),
+  * and the sub-component builders (imagery / review / edit / export).
+
+WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
+``solara.display``): MapApp renders the Analysis dialog with ``v-if``, so it
+DESTROYS the dialog DOM on close and REBUILDS it on reopen. A ``@solara.component``
+rendered via ``render_fixed`` + ``solara.display`` goes blank on reopen, but a raw
+ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
+``build_analysis_layout`` builds the tree once and RETURNS the outermost
+``v.Container``; the shell hands it to MapApp as the dialog content — same pattern
+as the sibling builders (``navigator`` / ``review_panel`` / ``build_edit_tools`` /
+``build_export`` / ``build_imagery``) and ``recipe_tile.build_recipe_layout`` /
+``aux_tile.build_aux_layout``. The CSS the OLD component injected via
+``solara.Style`` (a hook) is now the first child of the returned container as a raw
+``v.Html(tag="style", ...)`` element. The two former ``use_effect``s become
+``.subscribe`` registrations on ``app_state.actual_alert_id`` /
+``app_state.alerts_gdf`` (each also invoked once immediately).
 
 Key architectural decisions (FIXED by the migration contract):
 
@@ -42,7 +59,6 @@ import logging
 
 import ee
 import ipyvuetify as v
-import solara
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts.message import cm
@@ -51,11 +67,11 @@ from deforestation_alerts.scripts.mosaics_helper import (
     multipolygon_to_geodataframe,
 )
 from deforestation_alerts.scripts.recipe_helper import update_saved_dictionary
-from gui.tile.analysis.review_panel import AlertReviewPanel
-from gui.tile.analysis.edit_tools import AlertEditTools
-from gui.tile.analysis.export import AlertExport
-from gui.tile.analysis.imagery import AlertImagery
-from gui.tile.analysis.navigator import AlertNavigator
+from gui.tile.analysis.review_panel import build_review_panel
+from gui.tile.analysis.edit_tools import build_edit_tools
+from gui.tile.analysis.export import build_export
+from gui.tile.analysis.imagery import build_imagery
+from gui.tile.analysis.navigator import build_navigator
 from gui.tile.analysis.widgets import AnalysisWidgets
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -209,8 +225,7 @@ def view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model,
         logger.exception("Analysis: view_actual_alert map update failed")
 
 
-@solara.component
-def AnalysisTile(
+def build_analysis_layout(
     aux_model,
     selected_alerts_model,
     analyzed_alerts_model,
@@ -218,18 +233,23 @@ def AnalysisTile(
     app_state,
     gee_interface,
 ):
-    """Solara port of the OLD ``AnalysisTile`` ipyvuetify widget (foundation).
+    """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
+
+    Returns the outermost ``v.Container``; the shell hands it to MapApp as the
+    Analysis dialog content. Built once (no re-render) so the sub-builders'
+    handlers + subscriptions are wired exactly once and the widget tree survives
+    the dialog's ``v-if`` destroy/rebuild on reopen.
 
     Parameters
     ----------
     aux_model : AuxModel
-        Auxiliary model (custom report template; used by AlertExport later).
+        Auxiliary model (custom report template; used by ``build_export``).
     selected_alerts_model : SelectedAlertsModel
-        Filter selections + ``filtered_alert_raster`` (used by AlertImagery later).
+        Filter selections + ``filtered_alert_raster`` (used by ``build_imagery``).
     analyzed_alerts_model : AlertAnalysisModel
         Per-alert scratch state (imagery dicts, predictions, ``defo_dl_layer``,
-        ``last_save_time``). The foundation only resets ``defo_dl_layer`` and reads
-        the planet image dicts.
+        ``last_save_time``). The parent only resets ``defo_dl_layer`` and reads
+        the planet image dicts (in ``view_actual_alert``).
     app_tile_model : AppTileModel
         ``recipe_folder_path`` for the recipe json + output paths.
     app_state : AppState
@@ -238,54 +258,57 @@ def AnalysisTile(
         Session GEE interface, forwarded to both maps.
     """
     # Build the shared heavy widgets once.
-    widgets = solara.use_memo(
-        lambda: AnalysisWidgets(gee_interface=gee_interface), dependencies=[]
+    widgets = AnalysisWidgets(gee_interface=gee_interface)
+
+    # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
+    # .v_model). Owned here, passed to build_navigator + the subscription.
+    id_field = v.TextField(
+        v_model=app_state.actual_alert_id.value,
+        outlined=True,
+        single_line=True,
+        hide_details=True,
     )
 
-    # Memoized alert-id field (raw ipyvuetify so view_actual_alert can imperatively
-    # set .v_model). Owned here, passed to AlertNavigator + the effect.
-    id_field = solara.use_memo(
-        lambda: v.TextField(
-            v_model=app_state.actual_alert_id.value,
-            outlined=True,
-            single_line=True,
-            hide_details=True,
-        ),
-        dependencies=[],
-    )
-
-    # Inject the OLD tile's small CSS once (map height + tight text-field slots).
-    solara.Style(
-        ".custom-map-class2 { height: 55vh !important; } "
-        ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
-        "min-width: 40px; display: flex !important; align-items: center !important; }"
+    # The OLD tile's small CSS (map height + tight text-field slots). Was injected
+    # via solara.Style (a hook); now the first child of the returned container as a
+    # raw <style> element, preserving the exact CSS string.
+    style_el = v.Html(
+        tag="style",
+        children=[
+            ".custom-map-class2 { height: 55vh !important; } "
+            ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
+            "min-width: 40px; display: flex !important; align-items: center !important; }"
+        ],
     )
 
     # Per-alert orchestration: re-run whenever the current alert id changes
-    # (navigation drives app_state.actual_alert_id). Guarded to no-op when no
+    # (navigation drives app_state.actual_alert_id). Replaces the former
+    # use_effect with a subscribe + one immediate call (so a pre-selected alert
+    # renders on first build). Guarded inside view_actual_alert to no-op when no
     # alerts are loaded, so it is safe at mount/smoke time and idempotent.
-    def _run_view_actual_alert():
+    def _on_alert_change(*_):
         view_actual_alert(
             widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
         )
 
-    solara.use_effect(
-        _run_view_actual_alert, dependencies=[app_state.actual_alert_id.value]
+    app_state.actual_alert_id.subscribe(_on_alert_change)
+    view_actual_alert(
+        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
     )
 
     # Select alert 0 when an alert set first arrives (OLD create_gdf set
     # actual_alert_id = 0 on gdf arrival). The Filter publish / recipe load only
     # sets app_state.alerts_gdf and leaves actual_alert_id at -1, so without this
     # the tile would render empty until the user clicks "next". Only auto-selects
-    # from the unset (-1) state, so it never fights manual navigation.
-    def _select_first_alert():
+    # from the unset (-1) state, so it never fights manual navigation. Replaces the
+    # former use_effect with a subscribe + one immediate call.
+    def _select_first_alert_cb(*_):
         gdf = app_state.alerts_gdf.value
         if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
             app_state.go_to(0)
 
-    solara.use_effect(
-        _select_first_alert, dependencies=[app_state.alerts_gdf.value]
-    )
+    app_state.alerts_gdf.subscribe(_select_first_alert_cb)
+    _select_first_alert_cb()
 
     # TODO(recipe-load): the OLD tile rebuilt/merged alerts_gdf from the
     # selected-alerts traits here (create_gdf_partial/create_gdf_full + the
@@ -295,63 +318,96 @@ def AnalysisTile(
 
     # ------------------------------------------------------------------
     # Layout: left two-map panel + right scrolling control panel (ports OLD
-    # initialize_layout left_panel / right_panel).
+    # initialize_layout left_panel / right_panel), as a raw ipyvuetify tree.
     # ------------------------------------------------------------------
-    with solara.Row(style="height: 100%; gap: 0;"):
-        # LEFT: two map+selector columns side by side.
-        with solara.Column(
-            style="flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex;"
-        ):
-            with solara.Row(style="gap: 0;"):
-                with solara.Column(style="width: 50%;"):
-                    solara.display(widgets.map31)
-                    solara.display(widgets.imgSelection1)
-                with solara.Column(style="width: 50%;"):
-                    solara.display(widgets.map32)
-                    solara.display(widgets.imgSelection2)
-            # Imagery sub-component (stub): owns the slide-group orchestration
-            # over the panes/selectors above in Task 9.2.
-            AlertImagery(
-                widgets=widgets,
-                app_state=app_state,
-                selected_alerts_model=selected_alerts_model,
-                analyzed_alerts_model=analyzed_alerts_model,
+    # LEFT: two map+selector columns side by side.
+    left_inner_row = v.Html(
+        tag="div",
+        style_="display: flex; gap: 0;",
+        children=[
+            v.Html(
+                tag="div",
+                style_="width: 50%;",
+                children=[widgets.map31, widgets.imgSelection1],
+            ),
+            v.Html(
+                tag="div",
+                style_="width: 50%;",
+                children=[widgets.map32, widgets.imgSelection2],
+            ),
+        ],
+    )
+    left_panel = v.Html(
+        tag="div",
+        style_="flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex;",
+        children=[
+            v.Html(
+                tag="div",
+                style_="display: flex; flex-direction: column; width: 100%;",
+                children=[left_inner_row],
             )
+        ],
+    )
 
-        # RIGHT: nav + alert-info + cnn/driver + edit + export control cards.
-        with solara.Column(style="flex: 0 0 18rem; overflow: auto; padding: 0;"):
-            # Alert-info card (its "Alert info" title is the always-rendered
-            # smoke-test anchor).
-            solara.display(
-                v.Card(
-                    class_="pa-2 ma-2",
-                    hover=True,
-                    children=[
-                        v.CardTitle(
-                            class_="pa-0 ma-1",
-                            children=[cm.analysis_tile.alert_info.card_title],
-                        ),
-                        widgets.selected_alert_info,
-                    ],
-                )
-            )
-            AlertNavigator(app_state=app_state, id_field=id_field)
-            AlertReviewPanel(
+    # Imagery sub-component: owns the slide-group orchestration over the
+    # panes/selectors above. Returns None (side-effect only: registers the
+    # imagery_ctx subscription + fires once), so just call it.
+    build_imagery(
+        widgets=widgets,
+        app_state=app_state,
+        selected_alerts_model=selected_alerts_model,
+        analyzed_alerts_model=analyzed_alerts_model,
+    )
+
+    # RIGHT: alert-info + nav + review + edit + export control cards.
+    alert_info_card = v.Card(
+        class_="pa-2 ma-2",
+        hover=True,
+        children=[
+            v.CardTitle(
+                class_="pa-0 ma-1",
+                children=[cm.analysis_tile.alert_info.card_title],
+            ),
+            widgets.selected_alert_info,
+        ],
+    )
+    right_panel = v.Html(
+        tag="div",
+        style_="flex: 0 0 18rem; overflow: auto; padding: 0;",
+        children=[
+            alert_info_card,
+            build_navigator(app_state=app_state, id_field=id_field),
+            build_review_panel(
                 widgets=widgets,
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
-            )
-            AlertEditTools(
+            ),
+            build_edit_tools(
                 widgets=widgets,
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
-            )
-            AlertExport(
+            ),
+            build_export(
                 widgets=widgets,
                 app_state=app_state,
                 aux_model=aux_model,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
-            )
+            ),
+        ],
+    )
+
+    main_row = v.Row(
+        class_="ma-0",
+        style_="height: 100%; gap: 0;",
+        children=[left_panel, right_panel],
+    )
+
+    return v.Container(
+        fluid=True,
+        class_="pa-0 ma-0",
+        style_="height:100%;",
+        children=[style_el, main_row],
+    )
