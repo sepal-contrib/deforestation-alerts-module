@@ -7,27 +7,36 @@ No GEE calls here; map-layer updates use pure ipyleaflet/pysepal APIs on the
 pysepal single-map model every tile draws on the one shared map and renders its
 controls as a right-panel section / map popups (see the migration memory).
 
-Layer ownership on the shared map: the tile only adds/removes its OWN layers —
-the colored alert-status ``GeoData`` layers (named by ``_COLOR_DICT`` key) and the
-click ``Popup``s. It must never call ``map_.remove_all()`` (that would wipe other
+Alert rendering matches the ORIGINAL Voila tile: one ``MarkerCluster`` per alert
+status (``AwesomeIcon`` markers with Start/End/ID + "Go" popups) plus a
+``MenuControl`` of per-status toggle checkboxes — built by
+``overview_helper.build_status_marker_clusters`` and drawn on the single shared
+map.
+
+Layer ownership on the shared map: the tile only adds/removes its OWN layers — the
+status ``MarkerCluster`` layers (named ``overview-cluster-<status>``) and its
+``MenuControl``. It must never call ``map_.remove_all()`` (that would wipe other
 tiles' layers + the basemap); ``_clear_overview_layers`` removes just this tile's
-layers by name before each refresh.
+clusters (tracked handles + a name-prefix sweep) and its menu control before each
+refresh and whenever the tile is deactivated (single-map per-tile isolation).
 
 Scope note: the old tile also drew the AOI / forest-mask / aux / drawn-selection
 layers, which were `ee.*` calls in the view. Those are intentionally omitted from
 this tile (GEE in the view layer is disallowed); the Overview shows only the
-colored alert-status layers. The alert-DB download button is rendered in the
-right-panel card.
+alert-status markers. The alert-DB download button is rendered in the right-panel
+card.
 
 Known service-layer concern: overview_helper.py (a *service* module) still imports
-ipyvuetify for its `create_table_rows` and `add_colored_layers` helpers.
+ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
+`build_status_marker_clusters` helpers.
 - `calculate_alert_classes` is pure (no UI imports) — used directly here.
 - `create_table_rows` uses `v.Html` — reproduced locally as `_make_summary_rows` to
   avoid pulling ipyvuetify widgets through the service layer into this component.
   The helper version is left untouched; refactoring overview_helper is deferred to a
   later task.
-- `add_colored_layers` uses `v.Html`/`v.Btn`/`v.Card` for ipyleaflet popup children
-  only (they are never Solara reacton children), so calling it here is safe.
+- `create_markers_ipyvuetify` / `build_status_marker_clusters` use `v.*` for
+  ipyleaflet marker popups + the menu-control card only (never Solara reacton
+  children), so calling them here is safe.
 """
 
 import logging
@@ -36,24 +45,22 @@ import os
 import ipyvuetify as v
 import reacton.ipyvuetify as rv
 import solara
-from ipyleaflet import Popup
+from ipyleaflet import MarkerCluster, Popup
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.overview_helper import (
-    add_colored_layers,
+    build_status_marker_clusters,
     calculate_alert_classes,
+    create_markers_ipyvuetify,
 )
 
-logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
+# MarkerCluster layers added by this tile are named with this prefix so a
+# name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
+# that the tracked handles missed.
+_CLUSTER_NAME_PREFIX = "overview-cluster"
 
-# Alert status → map dot colour (same as old tile)
-_COLOR_DICT = {
-    "Not reviewed": "lightgrey",
-    "Confirmed": "red",
-    "Need revision": "orange",
-    "False Positive": "green",
-}
+logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
 # Summary-table row labels (matches old tile order)
 _ALERT_LABELS = [
@@ -84,22 +91,48 @@ def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
     ]
 
 
-def _clear_overview_layers(map_) -> None:
-    """Remove only THIS tile's layers from the shared map.
+def _clear_overview_layers(map_, holder) -> None:
+    """Remove only THIS tile's layers + control from the shared map.
 
-    The overview owns the colored alert-status ``GeoData`` layers (named by a
-    ``_COLOR_DICT`` key) and any click ``Popup``s. Everything else on the shared
-    map (basemap, AOI, alert rasters from other tiles) is left untouched. Never
-    use ``map_.remove_all()`` on the shared map.
+    The overview owns the status ``MarkerCluster`` layers and its ``MenuControl``.
+    Everything else on the shared map (basemap, AOI, alert rasters from other
+    tiles) is left untouched. Never use ``map_.remove_all()`` on the shared map.
+
+    ``holder`` is a session-stable dict (``{"clusters": [...], "menu": ...}``)
+    tracking the widgets this tile added; we remove those plus any stale cluster
+    found by the ``_CLUSTER_NAME_PREFIX`` name sweep (covers a render_fixed
+    double-mount), then reset the holder.
     """
-    for layer in list(map_.layers):
-        if getattr(layer, "base", False):
-            continue
-        if isinstance(layer, Popup) or getattr(layer, "name", None) in _COLOR_DICT:
+    menu = holder.get("menu")
+    if menu is not None:
+        removed = False
+        for remover in ("remove_control", "remove"):
             try:
-                map_.remove_layer(layer)
+                getattr(map_, remover)(menu)
+                removed = True
+                break
             except Exception:
-                logger.exception("Overview: failed to remove a layer during clear")
+                continue
+        if not removed:
+            logger.warning("Overview: could not remove the marker menu control")
+        holder["menu"] = None
+
+    tracked = list(holder.get("clusters", []))
+    holder["clusters"] = []
+    by_name = [
+        layer
+        for layer in list(map_.layers)
+        if isinstance(layer, MarkerCluster)
+        and str(getattr(layer, "name", "")).startswith(_CLUSTER_NAME_PREFIX)
+    ]
+    # also drop any stray click Popups the markers may have left on the map
+    stray_popups = [layer for layer in list(map_.layers) if isinstance(layer, Popup)]
+    for layer in set(tracked) | set(by_name) | set(stray_popups):
+        try:
+            if layer in map_.layers:
+                map_.remove_layer(layer)
+        except Exception:
+            logger.exception("Overview: failed to remove a layer during clear")
 
 
 @solara.component
@@ -107,8 +140,8 @@ def OverviewTile(app_state, map_):
     """Solara port of the old OverviewTile ipyvuetify widget.
 
     Renders the alert-status summary card (+ download button) as a right-panel
-    section; the colored alert-status points + their "Go" popups are drawn on the
-    single shared map.
+    section; the status marker clusters (+ a toggle menu control) and their "Go"
+    popups are drawn on the single shared map.
 
     Parameters
     ----------
@@ -130,6 +163,13 @@ def OverviewTile(app_state, map_):
         dependencies=[],
     )
 
+    # Session-stable handles for the cluster layers + menu control this tile adds
+    # to the shared map, so the effect can remove exactly its own widgets on
+    # refresh / deactivation (never the other tiles' layers).
+    overview_layers = solara.use_memo(
+        lambda: {"clusters": [], "menu": None}, dependencies=[]
+    )
+
     # --------------------------------------------------------------------------
     # Reactive effect: refresh map layers + summary table whenever alerts_gdf
     # changes.  Replaces the old `analyzed_alerts_model.observe(…, "alerts_gdf")`
@@ -145,9 +185,9 @@ def OverviewTile(app_state, map_):
     # navigation.
     active = app_state.current_page_view.value == "overview_tile"
 
-    # Callback: "Go" button in a map popup → navigate to that alert. Thin: read
+    # Callback: "Go" button in a marker popup → navigate to that alert. Thin: read
     # widget value → write reactive state. Defined before _sync_overview because
-    # the effect hands it to add_colored_layers.
+    # the effect hands it to create_markers_ipyvuetify.
     def _on_go_click(widget, event, data):
         try:
             app_state.actual_alert_id.value = int(widget.value)
@@ -160,8 +200,9 @@ def OverviewTile(app_state, map_):
 
         Runs on mount and whenever ``alerts_gdf`` changes OR this tile is
         activated/deactivated. The summary table (right-panel only) always tracks
-        the data; the colored alert points are drawn on the shared map ONLY while
-        this tile is active, and cleared otherwise (single-map isolation).
+        the data; the status marker clusters + their menu control are drawn on the
+        shared map ONLY while this tile is active, and cleared otherwise
+        (single-map isolation).
         """
         has_data = alerts_gdf is not None and len(alerts_gdf) > 0
         if has_data:
@@ -172,24 +213,26 @@ def OverviewTile(app_state, map_):
         else:
             tbody_ref.children = _make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)
 
-        # Always start by removing only THIS tile's layers (idempotent, by name).
+        # Always start by removing only THIS tile's layers + control (idempotent).
         try:
-            _clear_overview_layers(map_)
+            _clear_overview_layers(map_, overview_layers)
             if active and has_data:
-                gdf_points = alerts_gdf.drop(
-                    columns=[
-                        c
-                        for c in ["bounding_box", "alert_polygon"]
-                        if c in alerts_gdf.columns
-                    ]
-                ).set_geometry("point")
-                add_colored_layers(
-                    gdf_points,
+                # One MarkerCluster per status (AwesomeIcon markers + Start/End/ID
+                # "Go" popups) + a MenuControl status toggle — the original tile's
+                # UX, on the shared map. Markers carry point locations + their own
+                # popups, so (unlike GeoData) no geometry column is JSON-serialized.
+                markers = create_markers_ipyvuetify(
+                    alerts_gdf,
+                    "point",
+                    ["alert_date_min", "alert_date_max"],
                     "status",
-                    _COLOR_DICT,
-                    map_,
                     _on_go_click,
                 )
+                clusters, menu = build_status_marker_clusters(
+                    map_, markers, name_prefix=_CLUSTER_NAME_PREFIX
+                )
+                overview_layers["clusters"] = clusters
+                overview_layers["menu"] = menu
         except Exception:
             logger.exception("Overview: failed to refresh map layers")
 

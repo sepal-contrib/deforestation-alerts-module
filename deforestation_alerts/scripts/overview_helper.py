@@ -370,6 +370,70 @@ def add_marker_clusters_with_menucontrol(map_object, data_dict):
     map_object.add(menu_control)
 
 
+def build_status_marker_clusters(map_object, data_dict, name_prefix="overview-cluster"):
+    """Like ``add_marker_clusters_with_menucontrol`` but built for the SINGLE
+    shared map: it names each cluster and RETURNS the handles so the owning tile
+    can remove exactly its own layers + control later (never ``remove_all``).
+
+    Adds one ``MarkerCluster`` per status group plus a ``MenuControl`` of
+    per-status toggle checkboxes (the original Overview UX). The toggle handlers
+    guard add/remove with a membership check so flipping a checkbox while the
+    cluster is already absent/present can't raise.
+
+    Returns
+    -------
+    (clusters, menu_control) : (list[MarkerCluster], MenuControl)
+        Hand these back to the tile's cleanup so deactivating the tile removes
+        only the Overview layers from the shared map.
+    """
+    cluster_by_cat = {}
+    clusters = []
+    for category, markers in data_dict.items():
+        marker_cluster = MarkerCluster(
+            markers=markers,
+            show_coverage_on_hover=False,
+            name=f"{name_prefix}-{category}",
+        )
+        cluster_by_cat[category] = marker_cluster
+        clusters.append(marker_cluster)
+        map_object.add(marker_cluster)
+
+    def toggle_layer(change, category):
+        mc = cluster_by_cat[category]
+        if change["new"]:
+            if mc not in map_object.layers:
+                map_object.add(mc)
+        else:
+            if mc in map_object.layers:
+                map_object.remove_layer(mc)
+
+    checkboxes = {}
+    for category in data_dict.keys():
+        checkbox = v.Checkbox(v_model=True, label=category, dense=True)
+        checkbox.observe(
+            lambda change, cat=category: toggle_layer(change, cat), names="v_model"
+        )
+        checkboxes[category] = checkbox
+
+    checkbox_container = v.Container(
+        children=[checkboxes[cat] for cat in checkboxes],
+        class_="pa-3",
+        style_="padding: 5px; max-height: 300px; max-width: 300px; background-color: white;",
+    )
+
+    menu_control = MenuControl(
+        icon_content="mdi-layers",
+        position="topright",
+        card_content=checkbox_container,
+        card_title="Marker Control",
+    )
+    menu_control.set_size(
+        min_width="100px", max_width="400px", min_height="20vh", max_height="40vh"
+    )
+    map_object.add(menu_control)
+    return clusters, menu_control
+
+
 def add_marker_clusters_as_LayerGroup(map_object, data_dict):
     # Dictionary to store the marker clusters associated with each category
     marker_clusters = {}

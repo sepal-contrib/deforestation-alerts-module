@@ -470,7 +470,10 @@ def Page():
         {
             "id": 6,
             "name": cm.app.drawer_item.overview,
-            "icon": "mdi-chart-box-outline",
+            # mdi-chart-box-outline is absent from the bundled MDI font version
+            # (it rendered as a blank gap next to "Overview"); mdi-chart-bar is a
+            # core glyph present in every MDI release, so the symbol shows.
+            "icon": "mdi-chart-bar",
             # right-panel tile: stats card in the panel, alert points on the map.
             "display": "panel",
             "content": panel_sentinel,
