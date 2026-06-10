@@ -1,9 +1,20 @@
-"""AlertImagery sub-component (Task 9.2 — dual-map Planet/S2/Landsat selectors).
+"""build_imagery sub-component (Task 9.2 / B4 — dual-map Planet/S2/Landsat selectors).
 
-Architecture layer: view. This is the imagery slice of the OLD ``AnalysisTile``
-god-class port. It drives the two image-selector cards (``imgSelection1/2`` on
-``widgets``) and their date-button slide groups: Planet (synchronous, from the
-recipe-built monthly dicts) plus Sentinel-2 and Landsat (fetched lazily off EE).
+Architecture layer: view (raw-widget builder, no ``@solara.component``). This is the
+imagery slice of the OLD ``AnalysisTile`` god-class port. It drives the two
+image-selector cards (``imgSelection1/2`` on ``widgets``) and their date-button slide
+groups: Planet (synchronous, from the recipe-built monthly dicts) plus Sentinel-2 and
+Landsat (fetched lazily off EE).
+
+WHY A RAW BUILDER (not a Solara component + effects/use_task): MapApp renders the
+Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
+on reopen. Solara-component reactivity (``use_effect`` / ``use_task``) + ``solara.display``
+content does not survive that rebuild. Like the sibling builders
+(``navigator`` / ``review_panel`` / ``build_edit_tools`` / export) this is a plain
+function that registers a ``.subscribe`` on the driving reactive and starts daemon
+threads for off-thread work — there are no Solara hooks at all. This component renders
+nothing visible (the maps + selector cards are built/displayed elsewhere), so
+``build_imagery`` returns ``None``; the parent calls it purely for its side effects.
 
 Key port decisions (FIXED by the migration contract; the plan's reference code is
 unreliable):
@@ -11,20 +22,22 @@ unreliable):
 * **Per-alert handoff via ``widgets.imagery_ctx``.** The parent's
   ``view_actual_alert`` computes the alert grid / dates / planet dicts and
   publishes a context dict to ``widgets.imagery_ctx.value`` (a solara reactive).
-  This component keys every effect/task on that ctx, so the slide-group builds and
-  the EE fetches only run once the parent has published a fresh context — which
-  guarantees the grid/dates exist before any imagery work starts. When no alert is
-  active (``imagery_ctx.value is None``) everything no-ops (safe at smoke time).
+  This component ``.subscribe``s a single ``_on_ctx`` callback to that reactive, so
+  the slide-group builds and the EE fetches only run once the parent has published a
+  fresh context — which guarantees the grid/dates exist before any imagery work
+  starts. When no alert is active (ctx is ``None``) ``_on_ctx`` no-ops (safe at smoke
+  time). Because ``imagery_ctx`` may already hold a value when ``build_imagery`` runs
+  (an alert selected before the dialog opened), ``_on_ctx`` is also invoked once at
+  the end with the current value (mirroring a ``use_effect`` firing on mount).
 
-* **EE fetches run on a worker thread via ``use_task(prefer_threaded=True)``.**
-  ``getIndividualS2`` / ``getIndividualLandsat`` call blocking ``.getInfo()``;
-  ``prefer_threaded=True`` (same as the Filter tile) keeps that off the asyncio
-  event loop. The task body does ONLY the EE fetch and returns the ``list[dict]``.
-
-* **No widget mutation on the worker thread.** The OLD code mutated ipyvuetify
-  widgets from the fetch thread via traitlets observers — that anti-pattern is
-  removed here. The slide-group REBUILD (which mutates widgets) happens on the main
-  thread in a ``use_effect`` keyed on the task's ``value``, never inside the task.
+* **EE fetches run on daemon threads.** ``getIndividualS2`` /
+  ``getIndividualLandsat`` call blocking ``.getInfo()``; ``_on_ctx`` starts TWO
+  independent daemon threads (one S2, one Landsat), each doing only the EE fetch in a
+  ``try/except/finally`` (on failure: log + clear that source's spinner via the
+  "Not available" sentinel; on success: rebuild that source's slide groups). This is
+  the same task->daemon-thread conversion the sibling ``edit_tools`` / ``export``
+  builders use. ipyvuetify/ipyleaflet trait sets from the worker thread are accepted
+  (``recipe_tile`` / ``edit_tools`` / ``export`` do exactly this).
 
 * **Imperative helpers ported as module-level functions** (no ``self``):
   ``image_slider_map_callback`` / ``image_slider_info_callback`` /
@@ -54,9 +67,10 @@ import logging
 from datetime import datetime
 from operator import itemgetter
 
+import threading
+
 import ee
 import ipyvuetify as v
-import solara
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
@@ -446,40 +460,95 @@ def _rebuild_groups(
         logger.exception("Analysis imagery: after slide group rebuild failed")
 
 
-@solara.component
-def AlertImagery(
+def build_imagery(
     widgets,
     app_state,
     selected_alerts_model,
     analyzed_alerts_model,
 ):
-    """Imagery slice: Planet (sync) + S2/Landsat (use_task) slide-group drivers.
+    """Imagery slice: Planet (sync) + S2/Landsat (daemon threads) slide-group drivers.
 
-    Renders nothing visible. Registers, all keyed on ``widgets.imagery_ctx.value``:
+    Renders nothing visible — returns ``None``; the parent calls it purely for its
+    side effects. Subscribes a single ``_on_ctx`` callback to ``widgets.imagery_ctx``.
+    On a fresh ctx, ``_on_ctx``:
 
-    * a ``use_effect`` that (on a fresh ctx) shows the slide-group spinners, builds
-      the Planet slide groups synchronously from ``ctx["before/after_planet"]``, and
-      restores the OLD auto-switch of the visible tab to Sentinel-2 when Planet is
-      "Not available";
-    * two ``use_task(prefer_threaded=True)`` that fetch the S2 and Landsat dicts off
-      ``ctx["grid"]`` + the four ``get_sentinel2_dates`` windows;
-    * two ``use_effect`` (keyed on each task's value) that rebuild that source's
-      slide groups on the main thread once the fetch returns.
+    * shows the slide-group spinners + builds the Planet slide groups synchronously
+      from ``ctx["before/after_planet"]`` and restores the OLD auto-switch of the
+      visible tab to Sentinel-2 when Planet is "Not available" (former ``_build_planet``);
+    * starts a daemon thread that fetches the S2 dicts off ``ctx["grid"]`` + the four
+      ``get_sentinel2_dates`` windows and, on success, rebuilds the S2 slide groups
+      (former ``s2_task`` + ``_rebuild_s2``);
+    * starts a daemon thread that does the same for Landsat (former ``landsat_task`` +
+      ``_rebuild_landsat``).
 
-    Everything no-ops while ``imagery_ctx.value is None`` (no alert active), so it is
-    dormant at smoke time and the EE fetches never fire on mount.
+    Each fetch thread wraps the EE call in ``try/except/finally``: on failure it logs
+    and routes the empty result through the "Not available" sentinel so that source's
+    spinner is cleared / the no-images card shown.
+
+    ``_on_ctx`` no-ops while ctx is ``None`` (no alert active), so it is dormant at
+    smoke time and the EE fetches never fire on mount. Because ``imagery_ctx`` may
+    already hold a value when ``build_imagery`` runs, ``_on_ctx`` is also invoked once
+    at the end with the current value (self-guards on ``None``).
     """
-    ctx = widgets.imagery_ctx.value
 
     # ------------------------------------------------------------------
-    # Planet slide groups: synchronous (the recipe already built the monthly
-    # dicts). Rebuilt whenever the parent publishes a fresh ctx. Also shows the
-    # per-source spinners up front (the S2/Landsat fetches replace them later) and
-    # restores the OLD auto-switch to the Sentinel-2 tab when Planet is unavailable.
+    # Sentinel-2 fetch + rebuild: runs on a daemon thread (blocking .getInfo()).
+    # On success rebuilds the S2 slide groups; on failure logs + routes the empty
+    # result through the "Not available" sentinel so the spinner is cleared.
+    # S2 fires its default callback when Planet was unavailable (show[1]).
     # ------------------------------------------------------------------
-    def _build_planet():
+    def _fetch_and_rebuild_s2(ctx):
+        before = after = None
+        try:
+            dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
+            grid = ctx["grid"]
+            before = getIndividualS2(grid, dates[0], dates[1])
+            after = getIndividualS2(grid, dates[2], dates[3])
+        except Exception:
+            logger.exception("Analysis imagery: Sentinel-2 fetch failed")
+        finally:
+            show = ctx.get("show") or [True, False, False]
+            _rebuild_groups(
+                _normalize_source_data(before, "Sentinel 2"),
+                _normalize_source_data(after, "Sentinel 2"),
+                show[1],
+                show[1],
+                widgets,
+                selected_alerts_model,
+            )
+
+    # ------------------------------------------------------------------
+    # Landsat fetch + rebuild: same shape as S2. Landsat never fires its default
+    # callback (OLD slider_landsat_* passed False).
+    # ------------------------------------------------------------------
+    def _fetch_and_rebuild_landsat(ctx):
+        before = after = None
+        try:
+            dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
+            grid = ctx["grid"]
+            before = getIndividualLandsat(grid, dates[0], dates[1])
+            after = getIndividualLandsat(grid, dates[2], dates[3])
+        except Exception:
+            logger.exception("Analysis imagery: Landsat fetch failed")
+        finally:
+            _rebuild_groups(
+                _normalize_source_data(before, "Landsat"),
+                _normalize_source_data(after, "Landsat"),
+                False,
+                False,
+                widgets,
+                selected_alerts_model,
+            )
+
+    # ------------------------------------------------------------------
+    # Single ctx-driven callback. Runs the former _build_planet synchronously
+    # (Planet slide groups are built from the recipe-built monthly dicts), then
+    # starts the two independent EE-fetch daemon threads (S2 + Landsat).
+    # ------------------------------------------------------------------
+    def _on_ctx(ctx):
         if ctx is None:
             return
+
         _set_all_loading(widgets)
 
         before_planet = ctx.get("before_planet")
@@ -508,78 +577,18 @@ def AlertImagery(
             selected_alerts_model,
         )
 
-    solara.use_effect(_build_planet, dependencies=[ctx])
+        # EE fetches off the main thread (blocking .getInfo()). Independent sources.
+        threading.Thread(
+            target=_fetch_and_rebuild_s2, args=(ctx,), daemon=True
+        ).start()
+        threading.Thread(
+            target=_fetch_and_rebuild_landsat, args=(ctx,), daemon=True
+        ).start()
 
-    # ------------------------------------------------------------------
-    # Sentinel-2 fetches: ONE task fetching both before+after windows on a worker
-    # thread (blocking .getInfo()). Returns (before_list, after_list); never touches
-    # widgets. Keyed on ctx so it only runs once the parent published a fresh one.
-    # ------------------------------------------------------------------
-    def _fetch_s2():
-        if ctx is None:
-            return None
-        dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
-        grid = ctx["grid"]
-        before = getIndividualS2(grid, dates[0], dates[1])
-        after = getIndividualS2(grid, dates[2], dates[3])
-        return {"before": before, "after": after}
+    widgets.imagery_ctx.subscribe(_on_ctx)
 
-    s2_task = solara.lab.use_task(
-        _fetch_s2, dependencies=[ctx], prefer_threaded=True, raise_error=False
-    )
+    # imagery_ctx may already hold a value (an alert selected before the dialog was
+    # opened); fire once on "mount" (self-guards on None).
+    _on_ctx(widgets.imagery_ctx.value)
 
-    # ------------------------------------------------------------------
-    # Landsat fetches: same shape as S2.
-    # ------------------------------------------------------------------
-    def _fetch_landsat():
-        if ctx is None:
-            return None
-        dates = get_sentinel2_dates(ctx["fecha1"], ctx["fecha2"])
-        grid = ctx["grid"]
-        before = getIndividualLandsat(grid, dates[0], dates[1])
-        after = getIndividualLandsat(grid, dates[2], dates[3])
-        return {"before": before, "after": after}
-
-    landsat_task = solara.lab.use_task(
-        _fetch_landsat, dependencies=[ctx], prefer_threaded=True, raise_error=False
-    )
-
-    # ------------------------------------------------------------------
-    # Main-thread rebuilds: keyed on each task's value so the widget mutation runs
-    # on the render thread after the fetch returns (NOT inside the task body). S2
-    # fires its default callback when Planet was unavailable (show[1]); Landsat
-    # never fires by default (OLD slider_landsat_* passed False).
-    # ------------------------------------------------------------------
-    s2_result = s2_task.value
-    landsat_result = landsat_task.value
-
-    def _rebuild_s2():
-        if ctx is None or not s2_result:
-            return
-        show = ctx.get("show") or [True, False, False]
-        _rebuild_groups(
-            _normalize_source_data(s2_result["before"], "Sentinel 2"),
-            _normalize_source_data(s2_result["after"], "Sentinel 2"),
-            show[1],
-            show[1],
-            widgets,
-            selected_alerts_model,
-        )
-
-    solara.use_effect(_rebuild_s2, dependencies=[s2_result])
-
-    def _rebuild_landsat():
-        if ctx is None or not landsat_result:
-            return
-        _rebuild_groups(
-            _normalize_source_data(landsat_result["before"], "Landsat"),
-            _normalize_source_data(landsat_result["after"], "Landsat"),
-            False,
-            False,
-            widgets,
-            selected_alerts_model,
-        )
-
-    solara.use_effect(_rebuild_landsat, dependencies=[landsat_result])
-
-    return
+    return None
