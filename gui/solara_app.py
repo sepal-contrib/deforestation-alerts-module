@@ -45,7 +45,7 @@ from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
 from gui.tile.alerts_filter_tile import AlertsFilterTile
-from gui.tile.analysis import AnalysisTile
+from gui.tile.analysis import build_analysis_layout
 from gui.tile.aux_tile import build_aux_layout
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.recipe_tile import build_recipe_layout
@@ -305,20 +305,22 @@ def Page():
         dependencies=[],
     )
 
-    # Analysis tile: render_fixed so its hooks (memoized AnalysisWidgets + the
-    # view_actual_alert use_effect keyed on app_state.actual_alert_id) are
-    # preserved while MapApp gets a concrete DOMWidget. The effect early-returns
-    # when no alerts are loaded, so the render_fixed double-mount is safe.
+    # Analysis tile: build the RAW ipyvuetify layout once and hand it straight to
+    # MapApp (same as Aux/Recipe). NOT via render_fixed + solara.display: a
+    # solara.display-captured widget's view is not recreated when MapApp's
+    # v-dialog destroys + rebuilds the dialog DOM on close/reopen, so the maps +
+    # cards vanished on the 2nd open (blank dialog). A raw widget tree is re-viewed
+    # from its model on reopen like any ipywidget, so it survives. The per-alert
+    # orchestration (view_actual_alert) is driven by app_state.actual_alert_id
+    # subscriptions registered inside build_analysis_layout, not a use_effect.
     analysis_widget = solara.use_memo(
-        lambda: _render_detached(
-            lambda: AnalysisTile(
-                aux_model=aux_model,
-                selected_alerts_model=selected_alerts_model,
-                analyzed_alerts_model=analyzed_alerts_model,
-                app_tile_model=app_tile_model,
-                app_state=app_state,
-                gee_interface=gee_interface,
-            )
+        lambda: build_analysis_layout(
+            aux_model=aux_model,
+            selected_alerts_model=selected_alerts_model,
+            analyzed_alerts_model=analyzed_alerts_model,
+            app_tile_model=app_tile_model,
+            app_state=app_state,
+            gee_interface=gee_interface,
         ),
         dependencies=[],
     )
