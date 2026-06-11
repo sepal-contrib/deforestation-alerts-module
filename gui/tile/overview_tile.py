@@ -20,11 +20,19 @@ tiles' layers + the basemap); ``_clear_overview_layers`` removes just this tile'
 clusters (tracked handles + a name-prefix sweep) and its menu control before each
 refresh and whenever the tile is deactivated (single-map per-tile isolation).
 
-Scope note: the old tile also drew the AOI / forest-mask / aux / drawn-selection
-layers, which were `ee.*` calls in the view. Those are intentionally omitted from
-this tile (GEE in the view layer is disallowed); the Overview shows only the
-alert-status markers. The alert-DB download button is rendered in the right-panel
-card.
+AOI context layer: the AOI tile draws its AOI outline (layer name ``"aoi"``) only
+while it is active and REMOVES it on deactivation, so the AOI is gone by the time
+the user reaches the Overview. To show alerts in their AOI context, this tile
+draws the AOI too — but on its OWN layer name (``_OVERVIEW_AOI_LAYER`` =
+``"overview-aoi"``), never the AOI tile's ``"aoi"``, so the two tiles can't race
+on a shared layer (same per-tile ownership rule as the ``overview-cluster-*``
+clusters). It reuses the AOI tile's ``map_.add_ee_layer`` rendering call (a map
+draw of an already-built ``feature_collection`` — no new GEE *computation* in the
+view; AoiView is built ``gee=True`` throughout this app).
+
+Scope note: the old tile also drew the forest-mask / aux / drawn-selection layers,
+which were `ee.*` calls in the view; those remain omitted. The alert-DB download
+button is rendered in the right-panel card.
 
 Known service-layer concern: overview_helper.py (a *service* module) still imports
 ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
@@ -59,6 +67,10 @@ from deforestation_alerts.scripts.overview_helper import (
 # name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
 # that the tracked handles missed.
 _CLUSTER_NAME_PREFIX = "overview-cluster"
+
+# AOI outline layer this tile owns on the shared map (distinct from the AOI tile's
+# "aoi" layer so the two tiles never fight over a shared name).
+_OVERVIEW_AOI_LAYER = "overview-aoi"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
@@ -135,8 +147,30 @@ def _clear_overview_layers(map_, holder) -> None:
             logger.exception("Overview: failed to remove a layer during clear")
 
 
+def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
+    """Add/remove the Overview's own AOI outline on the shared map (idempotent).
+
+    Mirrors the AOI tile's ``_redraw_aoi_layer`` / ``_clear_aoi_layer`` but on the
+    tile-owned ``_OVERVIEW_AOI_LAYER`` name so it never touches the AOI tile's
+    ``"aoi"`` layer. Always removes first (so a stale outline / render_fixed
+    double-mount can't leave two), then re-adds when ``show`` is True and an AOI is
+    selected. ``feature_collection`` is the AOI ``ee`` object (AoiView is
+    ``gee=True`` here), drawn with ``add_ee_layer`` exactly as the AOI tile does.
+    """
+    try:
+        map_.remove_layer(_OVERVIEW_AOI_LAYER, none_ok=True)
+    except Exception:
+        logger.exception("Overview: failed to remove the AOI layer")
+    if not show or feature_collection is None:
+        return
+    try:
+        map_.add_ee_layer(feature_collection, {}, _OVERVIEW_AOI_LAYER)
+    except Exception:
+        logger.exception("Overview: failed to add the AOI layer")
+
+
 @solara.component
-def OverviewTile(app_state, map_):
+def OverviewTile(app_state, map_, aoi_date_model=None):
     """Solara port of the old OverviewTile ipyvuetify widget.
 
     Renders the alert-status summary card (+ download button) as a right-panel
@@ -151,6 +185,10 @@ def OverviewTile(app_state, map_):
     map_ : SepalMap
         The single shared map (the same instance ``MapApp`` renders fullscreen).
         Layers + popups are added/removed on this map.
+    aoi_date_model : AoiDateModel, optional
+        The recipe AOI model; its ``feature_collection`` is drawn as the Overview's
+        AOI-context outline while this tile is active. ``None`` (or no AOI selected)
+        simply skips the outline.
     """
     # --------------------------------------------------------------------------
     # Summary table body — held in a Ref so use_effect can mutate it in place.
@@ -237,6 +275,18 @@ def OverviewTile(app_state, map_):
             logger.exception("Overview: failed to refresh map layers")
 
     solara.use_effect(_sync_overview, [alerts_gdf, active])
+
+    # AOI-context outline: draw the AOI on the shared map while the Overview is
+    # active, remove it otherwise. Keyed on `active` ONLY (not alerts_gdf) so a
+    # filter run elsewhere can't make this effect strip the outline while another
+    # tile is showing — the AOI is read at activation time (it is selected long
+    # before the user reaches the Overview), mirroring the AOI tile's _sync_aoi.
+    aoi_fc = getattr(aoi_date_model, "feature_collection", None)
+
+    def _sync_overview_aoi():
+        sync_overview_aoi_layer(map_, aoi_fc, show=active)
+
+    solara.use_effect(_sync_overview_aoi, [active])
 
     # --------------------------------------------------------------------------
     # Info table (stable ipyvuetify widget; tbody_ref is mutated by use_effect)

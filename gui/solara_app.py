@@ -234,7 +234,9 @@ def Page():
     # double-mount is safe.
     overview_widget = solara.use_memo(
         lambda: _render_detached(
-            lambda: OverviewTile(app_state=app_state, map_=map_)
+            lambda: OverviewTile(
+                app_state=app_state, map_=map_, aoi_date_model=aoi_date_model
+            )
         ),
         dependencies=[],
     )
