@@ -23,6 +23,14 @@ from deforestation_alerts.scripts.cnn_worker import (  # noqa: F401
 
 
 def convert_julian_to_date(julian_date):
+    # vectorize.py returns None for alert_date_min/max when a polygon's date
+    # pixels are all nodata (stored in a gdf as NaN). Treat any missing/non-finite
+    # value as "N/A" rather than crashing: a single NaN here used to blank the
+    # whole Overview map ("not enough values to unpack") since the marker builder
+    # converts every row's dates without per-row guarding.
+    if julian_date is None or not np.isfinite(julian_date):
+        return "N/A"
+
     # Split the input string into year and julian day
     julian_date_str = "%.3f" % julian_date
     year_str, julian_str = julian_date_str.split(".")

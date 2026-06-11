@@ -32,10 +32,18 @@ def _records_from_arrays(alert, date, transform, *, min_cluster_size,
     """Sieve the alert mask, polygonize surviving clusters, return raw records."""
     # Exclude the nodata fill: the download unmasks masked pixels to `nodata`
     # (255) in both bands, and 255 > 0 would otherwise be read as alert code 255.
-    mask = ((alert > 0) & (alert != nodata)).astype(np.uint8)
+    valid = (alert > 0) & (alert != nodata)
+    mask = valid.astype(np.uint8)
     cleaned = features.sieve(mask, size=int(min_cluster_size),
                              connectivity=connectivity)
-    alert_clean = np.where(cleaned > 0, alert, 0).astype(alert.dtype)
+    # `sieve` fills sub-threshold holes (e.g. a lone nodata pixel inside a cluster)
+    # with the neighbouring class, so re-AND with `valid`: keep only pixels that
+    # the sieve retained AND that are genuine alert codes. Without this, a filled
+    # hole re-reads the original band's nodata (255) and becomes a phantom 1-px
+    # code-255 alert with no date (NaN) — which blanked the Overview map.
+    alert_clean = np.where(cleaned > 0, np.where(valid, alert, 0), 0).astype(
+        alert.dtype
+    )
 
     records = []
     px_area = abs(transform.a * transform.e)

@@ -130,6 +130,30 @@ def test_nodata_fill_is_not_read_as_an_alert(tmp_path):
     assert int(gdf.iloc[0]["alert_type_unique"][0]) == 10
 
 
+def test_embedded_nodata_hole_does_not_become_a_code255_alert(tmp_path):
+    # Live regression: a single nodata(255) pixel embedded INSIDE an alert cluster
+    # is a 1-px hole in the alert mask. With min_cluster_size>=2 the sieve fills
+    # that sub-threshold hole with its neighbor, and the old reconstruction read
+    # the ORIGINAL band there (255) -> a spurious 1-px code-255 "alert" with a
+    # nodata date (NaN). That NaN later crashed the Overview map. The cluster must
+    # vectorize as ONE real-code polygon with no phantom code-255 row.
+    alert = np.zeros((5, 5), dtype="float32")
+    alert[1:4, 1:4] = 10          # 3x3 cluster, code 10
+    alert[2, 2] = 255             # nodata pixel embedded in the cluster (a hole)
+    date = np.full((5, 5), 255, dtype="float32")
+    date[1:4, 1:4] = 2023.100
+    date[2, 2] = 255              # the hole has no valid date
+    path = _write_two_band(tmp_path, alert, date)
+
+    gdf = vectorize_alert_raster(path, min_cluster_size=2, connectivity=8)
+
+    codes = [int(c[0]) for c in gdf["alert_type_unique"]]
+    assert 255 not in codes, f"nodata fabricated a phantom alert: {codes}"
+    assert gdf["alert_date_min"].notna().all()
+    assert gdf["alert_date_max"].notna().all()
+    assert codes == [10]
+
+
 def test_blockwise_stitches_cluster_across_block_boundary(tmp_path):
     # one 4x2 cluster (code 1) spanning rows 3-6; force a block split at row 4
     alert = np.zeros((8, 4), dtype="float32")
