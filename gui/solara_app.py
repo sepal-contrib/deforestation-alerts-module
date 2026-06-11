@@ -23,7 +23,7 @@ from traitlets import HasTraits, Int
 
 from pysepal.scripts.utils import init_ee
 from pysepal.mapping import SepalMap
-from pysepal.sepalwidgets.vue_app import MapApp
+from pysepal.sepalwidgets.vue_app import MapApp, LocaleSelect
 from pysepal.solara import (
     get_current_gee_interface,
     get_current_sepal_client,
@@ -512,6 +512,9 @@ def Page():
         model=nav_model,
         right_panel_config=right_panel_config,
         right_panel_content=right_panel_content,
+        # Without a translator, MapApp's default LocaleSelect() falls back to
+        # English-only. Pass our translator so es-ES and fr are also offered.
+        language_selector=[LocaleSelect(translator=cm)],
     )
 
     # Programmatic tile navigation: translate tiles' current_page_view writes into
