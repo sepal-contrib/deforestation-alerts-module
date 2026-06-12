@@ -247,7 +247,13 @@ def save_gdf_to_csv(gdf, path, geometry_cols):
     out = pd.DataFrame(gdf).copy()
     for col in geometry_cols:
         if col in out.columns:
-            out[col] = out[col].apply(lambda g: g.wkt if g is not None else "")
+            # Treat NaN (an unset geometry column reindexed to floats) like None,
+            # so it encodes to "" rather than blowing up on ``g.wkt``.
+            out[col] = out[col].apply(
+                lambda g: g.wkt
+                if g is not None and not (isinstance(g, float) and pd.isna(g))
+                else ""
+            )
     out.to_csv(path, index=False)
     return path
 
@@ -282,7 +288,15 @@ def save_gdf_to_parquet(gdf, path):
     out = gpd.GeoDataFrame(gdf).copy()
     for col in ALERT_GEOM_COLS:
         if col in out.columns and not isinstance(out[col], gpd.GeoSeries):
-            out[col] = gpd.GeoSeries(out[col].tolist(), index=out.index, crs="EPSG:4326")
+            # An unset geometry column (e.g. `alert_polygon` before the user draws
+            # one) reindexes to NaN floats on a multi-row frame; map those to None
+            # so GeoSeries accepts them as missing geometry instead of raising on
+            # the float dtype.
+            vals = [
+                g if g is not None and not (isinstance(g, float) and pd.isna(g)) else None
+                for g in out[col].tolist()
+            ]
+            out[col] = gpd.GeoSeries(vals, index=out.index, crs="EPSG:4326")
     if "geometry" in out.columns:
         out = out.set_geometry("geometry")
     out.to_parquet(path)

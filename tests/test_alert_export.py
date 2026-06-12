@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
@@ -14,6 +15,30 @@ def _gdf():
     gdf["bounding_box"] = gdf.geometry.envelope
     gdf["point"] = gdf.geometry.centroid
     return gdf
+
+
+def _real_shape_gdf():
+    """Multi-row gdf with the unset ``alert_polygon`` shape that
+    convert_to_geopandas actually emits (empty object Series -> NaN floats)."""
+    polys = [
+        Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+        Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
+    ]
+    gdf = gpd.GeoDataFrame(
+        {"area_ha": [1.0, 2.0]}, geometry=gpd.GeoSeries(polys, crs="EPSG:4326")
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    gdf["point"] = gdf.geometry.centroid
+    gdf["alert_polygon"] = pd.Series([], dtype="object")
+    return gdf
+
+
+@pytest.mark.parametrize("fmt", ["csv", "gpkg", "geojson"])
+def test_export_handles_unset_alert_polygon_multirow(tmp_path, fmt):
+    # Regression: NaN alert_polygon must not crash any export format.
+    path = export_alerts_gdf(_real_shape_gdf(), str(tmp_path), fmt,
+                             ["GLAD-L"], "2026-01-01", "2026-06-12")
+    assert os.path.exists(path)
 
 
 def test_export_gpkg_drops_secondary_geometries(tmp_path):

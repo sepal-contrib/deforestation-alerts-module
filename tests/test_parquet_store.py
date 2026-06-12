@@ -1,3 +1,4 @@
+import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon
 from deforestation_alerts.scripts.recipe_helper import (
@@ -19,6 +20,29 @@ def _sample_gdf():
     gdf["bounding_box"] = gdf.geometry.envelope
     gdf["point"] = gdf.geometry.centroid
     return gdf
+
+
+def test_parquet_handles_empty_alert_polygon_multirow(tmp_path):
+    """Regression: convert_to_geopandas sets ``alert_polygon = pd.Series([], object)``,
+    which reindexes to NaN floats on a multi-row frame. The writer must coerce those
+    to missing geometry instead of crashing on the float dtype."""
+    polys = [
+        Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+        Polygon([(2, 2), (3, 2), (3, 3), (2, 3)]),
+    ]
+    gdf = gpd.GeoDataFrame(
+        {"area_ha": [1.0, 2.0]}, geometry=gpd.GeoSeries(polys, crs="EPSG:4326")
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    gdf["point"] = gdf.geometry.centroid
+    gdf["alert_polygon"] = pd.Series([], dtype="object")  # all-NaN on 2 rows
+    path = tmp_path / "alert_db.parquet"
+    save_gdf_to_parquet(gdf, path)
+    back = load_gdf_from_parquet(path)
+    assert len(back) == 2
+    assert back["alert_polygon"].iloc[0] is None
+    assert back["alert_polygon"].iloc[1] is None
+    assert back["point"].iloc[1].geom_type == "Point"
 
 
 def test_parquet_roundtrip_preserves_all_geometry_columns(tmp_path):
