@@ -136,11 +136,8 @@ def load_parameters_from_json(
         user_selection_polygon,
     )
     app_tile_model.import_from_dictionary(model_parameters)
-    analyzed_alerts_model.alerts_gdf = backfill_geometry(
-        load_gdf_from_csv(
-            app_tile_model.recipe_folder_path + "/alert_db.csv",
-            ["geometry", "bounding_box", "point", "alert_polygon"],
-        )
+    analyzed_alerts_model.alerts_gdf = load_alert_store(
+        app_tile_model.recipe_folder_path
     )
     analyzed_alerts_model.import_from_dictionary(model_parameters)
     app_tile_model.current_page_view = "analysis_tile"
@@ -212,11 +209,8 @@ def load_parameters_from_json_btn_state(
     btn.set_loader_text("Loading Alerts DB...")
     # btn.set_loader_percentage(90)
     app_tile_model.import_from_dictionary(model_parameters)
-    analyzed_alerts_model.alerts_gdf = backfill_geometry(
-        load_gdf_from_csv(
-            app_tile_model.recipe_folder_path + "/alert_db.csv",
-            ["geometry", "bounding_box", "point", "alert_polygon"],
-        )
+    analyzed_alerts_model.alerts_gdf = load_alert_store(
+        app_tile_model.recipe_folder_path
     )
     btn.set_loader_text("Loading last alert...")
     # btn.set_loader_percentage(100)
