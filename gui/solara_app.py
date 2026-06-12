@@ -181,7 +181,16 @@ def Page():
         ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
         # Hide the shared map while the Analysis workspace owns the step stage so
         # its leaflet layer-control menu can't bleed over the panel.
-        ".defo-map-hidden { display: none !important; }"
+        ".defo-map-hidden { display: none !important; }\n"
+        # The Analysis step-content panel above is lifted to z-index 801, which sits
+        # over MapApp's drawer collapse/expand arrow (`.sidebar-controls`, z-index 5)
+        # docked at the drawer edge — burying that control so the left nav drawer
+        # can't be collapsed while on the Analysis step. Lift the control above the
+        # step panel (still below the dialog scrim ~1005, so dialogs cover it). The
+        # `.v-application` prefix raises specificity above MapApp's own
+        # `.sidebar-controls { z-index: 5 !important }` (equal specificity would lose
+        # on source order).
+        ".v-application .sidebar-controls { z-index: 802 !important; }"
     )
 
     gee_interface = get_current_gee_interface()
