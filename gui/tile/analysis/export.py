@@ -86,6 +86,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     calculate_total_area,
     download_both_images,
 )
+from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from deforestation_alerts.scripts.report_builder import (
     add_files_to_zip,
     ensure_list,
@@ -203,18 +204,15 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
 
 
 def _save_alerts_to_gdf(alertas_gdf, app_tile_model):
-    """OLD ``save_alerts_to_gdf``: write ``alert_db.csv`` (geometry=bounding_box).
+    """Persist the alerts gdf to the canonical GeoParquet store.
 
+    Writes ``<recipe_folder>/alert_db.parquet`` (all geometry columns preserved).
     Guard: skip if ``recipe_folder_path`` is empty (smoke / no recipe yet).
     """
     recipe_folder = app_tile_model.recipe_folder_path
     if not recipe_folder:
         return
-    alertas_gdf.set_geometry("bounding_box", inplace=True)
-    alert_db_name = recipe_folder + "/alert_db.csv"
-    alertas_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_csv(
-        alert_db_name, index=False
-    )
+    save_gdf_to_parquet(alertas_gdf, os.path.join(recipe_folder, "alert_db.parquet"))
 
 
 def _download_data(widgets, app_state, aux_model, app_tile_model):
