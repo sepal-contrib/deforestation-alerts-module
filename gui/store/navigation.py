@@ -71,13 +71,19 @@ def active_map_view_for_step(step_id, panel_step_ids):
     return page_view_for_step(step_id)
 
 
-def resolve_navigation(view, step_display):
+def resolve_navigation(view, step_display, step_actions=None):
     """Decide the navigation actions for a target ``current_page_view``.
 
     Args:
         view: the ``current_page_view`` string (e.g. ``"filter_alerts"``).
         step_display: mapping of ``step_id -> display`` (``"panel"`` / ``"dialog"``
             / ``"step"``), built by the shell from its ``steps_data``.
+        step_actions: optional mapping of ``step_id -> right_panel_action``
+            (``"open"`` / ``"close"``), also built from ``steps_data``. When a step
+            supplies one it is used verbatim; otherwise the action is derived from
+            ``display``. This lets a ``"step"`` tile (Analysis) open the right panel
+            — which the display-derived rule cannot express, since ``"step"`` would
+            otherwise resolve to ``"close"``.
 
     Returns:
         A :class:`NavAction`, or ``None`` when ``view`` is not a known tile (the
@@ -87,7 +93,10 @@ def resolve_navigation(view, step_display):
     if step_id is None:
         return None
     display = step_display.get(step_id)
-    panel_action = "open" if display == "panel" else "close"
+    if step_actions is not None and step_actions.get(step_id) is not None:
+        panel_action = step_actions[step_id]
+    else:
+        panel_action = "open" if display == "panel" else "close"
     close_dialog = display != "dialog"
     return NavAction(step_id=step_id, panel_action=panel_action, close_dialog=close_dialog)
 
