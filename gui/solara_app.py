@@ -453,8 +453,9 @@ def Page():
     #              nothing bleeds through.
     #   "panel"  → right-panel card over the visible+interactive map (AOI, Filter,
     #              Overview — the map-interactive workflow tiles).
-    #   "step"   → opaque full panel. No tile uses this now; the lifted-z-index
-    #              rule in Page()'s solara.Style stays for any future step tile.
+    #   "step"   → opaque full panel. Analysis (step 7) uses this; the lifted
+    #              z-index rule in Page()'s solara.Style applies to all current
+    #              and future step tiles.
     steps_data = [
         {
             "id": 1,

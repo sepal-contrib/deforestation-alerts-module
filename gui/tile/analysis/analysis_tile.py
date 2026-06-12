@@ -14,12 +14,12 @@ It establishes:
   * and the sub-component builders (imagery / review / edit / export).
 
 WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
-``solara.display``): MapApp renders the Analysis dialog with ``v-if``, so it
-DESTROYS the dialog DOM on close and REBUILDS it on reopen. A ``@solara.component``
+``solara.display``): MapApp renders the Analysis step content with ``v-if``, so it
+DESTROYS the step DOM on close and REBUILDS it on reopen. A ``@solara.component``
 rendered via ``render_fixed`` + ``solara.display`` goes blank on reopen, but a raw
 ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
-``build_analysis_layout`` builds the tree once and RETURNS the outermost
-``v.Container``; the shell hands it to MapApp as the dialog content — same pattern
+``build_analysis_layout`` builds the tree once and RETURNS ``(stage, controls)``
+— the step content container and the right-panel controls — same pattern
 as the sibling builders (``navigator`` / ``review_panel`` / ``build_edit_tools`` /
 ``build_export`` / ``build_imagery``) and ``recipe_tile.build_recipe_layout`` /
 ``aux_tile.build_aux_layout``. The CSS the OLD component injected via
@@ -235,10 +235,11 @@ def build_analysis_layout(
 ):
     """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
 
-    Returns the outermost ``v.Container``; the shell hands it to MapApp as the
-    Analysis dialog content. Built once (no re-render) so the sub-builders'
-    handlers + subscriptions are wired exactly once and the widget tree survives
-    the dialog's ``v-if`` destroy/rebuild on reopen.
+    Returns ``(stage, controls)`` — the two-map workspace ``v.Container`` and the
+    right-panel controls ``v.Html``. The shell renders ``stage`` as the MapApp step
+    content and ``controls`` in the docked right panel (wrapper 7). Built once (no
+    re-render) so the sub-builders' handlers + subscriptions are wired exactly once
+    and the raw widget trees survive the step container's ``v-if`` rebuild.
 
     Parameters
     ----------
