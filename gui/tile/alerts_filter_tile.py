@@ -69,6 +69,7 @@ from deforestation_alerts.scripts.alert_filter_helper import (
 from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
 from deforestation_alerts.scripts.naming import alert_artifact_name
+from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
 
@@ -662,6 +663,19 @@ def AlertsFilterTile(
         app_state.alerts_gdf.value = convert_to_geopandas(
             gdf, custom_name=aux_model.custom_alert_name
         )
+
+        # Persist the freshly vectorized gdf to the canonical store NOW (not just
+        # on Save), so a reload before Save resumes without re-running EE. No-op
+        # when no recipe folder exists yet (smoke / pre-recipe runs).
+        recipe_folder = app_state.recipe_folder_path.value
+        if recipe_folder:
+            try:
+                save_gdf_to_parquet(
+                    app_state.alerts_gdf.value,
+                    str(Path(recipe_folder) / "alert_db.parquet"),
+                )
+            except Exception:
+                logger.exception("Filter: failed to persist alert_db.parquet")
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
