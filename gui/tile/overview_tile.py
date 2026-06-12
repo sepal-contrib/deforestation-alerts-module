@@ -62,6 +62,7 @@ from deforestation_alerts.scripts.overview_helper import (
     calculate_alert_classes,
     create_markers_ipyvuetify,
 )
+from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 
 # MarkerCluster layers added by this tile are named with this prefix so a
 # name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
@@ -73,6 +74,18 @@ _CLUSTER_NAME_PREFIX = "overview-cluster"
 _OVERVIEW_AOI_LAYER = "overview-aoi"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
+
+
+def _bind_export(btn, fmt, gdf, folder, sources, start, end):
+    """Return an ipyvuetify click handler that writes ``fmt`` and points ``btn``
+    at the produced file. Generates the export on demand from the in-memory gdf."""
+    def _on_click(widget, event, data):
+        try:
+            path = export_alerts_gdf(gdf, folder, fmt, sources, start, end)
+            btn.set_url(path=path)
+        except Exception:
+            logger.exception("Overview: export %s failed", fmt)
+    return _on_click
 
 # Summary-table row labels (matches old tile order)
 _ALERT_LABELS = [
@@ -170,7 +183,7 @@ def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
 
 
 @solara.component
-def OverviewTile(app_state, map_, aoi_date_model=None):
+def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=None):
     """Solara port of the old OverviewTile ipyvuetify widget.
 
     Renders the alert-status summary card (+ download button) as a right-panel
@@ -218,10 +231,12 @@ def OverviewTile(app_state, map_, aoi_date_model=None):
     # the download button appears once a recipe is loaded.
     recipe_folder = app_state.recipe_folder_path.value
     # Single shared map -> per-tile layer isolation: this tile draws its alert
-    # points only while it is the active tile, and clears them otherwise (so they
-    # don't bleed into AOI/Filter). Read reactively so the effect re-runs on
-    # navigation.
-    active = app_state.current_page_view.value == "overview_tile"
+    # points only while it is the active map tile, and clears them otherwise (so
+    # they don't bleed into AOI/Filter). Keyed on active_map_view (NOT
+    # current_page_view) so opening a popup over the map (e.g. clicking a marker's
+    # "Go" -> the Analysis dialog) leaves the points drawn underneath. Read
+    # reactively so the effect re-runs on navigation between right-panel tiles.
+    active = app_state.active_map_view.value == "overview_tile"
 
     # Callback: "Go" button in a marker popup → navigate to that alert. Thin: read
     # widget value → write reactive state. Defined before _sync_overview because
@@ -320,21 +335,31 @@ def OverviewTile(app_state, map_, aoi_date_model=None):
 
     with solara.Column(style="padding: 0;"):
         solara.display(info_card)
-        # Download-alerts-DB button (old tile's dwn_all_btn). Shown only when a
-        # recipe is loaded (recipe_folder_path set by RecipeTile) AND the saved
-        # alert_db.csv exists. Built declaratively (not memoized) so its URL
-        # reflects the current folder; sw.DownloadBtn.set_url() builds the link.
-        alert_db_path = (
-            os.path.join(recipe_folder, "alert_db.csv") if recipe_folder else ""
-        )
-        if alert_db_path and os.path.exists(alert_db_path):
-            download_btn = sw.DownloadBtn(
-                text=cm.overview_tile.alerts_db_label, small=True
-            )
-            download_btn.set_url(path=alert_db_path)
-            download_card = v.Card(
-                class_="pa-3 ma-3 d-flex justify-center",
+        # Export menu (replaces the old single-CSV download button). Shown only
+        # when a recipe is loaded AND there are alerts. Each format is generated
+        # on demand from the in-memory gdf into the recipe folder, named with
+        # source + date range. The canonical store is parquet; these are exports.
+        gdf = app_state.alerts_gdf.value
+        if recipe_folder and gdf is not None and len(gdf) > 0:
+            sources = getattr(selected_alerts_model, "selected_alert_sources", None) or []
+            start = getattr(aoi_date_model, "start_date", "") or ""
+            end = getattr(aoi_date_model, "end_date", "") or ""
+            export_buttons = []
+            for fmt in ("csv", "gpkg", "geojson"):
+                btn = sw.DownloadBtn(
+                    text=getattr(cm.overview_tile, f"export_{fmt}"), small=True
+                )
+                btn.on_event(
+                    "click",
+                    _bind_export(btn, fmt, gdf, recipe_folder, sources, start, end),
+                )
+                export_buttons.append(btn)
+            export_card = v.Card(
+                class_="pa-3 ma-3",
                 hover=True,
-                children=[download_btn],
+                children=[
+                    v.CardTitle(class_="pa-1", children=[cm.overview_tile.export_label]),
+                    v.Row(class_="d-flex justify-center", children=export_buttons),
+                ],
             )
-            solara.display(download_card)
+            solara.display(export_card)

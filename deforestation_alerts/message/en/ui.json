@@ -93,6 +93,10 @@
             "false_positives": "False Positives", 
             "revision": "Need further revision",
             "alerts_db_label": "Alerts DB",
+            "export_label": "Export alerts",
+            "export_csv": "CSV",
+            "export_gpkg": "GeoPackage",
+            "export_geojson": "GeoJSON",
             "summary_button_label": "Summary"
     },
 

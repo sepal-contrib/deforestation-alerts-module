@@ -40,7 +40,12 @@ from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAl
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
-from gui.store.navigation import apply_navigation, page_view_for_step, resolve_navigation
+from gui.store.navigation import (
+    active_map_view_for_step,
+    apply_navigation,
+    page_view_for_step,
+    resolve_navigation,
+)
 from gui.store.state_manager import AppState
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
@@ -235,7 +240,8 @@ def Page():
     overview_widget = solara.use_memo(
         lambda: _render_detached(
             lambda: OverviewTile(
-                app_state=app_state, map_=map_, aoi_date_model=aoi_date_model
+                app_state=app_state, map_=map_, aoi_date_model=aoi_date_model,
+                selected_alerts_model=selected_alerts_model,
             )
         ),
         dependencies=[],
@@ -381,6 +387,17 @@ def Page():
             if sid in panel_wrappers:
                 for step_id, wrap in panel_wrappers.items():
                     wrap.style_ = "" if step_id == sid else "display: none;"
+            # Active *map* tile: only a right-panel tile owns the shared map's
+            # layers, so only a panel activation updates active_map_view. A popup /
+            # dialog (About, Recipes, Aux, Analysis) overlays the map without owning
+            # its content -> active_map_view_for_step returns None and we leave the
+            # value as-is, so the underlying panel tile stays "active", keeps its
+            # layers drawn behind the popup, and they survive the popup's close.
+            # (Distinct from the current_page_view reverse-sync below, which mirrors
+            # every tile so the navigation signal stays faithful.)
+            map_view = active_map_view_for_step(sid, panel_wrappers)
+            if map_view is not None and app_state.active_map_view.value != map_view:
+                app_state.active_map_view.value = map_view
             # Reverse sync: keep current_page_view a faithful mirror of the active
             # step (so a manual drawer click updates it, and a *repeated* trigger
             # — e.g. searching twice — still changes the value and re-fires the
