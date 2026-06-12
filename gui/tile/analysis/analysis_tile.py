@@ -287,9 +287,14 @@ def build_analysis_layout(
             # the slide group scrolls inside its strip.
             ".analysis-col { flex: 1 1 0; min-width: 0; overflow: hidden; "
             "display: flex; flex-direction: column; } "
-            ".analysis-mapbox { flex: 1 1 auto; min-height: 0; display: flex; "
-            "flex-direction: column; } "
-            ".custom-map-class2 { flex: 1 1 auto; min-height: 260px; height: auto !important; } "
+            ".analysis-mapbox { display: flex; flex-direction: column; } "
+            # The ipyleaflet map sits inside an auto-generated ipywidgets wrapper
+            # (display:block) that breaks the flex-grow chain, so the map cannot be
+            # grown to fill the column via flex. Use a viewport-relative fixed
+            # height instead (the MapApp step container is full-viewport): tall maps
+            # that fill the stage, leaving ~300px for the title + selector strip +
+            # selected-image info line.
+            ".custom-map-class2 { height: calc(100vh - 300px) !important; min-height: 320px; } "
             ".analysis-col .v-slide-group__content { flex-wrap: nowrap; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
             "min-width: 40px; display: flex !important; align-items: center !important; }"
