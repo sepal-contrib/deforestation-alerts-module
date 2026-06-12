@@ -372,11 +372,11 @@ def Page():
     # after navigating away and back (same class of bug as the Recipe/Aux dialogs
     # on reopen). `display:none` keeps the DOM — and the widget views — alive, so
     # the controls survive. (step ids match steps_data below: AOI 4, Filter 5,
-    # Overview 6; Overview is the default-visible one.)
+    # Overview 6; AOI is the default-visible one.)
     panel_wrappers = solara.use_memo(
         lambda: {
-            6: v.Html(tag="div", children=[overview_widget]),
-            4: v.Html(tag="div", children=[aoi_widget], style_="display: none;"),
+            6: v.Html(tag="div", children=[overview_widget], style_="display: none;"),
+            4: v.Html(tag="div", children=[aoi_widget]),
             5: v.Html(tag="div", children=[filter_widget], style_="display: none;"),
             7: v.Html(
                 tag="div",
