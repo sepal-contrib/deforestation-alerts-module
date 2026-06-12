@@ -269,13 +269,27 @@ def build_analysis_layout(
         hide_details=True,
     )
 
-    # The OLD tile's small CSS (map height + tight text-field slots). Was injected
-    # via solara.Style (a hook); now the first child of the returned container as a
-    # raw <style> element, preserving the exact CSS string.
+    # Full-stage analysis workspace (Option C / variant 1). The stage fills the
+    # MapApp step container; two equal map columns sit side by side, each map
+    # flex-grows tall, with a compact internally-scrolling image-selector strip
+    # beneath it. Was injected via solara.Style; lives here as the stage's first
+    # child so the raw widget tree survives the step container's v-if rebuild.
     style_el = v.Html(
         tag="style",
         children=[
-            ".custom-map-class2 { height: 55vh !important; } "
+            ".analysis-stage { height: 100%; display: flex; flex-direction: column; } "
+            ".analysis-row { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; "
+            "width: 100%; } "
+            # min-width:0 is THE fix for the selector overflow: without it the flex
+            # column defaults to min-width:auto, so the image slide group stretches
+            # the column and resizes the maps. With it the column holds its half and
+            # the slide group scrolls inside its strip.
+            ".analysis-col { flex: 1 1 0; min-width: 0; overflow: hidden; "
+            "display: flex; flex-direction: column; } "
+            ".analysis-mapbox { flex: 1 1 auto; min-height: 0; display: flex; "
+            "flex-direction: column; } "
+            ".custom-map-class2 { flex: 1 1 auto; min-height: 260px; height: auto !important; } "
+            ".analysis-col .v-slide-group__content { flex-wrap: nowrap; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
             "min-width: 40px; display: flex !important; align-items: center !important; }"
         ],
@@ -320,32 +334,23 @@ def build_analysis_layout(
     # Layout: left two-map panel + right scrolling control panel (ports OLD
     # initialize_layout left_panel / right_panel), as a raw ipyvuetify tree.
     # ------------------------------------------------------------------
-    # LEFT: two map+selector columns side by side.
+    # LEFT/STAGE: two equal map+selector columns side by side. Each column gets
+    # min-width:0 (the overflow fix) so the slide group scrolls instead of
+    # resizing the maps.
     left_inner_row = v.Html(
         tag="div",
-        style_="display: flex; gap: 0;",
+        class_="analysis-row",
         children=[
             v.Html(
                 tag="div",
-                style_="width: 50%;",
+                class_="analysis-col",
                 children=[widgets.map31, widgets.imgSelection1],
             ),
             v.Html(
                 tag="div",
-                style_="width: 50%;",
+                class_="analysis-col",
                 children=[widgets.map32, widgets.imgSelection2],
             ),
-        ],
-    )
-    left_panel = v.Html(
-        tag="div",
-        style_="flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex;",
-        children=[
-            v.Html(
-                tag="div",
-                style_="display: flex; flex-direction: column; width: 100%;",
-                children=[left_inner_row],
-            )
         ],
     )
 
@@ -359,7 +364,9 @@ def build_analysis_layout(
         analyzed_alerts_model=analyzed_alerts_model,
     )
 
-    # RIGHT: alert-info + nav + review + edit + export control cards.
+    # RIGHT/CONTROLS: alert-info + nav + review + edit + export cards. Rendered in
+    # MapApp's docked right panel (a panel wrapper in the shell), NOT inside the
+    # stage — same chrome as AOI/Filter/Overview.
     alert_info_card = v.Card(
         class_="pa-2 ma-2",
         hover=True,
@@ -371,9 +378,9 @@ def build_analysis_layout(
             widgets.selected_alert_info,
         ],
     )
-    right_panel = v.Html(
+    controls = v.Html(
         tag="div",
-        style_="flex: 0 0 18rem; overflow: auto; padding: 0;",
+        class_="pa-0 ma-0",
         children=[
             alert_info_card,
             build_navigator(app_state=app_state, id_field=id_field),
@@ -399,15 +406,11 @@ def build_analysis_layout(
         ],
     )
 
-    main_row = v.Row(
-        class_="ma-0",
-        style_="height: 100%; gap: 0;",
-        children=[left_panel, right_panel],
+    # STAGE: the two-map workspace, handed to MapApp as the step content.
+    stage = v.Container(
+        fluid=True,
+        class_="pa-0 ma-0 analysis-stage",
+        children=[style_el, left_inner_row],
     )
 
-    return v.Container(
-        fluid=True,
-        class_="pa-0 ma-0",
-        style_="height:100%;",
-        children=[style_el, main_row],
-    )
+    return stage, controls

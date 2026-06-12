@@ -108,7 +108,7 @@ def _render_detached(make_element):
 
 
 @solara.component
-def _NavBridge(app_state, nav_model, mapapp_ref, step_display):
+def _NavBridge(app_state, nav_model, mapapp_ref, step_display, step_actions):
     """Programmatic tile navigation (restores the Voila ``current_page_view`` jump).
 
     Tiles signal navigation by writing ``app_state.current_page_view`` (AOI search
@@ -132,7 +132,7 @@ def _NavBridge(app_state, nav_model, mapapp_ref, step_display):
     view = app_state.current_page_view.value
 
     def _drive():
-        action = resolve_navigation(view, step_display)
+        action = resolve_navigation(view, step_display, step_actions)
         if action is None:
             return
         # Loop-safety: already on the target step (e.g. the step -> view reverse
@@ -178,7 +178,10 @@ def Page():
     solara.Style(
         ".step-content-container { z-index: 801 !important; }\n"
         ".dialog-card .v-application--wrap,\n"
-        ".right-panel .v-application--wrap { min-height: 0 !important; }"
+        ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
+        # Hide the shared map while the Analysis workspace owns the step stage so
+        # its leaflet layer-control menu can't bleed over the panel.
+        ".defo-map-hidden { display: none !important; }"
     )
 
     gee_interface = get_current_gee_interface()
@@ -313,15 +316,11 @@ def Page():
         dependencies=[],
     )
 
-    # Analysis tile: build the RAW ipyvuetify layout once and hand it straight to
-    # MapApp (same as Aux/Recipe). NOT via render_fixed + solara.display: a
-    # solara.display-captured widget's view is not recreated when MapApp's
-    # v-dialog destroys + rebuilds the dialog DOM on close/reopen, so the maps +
-    # cards vanished on the 2nd open (blank dialog). A raw widget tree is re-viewed
-    # from its model on reopen like any ipywidget, so it survives. The per-alert
-    # orchestration (view_actual_alert) is driven by app_state.actual_alert_id
-    # subscriptions registered inside build_analysis_layout, not a use_effect.
-    analysis_widget = solara.use_memo(
+    # Analysis tile: build the raw stage + controls once. The stage (two-map
+    # workspace) renders in MapApp's step content; the controls render in the
+    # docked right panel (panel wrapper 7). Raw widgets survive the step
+    # container's v-if rebuild, same as the other raw-built tiles.
+    analysis_stage_widget, analysis_controls_widget = solara.use_memo(
         lambda: build_analysis_layout(
             aux_model=aux_model,
             selected_alerts_model=selected_alerts_model,
@@ -369,6 +368,11 @@ def Page():
             6: v.Html(tag="div", children=[overview_widget]),
             4: v.Html(tag="div", children=[aoi_widget], style_="display: none;"),
             5: v.Html(tag="div", children=[filter_widget], style_="display: none;"),
+            7: v.Html(
+                tag="div",
+                children=[analysis_controls_widget],
+                style_="display: none;",
+            ),
         },
         dependencies=[],
     )
@@ -376,7 +380,12 @@ def Page():
         lambda: v.Container(
             fluid=True,
             class_="pa-0 ma-0",
-            children=[panel_wrappers[6], panel_wrappers[4], panel_wrappers[5]],
+            children=[
+                panel_wrappers[6],
+                panel_wrappers[4],
+                panel_wrappers[5],
+                panel_wrappers[7],
+            ],
         ),
         dependencies=[],
     )
@@ -387,15 +396,19 @@ def Page():
             if sid in panel_wrappers:
                 for step_id, wrap in panel_wrappers.items():
                     wrap.style_ = "" if step_id == sid else "display: none;"
-            # Active *map* tile: only a right-panel tile owns the shared map's
-            # layers, so only a panel activation updates active_map_view. A popup /
-            # dialog (About, Recipes, Aux, Analysis) overlays the map without owning
-            # its content -> active_map_view_for_step returns None and we leave the
-            # value as-is, so the underlying panel tile stays "active", keeps its
-            # layers drawn behind the popup, and they survive the popup's close.
-            # (Distinct from the current_page_view reverse-sync below, which mirrors
-            # every tile so the navigation signal stays faithful.)
-            map_view = active_map_view_for_step(sid, panel_wrappers)
+            # Hide the shared map while the Analysis workspace (step 7) owns the
+            # stage, so its leaflet layer-control menu can't bleed over the step
+            # panel (the bug that originally forced Analysis to be a dialog). The
+            # shared map + other tiles' layers stay mounted and return on leave.
+            if sid == 7:
+                map_.add_class("defo-map-hidden")
+            else:
+                map_.remove_class("defo-map-hidden")
+            # Right-panel tiles that OWN layers on the shared map (AOI/Filter/
+            # Overview). Analysis (7) renders its controls in the panel too but owns
+            # its OWN maps, so it is excluded — activating it must NOT change the
+            # active map view (else it would clear the underlying tile's layers).
+            map_view = active_map_view_for_step(sid, (4, 5, 6))
             if map_view is not None and app_state.active_map_view.value != map_view:
                 app_state.active_map_view.value = map_view
             # Reverse sync: keep current_page_view a faithful mirror of the active
@@ -506,17 +519,14 @@ def Page():
             "id": 7,
             "name": cm.app.drawer_item.analysis,
             "icon": "mdi-image-search",
-            # Wide modal dialog (popup) over the dimmed main map -- NOT an opaque
-            # "step" full page. width/height are percentage strings consumed by
-            # MapApp.vue's dialogWidthComputed/dialogHeightComputed (capped to the
-            # viewport minus the drawer), so the before/after dual-map layout gets
-            # near-fullscreen room while the dialog scrim hides the shared main
-            # map + its layer-control menu (was bleeding through at top-left).
-            "display": "dialog",
-            "width": "95%",
-            "height": "90%",
-            "content": analysis_widget,
-            "right_panel_action": "close",
+            # Full-stage workspace (Option C): the two-map stage renders in the
+            # step content container (pinned between the drawer and the docked
+            # right panel); the controls render in the right panel (wrapper 7).
+            # The shared map is hidden while active (see _on_step) so its layer
+            # menu can't bleed over the stage.
+            "display": "step",
+            "content": analysis_stage_widget,
+            "right_panel_action": "open",
         },
     ]
 
@@ -540,6 +550,10 @@ def Page():
     # MapApp step changes (+ right-panel / dialog handling). step_display is derived
     # from steps_data so there is a single source of truth for tile display types.
     step_display = {s["id"]: s["display"] for s in steps_data}
+    # Per-step right-panel action, the single source of truth resolve_navigation
+    # uses so the Analysis "step" tile opens the panel (a display-derived rule
+    # would resolve "step" to "close").
+    step_actions = {s["id"]: s.get("right_panel_action") for s in steps_data}
 
     # Resolve the rendered MapApp widget ONCE here, in Page's own context — where
     # ``app_element`` is valid (``solara.get_widget`` must be called from the
@@ -561,4 +575,5 @@ def Page():
         nav_model=nav_model,
         mapapp_ref=mapapp_ref,
         step_display=step_display,
+        step_actions=step_actions,
     )
