@@ -61,7 +61,7 @@ def build_aux_layout(aux_model):
         types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.ccdc_alerts_hint
     )
     card1 = v.Card(
-        class_="pa-3 ma-5", hover=True, children=[title1, ccdc_alerts_input]
+        class_="pa-2 ma-0", outlined=True, hover=True, children=[title1, ccdc_alerts_input]
     )
 
     # Card 1b — Custom alert source (RADD-shaped), placed right after CCDC. A named
@@ -77,7 +77,7 @@ def build_aux_layout(aux_model):
         types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.custom_alerts_hint
     )
     card_custom = v.Card(
-        class_="pa-3 ma-5",
+        class_="pa-2 ma-0", outlined=True,
         hover=True,
         children=[title_custom, custom_name_input, custom_alerts_input],
     )
@@ -87,7 +87,7 @@ def build_aux_layout(aux_model):
     fnf_input = sw.inputs.AssetSelect(
         types=["IMAGE"], label=cm.aux_tile.mask_asset_hint
     )
-    card2 = v.Card(class_="pa-3 ma-5", hover=True, children=[title2, fnf_input])
+    card2 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title2, fnf_input])
 
     # Card 3 — Auxiliary asset + viz params
     title3 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.aux_asset_title])
@@ -96,7 +96,7 @@ def build_aux_layout(aux_model):
     )
     aux_viz = sw.TextField(label=cm.aux_tile.aux_viz, v_model=None)
     card3 = v.Card(
-        class_="pa-3 ma-5", hover=True, children=[title3, aux_input, aux_viz]
+        class_="pa-2 ma-0", outlined=True, hover=True, children=[title3, aux_input, aux_viz]
     )
 
     # Card 4 — Report template upload
@@ -104,7 +104,7 @@ def build_aux_layout(aux_model):
         class_="pa-1 ma-1", children=[cm.aux_tile.report_template_title]
     )
     form_input = sw.inputs.FileInput(extensions=[".docx"])
-    card4 = v.Card(class_="pa-3 ma-5", hover=True, children=[title4, form_input])
+    card4 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title4, form_input])
 
     # Card 5 — Planet login. PlanetView itself is unchanged; note the OLD tile
     # built card5 but never added it to its layout (only cards 1-4 shipped), so
@@ -114,15 +114,21 @@ def build_aux_layout(aux_model):
         class_="pa-1 ma-1", children=[cm.aux_tile.planet_login_title]
     )
     planet_view = PlanetView()
-    card5 = v.Card(class_="pa-3 ma-5", hover=True, children=[title5, planet_view])
+    card5 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title5, planet_view])
 
-    # Two-column layout: aux settings left, Planet right. The step panel's own
+    # Responsive grid: all cards flow left-to-right and wrap into rows so the
+    # popup stays compact and needs no inner scroll. 3 across on wide viewports,
+    # 2 on medium, 1 on narrow; align="start" keeps cards top-aligned so a taller
+    # card (the 2-input ones) doesn't stretch its row-mates. The step panel's own
     # opaque background covers the fullscreen main map (see the z-index rule in
     # solara_app.py), so no extra backdrop is needed here.
+    cards = [card1, card_custom, card2, card3, card4, card5]
     layout = sw.Row(
+        class_="ma-0",
+        align="start",
         children=[
-            sw.Col(children=[card1, card_custom, card2, card3, card4]),
-            sw.Col(children=[card5]),
+            sw.Col(cols=12, sm=6, md=4, class_="pa-1", children=[c])
+            for c in cards
         ],
     )
 
