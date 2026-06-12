@@ -113,7 +113,11 @@ def _build_image_selector():
         ],
     )
     link((tabs, "v_model"), (tab_items, "v_model"))
-    return v.Card(class_="pa-1 ma-1", flat=True, children=[tabs, tab_items])
+    # ``analysis-selector`` marks the selector strip so the stage stylesheet can
+    # draw a theme-aware outline around it (see ``style_el`` in analysis_tile.py).
+    return v.Card(
+        class_="pa-1 ma-1 analysis-selector", flat=True, children=[tabs, tab_items]
+    )
 
 
 class AnalysisWidgets:
@@ -126,18 +130,23 @@ class AnalysisWidgets:
     ----------
     gee_interface : GEEInterface
         Session GEE interface forwarded to both SepalMaps.
+    theme_state : ThemeState, optional
+        Shared app theme state forwarded to both SepalMaps so the analysis maps
+        track the light/dark app theme exactly as the shared main map does.
     """
 
-    def __init__(self, gee_interface=None):
+    def __init__(self, gee_interface=None, theme_state=None):
         # ------------------------------------------------------------------
         # Two maps, data-linked (center + zoom), each with the SATELLITE
-        # basemap. Ports OLD ``initialize_layout`` map_31 / map_32.
+        # basemap. Ports OLD ``initialize_layout`` map_31 / map_32. Both bind
+        # the shared ``theme_state`` (like the main map) so they follow the
+        # app's light/dark theme instead of defaulting to the standalone theme.
         # ------------------------------------------------------------------
-        self.map_before = SepalMap(gee_interface=gee_interface)
+        self.map_before = SepalMap(gee_interface=gee_interface, theme_state=theme_state)
         self.map_before.add_class("custom-map-class2")
         self.map_before.add_basemap("SATELLITE")
 
-        self.map_after = SepalMap(gee_interface=gee_interface)
+        self.map_after = SepalMap(gee_interface=gee_interface, theme_state=theme_state)
         self.map_after.add_class("custom-map-class2")
         self.map_after.add_basemap("SATELLITE")
 

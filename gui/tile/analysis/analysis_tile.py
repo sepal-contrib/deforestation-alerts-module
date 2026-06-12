@@ -232,6 +232,7 @@ def build_analysis_layout(
     app_tile_model,
     app_state,
     gee_interface,
+    theme_state=None,
 ):
     """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
 
@@ -257,9 +258,12 @@ def build_analysis_layout(
         Source of truth for the alerts table + navigation.
     gee_interface : GEEInterface
         Session GEE interface, forwarded to both maps.
+    theme_state : ThemeState, optional
+        Shared app theme state, forwarded to both maps so they track the app's
+        light/dark theme exactly as the shared main map does.
     """
     # Build the shared heavy widgets once.
-    widgets = AnalysisWidgets(gee_interface=gee_interface)
+    widgets = AnalysisWidgets(gee_interface=gee_interface, theme_state=theme_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
     # .v_model). Owned here, passed to build_navigator + the subscription.
@@ -279,6 +283,21 @@ def build_analysis_layout(
         tag="style",
         children=[
             ".analysis-stage { height: 100%; display: flex; flex-direction: column; } "
+            # Stage background follows the app light/dark theme. The default is the
+            # light surface; the ``analysis-stage--dark`` marker class (toggled from
+            # ``theme_state.dark`` below — the SAME trait the maps bind to) swaps it
+            # to the dark surface so the workspace matches the rest of the app.
+            ".analysis-stage { background-color: #ffffff; transition: background-color 0.2s; } "
+            ".analysis-stage.analysis-stage--dark { background-color: #121212; } "
+            # Outline drawing the limits of each image-selector strip. The border
+            # colour tracks the theme (subtle dark line on light, subtle light line
+            # on dark) via the same ``--dark`` marker on the stage. The maps are NOT
+            # bordered: a light line framing the near-black map panels reads as a
+            # harsh white border, so the maps draw their own limit via the basemap.
+            ".analysis-stage .analysis-selector { border: 1px solid rgba(0, 0, 0, 0.18); "
+            "border-radius: 4px; } "
+            ".analysis-stage.analysis-stage--dark .analysis-selector { "
+            "border-color: rgba(255, 255, 255, 0.18); } "
             ".analysis-row { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; "
             "width: 100%; } "
             # min-width:0 is THE fix for the selector overflow: without it the flex
@@ -418,5 +437,21 @@ def build_analysis_layout(
         class_="pa-0 ma-0 analysis-stage",
         children=[style_el, left_inner_row],
     )
+
+    # Drive the stage background + outline colours off the app theme by toggling
+    # the ``analysis-stage--dark`` marker class. We observe the SAME
+    # ``theme_state.dark`` trait the two maps bind to, so the workspace chrome and
+    # the maps flip together. Built once with the rest of the raw widget tree, so
+    # the observer is wired exactly once.
+    def _sync_stage_theme(dark):
+        stage.class_ = "pa-0 ma-0 analysis-stage" + (
+            " analysis-stage--dark" if dark else ""
+        )
+
+    if theme_state is not None:
+        theme_state.observe(
+            lambda change: _sync_stage_theme(bool(change["new"])), "dark"
+        )
+    _sync_stage_theme(bool(getattr(theme_state, "dark", False)))
 
     return stage, controls

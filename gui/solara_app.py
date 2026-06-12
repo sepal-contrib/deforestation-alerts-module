@@ -337,6 +337,7 @@ def Page():
             app_tile_model=app_tile_model,
             app_state=app_state,
             gee_interface=gee_interface,
+            theme_state=theme_state,
         ),
         dependencies=[],
     )
