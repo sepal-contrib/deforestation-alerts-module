@@ -272,8 +272,8 @@ def build_analysis_layout(
 
     # Full-stage analysis workspace (Option C / variant 1). The stage fills the
     # MapApp step container; two equal map columns sit side by side, each map
-    # flex-grows tall, with a compact internally-scrolling image-selector strip
-    # beneath it. Was injected via solara.Style; lives here as the stage's first
+    # fills the stage height (viewport-relative), with a compact internally-scrolling
+    # image-selector strip beneath it. Was injected via solara.Style; lives here as the stage's first
     # child so the raw widget tree survives the step container's v-if rebuild.
     style_el = v.Html(
         tag="style",

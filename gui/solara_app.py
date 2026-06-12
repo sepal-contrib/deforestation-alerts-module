@@ -446,11 +446,10 @@ def Page():
     # the list order; ids are sequential so they read top-to-bottom.
     #
     # display types under the single-map model:
-    #   "dialog" → modal popup over the (dimmed) main map. Config/IO forms (About,
-    #              Recipes, Optional files) AND Analysis — the wide before/after
-    #              dual-map review popup (width/height "95%"/"90%"). The dialog
-    #              scrim hides the shared main map + its layer-control menu, so
-    #              nothing bleeds through.
+    #   "dialog" → modal popup over the (dimmed) main map. Config/IO forms only
+    #              (About, Recipes, Optional files). The dialog scrim hides the
+    #              shared main map + its layer-control menu, so nothing bleeds
+    #              through.
     #   "panel"  → right-panel card over the visible+interactive map (AOI, Filter,
     #              Overview — the map-interactive workflow tiles).
     #   "step"   → opaque full panel. Analysis (step 7) uses this; the lifted

@@ -171,8 +171,9 @@ class AnalysisWidgets:
 
         # OLD map *containers* (title + map + info). The slide-group builder
         # indexes children[1] (map) / children[2] (info), so keep this shape. The
-        # ``analysis-mapbox`` class (styled in analysis_tile.py) makes the map
-        # flex-grow to fill its column in the full-stage workspace.
+        # ``analysis-mapbox`` class (styled in analysis_tile.py) marks the map
+        # container for the full-stage workspace layout (the map height is set by
+        # the ``.custom-map-class2`` rule in analysis_tile.py).
         self.map31 = v.Container(
             class_="pa-1 ma-1 analysis-mapbox",
             children=[map1_title, self.map_before, imgInfo1],
