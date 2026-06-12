@@ -6,7 +6,7 @@ OLD ``AnalysisTile`` export card (``card06`` +
 
 * The **Save** button (``save_btn``) ran the OLD ``save_attributes_to_gdf`` —
   writing the user's confirmation / loss-driver / image-info / GEE-admin attributes
-  + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.csv``.
+  + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
 * The **Download alert data** button (``download_alert_data_btn``, disabled until a
   save happens) ran the OLD ``download_data`` — building the single-alert gpkg, the
   before/after-image GeoTIFF, the zip, and the Word report.
@@ -67,7 +67,7 @@ aux_model : AuxModel
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` (drawn polygon) / ``last_save_time`` (save stamp).
 app_tile_model : AppTileModel
-    ``recipe_folder_path`` for the output paths + ``alert_db.csv``.
+    ``recipe_folder_path`` for the output paths + ``alert_db.parquet``.
 """
 
 import logging
@@ -106,7 +106,7 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
 
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
     (faithful to OLD), does the blocking GEE admin lookup, persists
-    ``alert_db.csv``, and stamps ``last_save_time``. Returns ``True`` on success.
+    ``alert_db.parquet``, and stamps ``last_save_time``. Returns ``True`` on success.
     Guards on the gdf being present + the id in range (smoke-safe). Raises the OLD
     "confirmation==No but a polygon is drawn" guard, surfaced by the save effect.
     """
