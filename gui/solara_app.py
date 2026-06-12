@@ -190,7 +190,27 @@ def Page():
         # `.v-application` prefix raises specificity above MapApp's own
         # `.sidebar-controls { z-index: 5 !important }` (equal specificity would lose
         # on source order).
-        ".v-application .sidebar-controls { z-index: 802 !important; }"
+        ".v-application .sidebar-controls { z-index: 802 !important; }\n"
+        # Center modal dialogs over the MAP area (viewport minus the left nav
+        # drawer), not the whole viewport — otherwise a wide dialog (About is
+        # 1300px) centers across the drawer and its left edge sits under the
+        # drawer's collapse/expand handle (`.sidebar-controls`) docked at the
+        # drawer edge. The card is centered by `.v-dialog__content` — a FIXED,
+        # full-viewport flex box (`justify-content: center`); the `dialog-container`
+        # class from `content-class` lands on the inner `.v-dialog` (position:
+        # static), so size/offset must go on the `.v-dialog__content` parent, not
+        # `.dialog-container` (overriding the latter's width would force the card
+        # wider, the opposite of what we want). Shrink that fixed flex box by the
+        # live drawer width (`--sepal-drawer-width`, pushed onto :root by MapApp)
+        # and push its left edge in, so the card centers over the map only. Scoped
+        # with `:has` to MapApp's dialogs (the ones using `dialog-container`).
+        ".v-dialog__content:has(> .dialog-container) {\n"
+        "  left: var(--sepal-drawer-width, 0px) !important;\n"
+        "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
+        "}\n"
+        # Justify the About prose inside its dialog (scoped via AboutTile's
+        # `.about-content` wrapper so the form dialogs are untouched).
+        ".about-content { text-align: justify; }"
     )
 
     gee_interface = get_current_gee_interface()

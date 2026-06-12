@@ -15,4 +15,8 @@ _ABOUT_DIR = Path(__file__).resolve().parents[2] / "docs" / "about"
 @solara.component
 def AboutTile():
     about_path = _ABOUT_DIR / cm.about.pathname
-    solara.Markdown(about_path.read_text())
+    # Wrap in a classed div so the dialog can justify the prose (see the
+    # ``.about-content`` rule in solara_app.Page's Style) without affecting the
+    # other (form) dialogs.
+    with solara.Div(classes=["about-content"]):
+        solara.Markdown(about_path.read_text())
