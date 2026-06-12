@@ -266,6 +266,53 @@ def backfill_geometry(gdf):
     return gdf
 
 
+# Geometry columns the alerts gdf may carry. Used to coerce secondary geometry
+# columns to GeoSeries before a GeoParquet write and to decode the CSV fallback.
+ALERT_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
+
+
+def save_gdf_to_parquet(gdf, path):
+    """Write the alerts gdf to GeoParquet, preserving every geometry column.
+
+    GeoParquet supports multiple geometry columns; coerce the known secondary
+    geometry columns (`bounding_box`, `point`, `alert_polygon`) to GeoSeries so
+    they are written as geometry (not opaque objects). The active geometry stays
+    `geometry`.
+    """
+    out = gpd.GeoDataFrame(gdf).copy()
+    for col in ALERT_GEOM_COLS:
+        if col in out.columns and not isinstance(out[col], gpd.GeoSeries):
+            out[col] = gpd.GeoSeries(out[col].tolist(), index=out.index, crs="EPSG:4326")
+    if "geometry" in out.columns:
+        out = out.set_geometry("geometry")
+    out.to_parquet(path)
+    return str(path)
+
+
+def load_gdf_from_parquet(path):
+    """Read a GeoParquet alerts store; ensure `geometry` is the active geometry."""
+    gdf = gpd.read_parquet(path)
+    if "geometry" in gdf.columns:
+        gdf = gdf.set_geometry("geometry")
+    return gdf
+
+
+def load_alert_store(recipe_folder):
+    """Load the alerts gdf for a recipe folder: parquet preferred, CSV fallback.
+
+    Returns the gdf, or None when neither store exists. Old recipes that only
+    have `alert_db.csv` decode their WKT geometry columns and backfill the
+    polygon `geometry` (D10 back-compat), exactly as the old load path did.
+    """
+    parquet = os.path.join(recipe_folder, "alert_db.parquet")
+    if os.path.exists(parquet):
+        return load_gdf_from_parquet(parquet)
+    csv = os.path.join(recipe_folder, "alert_db.csv")
+    if os.path.exists(csv):
+        return backfill_geometry(load_gdf_from_csv(csv, ALERT_GEOM_COLS))
+    return None
+
+
 def update_saved_dictionary(json_file_path, key, new_value):
     """
     Updates the value of the 'actual_id' key in a JSON file and rewrites the file.
