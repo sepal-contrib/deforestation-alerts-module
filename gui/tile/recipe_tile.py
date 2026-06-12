@@ -19,9 +19,11 @@ errors on an inline ``sw.Alert`` (the original ipyvuetify tile did the same).
 The three handlers are re-architected around the shared **models + services**
 (unchanged from the Solara port):
 
-* **New recipe** writes ``app_tile_model.recipe_name`` and (if alerts are loaded)
-  resets every domain model + clears ``app_state.alerts_gdf``; tiles re-render
-  from their models, so clearing the models is the whole job.
+* **New recipe** (if alerts are loaded) resets every domain model + clears
+  ``app_state.alerts_gdf`` (tiles re-render from their models), then calls
+  ``start_new_recipe``: it sets ``recipe_name``, CREATES the recipe folder on
+  disk, and sets ``recipe_folder_path`` (model + ``app_state``) so the recipe is
+  persisted from the start — the Save card appears and export can write into it.
 * **Load recipe** reads the recipe JSON, imports it into the models via their
   ``import_from_dictionary`` services, sets ``recipe_folder_path``, and (if the
   saved ``alert_db.csv`` exists) loads the alert gdf into ``app_state.alerts_gdf``
@@ -45,18 +47,34 @@ from pysepal import sepalwidgets as sw
 from deforestation_alerts.message import cm
 from deforestation_alerts.parameter import directory
 from deforestation_alerts.scripts.recipe_helper import (
-    backfill_geometry,
+    create_directory,
     generate_recipe_string,
-    load_gdf_from_csv,
+    load_alert_store,
     save_model_parameters_to_json,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.recipe")
 
-# Geometry columns the OLD load decoded from alert_db.csv (Phase-3 `geometry`
-# added; load_gdf_from_csv tolerates absent columns, backfill_geometry fills
-# `geometry` from `bounding_box` for old recipes).
-_ALERT_DB_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
+
+def start_new_recipe(app_tile_model, app_state, recipe_name):
+    """Create a brand-new recipe: make its folder on disk, point the models at
+    it, and signal navigation to the Aux tile.
+
+    Creates ``<module_dir>/<recipe_name>/`` (plus the shared ``temp/``) via
+    ``create_directory`` and writes the resulting absolute path to BOTH
+    ``app_tile_model.recipe_folder_path`` (serialized into the recipe) and
+    ``app_state.recipe_folder_path`` (drives Save-card visibility + the
+    Overview/export ``alert_db.csv`` location). Mirrors what the load handler
+    does for an EXISTING recipe, so a freshly created recipe is persisted on
+    disk from the start instead of living only in memory.
+    """
+    app_tile_model.recipe_name = recipe_name
+    folder = create_directory(recipe_name)
+    app_tile_model.recipe_folder_path = folder
+    app_state.recipe_folder_path.value = folder
+    # Jump to the Aux (Optional files) tile; the shell's _NavBridge translates
+    # this current_page_view write into the MapApp step change.
+    app_state.current_page_view.value = "aux_tile"
 
 
 def build_recipe_layout(
@@ -176,9 +194,9 @@ def build_recipe_layout(
         ],
     )
 
-    # Show the Save card only once a recipe folder exists (set by load today;
-    # by the analysis/export folder-creation flow later). Subscribed once — the
-    # layout is memoized for the session, so the leaked cancel handle is fine.
+    # Show the Save card only once a recipe folder exists (set by new-recipe
+    # create and by load). Subscribed once — the layout is memoized for the
+    # session, so the leaked cancel handle is fine.
     def _sync_save_visibility(folder):
         save_card.style_ = "" if folder else "display:none;"
 
@@ -187,8 +205,8 @@ def build_recipe_layout(
 
     # ------------------------------------------------------------------
     # New-recipe handler. Thin: if alerts are already loaded, reset every model
-    # + clear the shared gdf (tiles re-render from model state); then set the
-    # recipe name and signal navigation to the Aux step.
+    # + clear the shared gdf (tiles re-render from model state); then start the
+    # new recipe (create its folder, set the name, navigate to the Aux step).
     # ------------------------------------------------------------------
     def _on_create_click(*_):
         if app_state.alerts_gdf.value is not None:
@@ -200,10 +218,7 @@ def build_recipe_layout(
             app_tile_model.reset_model()
             app_state.alerts_gdf.value = None
 
-        app_tile_model.recipe_name = new_recipe_input.v_model
-        # Jump to the Aux (Optional files) tile; the shell's _NavBridge translates
-        # this current_page_view write into the MapApp step change.
-        app_state.current_page_view.value = "aux_tile"
+        start_new_recipe(app_tile_model, app_state, new_recipe_input.v_model)
 
     create_btn.on_event("click", _on_create_click)
 
@@ -234,12 +249,11 @@ def build_recipe_layout(
         # here). Kept on app_state so the view layer needn't read the domain model.
         app_state.recipe_folder_path.value = folder
 
-        # If the saved alert DB exists, load it so Overview renders the alerts.
-        alert_db = os.path.join(folder, "alert_db.csv")
-        if os.path.exists(alert_db):
-            app_state.alerts_gdf.value = backfill_geometry(
-                load_gdf_from_csv(alert_db, _ALERT_DB_GEOM_COLS)
-            )
+        # Load the canonical alert store (parquet preferred, legacy CSV fallback)
+        # so Overview renders the alerts. None when the recipe has no store yet.
+        loaded = load_alert_store(folder)
+        if loaded is not None:
+            app_state.alerts_gdf.value = loaded
 
         # TODO(Task 9 – analysis tile): the OLD load also re-ran the EE pipeline
         # here (alert re-discovery, filtered alert raster, planet before/after
