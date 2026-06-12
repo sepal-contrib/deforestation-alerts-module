@@ -170,12 +170,16 @@ class AnalysisWidgets:
         imgInfo2 = v.Card(children=[selected_img_after_info])
 
         # OLD map *containers* (title + map + info). The slide-group builder
-        # indexes children[1] (map) / children[2] (info), so keep this shape.
+        # indexes children[1] (map) / children[2] (info), so keep this shape. The
+        # ``analysis-mapbox`` class (styled in analysis_tile.py) makes the map
+        # flex-grow to fill its column in the full-stage workspace.
         self.map31 = v.Container(
-            class_="pa-1 ma-1", children=[map1_title, self.map_before, imgInfo1]
+            class_="pa-1 ma-1 analysis-mapbox",
+            children=[map1_title, self.map_before, imgInfo1],
         )
         self.map32 = v.Container(
-            class_="pa-1 ma-1", children=[map2_title, self.map_after, imgInfo2]
+            class_="pa-1 ma-1 analysis-mapbox",
+            children=[map2_title, self.map_after, imgInfo2],
         )
 
         # ------------------------------------------------------------------
