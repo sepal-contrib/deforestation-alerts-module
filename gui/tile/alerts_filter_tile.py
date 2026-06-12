@@ -50,6 +50,7 @@ the analysis tile (Task 9):
 
 import logging
 import math
+from pathlib import Path
 
 import ee
 import ipyvuetify as v
@@ -67,6 +68,7 @@ from deforestation_alerts.scripts.alert_filter_helper import (
 )
 from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
+from deforestation_alerts.scripts.naming import alert_artifact_name
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
 
@@ -325,22 +327,40 @@ def _link_checkbox_map(map_widget, alert_source_select):
                 layer.visible = False
 
 
-def _run_local_vectorize(image, region, scale, min_size_pixels, on_status=None):
+def _filtered_alerts_path(recipe_folder, alert_sources, start_date, end_date):
+    """On-disk path for the downloaded filtered-alert raster.
+
+    Saves into the current recipe folder when one exists, else ``module_dir``
+    (smoke / no-recipe runs). Filename encodes source(s) + date range via the
+    shared ``naming`` helper, e.g.
+    ``filtered_alerts_glad-l-radd_2026-01-01_2026-06-12.tif``.
+    """
+    base = Path(recipe_folder) if recipe_folder else module_dir
+    name = alert_artifact_name(
+        "filtered_alerts", alert_sources, start_date, end_date, "tif"
+    )
+    return str(base / name)
+
+
+def _run_local_vectorize(
+    image, region, scale, min_size_pixels, out_tif, on_status=None
+):
     """Export the filtered alert raster to a local GeoTIFF, then vectorize it.
 
     Body of the OLD ``run_local_vectorize._work`` (minus the threading — the
     caller is already on the use_task worker thread) and minus the model writes,
     which the task does. Returns the raw vectorize GeoDataFrame.
 
-    ``on_status`` (optional) is called with a short user-facing label before each
-    of the two slow stages (download, vectorize) so the tile can surface progress.
+    ``out_tif`` is the destination GeoTIFF path (see ``_filtered_alerts_path`` —
+    the recipe folder, named with source + date range). ``on_status`` (optional)
+    is called with a short user-facing label before each of the two slow stages
+    (download, vectorize) so the tile can surface progress.
     """
     # geedim exports over an ee.Geometry; the AOI / drawn poly is a
     # FeatureCollection, so pass its geometry.
     export_region = (
         region.geometry() if isinstance(region, ee.FeatureCollection) else region
     )
-    out_tif = str(module_dir / "filtered_alerts.tif")
     # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
     if on_status:
         on_status(cm.filter_tile.analyze_status_downloading)
@@ -438,11 +458,13 @@ def AlertsFilterTile(
     # Single shared map -> per-tile isolation. Initial show/hide is established by
     # _build_form_widgets (only the "no alerts" card visible). Draw this tile's
     # layers (AOI + alert rasters) on the shared map ONLY while it is the active
-    # tile, and clear them when navigating away, so they don't bleed into AOI /
-    # Overview. Keyed on the reactive current_page_view so it re-runs on every nav:
+    # map tile, and clear them when navigating to another right-panel tile, so they
+    # don't bleed into AOI / Overview. Keyed on active_map_view (NOT
+    # current_page_view) so the "analyze" -> Analysis dialog flow leaves these
+    # layers drawn behind the popup; it re-runs on every nav between panel tiles:
     # on mount it clears (a no-op), and in the AOI-search flow (search populates
     # the model, then navigates here) it draws on the main thread.
-    active = app_state.current_page_view.value == "filter_alerts"
+    active = app_state.active_map_view.value == "filter_alerts"
 
     def _sync_active():
         if active:
@@ -470,10 +492,13 @@ def AlertsFilterTile(
     def _register_observer():
         def handler(change):
             # Single-map isolation: only touch the shared map while this tile is
-            # active. Otherwise (e.g. AOI's search populates the raster list while
-            # the user is still on AOI) skip — the activation effect above redraws
-            # from the model when the tile becomes active, on the main thread.
-            if app_state.current_page_view.value != "filter_alerts":
+            # the active map tile. Otherwise (e.g. AOI's search populates the raster
+            # list while the user is still on AOI) skip — the activation effect
+            # above redraws from the model when the tile becomes active, on the main
+            # thread. Keyed on active_map_view (NOT current_page_view) so a model
+            # update arriving while a popup overlays this tile still refreshes the
+            # layers underneath rather than being dropped as "inactive".
+            if app_state.active_map_view.value != "filter_alerts":
                 return
             _refresh_layout(
                 map_widget,
@@ -603,12 +628,22 @@ def AlertsFilterTile(
         )
 
         # 5. Download + vectorize locally (replaces the OLD GEE reduceToVectors).
+        # The downloaded filtered-alert raster lands in the current recipe folder,
+        # named with the selected source(s) + AOI date range (self-describing on
+        # disk); falls back to module_dir when no recipe exists yet.
         # on_status surfaces the "downloading" / "vectorizing" stages.
+        out_tif = _filtered_alerts_path(
+            app_state.recipe_folder_path.value,
+            alert_source,
+            aoi_date_model.start_date,
+            aoi_date_model.end_date,
+        )
         gdf = _run_local_vectorize(
             image=filtered_alert_raster,
             region=poly,
             scale=pixel_size,
             min_size_pixels=min_size_pixels,
+            out_tif=out_tif,
             on_status=analyze_status.set,
         )
         analyze_status.value = cm.filter_tile.analyze_status_found.format(n=len(gdf))
