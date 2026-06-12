@@ -78,10 +78,11 @@ class RecipeBtn(sw.Btn):
             path: the absolute path to a downloadable content
         """
         """Create a zip file from specified files in a directory."""
-        # List of files to include in the zip file
-        files = ["alert_db.csv", "recipe_parameters.json"]
-
+        # Prefer the canonical parquet store; include legacy alert_db.csv only if
+        # that's all the recipe has. recipe_parameters.json is always required.
         directory = module_dir / self.msg
+        store = "alert_db.parquet" if (directory / "alert_db.parquet").exists() else "alert_db.csv"
+        files = [store, "recipe_parameters.json"]
         # Ensure the directory exists and contains the required files
         if not all((directory / file).exists() for file in files):
             print(
