@@ -206,12 +206,14 @@ def AoiTile(
 
     # ------------------------------------------------------------------
     # Single shared map -> per-tile isolation. Show the AOI outline only while
-    # this tile is active; clear it when navigating away so it doesn't persist
-    # over Filter / Overview. Keyed on the reactive current_page_view so it
-    # re-runs on navigation; returning re-adds the layer from the model. Selection
-    # while already active is handled by AoiView itself (active doesn't change).
+    # this tile is the active map tile; clear it when navigating to another
+    # right-panel tile so it doesn't persist over Filter / Overview. Keyed on
+    # active_map_view (NOT current_page_view) so opening a popup over the map
+    # leaves the outline in place; returning re-adds the layer from the model.
+    # Selection while already active is handled by AoiView itself (active doesn't
+    # change).
     # ------------------------------------------------------------------
-    active = app_state.current_page_view.value == "aoi_tile"
+    active = app_state.active_map_view.value == "aoi_tile"
 
     def _sync_active():
         if active:

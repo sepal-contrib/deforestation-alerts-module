@@ -45,6 +45,32 @@ def page_view_for_step(step_id):
     return STEP_TO_PAGE_VIEW.get(step_id)
 
 
+def active_map_view_for_step(step_id, panel_step_ids):
+    """Return the view name that should become the active *map* tile, or ``None``.
+
+    The "active map tile" is the right-panel tile that owns the layers drawn on the
+    single shared map (AOI / Filter / Overview). It is deliberately distinct from
+    ``current_page_view`` (the navigation signal, which mirrors *every* tile): only
+    a right-panel tile activation may change it. A popup/dialog tile (About,
+    Recipes, Aux, Analysis) merely overlays the map without owning its content, so
+    activating one returns ``None`` here — the caller leaves the active map view
+    unchanged and the underlying panel tile's layers persist behind the popup and
+    survive its close.
+
+    Args:
+        step_id: the newly activated ``MapApp`` step id.
+        panel_step_ids: the right-panel tiles' step ids (``solara_app``'s
+            ``panel_wrappers`` keys: AOI 4, Filter 5, Overview 6).
+
+    Returns:
+        The panel tile's ``current_page_view`` name when ``step_id`` is a panel
+        tile, else ``None`` (meaning "leave the active map view unchanged").
+    """
+    if step_id not in panel_step_ids:
+        return None
+    return page_view_for_step(step_id)
+
+
 def resolve_navigation(view, step_display):
     """Decide the navigation actions for a target ``current_page_view``.
 

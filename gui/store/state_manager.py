@@ -11,6 +11,15 @@ class AppState:
     def __init__(self):
         # navigation
         self.current_page_view = solara.reactive("about_tile")
+        # The active *map* tile: the right-panel tile (AOI / Filter / Overview)
+        # that owns the layers drawn on the single shared map. Distinct from
+        # current_page_view (which mirrors every tile, popups included): this only
+        # changes on a right-panel tile activation, so opening a popup over the map
+        # leaves the underlying tile's content in place. The map-bearing tiles key
+        # their draw/clear effect off this. Empty until a panel tile is activated
+        # (the initial step is the About dialog). See gui/store/navigation.py:
+        # active_map_view_for_step and the _on_step handler in solara_app.py.
+        self.active_map_view = solara.reactive("")
         # alert review
         self.actual_alert_id = solara.reactive(-1)
         self.alerts_gdf = solara.reactive(None)  # ref to the domain gdf

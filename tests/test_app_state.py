@@ -9,6 +9,10 @@ def test_defaults():
     assert s.actual_alert_id.value == -1
     assert s.alerts_gdf.value is None
     assert s.loading.value is False
+    # The active *map* tile is distinct from current_page_view: it tracks only the
+    # right-panel tile that owns the shared map's layers, ignoring popups. No panel
+    # tile is active at startup (the initial step is the About dialog).
+    assert s.active_map_view.value == ""
 
 
 def test_reactives_are_independent_per_instance():
