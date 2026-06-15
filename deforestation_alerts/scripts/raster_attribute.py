@@ -145,3 +145,20 @@ def attribute_alerts(gdf, raster_path, band_stats):
     for col, _, _ in resolved:
         out[col] = columns[col]
     return out
+
+
+def build_attribute_config(source, kind, band_rows, reserved=ALERT_RESERVED_COLUMNS):
+    """Assemble the ``attribute_raster`` config from Aux-tile rows.
+
+    `band_rows`: list of ``{"include": bool, "band": str, "stat": str,
+    "column": str}``. Keeps only included rows, sanitizes the output column
+    (defaulting to the band name) and de-duplicates it vs `reserved` + earlier
+    included rows. Returns ``{"source", "kind", "bands": [...]}``.
+    """
+    included = [
+        {"band": r["band"], "stat": r["stat"],
+         "column": safe_column(r.get("column") or r["band"])}
+        for r in band_rows if r.get("include")
+    ]
+    included = resolve_column_names(included, reserved=reserved)
+    return {"source": source, "kind": kind, "bands": included}

@@ -133,3 +133,24 @@ def test_raster_without_crs_raises(tmp_path):
     gdf = _gdf([box(0, 8, 2, 10)])
     with pytest.raises(ValueError):
         ra.attribute_alerts(gdf, path, [{"band": "forest", "stat": "min", "column": "x"}])
+
+
+def test_build_attribute_config_includes_only_checked_and_dedups():
+    rows = [
+        {"include": True, "band": "forest", "stat": "majority", "column": ""},
+        {"include": False, "band": "skip", "stat": "mean", "column": "skip"},
+        {"include": True, "band": "count", "stat": "min", "column": "Count"},  # -> safe + dedup
+    ]
+    cfg = ra.build_attribute_config("/data/x.tif", "local", rows)
+    assert cfg["source"] == "/data/x.tif"
+    assert cfg["kind"] == "local"
+    assert cfg["bands"] == [
+        {"band": "forest", "stat": "majority", "column": "forest"},
+        {"band": "count", "stat": "min", "column": "count_2"},  # collides with reserved 'count'
+    ]
+
+
+def test_build_attribute_config_empty_when_nothing_included():
+    rows = [{"include": False, "band": "a", "stat": "mean", "column": "a"}]
+    cfg = ra.build_attribute_config("/x.tif", "local", rows)
+    assert cfg["bands"] == []
