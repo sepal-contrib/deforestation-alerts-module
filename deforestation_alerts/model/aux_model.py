@@ -30,6 +30,9 @@ class AuxModel(model.Model):
     aux_layer_vis = Any(None).tag(sync=True)
     "auxiliary layer visualization parameters"
 
+    attribute_raster = Any(None).tag(sync=True)
+    "optional raster (GEE asset or local path) + per-band stats to attribute alerts"
+
     custom_report_template = Any(None).tag(sync=True)
     "User custom template for reports"
 
@@ -45,6 +48,7 @@ class AuxModel(model.Model):
             "mask_layer": self.mask_layer,
             "aux_layer": self.aux_layer,
             "aux_layer_vis": self.aux_layer_vis,
+            "attribute_raster": self.attribute_raster,
             "custom_report_template": self.custom_report_template,
         }
         return dictionary
@@ -70,6 +74,9 @@ class AuxModel(model.Model):
             self.mask_layer = data.get("mask_layer", self.mask_layer)
             self.aux_layer = data.get("aux_layer", self.aux_layer)
             self.aux_layer_vis = data.get("aux_layer_vis", self.aux_layer_vis)
+            self.attribute_raster = data.get(
+                "attribute_raster", self.attribute_raster
+            )
             self.custom_report_template = data.get(
                 "custom_report_template", self.custom_report_template
             )

@@ -33,11 +33,15 @@ def test_aux_model_roundtrip():
     m.aux_layer_vis = {"palette": ["#000000"]}
     m.custom_alert_layer = "projects/x/custom"
     m.custom_alert_name = "MyAlerts"
+    m.attribute_raster = {
+        "source": "projects/x/forest", "kind": "gee",
+        "bands": [{"band": "forest", "stat": "majority", "column": "forest"}],
+    }
     exported = m.export_dictionary()
     assert set(exported) == {
         "ccdc_layer", "custom_alert_layer", "custom_alert_name",
         "mask_layer", "aux_layer", "aux_layer_vis",
-        "custom_report_template",
+        "custom_report_template", "attribute_raster",
     }
 
     loaded = AuxModel()
@@ -46,6 +50,10 @@ def test_aux_model_roundtrip():
     assert loaded.aux_layer_vis == {"palette": ["#000000"]}
     assert loaded.custom_alert_layer == "projects/x/custom"
     assert loaded.custom_alert_name == "MyAlerts"
+    assert loaded.attribute_raster == {
+        "source": "projects/x/forest", "kind": "gee",
+        "bands": [{"band": "forest", "stat": "majority", "column": "forest"}],
+    }
 
 
 def test_selected_alerts_model_export_keys_and_numeric_codes():
