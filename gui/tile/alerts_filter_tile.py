@@ -68,6 +68,7 @@ from deforestation_alerts.scripts.alert_filter_helper import (
 )
 from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
+from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
 from deforestation_alerts.scripts.naming import alert_artifact_name
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 
@@ -646,6 +647,16 @@ def AlertsFilterTile(
             min_size_pixels=min_size_pixels,
             out_tif=out_tif,
             on_status=analyze_status.set,
+        )
+        # 5b. Optional: attribute each alert with per-band stats from an extra
+        # raster (GEE asset or local file). No-op when unconfigured. Fails loud
+        # (the use_task surfaces the error) if configured but the raster/band is
+        # bad — so we never publish alerts that are silently missing the columns.
+        gdf = attribute_alerts_from_config(
+            gdf,
+            aux_model.attribute_raster,
+            poly,
+            app_state.recipe_folder_path.value,
         )
         analyze_status.value = cm.filter_tile.analyze_status_found.format(n=len(gdf))
 
