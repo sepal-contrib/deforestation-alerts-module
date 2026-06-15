@@ -16,6 +16,8 @@ from pysepal import sepalwidgets as sw
 from pysepal.planetapi import PlanetView
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.raster_attribute import band_names, build_attribute_config
+from deforestation_alerts.scripts.attribute_source import gee_band_names
 
 
 @solara.component
@@ -41,6 +43,87 @@ def AuxTile(aux_model):
     )
 
     solara.display(layout_widget)
+
+
+_STATS = ["majority", "mean", "min", "max", "median"]
+
+
+def _build_attribute_card(aux_model):
+    """Card: pick a GEE asset OR local raster, 'Load bands', then per-band
+    include/stat/column rows. Writes the assembled config to
+    aux_model.attribute_raster on any change."""
+    title = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.attribute_title])
+    asset_input = sw.inputs.AssetSelect(types=["IMAGE"], label=cm.aux_tile.attribute_asset_hint)
+    file_input = sw.inputs.FileInput(extensions=[".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint)
+    load_btn = v.Btn(class_="ma-1", small=True, children=[cm.aux_tile.attribute_load_bands])
+    rows_box = v.Container(class_="pa-0 ma-0", children=[])
+    status = v.Html(tag="div", class_="pa-1 ma-1 caption", children=[])
+
+    # Mutable holder of the live per-band row widgets (for config assembly).
+    state = {"rows": [], "source": None, "kind": None}
+
+    stat_items = [
+        {"text": getattr(cm.aux_tile, f"attribute_stat_{s}"), "value": s} for s in _STATS
+    ]
+
+    def _collect(*_):
+        band_rows = [
+            {"include": inc.v_model, "band": name, "stat": stat.v_model, "column": col.v_model}
+            for (name, inc, stat, col) in state["rows"]
+        ]
+        if state["source"]:
+            aux_model.attribute_raster = build_attribute_config(
+                state["source"], state["kind"], band_rows
+            )
+
+    def _make_row(name):
+        inc = v.Checkbox(v_model=True, class_="ma-0 pa-0", label=cm.aux_tile.attribute_include_label)
+        stat = v.Select(items=stat_items, v_model="majority", dense=True,
+                        label=cm.aux_tile.attribute_stat_label, style_="max-width: 130px")
+        col = v.TextField(v_model=name, dense=True, label=cm.aux_tile.attribute_column_label,
+                          style_="max-width: 160px")
+        for w in (inc, stat, col):
+            w.on_event("change", _collect)
+        row = v.Row(class_="ma-0 pa-0", align="center",
+                    children=[v.Col(cols=2, children=[inc]),
+                              v.Col(cols=5, children=[stat]),
+                              v.Col(cols=5, children=[col])])
+        return name, inc, stat, col, row
+
+    def _on_load(*_):
+        # Prefer the GEE asset; else the uploaded local file.
+        if asset_input.v_model:
+            source, kind = asset_input.v_model, "gee"
+            try:
+                names = gee_band_names(source)
+            except Exception as exc:  # surface, don't crash the dialog
+                state.update(source=None, rows=[])
+                rows_box.children = []
+                status.children = [f"{exc}"]
+                return
+        elif file_input.v_model:
+            source, kind = file_input.v_model, "local"
+            try:
+                names = band_names(source)
+            except Exception as exc:
+                state.update(source=None, rows=[])
+                rows_box.children = []
+                status.children = [f"{exc}"]
+                return
+        else:
+            status.children = [cm.aux_tile.attribute_no_source]
+            return
+
+        state.update(source=source, kind=kind, rows=[])
+        built = [_make_row(n) for n in names]
+        state["rows"] = [(n, inc, stat, col) for (n, inc, stat, col, _row) in built]
+        rows_box.children = [r[4] for r in built]
+        status.children = []
+        _collect()
+
+    load_btn.on_event("click", _on_load)
+    return v.Card(class_="pa-2 ma-0", outlined=True, hover=True,
+                  children=[title, asset_input, file_input, load_btn, status, rows_box])
 
 
 def build_aux_layout(aux_model):
@@ -99,6 +182,9 @@ def build_aux_layout(aux_model):
         class_="pa-2 ma-0", outlined=True, hover=True, children=[title3, aux_input, aux_viz]
     )
 
+    # Card 3b — Attribute alerts from a (multiband) raster.
+    card_attr = _build_attribute_card(aux_model)
+
     # Card 4 — Report template upload
     title4 = v.CardTitle(
         class_="pa-1 ma-1", children=[cm.aux_tile.report_template_title]
@@ -122,7 +208,7 @@ def build_aux_layout(aux_model):
     # card (the 2-input ones) doesn't stretch its row-mates. The step panel's own
     # opaque background covers the fullscreen main map (see the z-index rule in
     # solara_app.py), so no extra backdrop is needed here.
-    cards = [card1, card_custom, card2, card3, card4, card5]
+    cards = [card1, card_custom, card2, card3, card_attr, card4, card5]
     layout = sw.Row(
         class_="ma-0",
         align="start",
