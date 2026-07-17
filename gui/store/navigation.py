@@ -6,26 +6,25 @@ dialog actions. Kept side-effect-free (no solara, no EE, no widgets) so it is
 unit-testable offline; ``gui.solara_app._NavBridge`` applies the result to the
 rendered ``MapApp`` widget.
 
-Layout note: the seven drawer tiles map 1:1 to step ids in drawer order. Only
-1/3/5/7 are exercised by the current navigation triggers; the rest are mapped for
+Layout note: the drawer tiles map 1:1 to step ids in drawer order. Only a few
+are exercised by the current navigation triggers; the rest are mapped for
 completeness and to back the step -> view reverse sync (so a manual drawer click
 keeps ``current_page_view`` faithful, which in turn lets a *repeated* trigger
 re-fire). See docs/superpowers/specs/2026-06-10-programmatic-tile-navigation-design.md.
+
+The view->step mapping derives from the ``gui.store.workflow_steps.STEPS``
+registry — the single source of truth for step identity. Never hand-edit ids
+here.
 """
 
 from collections import namedtuple
 
-# current_page_view name -> drawer step id (drawer order). "filter_alerts" (not
-# "filter_tile") is intentional: it is the exact string the AOI tile sets.
-PAGE_VIEW_TO_STEP = {
-    "about_tile": 1,
-    "recipe_tile": 2,
-    "aux_tile": 3,
-    "aoi_tile": 4,
-    "filter_alerts": 5,
-    "overview_tile": 6,
-    "analysis_tile": 7,
-}
+from gui.store.workflow_steps import STEPS
+
+# current_page_view name -> drawer step id (drawer order), derived from the
+# STEPS registry. "filter_alerts" (not "filter_tile") is intentional: it is
+# the exact string the AOI tile sets.
+PAGE_VIEW_TO_STEP = {s.page_view: s.step_id for s in STEPS}
 
 STEP_TO_PAGE_VIEW = {step: view for view, step in PAGE_VIEW_TO_STEP.items()}
 

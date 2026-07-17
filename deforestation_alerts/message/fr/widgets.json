@@ -1,0 +1,53 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "load": "Charger",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "remove": "Retirer",
+    "replace": "Remplacer",
+    "delete": "Supprimer",
+    "close": "Fermer",
+    "actions": "Actions",
+    "advanced": "Avancé",
+    "new": "Nouveau",
+    "_test_fmt": "bonjour {name}",
+    "_test_one": "{n} élément",
+    "_test_other": "{n} éléments"
+  },
+  "dialog": {
+    "confirm_default_title": "Supprimer ?",
+    "confirm_default_message": "Cette action est irréversible.",
+    "confirm_default_label": "Supprimer"
+  },
+  "widgets": {
+    "log_console": {
+      "header": "Journal des processus",
+      "empty": "Aucune activité pour le moment."
+    },
+    "product_table": {
+      "status_running": "en cours",
+      "status_ready": "prêt",
+      "status_completed": "terminé",
+      "status_failed": "échoué",
+      "status_cancelled": "annulé"
+    },
+    "artifact_name": {
+      "label": "Nom",
+      "required": "Obligatoire.",
+      "saved_as": "Sera enregistré sous '{key}'.",
+      "exists_warning": "'{key}' existe déjà — sa création le remplacera."
+    },
+    "creation_dialog": {
+      "replace_title": "Remplacer l'existant ?",
+      "replace_message": "'{key}' existe déjà et sera remplacé. Continuer ?"
+    }
+  },
+  "workflow": {
+    "lock_filter": "Sélectionnez d'abord une zone d'intérêt et des dates.",
+    "lock_overview": "Chargez ou analysez d'abord des alertes.",
+    "lock_analysis": "Chargez ou analysez d'abord des alertes.",
+    "count_alerts_one": "{n} alerte",
+    "count_alerts_other": "{n} alertes"
+  }
+}

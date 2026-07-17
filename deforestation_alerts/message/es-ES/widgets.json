@@ -1,0 +1,53 @@
+{
+  "common": {
+    "save": "Guardar",
+    "load": "Cargar",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "remove": "Quitar",
+    "replace": "Reemplazar",
+    "delete": "Eliminar",
+    "close": "Cerrar",
+    "actions": "Acciones",
+    "advanced": "Avanzado",
+    "new": "Nuevo",
+    "_test_fmt": "hola {name}",
+    "_test_one": "{n} elemento",
+    "_test_other": "{n} elementos"
+  },
+  "dialog": {
+    "confirm_default_title": "¿Eliminar?",
+    "confirm_default_message": "Esta acción no se puede deshacer.",
+    "confirm_default_label": "Eliminar"
+  },
+  "widgets": {
+    "log_console": {
+      "header": "Registro de procesos",
+      "empty": "Sin actividad todavía."
+    },
+    "product_table": {
+      "status_running": "en ejecución",
+      "status_ready": "listo",
+      "status_completed": "completado",
+      "status_failed": "fallido",
+      "status_cancelled": "cancelado"
+    },
+    "artifact_name": {
+      "label": "Nombre",
+      "required": "Obligatorio.",
+      "saved_as": "Se guardará como '{key}'.",
+      "exists_warning": "'{key}' ya existe — crearlo lo reemplazará."
+    },
+    "creation_dialog": {
+      "replace_title": "¿Reemplazar el existente?",
+      "replace_message": "'{key}' ya existe y será reemplazado. ¿Continuar?"
+    }
+  },
+  "workflow": {
+    "lock_filter": "Seleccione primero un área de interés y las fechas.",
+    "lock_overview": "Cargue o analice alertas primero.",
+    "lock_analysis": "Cargue o analice alertas primero.",
+    "count_alerts_one": "{n} alerta",
+    "count_alerts_other": "{n} alertas"
+  }
+}

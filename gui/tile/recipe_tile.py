@@ -39,7 +39,6 @@ The three handlers are re-architected around the shared **models + services**
 
 import logging
 import os
-import threading
 
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
@@ -52,6 +51,8 @@ from deforestation_alerts.scripts.recipe_helper import (
     load_alert_store,
     save_model_parameters_to_json,
 )
+from gui.scripts.solara_threads import spawn_in_context
+from gui.store.project_writers import writing
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.recipe")
 
@@ -279,7 +280,10 @@ def build_recipe_layout(
                 load_btn.loading = False
                 load_btn.disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        # spawn_in_context (not a bare Thread): the worker sets solara
+        # reactives (alerts_gdf, current_page_view), which only reach the
+        # browser from a kernel-context-bearing thread.
+        spawn_in_context(_worker)
 
     load_btn.on_event("click", _on_load_click)
 
@@ -312,7 +316,11 @@ def build_recipe_layout(
 
         def _worker():
             try:
-                _run_save()
+                # Writer tracking: while the recipe files are being written the
+                # recipe is registered in project_writers, so any future
+                # delete/close path can refuse to act mid-write.
+                with writing(app_state.recipe_name.value or "recipe"):
+                    _run_save()
                 save_alert.add_msg(cm.recipe_tile.alert_save_recipe_done, "success")
             except Exception as e:  # noqa: BLE001 — surfaced on the alert
                 logger.exception("Recipe save failed")
@@ -323,7 +331,7 @@ def build_recipe_layout(
                 save_btn.loading = False
                 save_btn.disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        spawn_in_context(_worker)
 
     save_btn.on_event("click", _on_save_click)
 

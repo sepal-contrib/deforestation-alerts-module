@@ -38,3 +38,4 @@ dependencies:
       - pysepal==3.6.1
       - solara==1.57.4
       - pygaul<=4
+      - -e .

@@ -25,7 +25,7 @@ to MapApp as dialog content — same pattern as ``navigator`` / ``review_panel``
 
 Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recipe_tile``):
 
-* **Save + Download each run button-triggered on a daemon ``threading.Thread``** (both
+* **Save + Download each run button-triggered via ``spawn_in_context``** (both
   do blocking GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the
   click handler resets the alert, toggles that button's ``.loading``/``.disabled``,
   and starts the worker; the worker runs the blocking work in ``try/except/finally``.
@@ -72,7 +72,6 @@ app_tile_model : AppTileModel
 
 import logging
 import os
-import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -93,6 +92,8 @@ from deforestation_alerts.scripts.report_builder import (
     format_list,
     generate_deforestation_report_with_word_template,
 )
+from gui.scripts.solara_threads import spawn_in_context
+from gui.store.project_writers import writing
 from gui.tile.analysis.paths import alert_image_name
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -380,9 +381,12 @@ def build_export(
 
         def _worker():
             try:
-                saved = _save_attributes(
-                    widgets, app_state, analyzed_alerts_model, app_tile_model
-                )
+                # Writer tracking: register the recipe while its alert store is
+                # written so future delete/close paths can refuse to act mid-write.
+                with writing(app_state.recipe_name.value or "recipe"):
+                    saved = _save_attributes(
+                        widgets, app_state, analyzed_alerts_model, app_tile_model
+                    )
                 if saved:
                     _apply_save()
             except Exception as e:  # noqa: BLE001 — surfaced on the alert
@@ -392,7 +396,7 @@ def build_export(
                 ns["save_btn"].loading = False
                 ns["save_btn"].disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        spawn_in_context(_worker)
 
     # ------------------------------------------------------------------
     # Download handler: button-triggered daemon thread (heavy report generation /
@@ -406,9 +410,12 @@ def build_export(
 
         def _worker():
             try:
-                result = _download_data(
-                    widgets, app_state, aux_model, app_tile_model
-                )
+                # Writer tracking: the report/zip generation writes into the
+                # recipe folder — register it for the duration.
+                with writing(app_state.recipe_name.value or "recipe"):
+                    result = _download_data(
+                        widgets, app_state, aux_model, app_tile_model
+                    )
                 if result is not None:
                     _apply_download(result)
             except Exception as e:  # noqa: BLE001 — surfaced on the alert
@@ -418,7 +425,7 @@ def build_export(
                 ns["download_alert_data_btn"].loading = False
                 ns["download_alert_data_btn"].disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        spawn_in_context(_worker)
 
     # ------------------------------------------------------------------
     # Wire click handlers once (the widgets are built once per build). The buttons

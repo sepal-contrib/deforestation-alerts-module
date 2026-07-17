@@ -31,7 +31,7 @@ Ported OLD handlers:
 
 Threading (FIXED by the task contract):
 
-* Each CNN model runs button-triggered on a daemon ``threading.Thread`` (CPU/IO-bound;
+* Each CNN model runs button-triggered via ``spawn_in_context`` (CPU/IO-bound;
   never auto-run) — same pattern as ``recipe_tile``'s load/save workers. The worker
   builds the image name, downloads both images, pulls the HF model (idempotent /
   cached), runs ``apply_dl_model`` -> the prediction ``.tif`` path, and then (still on
@@ -68,7 +68,6 @@ app_tile_model : AppTileModel
 """
 
 import logging
-import threading
 
 import ipyvuetify as v
 import solara
@@ -86,6 +85,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     simplify_and_extract_features,
     verify_raster,
 )
+from gui.scripts.solara_threads import spawn_in_context
 from gui.tile.analysis.paths import alert_image_name
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -480,7 +480,7 @@ def build_edit_tools(
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        spawn_in_context(_worker)
 
     def _on_dl2_run(*_):
         ns["alert"].reset()
@@ -503,7 +503,7 @@ def build_edit_tools(
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False
 
-        threading.Thread(target=_worker, daemon=True).start()
+        spawn_in_context(_worker)
 
     # ------------------------------------------------------------------
     # Wire all click handlers once (the widgets are built once per build).

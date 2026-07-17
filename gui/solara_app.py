@@ -46,7 +46,10 @@ from gui.store.navigation import (
     page_view_for_step,
     resolve_navigation,
 )
+from gui.i18n import t
+from gui.scripts.log_bridge import install_log_console_handler
 from gui.store.state_manager import AppState
+from gui.store.workflow_steps import STEPS
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
 from gui.tile.alerts_filter_tile import AlertsFilterTile
@@ -54,10 +57,16 @@ from gui.tile.analysis import build_analysis_layout
 from gui.tile.aux_tile import build_aux_layout
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.recipe_tile import build_recipe_layout
+from gui.widget.log_console import LogConsole
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+# Bridge the app logger tree into the on-map LogConsole (idempotent; survives
+# Solara hot-reload). Worker-thread emits reach the browser once the console
+# binds its kernel context on mount.
+install_log_console_handler()
 
 
 class _NavModel(HasTraits):
@@ -383,7 +392,7 @@ def Page():
     # but a non-empty content list is what makes MapApp set current_step on click.
     panel_sentinel = solara.use_memo(lambda: v.Html(tag="div"), dependencies=[])
 
-    # Each right-panel tile's controls wrapped in a div we SHOW/HIDE. ALL three
+    # Each right-panel tile's controls wrapped in a div we SHOW/HIDE. ALL
     # wrappers stay mounted in panel_host at all times; on step change we toggle
     # their visibility instead of swapping panel_host.children.
     # WHY (not a children swap): swapping detaches the previous widget, and a
@@ -391,18 +400,24 @@ def Page():
     # NOT recreated when the widget is reattached — so AOI/Filter cards vanished
     # after navigating away and back (same class of bug as the Recipe/Aux dialogs
     # on reopen). `display:none` keeps the DOM — and the widget views — alive, so
-    # the controls survive. (step ids match steps_data below: AOI 4, Filter 5,
-    # Overview 6; AOI is the default-visible one.)
+    # the controls survive. Which steps have panel controls — and their ids —
+    # derives from the STEPS registry; AOI is the default-visible one (the
+    # initial step is the About dialog, which leaves the panel closed).
+    panel_controls = {
+        "aoi": aoi_widget,
+        "filter": filter_widget,
+        "overview": overview_widget,
+        "analysis": analysis_controls_widget,
+    }
     panel_wrappers = solara.use_memo(
         lambda: {
-            6: v.Html(tag="div", children=[overview_widget], style_="display: none;"),
-            4: v.Html(tag="div", children=[aoi_widget]),
-            5: v.Html(tag="div", children=[filter_widget], style_="display: none;"),
-            7: v.Html(
+            s.step_id: v.Html(
                 tag="div",
-                children=[analysis_controls_widget],
-                style_="display: none;",
-            ),
+                children=[panel_controls[s.key]],
+                style_="" if s.key == "aoi" else "display: none;",
+            )
+            for s in STEPS
+            if s.key in panel_controls
         },
         dependencies=[],
     )
@@ -411,14 +426,19 @@ def Page():
             fluid=True,
             class_="pa-0 ma-0",
             children=[
-                panel_wrappers[6],
-                panel_wrappers[4],
-                panel_wrappers[5],
-                panel_wrappers[7],
+                panel_wrappers[s.step_id]
+                for s in STEPS
+                if s.step_id in panel_wrappers
             ],
         ),
         dependencies=[],
     )
+
+    # Derived from the STEPS registry (single source of truth): the right-panel
+    # steps that OWN layers on the shared map, and the full-stage steps that
+    # hide the shared map while active.
+    map_owner_step_ids = tuple(s.step_id for s in STEPS if s.owns_map)
+    map_hidden_step_ids = {s.step_id for s in STEPS if s.hides_shared_map}
 
     def _wire_panel_swap():
         def _on_step(change):
@@ -426,19 +446,21 @@ def Page():
             if sid in panel_wrappers:
                 for step_id, wrap in panel_wrappers.items():
                     wrap.style_ = "" if step_id == sid else "display: none;"
-            # Hide the shared map while the Analysis workspace (step 7) owns the
-            # stage, so its leaflet layer-control menu can't bleed over the step
-            # panel (the bug that originally forced Analysis to be a dialog). The
-            # shared map + other tiles' layers stay mounted and return on leave.
-            if sid == 7:
+            # Hide the shared map while a full-stage workspace (Analysis) owns
+            # the stage, so its leaflet layer-control menu can't bleed over the
+            # step panel (the bug that originally forced Analysis to be a
+            # dialog). The shared map + other tiles' layers stay mounted and
+            # return on leave. Which steps hide the map derives from STEPS.
+            if sid in map_hidden_step_ids:
                 map_.add_class("defo-map-hidden")
             else:
                 map_.remove_class("defo-map-hidden")
-            # Right-panel tiles that OWN layers on the shared map (AOI/Filter/
-            # Overview). Analysis (7) renders its controls in the panel too but owns
-            # its OWN maps, so it is excluded — activating it must NOT change the
-            # active map view (else it would clear the underlying tile's layers).
-            map_view = active_map_view_for_step(sid, (4, 5, 6))
+            # Right-panel tiles that OWN layers on the shared map (owns_map in
+            # STEPS: AOI/Filter/Overview). Analysis renders its controls in the
+            # panel too but owns its OWN maps, so it is excluded — activating it
+            # must NOT change the active map view (else it would clear the
+            # underlying tile's layers).
+            map_view = active_map_view_for_step(sid, map_owner_step_ids)
             if map_view is not None and app_state.active_map_view.value != map_view:
                 app_state.active_map_view.value = map_view
             # Reverse sync: keep current_page_view a faithful mirror of the active
@@ -471,93 +493,33 @@ def Page():
         }
     ]
 
-    # Drawer order matches the ORIGINAL Voila app (ui.ipynb): About, Recipes,
-    # Optional files (Aux), AOI/Date, Filter, Overview, Analysis. Drawer order is
-    # the list order; ids are sequential so they read top-to-bottom.
-    #
-    # display types under the single-map model:
-    #   "dialog" → modal popup over the (dimmed) main map. Config/IO forms only
-    #              (About, Recipes, Optional files). The dialog scrim hides the
-    #              shared main map + its layer-control menu, so nothing bleeds
-    #              through.
-    #   "panel"  → right-panel card over the visible+interactive map (AOI, Filter,
-    #              Overview — the map-interactive workflow tiles).
-    #   "step"   → opaque full panel. Analysis (step 7) uses this; the lifted
-    #              z-index rule in Page()'s solara.Style applies to all current
-    #              and future step tiles.
+    # MapApp drawer entries derive from the STEPS registry (gui/store/
+    # workflow_steps.py) — the single source of truth for step order, ids,
+    # labels, icons, display types and right-panel actions. Only each step's
+    # CONTENT widget is supplied here: dialogs get their rendered tile, panel
+    # steps get the throwaway sentinel (their controls live in panel_host),
+    # and the Analysis full-stage step gets the two-map stage widget (its
+    # controls render in the right panel like the panel steps).
+    step_content = {
+        "about": about_widget,
+        "recipes": recipe_widget,
+        "aux": aux_widget,
+        "aoi": panel_sentinel,
+        "filter": panel_sentinel,
+        "overview": panel_sentinel,
+        "analysis": analysis_stage_widget,
+    }
     steps_data = [
         {
-            "id": 1,
-            "name": cm.app.drawer_item.about,
-            "icon": "mdi-help-circle",
-            "display": "dialog",
-            "content": about_widget,
-            "width": 1300,
-            "right_panel_action": "close",
-        },
-        {
-            "id": 2,
-            "name": cm.app.drawer_item.recipes,
-            "icon": "mdi-folder-open",
-            "display": "dialog",
-            "content": recipe_widget,
-            "width": 900,
-            "right_panel_action": "close",
-        },
-        {
-            "id": 3,
-            "name": cm.app.drawer_item.aux,
-            "icon": "mdi-layers-plus",
-            "display": "dialog",
-            "content": aux_widget,
-            "width": 900,
-            "right_panel_action": "close",
-        },
-        {
-            "id": 4,
-            "name": cm.app.drawer_item.aoi,
-            "icon": "mdi-map-marker",
-            # right-panel tile (single-map model): controls in the panel, AOI
-            # selection drawn on the shared map.
-            "display": "panel",
-            "content": panel_sentinel,
-            "right_panel_action": "open",
-        },
-        {
-            "id": 5,
-            "name": cm.app.drawer_item.filter,
-            "icon": "mdi-filter",
-            # right-panel tile (single-map model): form cards in the panel, alert
-            # / AOI / aux layers drawn on the shared map.
-            "display": "panel",
-            "content": panel_sentinel,
-            "right_panel_action": "open",
-        },
-        {
-            "id": 6,
-            "name": cm.app.drawer_item.overview,
-            # mdi-chart-box-outline is absent from the bundled MDI font version
-            # (it rendered as a blank gap next to "Overview"); mdi-chart-bar is a
-            # core glyph present in every MDI release, so the symbol shows.
-            "icon": "mdi-chart-bar",
-            # right-panel tile: stats card in the panel, alert points on the map.
-            "display": "panel",
-            "content": panel_sentinel,
-            "right_panel_action": "open",
-        },
-        {
-            "id": 7,
-            "name": cm.app.drawer_item.analysis,
-            "icon": "mdi-image-search",
-            # Full-stage workspace (Option C): the two-map stage renders in the
-            # step content container (pinned between the drawer and the docked
-            # right panel); the controls render in the right panel (wrapper 7).
-            # The shared map is hidden while active (see _on_step) so its layer
-            # menu can't bleed over the stage.
-            "display": "step",
-            "content": analysis_stage_widget,
-            "right_panel_action": "open",
-        },
+            "id": s.step_id,
+            "name": t(s.label_key),
+            "icon": s.icon,
+            "display": s.display,
+            "content": step_content[s.key],
+            "right_panel_action": s.panel_action,
+            **({"width": s.dialog_width} if s.dialog_width else {}),
+        }
+        for s in STEPS
     ]
 
     app_element = MapApp.element(
@@ -607,3 +569,9 @@ def Page():
         step_display=step_display,
         step_actions=step_actions,
     )
+
+    # Floating, collapsible process-log console pinned to the map's lower-right
+    # corner (Tier-1 scaffold widget). Renders the records captured by the
+    # ReactiveLogHandler installed at boot; mounting it binds this session's
+    # kernel context so worker-thread log emits reach the browser.
+    LogConsole()

@@ -67,8 +67,6 @@ import logging
 from datetime import datetime
 from operator import itemgetter
 
-import threading
-
 import ee
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
@@ -83,6 +81,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     get_sentinel2_dates,
     harmonizeL8ToS2_scaled,
 )
+from gui.scripts.solara_threads import spawn_in_context
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -577,13 +576,10 @@ def build_imagery(
             selected_alerts_model,
         )
 
-        # EE fetches off the main thread (blocking .getInfo()). Independent sources.
-        threading.Thread(
-            target=_fetch_and_rebuild_s2, args=(ctx,), daemon=True
-        ).start()
-        threading.Thread(
-            target=_fetch_and_rebuild_landsat, args=(ctx,), daemon=True
-        ).start()
+        # EE fetches off the main thread (blocking .getInfo()). Independent
+        # sources; spawn_in_context so any reactive writes reach the browser.
+        spawn_in_context(_fetch_and_rebuild_s2, (ctx,))
+        spawn_in_context(_fetch_and_rebuild_landsat, (ctx,))
 
     widgets.imagery_ctx.subscribe(_on_ctx)
 

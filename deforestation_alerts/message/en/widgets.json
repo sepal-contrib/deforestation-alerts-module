@@ -1,0 +1,53 @@
+{
+  "common": {
+    "save": "Save",
+    "load": "Load",
+    "cancel": "Cancel",
+    "create": "Create",
+    "remove": "Remove",
+    "replace": "Replace",
+    "delete": "Delete",
+    "close": "Close",
+    "actions": "Actions",
+    "advanced": "Advanced",
+    "new": "New",
+    "_test_fmt": "hello {name}",
+    "_test_one": "{n} item",
+    "_test_other": "{n} items"
+  },
+  "dialog": {
+    "confirm_default_title": "Delete?",
+    "confirm_default_message": "This action cannot be undone.",
+    "confirm_default_label": "Delete"
+  },
+  "widgets": {
+    "log_console": {
+      "header": "Process log",
+      "empty": "No activity yet."
+    },
+    "product_table": {
+      "status_running": "running",
+      "status_ready": "ready",
+      "status_completed": "completed",
+      "status_failed": "failed",
+      "status_cancelled": "cancelled"
+    },
+    "artifact_name": {
+      "label": "Name",
+      "required": "Required.",
+      "saved_as": "Will be saved as '{key}'.",
+      "exists_warning": "'{key}' already exists — creating will replace it."
+    },
+    "creation_dialog": {
+      "replace_title": "Replace existing?",
+      "replace_message": "'{key}' already exists and will be replaced. Continue?"
+    }
+  },
+  "workflow": {
+    "lock_filter": "Select an area of interest and dates first.",
+    "lock_overview": "Load or analyze alerts first.",
+    "lock_analysis": "Load or analyze alerts first.",
+    "count_alerts_one": "{n} alert",
+    "count_alerts_other": "{n} alerts"
+  }
+}
