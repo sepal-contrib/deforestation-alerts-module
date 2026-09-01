@@ -99,7 +99,11 @@ from gui.tile.analysis.paths import alert_image_name
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 # Default Word report template (OLD used this literal when no custom template set).
-_DEFAULT_REPORT_TEMPLATE = "data/report_template.docx"
+# Resolve from the repo root (export.py -> analysis -> tile -> gui -> root):
+# the CWD is not guaranteed writable or even stable on the platform.
+_DEFAULT_REPORT_TEMPLATE = str(
+    Path(__file__).resolve().parents[3] / "data" / "report_template.docx"
+)
 
 
 def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
