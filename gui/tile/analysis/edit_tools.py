@@ -338,7 +338,9 @@ def build_edit_tools(
 
     # ------------------------------------------------------------------
     # add/remove prediction (OLD) — main-thread click handlers mutating
-    # widgets.draw_before.data (which is .data-linked to draw_after).
+    # widgets.draw_before.data (jslink'd to draw_after; write both via
+    # set_synced_draw_data since Python-originated writes propagate to
+    # draw_after only through the explicit helper, never headlessly).
     # ------------------------------------------------------------------
     def _add_model_prediction(path, color_name, add_btn, remove_btn):
         if not path:
@@ -352,7 +354,7 @@ def build_edit_tools(
             new_features = convertir_formato3(edit_layer, color_name)
             widgets.draw_before.clear()
             widgets.draw_after.clear()
-            widgets.draw_before.data = orig_features + new_features
+            widgets.set_synced_draw_data(orig_features + new_features)
             add_btn.disabled = True
             remove_btn.disabled = False
         except Exception:
@@ -364,7 +366,7 @@ def build_edit_tools(
             orig_features = widgets.draw_before.data
             widgets.draw_before.clear()
             widgets.draw_after.clear()
-            widgets.draw_before.data = filter_features_by_color(orig_features, color_name)
+            widgets.set_synced_draw_data(filter_features_by_color(orig_features, color_name))
             add_btn.disabled = False
             remove_btn.disabled = True
         except Exception:
@@ -388,9 +390,11 @@ def build_edit_tools(
             widgets.draw_before.show()
             widgets.draw_after.show()
             if analyzed_alerts_model.defo_dl_layer is not None:
-                widgets.draw_after.data = convertir_formato3(
-                    analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"],
-                    "blue",
+                widgets.set_synced_draw_data(
+                    convertir_formato3(
+                        analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"],
+                        "blue",
+                    )
                 )
 
             ns["clear_btn"].disabled = False

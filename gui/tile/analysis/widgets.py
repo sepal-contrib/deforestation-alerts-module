@@ -46,6 +46,7 @@ Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts)
 
 import ipyvuetify as v
 import solara
+from ipywidgets import jslink
 from traitlets import link
 from pysepal import color, sepalwidgets as sw
 from pysepal.mapping import SepalMap
@@ -126,6 +127,17 @@ class AnalysisWidgets:
     Built once per session by ``AnalysisTile`` via ``use_memo``. See the module
     docstring for the full attribute contract handed to the sub-components.
 
+    Two-map sync contract: ``map_before``/``map_after`` (center + zoom) and
+    ``draw_before``/``draw_after`` (data) are wired with ``ipywidgets.jslink``,
+    a browser-side (frontend) link — user pans/zooms/draws on one map mirror to
+    the other with no kernel round-trip, and the kernel still receives the
+    normal trait-change notification afterwards so Python observers keep
+    working. The cost is that jslink propagates NOTHING headless (no browser,
+    no mirroring), so any Python-originated mutation of these traits MUST go
+    through ``set_synced_view``/``set_synced_draw_data`` instead of writing a
+    single widget directly — a one-sided write would silently diverge outside
+    a live frontend.
+
     Parameters
     ----------
     gee_interface : GEEInterface
@@ -150,9 +162,13 @@ class AnalysisWidgets:
         self.map_after.add_class("custom-map-class2")
         self.map_after.add_basemap("SATELLITE")
 
-        # two-way link center + zoom so panning one pans the other
-        link((self.map_before, "center"), (self.map_after, "center"))
-        link((self.map_before, "zoom"), (self.map_after, "zoom"))
+        # Browser-side two-way links: user pans/zooms/draws mirror to the
+        # other map client-side, with no kernel round-trip (the old
+        # traitlets.link lagged a full browser->python->browser cycle per
+        # event). jslink propagates NOTHING headless: Python-originated
+        # mutations must use set_synced_view/set_synced_draw_data below.
+        jslink((self.map_before, "center"), (self.map_after, "center"))
+        jslink((self.map_before, "zoom"), (self.map_after, "zoom"))
 
         # ------------------------------------------------------------------
         # Map titles + selected-image info cards (mutated by Task 9.2).
@@ -203,7 +219,7 @@ class AnalysisWidgets:
         # ------------------------------------------------------------------
         self.draw_before = CustomDrawControl(self.map_before)
         self.draw_after = CustomDrawControl(self.map_after)
-        link((self.draw_before, "data"), (self.draw_after, "data"))
+        jslink((self.draw_before, "data"), (self.draw_after, "data"))
 
         self.aoi_control = AoiControl(self.map_after)
         self.map_after.add(self.aoi_control)
@@ -244,3 +260,17 @@ class AnalysisWidgets:
         # while no alert is active (dormant at smoke time).
         # ------------------------------------------------------------------
         self.imagery_ctx = solara.reactive(None)
+
+    def set_synced_view(self, center, zoom):
+        """Python-originated view change: write BOTH maps explicitly (the
+        jslink mirror exists only in a live frontend)."""
+        self.map_before.center = center
+        self.map_after.center = center
+        self.map_before.zoom = zoom
+        self.map_after.zoom = zoom
+
+    def set_synced_draw_data(self, features):
+        """Python-originated draw change: write BOTH controls, with distinct
+        list objects so later in-place edits can't alias."""
+        self.draw_before.data = list(features)
+        self.draw_after.data = list(features)

@@ -164,9 +164,8 @@ def view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model,
         widgets.draw_before.hide()
         widgets.draw_after.hide()
 
-        # center/zoom (the two maps are center/zoom-linked)
-        widgets.map_before.center = (alerta.point.y, alerta.point.x)
-        widgets.map_before.zoom = 16
+        # center/zoom (the two maps are jslink'd; write both explicitly)
+        widgets.set_synced_view((alerta.point.y, alerta.point.x), 16)
 
         # clear + rebuild the bbox overlay on both maps
         widgets.map_before.remove_all()
