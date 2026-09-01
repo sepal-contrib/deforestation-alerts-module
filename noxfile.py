@@ -13,8 +13,7 @@ def lint(session):
     session.run("pre-commit", "run", "--a", *session.posargs)
 
 
-@nox.session(reuse_venv=True)
+@nox.session(reuse_venv=True, venv_backend="none")
 def app(session):
-    """Run the Solara application."""
-    session.install("-r", "requirements.txt")
+    """Run the Solara application in the active (conda) environment."""
     session.run("solara", "run", "gui/solara_app.py", "--port", "8900", "--no-open")

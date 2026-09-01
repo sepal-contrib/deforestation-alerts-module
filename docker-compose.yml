@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: gui/Dockerfile
+    ports:
+      - "8900:8900"
+    # SEPAL's app-launcher provides these in production; for local runs
+    # mount your EE credentials and set the module data dir.
+    volumes:
+      - ~/.config/earthengine:/root/.config/earthengine:ro
+    environment:
+      - DEFORESTATION_ALERTS_DATA_DIR=/tmp/module_results/deforestation_alerts

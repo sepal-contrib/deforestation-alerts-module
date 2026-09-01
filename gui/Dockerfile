@@ -6,10 +6,9 @@ FROM mambaorg/micromamba:1.5-jammy
 # These layers run before COPY . /app so source edits don't bust them.
 COPY sepal_environment.yml /tmp/sepal_environment.yml
 
-# NOTE (deployment follow-up): generate a pinned requirements.lock via
-#   pip-compile or `pip freeze` after a successful build and switch the
-#   COPY + pip install line below to use that lock file for fully
-#   reproducible builds.
+# NOTE: sepal_environment.yml is the pinned lock — every conda and pip
+#   dependency below is version-pinned in that file, so no separate
+#   requirements.lock generation step is needed.
 RUN micromamba create -y -n deforestation_alerts \
         -f /tmp/sepal_environment.yml \
     && micromamba clean --all --yes

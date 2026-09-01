@@ -22,7 +22,7 @@ jobs:
       - name: Verify ee-api fork
         shell: micromamba-shell {0}
         run: |
-          python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.1.5rc0', 'Expected fork 1.1.5rc0, got ' + v"
+          python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.6.14', 'Expected openforis fork 1.6.14, got ' + v"
 
 
       # Tier-1 tests run fully offline; the Tier-2 raster-pipeline integration tests
