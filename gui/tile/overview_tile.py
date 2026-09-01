@@ -57,6 +57,7 @@ import reacton.ipyvuetify as rv
 import solara
 from ipyleaflet import MarkerCluster, Popup
 from pysepal import sepalwidgets as sw
+from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.overview_helper import (
@@ -65,6 +66,7 @@ from deforestation_alerts.scripts.overview_helper import (
     create_markers_ipyvuetify,
 )
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
+from gui.scripts.solara_threads import spawn_in_context
 
 # MarkerCluster layers added by this tile are named with this prefix so a
 # name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
@@ -78,24 +80,102 @@ _OVERVIEW_AOI_LAYER = "overview-aoi"
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
 
-def _bind_export(btn, fmt, gdf, workspace, folder, sources, start, end):
-    """Return an ipyvuetify click handler that writes ``fmt`` and points ``btn``
-    at the produced file. Generates the export on demand from the in-memory gdf.
+def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end):
+    """Return the click handler that generates the ``fmt`` export and reveals its
+    download button.
+
+    TWO buttons, not one: ``sw.DownloadBtn`` starts life *disabled* (its default
+    ``path="#"`` makes ``set_url`` disable it), so a DownloadBtn wired to a click
+    handler can never be clicked and the export would never run. The generate
+    action therefore lives on a plain ``sw.Btn``; the DownloadBtn is built hidden
+    and is revealed — enabled, with its URL — only once a file actually exists.
+    Same pattern as ``analysis/export.py``'s save -> downloads toolbar.
+
+    Threading + feedback: writing a GPKG/GeoJSON and uploading it is blocking IO,
+    so the work runs on a daemon thread via ``spawn_in_context`` (which carries
+    the kernel context the notification globals resolve their bus from), wrapped
+    in a tracked task. A failure is an error toast, not a silent log line.
 
     The export lands in the user's SEPAL workspace, so the button gets the
     HOME-RELATIVE remote path: ``set_url`` -> ``su.create_download_link`` builds
     ``https://sepal.io/api/sandbox/jupyter/files/<path relative to Path.home()>``,
     and in the container ``Path.home()`` is the *container's* home, so handing it
     an absolute path yields a dead link (inventory a18)."""
+
     def _on_click(widget, event, data):
-        try:
-            path = export_alerts_gdf(
-                gdf, workspace, folder, fmt, sources, start, end
-            )
-            btn.set_url(path=workspace.home_relative(path))
-        except Exception:
-            logger.exception("Overview: export %s failed", fmt)
+        gen_btn.loading = True
+        gen_btn.disabled = True
+
+        def _worker():
+            # Imperative tracker (not ``with``): the context manager publishes its
+            # own raw-exception toast on failure, which would duplicate the one
+            # below. One opaque phase (write + upload), so no ``total_steps``.
+            task = track_task(str(cm.overview_tile.export_task_title))
+            try:
+                task.step(str(cm.overview_tile.export_step).format(fmt=fmt.upper()))
+                path = export_alerts_gdf(
+                    gdf, workspace, folder, fmt, sources, start, end
+                )
+                dl_btn.set_url(path=workspace.home_relative(path))
+                dl_btn.show()
+                task.complete()
+                notify(
+                    str(cm.overview_tile.export_done).format(fmt=fmt.upper()),
+                    type_="success",
+                )
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
+                logger.error("Overview: export %s failed", fmt, exc_info=e)
+                # fail() before the toast, so the run is already recorded as
+                # FAILED (with its reason) in the task log when the message lands.
+                task.fail(str(e))
+                notify(str(e), type_="error")
+            finally:
+                gen_btn.loading = False
+                gen_btn.disabled = False
+
+        spawn_in_context(_worker)
+
     return _on_click
+
+
+def build_export_card(gdf, workspace, folder, sources, start, end):
+    """Build the export card: one generate button per format + its hidden
+    DownloadBtn, revealed when that format has been written.
+
+    A module function (not inline in the component) so the buttons a user
+    actually clicks — including their enabled/hidden state — are directly
+    testable; the component only decides *whether* to show the card.
+    """
+    gen_buttons = []
+    dl_buttons = []
+    for fmt in ("csv", "gpkg", "geojson"):
+        label = str(getattr(cm.overview_tile, f"export_{fmt}"))
+        gen_btn = sw.Btn(
+            msg=label, small=True, outlined=True, color="primary", class_="pa-1 ma-1"
+        )
+        dl_btn = sw.DownloadBtn(
+            text=f"{cm.overview_tile.export_download} {label}",
+            small=True,
+            class_="pa-1 ma-1",
+        ).hide()
+        gen_btn.on_event(
+            "click",
+            _bind_export(
+                gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end
+            ),
+        )
+        gen_buttons.append(gen_btn)
+        dl_buttons.append(dl_btn)
+
+    return v.Card(
+        class_="pa-3 ma-3",
+        hover=True,
+        children=[
+            v.CardTitle(class_="pa-1", children=[cm.overview_tile.export_label]),
+            v.Row(class_="d-flex justify-center", children=gen_buttons),
+            v.Row(class_="d-flex justify-center", children=dl_buttons),
+        ],
+    )
 
 # Summary-table row labels (matches old tile order)
 _ALERT_LABELS = [
@@ -430,24 +510,8 @@ def OverviewTile(
             sources = getattr(selected_alerts_model, "selected_alert_sources", None) or []
             start = getattr(aoi_date_model, "start_date", "") or ""
             end = getattr(aoi_date_model, "end_date", "") or ""
-            export_buttons = []
-            for fmt in ("csv", "gpkg", "geojson"):
-                btn = sw.DownloadBtn(
-                    text=getattr(cm.overview_tile, f"export_{fmt}"), small=True
+            solara.display(
+                build_export_card(
+                    gdf, workspace, recipe_folder, sources, start, end
                 )
-                btn.on_event(
-                    "click",
-                    _bind_export(
-                        btn, fmt, gdf, workspace, recipe_folder, sources, start, end
-                    ),
-                )
-                export_buttons.append(btn)
-            export_card = v.Card(
-                class_="pa-3 ma-3",
-                hover=True,
-                children=[
-                    v.CardTitle(class_="pa-1", children=[cm.overview_tile.export_label]),
-                    v.Row(class_="d-flex justify-center", children=export_buttons),
-                ],
             )
-            solara.display(export_card)

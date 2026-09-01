@@ -558,6 +558,10 @@ RAW_LAYOUTS = [
     "gui/tile/recipe_tile.py",
     "gui/tile/analysis/edit_tools.py",
     "gui/tile/analysis/export.py",
+    # Hybrid: a Solara component, but its export card is a module-level raw
+    # widget builder whose worker publishes from a daemon thread, where no hook
+    # can run — so it belongs on the globals side of this boundary.
+    "gui/tile/overview_tile.py",
 ]
 
 
