@@ -24,7 +24,12 @@ def test_module_dir_env_override_absolute(tmp_path, monkeypatch):
     _reload_directory()
 
 
-def test_module_dir_env_override_tilde(monkeypatch):
+def test_module_dir_env_override_tilde(monkeypatch, tmp_path):
+    # Redirect $HOME into tmp_path so tilde-expansion doesn't touch the real
+    # home directory (R16): both Path("~/...").expanduser() and Path.home()
+    # read $HOME, so this still exercises genuine tilde expansion, just
+    # sandboxed.
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", "~/defo_alt_results")
     directory = _reload_directory()
     assert directory.module_dir == Path.home() / "defo_alt_results"
