@@ -71,12 +71,12 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.aoi_helper import (
-    add_ccdc_alerts_dictionary,
     add_custom_alerts_dictionary,
     check_aoi_inputs,
     create_available_alert_dictionary,
     create_basic_alerts_dictionary,
     create_filtered_alert_raster_dictionary,
+    get_alert_dates_ccdc,
     remove_ccdc_alerts_dictionary,
     remove_custom_alerts_dictionary,
 )
@@ -141,6 +141,20 @@ class AoiLayerRequest:
     token: int
 
 
+@dataclasses.dataclass(frozen=True)
+class CcdcUpdateRequest:
+    """Immutable snapshot for one CCDC-dictionary sync (token-guarded).
+
+    ``ccdc_layer`` is captured at trigger time (inside the traitlets handler, on
+    the main/render thread) rather than re-read live inside the worker thread —
+    the same "capture now, check token before the write" shape as
+    ``AoiLayerRequest``/``_apply_aoi_layer`` below.
+    """
+
+    ccdc_layer: Any
+    token: int
+
+
 def _run_search_sync(request: SearchRequest) -> SearchOutcome:
     """Pure search worker — runs inside ``asyncio.to_thread``.
 
@@ -181,16 +195,26 @@ def _run_search_sync(request: SearchRequest) -> SearchOutcome:
     )
 
 
-def _update_dictionary_ccdc(aux_model, alert_filter_model):
+def _update_dictionary_ccdc(alert_filter_model, request: CcdcUpdateRequest, generation):
     """Add/remove the CCDC entry in ``alert_filter_model.alerts_dictionary``.
 
     Same logic as the OLD tile's ``update_dictionary_ccdc`` method, lifted to a
-    module function. The add branch reaches ``add_ccdc_alerts_dictionary`` ->
-    ``get_alert_dates_ccdc``, which makes two blocking ``.getInfo()`` round-trips
-    (Decision 3: blocking GEE only inside a thread) — so the caller MUST run this
-    off the render/observer thread (see ``_register_ccdc_observer``'s
-    ``spawn_in_context`` wrapper), never call it directly from a trait observer.
-    Guarded so a missing ``CCDC`` key (double-clear) does not raise.
+    module function. The add branch makes two blocking ``ee.Date(...).getInfo()``
+    round-trips (``get_alert_dates_ccdc``) — Decision 3 confines that to a thread,
+    so the caller MUST invoke this off the render/observer thread (see
+    ``_register_ccdc_observer``'s ``spawn_in_context`` wrapper), never call it
+    directly from a trait observer.
+
+    Ordering race + fix, same idiom as ``AoiLayerRequest``/``_apply_aoi_layer``
+    below: picking asset A then quickly correcting to B starts two independent
+    round-trips (two observer fires -> two threads). If A's round-trip is
+    slower than B's, it would otherwise finish last and silently overwrite B's
+    correct entry with A's stale one. ``request.token`` is the
+    ``generation["value"]`` the caller bumped to at trigger time; the actual
+    dictionary write (add or remove) only happens if ``generation["value"]``
+    still equals ``request.token`` once the round-trip returns — a superseded
+    call is a no-op instead of a stale overwrite. Also guarded so a missing
+    ``CCDC`` key (double-clear) does not raise.
     """
     dictionary = alert_filter_model.alerts_dictionary
     if not isinstance(dictionary, dict):
@@ -199,9 +223,18 @@ def _update_dictionary_ccdc(aux_model, alert_filter_model):
         logger.warning("ccdc observer fired before alerts_dictionary was a dict")
         return
     try:
-        if aux_model.ccdc_layer:
-            add_ccdc_alerts_dictionary(dictionary, aux_model.ccdc_layer)
-        elif aux_model.ccdc_layer is None and "CCDC" in dictionary:
+        if request.ccdc_layer:
+            dates_ccdc = get_alert_dates_ccdc(request.ccdc_layer)
+            if generation["value"] != request.token:
+                return  # superseded by a later ccdc change; discard this stale result
+            dictionary["CCDC"] = {
+                "collection": request.ccdc_layer,
+                "start_date": dates_ccdc[0],
+                "end_date": dates_ccdc[1],
+            }
+        elif request.ccdc_layer is None and "CCDC" in dictionary:
+            if generation["value"] != request.token:
+                return
             remove_ccdc_alerts_dictionary(dictionary)
     except Exception:
         logger.exception("Failed to update CCDC entry in alerts_dictionary")
@@ -354,10 +387,28 @@ def AoiTile(
     # network I/O — exactly what Decision 3 (blocking GEE confined to a thread)
     # forbids. spawn_in_context defers the dictionary mutation to a daemon
     # thread instead (same pattern as the Analysis tile's button handlers).
+    #
+    # ccdc_generation is the same superseded-write guard as layer_generation /
+    # _apply_aoi_layer further below: the handler bumps the counter and captures
+    # the ccdc_layer value + the bumped token into an immutable CcdcUpdateRequest
+    # right here (on the render thread, before any network work), then
+    # _update_dictionary_ccdc checks the token immediately before it writes.
+    # Without this, picking asset A then quickly correcting to B starts two
+    # independent round-trips; if A's is slower it would land after B's and
+    # silently overwrite B's correct entry with A's stale one.
     # ------------------------------------------------------------------
+    ccdc_generation = solara.use_memo(lambda: {"value": 0}, dependencies=[])
+
     def _register_ccdc_observer():
         def handler(change):
-            spawn_in_context(_update_dictionary_ccdc, (aux_model, alert_filter_model))
+            ccdc_generation["value"] += 1
+            request = CcdcUpdateRequest(
+                ccdc_layer=aux_model.ccdc_layer, token=ccdc_generation["value"]
+            )
+            spawn_in_context(
+                _update_dictionary_ccdc,
+                (alert_filter_model, request, ccdc_generation),
+            )
 
         aux_model.observe(handler, "ccdc_layer")
         return lambda: aux_model.unobserve(handler, "ccdc_layer")

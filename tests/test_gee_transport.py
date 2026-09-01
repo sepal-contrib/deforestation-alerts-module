@@ -14,6 +14,15 @@ def test_no_async_gee_transport_mixed_in():
          str(REPO / "deforestation_alerts"), "--include=*.py"],
         capture_output=True, text=True,
     )
+    # grep's exit code doubles as "did the search actually happen": 0 = matches
+    # found, 1 = none found — both mean grep ran to completion over real paths.
+    # 2 means a usage/path error (e.g. gui/ or deforestation_alerts/ renamed out
+    # from under this test), which would leave stdout empty too — asserting on
+    # stdout alone would then pass while checking nothing, silently advertising
+    # protection this test isn't providing. Fail loudly on 2 instead.
+    assert result.returncode in (0, 1), (
+        f"grep did not run as expected (exit {result.returncode}): {result.stderr}"
+    )
     assert result.stdout == "", (
         "Async GEE calls found — the app is sync-via-thread only:\n" + result.stdout
     )
