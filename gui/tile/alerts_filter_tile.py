@@ -68,7 +68,6 @@ import asyncio
 import dataclasses
 import logging
 import math
-import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -104,10 +103,6 @@ _ALERT_VIS_PARAMS = {"min": 1, "max": 2, "palette": ["orange", "purple"]}
 # start/cancel toggle whose cancel is never disabled, so the second press of a
 # fast double click could otherwise cancel the run the first press started.
 _CANCEL_GRACE_SECONDS = 1.0
-
-# geedim runs every tile fetch on ONE process-wide asyncio runner, so only one
-# ``toGeoTIFF`` may be in flight at a time (see _download_alert_raster).
-_DOWNLOAD_LOCK = threading.Lock()
 
 
 class _InputsShim:
@@ -201,6 +196,7 @@ class AnalyzeOutcome:
     alerts_bbs: Any
     alerts_gdf: Any
     alert_count: int
+    recipe_folder: Any
 
 
 @dataclasses.dataclass(frozen=True)
@@ -450,6 +446,21 @@ def _filtered_alerts_path(recipe_folder, alert_sources, start_date, end_date):
     return str(base / name)
 
 
+def _loop_is_running() -> bool:
+    """True when the calling thread has a running asyncio event loop.
+
+    Same contract as ``gui.tile.aoi_tile._loop_is_running``: a
+    ``prefer_threaded=False`` task is scheduled with a bare
+    ``asyncio.create_task`` and raises without one, and an effect body must never
+    raise (reacton masks the failure behind "you are not using a container").
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 def _guard_cancel(on_cancel, started_at):
     """Wrap a TaskButton cancel callback so an accidental double click can't cancel.
 
@@ -563,13 +574,11 @@ def _download_alert_raster(plan: AnalyzePlan) -> str:
     First half of the OLD ``run_local_vectorize._work``. Blocking EE + network,
     so it only ever runs inside ``asyncio.to_thread``.
 
-    Serialized on ``_DOWNLOAD_LOCK``: geedim drives its tile fetches through ONE
-    process-wide asyncio runner (``geedim.utils.runner``), so a second concurrent
-    ``toGeoTIFF`` raises "This event loop is already running". That is reachable
-    now that Analyze can be cancelled — cancelling abandons the coroutine but the
-    thread keeps downloading, so an immediately restarted run would collide with
-    it. Queuing behind the abandoned download costs time but always produces the
-    right raster; the tile shows "downloading" throughout.
+    Concurrent geedim exports are serialized inside ``download_ee_image`` itself
+    (geedim has ONE process-wide asyncio runner). That matters here because
+    cancelling Analyze abandons the coroutine but not this thread, so an
+    immediately restarted run would otherwise collide with the download it just
+    walked away from — as would the Analysis dialog's imagery/export threads.
     """
     # geedim exports over an ee.Geometry; the AOI / drawn poly is a
     # FeatureCollection, so pass its geometry.
@@ -578,16 +587,15 @@ def _download_alert_raster(plan: AnalyzePlan) -> str:
         region.geometry() if isinstance(region, ee.FeatureCollection) else region
     )
     # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
-    with _DOWNLOAD_LOCK:
-        download_ee_image(
-            plan.filtered_alert_raster.select(["alert", "date"]),
-            plan.out_tif,
-            region=export_region,
-            scale=plan.pixel_size,
-            crs="EPSG:4326",
-            unmask_value=255,
-            nodata_value=255,
-        )
+    download_ee_image(
+        plan.filtered_alert_raster.select(["alert", "date"]),
+        plan.out_tif,
+        region=export_region,
+        scale=plan.pixel_size,
+        crs="EPSG:4326",
+        unmask_value=255,
+        nodata_value=255,
+    )
     return plan.out_tif
 
 
@@ -614,17 +622,23 @@ def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
         alerts_bbs=gdf.head(max_number_alerts),
         alerts_gdf=convert_to_geopandas(gdf, custom_name=request.custom_alert_name),
         alert_count=len(gdf),
+        # Carried from the click-time snapshot so the completion effect writes
+        # the store into the folder THIS run was configured with, even if a
+        # recipe was loaded while it was in flight.
+        recipe_folder=request.recipe_folder,
     )
 
 
 def _persist_alerts_gdf(alerts_gdf, recipe_folder) -> None:
-    """Cache the freshly vectorized gdf to the canonical parquet store.
+    """Write the freshly vectorized gdf to the canonical parquet store.
 
-    Same category as the exported GeoTIFF: an on-disk artifact of the run, not
-    model state — so it stays in the task (off the kernel loop) rather than in the
-    completion effect. Writing it NOW, not just on Save, means a reload before
-    Save resumes without re-running EE. No-op without a recipe folder
-    (smoke / pre-recipe runs).
+    This is persisted STATE, not a scratch artifact: recipe load reads
+    ``alert_db.parquet`` back (``recipe_helper.load_alert_store``, and the
+    recipe-export zip in ``gui.widget.custom_sw``), so a run the user cancelled
+    must never leave one behind. It is therefore called from the completion
+    effect, after the ``cancelled`` guard — never from the task body. Writing it
+    at analyze time, not just on Save, means a reload before Save resumes without
+    re-running EE. No-op without a recipe folder (smoke / pre-recipe runs).
     """
     if not recipe_folder:
         return
@@ -754,7 +768,14 @@ def AlertsFilterTile(
 
     def _schedule_layer_sync(show: bool):
         layer_generation["value"] += 1
-        layer_task(FilterLayerRequest(show=show, token=layer_generation["value"]))
+        request = FilterLayerRequest(show=show, token=layer_generation["value"])
+        if _loop_is_running():
+            layer_task(request)
+        else:
+            # See _loop_is_running: without a loop on this thread the task would
+            # raise out of the effect and take the render down, so fall back to
+            # the pre-refactor inline behaviour.
+            _apply_filter_layers(request)
 
     def _refresh_tile():
         """Form first (inline), then the map rebuild (task -> thread).
@@ -857,9 +878,6 @@ def AlertsFilterTile(
         )
 
         outcome = await asyncio.to_thread(_finish_analyze_sync, request, plan, gdf)
-        await asyncio.to_thread(
-            _persist_alerts_gdf, outcome.alerts_gdf, request.recipe_folder
-        )
         analyze_status.value = cm.filter_tile.analyze_status_found.format(
             n=outcome.alert_count
         )
@@ -950,6 +968,10 @@ def AlertsFilterTile(
         # Publish the assembled alerts_gdf — this is what Overview + the analysis
         # tile consume.
         app_state.alerts_gdf.value = outcome.alerts_gdf
+        # Persisted state, so it belongs on this side of the cancelled guard (a
+        # cancelled run must not leave a loadable alert_db.parquet behind). The
+        # gdf is fully materialized by now, so the write is a plain serialize.
+        _persist_alerts_gdf(outcome.alerts_gdf, outcome.recipe_folder)
         logger.info("Filter: analyze finished — %s alerts", outcome.alert_count)
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge

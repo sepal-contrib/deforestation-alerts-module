@@ -163,6 +163,21 @@ def _clear_overview_layers(map_, holder) -> None:
             logger.exception("Overview: failed to remove a layer during clear")
 
 
+def _loop_is_running() -> bool:
+    """True when the calling thread has a running asyncio event loop.
+
+    Same contract as ``gui.tile.aoi_tile._loop_is_running``: a
+    ``prefer_threaded=False`` task is scheduled with a bare
+    ``asyncio.create_task`` and raises without one, and an effect body must never
+    raise.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 @dataclasses.dataclass(frozen=True)
 class OverviewAoiLayerRequest:
     """Immutable snapshot for one Overview AOI-outline sync."""
@@ -343,13 +358,21 @@ def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=Non
 
     def _sync_overview_aoi():
         aoi_layer_generation["value"] += 1
-        aoi_layer_task(
-            OverviewAoiLayerRequest(
-                feature_collection=aoi_fc,
-                show=active,
-                token=aoi_layer_generation["value"],
-            )
+        request = OverviewAoiLayerRequest(
+            feature_collection=aoi_fc,
+            show=active,
+            token=aoi_layer_generation["value"],
         )
+        if _loop_is_running():
+            aoi_layer_task(request)
+        else:
+            # This effect runs on the tile's FIRST render, which happens inside
+            # solara_app._render_detached -> render_fixed and can land on a
+            # thread with no running loop; solara's prefer_threaded=False task
+            # would then raise out of the effect and take that render down
+            # (reacton masks it as "you are not using a container"). Effects must
+            # never raise: fall back to the pre-refactor inline call.
+            _apply_overview_aoi(request)
 
     solara.use_effect(_sync_overview_aoi, [active])
 

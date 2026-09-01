@@ -28,3 +28,21 @@ def test_save_skips_without_recipe_folder(tmp_path):
     model = types.SimpleNamespace(recipe_folder_path="")
     _save_alerts_to_gdf(_gdf(), model)  # must not raise
     assert not list(tmp_path.iterdir())
+
+
+def test_filter_persist_writes_parquet(tmp_path):
+    """The analyze store write moved out of the task and into the completion
+    effect (a cancelled run must leave no loadable alert_db.parquet); it must
+    still write the same store when a recipe folder exists."""
+    from gui.tile.alerts_filter_tile import _persist_alerts_gdf
+
+    _persist_alerts_gdf(_gdf(), str(tmp_path))
+    back = load_gdf_from_parquet(tmp_path / "alert_db.parquet")
+    assert back["status"].iloc[0] == "Confirmed"
+
+
+def test_filter_persist_skips_without_recipe_folder(tmp_path):
+    from gui.tile.alerts_filter_tile import _persist_alerts_gdf
+
+    _persist_alerts_gdf(_gdf(), "")  # must not raise
+    assert not list(tmp_path.iterdir())

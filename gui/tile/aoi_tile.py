@@ -266,8 +266,20 @@ def AoiTile(
     )
 
     def _start_init():
-        if init_task.not_called:
+        if not init_task.not_called:
+            return
+        if _loop_is_running():
             init_task()
+        else:
+            # Same exposure as the layer tasks (see _loop_is_running), but the
+            # fallback must NOT be "do it inline": that is exactly the render-time
+            # .getInfo() this task exists to remove. Skip instead — the search
+            # worker rebuilds the dictionary on its own thread when it finds the
+            # model field unset (SearchOutcome.dictionary_rebuilt).
+            logger.warning(
+                "No running event loop at mount; deferring the alerts-dictionary "
+                "init to the first search"
+            )
 
     solara.use_effect(_start_init, dependencies=[])
 
@@ -374,7 +386,16 @@ def AoiTile(
 
     def _sync_active():
         layer_generation["value"] += 1
-        layer_task(AoiLayerRequest(show=active, token=layer_generation["value"]))
+        request = AoiLayerRequest(show=active, token=layer_generation["value"])
+        if _loop_is_running():
+            layer_task(request)
+        else:
+            # No running loop on this thread, so solara's bare
+            # ``asyncio.create_task`` inside a prefer_threaded=False task would
+            # raise and take the whole render down with it (reacton then masks it
+            # behind "you are not using a container"). Effects must never raise:
+            # fall back to the pre-refactor behaviour and do the map work inline.
+            _apply_aoi_layer(aoi_view, map_, request, layer_generation)
 
     solara.use_effect(_sync_active, dependencies=[active])
 
@@ -498,6 +519,23 @@ def AoiTile(
             solara.Error(
                 f"Search failed: {search_task.exception}", classes=["ma-3"]
             )
+
+
+def _loop_is_running() -> bool:
+    """True when the calling thread has a running asyncio event loop.
+
+    ``solara.lab.use_task(prefer_threaded=False)`` schedules with a bare
+    ``asyncio.create_task``, which needs one; click handlers and ordinary
+    re-renders have it, but a render reached from a thread that does not (e.g.
+    the detached ``render_fixed`` mount in ``solara_app._render_detached``) would
+    get ``RuntimeError: no running event loop``. Callers scheduling a task from
+    an effect body check this first and fall back to doing the work inline.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
 
 
 def _guard_cancel(on_cancel, started_at):

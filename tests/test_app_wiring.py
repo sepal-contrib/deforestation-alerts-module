@@ -118,6 +118,42 @@ def test_search_and_analyze_have_a_synchronous_pending_guard():
         assert f"if {task}.pending:" in body[:600], f"{rel}: no pending guard"
 
 
+def test_effect_scheduled_tasks_guard_on_a_running_loop():
+    """solara schedules prefer_threaded=False tasks with a bare
+    asyncio.create_task, which raises without a running loop in the calling
+    thread. An effect body must never raise (reacton masks it behind "you are
+    not using a container"), so every task call made from an effect is guarded."""
+    for rel in GEE_TASK_FILES:
+        src = _src(rel)
+        assert "def _loop_is_running()" in src, f"{rel} has no loop guard helper"
+        assert "if _loop_is_running():" in src, f"{rel} never uses the loop guard"
+
+
+def test_geedim_exports_are_serialized_in_one_place():
+    """geedim has ONE process-wide asyncio runner, so overlapping exports raise
+    "This event loop is already running". The lock therefore belongs at the single
+    entry point every caller shares, not at one call site."""
+    src = _src("deforestation_alerts/scripts/raster_export.py")
+    assert "_DOWNLOAD_LOCK = threading.Lock()" in src
+    assert "_DOWNLOAD_LOCK.acquire(timeout=" in src, "must not block forever"
+    assert "_DOWNLOAD_LOCK.release()" in src
+    # and no tile may keep a private one that other callers bypass
+    for rel in GEE_TASK_FILES:
+        assert "_DOWNLOAD_LOCK" not in _src(rel), f"{rel} has a private export lock"
+
+
+def test_alert_store_is_written_only_after_the_cancelled_guard():
+    """alert_db.parquet is read back as state on recipe load, so a cancelled run
+    must not leave one behind: the write belongs in the completion effect."""
+    src = _src("gui/tile/alerts_filter_tile.py")
+    task_body = src[src.index("async def _analyze("):src.index("def _start_analyze(")]
+    assert "_persist_alerts_gdf" not in task_body, "persist must not run in the task"
+    apply_body = src[src.index("def _apply_analyze():"):]
+    cancel_at = apply_body.index(".cancelled")
+    persist_at = apply_body.index("_persist_alerts_gdf(")
+    assert cancel_at < persist_at, "persist must come after the cancelled guard"
+
+
 def test_notification_provider_mounted_before_tiles():
     src = _src("gui/solara_app.py")
     # Slice to Page()'s body: _render_detached is *defined* earlier in the

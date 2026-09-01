@@ -1,10 +1,33 @@
 """Download an Earth Engine image to a local GeoTIFF using the geedim 2.0 `.gd`
 accessor. Copied near-verbatim from spatial-risk-module
-(srm/spatialrisk/gee/ee_raster_export.py)."""
+(srm/spatialrisk/gee/ee_raster_export.py).
 
+Concurrency: geedim drives every tile fetch through ONE process-wide asyncio
+runner (``geedim.utils.AsyncRunner`` is a ``@singleton`` holding a single
+``Runner``), so two overlapping exports raise ``RuntimeError: This event loop is
+already running``. Every geedim export in this app goes through
+``download_ee_image``, so the serialization lock lives here — one lock covering
+the alert-raster export, the attribute-raster materialization
+(``attribute_source``) and the analysis mosaics (``mosaics_helper``), including
+the ones started from ``spawn_in_context`` daemon threads.
+"""
+
+import threading
 from typing import Any, Optional, Union
 
 import ee
+
+# Serializes the geedim export section (see the module docstring).
+_DOWNLOAD_LOCK = threading.Lock()
+
+# How long a caller waits for an in-flight export before giving up. It has to
+# cover a legitimately slow neighbour: geedim tiles national-scale exports, which
+# can run for many minutes on a slow SEPAL link. 30 minutes is comfortably above
+# that while still turning a wedged export into a visible error rather than a
+# session that hangs forever — the caller (a use_task) surfaces the raised
+# TimeoutError, and cancelling an export does NOT stop its thread, so an
+# unbounded wait could otherwise strand a second user indefinitely.
+_DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
 
 
 def download_ee_image(
@@ -46,13 +69,24 @@ def download_ee_image(
             image = image.clip(region)
         image = image.unmask(unmask_value, sameFootprint=False)
 
-    img = image.gd.prepareForExport(
-        crs=crs, region=region, scale=scale, resampling=resampling, dtype=dtype
-    )
+    # One export at a time, process-wide (see the module docstring).
+    if not _DOWNLOAD_LOCK.acquire(timeout=_DOWNLOAD_LOCK_TIMEOUT_S):
+        raise TimeoutError(
+            f"Timed out after {_DOWNLOAD_LOCK_TIMEOUT_S}s waiting for another "
+            f"Earth Engine export to finish; {filename} was not downloaded."
+        )
+    try:
+        img = image.gd.prepareForExport(
+            crs=crs, region=region, scale=scale, resampling=resampling, dtype=dtype
+        )
 
-    if nodata_value is None:
-        img.gd.toGeoTIFF(file=filename, overwrite=overwrite, nodata=True, **kwargs)
-    else:
-        img.gd.toGeoTIFF(file=filename, overwrite=overwrite, nodata=nodata_value, **kwargs)
+        if nodata_value is None:
+            img.gd.toGeoTIFF(file=filename, overwrite=overwrite, nodata=True, **kwargs)
+        else:
+            img.gd.toGeoTIFF(
+                file=filename, overwrite=overwrite, nodata=nodata_value, **kwargs
+            )
+    finally:
+        _DOWNLOAD_LOCK.release()
 
     print(f"File {filename}, downloaded")
