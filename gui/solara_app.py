@@ -33,6 +33,7 @@ from pysepal.solara import (
     setup_theme_colors,
     with_sepal_sessions,
 )
+from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
@@ -225,6 +226,13 @@ def Page():
     gee_interface = get_current_gee_interface()
     get_current_sepal_client()
     theme_state = get_current_theme_state()
+
+    # Centralized user feedback. Mounted BEFORE the tiles are constructed so
+    # use_notifications() inside them binds the real kernel-scoped bus (a
+    # later mount would hand first renders a silent NoopNotifier). MapApp
+    # publishes --sepal-notification-right-offset so the pill tracks the
+    # right panel.
+    NotificationProvider()
 
     # Ephemeral UI/nav state — memoized so it is not re-created on every
     # Page re-render (which would discard all reactive values mid-session).

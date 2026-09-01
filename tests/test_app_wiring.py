@@ -55,3 +55,14 @@ def test_no_bare_daemon_threads_in_tiles():
         src = _src(rel)
         assert "threading.Thread(" not in src, f"bare Thread in {rel}"
         assert "spawn_in_context" in src, f"{rel} lost its spawn_in_context import"
+
+
+def test_notification_provider_mounted_before_tiles():
+    import inspect
+
+    from gui import solara_app
+
+    src = inspect.getsource(solara_app.Page.f)  # match the file's existing access idiom
+    provider_at = src.index("NotificationProvider()")
+    first_tile_at = min(src.index("_render_detached"), src.index("MapApp.element"))
+    assert provider_at < first_tile_at, "provider must mount before tiles/MapApp"
