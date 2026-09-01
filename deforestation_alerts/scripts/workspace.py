@@ -197,8 +197,17 @@ class Workspace:
         return self._files.read_bytes(str(remote_path))
 
     def read_text(self, remote_path: Any) -> str:
-        """Download ``remote_path`` and decode it as text."""
-        return self._files.read_text(str(remote_path))
+        """Download ``remote_path`` and decode it as UTF-8.
+
+        Deliberately NOT ``files.read_text``: that decodes with "the charset
+        from the response", which means httpx *guesses* when SEPAL sends no
+        charset -- while :meth:`write_text` always encodes UTF-8. The asymmetry
+        would corrupt exactly the strings this app is full of: recipe and alert
+        names are user-supplied free text and the UI ships en / es-ES / fr, so
+        non-ASCII round-trips are the norm, and a mojibake'd recipe name is
+        silent data corruption rather than a visible failure.
+        """
+        return self.read_bytes(remote_path).decode("utf-8")
 
     def read_json(self, remote_path: Any) -> Any:
         """Download ``remote_path`` and parse it as JSON."""
@@ -251,13 +260,32 @@ class Workspace:
         and an absolute one absolute children. A folder that does not exist
         yet lists as empty -- a recipe picker asking before the first recipe
         exists is normal, not an error.
+
+        .. warning::
+
+           **UNVERIFIED against a live SEPAL server.** The "missing folder ->
+           empty list" behaviour assumes SEPAL's ``listFiles`` answers **404**
+           for a path that does not exist. Nothing establishes that:
+           ``UserFilesEndpoint.list`` only parses whatever comes back, and
+           pysepal's own ``get_remote_files`` swallows *every* exception, so it
+           is not evidence either. The 404 is asserted solely by this repo's
+           test fake. If the real server answers 403 or 500 instead, this call
+           **raises** where it should return ``[]`` -- and the tests stay green,
+           because the signature-drift guard compares signatures, not response
+           semantics. The user-visible failure would be a first-run recipe
+           picker erroring out before anything has ever been saved. Widen this
+           ``except`` (and the twin in :meth:`exists`) the first time a real
+           session shows a different status. See also Task 11, which calls
+           ``ensure_results_dir()`` once at wiring time so the results root
+           always exists -- that removes the common first-run case but not the
+           general one (any not-yet-created recipe subfolder still hits this).
         """
         folder = str(remote_path) if remote_path is not None else self.root
         try:
             listing = self._files.list(
                 folder, extensions=extensions, include_hidden=include_hidden
             )
-        except NotFound:
+        except NotFound:  # assumed status for "no such folder" -- see the warning
             return []
         base = _as_posix(folder)
         out = []
@@ -269,11 +297,23 @@ class Workspace:
         return sorted(out)
 
     def exists(self, remote_path: Any) -> bool:
-        """Whether a file or directory exists remotely (one listing round trip)."""
+        """Whether a file or directory exists remotely (one listing round trip).
+
+        .. warning::
+
+           **UNVERIFIED against a live SEPAL server**, same assumption as
+           :meth:`list`: a missing *parent* folder is taken to mean 404, and so
+           "does not exist". If the server answers 403/500 instead, this raises
+           instead of returning ``False`` -- and it is the load-recipe path that
+           breaks (the alert-store probe in ``recipe_helper.load_alert_store``,
+           the cached-GeoTIFF probe in ``analysis/export.py``, and the recipe
+           guards in ``recipe_tile`` / ``custom_sw``: inventory rows a13, a21,
+           a35, a36).
+        """
         path = _as_posix(remote_path)
         try:
             listing = self._files.list(str(path.parent), include_hidden=True)
-        except NotFound:
+        except NotFound:  # assumed status for "no such folder" -- see the warning
             return False
         return any(entry.name == path.name for entry in listing)
 

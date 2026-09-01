@@ -231,6 +231,26 @@ def test_text_and_json_roundtrip(ws):
     assert ws.read_json(folder + "/recipe_parameters.json") == {"a": 1, "b": [2, 3]}
 
 
+def test_text_roundtrip_is_utf8_symmetric(ws):
+    """write_text encodes UTF-8, so read_text must decode UTF-8 -- not whatever
+    charset httpx guesses from a response SEPAL may send without one. Recipe and
+    alert names are user-supplied free text and the UI ships en / es-ES / fr, so
+    this is the normal case, not an edge case."""
+    path = ws.results_dir("recipes") + "/nombre.txt"
+    name = "Canindeyú — Región Ñuble, forêt dégradée, 森林"
+    ws.write_text(path, name)
+    assert ws.read_text(path) == name
+    # And the bytes on the wire really are UTF-8, not some other encoding.
+    assert ws.read_bytes(path) == name.encode("utf-8")
+
+
+def test_json_roundtrip_survives_non_ascii(ws):
+    path = ws.results_dir("recipes") + "/recipe_parameters.json"
+    params = {"recipe_name": "Canindeyú_2026", "note": "déforestation"}
+    ws.write_json(path, params)
+    assert ws.read_json(path) == params
+
+
 def test_read_missing_raises(ws):
     with pytest.raises(NotFound):
         ws.read_bytes(ws.results_dir("nope.txt"))
@@ -256,6 +276,13 @@ def test_list_defaults_to_the_results_root_and_splits_dirs_from_files(ws):
 
 
 def test_list_filters_by_extension(ws):
+    """UNVERIFIED against a live SEPAL server: whether `listFiles` also drops
+    *directories* when `extensions` is set is decided here by FakeUserFiles
+    (which filters files only and always keeps directories), not by anything
+    real -- pysepal just forwards the parameter. If the server drops
+    directories too, a caller combining `extensions=` with `dirs_only=` gets
+    fewer results than this test implies. No call site does that today; check
+    it against a real session before one does."""
     folder = ws.results_dir("recipes")
     ws.write_bytes(folder + "/a.json", b"1")
     ws.write_bytes(folder + "/b.parquet", b"2")
@@ -263,10 +290,17 @@ def test_list_filters_by_extension(ws):
 
 
 def test_list_of_a_missing_folder_is_empty(ws):
+    """UNVERIFIED against a live SEPAL server: the 404 this rests on is asserted
+    by FakeUserFiles alone (see Workspace.list's warning). A real server
+    answering 403/500 for a missing folder would make the production call raise
+    while this test still passes -- the signature-drift guard below compares
+    signatures, not response semantics."""
     assert ws.list(ws.results_dir("does_not_exist")) == []
 
 
 def test_exists(ws):
+    """Carries the same UNVERIFIED 404 assumption as the listing tests above;
+    see Workspace.exists' warning for what breaks if it is wrong."""
     path = ws.results_dir("recipes") + "/x.json"
     assert ws.exists(path) is False
     ws.write_bytes(path, b"{}")
