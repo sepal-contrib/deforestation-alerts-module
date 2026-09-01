@@ -338,21 +338,22 @@ def export_card(monkeypatch, ws):
     import gui.tile.analysis.export as export
 
     app_state = AppState()
+    app_tile_model = AppTileModel()
     card = export.build_export(
         widgets=None,  # only touched inside _save_attributes / _download_data
         app_state=app_state,
         aux_model=AuxModel(),
         analyzed_alerts_model=AlertAnalysisModel(),
-        app_tile_model=AppTileModel(),
+        app_tile_model=app_tile_model,
         workspace=ws,
     )
-    return export, card, app_state
+    return export, card, app_state, app_tile_model
 
 
 def test_export_save_publishes_success_and_enables_the_download(
     export_card, monkeypatch
 ):
-    export, card, _app_state = export_card
+    export, card, _app_state, _app_tile_model = export_card
     events, threads = _record_feedback(monkeypatch, export)
     monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
 
@@ -375,7 +376,7 @@ def test_export_save_publishes_success_and_enables_the_download(
 def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):
-    export, card, _app_state = export_card
+    export, card, _app_state, _app_tile_model = export_card
     events, threads = _record_feedback(monkeypatch, export)
 
     def _boom(*a, **k):
@@ -394,6 +395,79 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
     assert kinds.index("task:fail") < kinds.index("toast")
     # the exception text is what reaches the user, not a bool/placeholder
     assert _toasts(events) == [("error", "no alert selected")]
+
+
+def _one_row_gdf():
+    """Enough of an alerts gdf to clear ``_download_data``'s id guards."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gdf = gpd.GeoDataFrame(
+        {"alert_polygon": [None]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:4326"
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    return gdf
+
+
+def _download_toolbar(card):
+    """The toolbar holding the two DownloadBtns (built hidden, shown on success)."""
+    from pysepal import sepalwidgets as sw
+
+    for widget in _widgets(card):
+        if isinstance(widget, sw.Toolbar) and any(
+            isinstance(child, sw.DownloadBtn)
+            for child in (getattr(widget, "children", None) or [])
+        ):
+            return widget
+    raise AssertionError("no downloads toolbar in the export card")
+
+
+@pytest.mark.parametrize(
+    "recipe_folder, with_alerts, expected",
+    [
+        # A recipe is what gives the files somewhere to live in the user's
+        # workspace; without one nothing can be written.
+        ("", True, cm.analysis_tile.export_labels.download_no_recipe),
+        # With a recipe but no selected alert there is nothing to build.
+        ("/home/sepal-user/module_results/deforestation_alerts/r",
+         False, cm.analysis_tile.export_labels.download_no_alert),
+    ],
+    ids=["no-recipe", "no-alert"],
+)
+def test_export_download_refusal_fails_the_task_and_says_why(
+    export_card, monkeypatch, recipe_folder, with_alerts, expected
+):
+    """A download that writes nothing must not report success.
+
+    ``_download_data`` runs for REAL here (it refuses before touching
+    ``widgets``), so this drives the actual refusal, not a stub. It used to call
+    ``task.complete()`` and then silently skip the toast and the reveal: a green
+    pill, no files, no explanation.
+    """
+    export, card, app_state, app_tile_model = export_card
+    events, threads = _record_feedback(monkeypatch, export)
+
+    app_tile_model.recipe_folder_path = recipe_folder
+    if with_alerts:
+        app_state.alerts_gdf.value = _one_row_gdf()
+        app_state.actual_alert_id.value = 0
+
+    toolbar = _download_toolbar(card)
+    download_btn = _button(
+        card, cm.analysis_tile.export_labels.download_alert_data_btn
+    )
+    download_btn.fire_event("click", None)
+    _join(threads)
+
+    kinds = [e[0] for e in events]
+    assert "task:complete" not in kinds
+    # fail() before the toast, so the pill is already FAILED when it appears
+    assert kinds.index("task:fail") < kinds.index("toast")
+    assert ("task:fail", str(expected)) in events
+    assert _toasts(events) == [("warning", str(expected))]
+    # nothing was revealed, and the button is released
+    assert toolbar.viz is False
+    assert download_btn.loading is False and download_btn.disabled is False
 
 
 # ---------------------------------------------------------------------------

@@ -192,7 +192,9 @@
                 "save_done": "Attributs de l'alerte enregistrés.",
                 "download_task_title": "Préparation du téléchargement de l'alerte",
                 "download_step": "Génération des fichiers et du rapport…",
-                "download_done": "Téléchargement de l'alerte prêt."
+                "download_done": "Téléchargement de l'alerte prêt.",
+                "download_no_recipe": "Aucune recette n'est chargée : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans votre espace de travail SEPAL. Créez ou chargez d'abord une recette.",
+                "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger."
         }
     }
 }

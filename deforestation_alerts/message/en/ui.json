@@ -191,7 +191,9 @@
                 "save_done": "Alert attributes saved.",
                 "download_task_title": "Preparing alert download",
                 "download_step": "Building files and report…",
-                "download_done": "Alert download ready."
+                "download_done": "Alert download ready.",
+                "download_no_recipe": "No recipe is loaded, so there is nowhere in your SEPAL workspace to save the alert files. Create or load a recipe first.",
+                "download_no_alert": "No alert is selected, so there is nothing to download."
         }
     }
 }

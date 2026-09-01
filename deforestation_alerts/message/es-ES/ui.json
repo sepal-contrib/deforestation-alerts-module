@@ -191,7 +191,9 @@
                 "save_done": "Atributos de la alerta guardados.",
                 "download_task_title": "Preparando la descarga de la alerta",
                 "download_step": "Generando archivos e informe…",
-                "download_done": "Descarga de la alerta lista."
+                "download_done": "Descarga de la alerta lista.",
+                "download_no_recipe": "No hay ninguna receta cargada, así que no hay dónde guardar los archivos de la alerta en tu espacio de trabajo de SEPAL. Crea o carga una receta primero.",
+                "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar."
         }
     }
 }

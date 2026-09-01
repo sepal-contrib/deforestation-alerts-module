@@ -507,8 +507,26 @@ def build_export(
                     result = _download_data(
                         widgets, app_state, aux_model, app_tile_model, workspace
                     )
-                task.complete()
-                if result is not None:
+                if result is None:
+                    # `_download_data` refused: nothing was written and no
+                    # download button will be revealed, so completing the task
+                    # here would show a green pill for a no-op the user cannot
+                    # explain. Report WHY through the notification system, the
+                    # same way the except branch below reports a crash — and
+                    # fail() BEFORE the toast so the pill stays visible as
+                    # FAILED. (The two causes are re-derived here rather than
+                    # returned, so `_download_data` keeps its "paths or nothing"
+                    # contract.)
+                    reason = str(
+                        cm.analysis_tile.export_labels.download_no_recipe
+                        if not app_tile_model.recipe_folder_path
+                        else cm.analysis_tile.export_labels.download_no_alert
+                    )
+                    logger.warning("Analysis: download refused — %s", reason)
+                    task.fail(reason)
+                    notify(reason, type_="warning")
+                else:
+                    task.complete()
                     _apply_download(result)
                     notify(
                         str(cm.analysis_tile.export_labels.download_done),
