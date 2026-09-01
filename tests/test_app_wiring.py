@@ -58,11 +58,17 @@ def test_no_bare_daemon_threads_in_tiles():
 
 
 def test_notification_provider_mounted_before_tiles():
-    import inspect
-
-    from gui import solara_app
-
-    src = inspect.getsource(solara_app.Page.f)  # match the file's existing access idiom
-    provider_at = src.index("NotificationProvider()")
-    first_tile_at = min(src.index("_render_detached"), src.index("MapApp.element"))
+    src = _src("gui/solara_app.py")
+    # Slice to Page()'s body: _render_detached is *defined* earlier in the
+    # file (well before the mount point), so a whole-file index comparison
+    # would find that definition and report a false ordering failure even
+    # when the mount is correctly placed. Scoping to the function body
+    # leaves only the call sites inside Page(), matching what
+    # inspect.getsource(Page.f) would give without importing the module
+    # (gui.solara_app calls init_ee() at import time — see module docstring).
+    page_body = src[src.index("def Page():"):]
+    provider_at = page_body.index("NotificationProvider()")
+    first_tile_at = min(
+        page_body.index("_render_detached("), page_body.index("MapApp.element")
+    )
     assert provider_at < first_tile_at, "provider must mount before tiles/MapApp"
