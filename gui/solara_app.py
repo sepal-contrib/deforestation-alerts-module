@@ -51,6 +51,7 @@ from gui.store.navigation import (
 )
 from gui.i18n import t
 from gui.scripts.log_bridge import install_log_console_handler
+from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import STEPS
 from gui.tile.about_tile import AboutTile
@@ -171,7 +172,28 @@ setup_solara_server()
 
 @solara.lab.on_kernel_start
 def on_kernel_start():
-    return setup_sessions()
+    """Per-kernel session bootstrap + the teardown that sweeps its scratch.
+
+    ``setup_sessions()`` returns pysepal's own cleanup; we wrap it so the
+    container-local scratch this kernel's ``Workspace`` staged (analyze rasters,
+    staged alert stores, the CNN composite + prediction) is deleted when the
+    kernel dies. Without it those files outlive the session and the container's
+    tmp grows for every run. The sweep is kernel-scoped — see
+    ``gui.scripts.scratch_registry`` — so it can never touch another live
+    kernel's scratch, and it runs FIRST so a failure in pysepal's cleanup cannot
+    skip it (it swallows its own errors either way).
+    """
+    session_cleanup = setup_sessions()
+
+    def _cleanup():
+        try:
+            cleanup_kernel_scratch()
+        except Exception:  # pragma: no cover — cleanup_kernel_scratch never raises
+            logger.exception("Kernel teardown: scratch sweep failed")
+        if callable(session_cleanup):
+            session_cleanup()
+
+    return _cleanup
 
 
 @solara.component
@@ -247,7 +269,16 @@ def Page():
     # parents, and a missing results root lists as [] / exists as False.
     # Workspace() itself DOES raise on a missing/module-less client — that is a
     # broken session, and failing at startup beats failing mid-save.
-    workspace = solara.use_memo(lambda: Workspace(sepal_client), dependencies=[])
+    # Registered with the kernel-scoped scratch registry as it is built, so the
+    # on_kernel_start cleanup above can delete everything it staged locally when
+    # this kernel goes away (registration is a dict insert — no I/O on the render
+    # path).
+    def _make_workspace():
+        ws = Workspace(sepal_client)
+        register_scratch_owner(ws)
+        return ws
+
+    workspace = solara.use_memo(_make_workspace, dependencies=[])
 
     # Centralized user feedback. Mounted BEFORE the tiles are constructed so
     # use_notifications() inside them binds the real kernel-scoped bus (a

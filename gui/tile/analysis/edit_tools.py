@@ -138,10 +138,17 @@ def _run_cnn_model(
     path. Runs on the daemon worker thread; the widget mutation (verify/enable,
     add/remove) happens separately, never inside this function.
 
-    The staged composite is deliberately NOT discarded: the prediction raster
-    ``apply_dl_model`` writes sits beside it and the caller reads that path back.
-    Both are container-local scratch (inventory c11/c12) and are swept with the
-    rest of the Workspace's scratch at session end.
+    Neither staged file can be discarded here: ``apply_dl_model`` writes the
+    prediction raster INTO the composite's own scratch directory (same stem +
+    ``_prediction<suffix>.tif``), so releasing the composite would delete the
+    prediction — and the prediction path outlives this call, stashed on
+    ``analyzed_alerts_model.model*_prediction_file`` and read again every time the
+    user adds/removes the prediction overlay. Both are container-local scratch
+    (inventory c11/c12); they are released when the kernel goes away, by the
+    ``cleanup_kernel_scratch()`` sweep the ``on_kernel_start`` teardown in
+    ``gui/solara_app.py`` runs (``gui.scripts.scratch_registry``). Repeated CNN
+    runs in ONE session therefore still accumulate one composite + one prediction
+    each — bounded by the session, not by the container's lifetime.
     """
     from huggingface_hub import hf_hub_download
 
