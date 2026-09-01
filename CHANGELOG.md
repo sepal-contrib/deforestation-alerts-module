@@ -12,8 +12,8 @@
   dropped.
 - Restructured the module to the `data/ docs/ gui/ deforestation_alerts/` layout
   (was `component/` + `doc/` + `utils/`). No functional change.
-- SEPAL app requirements update: bumped `sepal_environment.yml` to `pysepal==3.8.0`
-  (pinned to a fork SHA to pick up the voila-local-sessions fix), rewrote the deploy
+- SEPAL app requirements update: bumped `sepal_environment.yml` to pysepal 3.8 (pinned
+  to a fork commit SHA to pick up the voila-local-sessions fix), rewrote the deploy
   spec so every pip dependency is exactly pinned (git deps pinned to an immutable
   tag/SHA) with no `-e .`; added fail-fast GDAL scratch-directory configuration for
   SEPAL's read-only module mount; centralized user-facing feedback through pysepal's
