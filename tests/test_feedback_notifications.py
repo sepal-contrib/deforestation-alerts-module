@@ -248,6 +248,57 @@ def test_recipe_load_tracks_its_phases_and_publishes_success(
     assert _toasts(events) == [("success", cm.recipe_tile.alert_load_recipe_done)]
 
 
+@pytest.mark.parametrize("shape", ["home_relative", "root_relative"])
+def test_recipe_load_normalizes_a_non_absolute_picked_path(
+    recipe_layout, ws, monkeypatch, shape
+):
+    """picker -> adapter boundary: ``FileInput`` fills ``v_model`` from the path
+    the SERVER echoes, which is not built here and is not trusted. A path that
+    is not absolute must still resolve to the right remote recipe folder rather
+    than failing the load or anchoring the alert store somewhere else."""
+    recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
+    events, threads = _record_feedback(monkeypatch, recipe_tile)
+
+    params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
+    folder = ws.results_dir("recipe_from_disk")
+    recipe_file = folder + "/recipe_parameters.json"
+    ws.write_json(recipe_file, params)
+    picked = (
+        ws.home_relative(recipe_file)  # module_results/deforestation_alerts/...
+        if shape == "home_relative"
+        else "recipe_from_disk/recipe_parameters.json"
+    )
+    assert not picked.startswith("/")
+    _find_load_input(layout).v_model = picked
+
+    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
+    _join(threads)
+
+    assert aoi_date.imported == params
+    # the store is anchored on the ABSOLUTE remote folder, not on the echo
+    assert app_state.recipe_folder_path.value == folder
+    assert app_tile_model.recipe_folder_path == folder
+    assert _toasts(events) == [("success", cm.recipe_tile.alert_load_recipe_done)]
+
+
+def test_recipe_load_refuses_a_picked_path_outside_the_workspace(
+    recipe_layout, ws, monkeypatch
+):
+    """An echoed path pointing somewhere else entirely must fail visibly instead
+    of silently pointing the alert store at another folder."""
+    recipe_tile, layout, app_state, _model, _aoi = recipe_layout
+    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    _find_load_input(layout).v_model = "/home/other-user/recipe_parameters.json"
+
+    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
+    _join(threads)
+
+    assert app_state.recipe_folder_path.value in (None, "")
+    (type_, message), = _toasts(events)
+    assert type_ == "error"
+    assert message.startswith(cm.recipe_tile.input_hint_load_recipe_name)
+
+
 def test_recipe_load_failure_fails_the_task_before_the_error_toast(
     recipe_layout, monkeypatch
 ):

@@ -71,6 +71,48 @@ from gui.store.project_writers import writing
 logger = logging.getLogger("SEPALUI.deforestation_alerts.recipe")
 
 
+def normalize_picked_path(workspace, picked):
+    """Turn the picker's ``v_model`` into an absolute path inside the workspace.
+
+    WHY: ``FileInput`` builds its entries from ``get_remote_files``, which sets
+    ``path=entry.path`` -- the path the SERVER echoes back, not one we built.
+    ``Workspace.list`` deliberately does not trust that field, so neither does
+    this. Today sepal.io echoes a home-ABSOLUTE path
+    (``/home/sepal-user/module_results/deforestation_alerts/<recipe>/...``) and
+    this is the identity; the guard exists because the whole recipe store is
+    anchored on this value (``PurePosixPath(picked).parent`` becomes
+    ``recipe_folder_path``), so a home-RELATIVE or otherwise unrooted echo must
+    not silently point the alert store at some other remote folder.
+
+    Accepted, in order:
+
+    * absolute and at/under ``workspace.root`` -> unchanged;
+    * home-relative (``module_results/deforestation_alerts/...``) -> re-rooted
+      onto the SEPAL home;
+    * root-relative (``<recipe>/recipe_parameters.json``) -> joined onto
+      ``workspace.root``.
+
+    Anything else (a traversal, or an absolute path outside the results root)
+    raises ``FileNotFoundError``: better a visible refusal than a load that
+    succeeds against the wrong folder.
+    """
+    path = PurePosixPath(str(picked))
+    root = PurePosixPath(workspace.root)
+    if ".." in path.parts:
+        raise FileNotFoundError(f"{picked}: path traverses outside the workspace")
+    if path.is_absolute():
+        if path == root or root in path.parents:
+            return str(path)
+        raise FileNotFoundError(f"{picked}: not inside {workspace.root}")
+    # Relative: either home-relative (the results root's own home-relative
+    # prefix leads it) or root-relative.
+    rel_root = PurePosixPath(workspace.home_relative(root))
+    home = PurePosixPath(*root.parts[: len(root.parts) - len(rel_root.parts)])
+    if home.is_absolute() and path.parts[: len(rel_root.parts)] == rel_root.parts:
+        return str(home / path)
+    return str(root / path)
+
+
 def start_new_recipe(app_tile_model, app_state, recipe_name, workspace):
     """Create a brand-new recipe in the user's SEPAL workspace, point the models
     at it, and signal navigation to the Aux tile.
@@ -142,6 +184,10 @@ def build_recipe_layout(
     # user's SEPAL workspace, so ``.v_model`` is a REMOTE path. ``root`` is
     # passed explicitly — with a client and no root the widget defaults it to ""
     # and then rejects any absolute initial_folder.
+    # ASSUMED SERVER SHAPE: the widget's entries carry the path the server
+    # echoes (``get_remote_files`` -> ``FileEntry.path``), observed to be
+    # home-ABSOLUTE. That is not trusted: ``_run_load`` puts ``v_model`` through
+    # ``normalize_picked_path`` before it anchors the store.
     load_recipe_input = FileInput(
         initial_folder=workspace.root,
         root=workspace.root,
@@ -251,7 +297,10 @@ def build_recipe_layout(
     # in the notification pill and the outcome is a toast.
     # ------------------------------------------------------------------
     def _run_load(task):
-        file_name = load_recipe_input.v_model
+        picked = load_recipe_input.v_model
+        # The picker's path comes from the SERVER's echoed `path` field; anchor
+        # it on the workspace before anything is read or derived from it.
+        file_name = normalize_picked_path(workspace, picked) if picked else picked
         if not file_name or not workspace.exists(file_name):
             raise FileNotFoundError(cm.recipe_tile.input_hint_load_recipe_name)
 

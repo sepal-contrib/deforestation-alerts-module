@@ -86,6 +86,19 @@ def test_save_returns_the_remote_path_and_the_store_lands_in_the_workspace(ws):
     assert ws.exists(path)
 
 
+def test_save_load_roundtrip_leaves_no_scratch_residue(ws, tmp_path):
+    """The store is staged locally, but this runs once per alert save: a leftover
+    copy of ``alert_db.parquet`` per save would fill the container's tmp for the
+    life of the session."""
+    path = ws.results_dir("recipe_test", "alert_db.parquet")
+    save_gdf_to_parquet(_sample_gdf(), ws, path)
+    load_gdf_from_parquet(ws, path)
+
+    scratch = tmp_path / "scratch"
+    residue = [p for p in scratch.rglob("*") if p.is_file()]
+    assert residue == []
+
+
 def test_load_alert_store_prefers_parquet(ws):
     folder = ws.results_dir("recipe_test")
     save_gdf_to_parquet(_sample_gdf(), ws, folder + "/alert_db.parquet")

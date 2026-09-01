@@ -15,8 +15,8 @@ REAL ``pysepal_api.SepalClient`` surface the adapter binds to --
 * ``ensure_results_dir()`` is network I/O the client's own docstring says to
   call once at startup, never on a render path. ``results_path`` is pure path
   arithmetic. ``test_results_dir_is_pure`` pins that the adapter builds paths
-  from the latter and never calls the former. (The app makes that one startup
-  call in ``Page()``, not from inside the adapter.)
+  from the latter and never calls the former. Nor does the app: ``Page()``
+  constructs the Workspace during render, so that construction stays pure.
 """
 
 from pathlib import Path
@@ -273,6 +273,32 @@ def test_upload_from_scratch_accepts_a_str_path(ws):
     remote = ws.results_dir("t.txt")
     ws.upload_from_scratch(str(local), remote)
     assert ws.read_text(remote) == "hi"
+
+
+def test_discard_scratch_removes_the_file_and_its_private_dir(ws):
+    """The hot paths (one store save per alert) must not leave a copy behind."""
+    local = ws.scratch_file(".parquet")
+    local.write_bytes(b"PAR1")
+    private = local.parent
+    root = private.parent
+
+    ws.discard_scratch(local)
+
+    assert not local.exists()
+    assert not private.exists()
+    assert root.is_dir()  # the shared scratch root survives for the next stage
+
+
+def test_discard_scratch_ignores_paths_outside_its_scratch_root(ws, tmp_path):
+    """It must never be able to delete user data or a packaged asset."""
+    ws.scratch_file()  # force the scratch root into existence
+    outsider = tmp_path / "not_scratch" / "keep.txt"
+    outsider.parent.mkdir(parents=True)
+    outsider.write_text("keep")
+
+    ws.discard_scratch(outsider)
+
+    assert outsider.exists()
 
 
 def test_cleanup_scratch_removes_everything_and_is_reusable(ws):

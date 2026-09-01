@@ -6,8 +6,6 @@ reader on purpose: its caller (``load_alert_store``) stages the remote CSV with
 ``download_to_scratch`` first, because pandas only opens local files.
 """
 
-import json
-
 from shapely.geometry import Point
 
 from deforestation_alerts.scripts.recipe_helper import (
@@ -93,7 +91,11 @@ def test_save_model_parameters_merges_all_dicts(ws):
 
 def test_save_model_parameters_is_valid_utf8_json_in_the_workspace(ws):
     """The recipe name is user-supplied free text; it must survive the round
-    trip through the adapter (which encodes/decodes UTF-8 in both directions)."""
+    trip through the adapter (which encodes/decodes UTF-8 in both directions).
+
+    Read back with ``read_json`` -- the call the production load path makes --
+    so the assertion covers the decode that actually ships, not a friendlier
+    neighbouring one."""
     app = AppTileModel()
     app.recipe_name = "Canindeyú_2026"
     selected = SelectedAlertsModel()
@@ -104,4 +106,4 @@ def test_save_model_parameters_is_valid_utf8_json_in_the_workspace(ws):
         ws, out, AuxModel(), _AoiDateStub(), None, selected, AlertAnalysisModel(), app
     )
 
-    assert json.loads(ws.read_text(out))["recipe_name"] == "Canindeyú_2026"
+    assert ws.read_json(out)["recipe_name"] == "Canindeyú_2026"

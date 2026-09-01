@@ -14,9 +14,11 @@ and the wired path is remote.
 No GEE, no browser.
 """
 
+import pytest
+
 from deforestation_alerts.model.app_model import AppTileModel
 from gui.store.state_manager import AppState
-from gui.tile.recipe_tile import start_new_recipe
+from gui.tile.recipe_tile import normalize_picked_path, start_new_recipe
 
 
 def test_start_new_recipe_creates_folder_and_wires_path(ws):
@@ -36,3 +38,29 @@ def test_start_new_recipe_creates_folder_and_wires_path(ws):
     # name recorded + navigation to the Aux step preserved
     assert app_tile_model.recipe_name == "recipe_2026-06-11-120000"
     assert app_state.current_page_view.value == "aux_tile"
+
+
+# ---------------------------------------------------------------------------
+# The picker's path is the server's echo, not one we built (Task 11 fix round 1)
+# ---------------------------------------------------------------------------
+def test_normalize_picked_path_accepts_an_absolute_workspace_path(ws):
+    picked = ws.results_dir("r1", "recipe_parameters.json")
+    assert normalize_picked_path(ws, picked) == picked
+
+
+def test_normalize_picked_path_reroots_a_home_relative_echo(ws):
+    absolute = ws.results_dir("r1", "recipe_parameters.json")
+    assert normalize_picked_path(ws, ws.home_relative(absolute)) == absolute
+
+
+def test_normalize_picked_path_reroots_a_root_relative_echo(ws):
+    assert normalize_picked_path(ws, "r1/recipe_parameters.json") == ws.results_dir(
+        "r1", "recipe_parameters.json"
+    )
+
+
+def test_normalize_picked_path_rejects_paths_outside_the_workspace(ws):
+    with pytest.raises(FileNotFoundError):
+        normalize_picked_path(ws, "/etc/passwd")
+    with pytest.raises(FileNotFoundError):
+        normalize_picked_path(ws, "../../etc/passwd")

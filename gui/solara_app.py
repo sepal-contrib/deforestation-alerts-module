@@ -230,23 +230,14 @@ def Page():
 
     # The ONE boundary every user file goes through. Built here from the session
     # client and threaded into the tiles exactly like ``gee_interface`` — never
-    # fetched at module import, where no session exists yet. ``ensure_results_dir``
-    # is the client's own once-at-startup mkdir of the results root: it is
-    # idempotent, and it removes the first-run case where a listing of a
-    # never-created root would have to be interpreted (see Workspace.list's note
-    # on the 404). It is NOT called per write. A transient failure is logged
-    # rather than fatal: every Workspace write creates its own parents anyway.
+    # fetched at module import, where no session exists yet. Construction is
+    # PURE: no ``ensure_results_dir()`` (or any other network call) here — this
+    # body runs on the render path, which the adapter forbids blocking I/O on.
+    # First run needs no mkdir anyway: every Workspace write creates its own
+    # parents, and a missing results root lists as [] / exists as False.
     # Workspace() itself DOES raise on a missing/module-less client — that is a
     # broken session, and failing at startup beats failing mid-save.
-    def _make_workspace():
-        ws = Workspace(sepal_client)
-        try:
-            sepal_client.ensure_results_dir()
-        except Exception:
-            logger.exception("Failed to ensure the SEPAL results directory")
-        return ws
-
-    workspace = solara.use_memo(_make_workspace, dependencies=[])
+    workspace = solara.use_memo(lambda: Workspace(sepal_client), dependencies=[])
 
     # Centralized user feedback. Mounted BEFORE the tiles are constructed so
     # use_notifications() inside them binds the real kernel-scoped bus (a

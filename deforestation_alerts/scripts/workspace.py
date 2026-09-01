@@ -210,8 +210,14 @@ class Workspace:
         return self.read_bytes(remote_path).decode("utf-8")
 
     def read_json(self, remote_path: Any) -> Any:
-        """Download ``remote_path`` and parse it as JSON."""
-        return self._files.read_json(str(remote_path))
+        """Download ``remote_path`` and parse it as JSON.
+
+        Goes through :meth:`read_text` (forced UTF-8), NOT ``files.read_json``,
+        for exactly the reason spelled out there: this is the production
+        recipe-load path and recipe names are user-supplied free text, so the
+        charset-guessing decode must not be reachable from it either.
+        """
+        return json.loads(self.read_text(remote_path))
 
     def write_bytes(self, remote_path: Any, data: bytes, *, overwrite: bool = True) -> str:
         """Upload ``data`` to ``remote_path``; returns the path written.
@@ -280,10 +286,11 @@ class Workspace:
            stay green, because the signature-drift guard compares signatures,
            not response semantics. The user-visible failure would be a first-run
            recipe picker erroring out before anything has ever been saved.
-           Task 11 also calls ``ensure_results_dir()`` once at wiring time so
-           the results root always exists -- that removes the common first-run
-           case but not the general one (any not-yet-created recipe subfolder
-           still hits this).
+           Nothing calls ``ensure_results_dir()`` to paper over the first-run
+           case: that would be a blocking round trip on the ``Page()`` render
+           path, which this module forbids. The root is created at write time
+           by ``files.mkdir(..., parents=True)``, and until then the verified
+           semantics (list -> ``[]``, exists -> ``False``) cover first run.
         """
         folder = str(remote_path) if remote_path is not None else self.root
         try:
@@ -376,12 +383,37 @@ class Workspace:
         """Upload a staged local file to ``remote_path``; returns that path.
 
         The local file is left in place: callers routinely reuse it (the report
-        zips the same GeoTIFF it just uploaded). :meth:`cleanup_scratch` is the
-        bulk sweep.
+        zips the same GeoTIFF it just uploaded). A caller that is done with it
+        should call :meth:`discard_scratch` right away -- especially on a
+        per-alert path; :meth:`cleanup_scratch` is the bulk sweep.
         """
         return self.write_bytes(
             remote_path, Path(local_path).read_bytes(), overwrite=overwrite
         )
+
+    def discard_scratch(self, local_path: Any) -> None:
+        """Delete one staged file and the private directory it was created in.
+
+        Every ``scratch_file`` / ``download_to_scratch`` call makes its own
+        ``mkdtemp`` directory, so dropping the parent drops the file and nothing
+        else. Call it as soon as a staged file has been uploaded (or read) on a
+        hot path -- the alert store is staged once per alert save, and without
+        this every save leaves a full copy of ``alert_db.parquet`` in the
+        container's tmp for the life of the session. A path outside this
+        Workspace's scratch root is ignored: this must never be able to delete
+        user data or a packaged asset.
+        """
+        path = Path(local_path)
+        root = self._scratch_root
+        if root is None:
+            return
+        parent = path.parent
+        try:
+            inside = parent != root and root in parent.parents
+        except (OSError, ValueError):  # pragma: no cover -- defensive
+            return
+        if inside:
+            shutil.rmtree(parent, ignore_errors=True)
 
     def cleanup_scratch(self) -> None:
         """Delete everything this Workspace staged locally. Safe to call twice;

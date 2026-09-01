@@ -113,8 +113,9 @@ class FakeSepalClient:
     """Fake of the session ``SepalClient``: a pure ``results_path`` plus ``files``.
 
     ``ensure_results_dir`` is present because the real client has it -- it counts
-    calls so a test can prove the adapter never issues that request on a render
-    path (the app calls it exactly once, at wiring time in ``Page()``).
+    calls so a test can prove the adapter never issues that request. Nothing in
+    the app calls it either: ``Page()`` builds the Workspace on a render path,
+    and writes create their own parents.
     """
 
     def __init__(self, module_name="deforestation_alerts"):

@@ -315,19 +315,29 @@ def save_gdf_to_parquet(gdf, workspace, remote_path):
     if "geometry" in out.columns:
         out = out.set_geometry("geometry")
     # pyarrow writes a local file; stage it, then ship it to the user's
-    # workspace and hand back the REMOTE path that is the store.
+    # workspace and hand back the REMOTE path that is the store. The staged copy
+    # is dropped immediately: this runs once per alert save, so keeping it would
+    # pile up a full copy of the store in container tmp per save.
     local = workspace.scratch_file(".parquet")
-    out.to_parquet(local)
-    return workspace.upload_from_scratch(local, remote_path)
+    try:
+        out.to_parquet(local)
+        return workspace.upload_from_scratch(local, remote_path)
+    finally:
+        workspace.discard_scratch(local)
 
 
 def load_gdf_from_parquet(workspace, remote_path):
     """Read a GeoParquet alerts store out of the user's SEPAL workspace.
 
-    GeoPandas/pyarrow only open local files, so the store is staged first;
+    GeoPandas/pyarrow only open local files, so the store is staged first, then
+    the staged copy is discarded (the gdf is fully in memory by then);
     `geometry` is made the active geometry on the way back.
     """
-    gdf = gpd.read_parquet(workspace.download_to_scratch(remote_path))
+    local = workspace.download_to_scratch(remote_path)
+    try:
+        gdf = gpd.read_parquet(local)
+    finally:
+        workspace.discard_scratch(local)
     if "geometry" in gdf.columns:
         gdf = gdf.set_geometry("geometry")
     return gdf
@@ -353,7 +363,10 @@ def load_alert_store(workspace, recipe_folder):
     csv = str(folder / "alert_db.csv")
     if workspace.exists(csv):
         local = workspace.download_to_scratch(csv)
-        return backfill_geometry(load_gdf_from_csv(local, ALERT_GEOM_COLS))
+        try:
+            return backfill_geometry(load_gdf_from_csv(local, ALERT_GEOM_COLS))
+        finally:
+            workspace.discard_scratch(local)
     return None
 
 
