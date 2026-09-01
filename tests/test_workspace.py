@@ -1,8 +1,10 @@
 """Contract tests for the SepalClient workspace adapter.
 
-The fake below mirrors the REAL ``pysepal_api.SepalClient`` surface the adapter
-binds to -- ``client.files.{list,read_bytes,read_json,write,mkdir}`` plus the
-pure ``client.results_path`` attribute -- including the parts that bite:
+The fake these run against lives in ``tests/conftest.py`` (the ``ws`` /
+``fakes`` fixtures) because every store test now needs it too. It mirrors the
+REAL ``pysepal_api.SepalClient`` surface the adapter binds to --
+``client.files.{list,read_bytes,read_json,write,mkdir}`` plus the pure
+``client.results_path`` attribute -- including the parts that bite:
 
 * ``files.list`` returns a ``DirectoryListing`` model (not a list of names), so
   the fake builds the REAL pydantic models rather than hand-rolled stand-ins: a
@@ -13,128 +15,14 @@ pure ``client.results_path`` attribute -- including the parts that bite:
 * ``ensure_results_dir()`` is network I/O the client's own docstring says to
   call once at startup, never on a render path. ``results_path`` is pure path
   arithmetic. ``test_results_dir_is_pure`` pins that the adapter builds paths
-  from the latter and never calls the former.
+  from the latter and never calls the former. (The app makes that one startup
+  call in ``Page()``, not from inside the adapter.)
 """
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import pytest
 from pysepal_api.errors import Conflict, NotFound
-from pysepal_api.models import DirectoryListing, FileEntry, FileWriteResult
-
-RESULTS_PATH = PurePosixPath("/home/sepal-user/module_results/deforestation_alerts")
-
-
-class FakeUserFiles:
-    """In-memory stand-in for ``pysepal_api.endpoints.user_files.UserFilesEndpoint``.
-
-    Signatures copied from the real class; paths are kept verbatim (the real
-    endpoint sanitizes them server-side, which is not what we are testing here).
-    """
-
-    def __init__(self):
-        self.files: dict[str, bytes] = {}
-        self.dirs: set[str] = set()
-        self.mkdir_calls: list[str] = []
-
-    # -- real signature: list(folder=".", *, extensions=None, include_hidden=False)
-    def list(self, folder=".", *, extensions=None, include_hidden=False):
-        folder = str(folder).rstrip("/") or "/"
-        if folder not in self.dirs:
-            raise NotFound(404, url=folder)
-        entries = []
-        for name in self._children(folder, self.dirs):
-            entries.append(
-                FileEntry(name=name, path=f"{folder}/{name}", type="directory", size=0)
-            )
-        for name in self._children(folder, self.files):
-            if extensions and PurePosixPath(name).suffix not in extensions:
-                continue
-            entries.append(
-                FileEntry(
-                    name=name,
-                    path=f"{folder}/{name}",
-                    type="file",
-                    size=len(self.files[f"{folder}/{name}"]),
-                )
-            )
-        if not include_hidden:
-            entries = [e for e in entries if not e.name.startswith(".")]
-        return DirectoryListing(path=folder, files=entries, count=len(entries))
-
-    @staticmethod
-    def _children(folder, keys):
-        prefix = folder if folder.endswith("/") else folder + "/"
-        out = []
-        for key in keys:
-            if not key.startswith(prefix):
-                continue
-            rest = key[len(prefix) :]
-            if "/" in rest or not rest:
-                continue
-            out.append(rest)
-        return out
-
-    def read_bytes(self, file_path):
-        key = str(file_path)
-        if key not in self.files:
-            raise NotFound(404, url=key)
-        return self.files[key]
-
-    def read_text(self, file_path):
-        return self.read_bytes(file_path).decode("utf-8")
-
-    def read_json(self, file_path):
-        import json
-
-        return json.loads(self.read_text(file_path))
-
-    # -- real signature: write(file_path, content, *, overwrite=False)
-    def write(self, file_path, content, *, overwrite=False):
-        key = str(file_path)
-        if key in self.files and not overwrite:
-            raise Conflict(409, url=key)
-        payload = content.encode("utf-8") if isinstance(content, str) else content
-        self.files[key] = payload
-        return FileWriteResult(path=key, size=len(payload))
-
-    # -- real signature: mkdir(path, *, parents=True) -> PurePosixPath
-    def mkdir(self, path, *, parents=True):
-        key = str(path).rstrip("/") or "/"
-        self.mkdir_calls.append(key)
-        parts = PurePosixPath(key).parts
-        for i in range(1, len(parts) + 1):
-            self.dirs.add(str(PurePosixPath(*parts[:i])).rstrip("/") or "/")
-        return PurePosixPath(key)
-
-
-class FakeSepalClient:
-    """Fake of the session ``SepalClient``: a pure ``results_path`` plus ``files``.
-
-    ``ensure_results_dir`` is present because the real client has it -- it
-    counts calls so a test can prove the adapter never issues that request.
-    """
-
-    def __init__(self, module_name="deforestation_alerts"):
-        self.module_name = module_name
-        self.results_path = RESULTS_PATH if module_name else None
-        self.files = FakeUserFiles()
-        self.ensure_calls = 0
-
-    def ensure_results_dir(self):
-        self.ensure_calls += 1
-        if not self.module_name:
-            return None
-        return self.files.mkdir(str(self.results_path), parents=True)
-
-
-@pytest.fixture()
-def ws(monkeypatch, tmp_path):
-    """A Workspace over a fake client, with scratch pinned inside tmp_path."""
-    from deforestation_alerts.scripts.workspace import Workspace
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_GDAL_TMPDIR", str(tmp_path / "scratch"))
-    return Workspace(FakeSepalClient())
 
 
 # ---------------------------------------------------------------------------
@@ -142,15 +30,15 @@ def ws(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_results_dir_roots_under_results_path(ws):
+def test_results_dir_roots_under_results_path(ws, fakes):
     p = ws.results_dir("recipes", "r1")
-    assert p == f"{RESULTS_PATH}/recipes/r1"
-    assert p.startswith(str(RESULTS_PATH))
+    assert p == f"{fakes.RESULTS_PATH}/recipes/r1"
+    assert p.startswith(str(fakes.RESULTS_PATH))
 
 
-def test_results_dir_no_parts_is_the_root(ws):
-    assert ws.results_dir() == str(RESULTS_PATH)
-    assert ws.root == str(RESULTS_PATH)
+def test_results_dir_no_parts_is_the_root(ws, fakes):
+    assert ws.results_dir() == str(fakes.RESULTS_PATH)
+    assert ws.root == str(fakes.RESULTS_PATH)
 
 
 def test_results_dir_is_pure(ws):
@@ -174,11 +62,11 @@ def test_workspace_requires_a_client():
         Workspace(None)
 
 
-def test_workspace_requires_a_module_name():
+def test_workspace_requires_a_module_name(fakes):
     from deforestation_alerts.scripts.workspace import Workspace
 
     with pytest.raises(ValueError):
-        Workspace(FakeSepalClient(module_name=None))
+        Workspace(fakes.FakeSepalClient(module_name=None))
 
 
 # ---------------------------------------------------------------------------
@@ -290,17 +178,17 @@ def test_list_filters_by_extension(ws):
 
 
 def test_list_of_a_missing_folder_is_empty(ws):
-    """UNVERIFIED against a live SEPAL server: the 404 this rests on is asserted
-    by FakeUserFiles alone (see Workspace.list's warning). A real server
-    answering 403/500 for a missing folder would make the production call raise
-    while this test still passes -- the signature-drift guard below compares
-    signatures, not response semantics."""
+    """The 404 this rests on is FakeUserFiles' choice here, but it was confirmed
+    against sepal.io on 2026-09-01 (Task 11 live check; see Workspace.list's
+    note). A deployment answering 403/500 for a missing folder would still make
+    the production call raise while this test passes -- the signature-drift
+    guard below compares signatures, not response semantics."""
     assert ws.list(ws.results_dir("does_not_exist")) == []
 
 
 def test_exists(ws):
-    """Carries the same UNVERIFIED 404 assumption as the listing tests above;
-    see Workspace.exists' warning for what breaks if it is wrong."""
+    """Carries the same 404 assumption as the listing tests above; see
+    Workspace.exists' note for what breaks where it does not hold."""
     path = ws.results_dir("recipes") + "/x.json"
     assert ws.exists(path) is False
     ws.write_bytes(path, b"{}")
@@ -421,16 +309,16 @@ def _shape(func):
     ]
 
 
-def test_fake_user_files_matches_the_real_endpoint_signatures():
+def test_fake_user_files_matches_the_real_endpoint_signatures(fakes):
     from pysepal_api.endpoints.user_files import UserFilesEndpoint
 
     for name in ("list", "read_bytes", "read_text", "read_json", "write", "mkdir"):
-        assert _shape(getattr(FakeUserFiles, name)) == _shape(
+        assert _shape(getattr(fakes.FakeUserFiles, name)) == _shape(
             getattr(UserFilesEndpoint, name)
         ), f"FakeUserFiles.{name} has drifted from UserFilesEndpoint.{name}"
 
 
-def test_real_client_exposes_the_attributes_the_adapter_binds_to():
+def test_real_client_exposes_the_attributes_the_adapter_binds_to(fakes):
     """Construction is pure (no network), so this can assert on the real class."""
     from pysepal_api import NoAuth, SepalClient
 
@@ -439,11 +327,11 @@ def test_real_client_exposes_the_attributes_the_adapter_binds_to():
         base_url="https://example.invalid",
         auth=NoAuth(),
     ) as client:
-        assert client.results_path == RESULTS_PATH
+        assert client.results_path == fakes.RESULTS_PATH
         assert hasattr(client.files, "write") and hasattr(client.files, "mkdir")
 
 
-def test_workspace_accepts_the_real_client():
+def test_workspace_accepts_the_real_client(fakes):
     from deforestation_alerts.scripts.workspace import Workspace
     from pysepal_api import NoAuth, SepalClient
 
@@ -452,4 +340,4 @@ def test_workspace_accepts_the_real_client():
         base_url="https://example.invalid",
         auth=NoAuth(),
     ) as client:
-        assert Workspace(client).results_dir("recipes") == f"{RESULTS_PATH}/recipes"
+        assert Workspace(client).results_dir("recipes") == f"{fakes.RESULTS_PATH}/recipes"

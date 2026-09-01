@@ -87,7 +87,9 @@ _ALERT_BB_STYLE = {
 }
 
 
-def view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field):
+def view_actual_alert(
+    widgets, app_state, analyzed_alerts_model, app_tile_model, id_field, workspace
+):
     """Per-alert orchestration owned by the foundation.
 
     Ports the foundation-relevant parts of the OLD ``view_actual_alert``: select
@@ -145,6 +147,7 @@ def view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model,
     if recipe_folder:
         try:
             update_saved_dictionary(
+                workspace,
                 recipe_folder + "/recipe_parameters.json",
                 "actual_alert_id",
                 alert_id,
@@ -231,6 +234,7 @@ def build_analysis_layout(
     app_tile_model,
     app_state,
     gee_interface,
+    workspace,
     theme_state=None,
 ):
     """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
@@ -257,6 +261,9 @@ def build_analysis_layout(
         Source of truth for the alerts table + navigation.
     gee_interface : GEEInterface
         Session GEE interface, forwarded to both maps.
+    workspace : Workspace
+        Session user-file adapter (built in ``Page()``); the recipe JSON and the
+        alert store are read/written through it.
     theme_state : ThemeState, optional
         Shared app theme state, forwarded to both maps so they track the app's
         light/dark theme exactly as the shared main map does.
@@ -326,12 +333,17 @@ def build_analysis_layout(
     # alerts are loaded, so it is safe at mount/smoke time and idempotent.
     def _on_alert_change(*_):
         view_actual_alert(
-            widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
+            widgets,
+            app_state,
+            analyzed_alerts_model,
+            app_tile_model,
+            id_field,
+            workspace,
         )
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
     view_actual_alert(
-        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
+        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field, workspace
     )
 
     # Select alert 0 when an alert set first arrives (OLD create_gdf set
@@ -426,6 +438,7 @@ def build_analysis_layout(
                 aux_model=aux_model,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
+                workspace=workspace,
             ),
         ],
     )

@@ -1,7 +1,12 @@
-"""Characterization tests for component/scripts/recipe_helper.py pure I/O."""
+"""Characterization tests for deforestation_alerts/scripts/recipe_helper.py I/O.
+
+The recipe JSON lives in the user's SEPAL workspace, so the two functions that
+touch it are driven through ``Workspace``. ``load_gdf_from_csv`` stays a local
+reader on purpose: its caller (``load_alert_store``) stages the remote CSV with
+``download_to_scratch`` first, because pandas only opens local files.
+"""
 
 import json
-from pathlib import Path
 
 from shapely.geometry import Point
 
@@ -23,16 +28,24 @@ def test_load_gdf_from_csv_decodes_wkt_geometry(sample_wkt_csv):
     assert list(gdf["id"]) == [0, 1]
 
 
-def test_update_saved_dictionary_overwrites_and_adds_keys(tmp_path):
-    p = tmp_path / "recipe_parameters.json"
-    p.write_text(json.dumps({"actual_alert_id": 0}))
+def test_update_saved_dictionary_overwrites_and_adds_keys(ws):
+    path = ws.results_dir("recipe_test", "recipe_parameters.json")
+    ws.write_json(path, {"actual_alert_id": 0})
 
-    update_saved_dictionary(str(p), "actual_alert_id", 5)
-    update_saved_dictionary(str(p), "recipe_name", "recipe_test")
+    update_saved_dictionary(ws, path, "actual_alert_id", 5)
+    update_saved_dictionary(ws, path, "recipe_name", "recipe_test")
 
-    data = json.loads(p.read_text())
+    data = ws.read_json(path)
     assert data["actual_alert_id"] == 5          # overwritten
     assert data["recipe_name"] == "recipe_test"  # added
+
+
+def test_update_saved_dictionary_survives_a_missing_recipe(ws):
+    """The old code swallowed FileNotFoundError so a per-alert id write could
+    never break navigation; the adapter's equivalent is pysepal_api.NotFound."""
+    update_saved_dictionary(
+        ws, ws.results_dir("gone", "recipe_parameters.json"), "actual_alert_id", 1
+    )  # must not raise
 
 
 from deforestation_alerts.model.aux_model import AuxModel
@@ -49,16 +62,17 @@ class _AoiDateStub:
         return {"aoi_method": "ADMIN0", "aoi_admin": ["CIV"]}
 
 
-def test_save_model_parameters_merges_all_dicts(tmp_path):
+def test_save_model_parameters_merges_all_dicts(ws):
     app = AppTileModel()
     app.recipe_name = "recipe_test"
-    out = tmp_path / "recipe_parameters.json"
+    out = ws.results_dir("recipe_test", "recipe_parameters.json")
 
     selected = SelectedAlertsModel()
     selected.min_area = 1.5  # Float(None) default raises on export under installed traitlets
 
     path = save_model_parameters_to_json(
-        str(out),
+        ws,
+        out,
         AuxModel(),          # aux_model        -> contributes ccdc_layer, ...
         _AoiDateStub(),      # aoi_date_model   -> contributes aoi_method, aoi_admin
         None,                # alert_filter_model -> intentionally unused
@@ -67,10 +81,27 @@ def test_save_model_parameters_merges_all_dicts(tmp_path):
         app,                 # app_tile_model   -> contributes recipe_name, ...
     )
 
-    data = json.loads(Path(path).read_text())
+    assert path == out
+    data = ws.read_json(path)
     # one representative key from each contributing model
     assert "ccdc_layer" in data                # AuxModel
     assert data["aoi_method"] == "ADMIN0"      # AoiDate stub
     assert "selected_alert_sources" in data    # SelectedAlertsModel
     assert data["actual_alert_id"] == 0        # AlertAnalysisModel (clamped)
     assert data["recipe_name"] == "recipe_test"  # AppTileModel
+
+
+def test_save_model_parameters_is_valid_utf8_json_in_the_workspace(ws):
+    """The recipe name is user-supplied free text; it must survive the round
+    trip through the adapter (which encodes/decodes UTF-8 in both directions)."""
+    app = AppTileModel()
+    app.recipe_name = "Canindeyú_2026"
+    selected = SelectedAlertsModel()
+    selected.min_area = 1.5
+    out = ws.results_dir("Canindeyú_2026", "recipe_parameters.json")
+
+    save_model_parameters_to_json(
+        ws, out, AuxModel(), _AoiDateStub(), None, selected, AlertAnalysisModel(), app
+    )
+
+    assert json.loads(ws.read_text(out))["recipe_name"] == "Canindeyú_2026"

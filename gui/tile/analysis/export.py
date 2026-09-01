@@ -80,7 +80,7 @@ app_tile_model : AppTileModel
 import logging
 import os
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import ee
 import geopandas as gpd
@@ -114,7 +114,7 @@ _DEFAULT_REPORT_TEMPLATE = str(
 )
 
 
-def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
+def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
@@ -210,22 +210,28 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
         )
 
     # Persist the alert DB (OLD save_alerts_to_gdf). Skip if no recipe folder.
-    _save_alerts_to_gdf(alertas_gdf, app_tile_model)
+    _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace)
 
     analyzed_alerts_model.last_save_time = datetime.today().timestamp()
     return True
 
 
-def _save_alerts_to_gdf(alertas_gdf, app_tile_model):
+def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
     """Persist the alerts gdf to the canonical GeoParquet store.
 
-    Writes ``<recipe_folder>/alert_db.parquet`` (all geometry columns preserved).
+    Writes ``<recipe_folder>/alert_db.parquet`` (all geometry columns preserved)
+    into the user's SEPAL workspace through ``workspace``; ``recipe_folder_path``
+    is a REMOTE path, so the join is posix, not ``os.path``.
     Guard: skip if ``recipe_folder_path`` is empty (smoke / no recipe yet).
     """
     recipe_folder = app_tile_model.recipe_folder_path
     if not recipe_folder:
         return
-    save_gdf_to_parquet(alertas_gdf, os.path.join(recipe_folder, "alert_db.parquet"))
+    save_gdf_to_parquet(
+        alertas_gdf,
+        workspace,
+        str(PurePosixPath(recipe_folder) / "alert_db.parquet"),
+    )
 
 
 def _download_data(widgets, app_state, aux_model, app_tile_model):
@@ -303,8 +309,14 @@ def build_export(
     aux_model,
     analyzed_alerts_model,
     app_tile_model,
+    workspace,
 ):
-    """Build and return the export card (OLD ``card06``) with the save + download flow."""
+    """Build and return the export card (OLD ``card06``) with the save + download flow.
+
+    ``workspace`` is the session ``Workspace`` built in ``Page()`` and threaded
+    down like ``gee_interface``: the alert store it writes is a user file and
+    must land in the user's SEPAL workspace, not the container's disk.
+    """
 
     # ------------------------------------------------------------------
     # Buttons + toolbars (created once so the imperative
@@ -399,7 +411,11 @@ def build_export(
                 # written so future delete/close paths can refuse to act mid-write.
                 with writing(app_state.recipe_name.value or "recipe"):
                     saved = _save_attributes(
-                        widgets, app_state, analyzed_alerts_model, app_tile_model
+                        widgets,
+                        app_state,
+                        analyzed_alerts_model,
+                        app_tile_model,
+                        workspace,
                     )
                 task.complete()
                 if saved:

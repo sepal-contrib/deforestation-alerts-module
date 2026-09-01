@@ -23,7 +23,6 @@ No GEE, no browser.
 """
 
 import ast
-import json
 from pathlib import Path
 
 import pytest
@@ -33,7 +32,6 @@ from deforestation_alerts.model.alerts_model import SelectedAlertsModel
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
-from deforestation_alerts.parameter import directory
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 
@@ -160,9 +158,13 @@ class _AoiDateStub:
 # recipe_tile — raw ipyvuetify layout + daemon workers -> notify()/track_task()
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def recipe_layout(tmp_path, monkeypatch):
-    """Build the real recipe layout against tmp_path, with the models it needs."""
-    monkeypatch.setattr(directory, "module_dir", tmp_path)
+def recipe_layout(ws):
+    """Build the real recipe layout against a ``Workspace`` over the fake client.
+
+    The recipe files these workers save and load are USER files, so the assertions
+    below read them back out of the workspace (``ws``), not off the container's
+    disk — that IS the contract Task 11 moved them onto.
+    """
     import gui.tile.recipe_tile as recipe_tile
 
     selected = SelectedAlertsModel()
@@ -179,50 +181,55 @@ def recipe_layout(tmp_path, monkeypatch):
         AlertAnalysisModel(),
         app_tile_model,
         app_state,
+        ws,
     )
     return recipe_tile, layout, app_state, app_tile_model, aoi_date
 
 
-def test_recipe_save_publishes_a_success_toast(recipe_layout, tmp_path, monkeypatch):
+def test_recipe_save_publishes_a_success_toast(recipe_layout, ws, monkeypatch):
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
     events, threads = _record_feedback(monkeypatch, recipe_tile)
-    app_state.recipe_folder_path.value = str(tmp_path)
+    folder = ws.ensure_dir("recipe_test")
+    app_state.recipe_folder_path.value = folder
 
     _button(layout, cm.recipe_tile.button_save_recipe).fire_event("click", None)
     _join(threads)
 
-    # the toast reports a save that really happened
-    assert (tmp_path / "recipe_parameters.json").is_file()
+    # the toast reports a save that really happened -- in the user's workspace
+    assert ws.exists(folder + "/recipe_parameters.json")
     assert _toasts(events) == [("success", cm.recipe_tile.alert_save_recipe_done)]
 
 
 def test_recipe_save_failure_publishes_an_error_toast(
-    recipe_layout, tmp_path, monkeypatch
+    recipe_layout, ws, monkeypatch
 ):
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
     events, threads = _record_feedback(monkeypatch, recipe_tile)
     # a folder that does not exist -> _run_save raises FileNotFoundError
-    app_state.recipe_folder_path.value = str(tmp_path / "gone")
+    gone = ws.results_dir("gone")
+    app_state.recipe_folder_path.value = gone
 
     _button(layout, cm.recipe_tile.button_save_recipe).fire_event("click", None)
     _join(threads)
 
-    assert not (tmp_path / "gone").exists()
+    assert not ws.exists(gone)
+    assert ws.client.files.files == {}  # and nothing was written anyway
     (type_, message), = _toasts(events)
     assert type_ == "error"
     assert message.startswith(cm.recipe_tile.input_hint_save_recipe_error)
 
 
 def test_recipe_load_tracks_its_phases_and_publishes_success(
-    recipe_layout, tmp_path, monkeypatch
+    recipe_layout, ws, monkeypatch
 ):
     recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
     events, threads = _record_feedback(monkeypatch, recipe_tile)
 
     params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
-    recipe_file = tmp_path / "recipe_parameters.json"
-    recipe_file.write_text(json.dumps(params))
-    _find_load_input(layout).v_model = str(recipe_file)
+    folder = ws.results_dir("recipe_from_disk")
+    recipe_file = folder + "/recipe_parameters.json"
+    ws.write_json(recipe_file, params)
+    _find_load_input(layout).v_model = recipe_file
 
     _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
     _join(threads)
@@ -230,7 +237,7 @@ def test_recipe_load_tracks_its_phases_and_publishes_success(
     # the load really ran: models imported and the folder published
     assert aoi_date.imported == params
     assert app_tile_model.recipe_name == "recipe_from_disk"
-    assert app_state.recipe_folder_path.value == str(tmp_path)
+    assert app_state.recipe_folder_path.value == folder
     # and it was reported as a 2-phase tracked task followed by one success toast
     assert events[0] == ("task:start", cm.recipe_tile.load_task_title, 2)
     assert [e for e in events if e[0] == "task:step"] == [
@@ -262,10 +269,12 @@ def test_recipe_load_failure_fails_the_task_before_the_error_toast(
 
 
 def _find_load_input(layout):
-    from pysepal import sepalwidgets as sw
+    """The recipe picker: pysepal's REMOTE-capable FileInput (not ``sw.FileInput``,
+    which is a different class that browses the container's disk)."""
+    from pysepal.sepalwidgets.file_input import FileInput
 
     for widget in _widgets(layout):
-        if isinstance(widget, sw.FileInput):
+        if isinstance(widget, FileInput):
             return widget
     raise AssertionError("no FileInput in the recipe layout")
 
@@ -274,7 +283,7 @@ def _find_load_input(layout):
 # analysis/export — raw layout + daemon workers -> notify()/track_task()
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def export_card(monkeypatch):
+def export_card(monkeypatch, ws):
     import gui.tile.analysis.export as export
 
     app_state = AppState()
@@ -284,6 +293,7 @@ def export_card(monkeypatch):
         aux_model=AuxModel(),
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=AppTileModel(),
+        workspace=ws,
     )
     return export, card, app_state
 

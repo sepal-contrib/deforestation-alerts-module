@@ -261,31 +261,36 @@ class Workspace:
         yet lists as empty -- a recipe picker asking before the first recipe
         exists is normal, not an error.
 
-        .. warning::
+        .. note::
 
-           **UNVERIFIED against a live SEPAL server.** The "missing folder ->
-           empty list" behaviour assumes SEPAL's ``listFiles`` answers **404**
-           for a path that does not exist. Nothing establishes that:
-           ``UserFilesEndpoint.list`` only parses whatever comes back, and
-           pysepal's own ``get_remote_files`` swallows *every* exception, so it
-           is not evidence either. The 404 is asserted solely by this repo's
-           test fake. If the real server answers 403 or 500 instead, this call
-           **raises** where it should return ``[]`` -- and the tests stay green,
-           because the signature-drift guard compares signatures, not response
-           semantics. The user-visible failure would be a first-run recipe
-           picker erroring out before anything has ever been saved. Widen this
-           ``except`` (and the twin in :meth:`exists`) the first time a real
-           session shows a different status. See also Task 11, which calls
-           ``ensure_results_dir()`` once at wiring time so the results root
-           always exists -- that removes the common first-run case but not the
-           general one (any not-yet-created recipe subfolder still hits this).
+           The "missing folder -> empty list" behaviour rests on SEPAL's
+           ``listFiles`` answering **404** for a path that does not exist. That
+           was **UNVERIFIED** when this adapter was written -- nothing in the
+           libraries establishes it (``UserFilesEndpoint.list`` only parses
+           whatever comes back, and pysepal's ``get_remote_files`` swallows
+           *every* exception), so it was asserted solely by this repo's test
+           fake. **Task 11 verified it against sepal.io on 2026-09-01** in a
+           real session for a real user: listing a folder that has never
+           existed returns ``[]``, and probing a file under it returns
+           ``False``.
+
+           The ``except`` stays narrow, so the caveat is now only about OTHER
+           statuses: if some deployment answers 403 or 500 for a missing folder,
+           this call **raises** where it should return ``[]`` -- and the tests
+           stay green, because the signature-drift guard compares signatures,
+           not response semantics. The user-visible failure would be a first-run
+           recipe picker erroring out before anything has ever been saved.
+           Task 11 also calls ``ensure_results_dir()`` once at wiring time so
+           the results root always exists -- that removes the common first-run
+           case but not the general one (any not-yet-created recipe subfolder
+           still hits this).
         """
         folder = str(remote_path) if remote_path is not None else self.root
         try:
             listing = self._files.list(
                 folder, extensions=extensions, include_hidden=include_hidden
             )
-        except NotFound:  # assumed status for "no such folder" -- see the warning
+        except NotFound:  # verified status for "no such folder" -- see the note
             return []
         base = _as_posix(folder)
         out = []
@@ -299,11 +304,12 @@ class Workspace:
     def exists(self, remote_path: Any) -> bool:
         """Whether a file or directory exists remotely (one listing round trip).
 
-        .. warning::
+        .. note::
 
-           **UNVERIFIED against a live SEPAL server**, same assumption as
-           :meth:`list`: a missing *parent* folder is taken to mean 404, and so
-           "does not exist". If the server answers 403/500 instead, this raises
+           Same 404 assumption as :meth:`list`, verified with it against
+           sepal.io on 2026-09-01 (see the note there): a missing *parent*
+           folder is taken to mean 404, and so "does not exist". If some other
+           deployment answers 403/500 instead, this raises
            instead of returning ``False`` -- and it is the load-recipe path that
            breaks (the alert-store probe in ``recipe_helper.load_alert_store``,
            the cached-GeoTIFF probe in ``analysis/export.py``, and the recipe
@@ -313,7 +319,7 @@ class Workspace:
         path = _as_posix(remote_path)
         try:
             listing = self._files.list(str(path.parent), include_hidden=True)
-        except NotFound:  # assumed status for "no such folder" -- see the warning
+        except NotFound:  # verified status for "no such folder" -- see the note
             return False
         return any(entry.name == path.name for entry in listing)
 

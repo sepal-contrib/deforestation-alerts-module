@@ -41,6 +41,7 @@ from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAl
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
+from deforestation_alerts.scripts.workspace import Workspace
 from gui.store.navigation import (
     active_map_view_for_step,
     apply_navigation,
@@ -224,8 +225,28 @@ def Page():
     )
 
     gee_interface = get_current_gee_interface()
-    get_current_sepal_client()
+    sepal_client = get_current_sepal_client()
     theme_state = get_current_theme_state()
+
+    # The ONE boundary every user file goes through. Built here from the session
+    # client and threaded into the tiles exactly like ``gee_interface`` — never
+    # fetched at module import, where no session exists yet. ``ensure_results_dir``
+    # is the client's own once-at-startup mkdir of the results root: it is
+    # idempotent, and it removes the first-run case where a listing of a
+    # never-created root would have to be interpreted (see Workspace.list's note
+    # on the 404). It is NOT called per write. A transient failure is logged
+    # rather than fatal: every Workspace write creates its own parents anyway.
+    # Workspace() itself DOES raise on a missing/module-less client — that is a
+    # broken session, and failing at startup beats failing mid-save.
+    def _make_workspace():
+        ws = Workspace(sepal_client)
+        try:
+            sepal_client.ensure_results_dir()
+        except Exception:
+            logger.exception("Failed to ensure the SEPAL results directory")
+        return ws
+
+    workspace = solara.use_memo(_make_workspace, dependencies=[])
 
     # Centralized user feedback. Mounted BEFORE the tiles are constructed so
     # use_notifications() inside them binds the real kernel-scoped bus (a
@@ -335,6 +356,7 @@ def Page():
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_state=app_state,
                 gee_interface=gee_interface,
+                workspace=workspace,
                 map_=map_,
             )
         ),
@@ -357,6 +379,7 @@ def Page():
             analyzed_alerts_model=analyzed_alerts_model,
             app_tile_model=app_tile_model,
             app_state=app_state,
+            workspace=workspace,
             gee_interface=gee_interface,
         ),
         dependencies=[],
@@ -374,6 +397,7 @@ def Page():
             app_tile_model=app_tile_model,
             app_state=app_state,
             gee_interface=gee_interface,
+            workspace=workspace,
             theme_state=theme_state,
         ),
         dependencies=[],

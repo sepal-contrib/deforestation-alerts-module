@@ -69,7 +69,7 @@ import dataclasses
 import logging
 import math
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any
 
@@ -630,7 +630,7 @@ def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
     )
 
 
-def _persist_alerts_gdf(alerts_gdf, recipe_folder) -> None:
+def _persist_alerts_gdf(alerts_gdf, recipe_folder, workspace) -> None:
     """Write the freshly vectorized gdf to the canonical parquet store.
 
     This is persisted STATE, not a scratch artifact: recipe load reads
@@ -640,12 +640,17 @@ def _persist_alerts_gdf(alerts_gdf, recipe_folder) -> None:
     effect, after the ``cancelled`` guard — never from the task body. Writing it
     at analyze time, not just on Save, means a reload before Save resumes without
     re-running EE. No-op without a recipe folder (smoke / pre-recipe runs).
+
+    ``recipe_folder`` is a REMOTE path in the user's SEPAL workspace, so the join
+    is posix and the write goes through ``workspace``.
     """
     if not recipe_folder:
         return
     try:
         save_gdf_to_parquet(
-            alerts_gdf, str(Path(recipe_folder) / "alert_db.parquet")
+            alerts_gdf,
+            workspace,
+            str(PurePosixPath(recipe_folder) / "alert_db.parquet"),
         )
     except Exception:
         logger.exception("Filter: failed to persist alert_db.parquet")
@@ -660,6 +665,7 @@ def AlertsFilterTile(
     analyzed_alerts_model,
     app_state,
     gee_interface,
+    workspace,
     map_,
 ):
     """Solara port of the old AlertsFilterTile ipyvuetify widget.
@@ -685,6 +691,9 @@ def AlertsFilterTile(
         to ``app_state.alerts_gdf`` (Overview + analysis tile consume it).
     gee_interface : GEEInterface
         Session GEE interface, forwarded to the map.
+    workspace : Workspace
+        Session user-file adapter (built in ``Page()``); the vectorized alert
+        store is written through it into the user's SEPAL workspace.
     map_ : SepalMap
         The single shared map; this tile attaches its draw/inspector controls and
         alert/AOI/aux layers to it.
@@ -1003,7 +1012,7 @@ def AlertsFilterTile(
         # Persisted state, so it belongs on this side of the cancelled guard (a
         # cancelled run must not leave a loadable alert_db.parquet behind). The
         # gdf is fully materialized by now, so the write is a plain serialize.
-        _persist_alerts_gdf(outcome.alerts_gdf, outcome.recipe_folder)
+        _persist_alerts_gdf(outcome.alerts_gdf, outcome.recipe_folder, workspace)
         logger.info("Filter: analyze finished — %s alerts", outcome.alert_count)
         notifications.success(
             cm.filter_tile.analyze_done.format(n=outcome.alert_count)
