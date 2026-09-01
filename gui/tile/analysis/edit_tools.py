@@ -521,7 +521,10 @@ def build_edit_tools(
                     task.fail(str(cm.analysis_tile.model_labels.dl_404))
             except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Analysis: model 1 run failed")
-                # fail() before the toast: the pill stays visible as FAILED.
+                # fail() before the toast, so the run is already recorded as
+                # FAILED (with its reason) in the task log when the message
+                # lands. The pill itself only shows RUNNING tasks, so it
+                # disappears at that point rather than staying on screen.
                 task.fail(str(e))
                 notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
             finally:

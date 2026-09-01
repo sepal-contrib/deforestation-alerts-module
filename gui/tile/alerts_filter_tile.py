@@ -997,10 +997,11 @@ def AlertsFilterTile(
                 # fail() BEFORE the error toast, and before the tracker's own
                 # __exit__ runs: an explicitly failed tracker is already
                 # "finished", so __exit__ will not publish a second (raw) error
-                # toast on top of the one ``_apply_analyze`` publishes. The pill
-                # stays visible as FAILED. asyncio.CancelledError is a
-                # BaseException and deliberately not caught here — __exit__ turns
-                # it into a CANCELLED pill instead.
+                # toast on top of the one ``_apply_analyze`` publishes. The run
+                # is recorded as FAILED in the task log (the pill only shows
+                # RUNNING tasks, so it disappears rather than staying on
+                # screen). asyncio.CancelledError is a BaseException and
+                # deliberately not caught here — __exit__ marks it CANCELLED.
                 task.fail(str(exc))
                 raise
             finally:

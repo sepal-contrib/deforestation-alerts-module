@@ -44,8 +44,8 @@ class _RecordingTask:
 
     Appends into the SAME event list the ``notify`` recorder writes to, so a test
     can assert the *ordering* between a tracker transition and a toast (the
-    contract is: ``fail()`` first, so the pill is already FAILED and stays
-    visible when the error toast appears).
+    contract is: ``fail()`` first, so the run is already recorded as FAILED —
+    with its reason — by the time the error toast appears).
     """
 
     def __init__(self, events, title, total_steps=None):
@@ -371,6 +371,50 @@ def test_export_save_publishes_success_and_enables_the_download(
     assert _toasts(events) == [
         ("success", cm.analysis_tile.export_labels.save_done)
     ]
+
+
+@pytest.mark.parametrize(
+    "with_alerts, alert_id",
+    [
+        # Nothing loaded at all (a Save pressed before any analyze/recipe load).
+        (False, None),
+        # An alerts gdf, but the selected index is past its end.
+        (True, 5),
+    ],
+    ids=["no-alerts", "id-out-of-range"],
+)
+def test_export_save_refusal_fails_the_task_and_says_why(
+    export_card, monkeypatch, with_alerts, alert_id
+):
+    """A Save that writes nothing must not record a DONE run.
+
+    ``_save_attributes`` runs for REAL here (it refuses on its id guards before
+    touching ``widgets``). It used to call ``task.complete()`` unconditionally
+    and then skip the toast and the button enable: a DONE run, no file, no
+    explanation, and a download button still disabled for no stated reason.
+    """
+    export, card, app_state, _app_tile_model = export_card
+    events, threads = _record_feedback(monkeypatch, export)
+
+    if with_alerts:
+        app_state.alerts_gdf.value = _one_row_gdf()
+    app_state.actual_alert_id.value = alert_id
+
+    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    save_btn.fire_event("click", None)
+    _join(threads)
+
+    expected = str(cm.analysis_tile.export_labels.save_no_alert)
+    kinds = [e[0] for e in events]
+    assert "task:complete" not in kinds
+    # fail() before the toast, so the run is logged as FAILED before the message
+    assert kinds.index("task:fail") < kinds.index("toast")
+    assert ("task:fail", expected) in events
+    assert _toasts(events) == [("warning", expected)]
+    # nothing was enabled, and the save button is released
+    assert download_btn.disabled is True
+    assert save_btn.loading is False and save_btn.disabled is False
 
 
 def test_export_save_failure_fails_the_task_before_the_error_toast(

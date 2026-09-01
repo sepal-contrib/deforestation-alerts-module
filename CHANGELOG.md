@@ -23,6 +23,15 @@
   the container's local disk; and added browser-side `jslink` sync between the Analysis
   workspace's paired maps.
 
+### Removed
+
+- The `DEFORESTATION_ALERTS_DATA_DIR` environment variable. User data now lives in the
+  SEPAL workspace resolved from the session `SepalClient` (`Workspace`), so there is no
+  container-local data directory left to override.
+- The `deforestation_alerts.parameter` package. Its container-local `module_dir` was
+  replaced by the `Workspace` adapter, and the GDAL temp-directory configuration that
+  rode along on its import now runs explicitly in `gui/solara_app.py`.
+
 ## v_1.0 (2025-03-25)
 
 ### Feature

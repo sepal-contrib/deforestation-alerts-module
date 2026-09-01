@@ -473,8 +473,15 @@ def AoiTile(
             # ``asyncio.create_task`` inside a prefer_threaded=False task would
             # raise and take the whole render down with it (reacton then masks it
             # behind "you are not using a container"). Effects must never raise:
-            # fall back to the pre-refactor behaviour and do the map work inline.
-            _apply_aoi_layer(aoi_view, map_, request, layer_generation)
+            # fall back to the pre-refactor behaviour and do the map work inline
+            # — inside the same try/except every other inline map call in this
+            # module uses, since `_redraw_aoi_layer` reaches EE via
+            # `add_ee_layer` and an EE/map failure here would raise out of the
+            # effect, which is the very thing the guard exists to prevent.
+            try:
+                _apply_aoi_layer(aoi_view, map_, request, layer_generation)
+            except Exception:
+                logger.exception("AOI: inline AOI-layer sync failed")
 
     solara.use_effect(_sync_active, dependencies=[active])
 

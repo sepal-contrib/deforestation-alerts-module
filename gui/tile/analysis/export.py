@@ -468,16 +468,30 @@ def build_export(
                         app_tile_model,
                         workspace,
                     )
-                task.complete()
                 if saved:
+                    task.complete()
                     _apply_save()
                     notify(
                         str(cm.analysis_tile.export_labels.save_done),
                         type_="success",
                     )
+                else:
+                    # `_save_attributes` refused: nothing was written and the
+                    # download button stays disabled, so completing the task here
+                    # would record a DONE run for a no-op the user cannot
+                    # explain. Same refusal shape as `_on_download` below —
+                    # fail() BEFORE the toast, so the run is already recorded as
+                    # FAILED with its reason when the message lands. (The only
+                    # way `_save_attributes` returns False is a missing/invalid
+                    # alert id, which is what the message says.)
+                    reason = str(cm.analysis_tile.export_labels.save_no_alert)
+                    logger.warning("Analysis: save refused — %s", reason)
+                    task.fail(reason)
+                    notify(reason, type_="warning")
             except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.error("Analysis: save attributes failed", exc_info=e)
-                # fail() before the toast: the pill stays visible as FAILED.
+                # fail() before the toast, so the run is already recorded as
+                # FAILED (with its reason) in the task log when the message lands.
                 task.fail(str(e))
                 notify(str(e), type_="error")
             finally:
@@ -513,8 +527,9 @@ def build_export(
                     # here would show a green pill for a no-op the user cannot
                     # explain. Report WHY through the notification system, the
                     # same way the except branch below reports a crash — and
-                    # fail() BEFORE the toast so the pill stays visible as
-                    # FAILED. (The two causes are re-derived here rather than
+                    # fail() BEFORE the toast, so the run is already recorded as
+                    # FAILED (with its reason) in the task log when the message
+                    # lands. (The two causes are re-derived here rather than
                     # returned, so `_download_data` keeps its "paths or nothing"
                     # contract.)
                     reason = str(

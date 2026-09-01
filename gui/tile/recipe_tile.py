@@ -350,8 +350,10 @@ def build_recipe_layout(
                 notify(cm.recipe_tile.alert_load_recipe_done, type_="success")
             except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Recipe load failed")
-                # fail() before the toast so the pill is FAILED (and stays
-                # visible) by the time the user reads the message.
+                # fail() before the toast, so the run is already recorded as
+                # FAILED (with its reason) in the task log by the time the
+                # user reads the message. The pill only shows RUNNING tasks,
+                # so it disappears rather than staying on screen.
                 task.fail(str(e))
                 notify(
                     f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}",
