@@ -2,10 +2,6 @@
 # Base: micromamba for fast conda env creation
 FROM mambaorg/micromamba:1.5-jammy
 
-# Copy environment spec and build the conda environment.
-# These layers run before COPY . /app so source edits don't bust them.
-COPY sepal_environment.yml /tmp/sepal_environment.yml
-
 # git is a build-time tool only (pip needs it to clone the earthengine-api
 # fork pinned via git+https:// in sepal_environment.yml) — it is not an
 # application dependency, so it is installed here rather than added to the
@@ -15,11 +11,17 @@ COPY sepal_environment.yml /tmp/sepal_environment.yml
 # include base's bin dir, so a conda-installed git in base is invisible to it;
 # apt puts git on the system PATH (/usr/bin), which every env sees regardless
 # of which conda env is activated.
+# Placed before COPY sepal_environment.yml (below) so edits to that
+# frequently-changing deploy-authority file don't also bust this layer.
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
+
+# Copy environment spec and build the conda environment.
+# These layers run before COPY . /app so source edits don't bust them.
+COPY sepal_environment.yml /tmp/sepal_environment.yml
 
 # NOTE: sepal_environment.yml is the pinned lock — every conda and pip
 #   dependency below is version-pinned in that file, so no separate
@@ -41,6 +43,15 @@ COPY gui/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Expose the Solara port
 EXPOSE 8900
+
+# gui/supervisord.conf's solara command passes no --port; solara's own
+# default is `int(os.environ.get("PORT", 8765))`, so without this the
+# process inside the container would listen on 8765 while EXPOSE and
+# docker-compose.yml both advertise 8900. Setting PORT here (rather than
+# hardcoding --port 8900 into supervisord.conf) keeps EXPOSE, the compose
+# mapping, and the served port in agreement by default, while still letting
+# SEPAL's app-launcher (or any other platform) override PORT at runtime.
+ENV PORT=8900
 
 # Run as root so supervisord's user=root directive in supervisord.conf is honored
 USER root
