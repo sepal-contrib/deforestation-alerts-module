@@ -80,6 +80,7 @@ from deforestation_alerts.scripts.aoi_helper import (
     remove_ccdc_alerts_dictionary,
     remove_custom_alerts_dictionary,
 )
+from gui.scripts.solara_threads import spawn_in_context
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.aoi")
 
@@ -184,8 +185,12 @@ def _update_dictionary_ccdc(aux_model, alert_filter_model):
     """Add/remove the CCDC entry in ``alert_filter_model.alerts_dictionary``.
 
     Same logic as the OLD tile's ``update_dictionary_ccdc`` method, lifted to a
-    module function so the traitlets observer handler can call it. Guarded so a
-    missing ``CCDC`` key (double-clear) does not raise.
+    module function. The add branch reaches ``add_ccdc_alerts_dictionary`` ->
+    ``get_alert_dates_ccdc``, which makes two blocking ``.getInfo()`` round-trips
+    (Decision 3: blocking GEE only inside a thread) — so the caller MUST run this
+    off the render/observer thread (see ``_register_ccdc_observer``'s
+    ``spawn_in_context`` wrapper), never call it directly from a trait observer.
+    Guarded so a missing ``CCDC`` key (double-clear) does not raise.
     """
     dictionary = alert_filter_model.alerts_dictionary
     if not isinstance(dictionary, dict):
@@ -341,10 +346,18 @@ def AoiTile(
     # ccdc traitlets observer — registered exactly once, torn down on unmount.
     # (A Solara use_effect keyed on aux_model.ccdc_layer would NOT fire: traitlets
     # mutations don't trigger Solara re-renders.)
+    #
+    # The handler itself must stay non-blocking: _update_dictionary_ccdc's add
+    # branch makes two blocking GEE .getInfo() calls (get_alert_dates_ccdc), and
+    # traitlets fires observers synchronously on the thread that set the trait
+    # (here, the render/kernel thread). Calling it inline would block the UI on
+    # network I/O — exactly what Decision 3 (blocking GEE confined to a thread)
+    # forbids. spawn_in_context defers the dictionary mutation to a daemon
+    # thread instead (same pattern as the Analysis tile's button handlers).
     # ------------------------------------------------------------------
     def _register_ccdc_observer():
         def handler(change):
-            _update_dictionary_ccdc(aux_model, alert_filter_model)
+            spawn_in_context(_update_dictionary_ccdc, (aux_model, alert_filter_model))
 
         aux_model.observe(handler, "ccdc_layer")
         return lambda: aux_model.unobserve(handler, "ccdc_layer")
@@ -637,7 +650,11 @@ def _build_aoi_view(aoi_date_model, map_widget, gee_interface):
         map_=map_widget,
         model=aoi_date_model,
         gee_interface=gee_interface,
-        methods=["ADMIN1", "ADMIN2", "SHAPE", "DRAW", "ASSET"],
+        # Dual-target app (voila sandbox + app-launcher container): SHAPE
+        # reads server-local files, which in the container are NOT the user's
+        # SEPAL workspace (pysepal skill, AOI Method Restrictions) — excluded
+        # as the lowest common denominator. DRAW/ADMIN/ASSET cover the cases.
+        methods=["ADMIN1", "ADMIN2", "DRAW", "ASSET"],
     )
     view.flat = True
     return view
