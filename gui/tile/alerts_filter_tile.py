@@ -1,10 +1,26 @@
 """Filter (alert) tile as a Solara component (Phase 4 port of the old ipyvuetify class).
 
 Architecture layer: view — imports solara + ipyvuetify/pysepal/ipyleaflet for UI
-only. The EE-orchestration + raster-export + local-vectorize work runs in
-``solara.lab.use_task(prefer_threaded=True)``; the EE helpers themselves are
-module-level functions taking explicit args (no ``self``) so the Recipe tile can
-reuse them later.
+only. The EE-orchestration + raster-export + local-vectorize work runs as an
+**async** ``solara.lab.use_task(prefer_threaded=False)`` on Solara's kernel loop,
+with every blocking step handed to ``asyncio.to_thread``; the EE helpers
+themselves are module-level functions taking explicit args (no ``self``) so the
+Recipe tile can reuse them later.
+
+Task lifecycle (the same four-part pattern the AOI tile documents):
+
+1. **pure sync workers** take a frozen snapshot and return frozen values —
+   ``_prepare_analyze_sync`` / ``_download_alert_raster`` /
+   ``_vectorize_alert_tif`` / ``_finish_analyze_sync`` mutate no model, no
+   reactive, no widget, and never navigate;
+2. the **async task** awaits each of them through ``asyncio.to_thread``. The
+   await points double as cancellation checkpoints: a cancel between two stages
+   stops the flow before the next (much more expensive) one starts;
+3. the **click handler** snapshots the form and holds a synchronous ``pending``
+   guard (a render-time ``disabled=`` cannot stop a double click);
+4. the **completion effect** — full dependency list — performs every model write
+   and the ``current_page_view`` navigation, and applies nothing when the run was
+   cancelled.
 
 Key port decisions (see Phase 4 plan, Step 5):
 
@@ -29,13 +45,13 @@ Key port decisions (see Phase 4 plan, Step 5):
   attached to the shared map.
 * **The "Analyze" flow is a button-triggered ``use_task``, not auto-run.**
   ``use_task(dependencies=None)`` only runs when called, so it never fires on
-  mount (which would hit EE with no AOI/alerts). The task validates inputs via the
-  shared ``check_alert_filter_inputs`` (through a thin ``_InputsShim`` around the
-  memoized widgets — same approach as AOI), saves selections onto
-  ``selected_alerts_model``, builds the filtered EE image, exports it with
-  ``download_ee_image``, vectorizes locally with ``vectorize_alert_raster``, and
-  publishes the assembled ``alerts_gdf`` to ``app_state.alerts_gdf.value`` (what
-  Overview + the future analysis tile consume).
+  mount (which would hit EE with no AOI/alerts). The workers validate inputs via
+  the shared ``check_alert_filter_inputs`` (through a thin ``_InputsShim`` built
+  from the click-time snapshot — same approach as AOI), build the filtered EE
+  image, export it with ``download_ee_image`` and vectorize locally with
+  ``vectorize_alert_raster``; the completion effect then saves the selections
+  onto ``selected_alerts_model`` and publishes the assembled ``alerts_gdf`` to
+  ``app_state.alerts_gdf.value`` (what Overview + the analysis tile consume).
 
 Deferred (with TODO comments) — intertwined with the Recipe tile (next task) and
 the analysis tile (Task 9):
@@ -48,9 +64,15 @@ the analysis tile (Task 9):
 * ``load_saved_parameters``: belongs to the Recipe tile; not ported here.
 """
 
+import asyncio
+import dataclasses
 import logging
 import math
+import threading
+import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import ee
 import ipyvuetify as v
@@ -58,6 +80,7 @@ import solara
 from ipyleaflet import TileLayer
 from pysepal.mapping.draw_control import DrawControl
 from pysepal.mapping.inspector_control import InspectorControl
+from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.parameter import module_dir
@@ -77,6 +100,15 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
 # Alert-raster visualization (same as the OLD tile's self.lista_vis_params[0]).
 _ALERT_VIS_PARAMS = {"min": 1, "max": 2, "palette": ["orange", "purple"]}
 
+# See gui/tile/aoi_tile.py's _guard_cancel: the pysepal TaskButton is a single
+# start/cancel toggle whose cancel is never disabled, so the second press of a
+# fast double click could otherwise cancel the run the first press started.
+_CANCEL_GRACE_SECONDS = 1.0
+
+# geedim runs every tile fetch on ONE process-wide asyncio runner, so only one
+# ``toGeoTIFF`` may be in flight at a time (see _download_alert_raster).
+_DOWNLOAD_LOCK = threading.Lock()
+
 
 class _InputsShim:
     """Adapter exposing the attribute shape ``check_alert_filter_inputs`` expects.
@@ -90,26 +122,93 @@ class _InputsShim:
       * ``self.number_of_alerts.v_model``
       * ``self.drawn_item.to_json()`` (only when the "by drawn polygon" method is
         selected)
-    Rather than fork the still-shared helper, we hand it this thin shim around the
-    memoized widgets so the validation logic stays in one place (same approach as
-    the AOI tile's ``_InputsShim`` for ``check_aoi_inputs``).
+    Rather than fork the still-shared helper, we hand it this thin shim built from
+    the immutable ``AnalyzeRequest`` snapshot, so the validation logic stays in one
+    place AND the worker never touches a live widget (same approach as the AOI
+    tile's ``_InputsShim`` for ``check_aoi_inputs``).
     """
 
     def __init__(
         self,
-        alert_source_select,
-        min_area_input,
-        alert_selection_method_select,
-        alert_sorting_select,
-        number_of_alerts,
-        drawn_item,
+        alert_sources,
+        min_area,
+        area_selection,
+        sorting_method,
+        max_alerts,
+        drawn_geojson,
     ):
-        self.alert_source_select = alert_source_select
-        self.min_area_input = min_area_input
-        self.alert_selection_method_select = alert_selection_method_select
-        self.alert_sorting_select = alert_sorting_select
-        self.number_of_alerts = number_of_alerts
-        self.drawn_item = drawn_item
+        self.alert_source_select = SimpleNamespace(v_model=alert_sources)
+        self.min_area_input = SimpleNamespace(v_model=min_area)
+        self.alert_selection_method_select = SimpleNamespace(v_model=area_selection)
+        self.alert_sorting_select = SimpleNamespace(v_model=sorting_method)
+        self.number_of_alerts = SimpleNamespace(v_model=max_alerts)
+        self.drawn_item = SimpleNamespace(to_json=lambda: drawn_geojson)
+
+
+@dataclasses.dataclass(frozen=True)
+class AnalyzeRequest:
+    """Immutable snapshot of the form + models, taken at Analyze-click time."""
+
+    alert_sources: Any
+    min_area: Any
+    area_selection: Any
+    sorting_method: Any
+    max_alerts: Any
+    drawn_geojson: Any
+    alerts_raster_dictionary: Any
+    mask_layer: Any
+    feature_collection: Any
+    start_date: Any
+    end_date: Any
+    recipe_folder: Any
+    attribute_raster: Any
+    custom_alert_name: Any
+
+
+@dataclasses.dataclass(frozen=True)
+class AnalyzeSelections:
+    """The validated user selections, as they will be written to the model."""
+
+    selected_alert_sources: Any
+    alert_selection_area: Any
+    alert_sorting_method: Any
+    min_area: float
+    max_number_alerts: int
+    alert_selection_polygons: Any
+    alert_selection_area_n: int
+    alert_sorting_method_n: int
+
+
+@dataclasses.dataclass(frozen=True)
+class AnalyzePlan:
+    """Everything the export/vectorize stages need — built by the first worker."""
+
+    selections: AnalyzeSelections
+    filtered_alert_raster: Any
+    region: Any
+    pixel_size: Any
+    min_size_pixels: int
+    out_tif: str
+
+
+@dataclasses.dataclass(frozen=True)
+class AnalyzeOutcome:
+    """What the analyze run produced. Applied by the completion effect only."""
+
+    selections: AnalyzeSelections
+    filtered_alert_raster: Any
+    alerts_total_bbs: Any
+    alerts_bbs: Any
+    alerts_gdf: Any
+    alert_count: int
+
+
+@dataclasses.dataclass(frozen=True)
+class FilterLayerRequest:
+    """Immutable snapshot for one Filter map-layer sync (draw when ``show``)."""
+
+    show: bool
+    token: int
 
 
 def create_filtered_alert_raster(
@@ -222,37 +321,22 @@ def _clear_filter_layers(map_widget, tracked):
     tracked["names"] = []
 
 
-def _refresh_layout(
-    map_widget,
-    drawn_item,
-    alert_source_select,
-    cards,
-    aoi_date_model,
-    aux_model,
-    alert_filter_model,
-    tracked,
-):
-    """Refresh the source-select items + map layers from the alert dictionaries.
+def _refresh_form(alert_source_select, cards, alert_filter_model) -> bool:
+    """Refresh the source-select items + card visibility. Returns "has alerts".
 
-    Module-level so the traitlets observer handler can call it. Mirrors the OLD
-    tile's ``update_layout``: when no alerts are available, show only the "no
-    alerts" card; otherwise populate the select, reveal the form cards, and
-    rebuild the map (AOI + each alert source's alert/date layers + optional
-    aux/mask layers). ``cards`` is a dict of the show/hide-able cards.
-
-    ``map_widget`` is the SINGLE shared map, so we must NOT ``remove_all()`` (that
-    wipes other tiles' layers + the basemap). ``tracked`` is a ``{"names": [...]}``
-    holder of the layer names THIS tile last added; we remove exactly those before
-    adding the new set, leaving every other tile's layers intact.
+    The widget half of the OLD tile's ``update_layout``: when no alerts are
+    available show only the "no alerts" card; otherwise populate the select and
+    reveal the form cards. Pure ipyvuetify mutation and no GEE, so it stays on the
+    render thread (the map half, ``_refresh_map_layers``, is what goes to a
+    thread). Module-level so the traitlets observer handler can call it.
     """
     alerts_names_list = alert_filter_model.available_alerts_list
-    alerts_raster_dictionary = alert_filter_model.available_alerts_raster_list
 
     if not alerts_names_list or len(alerts_names_list) == 0:
         cards["no_alerts"].show()
         for key in ("source", "min_area", "area_method", "sorting", "max_number"):
             cards[key].hide()
-        return
+        return False
 
     alert_source_select.items = alerts_names_list
     alert_source_select.v_model = [alerts_names_list[0]]
@@ -260,8 +344,30 @@ def _refresh_layout(
     cards["no_alerts"].hide()
     for key in ("source", "min_area", "area_method", "sorting", "max_number"):
         cards[key].show()
+    return True
 
-    # Rebuild ONLY this tile's layers on the shared map.
+
+def _refresh_map_layers(
+    map_widget,
+    alert_source_select,
+    aoi_date_model,
+    aux_model,
+    alert_filter_model,
+    tracked,
+):
+    """Rebuild ONLY this tile's layers on the shared map (AOI + alert/date/aux).
+
+    The GEE half of the OLD tile's ``update_layout``. Every ``add_ee_layer`` here
+    blocks while EE resolves a tile-map id, so this function is only ever called
+    from inside ``asyncio.to_thread`` — never from a render, an effect body or an
+    observer directly.
+
+    ``map_widget`` is the SINGLE shared map, so we must NOT ``remove_all()`` (that
+    wipes other tiles' layers + the basemap). ``tracked`` is a ``{"names": [...]}``
+    holder of the layer names THIS tile last added; we remove exactly those before
+    adding the new set, leaving every other tile's layers intact.
+    """
+    alerts_raster_dictionary = alert_filter_model.available_alerts_raster_list or {}
     try:
         # Drop the layers this tile added last time, then track + add the new set.
         _clear_filter_layers(map_widget, tracked)
@@ -344,42 +450,190 @@ def _filtered_alerts_path(recipe_folder, alert_sources, start_date, end_date):
     return str(base / name)
 
 
-def _run_local_vectorize(
-    image, region, scale, min_size_pixels, out_tif, on_status=None
-):
-    """Export the filtered alert raster to a local GeoTIFF, then vectorize it.
+def _guard_cancel(on_cancel, started_at):
+    """Wrap a TaskButton cancel callback so an accidental double click can't cancel.
 
-    Body of the OLD ``run_local_vectorize._work`` (minus the threading — the
-    caller is already on the use_task worker thread) and minus the model writes,
-    which the task does. Returns the raw vectorize GeoDataFrame.
+    Identical to (and documented at) ``gui.tile.aoi_tile._guard_cancel``: the
+    TaskButton is a single start/cancel toggle whose cancel is never disabled, so
+    the second press of a fast double click can land on the freshly toggled cancel
+    state and kill the run the first press started. Cancels within
+    ``_CANCEL_GRACE_SECONDS`` of the start are dropped; a deliberate cancel of a
+    multi-minute analyze is always later than that. Returning early also leaves
+    ``cancel_reason_ref`` untouched (the wrapped callback is what sets it).
+    """
 
-    ``out_tif`` is the destination GeoTIFF path (see ``_filtered_alerts_path`` —
-    the recipe folder, named with source + date range). ``on_status`` (optional)
-    is called with a short user-facing label before each of the two slow stages
-    (download, vectorize) so the tile can surface progress.
+    def _on_cancel(*args, **kwargs):
+        if time.monotonic() - (started_at.current or 0.0) < _CANCEL_GRACE_SECONDS:
+            return
+        on_cancel(*args, **kwargs)
+
+    return _on_cancel
+
+
+def _prepare_analyze_sync(request: AnalyzeRequest) -> AnalyzePlan:
+    """Validate the snapshot and build the EE image + export params. Pure.
+
+    Runs inside ``asyncio.to_thread``: ``check_alert_filter_inputs`` raises on bad
+    input (surfaced through ``analyze_task.error``) and the ``create_*`` helpers
+    build eeclient objects. Nothing here touches a model, a reactive or a widget.
+    """
+    (
+        alert_source,
+        user_min_alert_size,
+        alert_area_selection,
+        alert_sorting_method,
+        user_max_number_alerts,
+        user_selection_polygon,
+    ) = check_alert_filter_inputs(
+        _InputsShim(
+            request.alert_sources,
+            request.min_area,
+            request.area_selection,
+            request.sorting_method,
+            request.max_alerts,
+            request.drawn_geojson,
+        )
+    )
+
+    alert_selection_dict_n = {
+        cm.filter_tile.area_selection_method_label1: 1,
+        cm.filter_tile.area_selection_method_label2: 2,
+    }
+    alert_sorting_method_dict_n = {
+        cm.filter_tile.alert_sorting_method_label1: 1,
+        cm.filter_tile.alert_sorting_method_label2: 2,
+        cm.filter_tile.alert_sorting_method_label3: 3,
+        cm.filter_tile.alert_sorting_method_label4: 4,
+    }
+    selections = AnalyzeSelections(
+        selected_alert_sources=alert_source,
+        alert_selection_area=alert_area_selection,
+        alert_sorting_method=alert_sorting_method,
+        min_area=float(user_min_alert_size),
+        max_number_alerts=int(user_max_number_alerts),
+        alert_selection_polygons=user_selection_polygon,
+        alert_selection_area_n=alert_selection_dict_n.get(alert_area_selection, 0),
+        alert_sorting_method_n=alert_sorting_method_dict_n.get(
+            alert_sorting_method, 0
+        ),
+    )
+
+    filtered_alert_raster = create_filtered_alert_raster(
+        request.alerts_raster_dictionary,
+        request.mask_layer,
+        alert_source,
+        alert_area_selection,
+        user_selection_polygon,
+    )
+
+    (
+        poly,
+        _alerta_reducir,  # unused (legacy GEE band stack)
+        pixel_size,
+        min_size_pixels,
+        _grid_size,  # unused (legacy GEE covering grid)
+    ) = create_vector_download_params(
+        request.feature_collection,
+        user_selection_polygon,
+        filtered_alert_raster,
+        alert_source,
+        user_min_alert_size,
+        alert_area_selection,
+    )
+
+    # The downloaded filtered-alert raster lands in the current recipe folder,
+    # named with the selected source(s) + AOI date range (self-describing on
+    # disk); falls back to module_dir when no recipe exists yet.
+    out_tif = _filtered_alerts_path(
+        request.recipe_folder, alert_source, request.start_date, request.end_date
+    )
+    return AnalyzePlan(
+        selections=selections,
+        filtered_alert_raster=filtered_alert_raster,
+        region=poly,
+        pixel_size=pixel_size,
+        min_size_pixels=min_size_pixels,
+        out_tif=out_tif,
+    )
+
+
+def _download_alert_raster(plan: AnalyzePlan) -> str:
+    """Export the filtered alert raster to a local GeoTIFF. Pure, thread-only.
+
+    First half of the OLD ``run_local_vectorize._work``. Blocking EE + network,
+    so it only ever runs inside ``asyncio.to_thread``.
+
+    Serialized on ``_DOWNLOAD_LOCK``: geedim drives its tile fetches through ONE
+    process-wide asyncio runner (``geedim.utils.runner``), so a second concurrent
+    ``toGeoTIFF`` raises "This event loop is already running". That is reachable
+    now that Analyze can be cancelled — cancelling abandons the coroutine but the
+    thread keeps downloading, so an immediately restarted run would collide with
+    it. Queuing behind the abandoned download costs time but always produces the
+    right raster; the tile shows "downloading" throughout.
     """
     # geedim exports over an ee.Geometry; the AOI / drawn poly is a
     # FeatureCollection, so pass its geometry.
+    region = plan.region
     export_region = (
         region.geometry() if isinstance(region, ee.FeatureCollection) else region
     )
     # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
-    if on_status:
-        on_status(cm.filter_tile.analyze_status_downloading)
-    download_ee_image(
-        image.select(["alert", "date"]),
-        out_tif,
-        region=export_region,
-        scale=scale,
-        crs="EPSG:4326",
-        unmask_value=255,
-        nodata_value=255,
-    )
-    if on_status:
-        on_status(cm.filter_tile.analyze_status_vectorizing)
+    with _DOWNLOAD_LOCK:
+        download_ee_image(
+            plan.filtered_alert_raster.select(["alert", "date"]),
+            plan.out_tif,
+            region=export_region,
+            scale=plan.pixel_size,
+            crs="EPSG:4326",
+            unmask_value=255,
+            nodata_value=255,
+        )
+    return plan.out_tif
+
+
+def _vectorize_alert_tif(plan: AnalyzePlan):
+    """Vectorize the downloaded GeoTIFF. Pure, CPU-heavy, thread-only."""
     return vectorize_alert_raster(
-        out_tif, min_cluster_size=min_size_pixels, connectivity=8
+        plan.out_tif, min_cluster_size=plan.min_size_pixels, connectivity=8
     )
+
+
+def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
+    """Assemble the final outcome from the raw vectorize result. Pure.
+
+    ``convert_to_geopandas`` builds the status/point/alert_sources columns that
+    Overview + the analysis tile consume; ``custom_name`` labels the user-defined
+    source (ten-thousands code slot) in the decoded ``alert_sources`` column.
+    Nothing is published here — the completion effect owns that.
+    """
+    max_number_alerts = plan.selections.max_number_alerts
+    return AnalyzeOutcome(
+        selections=plan.selections,
+        filtered_alert_raster=plan.filtered_alert_raster,
+        alerts_total_bbs=gdf,
+        alerts_bbs=gdf.head(max_number_alerts),
+        alerts_gdf=convert_to_geopandas(gdf, custom_name=request.custom_alert_name),
+        alert_count=len(gdf),
+    )
+
+
+def _persist_alerts_gdf(alerts_gdf, recipe_folder) -> None:
+    """Cache the freshly vectorized gdf to the canonical parquet store.
+
+    Same category as the exported GeoTIFF: an on-disk artifact of the run, not
+    model state — so it stays in the task (off the kernel loop) rather than in the
+    completion effect. Writing it NOW, not just on Save, means a reload before
+    Save resumes without re-running EE. No-op without a recipe folder
+    (smoke / pre-recipe runs).
+    """
+    if not recipe_folder:
+        return
+    try:
+        save_gdf_to_parquet(
+            alerts_gdf, str(Path(recipe_folder) / "alert_db.parquet")
+        )
+    except Exception:
+        logger.exception("Filter: failed to persist alert_db.parquet")
 
 
 @solara.component
@@ -432,10 +686,10 @@ def AlertsFilterTile(
     solara.use_memo(lambda: _add_inspector(map_widget), dependencies=[])
     tracked = solara.use_memo(lambda: {"names": []}, dependencies=[])
 
-    # Reactive status line for the Analyze flow. Set from the use_task worker
-    # thread (safe for reactives — same as the app_state writes below; distinct
-    # from the "no widget mutation in a task body" rule, which is about ipyvuetify
-    # .items/.v_model).
+    # Reactive status line for the Analyze flow. Written ONLY from the async task
+    # coroutine (which runs on the kernel loop), between the ``to_thread`` stages
+    # — never from a worker. Task 7 hangs the notification progress tracker off
+    # these same stage boundaries.
     analyze_status = solara.use_reactive("")
 
     # ------------------------------------------------------------------
@@ -465,16 +719,23 @@ def AlertsFilterTile(
     # current_page_view) so the "analyze" -> Analysis dialog flow leaves these
     # layers drawn behind the popup; it re-runs on every nav between panel tiles:
     # on mount it clears (a no-op), and in the AOI-search flow (search populates
-    # the model, then navigates here) it draws on the main thread.
+    # the model, then navigates here) it draws.
+    # The form half of the refresh is plain widget mutation and stays inline; the
+    # map half (a stack of blocking ``add_ee_layer`` calls) is handed to the async
+    # layer task, which runs it in ``asyncio.to_thread``. ``layer_generation``
+    # makes a superseded rebuild a no-op: cancelling a task abandons the coroutine
+    # but not the thread it started, so a slow draw from a previous activation
+    # could otherwise re-add layers after a later clear.
     active = app_state.active_map_view.value == "filter_alerts"
+    layer_generation = solara.use_memo(lambda: {"value": 0}, dependencies=[])
 
-    def _sync_active():
-        if active:
-            _refresh_layout(
+    def _apply_filter_layers(request: FilterLayerRequest):
+        if layer_generation["value"] != request.token:
+            return
+        if request.show:
+            _refresh_map_layers(
                 map_widget,
-                drawn_item,
                 alert_source_select,
-                cards,
                 aoi_date_model,
                 aux_model,
                 alert_filter_model,
@@ -482,6 +743,33 @@ def AlertsFilterTile(
             )
         else:
             _clear_filter_layers(map_widget, tracked)
+
+    async def _sync_filter_layers(request: FilterLayerRequest):
+        await asyncio.to_thread(_apply_filter_layers, request)
+        return request
+
+    layer_task = solara.lab.use_task(
+        _sync_filter_layers, dependencies=None, prefer_threaded=False, raise_error=False
+    )
+
+    def _schedule_layer_sync(show: bool):
+        layer_generation["value"] += 1
+        layer_task(FilterLayerRequest(show=show, token=layer_generation["value"]))
+
+    def _refresh_tile():
+        """Form first (inline), then the map rebuild (task -> thread).
+
+        Parity with the OLD single ``_refresh_layout``: with no alerts available
+        it only collapses the form and leaves the map untouched.
+        """
+        if _refresh_form(alert_source_select, cards, alert_filter_model):
+            _schedule_layer_sync(True)
+
+    def _sync_active():
+        if active:
+            _refresh_tile()
+        else:
+            _schedule_layer_sync(False)
 
     solara.use_effect(_sync_active, dependencies=[active])
 
@@ -496,22 +784,17 @@ def AlertsFilterTile(
             # Single-map isolation: only touch the shared map while this tile is
             # the active map tile. Otherwise (e.g. AOI's search populates the raster
             # list while the user is still on AOI) skip — the activation effect
-            # above redraws from the model when the tile becomes active, on the main
-            # thread. Keyed on active_map_view (NOT current_page_view) so a model
+            # above redraws from the model when the tile becomes active. Keyed on
+            # active_map_view (NOT current_page_view) so a model
             # update arriving while a popup overlays this tile still refreshes the
             # layers underneath rather than being dropped as "inactive".
             if app_state.active_map_view.value != "filter_alerts":
                 return
-            _refresh_layout(
-                map_widget,
-                drawn_item,
-                alert_source_select,
-                cards,
-                aoi_date_model,
-                aux_model,
-                alert_filter_model,
-                tracked,
-            )
+            # The AOI search now applies its results from a completion effect on
+            # the kernel loop, so this handler fires there too — which is what
+            # lets it schedule the layer task (a coroutine task needs a running
+            # loop in the calling thread).
+            _refresh_tile()
 
         alert_filter_model.observe(handler, "available_alerts_raster_list")
         return lambda: alert_filter_model.unobserve(
@@ -540,54 +823,114 @@ def AlertsFilterTile(
     # click handler calls analyze_task(). Does the EE-orchestration + export +
     # local vectorize on a worker thread and publishes the assembled gdf.
     # ------------------------------------------------------------------
-    def _run_analyze():
-        # 1. Validate inputs via the shared helper through the shim.
-        shim = _InputsShim(
-            alert_source_select,
-            min_area_input,
-            alert_selection_method_select,
-            alert_sorting_select,
-            number_of_alerts,
-            drawn_item,
-        )
-        (
-            alert_source,
-            user_min_alert_size,
-            alert_area_selection,
-            alert_sorting_method,
-            user_max_number_alerts,
-            user_selection_polygon,
-        ) = check_alert_filter_inputs(shim)
+    async def _analyze(request: AnalyzeRequest) -> AnalyzeOutcome:
+        """Stage the analyze run on the kernel loop; every stage in a thread.
 
-        # 2. Save the user selections onto selected_alerts_model (parity).
-        # NOTE: this runs on the use_task worker thread (prefer_threaded=True), so
-        # any traitlets `.observe` callbacks on selected_alerts_model fire on THIS
-        # thread (traitlets, unlike Solara reactives, has no scope marshaling).
-        # When the analysis tile is ported (Task 9), its observers on this model
-        # must not mutate ipyvuetify widgets directly from here.
-        selected_alerts_model.selected_alert_sources = alert_source
-        selected_alerts_model.alert_selection_area = alert_area_selection
-        selected_alerts_model.alert_sorting_method = alert_sorting_method
-        selected_alerts_model.min_area = float(user_min_alert_size)
-        selected_alerts_model.max_number_alerts = int(user_max_number_alerts)
-        selected_alerts_model.alert_selection_polygons = user_selection_polygon
+        The status writes are the only mutation in this coroutine — they run on
+        the loop, between stages, and are what Task 7's progress tracker will hang
+        off. Everything else is a pure worker; results reach the models only via
+        ``_apply_analyze``.
+        """
+        # "joining" = unioning the selected sources into one raster.
+        analyze_status.value = cm.filter_tile.analyze_status_joining.format(
+            n=len(request.alert_sources or [])
+        )
+        plan = await asyncio.to_thread(_prepare_analyze_sync, request)
 
-        alert_selection_dict_n = {
-            cm.filter_tile.area_selection_method_label1: 1,
-            cm.filter_tile.area_selection_method_label2: 2,
-        }
-        selected_alerts_model.alert_selection_area_n = alert_selection_dict_n.get(
-            alert_area_selection, 0
+        # Download + vectorize locally (replaces the OLD GEE reduceToVectors).
+        analyze_status.value = cm.filter_tile.analyze_status_downloading
+        await asyncio.to_thread(_download_alert_raster, plan)
+
+        analyze_status.value = cm.filter_tile.analyze_status_vectorizing
+        gdf = await asyncio.to_thread(_vectorize_alert_tif, plan)
+
+        # Optional: attribute each alert with per-band stats from an extra raster
+        # (GEE asset or local file). No-op when unconfigured. Fails loud (the
+        # use_task surfaces the error) if configured but the raster/band is bad —
+        # so we never publish alerts that are silently missing the columns.
+        gdf = await asyncio.to_thread(
+            attribute_alerts_from_config,
+            gdf,
+            request.attribute_raster,
+            plan.region,
+            request.recipe_folder,
         )
-        alert_sorting_method_dict_n = {
-            cm.filter_tile.alert_sorting_method_label1: 1,
-            cm.filter_tile.alert_sorting_method_label2: 2,
-            cm.filter_tile.alert_sorting_method_label3: 3,
-            cm.filter_tile.alert_sorting_method_label4: 4,
-        }
-        selected_alerts_model.alert_sorting_method_n = (
-            alert_sorting_method_dict_n.get(alert_sorting_method, 0)
+
+        outcome = await asyncio.to_thread(_finish_analyze_sync, request, plan, gdf)
+        await asyncio.to_thread(
+            _persist_alerts_gdf, outcome.alerts_gdf, request.recipe_folder
         )
+        analyze_status.value = cm.filter_tile.analyze_status_found.format(
+            n=outcome.alert_count
+        )
+        return outcome
+
+    analyze_task = solara.lab.use_task(
+        _analyze, dependencies=None, prefer_threaded=False, raise_error=False
+    )
+    analyze_started_at = solara.use_ref(0.0)
+    analyze_cancel_reason = solara.use_ref(None)
+
+    def _start_analyze():
+        # Synchronous pending guard: a render-time ``disabled=`` cannot stop the
+        # second press of a double click (it is dispatched against the button as
+        # it was before the re-render), but this can.
+        if analyze_task.pending:
+            return
+        analyze_cancel_reason.current = None
+        analyze_started_at.current = time.monotonic()
+        analyze_status.value = ""
+        logger.info(
+            "Filter: analyze started for %s", alert_source_select.v_model
+        )
+        # Snapshot the whole form + the model inputs at click time, so the workers
+        # can never observe a half-changed form or a model another tile is writing.
+        analyze_task(
+            AnalyzeRequest(
+                alert_sources=alert_source_select.v_model,
+                min_area=min_area_input.v_model,
+                area_selection=alert_selection_method_select.v_model,
+                sorting_method=alert_sorting_select.v_model,
+                max_alerts=number_of_alerts.v_model,
+                drawn_geojson=drawn_item.to_json(),
+                alerts_raster_dictionary=alert_filter_model.available_alerts_raster_list,
+                mask_layer=aux_model.mask_layer,
+                feature_collection=aoi_date_model.feature_collection,
+                start_date=aoi_date_model.start_date,
+                end_date=aoi_date_model.end_date,
+                recipe_folder=app_state.recipe_folder_path.value,
+                attribute_raster=aux_model.attribute_raster,
+                custom_alert_name=aux_model.custom_alert_name,
+            )
+        )
+
+    def _apply_analyze():
+        # The ONLY place analyze results reach the models. A cancelled run leaves
+        # every model and the current page exactly as they were.
+        if analyze_task.cancelled:
+            logger.info("Filter: analyze cancelled — models and page unchanged")
+            return
+        if not analyze_task.finished:
+            return
+        outcome = analyze_task.value
+        if outcome is None:
+            return
+
+        # Save the user selections onto selected_alerts_model (parity). This now
+        # runs on the kernel loop, so any traitlets `.observe` callbacks on
+        # selected_alerts_model fire there too rather than on a worker thread.
+        selections = outcome.selections
+        selected_alerts_model.selected_alert_sources = selections.selected_alert_sources
+        selected_alerts_model.alert_selection_area = selections.alert_selection_area
+        selected_alerts_model.alert_sorting_method = selections.alert_sorting_method
+        selected_alerts_model.min_area = selections.min_area
+        selected_alerts_model.max_number_alerts = selections.max_number_alerts
+        selected_alerts_model.alert_selection_polygons = (
+            selections.alert_selection_polygons
+        )
+        selected_alerts_model.alert_selection_area_n = selections.alert_selection_area_n
+        selected_alerts_model.alert_sorting_method_n = selections.alert_sorting_method_n
+        selected_alerts_model.filtered_alert_raster = outcome.filtered_alert_raster
 
         # TODO(Recipe tile): the OLD tile also created the recipe directory
         # (create_recipe_directory) and saved recipe parameters
@@ -598,107 +941,37 @@ def AlertsFilterTile(
         # deferred to the Recipe tile task. The alerts_gdf publish below does not
         # need them.
 
-        # Progress: "joining" = unioning the selected sources into one raster.
-        analyze_status.value = cm.filter_tile.analyze_status_joining.format(
-            n=len(alert_source)
-        )
-
-        # 3. Build the filtered alert raster (EE image).
-        filtered_alert_raster = create_filtered_alert_raster(
-            alert_filter_model.available_alerts_raster_list,
-            aux_model.mask_layer,
-            alert_source,
-            alert_area_selection,
-            user_selection_polygon,
-        )
-        selected_alerts_model.filtered_alert_raster = filtered_alert_raster
-
-        # 4. Export region + pixel size + min cluster-size in pixels.
-        (
-            poly,
-            _alerta_reducir,  # unused (legacy GEE band stack)
-            pixel_size,
-            min_size_pixels,
-            _grid_size,  # unused (legacy GEE covering grid)
-        ) = create_vector_download_params(
-            aoi_date_model.feature_collection,
-            user_selection_polygon,
-            filtered_alert_raster,
-            alert_source,
-            user_min_alert_size,
-            alert_area_selection,
-        )
-
-        # 5. Download + vectorize locally (replaces the OLD GEE reduceToVectors).
-        # The downloaded filtered-alert raster lands in the current recipe folder,
-        # named with the selected source(s) + AOI date range (self-describing on
-        # disk); falls back to module_dir when no recipe exists yet.
-        # on_status surfaces the "downloading" / "vectorizing" stages.
-        out_tif = _filtered_alerts_path(
-            app_state.recipe_folder_path.value,
-            alert_source,
-            aoi_date_model.start_date,
-            aoi_date_model.end_date,
-        )
-        gdf = _run_local_vectorize(
-            image=filtered_alert_raster,
-            region=poly,
-            scale=pixel_size,
-            min_size_pixels=min_size_pixels,
-            out_tif=out_tif,
-            on_status=analyze_status.set,
-        )
-        # 5b. Optional: attribute each alert with per-band stats from an extra
-        # raster (GEE asset or local file). No-op when unconfigured. Fails loud
-        # (the use_task surfaces the error) if configured but the raster/band is
-        # bad — so we never publish alerts that are silently missing the columns.
-        gdf = attribute_alerts_from_config(
-            gdf,
-            aux_model.attribute_raster,
-            poly,
-            app_state.recipe_folder_path.value,
-        )
-        analyze_status.value = cm.filter_tile.analyze_status_found.format(n=len(gdf))
-
         # Parity: publish the raw vectorize sets onto selected_alerts_model
         # (the OLD tile set these; the still-traitlets analysis tile reads them).
-        max_number_alerts = int(user_max_number_alerts)
-        selected_alerts_model.alerts_total_bbs = gdf
-        selected_alerts_model.alerts_bbs = gdf.head(max_number_alerts)
+        selected_alerts_model.alerts_total_bbs = outcome.alerts_total_bbs
+        selected_alerts_model.alerts_bbs = outcome.alerts_bbs
         selected_alerts_model.received_alerts = True
 
-        # 6. Assemble the alerts_gdf (status/point/alert_sources/... columns) and
-        # publish it — this is what Overview + the future analysis tile consume.
-        # custom_name labels the user-defined source (ten-thousands code slot) in
-        # the decoded alert_sources column.
-        app_state.alerts_gdf.value = convert_to_geopandas(
-            gdf, custom_name=aux_model.custom_alert_name
-        )
-
-        # Persist the freshly vectorized gdf to the canonical store NOW (not just
-        # on Save), so a reload before Save resumes without re-running EE. No-op
-        # when no recipe folder exists yet (smoke / pre-recipe runs).
-        recipe_folder = app_state.recipe_folder_path.value
-        if recipe_folder:
-            try:
-                save_gdf_to_parquet(
-                    app_state.alerts_gdf.value,
-                    str(Path(recipe_folder) / "alert_db.parquet"),
-                )
-            except Exception:
-                logger.exception("Filter: failed to persist alert_db.parquet")
+        # Publish the assembled alerts_gdf — this is what Overview + the analysis
+        # tile consume.
+        app_state.alerts_gdf.value = outcome.alerts_gdf
+        logger.info("Filter: analyze finished — %s alerts", outcome.alert_count)
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "analysis_tile"
-        return True
 
-    analyze_task = solara.lab.use_task(
-        _run_analyze, dependencies=None, prefer_threaded=True, raise_error=False
+    solara.use_effect(
+        _apply_analyze,
+        [
+            analyze_task.pending,
+            analyze_task.finished,
+            analyze_task.error,
+            analyze_task.cancelled,
+        ],
     )
 
-    def _on_analyze_click(*_):
-        analyze_task()
+    analyze_button_props = use_task_button(
+        analyze_task, on_start=_start_analyze, cancel_reason_ref=analyze_cancel_reason
+    )
+    analyze_button_props["on_cancel"] = _guard_cancel(
+        analyze_button_props["on_cancel"], analyze_started_at
+    )
 
     # ------------------------------------------------------------------
     # Render layout: controls only (this widget IS the right-panel section
@@ -711,14 +984,12 @@ def AlertsFilterTile(
         solara.display(cards["area_method"])
         solara.display(cards["sorting"])
         solara.display(cards["max_number"])
-        solara.Button(
-            label=cm.filter_tile.analyze_alerts_button,
-            on_click=_on_analyze_click,
-            loading=analyze_task.pending,
-            disabled=analyze_task.pending,
-            color="primary",
-            class_="ma-3",
-        )
+        with solara.Div(style="padding: 12px;"):
+            TaskButtonComponent(
+                label=cm.filter_tile.analyze_alerts_button,
+                **analyze_button_props,
+                block=True,
+            )
         if analyze_task.pending and analyze_status.value:
             solara.Info(analyze_status.value, classes=["ma-3"])
         if analyze_task.error:

@@ -47,8 +47,11 @@ ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
   children), so calling them here is safe.
 """
 
+import asyncio
+import dataclasses
 import logging
 import os
+from typing import Any
 
 import ipyvuetify as v
 import reacton.ipyvuetify as rv
@@ -160,6 +163,15 @@ def _clear_overview_layers(map_, holder) -> None:
             logger.exception("Overview: failed to remove a layer during clear")
 
 
+@dataclasses.dataclass(frozen=True)
+class OverviewAoiLayerRequest:
+    """Immutable snapshot for one Overview AOI-outline sync."""
+
+    feature_collection: Any
+    show: bool
+    token: int
+
+
 def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
     """Add/remove the Overview's own AOI outline on the shared map (idempotent).
 
@@ -169,6 +181,11 @@ def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
     double-mount can't leave two), then re-adds when ``show`` is True and an AOI is
     selected. ``feature_collection`` is the AOI ``ee`` object (AoiView is
     ``gee=True`` here), drawn with ``add_ee_layer`` exactly as the AOI tile does.
+
+    ``add_ee_layer`` blocks while EE resolves the tile-map id, so the component
+    never calls this from an effect body: it goes through the component's
+    ``aoi_layer_task`` + ``asyncio.to_thread``. It stays a plain module function
+    so it remains directly testable.
     """
     try:
         map_.remove_layer(_OVERVIEW_AOI_LAYER, none_ok=True)
@@ -296,10 +313,43 @@ def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=Non
     # filter run elsewhere can't make this effect strip the outline while another
     # tile is showing — the AOI is read at activation time (it is selected long
     # before the user reaches the Overview), mirroring the AOI tile's _sync_aoi.
+    #
+    # The draw itself is an ``add_ee_layer``, which blocks on EE — so the effect
+    # only schedules the async task (kernel loop, ``prefer_threaded=False``) and
+    # the map work happens in ``asyncio.to_thread``. ``aoi_layer_generation``
+    # makes a superseded sync a no-op: cancelling the task abandons the coroutine
+    # but the thread it started keeps running, so a slow draw could otherwise
+    # re-add the outline after a later clear.
     aoi_fc = getattr(aoi_date_model, "feature_collection", None)
+    aoi_layer_generation = solara.use_memo(lambda: {"value": 0}, dependencies=[])
+
+    def _apply_overview_aoi(request: OverviewAoiLayerRequest):
+        if aoi_layer_generation["value"] != request.token:
+            return
+        sync_overview_aoi_layer(
+            map_, request.feature_collection, show=request.show
+        )
+
+    async def _sync_overview_aoi_task(request: OverviewAoiLayerRequest):
+        await asyncio.to_thread(_apply_overview_aoi, request)
+        return request
+
+    aoi_layer_task = solara.lab.use_task(
+        _sync_overview_aoi_task,
+        dependencies=None,
+        prefer_threaded=False,
+        raise_error=False,
+    )
 
     def _sync_overview_aoi():
-        sync_overview_aoi_layer(map_, aoi_fc, show=active)
+        aoi_layer_generation["value"] += 1
+        aoi_layer_task(
+            OverviewAoiLayerRequest(
+                feature_collection=aoi_fc,
+                show=active,
+                token=aoi_layer_generation["value"],
+            )
+        )
 
     solara.use_effect(_sync_overview_aoi, [active])
 

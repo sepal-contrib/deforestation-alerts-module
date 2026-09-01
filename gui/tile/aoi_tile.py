@@ -1,8 +1,26 @@
 """AOI/Date tile as a Solara component (Phase 4 port of the old ipyvuetify class).
 
 Architecture layer: view — imports solara + ipyvuetify/pysepal for UI only. The
-GEE-heavy search runs in ``solara.lab.use_task(prefer_threaded=True)``; the model
-mutations and the ccdc dictionary observer stay on the (service) helper functions.
+GEE-heavy search runs as an **async** ``solara.lab.use_task(prefer_threaded=False)``
+on Solara's kernel loop, with every blocking eeclient call inside
+``asyncio.to_thread``; the model mutations and the ccdc dictionary observer stay
+on the (service) helper functions.
+
+Task lifecycle (the four-part pattern used for every long-running action here —
+the alerts-dictionary init, the search, and the AOI map layer):
+
+1. a **pure sync worker** takes a frozen request snapshot and returns a frozen
+   outcome — no model / reactive / widget mutation, no navigation;
+2. an **async task** on the kernel loop (``prefer_threaded=False``) awaits that
+   worker through ``asyncio.to_thread`` (this is also where ``add_ee_layer``
+   runs — never from render or an effect body);
+3. the **click handler** takes the snapshot and holds a synchronous ``pending``
+   guard (a render-time ``disabled=`` cannot stop a double click, because the
+   click that follows the first one is dispatched against the pre-render button);
+4. a **completion effect** with the full dependency list
+   ``[pending, finished, error, cancelled]`` owns every model write and the
+   ``current_page_view`` navigation, and applies nothing when the task was
+   cancelled.
 
 Key port decisions (see Phase 4 plan, Step 2):
 
@@ -20,8 +38,9 @@ Key port decisions (see Phase 4 plan, Step 2):
   tear it down on unmount.
 * **Search is a button-triggered task, not auto-run.** ``use_task(dependencies=None)``
   only runs when called, so it never fires on mount (which would hit EE with no
-  inputs); the click handler calls ``search_task()`` and the button shows
-  ``search_task.pending`` as its loader.
+  inputs); the click handler snapshots the inputs and calls
+  ``search_task(SearchRequest(...))``, and the button is the pysepal
+  ``TaskButtonComponent`` (single start/cancel toggle — never a second button).
 * **AoiView + DatePickers are memoized once** (``dependencies=[]``) so the widget
   identities and the ``.bind()`` chain are stable across re-renders. The AoiView
   is attached to the **single shared map** (``map_``) passed in from
@@ -30,13 +49,19 @@ Key port decisions (see Phase 4 plan, Step 2):
   controls (a right-panel section).
 """
 
+import asyncio
+import dataclasses
 import logging
+import time
 from datetime import date
+from types import SimpleNamespace
+from typing import Any
 
 import ipyvuetify as v
 import solara
 from pysepal import aoi
 from pysepal import sepalwidgets as sw
+from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.aoi_helper import (
@@ -52,6 +77,14 @@ from deforestation_alerts.scripts.aoi_helper import (
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.aoi")
 
+# A click on the pysepal TaskButton toggles start -> cancel, and cancel is never
+# disabled (by design). A fast double click on "Search" can therefore land its
+# second press on the already-toggled cancel state and kill the run the user just
+# started. Cancels arriving within this grace window of the start are treated as
+# that accidental second press and ignored; a deliberate cancel always comes
+# later than this.
+_CANCEL_GRACE_SECONDS = 1.0
+
 
 class _InputsShim:
     """Adapter exposing the attribute shape ``check_aoi_inputs`` expects.
@@ -60,13 +93,85 @@ class _InputsShim:
     ``self.aoi_view.model.feature_collection`` and ``self.start_date.v_model`` /
     ``self.end_date.v_model`` (it was written against the OLD widget-class
     ``self``). Rather than fork the still-shared helper, we hand it this thin
-    shim around the memoized widgets so the validation logic stays in one place.
+    shim built from the immutable ``SearchRequest`` snapshot, so the validation
+    logic stays in one place AND the worker never touches a live widget.
     """
 
-    def __init__(self, aoi_view, start_picker, end_picker):
-        self.aoi_view = aoi_view
-        self.start_date = start_picker
-        self.end_date = end_picker
+    def __init__(self, feature_collection, start_date, end_date):
+        self.aoi_view = SimpleNamespace(
+            model=SimpleNamespace(feature_collection=feature_collection)
+        )
+        self.start_date = SimpleNamespace(v_model=start_date)
+        self.end_date = SimpleNamespace(v_model=end_date)
+
+
+@dataclasses.dataclass(frozen=True)
+class SearchRequest:
+    """Immutable snapshot of everything the search needs, taken at click time."""
+
+    feature_collection: Any
+    start_date: Any
+    end_date: Any
+    alerts_dictionary: Any
+    ccdc_layer: Any
+
+
+@dataclasses.dataclass(frozen=True)
+class SearchOutcome:
+    """What the search produced. Applied by the completion effect, never here."""
+
+    available_alerts_list: list
+    available_alerts_raster_list: dict
+    alerts_dictionary: dict
+    dictionary_rebuilt: bool = False
+
+
+@dataclasses.dataclass(frozen=True)
+class AoiLayerRequest:
+    """Immutable snapshot for one AOI map-layer sync (draw when ``show``)."""
+
+    show: bool
+    token: int
+
+
+def _run_search_sync(request: SearchRequest) -> SearchOutcome:
+    """Pure search worker — runs inside ``asyncio.to_thread``.
+
+    Every call below is the blocking eeclient API (``create_*`` reach
+    ``.getInfo()``), which is exactly why this whole function is confined to a
+    thread. It mutates nothing: the dictionaries/lists it builds travel back in a
+    ``SearchOutcome`` and the component's completion effect writes them onto the
+    models.
+    """
+    feature_collection, date1, date2 = check_aoi_inputs(
+        _InputsShim(request.feature_collection, request.start_date, request.end_date)
+    )
+
+    dictionary = request.alerts_dictionary
+    dictionary_rebuilt = False
+    if not isinstance(dictionary, dict):
+        # Defensive: the init task has not landed yet (or it failed). Rebuild
+        # here — still on the worker thread — and hand it back for the effect.
+        dictionary = create_basic_alerts_dictionary()
+        dictionary_rebuilt = True
+
+    available = create_available_alert_dictionary(
+        dictionary, feature_collection, date1, date2
+    )
+    rasters = create_filtered_alert_raster_dictionary(
+        available,
+        feature_collection,
+        date1,
+        date2,
+        request.ccdc_layer,
+        full_dictionary=dictionary,
+    )
+    return SearchOutcome(
+        available_alerts_list=available,
+        available_alerts_raster_list=rasters,
+        alerts_dictionary=dictionary,
+        dictionary_rebuilt=dictionary_rebuilt,
+    )
 
 
 def _update_dictionary_ccdc(aux_model, alert_filter_model):
@@ -141,21 +246,51 @@ def AoiTile(
     """
     # ------------------------------------------------------------------
     # Initialize the alerts dictionary + available lists exactly once.
-    # OLD __init__ did this eagerly; create_basic_alerts_dictionary hits EE, so
-    # we run it in a memo (dependencies=[]) rather than on every render. If EE is
-    # unavailable we fall back to {} and log — the tile still renders.
+    # ``create_basic_alerts_dictionary`` makes three blocking ``.getInfo()``
+    # round-trips (GLAD-L / GLAD-S2 / RADD collection dates), so it must NOT run
+    # at render time — it used to sit in a ``use_memo``, which blocked the first
+    # render of the whole page on the network. It is now an async task on the
+    # kernel loop whose eeclient work happens in a thread, fired once from a
+    # mount effect; the completion effect writes the model fields the render
+    # reads. If EE is unavailable we fall back to {} and log — the tile still
+    # renders.
     # ------------------------------------------------------------------
-    def _init_models():
-        try:
-            alert_filter_model.alerts_dictionary = create_basic_alerts_dictionary()
-        except Exception:
-            logger.exception("Failed to build basic alerts dictionary (EE down?)")
+    async def _init_alerts_dictionary():
+        return await asyncio.to_thread(create_basic_alerts_dictionary)
+
+    init_task = solara.lab.use_task(
+        _init_alerts_dictionary,
+        dependencies=None,
+        prefer_threaded=False,
+        raise_error=False,
+    )
+
+    def _start_init():
+        if init_task.not_called:
+            init_task()
+
+    solara.use_effect(_start_init, dependencies=[])
+
+    def _apply_init():
+        if init_task.cancelled or init_task.pending:
+            return
+        if init_task.finished and init_task.value is not None:
+            alert_filter_model.alerts_dictionary = init_task.value
+        elif init_task.error:
+            logger.error(
+                "Failed to build basic alerts dictionary (EE down?)",
+                exc_info=init_task.exception,
+            )
             alert_filter_model.alerts_dictionary = {}
+        else:
+            return
         alert_filter_model.available_alerts_list = []
         alert_filter_model.available_alerts_raster_list = []
-        return True
 
-    solara.use_memo(_init_models, dependencies=[])
+    solara.use_effect(
+        _apply_init,
+        [init_task.pending, init_task.finished, init_task.error, init_task.cancelled],
+    )
 
     # ------------------------------------------------------------------
     # Memoized AoiView, attached to the single shared map. AoiView's model IS
@@ -213,62 +348,116 @@ def AoiTile(
     # Selection while already active is handled by AoiView itself (active doesn't
     # change).
     # ------------------------------------------------------------------
+    # ``_redraw_aoi_layer`` calls ``map_.add_ee_layer``, which blocks on EE while it
+    # resolves the tile-map id — so it must not run in the effect body itself.
+    # The effect only schedules the async layer task, which does the map work in
+    # ``asyncio.to_thread`` (the pysepal-verified placement for ``add_ee_layer``).
+    #
+    # ``layer_generation`` makes a superseded draw a no-op: cancelling the task
+    # abandons the coroutine but the thread it started keeps running, so a slow
+    # "draw" from a previous activation could otherwise re-add the outline after
+    # a later "clear". Each effect run bumps the counter and passes it as the
+    # request token; the thread checks the token immediately before it touches
+    # the map and returns when it has been superseded.
     active = app_state.active_map_view.value == "aoi_tile"
+    layer_generation = solara.use_memo(lambda: {"value": 0}, dependencies=[])
+
+    async def _sync_aoi_layer(request: AoiLayerRequest):
+        await asyncio.to_thread(
+            _apply_aoi_layer, aoi_view, map_, request, layer_generation
+        )
+        return request
+
+    layer_task = solara.lab.use_task(
+        _sync_aoi_layer, dependencies=None, prefer_threaded=False, raise_error=False
+    )
 
     def _sync_active():
-        if active:
-            _redraw_aoi_layer(aoi_view, map_)
-        else:
-            _clear_aoi_layer(map_)
+        layer_generation["value"] += 1
+        layer_task(AoiLayerRequest(show=active, token=layer_generation["value"]))
 
     solara.use_effect(_sync_active, dependencies=[active])
 
     # ------------------------------------------------------------------
     # Search task. dependencies=None => never auto-runs; only fires when the
-    # click handler calls search_task(). Does the EE-ish work on a worker thread
-    # and writes the result lists onto alert_filter_model.
+    # click handler calls search_task(request). The coroutine stays on the kernel
+    # loop and hands the whole blocking eeclient body to a thread; NOTHING is
+    # written to a model here — see _apply_search below.
     # ------------------------------------------------------------------
-    def _run_search():
+    async def _search(request: SearchRequest) -> SearchOutcome:
+        return await asyncio.to_thread(_run_search_sync, request)
+
+    search_task = solara.lab.use_task(
+        _search, dependencies=None, prefer_threaded=False, raise_error=False
+    )
+    search_started_at = solara.use_ref(0.0)
+    search_cancel_reason = solara.use_ref(None)
+
+    def _start_search():
+        # Synchronous pending guard: a render-time ``disabled=`` cannot stop the
+        # second press of a double click (it is dispatched against the button as
+        # it was before the re-render), but this can.
+        if search_task.pending:
+            return
         # AOI fields are already on aoi_date_model (AoiView wrote them); dates are
-        # already bound from the pickers. Validate via the shared helper through
-        # the shim, then run the two create_* service functions.
-        shim = _InputsShim(aoi_view, start_picker, end_picker)
-        feature_collection, date1, date2 = check_aoi_inputs(shim)
-
-        dictionary = alert_filter_model.alerts_dictionary
-        if not isinstance(dictionary, dict):
-            # Defensive: should have been set by _init_models.
-            dictionary = create_basic_alerts_dictionary()
-            alert_filter_model.alerts_dictionary = dictionary
-
-        available = create_available_alert_dictionary(
-            dictionary, feature_collection, date1, date2
-        )
-        alert_filter_model.available_alerts_list = available
-
-        alert_filter_model.available_alerts_raster_list = (
-            create_filtered_alert_raster_dictionary(
-                available,
-                feature_collection,
-                date1,
-                date2,
-                aux_model.ccdc_layer,
-                full_dictionary=dictionary,
+        # already bound from the pickers. Snapshot them here, at click time, so
+        # the worker can never observe a half-changed form.
+        search_cancel_reason.current = None
+        search_started_at.current = time.monotonic()
+        logger.info("AOI: alert search started")
+        search_task(
+            SearchRequest(
+                feature_collection=getattr(
+                    aoi_view.model, "feature_collection", None
+                ),
+                start_date=start_picker.v_model,
+                end_date=end_picker.v_model,
+                alerts_dictionary=alert_filter_model.alerts_dictionary,
+                ccdc_layer=aux_model.ccdc_layer,
             )
         )
 
+    def _apply_search():
+        # The ONLY place search results reach the models. A cancelled run leaves
+        # every model and the current page exactly as they were.
+        if search_task.cancelled:
+            logger.info("AOI: alert search cancelled — models and page unchanged")
+            return
+        if not search_task.finished:
+            return
+        outcome = search_task.value
+        if outcome is None:
+            return
+        if outcome.dictionary_rebuilt:
+            alert_filter_model.alerts_dictionary = outcome.alerts_dictionary
+        alert_filter_model.available_alerts_list = outcome.available_alerts_list
+        alert_filter_model.available_alerts_raster_list = (
+            outcome.available_alerts_raster_list
+        )
+        logger.info(
+            "AOI: alert search finished — %s source(s) available",
+            len(outcome.available_alerts_list),
+        )
         # Jump to the Filter tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
         app_state.current_page_view.value = "filter_alerts"
-        return True
 
-    search_task = solara.lab.use_task(
-        _run_search, dependencies=None, prefer_threaded=True, raise_error=False
+    solara.use_effect(
+        _apply_search,
+        [
+            search_task.pending,
+            search_task.finished,
+            search_task.error,
+            search_task.cancelled,
+        ],
     )
 
-    def _on_search_click(*_):
-        # Thin callback: just trigger the task; the task does the work + writes.
-        search_task()
+    search_button_props = use_task_button(
+        search_task, on_start=_start_search, cancel_reason_ref=search_cancel_reason
+    )
+    search_button_props["on_cancel"] = _guard_cancel(
+        search_button_props["on_cancel"], search_started_at
+    )
 
     # ------------------------------------------------------------------
     # Render layout: controls only (this widget IS the right-panel section
@@ -299,18 +488,51 @@ def AoiTile(
     with solara.Column(style="padding: 0;"):
         solara.display(aoi_card)
         solara.display(date_card)
-        solara.Button(
-            label=cm.aoi_tile.search_button,
-            on_click=_on_search_click,
-            loading=search_task.pending,
-            disabled=search_task.pending,
-            color="primary",
-            class_="ma-3",
-        )
+        with solara.Div(style="padding: 12px;"):
+            TaskButtonComponent(
+                label=cm.aoi_tile.search_button,
+                **search_button_props,
+                block=True,
+            )
         if search_task.error:
             solara.Error(
                 f"Search failed: {search_task.exception}", classes=["ma-3"]
             )
+
+
+def _guard_cancel(on_cancel, started_at):
+    """Wrap a TaskButton cancel callback so an accidental double click can't cancel.
+
+    The pysepal TaskButton is a single start/cancel toggle and cancel is never
+    disabled, so the second press of a fast double click on "Search"/"Analyze"
+    can arrive after the server already re-rendered the button into its cancel
+    state and kill the run that the first press just started. Cancels within
+    ``_CANCEL_GRACE_SECONDS`` of the start are dropped; a deliberate cancel is
+    always later than that. Returning early also leaves ``cancel_reason_ref``
+    untouched (the wrapped callback is what sets it).
+    """
+
+    def _on_cancel(*args, **kwargs):
+        if time.monotonic() - (started_at.current or 0.0) < _CANCEL_GRACE_SECONDS:
+            return
+        on_cancel(*args, **kwargs)
+
+    return _on_cancel
+
+
+def _apply_aoi_layer(aoi_view, map_widget, request: AoiLayerRequest, generation):
+    """Draw or clear the AOI layer on the shared map — runs in ``to_thread``.
+
+    ``generation["value"]`` is bumped by the scheduling effect; a run whose token
+    no longer matches has been superseded (the task was cancelled/replaced but
+    its thread survives cancellation) and must not touch the map.
+    """
+    if generation["value"] != request.token:
+        return
+    if request.show:
+        _redraw_aoi_layer(aoi_view, map_widget)
+    else:
+        _clear_aoi_layer(map_widget)
 
 
 def _clear_aoi_layer(map_widget):
