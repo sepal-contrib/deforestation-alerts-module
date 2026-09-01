@@ -1,7 +1,10 @@
 """Tier-1 tests for attribute_source: local pass-through, description stamping,
 and the config->materialize->attribute integration (no GEE)."""
 
+from pathlib import Path
+
 import numpy as np
+import pytest
 import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import box
@@ -24,9 +27,19 @@ def _write_raster(path, band, *, descriptions=None):
     return str(path)
 
 
-def test_materialize_local_returns_source_unchanged():
-    cfg = {"source": "/data/forest.tif", "kind": "local", "bands": []}
-    assert asrc.materialize_attribute_raster(cfg, region=None, recipe_folder=None) == "/data/forest.tif"
+def test_materialize_local_stages_the_users_raster_down(ws, tmp_path):
+    """`kind == "local"` is a path the user picked in their SEPAL workspace, so
+    it must be STAGED, not handed straight to rasterio: the container has no
+    such file."""
+    remote = ws.results_dir("forest.tif")
+    ws.write_bytes(remote, b"tif-bytes")
+    cfg = {"source": remote, "kind": "local", "bands": []}
+
+    local = asrc.materialize_attribute_raster(cfg, region=None, workspace=ws)
+
+    assert local != remote
+    assert Path(local).read_bytes() == b"tif-bytes"
+    assert Path(local).is_relative_to(tmp_path)
 
 
 def test_set_band_descriptions_roundtrip(tmp_path):
@@ -35,19 +48,39 @@ def test_set_band_descriptions_roundtrip(tmp_path):
     assert ra.band_names(path) == ["forest"]
 
 
-def test_attribute_alerts_from_config_local(tmp_path):
+def test_attribute_alerts_from_config_local(tmp_path, ws):
     path = _write_raster(tmp_path / "r.tif", [[1, 1], [1, 0]], descriptions=["forest"])
     gdf = gpd.GeoDataFrame({"id": [0]}, geometry=[box(0, 8, 2, 10)], crs="EPSG:4326")
     cfg = {
         "source": path, "kind": "local",
         "bands": [{"band": "forest", "stat": "majority", "column": "forest"}],
     }
-    out = asrc.attribute_alerts_from_config(gdf, cfg, region=None, recipe_folder=None)
+    out = asrc.attribute_alerts_from_config(
+        gdf, cfg, region=None, workspace=ws, materialize=lambda c, r, w: c["source"]
+    )
     assert out["forest"].iloc[0] == 1
 
 
-def test_attribute_alerts_from_config_noop_when_empty(tmp_path):
+def test_attribute_alerts_from_config_noop_when_empty(ws):
     gdf = gpd.GeoDataFrame({"id": [0]}, geometry=[box(0, 8, 2, 10)], crs="EPSG:4326")
-    assert asrc.attribute_alerts_from_config(gdf, None, None, None) is gdf
+    assert asrc.attribute_alerts_from_config(gdf, None, None, ws) is gdf
     empty_cfg = {"source": "x", "kind": "local", "bands": []}
-    assert asrc.attribute_alerts_from_config(gdf, empty_cfg, None, None) is gdf
+    assert asrc.attribute_alerts_from_config(gdf, empty_cfg, None, ws) is gdf
+
+
+def test_attribute_alerts_from_config_releases_the_staged_raster(tmp_path, ws):
+    """The staged raster is discarded whether the attribution pass succeeds or
+    raises — it is a full copy of the user's raster in the container's tmp."""
+    path = _write_raster(tmp_path / "r.tif", [[1, 1], [1, 0]], descriptions=["forest"])
+    remote = ws.results_dir("forest.tif")
+    ws.write_bytes(remote, Path(path).read_bytes())
+    gdf = gpd.GeoDataFrame({"id": [0]}, geometry=[box(0, 8, 2, 10)], crs="EPSG:4326")
+    cfg = {
+        "source": remote, "kind": "local",
+        "bands": [{"band": "nope", "stat": "majority", "column": "nope"}],
+    }
+
+    with pytest.raises(Exception):
+        asrc.attribute_alerts_from_config(gdf, cfg, region=None, workspace=ws)
+
+    assert [p for p in (tmp_path / "scratch").rglob("*") if p.is_file()] == []

@@ -14,6 +14,7 @@ import solara
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 from pysepal.planetapi import PlanetView
+from pysepal.sepalwidgets.file_input import FileInput
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.raster_attribute import band_names, build_attribute_config
@@ -21,7 +22,7 @@ from deforestation_alerts.scripts.attribute_source import gee_band_names
 
 
 @solara.component
-def AuxTile(aux_model):
+def AuxTile(aux_model, workspace):
     """Solara port of the old AuxTile ipyvuetify widget.
 
     Parameters
@@ -30,6 +31,9 @@ def AuxTile(aux_model):
         Domain model holding the auxiliary layer configuration traits.
         Widgets are bound to it once via the traitlets `.bind()` chain
         inside use_memo; no observers, no GEE calls.
+    workspace : Workspace
+        The session user-file adapter. Its client backs the two file pickers so
+        they browse the user's SEPAL workspace, not the container's disk.
     """
 
     # ------------------------------------------------------------------
@@ -38,7 +42,7 @@ def AuxTile(aux_model):
     # so bindings are attached exactly once.
     # ------------------------------------------------------------------
     layout_widget = solara.use_memo(
-        lambda: build_aux_layout(aux_model),
+        lambda: build_aux_layout(aux_model, workspace),
         dependencies=[],
     )
 
@@ -48,13 +52,44 @@ def AuxTile(aux_model):
 _STATS = ["majority", "mean", "min", "max", "median"]
 
 
-def _build_attribute_card(aux_model):
+def _remote_file_input(workspace, extensions, **kwargs):
+    """A file picker that browses the USER's SEPAL workspace.
+
+    A bare ``sw.inputs.FileInput`` lists the CONTAINER's filesystem, where the
+    user's rasters and report templates do not exist (inventory a33). Rooted at
+    the SEPAL home rather than this module's results dir because these inputs
+    point at files the user keeps anywhere. ``root`` is passed explicitly: with a
+    client and no root the widget defaults it to "" and then rejects any absolute
+    ``initial_folder``. The resulting ``.v_model`` is a REMOTE path, which is why
+    ``attribute_source`` and the report builder stage their inputs down.
+    """
+    return FileInput(
+        initial_folder=workspace.home,
+        root=workspace.home,
+        sepal_client=workspace.client,
+        extensions=extensions,
+        **kwargs,
+    )
+
+
+def _remote_band_names(workspace, remote_path):
+    """Band names of a raster the user picked in their SEPAL workspace."""
+    local = workspace.download_to_scratch(remote_path)
+    try:
+        return band_names(str(local))
+    finally:
+        workspace.discard_scratch(local)
+
+
+def _build_attribute_card(aux_model, workspace):
     """Card: pick a GEE asset OR local raster, 'Load bands', then per-band
     include/stat/column rows. Writes the assembled config to
     aux_model.attribute_raster on any change."""
     title = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.attribute_title])
     asset_input = sw.inputs.AssetSelect(types=["IMAGE"], label=cm.aux_tile.attribute_asset_hint)
-    file_input = sw.inputs.FileInput(extensions=[".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint)
+    file_input = _remote_file_input(
+        workspace, [".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint
+    )
     load_btn = v.Btn(class_="ma-1", small=True, children=[cm.aux_tile.attribute_load_bands])
     rows_box = v.Container(class_="pa-0 ma-0", children=[])
     status = v.Html(tag="div", class_="pa-1 ma-1 caption", children=[])
@@ -104,7 +139,9 @@ def _build_attribute_card(aux_model):
         elif file_input.v_model:
             source, kind = file_input.v_model, "local"
             try:
-                names = band_names(source)
+                # `source` is a REMOTE workspace path and rasterio only opens
+                # local files, so stage it just long enough to read the header.
+                names = _remote_band_names(workspace, source)
             except Exception as exc:
                 state.update(source=None, rows=[])
                 rows_box.children = []
@@ -126,7 +163,7 @@ def _build_attribute_card(aux_model):
                   children=[title, asset_input, file_input, load_btn, status, rows_box])
 
 
-def build_aux_layout(aux_model):
+def build_aux_layout(aux_model, workspace):
     """Build the full card layout and bind widgets to aux_model traits.
 
     Returns the outermost ipyvuetify layout widget. ``Page`` hands this RAW
@@ -183,13 +220,13 @@ def build_aux_layout(aux_model):
     )
 
     # Card 3b — Attribute alerts from a (multiband) raster.
-    card_attr = _build_attribute_card(aux_model)
+    card_attr = _build_attribute_card(aux_model, workspace)
 
     # Card 4 — Report template upload
     title4 = v.CardTitle(
         class_="pa-1 ma-1", children=[cm.aux_tile.report_template_title]
     )
-    form_input = sw.inputs.FileInput(extensions=[".docx"])
+    form_input = _remote_file_input(workspace, [".docx"])
     card4 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title4, form_input])
 
     # Card 5 — Planet login. PlanetView itself is unchanged; note the OLD tile

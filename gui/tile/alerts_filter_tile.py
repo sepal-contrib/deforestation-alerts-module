@@ -69,7 +69,7 @@ import dataclasses
 import logging
 import math
 import time
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from types import SimpleNamespace
 from typing import Any
 
@@ -83,7 +83,6 @@ from pysepal.solara.components.task_button import TaskButtonComponent, use_task_
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.message import cm
-from deforestation_alerts.parameter import module_dir
 from deforestation_alerts.scripts.alert_filter_helper import (
     check_alert_filter_inputs,
     convert_to_geopandas,
@@ -184,7 +183,10 @@ class AnalyzePlan:
     region: Any
     pixel_size: Any
     min_size_pixels: int
+    # Where geedim writes and the vectorizer reads (container-local scratch)...
     out_tif: str
+    # ...and where it is published in the user's workspace (None: no recipe yet).
+    remote_tif: Any
 
 
 @dataclasses.dataclass(frozen=True)
@@ -432,19 +434,24 @@ def _link_checkbox_map(map_widget, alert_source_select):
                 layer.visible = False
 
 
-def _filtered_alerts_path(recipe_folder, alert_sources, start_date, end_date):
-    """On-disk path for the downloaded filtered-alert raster.
+def _filtered_alerts_path(workspace, recipe_folder, alert_sources, start_date, end_date):
+    """``(local_tif, remote_tif)`` for the downloaded filtered-alert raster.
 
-    Saves into the current recipe folder when one exists, else ``module_dir``
-    (smoke / no-recipe runs). Filename encodes source(s) + date range via the
-    shared ``naming`` helper, e.g.
+    geedim writes and the vectorizer reads local files only, so the raster is
+    always built in ``workspace`` scratch; it is *also* user data, so when a
+    recipe is loaded it is uploaded into that recipe folder in the user's SEPAL
+    workspace (``remote_tif``). Without a recipe there is nowhere to put it and
+    ``remote_tif`` is ``None`` — the old ``module_dir`` fallback wrote it to the
+    container's disk, where the user could never see it (inventory a28/a29).
+
+    Filename encodes source(s) + date range via the shared ``naming`` helper, e.g.
     ``filtered_alerts_glad-l-radd_2026-01-01_2026-06-12.tif``.
     """
-    base = Path(recipe_folder) if recipe_folder else module_dir
     name = alert_artifact_name(
         "filtered_alerts", alert_sources, start_date, end_date, "tif"
     )
-    return str(base / name)
+    remote = str(PurePosixPath(recipe_folder) / name) if recipe_folder else None
+    return str(workspace.scratch_file(name=name)), remote
 
 
 def _loop_is_running() -> bool:
@@ -482,7 +489,7 @@ def _guard_cancel(on_cancel, started_at):
     return _on_cancel
 
 
-def _prepare_analyze_sync(request: AnalyzeRequest) -> AnalyzePlan:
+def _prepare_analyze_sync(request: AnalyzeRequest, workspace) -> AnalyzePlan:
     """Validate the snapshot and build the EE image + export params. Pure.
 
     Runs inside ``asyncio.to_thread``: ``check_alert_filter_inputs`` raises on bad
@@ -553,11 +560,15 @@ def _prepare_analyze_sync(request: AnalyzeRequest) -> AnalyzePlan:
         alert_area_selection,
     )
 
-    # The downloaded filtered-alert raster lands in the current recipe folder,
-    # named with the selected source(s) + AOI date range (self-describing on
-    # disk); falls back to module_dir when no recipe exists yet.
-    out_tif = _filtered_alerts_path(
-        request.recipe_folder, alert_source, request.start_date, request.end_date
+    # The downloaded filtered-alert raster is staged locally for the vectorizer
+    # and published into the current recipe folder, named with the selected
+    # source(s) + AOI date range (self-describing in the user's workspace).
+    out_tif, remote_tif = _filtered_alerts_path(
+        workspace,
+        request.recipe_folder,
+        alert_source,
+        request.start_date,
+        request.end_date,
     )
     return AnalyzePlan(
         selections=selections,
@@ -566,6 +577,7 @@ def _prepare_analyze_sync(request: AnalyzeRequest) -> AnalyzePlan:
         pixel_size=pixel_size,
         min_size_pixels=min_size_pixels,
         out_tif=out_tif,
+        remote_tif=remote_tif,
     )
 
 
@@ -598,6 +610,19 @@ def _download_alert_raster(plan: AnalyzePlan) -> str:
         nodata_value=255,
     )
     return plan.out_tif
+
+
+def _publish_alert_raster(plan: AnalyzePlan, workspace):
+    """Upload the staged filtered-alert raster into the user's recipe folder.
+
+    The raster is a deliverable the user asked for (it is named after the sources
+    and dates they picked), so it goes to their SEPAL workspace — but geedim can
+    only write locally, hence download-then-upload. No-op without a recipe folder.
+    Returns the remote path written, or ``None``.
+    """
+    if not plan.remote_tif:
+        return None
+    return workspace.upload_from_scratch(plan.out_tif, plan.remote_tif)
 
 
 def _vectorize_alert_tif(plan: AnalyzePlan):
@@ -869,6 +894,7 @@ def AlertsFilterTile(
         no-op unless configured and never had a phase message, so it rides along
         inside the "assembling" step rather than inflating the count.)
         """
+        plan = None
         with notifications.track(
             cm.filter_tile.analyze_task_title, total_steps=4
         ) as task:
@@ -879,11 +905,14 @@ def AlertsFilterTile(
                         n=len(request.alert_sources or [])
                     )
                 )
-                plan = await asyncio.to_thread(_prepare_analyze_sync, request)
+                plan = await asyncio.to_thread(
+                    _prepare_analyze_sync, request, workspace
+                )
 
                 # Download + vectorize locally (replaces the OLD GEE reduceToVectors).
                 task.step(cm.filter_tile.analyze_status_downloading)
                 await asyncio.to_thread(_download_alert_raster, plan)
+                await asyncio.to_thread(_publish_alert_raster, plan, workspace)
 
                 task.step(cm.filter_tile.analyze_status_vectorizing)
                 gdf = await asyncio.to_thread(_vectorize_alert_tif, plan)
@@ -898,7 +927,7 @@ def AlertsFilterTile(
                     gdf,
                     request.attribute_raster,
                     plan.region,
-                    request.recipe_folder,
+                    workspace,
                 )
 
                 outcome = await asyncio.to_thread(
@@ -918,6 +947,12 @@ def AlertsFilterTile(
                 # it into a CANCELLED pill instead.
                 task.fail(str(exc))
                 raise
+            finally:
+                # The staged raster has been published (and vectorized) by now;
+                # leaving it behind would keep a full copy of every analyze run
+                # in the container's tmp for the life of the session.
+                if plan is not None:
+                    workspace.discard_scratch(plan.out_tif)
 
     analyze_task = solara.lab.use_task(
         _analyze, dependencies=None, prefer_threaded=False, raise_error=False

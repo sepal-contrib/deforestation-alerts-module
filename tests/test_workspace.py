@@ -367,3 +367,15 @@ def test_workspace_accepts_the_real_client(fakes):
         auth=NoAuth(),
     ) as client:
         assert Workspace(client).results_dir("recipes") == f"{fakes.RESULTS_PATH}/recipes"
+
+
+def test_home_is_the_sepal_user_home_not_the_results_root(ws):
+    """The browse root for the Aux tile's file pickers: a user keeps the raster
+    or report template they want anywhere in their workspace, not necessarily
+    under this module's results dir."""
+    from pysepal_api.paths import BASE_REMOTE_PATH
+
+    assert ws.home == BASE_REMOTE_PATH
+    assert ws.root.startswith(ws.home + "/")
+    # It agrees with what the server would accept for a write under it.
+    assert ws.home_relative(f"{ws.home}/rasters/forest.tif") == "rasters/forest.tif"

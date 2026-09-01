@@ -1,7 +1,6 @@
 from pysepal import model
 from traitlets import Any, Int, Float, Unicode
 
-from deforestation_alerts import parameter as cp
 from deforestation_alerts.message import cm
 
 

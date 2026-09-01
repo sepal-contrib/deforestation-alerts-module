@@ -1,14 +1,20 @@
 """Resolve an attribution-raster config to a local GeoTIFF. GEE-aware (unlike the
-pure raster_attribute module): a GEE asset is downloaded once to the recipe folder
-and stamped with its band names; a local file is used as-is. Also enumerates GEE
-band names for the Aux-tile config UI, and ties config -> materialize -> attribute."""
+pure raster_attribute module): a GEE asset is downloaded once and stamped with its
+band names; a user-picked raster is staged down from their SEPAL workspace. Also
+enumerates GEE band names for the Aux-tile config UI, and ties
+config -> materialize -> attribute.
 
-from pathlib import Path
+Both artifacts are container-local **scratch** (inventory rows a31/a32). The GEE
+download used to land in the recipe folder, but nothing ever re-read it -- every
+call downloads afresh -- so it was write-only user clutter; it is now built in
+``workspace.scratch_dir()`` and never uploaded. The ``kind == "local"`` source is
+a path the user picked in the Aux tile's remote ``FileInput``, i.e. a REMOTE
+workspace path, so it is staged down before rasterio opens it.
+"""
 
 import ee
 import rasterio
 
-from deforestation_alerts.parameter import module_dir
 from deforestation_alerts.scripts.naming import safe_token
 from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.raster_attribute import attribute_alerts
@@ -26,15 +32,20 @@ def _set_band_descriptions(tif_path, names):
         dst.descriptions = tuple(names)
 
 
-def materialize_attribute_raster(config, region, recipe_folder):
-    """Return a local GeoTIFF path for the attribution raster.
+def materialize_attribute_raster(config, region, workspace):
+    """Return a LOCAL GeoTIFF path for the attribution raster.
 
-    local -> config["source"] unchanged. gee -> download ee.Image(source) clipped
-    to `region` at its native scale into `recipe_folder` (or module_dir), stamping
-    band descriptions. `region` may be an ee.Geometry or ee.FeatureCollection (a FeatureCollection is reduced to its geometry before download).
+    local -> `config["source"]` is a remote workspace path, staged down. gee ->
+    download ee.Image(source) clipped to `region` at its native scale into
+    `workspace` scratch, stamping band descriptions. `region` may be an
+    ee.Geometry or ee.FeatureCollection (a FeatureCollection is reduced to its
+    geometry before download).
+
+    The caller owns the returned path and should ``workspace.discard_scratch`` it
+    once the attribution pass has read it.
     """
     if config["kind"] == "local":
-        return config["source"]
+        return str(workspace.download_to_scratch(config["source"]))
 
     asset_id = config["source"]
     img = ee.Image(asset_id)
@@ -44,8 +55,9 @@ def materialize_attribute_raster(config, region, recipe_folder):
     region_geom = (
         region.geometry() if isinstance(region, ee.FeatureCollection) else region
     )
-    base = Path(recipe_folder) if recipe_folder else module_dir
-    out_tif = str(base / f"attribute_{safe_token(asset_id)}.tif")
+    out_tif = str(
+        workspace.scratch_file(name=f"attribute_{safe_token(asset_id)}.tif")
+    )
     # Native scale keeps categorical values intact; near resampling avoids blending.
     native_scale = img.projection().nominalScale().getInfo()
     download_ee_image(
@@ -56,15 +68,19 @@ def materialize_attribute_raster(config, region, recipe_folder):
     return out_tif
 
 
-def attribute_alerts_from_config(gdf, config, region, recipe_folder,
+def attribute_alerts_from_config(gdf, config, region, workspace,
                                  materialize=materialize_attribute_raster):
     """No-op when `config` has no bands; else materialize the raster and attribute.
 
     Returns `gdf` unchanged (same object) when there is nothing to do, so callers
     can assign unconditionally. Raises (fail loud) if attribution is configured but
-    the raster can't be materialized/read or a band is missing.
+    the raster can't be materialized/read or a band is missing. The staged raster
+    is released either way.
     """
     if not config or not config.get("bands"):
         return gdf
-    tif = materialize(config, region, recipe_folder)
-    return attribute_alerts(gdf, tif, config["bands"])
+    tif = materialize(config, region, workspace)
+    try:
+        return attribute_alerts(gdf, tif, config["bands"])
+    finally:
+        workspace.discard_scratch(tif)

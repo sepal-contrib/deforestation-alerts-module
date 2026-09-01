@@ -50,7 +50,6 @@ ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
 import asyncio
 import dataclasses
 import logging
-import os
 from typing import Any
 
 import ipyvuetify as v
@@ -79,13 +78,21 @@ _OVERVIEW_AOI_LAYER = "overview-aoi"
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
 
-def _bind_export(btn, fmt, gdf, folder, sources, start, end):
+def _bind_export(btn, fmt, gdf, workspace, folder, sources, start, end):
     """Return an ipyvuetify click handler that writes ``fmt`` and points ``btn``
-    at the produced file. Generates the export on demand from the in-memory gdf."""
+    at the produced file. Generates the export on demand from the in-memory gdf.
+
+    The export lands in the user's SEPAL workspace, so the button gets the
+    HOME-RELATIVE remote path: ``set_url`` -> ``su.create_download_link`` builds
+    ``https://sepal.io/api/sandbox/jupyter/files/<path relative to Path.home()>``,
+    and in the container ``Path.home()`` is the *container's* home, so handing it
+    an absolute path yields a dead link (inventory a18)."""
     def _on_click(widget, event, data):
         try:
-            path = export_alerts_gdf(gdf, folder, fmt, sources, start, end)
-            btn.set_url(path=path)
+            path = export_alerts_gdf(
+                gdf, workspace, folder, fmt, sources, start, end
+            )
+            btn.set_url(path=workspace.home_relative(path))
         except Exception:
             logger.exception("Overview: export %s failed", fmt)
     return _on_click
@@ -215,7 +222,9 @@ def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
 
 
 @solara.component
-def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=None):
+def OverviewTile(
+    app_state, map_, workspace, aoi_date_model=None, selected_alerts_model=None
+):
     """Solara port of the old OverviewTile ipyvuetify widget.
 
     Renders the alert-status summary card (+ download button) as a right-panel
@@ -230,6 +239,10 @@ def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=Non
     map_ : SepalMap
         The single shared map (the same instance ``MapApp`` renders fullscreen).
         Layers + popups are added/removed on this map.
+    workspace : Workspace
+        The session user-file adapter built in ``Page()``. The format exports are
+        user data and are written through it, into the recipe folder in the
+        user's SEPAL workspace.
     aoi_date_model : AoiDateModel, optional
         The recipe AOI model; its ``feature_collection`` is drawn as the Overview's
         AOI-context outline while this tile is active. ``None`` (or no AOI selected)
@@ -424,7 +437,9 @@ def OverviewTile(app_state, map_, aoi_date_model=None, selected_alerts_model=Non
                 )
                 btn.on_event(
                     "click",
-                    _bind_export(btn, fmt, gdf, recipe_folder, sources, start, end),
+                    _bind_export(
+                        btn, fmt, gdf, workspace, recipe_folder, sources, start, end
+                    ),
                 )
                 export_buttons.append(btn)
             export_card = v.Card(

@@ -70,7 +70,11 @@ app_state : AppState
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` — the user-drawn polygon GeoDataFrame.
 app_tile_model : AppTileModel
-    ``recipe_folder_path`` for the prediction output paths.
+    ``recipe_folder_path`` — the REMOTE recipe folder the before/after composite
+    is cached in.
+workspace : Workspace
+    The session user-file adapter; the composite is staged through it (the
+    prediction raster itself stays container-local scratch).
 """
 
 import logging
@@ -81,11 +85,11 @@ from ipyleaflet import GeoData
 from pysepal import color, sepalwidgets as sw
 from pysepal.solara.notifications import notify, track_task
 
+from deforestation_alerts import gdal_env
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
 from deforestation_alerts.scripts.mosaics_helper import (
     convertir_formato3,
-    download_both_images,
     filter_features_by_color,
     geojson_to_geodataframe,
     raster_to_gdf,
@@ -93,7 +97,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     verify_raster,
 )
 from gui.scripts.solara_threads import spawn_in_context
-from gui.tile.analysis.paths import alert_image_name
+from gui.tile.analysis.paths import stage_alert_image
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -123,42 +127,44 @@ class _EditionButton(v.Btn, sw.SepalWidget):
         super().__init__(**kwargs)
 
 
-def _run_cnn_model(model_repo, model_file, suffix, widgets, app_state, app_tile_model):
+def _run_cnn_model(
+    model_repo, model_file, suffix, widgets, app_state, app_tile_model, workspace
+):
     """Body of the OLD ``run_dl_model_*`` (worker side), without widget mutation.
 
-    Builds the image name from the recipe folder + alert id + the two selected
-    images' suffixes, downloads both images, pulls the HF model (cached), runs
-    ``apply_dl_model``, and returns the prediction ``.tif`` path. Runs on the
-    daemon worker thread; the widget mutation (verify/enable, add/remove) happens
-    separately, never inside this function.
+    Stages the before/after composite for the current alert (the shared cache in
+    the user's recipe folder — see ``paths.stage_alert_image``), pulls the HF
+    model (cached), runs ``apply_dl_model``, and returns the prediction ``.tif``
+    path. Runs on the daemon worker thread; the widget mutation (verify/enable,
+    add/remove) happens separately, never inside this function.
+
+    The staged composite is deliberately NOT discarded: the prediction raster
+    ``apply_dl_model`` writes sits beside it and the caller reads that path back.
+    Both are container-local scratch (inventory c11/c12) and are swept with the
+    rest of the Workspace's scratch at session end.
     """
     from huggingface_hub import hf_hub_download
 
     actual_alert_id = app_state.actual_alert_id.value
-    recipe_folder = app_tile_model.recipe_folder_path
 
-    before_info = widgets.selected_img_before_info_list
-    after_info = widgets.selected_img_after_info_list
-
-    image_name = alert_image_name(
-        recipe_folder, actual_alert_id, before_info, after_info
-    )
-    source1 = before_info[0]
-    source2 = after_info[0]
-
-    download_both_images(
+    image_local, _ = stage_alert_image(
+        workspace,
+        app_tile_model.recipe_folder_path,
+        actual_alert_id,
+        widgets.selected_img_before_info_list,
+        widgets.selected_img_after_info_list,
         widgets.selected_img_before,
         widgets.selected_img_after,
-        image_name,
-        source1,
-        source2,
         widgets.actual_alert_grid,
     )
 
+    # The CNN weights are a container-local cache, not user data — but they must
+    # land in the one directory this app has proven writable, not a hard-coded
+    # ``/tmp`` (inventory c18).
     model_path = hf_hub_download(
-        repo_id=model_repo, filename=model_file, local_dir="/tmp"
+        repo_id=model_repo, filename=model_file, local_dir=str(gdal_env.scratch_dir())
     )
-    return apply_dl_model(image_name, model_path, suffix)
+    return apply_dl_model(str(image_local), model_path, suffix)
 
 
 def build_edit_tools(
@@ -166,8 +172,14 @@ def build_edit_tools(
     app_state,
     analyzed_alerts_model,
     app_tile_model,
+    workspace,
 ):
-    """Build and return the edit-tools + CNN card (OLD ``card04``)."""
+    """Build and return the edit-tools + CNN card (OLD ``card04``).
+
+    ``workspace`` is the session user-file adapter: the before/after composite
+    the CNN runs on is cached in the user's recipe folder, so it is staged
+    through the adapter rather than opened from the container's disk.
+    """
 
     # ------------------------------------------------------------------
     # Widgets (created once so the OLD .show()/.hide()/.disabled imperative
@@ -489,7 +501,7 @@ def build_edit_tools(
                 task.step(str(cm.analysis_tile.model_labels.dl_step_run))
                 pred_path = _run_cnn_model(
                     _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                    widgets, app_state, app_tile_model,
+                    widgets, app_state, app_tile_model, workspace,
                 )
                 if _apply_model1(pred_path):
                     task.complete()
@@ -524,7 +536,7 @@ def build_edit_tools(
                 task.step(str(cm.analysis_tile.model_labels.dl_step_run))
                 pred_path = _run_cnn_model(
                     _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                    widgets, app_state, app_tile_model,
+                    widgets, app_state, app_tile_model, workspace,
                 )
                 if _apply_model2(pred_path):
                     task.complete()

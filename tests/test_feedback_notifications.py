@@ -400,7 +400,7 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
 # analysis/edit_tools — raw layout + daemon workers -> notify()/track_task()
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def edit_tools_card():
+def edit_tools_card(ws):
     import gui.tile.analysis.edit_tools as edit_tools
 
     analyzed_alerts_model = AlertAnalysisModel()
@@ -409,6 +409,7 @@ def edit_tools_card():
         app_state=AppState(),
         analyzed_alerts_model=analyzed_alerts_model,
         app_tile_model=AppTileModel(),
+        workspace=ws,
     )
     return edit_tools, card, analyzed_alerts_model
 

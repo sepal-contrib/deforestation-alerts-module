@@ -58,7 +58,7 @@ from pysepal_api.errors import NotFound
 # `sanitize_write_path` is the exact rule the client applies to every write, so
 # reusing it makes `home_relative` agree with what the server would accept
 # instead of re-deriving the home prefix here.
-from pysepal_api.paths import sanitize_write_path
+from pysepal_api.paths import BASE_REMOTE_PATH, sanitize_write_path
 
 from deforestation_alerts import gdal_env
 
@@ -128,6 +128,19 @@ class Workspace:
         """Absolute remote results root, e.g.
         ``/home/sepal-user/module_results/deforestation_alerts``."""
         return str(self._root)
+
+    @property
+    def home(self) -> str:
+        """The SEPAL user's remote home, e.g. ``/home/sepal-user``.
+
+        The browse root for the file pickers that let a user point at a raster or
+        a report template they keep ANYWHERE in their workspace, not just under
+        this module's results dir. Derived from ``BASE_REMOTE_PATH`` rather than
+        by trimming :attr:`root`, so it cannot drift if the results layout
+        changes; :func:`pysepal_api.paths.sanitize_write_path` enforces the same
+        constant for every write, so this is the exact boundary the server does.
+        """
+        return BASE_REMOTE_PATH
 
     def results_dir(self, *parts: Any) -> str:
         """Remote path under the results root. Pure -- no I/O, no network.

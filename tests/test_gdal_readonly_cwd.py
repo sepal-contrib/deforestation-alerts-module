@@ -12,8 +12,11 @@ gdal.UseExceptions()
 
 
 def test_compute_proximity_survives_readonly_cwd(tmp_path, monkeypatch, request):
-    # Importing the directory module wires configure_gdal_tmpdir()
-    import deforestation_alerts.parameter.directory  # noqa: F401
+    # The app wires this once at import of gui/solara_app.py; call it directly
+    # so the test does not depend on the whole UI module being importable.
+    from deforestation_alerts.gdal_env import configure_gdal_tmpdir
+
+    configure_gdal_tmpdir()
 
     ro = tmp_path / "ro"
     ro.mkdir()

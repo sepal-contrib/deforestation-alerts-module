@@ -525,13 +525,20 @@ def simplify_and_extract_features(
 
 
 def add_files_to_zip(zip_filename, file1, file2):
+    """Zip two LOCAL files, stored under their basenames.
+
+    ``arcname`` matters since the members are staged scratch copies: without it
+    zipfile stores the full staging path, so the user unpacking the archive would
+    get a ``tmp/workspace_.../`` tree instead of the two files they asked for.
+    """
+    import os
     import zipfile
 
     # Open a zip file in write mode, create it if it doesn't exist
     with zipfile.ZipFile(zip_filename, "w") as zipf:
         # Add the files to the zip
-        zipf.write(file1)
-        zipf.write(file2)
+        zipf.write(file1, arcname=os.path.basename(file1))
+        zipf.write(file2, arcname=os.path.basename(file2))
 
 
 def is_after_march_2025(target_date_str):

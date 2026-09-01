@@ -431,6 +431,7 @@ def build_analysis_layout(
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
+                workspace=workspace,
             ),
             build_export(
                 widgets=widgets,

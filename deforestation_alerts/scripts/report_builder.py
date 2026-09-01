@@ -13,7 +13,6 @@ from datetime import datetime
 import cartopy.io.img_tiles as cimgt
 from shapely.geometry import box
 from pathlib import Path
-from deforestation_alerts.parameter import directory
 import ast
 
 def ensure_list(input_data):
@@ -161,8 +160,30 @@ def add_north_arrow(ax, x=0.95, y=0.95):
 
 
 def generate_deforestation_report_with_word_template(
-    image_path, geodataframe_path, template_path, output_path, scale_bar_length=200
+    image_path,
+    geodataframe_path,
+    template_path,
+    output_path,
+    workspace,
+    scale_bar_length=200,
 ):
+    """Render the Word report and upload it to the user's SEPAL workspace.
+
+    Path contract (inventory rows a26/a27 + c4-c6):
+
+    * ``image_path`` / ``geodataframe_path`` / ``template_path`` are **local**
+      paths — rasterio, GeoPandas and python-docx only speak local files, so the
+      caller stages them (``workspace.download_to_scratch``) before calling here.
+    * ``output_path`` is a **remote** path in the user's workspace. The document
+      is built in ``workspace.scratch_file(".docx")`` and uploaded; the returned
+      value is the remote path that was written.
+    * The six intermediate JPEGs go in one ``workspace.scratch_dir()`` per call.
+      They used to share ``<module_dir>/temp``, so two concurrent reports
+      overwrote each other's ``output_image1.jpg``; and after the recipe folder
+      became remote nothing created that directory at all.
+
+    Every staged file this function creates is released before it returns.
+    """
     # Load Word template
     doc = Document(template_path)
     geodataframe = gpd.read_file(geodataframe_path)
@@ -188,8 +209,31 @@ def generate_deforestation_report_with_word_template(
             if f"{{{key}}}" in para.text:
                 para.text = para.text.replace(f"{{{key}}}", str(value))
 
+    # One private scratch dir per report: the six JPEGs below and the .docx are
+    # container-local intermediates, and `discard_scratch` drops the whole dir.
+    folder_temp = workspace.scratch_dir()
+    local_doc = folder_temp / "report.docx"
+    try:
+        return _render_report(
+            doc, geodataframe, image_path, folder_temp, local_doc,
+            workspace, output_path,
+        )
+    finally:
+        # Deletes `local_doc`'s parent, i.e. the whole `folder_temp` above.
+        workspace.discard_scratch(local_doc)
+
+
+def _render_report(
+    doc, geodataframe, image_path, folder_temp, local_doc, workspace, output_path
+):
+    """Plot the six figures, place them in ``doc``, save and upload it.
+
+    Split out of :func:`generate_deforestation_report_with_word_template` only so
+    that function's ``finally`` can release ``folder_temp`` around the whole body.
+    """
+    folder_temp = str(folder_temp)
+
     # Process Image 1
-    folder_temp = os.path.abspath(directory.module_dir / "temp")
     img1_path_jpg = folder_temp + "/output_image1.jpg"
     plot_tiff_with_overlay(
         image_path,
@@ -219,8 +263,7 @@ def generate_deforestation_report_with_word_template(
         overlay_color="red",
     )
 
-    # Process Image 1
-    folder_temp = os.path.abspath(directory.module_dir / "temp")
+    # Process Image 4
     img4_path_jpg = folder_temp + "/output_image4.jpg"
     plot_tiff_with_overlay(
         image_path,
@@ -282,9 +325,10 @@ def generate_deforestation_report_with_word_template(
             run = para.add_run()
             run.add_picture(img6_path_jpg, width=Pt(250))
 
-    # Save the report as a Word document
-    doc.save(output_path)
-    # print(f"Report generated successfully: {output_path}")
+    # Save the report locally (python-docx only writes local files), then upload
+    # it into the user's SEPAL workspace and return the remote path written.
+    doc.save(str(local_doc))
+    return workspace.upload_from_scratch(local_doc, output_path)
 
 
 def get_unique_alerts(alert_list, custom_name=None):

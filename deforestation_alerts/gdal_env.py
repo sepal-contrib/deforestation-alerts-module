@@ -60,17 +60,17 @@ def _fallback_candidates() -> list:
         # and would reproduce the very bug this module exists to prevent.
         out.append(system_tmp / f"deforestation_alerts_gdal_{os.getuid()}")
 
-    # Last resort: the module's own output root. SEPAL guarantees it is
-    # writable, because every app output goes there. Resolved independently of
-    # ``directory.module_dir`` to avoid an import cycle -- directory.py imports
-    # this module -- so keep it in step with ``directory``'s own resolution.
-    data_dir = os.environ.get("DEFORESTATION_ALERTS_DATA_DIR")
-    base = (
-        Path(data_dir).expanduser()
-        if data_dir
-        else Path.home() / "module_results" / "deforestation_alerts"
-    )
-    out.append(base / ".gdal_tmp")
+    # Last resort: a ``module_results``-shaped directory under the PROCESS home.
+    # NOTE (inventory c3): this is the app's SCRATCH root, not the user's
+    # workspace. In the container it resolves to a container path, which is
+    # exactly right here and exactly wrong for user data -- that goes through
+    # ``scripts/workspace.Workspace`` and the SepalClient. This is the last copy
+    # of the arithmetic the deleted ``parameter.directory`` module used, and it
+    # survived that deletion on purpose; do not re-couple the two. The old
+    # ``DEFORESTATION_ALERTS_DATA_DIR`` override went with it -- redirecting
+    # scratch is what ``DEFORESTATION_ALERTS_GDAL_TMPDIR`` above is for, and a
+    # second knob pointing at "the data dir" would read as a local-mode switch.
+    out.append(Path.home() / "module_results" / "deforestation_alerts" / ".gdal_tmp")
 
     return out
 

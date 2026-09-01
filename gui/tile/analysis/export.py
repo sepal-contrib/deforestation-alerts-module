@@ -74,11 +74,15 @@ aux_model : AuxModel
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` (drawn polygon) / ``last_save_time`` (save stamp).
 app_tile_model : AppTileModel
-    ``recipe_folder_path`` for the output paths + ``alert_db.parquet``.
+    ``recipe_folder_path`` for the output paths + ``alert_db.parquet``. It is a
+    REMOTE path in the user's SEPAL workspace.
+workspace : Workspace
+    The session user-file adapter. Every artifact this card produces — the alert
+    store, the gpkg, the composite GeoTIFF, the zip and the Word report — is user
+    data and goes through it; the DownloadBtns get ``home_relative`` URLs.
 """
 
 import logging
-import os
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
@@ -89,10 +93,7 @@ from pysepal import sepalwidgets as sw
 from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
-from deforestation_alerts.scripts.mosaics_helper import (
-    calculate_total_area,
-    download_both_images,
-)
+from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from deforestation_alerts.scripts.report_builder import (
     add_files_to_zip,
@@ -102,7 +103,7 @@ from deforestation_alerts.scripts.report_builder import (
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
-from gui.tile.analysis.paths import alert_image_name
+from gui.tile.analysis.paths import stage_alert_image
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -234,12 +235,20 @@ def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
     )
 
 
-def _download_data(widgets, app_state, aux_model, app_tile_model):
+def _download_data(widgets, app_state, aux_model, app_tile_model, workspace):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
-    and the Word report. Returns ``{"zip_path", "report_path"}`` (absolute) for the
-    download effect to wire onto the two DownloadBtns. Guards on the gdf/id.
+    and the Word report. Returns ``{"zip_path", "report_path"}`` — REMOTE
+    workspace paths for the download effect to wire onto the two DownloadBtns.
+    Guards on the gdf/id.
+
+    ``recipe_folder_path`` is a remote path, but GeoPandas, geedim, ``zipfile``
+    and python-docx all only speak local files, so all four artifacts are built
+    in one private ``workspace.scratch_dir()`` and uploaded (inventory rows
+    a20-a25 + c14/c16). The cached-GeoTIFF probe is a remote ``exists``, and a
+    cache hit is staged back down so the zip and the report can read it.
+    Everything staged is released in the ``finally``.
     """
     alertas_gdf = app_state.alerts_gdf.value
     actual_alert_id = app_state.actual_alert_id.value
@@ -249,58 +258,93 @@ def _download_data(widgets, app_state, aux_model, app_tile_model):
     if actual_alert_id >= len(alertas_gdf):
         return None
 
-    recipe_folder = app_tile_model.recipe_folder_path
+    # Every artifact below is written into the recipe folder; without one there
+    # is nowhere in the user's workspace to put them (smoke / pre-recipe runs).
+    if not app_tile_model.recipe_folder_path:
+        return None
+    recipe_folder = PurePosixPath(app_tile_model.recipe_folder_path)
 
     # Single-row GeoDataFrame for the selected alert.
     selected_element = alertas_gdf.iloc[actual_alert_id]
     selected_gdf = gpd.GeoDataFrame(
         [selected_element], columns=alertas_gdf.columns
     )
-    if not selected_gdf["alert_polygon"].isnull().all():
-        selected_gdf.set_geometry("alert_polygon", inplace=True)
-    else:
-        selected_gdf.set_geometry("bounding_box", inplace=True)
-
-    gpkg_name = recipe_folder + "/alert_" + str(actual_alert_id) + ".gpkg"
-    selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
-        gpkg_name, driver="GPKG"
+    active = (
+        "alert_polygon"
+        if not selected_gdf["alert_polygon"].isnull().all()
+        else "bounding_box"
+    )
+    selected_gdf.set_geometry(active, inplace=True)
+    # PRE-EXISTING BUG, fixed here because the migrated path is otherwise
+    # untestable: ``alerts_gdf`` carries three geometry columns (polygon +
+    # ``bounding_box`` + ``point``), and GPKG accepts exactly one — so
+    # ``to_file`` raised "GeoDataFrame contains multiple geometry columns" on
+    # EVERY download. Drop the inactive ones, the same way ``alert_export`` does
+    # for its single-geometry formats; the report only reads attribute columns.
+    selected_gdf = selected_gdf.drop(
+        columns=[
+            c
+            for c in selected_gdf.columns
+            if c != active and selected_gdf[c].dtype == "geometry"
+        ]
     )
 
-    # Before/after image GeoTIFF (download only if not already present). Built via
-    # the shared helper so it matches the path the CNN run (edit_tools) wrote.
-    image_name = alert_image_name(
-        recipe_folder,
-        actual_alert_id,
-        widgets.selected_img_before_info_list,
-        widgets.selected_img_after_info_list,
-    )
-    if not Path(image_name).exists():
-        download_both_images(
+    # One staging area for the artifacts built here; `download_to_scratch` makes
+    # its own private dir per file, so those are tracked separately. Releasing
+    # `gpkg_local` releases the whole `stage` directory it lives in.
+    stage = workspace.scratch_dir()
+    gpkg_remote = recipe_folder / f"alert_{actual_alert_id}.gpkg"
+    gpkg_local = stage / gpkg_remote.name
+    staged = [gpkg_local]
+    try:
+        selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
+            str(gpkg_local), driver="GPKG"
+        )
+        workspace.upload_from_scratch(gpkg_local, str(gpkg_remote))
+
+        # Before/after image GeoTIFF (downloaded only if not already in the recipe
+        # folder). Built via the shared helper so it resolves to the same cached
+        # file the CNN run (edit_tools) wrote.
+        image_local, _ = stage_alert_image(
+            workspace,
+            str(recipe_folder),
+            actual_alert_id,
+            widgets.selected_img_before_info_list,
+            widgets.selected_img_after_info_list,
             widgets.selected_img_before,
             widgets.selected_img_after,
-            image_name,
-            widgets.selected_img_before_info_list[0],
-            widgets.selected_img_after_info_list[0],
             widgets.actual_alert_grid,
         )
+        staged.append(image_local)
 
-    # Zip the image + gpkg.
-    zipfile_name = recipe_folder + "/alert_" + str(actual_alert_id) + ".zip"
-    add_files_to_zip(zipfile_name, image_name, gpkg_name)
-    zip_path = os.path.abspath(zipfile_name)
+        # Zip the image + gpkg.
+        zip_remote = recipe_folder / f"alert_{actual_alert_id}.zip"
+        zip_local = stage / zip_remote.name
+        add_files_to_zip(str(zip_local), str(image_local), str(gpkg_local))
+        workspace.upload_from_scratch(zip_local, str(zip_remote))
 
-    # Word report.
-    output_report_path = recipe_folder + "/alert_" + str(actual_alert_id) + ".docx"
-    if not aux_model.custom_report_template:
-        report_template = _DEFAULT_REPORT_TEMPLATE
-    else:
-        report_template = aux_model.custom_report_template
-    generate_deforestation_report_with_word_template(
-        image_name, gpkg_name, report_template, output_report_path
-    )
-    report_path = os.path.abspath(output_report_path)
+        # Word report. The DEFAULT template is a packaged asset (inventory b1) and
+        # stays container-local; a CUSTOM one is a user file and is staged down.
+        report_remote = recipe_folder / f"alert_{actual_alert_id}.docx"
+        if aux_model.custom_report_template:
+            report_template = workspace.download_to_scratch(
+                aux_model.custom_report_template
+            )
+            staged.append(report_template)
+        else:
+            report_template = _DEFAULT_REPORT_TEMPLATE
+        generate_deforestation_report_with_word_template(
+            str(image_local),
+            str(gpkg_local),
+            str(report_template),
+            str(report_remote),
+            workspace,
+        )
 
-    return {"zip_path": zip_path, "report_path": report_path}
+        return {"zip_path": str(zip_remote), "report_path": str(report_remote)}
+    finally:
+        for path in staged:
+            workspace.discard_scratch(path)
 
 
 def build_export(
@@ -385,8 +429,15 @@ def build_export(
     # OLD error branch becomes the worker's except.
     # ------------------------------------------------------------------
     def _apply_download(result):
-        ns["files_dwn_btn"].set_url(path=result["zip_path"])
-        ns["report_dwn_btn"].set_url(path=result["report_path"])
+        # The zip/report live in the user's SEPAL workspace, so the buttons get
+        # HOME-RELATIVE paths: ``set_url`` -> ``su.create_download_link`` builds
+        # ``.../jupyter/files/<Path(path).relative_to(Path.home())>``, and in the
+        # container ``Path.home()`` is the CONTAINER's home, so an absolute
+        # workspace path degrades to a dead link (inventory a23).
+        ns["files_dwn_btn"].set_url(path=workspace.home_relative(result["zip_path"]))
+        ns["report_dwn_btn"].set_url(
+            path=workspace.home_relative(result["report_path"])
+        )
         ns["toolbar_downloads"].show()
 
     # ------------------------------------------------------------------
@@ -454,7 +505,7 @@ def build_export(
                 # recipe folder — register it for the duration.
                 with writing(app_state.recipe_name.value or "recipe"):
                     result = _download_data(
-                        widgets, app_state, aux_model, app_tile_model
+                        widgets, app_state, aux_model, app_tile_model, workspace
                     )
                 task.complete()
                 if result is not None:

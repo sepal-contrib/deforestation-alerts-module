@@ -17,8 +17,6 @@ from configparser import ConfigParser
 from pathlib import Path
 from typing import List, Tuple, Union
 from box import Box
-from deforestation_alerts.parameter import module_dir
-import zipfile
 from warnings import warn
 from typing import Any, Callable, List, Optional
 import time
@@ -58,53 +56,20 @@ class ShareBtn(v.Btn, SepalWidget):
         return self
 
 
-class RecipeBtn(sw.Btn):
-    def __init__(
-        self, download_button, msg: str = "", gliph: str = "", **kwargs
-    ) -> None:
-        kwargs.setdefault("small", True)
-        kwargs.setdefault("color", "menu")
-        kwargs.setdefault("class_", "ma-2 pa-n6")
-        self.download_button = download_button
-        super().__init__(msg=msg, gliph=gliph, **kwargs)
-        self.on_event("click", self.zip_set_url)
-
-    def zip_set_url(self, widget, event, data):
-        """Set the URL of the download btn. and unable it.
-
-        If nothing is provided the btn is disabled.
-
-        Args:
-            path: the absolute path to a downloadable content
-        """
-        """Create a zip file from specified files in a directory."""
-        # Prefer the canonical parquet store; include legacy alert_db.csv only if
-        # that's all the recipe has. recipe_parameters.json is always required.
-        directory = module_dir / self.msg
-        store = "alert_db.parquet" if (directory / "alert_db.parquet").exists() else "alert_db.csv"
-        files = [store, "recipe_parameters.json"]
-        # Ensure the directory exists and contains the required files
-        if not all((directory / file).exists() for file in files):
-            print(
-                [str(file) for file in directory.iterdir()],
-                "Required files are missing from the specified directory.",
-            )
-            return None
-
-        # Create a zip file with the name of the folder
-        project_name = directory.parts[-1]
-        zip_filename = f"{directory}/{project_name}.zip"
-        with zipfile.ZipFile(zip_filename, "w") as zipf:
-            for file in files:
-                fullpath = directory / file
-                zipf.write(fullpath, arcname=file)
-
-        # Create URL
-        # url = su.create_download_link(zip_filename)
-        # Set download url to donwload button
-        self.download_button.set_url(path=zip_filename)
-        self.download_button.show()
-        return self
+# ``RecipeBtn`` (the "zip this recipe and hand it to a DownloadBtn" widget) was
+# REMOVED here, not migrated. It was the last importer of the deleted
+# ``parameter.module_dir`` and it was dead code: the Phase-4 port replaced the
+# header RecipeBtn/ShareBtn pair with the Recipe tile's Save card
+# (``gui/tile/recipe_tile.py``), and nothing has constructed it since. Every line
+# of it assumed a container-local recipe folder (``module_dir / name``,
+# ``.exists()``, ``.iterdir()``, a local ``zipfile.ZipFile``, and a ``set_url``
+# with a container-absolute path) — i.e. it could not work at all now that the
+# recipe folder lives in the user's SEPAL workspace. If recipe-export-as-zip is
+# wanted again, rebuild it against ``Workspace``: ``exists``/``list`` for the
+# guard, ``download_to_scratch`` each member into one ``scratch_dir()``, zip
+# there, ``upload_from_scratch``, then ``set_url(workspace.home_relative(...))``
+# — the same shape as ``gui/tile/analysis/export.py::_download_data``
+# (inventory row a36).
 
 
 class CustomDrawControl(GeomanDrawControl):

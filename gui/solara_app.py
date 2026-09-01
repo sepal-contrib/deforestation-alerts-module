@@ -35,6 +35,7 @@ from pysepal.solara import (
 )
 from pysepal.solara.notifications import NotificationProvider
 
+from deforestation_alerts.gdal_env import configure_gdal_tmpdir
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
 from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
@@ -69,6 +70,15 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 # Solara hot-reload). Worker-thread emits reach the browser once the console
 # binds its kernel context on mount.
 install_log_console_handler()
+
+# Point GDAL's temp-file allocator at a directory proven writable, ONCE per
+# process. This used to ride along on the import of the (now deleted)
+# ``deforestation_alerts.parameter`` package, whose only other job was the
+# container-local ``module_dir`` the Workspace adapter replaced. It lives here
+# because this module is the app's single entry point (``solara run
+# gui/solara_app.py`` and ``ui.ipynb`` both import it), and it is import-time,
+# not render-time: it is a local mkdir + write probe, never a network call.
+configure_gdal_tmpdir()
 
 
 class _NavModel(HasTraits):
@@ -301,7 +311,8 @@ def Page():
     overview_widget = solara.use_memo(
         lambda: _render_detached(
             lambda: OverviewTile(
-                app_state=app_state, map_=map_, aoi_date_model=aoi_date_model,
+                app_state=app_state, map_=map_, workspace=workspace,
+                aoi_date_model=aoi_date_model,
                 selected_alerts_model=selected_alerts_model,
             )
         ),
@@ -314,7 +325,7 @@ def Page():
     # recreated when MapApp destroys the dialog DOM on close and rebuilds it on
     # reopen, so the cards vanish on the 2nd open. A raw widget survives reopen.
     aux_widget = solara.use_memo(
-        lambda: build_aux_layout(aux_model),
+        lambda: build_aux_layout(aux_model, workspace),
         dependencies=[],
     )
 
