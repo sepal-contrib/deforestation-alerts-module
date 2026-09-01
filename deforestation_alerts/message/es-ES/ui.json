@@ -12,6 +12,9 @@
             "card_title_save_recipe": "Guardar Proyecto",
             "card_subtitle_save_recipe": "Guarda los parámetros del proyecto actual en su carpeta.",
             "alert_save_recipe_done": "Parámetros del proyecto guardados.",
+            "alert_load_recipe_done": "Proyecto cargado.",
+            "load_task_title": "Cargando proyecto",
+            "load_step_parameters": "Leyendo parámetros del proyecto…",
             "input_hint_save_recipe_error": "No se pudo guardar el proyecto",
             "alert_done_message": "Hecho",
             "loader_creating_recipe": "Creando proyecto...",
@@ -55,6 +58,7 @@
 
     "aoi_tile": {
             "search_button": "Buscar alertas",
+            "search_done": "Búsqueda de alertas completada — {n} fuente(s) disponible(s)",
             "aoi_selection_title":"Selección de AOI", 
             "date_selection_title": "Selección de fecha", 
             "start_date_label": "Fecha incial", 
@@ -73,6 +77,8 @@
             "analyze_status_downloading": "Descargando ráster de alertas…",
             "analyze_status_vectorizing": "Vectorizando agrupaciones…",
             "analyze_status_found": "Se encontraron {n} alertas — ensamblando…",
+            "analyze_task_title": "Analizando alertas",
+            "analyze_done": "Análisis completado — {n} alertas",
             "available_alerts_title": "Alertas disponibles",
             "no_alerts_message": "No hay alertas disponibles en el área o las fechas seleccionadas",
             "available_alerts_hint": "Selecciona una o múltiples fuentes de alertas",
@@ -169,14 +175,23 @@
                 "dl_button2": "Modelo grande pero más lento",
                 "dl_button_add": "Agregar al mapa",
                 "dl_button_remove": "Quitar del mapa",
-                "dl_404": "El modelo no encontró pérdidas"
+                "dl_404": "El modelo no encontró pérdidas",
+                "dl_task_title": "Ejecutando modelo de aprendizaje profundo",
+                "dl_step_run": "Descargando imágenes y ejecutando el modelo…",
+                "dl_done": "Predicción del modelo lista."
             },
             "export_labels": {
                 "export_title": "Guardar y exportar",
                 "save_btn": "Guardar",
                 "download_alert_data_btn": "Descargar",
                 "files_dwn_btn": "Archivos",
-                "report_dwn_btn": "Informe"
+                "report_dwn_btn": "Informe",
+                "save_task_title": "Guardando atributos de la alerta",
+                "save_step": "Escribiendo la base de alertas…",
+                "save_done": "Atributos de la alerta guardados.",
+                "download_task_title": "Preparando la descarga de la alerta",
+                "download_step": "Generando archivos e informe…",
+                "download_done": "Descarga de la alerta lista."
         }
     }
 }

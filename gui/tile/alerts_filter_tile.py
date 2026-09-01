@@ -80,6 +80,7 @@ from ipyleaflet import TileLayer
 from pysepal.mapping.draw_control import DrawControl
 from pysepal.mapping.inspector_control import InspectorControl
 from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
+from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.parameter import module_dir
@@ -693,18 +694,19 @@ def AlertsFilterTile(
     # and track the layer names this tile adds so a refresh removes only its own
     # layers (never remove_all on the shared map).
     # ------------------------------------------------------------------
+    # This is a Solara component, so user feedback goes through the HOOK
+    # (``use_notifications()``), never the ``notify()`` global: the hook binds
+    # the notifier to the bus of the kernel that is rendering. The Notifier is
+    # memoized on that bus, so the closure the analyze coroutine captures stays
+    # valid for the life of the session.
+    notifications = use_notifications()
+
     map_widget = map_
     drawn_item = solara.use_memo(
         lambda: _build_draw_control(map_widget), dependencies=[]
     )
     solara.use_memo(lambda: _add_inspector(map_widget), dependencies=[])
     tracked = solara.use_memo(lambda: {"names": []}, dependencies=[])
-
-    # Reactive status line for the Analyze flow. Written ONLY from the async task
-    # coroutine (which runs on the kernel loop), between the ``to_thread`` stages
-    # — never from a worker. Task 7 hangs the notification progress tracker off
-    # these same stage boundaries.
-    analyze_status = solara.use_reactive("")
 
     # ------------------------------------------------------------------
     # Memoized form widgets. Created once so identities are stable: the observer
@@ -847,41 +849,66 @@ def AlertsFilterTile(
     async def _analyze(request: AnalyzeRequest) -> AnalyzeOutcome:
         """Stage the analyze run on the kernel loop; every stage in a thread.
 
-        The status writes are the only mutation in this coroutine — they run on
-        the loop, between stages, and are what Task 7's progress tracker will hang
-        off. Everything else is a pure worker; results reach the models only via
-        ``_apply_analyze``.
+        The tracker milestones are the only mutation in this coroutine — they run
+        on the loop, between stages, and replace the reactive status line the tile
+        used to render inline. Everything else is a pure worker; results reach the
+        models only via ``_apply_analyze``.
+
+        ``total_steps=4`` is the number of phases that actually exist here and
+        already had a status message: join → download → vectorize → assemble.
+        (The optional raster attribution between vectorize and assemble is a
+        no-op unless configured and never had a phase message, so it rides along
+        inside the "assembling" step rather than inflating the count.)
         """
-        # "joining" = unioning the selected sources into one raster.
-        analyze_status.value = cm.filter_tile.analyze_status_joining.format(
-            n=len(request.alert_sources or [])
-        )
-        plan = await asyncio.to_thread(_prepare_analyze_sync, request)
+        with notifications.track(
+            cm.filter_tile.analyze_task_title, total_steps=4
+        ) as task:
+            try:
+                # "joining" = unioning the selected sources into one raster.
+                task.step(
+                    cm.filter_tile.analyze_status_joining.format(
+                        n=len(request.alert_sources or [])
+                    )
+                )
+                plan = await asyncio.to_thread(_prepare_analyze_sync, request)
 
-        # Download + vectorize locally (replaces the OLD GEE reduceToVectors).
-        analyze_status.value = cm.filter_tile.analyze_status_downloading
-        await asyncio.to_thread(_download_alert_raster, plan)
+                # Download + vectorize locally (replaces the OLD GEE reduceToVectors).
+                task.step(cm.filter_tile.analyze_status_downloading)
+                await asyncio.to_thread(_download_alert_raster, plan)
 
-        analyze_status.value = cm.filter_tile.analyze_status_vectorizing
-        gdf = await asyncio.to_thread(_vectorize_alert_tif, plan)
+                task.step(cm.filter_tile.analyze_status_vectorizing)
+                gdf = await asyncio.to_thread(_vectorize_alert_tif, plan)
 
-        # Optional: attribute each alert with per-band stats from an extra raster
-        # (GEE asset or local file). No-op when unconfigured. Fails loud (the
-        # use_task surfaces the error) if configured but the raster/band is bad —
-        # so we never publish alerts that are silently missing the columns.
-        gdf = await asyncio.to_thread(
-            attribute_alerts_from_config,
-            gdf,
-            request.attribute_raster,
-            plan.region,
-            request.recipe_folder,
-        )
+                # Optional: attribute each alert with per-band stats from an extra
+                # raster (GEE asset or local file). No-op when unconfigured. Fails
+                # loud (the use_task surfaces the error) if configured but the
+                # raster/band is bad — so we never publish alerts that are
+                # silently missing the columns.
+                gdf = await asyncio.to_thread(
+                    attribute_alerts_from_config,
+                    gdf,
+                    request.attribute_raster,
+                    plan.region,
+                    request.recipe_folder,
+                )
 
-        outcome = await asyncio.to_thread(_finish_analyze_sync, request, plan, gdf)
-        analyze_status.value = cm.filter_tile.analyze_status_found.format(
-            n=outcome.alert_count
-        )
-        return outcome
+                outcome = await asyncio.to_thread(
+                    _finish_analyze_sync, request, plan, gdf
+                )
+                task.step(
+                    cm.filter_tile.analyze_status_found.format(n=outcome.alert_count)
+                )
+                return outcome
+            except Exception as exc:
+                # fail() BEFORE the error toast, and before the tracker's own
+                # __exit__ runs: an explicitly failed tracker is already
+                # "finished", so __exit__ will not publish a second (raw) error
+                # toast on top of the one ``_apply_analyze`` publishes. The pill
+                # stays visible as FAILED. asyncio.CancelledError is a
+                # BaseException and deliberately not caught here — __exit__ turns
+                # it into a CANCELLED pill instead.
+                task.fail(str(exc))
+                raise
 
     analyze_task = solara.lab.use_task(
         _analyze, dependencies=None, prefer_threaded=False, raise_error=False
@@ -897,7 +924,6 @@ def AlertsFilterTile(
             return
         analyze_cancel_reason.current = None
         analyze_started_at.current = time.monotonic()
-        analyze_status.value = ""
         logger.info(
             "Filter: analyze started for %s", alert_source_select.v_model
         )
@@ -927,6 +953,12 @@ def AlertsFilterTile(
         # every model and the current page exactly as they were.
         if analyze_task.cancelled:
             logger.info("Filter: analyze cancelled — models and page unchanged")
+            return
+        if analyze_task.error:
+            # ``analyze_task.exception`` is the raised exception; ``analyze_task.error``
+            # is a bool, so str()-ing it would publish "True".
+            logger.error("Filter: analyze failed", exc_info=analyze_task.exception)
+            notifications.error(str(analyze_task.exception))
             return
         if not analyze_task.finished:
             return
@@ -973,6 +1005,9 @@ def AlertsFilterTile(
         # gdf is fully materialized by now, so the write is a plain serialize.
         _persist_alerts_gdf(outcome.alerts_gdf, outcome.recipe_folder)
         logger.info("Filter: analyze finished — %s alerts", outcome.alert_count)
+        notifications.success(
+            cm.filter_tile.analyze_done.format(n=outcome.alert_count)
+        )
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
@@ -1012,12 +1047,10 @@ def AlertsFilterTile(
                 **analyze_button_props,
                 block=True,
             )
-        if analyze_task.pending and analyze_status.value:
-            solara.Info(analyze_status.value, classes=["ma-3"])
-        if analyze_task.error:
-            solara.Error(
-                f"Analysis failed: {analyze_task.exception}", classes=["ma-3"]
-            )
+        # No inline status/error elements here: progress is the notification
+        # task pill (``notifications.track`` in ``_analyze``) and the outcome is
+        # a toast from ``_apply_analyze``. The cards above are static form
+        # guidance (labels/hints), not feedback, so they stay.
 
 
 def _add_inspector(map_widget):

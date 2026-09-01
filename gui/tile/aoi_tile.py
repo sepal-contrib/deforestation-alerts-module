@@ -18,9 +18,14 @@ the alerts-dictionary init, the search, and the AOI map layer):
    guard (a render-time ``disabled=`` cannot stop a double click, because the
    click that follows the first one is dispatched against the pre-render button);
 4. a **completion effect** with the full dependency list
-   ``[pending, finished, error, cancelled]`` owns every model write and the
-   ``current_page_view`` navigation, and applies nothing when the task was
-   cancelled.
+   ``[pending, finished, error, cancelled]`` owns every model write, the
+   ``current_page_view`` navigation and the success/error **toast**, and applies
+   nothing when the task was cancelled.
+
+User feedback is published through the pysepal notification system
+(``use_notifications()`` — the hook, because this module is a Solara component),
+never rendered inline: there is no ``solara.Error``/``solara.Info`` status
+element in this tile.
 
 Key port decisions (see Phase 4 plan, Step 2):
 
@@ -62,6 +67,7 @@ import solara
 from pysepal import aoi
 from pysepal import sepalwidgets as sw
 from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
+from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.aoi_helper import (
@@ -244,6 +250,15 @@ def AoiTile(
     map_ : SepalMap
         The single shared map; the AoiView draws AOI selection on it.
     """
+    # This is a Solara component, so user feedback goes through the HOOK
+    # (``use_notifications()``), never the ``notify()`` global: the hook binds
+    # the notifier to the bus of the kernel that is rendering, which is the only
+    # binding that is correct for per-session UI. ``NotificationProvider`` is
+    # mounted above this component in ``solara_app.Page``, so this resolves to a
+    # real Notifier (a NoopNotifier only when rendered without the provider,
+    # e.g. in a unit test).
+    notifications = use_notifications()
+
     # ------------------------------------------------------------------
     # Initialize the alerts dictionary + available lists exactly once.
     # ``create_basic_alerts_dictionary`` makes three blocking ``.getInfo()``
@@ -444,6 +459,12 @@ def AoiTile(
         if search_task.cancelled:
             logger.info("AOI: alert search cancelled — models and page unchanged")
             return
+        if search_task.error:
+            # ``search_task.exception`` is the raised exception; ``search_task.error``
+            # is a bool, so str()-ing it would publish "True".
+            logger.error("AOI: alert search failed", exc_info=search_task.exception)
+            notifications.error(str(search_task.exception))
+            return
         if not search_task.finished:
             return
         outcome = search_task.value
@@ -458,6 +479,9 @@ def AoiTile(
         logger.info(
             "AOI: alert search finished — %s source(s) available",
             len(outcome.available_alerts_list),
+        )
+        notifications.success(
+            cm.aoi_tile.search_done.format(n=len(outcome.available_alerts_list))
         )
         # Jump to the Filter tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
@@ -515,10 +539,9 @@ def AoiTile(
                 **search_button_props,
                 block=True,
             )
-        if search_task.error:
-            solara.Error(
-                f"Search failed: {search_task.exception}", classes=["ma-3"]
-            )
+        # No inline feedback here: search failures are published as an error
+        # toast from ``_apply_search`` (the notification system is the app's
+        # single user-feedback channel).
 
 
 def _loop_is_running() -> bool:

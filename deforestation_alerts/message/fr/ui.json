@@ -12,6 +12,9 @@
             "card_title_save_recipe": "Enregistrer la Recette",
             "card_subtitle_save_recipe": "Enregistrez les paramètres de la recette actuelle dans son dossier.",
             "alert_save_recipe_done": "Paramètres de la recette enregistrés.",
+            "alert_load_recipe_done": "Recette chargée.",
+            "load_task_title": "Chargement de la recette",
+            "load_step_parameters": "Lecture des paramètres de la recette…",
             "input_hint_save_recipe_error": "Impossible d'enregistrer la recette",
             "alert_done_message": "Terminé",
             "loader_creating_recipe": "Création de la recette...",
@@ -55,6 +58,7 @@
 
     "aoi_tile": {
             "search_button": "Rechercher des alertes",
+            "search_done": "Recherche d'alertes terminée — {n} source(s) disponible(s)",
             "aoi_selection_title":"Sélection de l'AOI", 
             "date_selection_title": "Sélection de la Date", 
             "start_date_label": "Date de début", 
@@ -73,6 +77,8 @@
             "analyze_status_downloading": "Téléchargement du raster d'alertes…",
             "analyze_status_vectorizing": "Vectorisation des agrégats…",
             "analyze_status_found": "{n} alertes trouvées — assemblage…",
+            "analyze_task_title": "Analyse des alertes",
+            "analyze_done": "Analyse terminée — {n} alertes",
             "available_alerts_title": "Alertes disponibles",
             "no_alerts_message": "Aucune alerte n'est disponible pour la date/la zone sélectionnée",
             "available_alerts_hint": "Sélectionnez une ou plusieurs sources d'alerte",
@@ -170,14 +176,23 @@
                 "dl_button2": "Modèle plus grand mais plus lent",
                 "dl_button_add": "Ajouter à la carte",
                 "dl_button_remove": "Retirer de la carte",
-                "dl_404": "Le modèle n'a trouvé aucune perte"
+                "dl_404": "Le modèle n'a trouvé aucune perte",
+                "dl_task_title": "Exécution du modèle d'apprentissage profond",
+                "dl_step_run": "Téléchargement des images et exécution du modèle…",
+                "dl_done": "Prédiction du modèle prête."
             },
             "export_labels": {
                 "export_title": "Sauvegarder et exporter",
                 "save_btn": "Sauvegarder",
                 "download_alert_data_btn": "Télécharger",
                 "files_dwn_btn": "Fichiers",
-                "report_dwn_btn": "Rapport"
+                "report_dwn_btn": "Rapport",
+                "save_task_title": "Enregistrement des attributs de l'alerte",
+                "save_step": "Écriture de la base d'alertes…",
+                "save_done": "Attributs de l'alerte enregistrés.",
+                "download_task_title": "Préparation du téléchargement de l'alerte",
+                "download_step": "Génération des fichiers et du rapport…",
+                "download_done": "Téléchargement de l'alerte prêt."
         }
     }
 }

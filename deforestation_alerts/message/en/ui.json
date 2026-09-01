@@ -12,6 +12,9 @@
             "card_title_save_recipe": "Save Recipe",
             "card_subtitle_save_recipe": "Save the current recipe parameters to its folder.",
             "alert_save_recipe_done": "Recipe parameters saved.",
+            "alert_load_recipe_done": "Recipe loaded.",
+            "load_task_title": "Loading recipe",
+            "load_step_parameters": "Reading recipe parameters…",
             "input_hint_save_recipe_error": "Could not save the recipe",
             "alert_done_message": "Done",
             "loader_creating_recipe": "Creating recipe...",
@@ -55,6 +58,7 @@
 
     "aoi_tile": {
             "search_button": "Search alerts",
+            "search_done": "Alert search complete — {n} source(s) available",
             "aoi_selection_title":"AOI selection", 
             "date_selection_title": "Date selection", 
             "start_date_label": "Start date", 
@@ -73,6 +77,8 @@
             "analyze_status_downloading": "Downloading alert raster…",
             "analyze_status_vectorizing": "Vectorizing clusters…",
             "analyze_status_found": "Found {n} alerts — assembling…",
+            "analyze_task_title": "Analyzing alerts",
+            "analyze_done": "Analysis complete — {n} alerts",
             "available_alerts_title": "Available alerts",
             "no_alerts_message": "No alerts are available for the date/area selected",
             "available_alerts_hint": "Select one or multiple alert sources",
@@ -169,14 +175,23 @@
                 "dl_button2": "Larger but slower model",
                 "dl_button_add": "Add to map",
                 "dl_button_remove": "Remove from map",
-                "dl_404": "Model did not find forest loss polygons"
+                "dl_404": "Model did not find forest loss polygons",
+                "dl_task_title": "Running deep-learning model",
+                "dl_step_run": "Downloading images and running the model…",
+                "dl_done": "Model prediction ready."
             },
             "export_labels": {
                 "export_title": "Save and Export",
                 "save_btn": "Save",
                 "download_alert_data_btn": "Download",
                 "files_dwn_btn": "Files",
-                "report_dwn_btn": "Report"
+                "report_dwn_btn": "Report",
+                "save_task_title": "Saving alert attributes",
+                "save_step": "Writing the alert store…",
+                "save_done": "Alert attributes saved.",
+                "download_task_title": "Preparing alert download",
+                "download_step": "Building files and report…",
+                "download_done": "Alert download ready."
         }
     }
 }

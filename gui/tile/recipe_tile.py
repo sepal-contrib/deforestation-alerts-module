@@ -13,8 +13,15 @@ builds this once via ``use_memo`` and hands it to MapApp as the dialog content �
 same pattern as ``aux_tile.build_aux_layout``.
 
 The async **load** that the earlier Solara port ran via ``solara.lab.use_task``
-is here a daemon thread that toggles the Load button's spinner and surfaces
-errors on an inline ``sw.Alert`` (the original ipyvuetify tile did the same).
+is here a daemon thread that toggles the Load button's spinner.
+
+**Feedback goes through the pysepal notification GLOBALS** (``notify`` /
+``track_task``), not the ``use_notifications()`` hook: this module builds raw
+ipyvuetify widgets and its outcomes are published from daemon worker threads, so
+there is no Solara component render in which a hook could be called. The globals
+resolve the bus from the current kernel context, which ``spawn_in_context``
+propagates onto the worker thread. The inline ``sw.Alert`` surfaces that the load
+and save flows used to write to are gone — the toast IS the feedback.
 
 The three handlers are re-architected around the shared **models + services**
 (unchanged from the Solara port):
@@ -42,6 +49,7 @@ import os
 
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
+from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.parameter import directory
@@ -139,10 +147,6 @@ def build_recipe_layout(
         color="primary",
         class_="ma-5",
     )
-    # Inline error surface for the load (hidden until something fails).
-    alert = sw.Alert().hide()
-    # Inline success/error surface for the save (hidden until something happens).
-    save_alert = sw.Alert().hide()
 
     new_card = v.Card(
         class_="pa-3 ma-5",
@@ -172,7 +176,6 @@ def build_recipe_layout(
             ),
             load_recipe_input,
             v.CardActions(class_="justify-end", children=[load_btn]),
-            alert,
         ],
     )
     # Save card — written to the EXISTING recipe folder only, so it stays hidden
@@ -191,7 +194,6 @@ def build_recipe_layout(
                 children=[cm.recipe_tile.card_subtitle_save_recipe],
             ),
             v.CardActions(class_="justify-end", children=[save_btn]),
-            save_alert,
         ],
     )
 
@@ -225,15 +227,17 @@ def build_recipe_layout(
 
     # ------------------------------------------------------------------
     # Load. File/IO + model round-trip + gdf load run on a daemon thread so the
-    # UI stays responsive; the button shows a spinner and errors land on `alert`.
+    # UI stays responsive; the button shows a spinner, progress is a tracked task
+    # in the notification pill and the outcome is a toast.
     # ------------------------------------------------------------------
-    def _run_load():
+    def _run_load(task):
         file_name = load_recipe_input.v_model
         if not file_name or not os.path.exists(file_name):
             raise FileNotFoundError(cm.recipe_tile.input_hint_load_recipe_name)
 
         import json
 
+        task.step(cm.recipe_tile.load_step_parameters)
         with open(file_name, "r") as json_file:
             params = json.load(json_file)
 
@@ -252,6 +256,7 @@ def build_recipe_layout(
 
         # Load the canonical alert store (parquet preferred, legacy CSV fallback)
         # so Overview renders the alerts. None when the recipe has no store yet.
+        task.step(cm.recipe_tile.loader_loading_alert_db)
         loaded = load_alert_store(folder)
         if loaded is not None:
             app_state.alerts_gdf.value = loaded
@@ -264,25 +269,34 @@ def build_recipe_layout(
         app_state.current_page_view.value = "analysis_tile"
 
     def _on_load_click(*_):
-        alert.reset()
         load_btn.loading = True
         load_btn.disabled = True
 
         def _worker():
+            # The tracker is driven imperatively rather than with ``with``: the
+            # context manager publishes its own raw-exception toast on failure,
+            # which would land on top of the friendlier one below.
+            task = track_task(cm.recipe_tile.load_task_title, total_steps=2)
             try:
-                _run_load()
-            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                _run_load(task)
+                task.complete()
+                notify(cm.recipe_tile.alert_load_recipe_done, type_="success")
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Recipe load failed")
-                alert.add_msg(
-                    f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}", "error"
+                # fail() before the toast so the pill is FAILED (and stays
+                # visible) by the time the user reads the message.
+                task.fail(str(e))
+                notify(
+                    f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}",
+                    type_="error",
                 )
             finally:
                 load_btn.loading = False
                 load_btn.disabled = False
 
         # spawn_in_context (not a bare Thread): the worker sets solara
-        # reactives (alerts_gdf, current_page_view), which only reach the
-        # browser from a kernel-context-bearing thread.
+        # reactives (alerts_gdf, current_page_view) and publishes notifications,
+        # both of which need the kernel context to reach the browser.
         spawn_in_context(_worker)
 
     load_btn.on_event("click", _on_load_click)
@@ -291,7 +305,8 @@ def build_recipe_layout(
     # Save. Persist every model to <recipe_folder>/recipe_parameters.json via
     # the shared service. Requires an existing recipe folder (the card is hidden
     # until one exists; the guard is a safety net). Runs on a daemon thread for
-    # parity with load; the button spins and success/errors land on `save_alert`.
+    # parity with load; the button spins and success/errors are published as
+    # toasts.
     # ------------------------------------------------------------------
     def _run_save():
         folder = app_state.recipe_folder_path.value
@@ -310,7 +325,6 @@ def build_recipe_layout(
         )
 
     def _on_save_click(*_):
-        save_alert.reset()
         save_btn.loading = True
         save_btn.disabled = True
 
@@ -321,11 +335,14 @@ def build_recipe_layout(
                 # delete/close path can refuse to act mid-write.
                 with writing(app_state.recipe_name.value or "recipe"):
                     _run_save()
-                save_alert.add_msg(cm.recipe_tile.alert_save_recipe_done, "success")
-            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                # No task pill for save: it is a single json dump, short enough
+                # that the button spinner is the whole progress story.
+                notify(cm.recipe_tile.alert_save_recipe_done, type_="success")
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Recipe save failed")
-                save_alert.add_msg(
-                    f"{cm.recipe_tile.input_hint_save_recipe_error}: {e}", "error"
+                notify(
+                    f"{cm.recipe_tile.input_hint_save_recipe_error}: {e}",
+                    type_="error",
                 )
             finally:
                 save_btn.loading = False
@@ -335,8 +352,8 @@ def build_recipe_layout(
 
     save_btn.on_event("click", _on_save_click)
 
-    # Layout: three cards, each containing its own action button (errors surface
-    # on the inline alert inside the relevant card). The Save card is hidden
+    # Layout: three cards, each containing its own action button (outcomes are
+    # published as notification toasts, not inline). The Save card is hidden
     # until a recipe folder exists (see _sync_save_visibility above).
     return v.Container(
         fluid=True,

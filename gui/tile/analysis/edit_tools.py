@@ -38,9 +38,9 @@ Threading (FIXED by the task contract):
   the worker thread, in the success path) runs the OLD ``verify_model*_output`` /
   ``enable_dl*`` apply step with that path: stores ``predN_path`` /
   ``analyzed_alerts_model.modelN_prediction_file`` and shows the add/remove buttons.
-  The run button spins (``.loading``/``.disabled``) for the duration and errors are
-  logged + surfaced on the inline alert. ipywidgets trait sets from the worker thread
-  are fine (recipe_tile does exactly this).
+  The run button spins (``.loading``/``.disabled``) for the duration, the run is a
+  tracked task in the notification pill and the outcome is a toast. ipywidgets trait
+  sets from the worker thread are fine (recipe_tile does exactly this).
 * add/remove prediction are main-thread click handlers reading the stored
   prediction path.
 * The edit + DL toolbars + buttons are built once so the OLD ``.show()/.hide()/
@@ -51,7 +51,13 @@ Threading (FIXED by the task contract):
 Guards: everything no-ops safely with no alert loaded (smoke time): buttons render
 but the CNN/edit click paths are not exercised, and the defo-layer observer is
 registered but ``defo_dl_layer`` stays ``None``. EE / raster / file failures are
-caught and surfaced on the ``alert`` (or logged) so a failure never breaks render.
+caught and published as an error toast (or logged) so a failure never breaks render.
+
+Feedback uses the pysepal notification **globals** (``notify`` / ``track_task``),
+not the ``use_notifications()`` hook: this module builds raw ipyvuetify widgets
+and publishes from daemon worker threads, so there is no component render to hold
+a hook. ``spawn_in_context`` carries the kernel context the globals resolve the
+bus from.
 
 Props
 -----
@@ -73,6 +79,7 @@ import ipyvuetify as v
 import solara
 from ipyleaflet import GeoData
 from pysepal import color, sepalwidgets as sw
+from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
@@ -169,9 +176,6 @@ def build_edit_tools(
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
-
-        # error alert (OLD self.alert_draw_alert)
-        ns["alert"] = sw.Alert().hide()
 
         # --- edit toolbar (start / save / stop) ---
         ns["start_btn"] = _EditionButton(
@@ -308,23 +312,29 @@ def build_edit_tools(
     # path with the worker's computed prediction path (replaces the OLD
     # model*_prediction_time observer / the use_task-value effect).
     # ------------------------------------------------------------------
-    def _apply_model1(pred_path):
+    # Both return whether the apply succeeded, so the calling worker knows not to
+    # publish a success toast on top of the error toast published here.
+    def _apply_model1(pred_path) -> bool:
         try:
             pred1_path.value = pred_path
             analyzed_alerts_model.model1_prediction_file = pred_path
             _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
+            return True
         except Exception:
             logger.exception("Analysis: model 1 verify failed")
-            ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
+            return False
 
-    def _apply_model2(pred_path):
+    def _apply_model2(pred_path) -> bool:
         try:
             pred2_path.value = pred_path
             analyzed_alerts_model.model2_prediction_file = pred_path
             _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
+            return True
         except Exception:
             logger.exception("Analysis: model 2 verify failed")
-            ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
+            return False
 
     # ------------------------------------------------------------------
     # add/remove prediction (OLD) — main-thread click handlers mutating
@@ -347,7 +357,7 @@ def build_edit_tools(
             remove_btn.disabled = False
         except Exception:
             logger.exception("Analysis: add prediction failed")
-            ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
 
     def _remove_model_prediction(color_name, add_btn, remove_btn):
         try:
@@ -457,25 +467,40 @@ def build_edit_tools(
     # CNN run handlers: button-triggered daemon threads (CPU/IO-bound; never
     # auto-run). The worker runs _run_cnn_model -> prediction path, then on the
     # success path applies the OLD verify/enable step with that path. The run
-    # button spins for the duration; errors are logged + surfaced on the alert.
+    # button spins for the duration; errors are logged + published as toasts.
     # ------------------------------------------------------------------
     def _on_dl1_run(*_):
-        ns["alert"].reset()
         ns["dl1_add"].disabled = True
         ns["dl1_remove"].disabled = True
         ns["dl1_run"].loading = True
         ns["dl1_run"].disabled = True
 
         def _worker():
+            # Imperative tracker (not ``with``): the context manager publishes its
+            # own raw-exception toast on failure, which would land on top of the
+            # friendlier dl_404 message below. No ``total_steps`` — the run is one
+            # opaque download+inference phase, so an indeterminate pill is honest.
+            task = track_task(cm.analysis_tile.model_labels.dl_task_title)
             try:
+                task.step(str(cm.analysis_tile.model_labels.dl_step_run))
                 pred_path = _run_cnn_model(
                     _MODEL1_REPO, _MODEL1_FILE, "_m1",
                     widgets, app_state, app_tile_model,
                 )
-                _apply_model1(pred_path)
-            except Exception:  # noqa: BLE001 — surfaced on the alert
+                if _apply_model1(pred_path):
+                    task.complete()
+                    notify(
+                        str(cm.analysis_tile.model_labels.dl_done), type_="success"
+                    )
+                else:
+                    # _apply_model1 already published the dl_404 error toast;
+                    # mark the pill FAILED rather than completing it.
+                    task.fail(str(cm.analysis_tile.model_labels.dl_404))
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Analysis: model 1 run failed")
-                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+                # fail() before the toast: the pill stays visible as FAILED.
+                task.fail(str(e))
+                notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
             finally:
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
@@ -483,22 +508,33 @@ def build_edit_tools(
         spawn_in_context(_worker)
 
     def _on_dl2_run(*_):
-        ns["alert"].reset()
         ns["dl2_add"].disabled = True
         ns["dl2_remove"].disabled = True
         ns["dl2_run"].loading = True
         ns["dl2_run"].disabled = True
 
         def _worker():
+            # Same imperative-tracker rationale as _on_dl1_run above.
+            task = track_task(cm.analysis_tile.model_labels.dl_task_title)
             try:
+                task.step(str(cm.analysis_tile.model_labels.dl_step_run))
                 pred_path = _run_cnn_model(
                     _MODEL2_REPO, _MODEL2_FILE, "_m2",
                     widgets, app_state, app_tile_model,
                 )
-                _apply_model2(pred_path)
-            except Exception:  # noqa: BLE001 — surfaced on the alert
+                if _apply_model2(pred_path):
+                    task.complete()
+                    notify(
+                        str(cm.analysis_tile.model_labels.dl_done), type_="success"
+                    )
+                else:
+                    # _apply_model2 already published the dl_404 error toast;
+                    # mark the pill FAILED rather than completing it.
+                    task.fail(str(cm.analysis_tile.model_labels.dl_404))
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.exception("Analysis: model 2 run failed")
-                ns["alert"].add_msg(str(cm.analysis_tile.model_labels.dl_404), "error")
+                task.fail(str(e))
+                notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
             finally:
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False
@@ -559,7 +595,8 @@ def build_edit_tools(
     _register_defo_observer()
 
     # ------------------------------------------------------------------
-    # Layout: OLD card04 = edit title + toolBarEdition + toolBarDL1/2 + alert.
+    # Layout: OLD card04 = edit title + toolBarEdition + toolBarDL1/2. The OLD
+    # inline alert is gone: failures are error toasts (see _on_dl*_run).
     # ------------------------------------------------------------------
     card = v.Card(
         class_="pa-2 ma-2",
@@ -572,7 +609,6 @@ def build_edit_tools(
             ns["toolbar_edition"],
             ns["toolbar_dl1"],
             ns["toolbar_dl2"],
-            ns["alert"],
         ],
     )
     return card

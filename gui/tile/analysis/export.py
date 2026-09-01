@@ -27,21 +27,28 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
 
 * **Save + Download each run button-triggered via ``spawn_in_context``** (both
   do blocking GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the
-  click handler resets the alert, toggles that button's ``.loading``/``.disabled``,
-  and starts the worker; the worker runs the blocking work in ``try/except/finally``.
+  click handler toggles that button's ``.loading``/``.disabled`` and starts the
+  worker; the worker runs the blocking work in ``try/except/finally``, wrapped in a
+  tracked task so the notification pill shows it running.
 * **No widget mutation inside the blocking bodies.** The save body does the gdf
   mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
   download body does the gpkg/image/zip/report (IO only) and RETURNS
   ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
   the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
   END of the corresponding worker's success path with that returned value. Errors are
-  logged + surfaced on the inline ``sw.Alert`` in the worker's ``except``. ipywidgets
+  logged + published as an error toast in the worker's ``except``. ipywidgets
   trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
   (recipe_tile / edit_tools do exactly this).
 * The buttons + toolbars are **built once** (the builder runs once per build) so the
   imperative ``.show()/.hide()/.disabled``/``.set_url()`` calls port unchanged; the
   download buttons start in a hidden ``toolBarDownloads`` and the "Download alert data"
   button starts disabled (enabled by the save worker's success path).
+
+Feedback uses the pysepal notification **globals** (``notify`` / ``track_task``),
+not the ``use_notifications()`` hook: this module builds raw ipyvuetify widgets and
+publishes from daemon worker threads, so there is no component render to hold a
+hook. ``spawn_in_context`` carries the kernel context the globals resolve the bus
+from. There is no inline ``sw.Alert`` any more.
 
 Source-of-truth adaptation (Task 9): OLD read/wrote
 ``self.analyzed_alerts_model.alerts_gdf``; in the new architecture that GeoDataFrame
@@ -79,6 +86,7 @@ import ee
 import geopandas as gpd
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
+from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.mosaics_helper import (
@@ -306,7 +314,6 @@ def build_export(
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
-        ns["alert"] = sw.Alert().hide()
 
         ns["save_btn"] = sw.Btn(
             msg=cm.analysis_tile.export_labels.save_btn,
@@ -350,7 +357,6 @@ def build_export(
     # thread are fine). The OLD error branch becomes the worker's except.
     # ------------------------------------------------------------------
     def _apply_save():
-        ns["alert"].hide()
         ns["download_alert_data_btn"].disabled = False
         # Poke the alerts_gdf reactive so dependents refresh. The save mutated
         # the gdf in place (.at[id, col]) which does NOT change the reactive's
@@ -367,7 +373,6 @@ def build_export(
     # OLD error branch becomes the worker's except.
     # ------------------------------------------------------------------
     def _apply_download(result):
-        ns["alert"].hide()
         ns["files_dwn_btn"].set_url(path=result["zip_path"])
         ns["report_dwn_btn"].set_url(path=result["report_path"])
         ns["toolbar_downloads"].show()
@@ -375,27 +380,39 @@ def build_export(
     # ------------------------------------------------------------------
     # Save handler: button-triggered daemon thread (blocking GEE .getInfo() / CSV
     # write; never auto-run). The button spins for the duration; on success the
-    # worker applies the OLD save effect, on failure it logs + surfaces the error
-    # (incl. the OLD "confirmation==No but a polygon is drawn" guard) on the alert.
+    # worker applies the OLD save effect, on failure it logs + publishes the error
+    # (incl. the OLD "confirmation==No but a polygon is drawn" guard) as a toast.
     # ------------------------------------------------------------------
     def _on_save(*_):
-        ns["alert"].reset()
         ns["save_btn"].loading = True
         ns["save_btn"].disabled = True
 
         def _worker():
+            # Imperative tracker (not ``with``): the context manager publishes its
+            # own error toast on failure, which would duplicate the one below. No
+            # ``total_steps`` — the save is a single opaque phase (GEE admin
+            # lookups + the alert-store write), so the pill stays indeterminate.
+            task = track_task(cm.analysis_tile.export_labels.save_task_title)
             try:
+                task.step(str(cm.analysis_tile.export_labels.save_step))
                 # Writer tracking: register the recipe while its alert store is
                 # written so future delete/close paths can refuse to act mid-write.
                 with writing(app_state.recipe_name.value or "recipe"):
                     saved = _save_attributes(
                         widgets, app_state, analyzed_alerts_model, app_tile_model
                     )
+                task.complete()
                 if saved:
                     _apply_save()
-            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                    notify(
+                        str(cm.analysis_tile.export_labels.save_done),
+                        type_="success",
+                    )
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.error("Analysis: save attributes failed", exc_info=e)
-                ns["alert"].add_msg(str(e), "error")
+                # fail() before the toast: the pill stays visible as FAILED.
+                task.fail(str(e))
+                notify(str(e), type_="error")
             finally:
                 ns["save_btn"].loading = False
                 ns["save_btn"].disabled = False
@@ -405,26 +422,35 @@ def build_export(
     # ------------------------------------------------------------------
     # Download handler: button-triggered daemon thread (heavy report generation /
     # IO). On success the worker applies the OLD download effect with the returned
-    # zip/report paths; on failure it logs + surfaces the error on the alert.
+    # zip/report paths; on failure it logs + publishes the error as a toast.
     # ------------------------------------------------------------------
     def _on_download(*_):
-        ns["alert"].reset()
         ns["download_alert_data_btn"].loading = True
         ns["download_alert_data_btn"].disabled = True
 
         def _worker():
+            # Same imperative-tracker rationale as _on_save above; the report/zip
+            # build is one opaque long phase.
+            task = track_task(cm.analysis_tile.export_labels.download_task_title)
             try:
+                task.step(str(cm.analysis_tile.export_labels.download_step))
                 # Writer tracking: the report/zip generation writes into the
                 # recipe folder — register it for the duration.
                 with writing(app_state.recipe_name.value or "recipe"):
                     result = _download_data(
                         widgets, app_state, aux_model, app_tile_model
                     )
+                task.complete()
                 if result is not None:
                     _apply_download(result)
-            except Exception as e:  # noqa: BLE001 — surfaced on the alert
+                    notify(
+                        str(cm.analysis_tile.export_labels.download_done),
+                        type_="success",
+                    )
+            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
                 logger.error("Analysis: download data failed", exc_info=e)
-                ns["alert"].add_msg(str(e), "error")
+                task.fail(str(e))
+                notify(str(e), type_="error")
             finally:
                 ns["download_alert_data_btn"].loading = False
                 ns["download_alert_data_btn"].disabled = False
@@ -443,7 +469,7 @@ def build_export(
 
     # ------------------------------------------------------------------
     # Layout: OLD card06 = export title + toolBarSaveExport + toolBarDownloads
-    # (hidden) + the error alert.
+    # (hidden). The OLD inline error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
     card = v.Card(
         class_="pa-2 ma-2",
@@ -455,7 +481,6 @@ def build_export(
             ),
             ns["toolbar_save_export"],
             ns["toolbar_downloads"],
-            ns["alert"],
         ],
     )
     return card

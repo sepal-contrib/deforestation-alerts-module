@@ -81,6 +81,14 @@ def CreationDialog(
                 solara.Text(title)
             with rv.CardText():
                 solara.Column(style="gap:4px;", children=children)
+                # KEPT INLINE ON PURPOSE — this is the app's only remaining
+                # inline feedback. It is *field validation*: the message names
+                # what is wrong with the form the user is looking at, it must
+                # stay pinned next to that form while they correct it, and it
+                # must not survive the dialog closing. A toast is the wrong
+                # channel for all three (it floats away from the field, it
+                # auto-dismisses, and it outlives the dialog). Every *outcome*
+                # of an action goes through the notification system instead.
                 if error:
                     rv.Alert(type_="error", dense=True, children=[error])
             with rv.CardActions(style_="justify-content: flex-end; gap: 8px;"):
