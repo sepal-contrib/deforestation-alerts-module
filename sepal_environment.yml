@@ -1,41 +1,61 @@
 name: deforestation-alerts-module
 channels:
   - conda-forge
-  - defaults
 
 dependencies:
-  - python=3.10
+  # Match the tested dev env (python 3.11.10, gdal 3.12.3, numpy 1.26.4,
+  # tensorflow 2.17.0)
+  - python=3.11
+  - gdal=3.12
+  - numpy=1.26
+  # Geospatial binaries — conda handles these correctly
   - cartopy>=0.24.0
   - fiona>=1.10
-  - gdal>=3.8
-  - geemap>=0.35.0
   - geopandas>=1.0
+  - rasterio>=1.3
+  - shapely>=2.0
+  - pyproj
+  # Scientific
+  - matplotlib>=3.9
+  - pandas>=2.2
+  - pyarrow
+  # GUI / widgets
+  - geemap>=0.35.0
   - ipyevents>=2.0
   - ipyleaflet>=0.19
   - ipython>=8.12
-  - ipyvuetify>=1.10.0
+  - ipyvuetify<3
   - ipywidgets>=8.1
-  - matplotlib>=3.9
-  - numpy>=1.26,<2
-  - pandas>=2.2
-  - pyarrow
-  - pyproj
-  - rasterio>=1.3
-  - shapely>=2.0
-  - tensorflow>=2.16,<2.18
-  - tensorflow-probability>=0.24
-  - tf-keras
   - traitlets>=5.14
+  # Serving (Decision 1: dual-target — voila for the classic SEPAL path,
+  # solara-server for dev + the app-launcher container)
+  - voila
+  # Env plumbing
+  - ipykernel
+  - setuptools
+  - wheel
   - pip
   - pip:
-      - dateutils==0.6.12
-      - git+https://github.com/openforis/earthengine-api.git@v1.1.5rc0#egg=earthengine-api&subdirectory=python
-      - geedim>=2.0.0
-      - huggingface_hub
-      - matplotlib-scalebar==0.8.1
+      # Earth Engine — SEPAL's custom build. v1.1.5rc0 conflicts with
+      # pysepal 3.8's earthengine-api>1.6.0 requirement; v1.6.14 is the
+      # build spatial_risk deploys with.
+      - "earthengine-api @ git+https://github.com/openforis/earthengine-api.git@v1.6.14#subdirectory=python"
+      - geedim==2.0.0
+      - huggingface_hub==1.29.0   # CNN model download (gui/tile/analysis/edit_tools.py)
+      - matplotlib-scalebar==0.9.0
       - MightyMosaic==1.2.3
-      - python-docx==1.1.2
-      - pysepal==3.6.1
+      - python-docx==1.2.0
+      - pygaul==0.4.2
+      - pysepal==3.8.0
       - solara==1.57.4
-      - pygaul<=4
-      - -e .
+      # tensorflow: pip, not conda. conda-forge's tensorflow=2.17 defaults to
+      # CUDA builds gated on the __cuda virtual package; when that package is
+      # absent (this dev box, and SEPAL's GPU-less app-launcher containers
+      # alike), the solver still has to backtrack through all 31 build
+      # variants while co-solving the conda geospatial stack, which never
+      # converges in practice. The tested dev env installs tensorflow via pip
+      # for the same reason. Do NOT move this back to the conda block.
+      - tensorflow==2.17.0
+      # NOTE: no `-e .` — the app runs in place (supervisord launches
+      # `solara run gui/solara_app.py`; gui/solara_app.py shims sys.path,
+      # pytest uses pyproject's pythonpath=["."]).
