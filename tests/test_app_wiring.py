@@ -142,16 +142,28 @@ def test_geedim_exports_are_serialized_in_one_place():
         assert "_DOWNLOAD_LOCK" not in _src(rel), f"{rel} has a private export lock"
 
 
-def test_alert_store_is_written_only_after_the_cancelled_guard():
-    """alert_db.parquet is read back as state on recipe load, so a cancelled run
-    must not leave one behind: the write belongs in the completion effect."""
+def test_alert_store_is_written_off_the_loop_after_a_cancellation_recheck():
+    """Two properties at once.
+
+    (1) alert_db.parquet is read back as state on recipe load, so a cancelled run
+    must not leave one behind — the write is preceded by an explicit
+    cancellation re-check (``await asyncio.sleep(0)``, at which a requested
+    cancel raises before anything is written).
+    (2) It is a GeoParquet serialize plus an upload of the whole store, so it
+    must not run on the kernel loop: it goes through ``asyncio.to_thread`` inside
+    the task, never from the completion effect.
+    """
     src = _src("gui/tile/alerts_filter_tile.py")
     task_body = src[src.index("async def _analyze("):src.index("def _start_analyze(")]
-    assert "_persist_alerts_gdf" not in task_body, "persist must not run in the task"
+    recheck_at = task_body.index("await asyncio.sleep(0)")
+    persist_at = task_body.index("_persist_alerts_gdf,")
+    assert recheck_at < persist_at, "persist must follow the cancellation re-check"
+    call = task_body[task_body.rindex("await ", 0, persist_at):persist_at]
+    assert "asyncio.to_thread(" in call, "persist must run in a thread"
     apply_body = src[src.index("def _apply_analyze():"):]
-    cancel_at = apply_body.index(".cancelled")
-    persist_at = apply_body.index("_persist_alerts_gdf(")
-    assert cancel_at < persist_at, "persist must come after the cancelled guard"
+    assert "_persist_alerts_gdf" not in apply_body, (
+        "persist must not run in the completion effect (that is the kernel loop)"
+    )
 
 
 def test_notification_provider_mounted_before_tiles():

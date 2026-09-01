@@ -43,13 +43,13 @@ def test_save_skips_without_recipe_folder(ws):
 
 
 def test_filter_persist_writes_parquet(ws):
-    """The analyze store write moved out of the task and into the completion
-    effect (a cancelled run must leave no loadable alert_db.parquet); it must
-    still write the same store when a recipe folder exists."""
+    """The analyze store write runs inside the task (in a thread, after an
+    explicit cancellation re-check) and reports back by return value: ``None``
+    means "written"."""
     from gui.tile.alerts_filter_tile import _persist_alerts_gdf
 
     folder = ws.results_dir("recipe_test")
-    _persist_alerts_gdf(_gdf(), folder, ws)
+    assert _persist_alerts_gdf(_gdf(), folder, ws) is None
 
     back = load_gdf_from_parquet(ws, folder + "/alert_db.parquet")
     assert back["status"].iloc[0] == "Confirmed"
@@ -58,5 +58,51 @@ def test_filter_persist_writes_parquet(ws):
 def test_filter_persist_skips_without_recipe_folder(ws):
     from gui.tile.alerts_filter_tile import _persist_alerts_gdf
 
-    _persist_alerts_gdf(_gdf(), "", ws)  # must not raise
+    assert _persist_alerts_gdf(_gdf(), "", ws) is None  # must not raise
     assert ws.client.files.files == {}
+
+
+def test_filter_persist_reports_a_failed_write_instead_of_raising(ws):
+    """A store write that fails must neither kill the analyze (the alerts are
+    already in memory) nor pass silently: it comes back as a message."""
+    from gui.tile.alerts_filter_tile import _persist_alerts_gdf
+
+    def _boom(*_a, **_kw):
+        raise OSError("workspace is full")
+
+    ws.client.files.write = _boom
+
+    error = _persist_alerts_gdf(_gdf(), ws.results_dir("recipe_test"), ws)
+
+    assert error == "workspace is full"
+    assert ws.client.files.files == {}
+
+
+def test_a_failed_store_write_is_reported_as_an_error_not_a_success():
+    """The completion effect routes this pair to notifications.error /
+    .success; reporting a failed store write as "Analysis complete" was the bug.
+    """
+    import dataclasses
+
+    from deforestation_alerts.message import cm
+    from gui.tile.alerts_filter_tile import AnalyzeOutcome, _analyze_feedback
+
+    outcome = AnalyzeOutcome(
+        selections=None,
+        filtered_alert_raster=None,
+        alerts_total_bbs=None,
+        alerts_bbs=None,
+        alerts_gdf=None,
+        alert_count=7,
+        recipe_folder="/home/sepal-user/module_results/deforestation_alerts/r",
+    )
+
+    assert _analyze_feedback(outcome) == (
+        "success",
+        str(cm.filter_tile.analyze_done.format(n=7)),
+    )
+
+    failed = dataclasses.replace(outcome, persist_error="workspace is full")
+    type_, message = _analyze_feedback(failed)
+    assert type_ == "error"
+    assert "workspace is full" in message and "7" in message

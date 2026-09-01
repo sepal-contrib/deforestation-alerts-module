@@ -79,6 +79,7 @@
             "analyze_status_found": "Se encontraron {n} alertas — ensamblando…",
             "analyze_task_title": "Analizando alertas",
             "analyze_done": "Análisis completado — {n} alertas",
+            "analyze_store_failed": "Se encontraron {n} alertas, pero no se pudo guardar la base de alertas: {error}",
             "available_alerts_title": "Alertas disponibles",
             "no_alerts_message": "No hay alertas disponibles en el área o las fechas seleccionadas",
             "available_alerts_hint": "Selecciona una o múltiples fuentes de alertas",
@@ -116,6 +117,10 @@
             "export_csv": "CSV",
             "export_gpkg": "GeoPackage",
             "export_geojson": "GeoJSON",
+            "export_download": "Descargar",
+            "export_task_title": "Exportando alertas",
+            "export_step": "Generando la exportación {fmt}…",
+            "export_done": "Exportación {fmt} lista.",
             "summary_button_label": "Resumen"
     },
 
@@ -193,7 +198,8 @@
                 "download_step": "Generando archivos e informe…",
                 "download_done": "Descarga de la alerta lista.",
                 "download_no_recipe": "No hay ninguna receta cargada, así que no hay dónde guardar los archivos de la alerta en tu espacio de trabajo de SEPAL. Crea o carga una receta primero.",
-                "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar."
+                "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
+                "save_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que guardar."
         }
     }
 }

@@ -79,6 +79,7 @@
             "analyze_status_found": "Found {n} alerts — assembling…",
             "analyze_task_title": "Analyzing alerts",
             "analyze_done": "Analysis complete — {n} alerts",
+            "analyze_store_failed": "Found {n} alerts, but saving the alert store failed: {error}",
             "available_alerts_title": "Available alerts",
             "no_alerts_message": "No alerts are available for the date/area selected",
             "available_alerts_hint": "Select one or multiple alert sources",
@@ -116,6 +117,10 @@
             "export_csv": "CSV",
             "export_gpkg": "GeoPackage",
             "export_geojson": "GeoJSON",
+            "export_download": "Download",
+            "export_task_title": "Exporting alerts",
+            "export_step": "Writing the {fmt} export…",
+            "export_done": "{fmt} export ready.",
             "summary_button_label": "Summary"
     },
 
@@ -193,7 +198,8 @@
                 "download_step": "Building files and report…",
                 "download_done": "Alert download ready.",
                 "download_no_recipe": "No recipe is loaded, so there is nowhere in your SEPAL workspace to save the alert files. Create or load a recipe first.",
-                "download_no_alert": "No alert is selected, so there is nothing to download."
+                "download_no_alert": "No alert is selected, so there is nothing to download.",
+                "save_no_alert": "No alert is selected, so there is nothing to save."
         }
     }
 }

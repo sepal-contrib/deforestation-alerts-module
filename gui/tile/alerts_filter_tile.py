@@ -200,6 +200,11 @@ class AnalyzeOutcome:
     alerts_gdf: Any
     alert_count: int
     recipe_folder: Any
+    # Why the alert store could not be written, or ``None`` when it was (or when
+    # there is no recipe folder to write it into). Set inside the task, read by
+    # the completion effect to pick the toast — a failed store write must not be
+    # reported as a success.
+    persist_error: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -655,30 +660,58 @@ def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
     )
 
 
-def _persist_alerts_gdf(alerts_gdf, recipe_folder, workspace) -> None:
+def _persist_alerts_gdf(alerts_gdf, recipe_folder, workspace) -> str | None:
     """Write the freshly vectorized gdf to the canonical parquet store.
+
+    Returns ``None`` when the store was written (or when there is no recipe
+    folder to write it into — smoke / pre-recipe runs), and the failure message
+    otherwise. It does NOT raise: the analyze itself succeeded, and the alerts
+    are already in memory, so a store failure must degrade the run's feedback,
+    not throw the results away. The caller turns a returned message into an error
+    toast — reporting a failed store write as a success is exactly the bug this
+    return value exists to prevent.
 
     This is persisted STATE, not a scratch artifact: recipe load reads
     ``alert_db.parquet`` back (``recipe_helper.load_alert_store``, and the
     recipe-export zip in ``gui.widget.custom_sw``), so a run the user cancelled
-    must never leave one behind. It is therefore called from the completion
-    effect, after the ``cancelled`` guard — never from the task body. Writing it
-    at analyze time, not just on Save, means a reload before Save resumes without
-    re-running EE. No-op without a recipe folder (smoke / pre-recipe runs).
+    must never leave one behind — see the explicit cancellation re-check the task
+    body does before calling this. Writing it at analyze time, not just on Save,
+    means a reload before Save resumes without re-running EE.
+
+    Blocking: a GeoParquet serialize plus an upload of the whole store. Callers
+    must run it in a thread (``asyncio.to_thread``), never on the kernel loop.
 
     ``recipe_folder`` is a REMOTE path in the user's SEPAL workspace, so the join
     is posix and the write goes through ``workspace``.
     """
     if not recipe_folder:
-        return
+        return None
     try:
         save_gdf_to_parquet(
             alerts_gdf,
             workspace,
             str(PurePosixPath(recipe_folder) / "alert_db.parquet"),
         )
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — surfaced as an error toast
         logger.exception("Filter: failed to persist alert_db.parquet")
+        return str(exc) or exc.__class__.__name__
+    return None
+
+
+def _analyze_feedback(outcome: AnalyzeOutcome) -> tuple[str, str]:
+    """``(toast type, message)`` for a finished analyze.
+
+    Split out of the completion effect so the "a failed alert-store write is not
+    a success" rule is directly testable: the effect only routes the pair to the
+    matching notifier method.
+    """
+    if outcome.persist_error:
+        return "error", str(
+            cm.filter_tile.analyze_store_failed.format(
+                n=outcome.alert_count, error=outcome.persist_error
+            )
+        )
+    return "success", str(cm.filter_tile.analyze_done.format(n=outcome.alert_count))
 
 
 @solara.component
@@ -933,6 +966,29 @@ def AlertsFilterTile(
                 outcome = await asyncio.to_thread(
                     _finish_analyze_sync, request, plan, gdf
                 )
+
+                # Persisted state (alert_db.parquet). It is written HERE, in a
+                # thread, and no longer from the completion effect: that effect
+                # runs on the kernel loop, so every analyze used to block the UI
+                # thread for a whole GeoParquet serialize + an upload of the
+                # entire alert store.
+                #
+                # The property the completion effect gave us — a cancelled run
+                # must never leave a loadable alert_db.parquet behind — is kept by
+                # an explicit cancellation re-check: ``await asyncio.sleep(0)``
+                # yields to the loop, so a cancel requested at any point up to
+                # here raises CancelledError before anything is written. The check
+                # goes BEFORE the call because cancelling a ``to_thread`` cannot
+                # stop the thread once it has started.
+                await asyncio.sleep(0)
+                persist_error = await asyncio.to_thread(
+                    _persist_alerts_gdf,
+                    outcome.alerts_gdf,
+                    outcome.recipe_folder,
+                    workspace,
+                )
+                outcome = dataclasses.replace(outcome, persist_error=persist_error)
+
                 task.step(
                     cm.filter_tile.analyze_status_found.format(n=outcome.alert_count)
                 )
@@ -1044,14 +1100,19 @@ def AlertsFilterTile(
         # Publish the assembled alerts_gdf — this is what Overview + the analysis
         # tile consume.
         app_state.alerts_gdf.value = outcome.alerts_gdf
-        # Persisted state, so it belongs on this side of the cancelled guard (a
-        # cancelled run must not leave a loadable alert_db.parquet behind). The
-        # gdf is fully materialized by now, so the write is a plain serialize.
-        _persist_alerts_gdf(outcome.alerts_gdf, outcome.recipe_folder, workspace)
         logger.info("Filter: analyze finished — %s alerts", outcome.alert_count)
-        notifications.success(
-            cm.filter_tile.analyze_done.format(n=outcome.alert_count)
-        )
+        # The alert store was written inside the task (off the kernel loop). If
+        # that write failed the alerts still exist in memory and the page still
+        # advances, but the user is told — a store failure was previously
+        # swallowed and reported as a success.
+        type_, message = _analyze_feedback(outcome)
+        if type_ == "error":
+            logger.error(
+                "Filter: alert store write failed — %s", outcome.persist_error
+            )
+            notifications.error(message)
+        else:
+            notifications.success(message)
 
         # Jump to the analysis tile (as the OLD tile did). The shell's _NavBridge
         # translates this current_page_view write into the MapApp step change.
