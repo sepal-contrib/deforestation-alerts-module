@@ -31,8 +31,14 @@ draw of an already-built ``feature_collection`` — no new GEE *computation* in 
 view; AoiView is built ``gee=True`` throughout this app).
 
 Scope note: the old tile also drew the forest-mask / aux / drawn-selection layers,
-which were `ee.*` calls in the view; those remain omitted. The alert-DB download
-button is rendered in the right-panel card.
+which were `ee.*` calls in the view; those remain omitted. The alert exports are
+rendered in the right-panel card.
+
+Export card feedback (the one place this component publishes): ``build_export_card``
+and its click handler are module-level RAW ipyvuetify builders whose worker runs on
+a daemon thread (``spawn_in_context``), where no Solara hook can run — so they use
+the notification GLOBALS (``notify`` / ``track_task``), like ``recipe_tile`` and
+``analysis/export``, not ``use_notifications()``.
 
 Known service-layer concern: overview_helper.py (a *service* module) still imports
 ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
@@ -176,6 +182,7 @@ def build_export_card(gdf, workspace, folder, sources, start, end):
             v.Row(class_="d-flex justify-center", children=dl_buttons),
         ],
     )
+
 
 # Summary-table row labels (matches old tile order)
 _ALERT_LABELS = [
