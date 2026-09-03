@@ -45,9 +45,12 @@
   },
   "workflow": {
     "lock_filter": "Seleccione primero un área de interés y las fechas.",
-    "lock_overview": "Cargue o analice alertas primero.",
     "lock_analysis": "Cargue o analice alertas primero.",
     "count_alerts_one": "{n} alerta",
-    "count_alerts_other": "{n} alertas"
+    "count_alerts_other": "{n} alertas",
+    "step_badge": "{n} / {total}",
+    "count_empty": "nada todavía",
+    "count_reviewed_one": "{n} revisada",
+    "count_reviewed_other": "{n} revisadas"
   }
 }

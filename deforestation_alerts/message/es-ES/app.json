@@ -1,6 +1,7 @@
 {
     "app": {
         "title": "Análisis de Alertas de Pérdida de Cobertura Forestal",
+        "panel_workflow_title": "Flujo de trabajo",
         "footer": "SEPAL \u00a9 {}",
         "banner": "¡Este es mi primer aplicativo! :)",
         "drawer_item": {

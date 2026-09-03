@@ -45,9 +45,12 @@
   },
   "workflow": {
     "lock_filter": "Select an area of interest and dates first.",
-    "lock_overview": "Load or analyze alerts first.",
     "lock_analysis": "Load or analyze alerts first.",
     "count_alerts_one": "{n} alert",
-    "count_alerts_other": "{n} alerts"
+    "count_alerts_other": "{n} alerts",
+    "step_badge": "{n} / {total}",
+    "count_empty": "nothing yet",
+    "count_reviewed_one": "{n} reviewed",
+    "count_reviewed_other": "{n} reviewed"
   }
 }

@@ -107,7 +107,9 @@
 
     "overview_tile": {
             "title": "Resumen General",
-            "total":"Total de Alertas", 
+            "back_to_workflow": "Flujo de trabajo",
+            "review_button": "Revisar alertas",
+            "total":"Total de Alertas",
             "reviewed": "Alertas Revisadas", 
             "confirmed": "Alertas Confirmadas", 
             "false_positives": "Falsos Positivos", 

@@ -108,7 +108,9 @@
     
     "overview_tile": {
             "title": "Vue D'Ensemble Générale",
-            "total":"Total des Alertes", 
+            "back_to_workflow": "Flux de travail",
+            "review_button": "Réviser les alertes",
+            "total":"Total des Alertes",
             "reviewed": "Alertes Examinnées", 
             "confirmed": "Alertes Confirmées", 
             "false_positives": "Faux Positifs", 
