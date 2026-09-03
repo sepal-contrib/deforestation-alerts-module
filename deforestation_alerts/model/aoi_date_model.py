@@ -74,6 +74,17 @@ class AoiDateModel(AoiModel):
             elif self.method == "ASSET":
                 self._from_asset(self.asset_json)
 
+            # Recipe load calls the _from_* loaders directly instead of going
+            # through AoiModel.set_object(), so nothing bumps ``object_set`` --
+            # the one trait that fires *after* both the geometry and the name
+            # are materialised. Observers of "the AOI object was (re)set" (the
+            # shell's aoi_name mirror, which feeds the pipeline header gates)
+            # never hear about a recipe load without this. Bump it last, and
+            # unconditionally: a recipe with no AOI method leaves
+            # ``feature_collection`` None, which is itself the correct
+            # "no AOI selected" signal.
+            self.object_set += 1
+
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Error loading JSON file: {e}")
 

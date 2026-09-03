@@ -5,6 +5,7 @@ read the source text instead of importing the module — same contract lock,
 credential-free.
 """
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,3 +199,83 @@ def test_overview_view_has_back_and_review_buttons():
     assert 'app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view' in src
     assert 'app_state.current_page_view.value = "analysis_tile"' in src
     assert "rv.Btn(" not in src
+
+
+def test_panel_bridge_drives_views_stage_map_owner_and_title():
+    src = _src("gui/solara_app.py")
+    body = src[src.index("def _PanelBridge("):]
+    body = body[: body.index("\ninit_ee()")]
+    assert "app_state.panel_view.value" in body and "app_state.active_step.value" in body
+    assert 'header_wrapper.style_ = "" if workflow else "display: none;"' in body
+    assert "stage_host.visible = workflow and spec.full_stage" in body
+    assert 'map_.add_class("defo-map-hidden")' in body
+    assert "if spec.owns_map" in body
+    assert "rail_item_for_step" in body and "item.owns_map" in body
+    assert "panel.config = {**workflow_config" in body
+    assert "app_state.current_page_view.value = " in body
+
+
+def test_panel_bridge_never_clears_the_shared_map_owner():
+    """Regression guard for e09d545 ("popups no longer clear the active panel
+    tile's map layers").
+
+    Opening a popup/dialog over a right-panel tile must NOT change
+    ``app_state.active_map_view``: the map-bearing tiles (AOI / Filter /
+    Overview) key their draw/clear effect off it, so clearing it wipes the
+    underlying tile's layers and they never come back when the popup closes.
+    The old guard was ``navigation.active_map_view_for_step`` (returned None
+    for popup steps = "leave unchanged"), deleted in the registry split. The
+    behaviour now lives in ``_PanelBridge``'s owner branch, which only ever
+    ASSIGNS a resolved owner and never clears one.
+    """
+    src = _src("gui/solara_app.py")
+    body = src[src.index("def _PanelBridge("):]
+    body = body[: body.index("\ninit_ee()")]
+    writes = [
+        line.strip()
+        for line in body.splitlines()
+        if "active_map_view" in line and not line.strip().startswith("#")
+    ]
+    assert writes == [
+        "if owner is not None and app_state.active_map_view.value != owner:",
+        "app_state.active_map_view.value = owner",
+    ], f"active_map_view must only be assigned a resolved owner: {writes}"
+    for clearing in (
+        'active_map_view.value = ""',
+        "active_map_view.value = None",
+        'active_map_view.set("")',
+        "active_map_view.set(None)",
+    ):
+        assert clearing not in src, f"the shared-map owner must never be cleared: {clearing}"
+
+
+def test_rail_mirror_switches_panel_view_for_panel_items_only():
+    src = _src("gui/solara_app.py")
+    page_body = src[src.index("def Page():"):]
+    assert 'nav_model.observe(_on_rail_step, "current_step")' in page_body
+    assert 'if item is not None and item.display == "panel":' in page_body
+    assert "app_state.panel_view.set(item.key)" in page_body
+
+
+def test_aoi_name_is_mirrored_from_the_aoi_model():
+    """The mirror must observe traits that can actually notify.
+
+    Regression: the first cut observed ``feature_collection``, which is a plain
+    class attribute on AoiModel, not a traitlet -- ``observe`` accepts the name
+    and silently never fires. See
+    ``tests/test_app_state.py::test_only_object_set_and_name_can_notify_the_aoi_mirror``
+    for the behavioural half of this guard.
+    """
+    src = _src("gui/solara_app.py")
+    page_body = src[src.index("def Page():"):]
+    assert 'aoi_date_model.observe(_on_aoi, names=["object_set", "name"])' in page_body
+    assert 'aoi_date_model.unobserve(_on_aoi, names=["object_set", "name"])' in page_body
+    # feature_collection may appear in prose, but never as an observed name.
+    observed = re.findall(r"observe\(_on_aoi, names=\[([^\]]*)\]", page_body)
+    assert observed, "the aoi mirror must register an observer"
+    for names in observed:
+        assert "feature_collection" not in names, (
+            "feature_collection is not a traitlet; observing it never fires"
+        )
+    assert "app_state.aoi_name.set(aoi_name_from_model(aoi_date_model))" in page_body
+    assert "solara.use_effect(_mirror_aoi_name, dependencies=[])" in page_body

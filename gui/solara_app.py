@@ -51,7 +51,7 @@ from gui.store.navigation import (
 from gui.i18n import t
 from gui.scripts.log_bridge import install_log_console_handler
 from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
-from gui.store.state_manager import AppState
+from gui.store.state_manager import AppState, aoi_name_from_model
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
@@ -132,25 +132,19 @@ def _render_detached(make_element):
 
 @solara.component
 def _NavBridge(app_state, nav_model, mapapp_ref):
-    """Programmatic tile navigation (restores the Voila ``current_page_view`` jump).
+    """Programmatic navigation: tiles' ``current_page_view`` writes → shell state.
 
-    Tiles signal navigation by writing ``app_state.current_page_view`` (AOI search
-    -> Filter, Filter analyze -> Analysis, Recipe load -> Analysis, etc.). This
-    invisible leaf component reads that reactive and, on change, drives the active
-    ``MapApp`` step plus the right-panel / dialog state. It is a *leaf* on purpose:
-    only this component re-renders on a nav event, so ``Page`` / ``MapApp`` /
-    ``steps_data`` are not rebuilt.
+    Tiles signal navigation by writing ``app_state.current_page_view`` (AOI
+    search → Filter, Filter analyze → Analysis, Recipe load → Analysis,
+    Overview "Go"/"Review alerts" → Analysis, Overview "Workflow" → the active
+    step, Recipe new → Optional files). This invisible leaf component resolves
+    the string to a workflow index or a rail step id and applies it. It is a
+    *leaf* on purpose: only this component re-renders on a nav event, so
+    ``Page`` / ``MapApp`` are not rebuilt.
 
-    The Vue ``current_step`` watcher only switches content + opens dialogs; unlike a
-    drawer click it does NOT apply ``right_panel_action`` or close a lingering
-    dialog. So we drive those explicitly via the ``MapApp`` widget, which ``Page``
-    resolves (``solara.get_widget`` must run in the component that created the
-    element) and hands us through ``mapapp_ref``: open the panel for panel tiles /
-    close it otherwise, and dismiss any open dialog when the target is not a dialog.
-
-    Threading: search/analyze run in worker threads; they only set the reactive.
-    Solara marshals this component's re-render + effect onto the main thread, so all
-    widget mutation here stays main-thread.
+    Threading: search/analyze run in worker threads; they only set the
+    reactive. Solara marshals this component's re-render + effect onto the
+    main thread, so all widget mutation here stays main-thread.
     """
     view = app_state.current_page_view.value
 
@@ -158,13 +152,86 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
         action = resolve_navigation(view)
         if action is None:
             return
-        # Loop-safety: already on the target step (e.g. the step -> view reverse
-        # sync just echoed the active page) -> nothing to do.
-        if action.step_id == nav_model.current_step:
+        # Loop-safety: the target is already showing (e.g. _PanelBridge just
+        # mirrored the showing view back into current_page_view).
+        if (
+            action.kind == "workflow"
+            and app_state.panel_view.value == "workflow"
+            and action.target == app_state.active_step.value
+        ):
             return
-        apply_navigation(mapapp_ref.get("widget"), nav_model, action)
+        if action.kind == "rail" and action.target == nav_model.current_step:
+            return
+        apply_navigation(mapapp_ref.get("widget"), nav_model, app_state, action)
 
     solara.use_effect(_drive, [view])
+
+
+@solara.component
+def _PanelBridge(
+    app_state, panel_wrappers, header_wrapper, stage_host, map_, mapapp_ref, workflow_config
+):
+    """Apply the panel view + workflow position to the widgets: wrapper and
+    header visibility, the Analysis stage overlay + shared-map hiding, the
+    shared-map owner, the panel title/icon, and the ``current_page_view``
+    mirror.
+
+    A leaf component (same reason as ``_NavBridge``). Runs whenever
+    ``panel_view`` or ``active_step`` change, whoever set them (header click,
+    rail click, navigation bridge).
+    """
+    view = app_state.panel_view.value
+    active = app_state.active_step.value
+
+    def _apply():
+        workflow = view == "workflow"
+        spec = STEPS[active]
+        showing_key = spec.key if workflow else view
+        header_wrapper.style_ = "" if workflow else "display: none;"
+        for key, wrap in panel_wrappers.items():
+            wrap.style_ = "" if key == showing_key else "display: none;"
+        # Full-stage step (Analysis, Workflow view only): show the overlay and
+        # hide the shared map so its leaflet layer-control menu can't bleed
+        # over the panel. Other steps' layers stay mounted and return on leave.
+        stage_host.visible = workflow and spec.full_stage
+        if stage_host.visible:
+            map_.add_class("defo-map-hidden")
+        else:
+            map_.remove_class("defo-map-hidden")
+        # Shared-map owner. Workflow steps that own layers (AOI/Filter) claim
+        # it; Analysis owns its own maps and must NOT change it. The Overview
+        # view claims it too — that is what makes OverviewTile draw its status
+        # clusters (its effects key on active_map_view == "overview_tile").
+        owner = None
+        if workflow:
+            if spec.owns_map:
+                owner = spec.page_view
+        else:
+            item = next((r for r in RAIL_ITEMS if r.key == view), None)
+            if item is not None and item.owns_map:
+                owner = item.page_view
+        if owner is not None and app_state.active_map_view.value != owner:
+            app_state.active_map_view.value = owner
+        # Panel title/icon follow the view (pysepal RightPanel.config is a
+        # synced trait; keep the width so the config observer is a no-op).
+        mapapp = mapapp_ref.get("widget")
+        if mapapp is not None and mapapp.right_panel:
+            panel = mapapp.right_panel[0]
+            if workflow:
+                panel.config = {**workflow_config}
+            else:
+                item = rail_item_for_step(next(r.step_id for r in RAIL_ITEMS if r.key == view))
+                panel.config = {**workflow_config, "title": t(item.label_key), "icon": item.icon}
+        # Mirror: keep current_page_view faithful to what is showing so a
+        # *repeated* trigger (e.g. searching twice) still changes the value and
+        # re-fires _NavBridge, whose guard then no-ops.
+        showing_view = spec.page_view if workflow else next(
+            r.page_view for r in RAIL_ITEMS if r.key == view
+        )
+        if app_state.current_page_view.value != showing_view:
+            app_state.current_page_view.value = showing_view
+
+    solara.use_effect(_apply, [view, active])
 
 
 init_ee()
@@ -492,6 +559,47 @@ def Page():
     stage_host = solara.use_memo(
         lambda: StageHost(content=[analysis_stage_widget]), dependencies=[]
     )
+
+    # Rail clicks: a panel item (Overview) switches the right panel to its
+    # view; a dialog item leaves the view alone; every item mirrors its page
+    # view so Recipe → Optional files and repeated triggers keep working.
+    # None (dialog closed, "Map" clicked) changes nothing — see spec D13.
+    def _wire_rail_mirror():
+        def _on_rail_step(change):
+            sid = change["new"]
+            item = rail_item_for_step(sid)
+            if item is not None and item.display == "panel":
+                app_state.panel_view.set(item.key)
+            view = page_view_for_rail_step(sid)
+            if view is not None and app_state.current_page_view.value != view:
+                app_state.current_page_view.value = view
+
+        nav_model.observe(_on_rail_step, "current_step")
+        return lambda: nav_model.unobserve(_on_rail_step, "current_step")
+
+    solara.use_effect(_wire_rail_mirror, dependencies=[])
+
+    # AOI-name mirror for the pipeline header gates (a solara reactive cannot
+    # subscribe to a traitlets model). None when no AOI geometry is selected.
+    #
+    # Observe ``object_set``, NOT ``feature_collection``: the latter is a plain
+    # class attribute on AoiModel, not a traitlet, so ``observe`` accepts the
+    # name and then silently never fires. ``object_set`` is a real Int trait
+    # bumped on the LAST line of AoiModel.set_object(), i.e. after the _from_*
+    # loader has assigned both the geometry and the name -- the only moment both
+    # are guaranteed materialised, since 4 of the 5 loaders assign ``name``
+    # *before* ``feature_collection``. ``name`` stays in the list so a
+    # clear_attributes() reset (which nulls ``name`` but deliberately leaves
+    # ``object_set`` alone) still clears the header.
+    def _mirror_aoi_name():
+        def _on_aoi(change=None):
+            app_state.aoi_name.set(aoi_name_from_model(aoi_date_model))
+
+        aoi_date_model.observe(_on_aoi, names=["object_set", "name"])
+        _on_aoi()
+        return lambda: aoi_date_model.unobserve(_on_aoi, names=["object_set", "name"])
+
+    solara.use_effect(_mirror_aoi_name, dependencies=[])
 
     WORKFLOW_PANEL_CONFIG = {
         "title": t("app.panel_workflow_title"),

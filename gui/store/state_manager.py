@@ -56,3 +56,19 @@ class AppState:
 
     def go_prev(self):
         self.go_to(self.actual_alert_id.value - 1)
+
+
+def aoi_name_from_model(model):
+    """The AOI label for the pipeline header gates, or None when no AOI is set.
+
+    The *geometry* gates the label: ``name`` is a traitlet that outlives a
+    cleared geometry, so a name without a ``feature_collection`` is a stale
+    label rather than a selected AOI.
+
+    Solara-free on purpose (no reactives, no widgets) so the mirror installed by
+    ``Page()._mirror_aoi_name`` can be unit-tested without importing
+    ``gui.solara_app`` (which calls ``init_ee()`` at import time).
+    """
+    fc = getattr(model, "feature_collection", None)
+    name = getattr(model, "name", None) if fc is not None else None
+    return name or None
