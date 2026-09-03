@@ -44,16 +44,15 @@ from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
 from deforestation_alerts.scripts.workspace import Workspace
 from gui.store.navigation import (
-    active_map_view_for_step,
     apply_navigation,
-    page_view_for_step,
+    page_view_for_rail_step,
     resolve_navigation,
 )
 from gui.i18n import t
 from gui.scripts.log_bridge import install_log_console_handler
 from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
 from gui.store.state_manager import AppState
-from gui.store.workflow_steps import STEPS
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
 from gui.tile.alerts_filter_tile import AlertsFilterTile
@@ -62,6 +61,8 @@ from gui.tile.aux_tile import build_aux_layout
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.recipe_tile import build_recipe_layout
 from gui.widget.log_console import LogConsole
+from gui.widget.stage_host import StageHost
+from gui.widget.workflow_header import WorkflowHeader
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -130,7 +131,7 @@ def _render_detached(make_element):
 
 
 @solara.component
-def _NavBridge(app_state, nav_model, mapapp_ref, step_display, step_actions):
+def _NavBridge(app_state, nav_model, mapapp_ref):
     """Programmatic tile navigation (restores the Voila ``current_page_view`` jump).
 
     Tiles signal navigation by writing ``app_state.current_page_view`` (AOI search
@@ -154,7 +155,7 @@ def _NavBridge(app_state, nav_model, mapapp_ref, step_display, step_actions):
     view = app_state.current_page_view.value
 
     def _drive():
-        action = resolve_navigation(view, step_display, step_actions)
+        action = resolve_navigation(view)
         if action is None:
             return
         # Loop-safety: already on the target step (e.g. the step -> view reverse
@@ -201,58 +202,38 @@ def on_kernel_start():
 def Page():
     setup_theme_colors()
 
-    # MapApp renders the main map with `fullscreen=True`, which gives its leaflet
-    # container `position: fixed; z-index: 800` over the whole viewport. The
-    # step-content panel (where "step" tiles render) sits at z-index 0, so the
-    # map bleeds through any gaps in a form tile (e.g. Aux). The panel only exists
-    # while a step is active, so lifting it above the map is safe and fixes every
-    # step tile at once; map-backed tiles render their own map inside the panel.
-    #
-    # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
-    # `solara.display(card)`, and ipyvuetify wraps each standalone display in its
-    # OWN Vuetify `<v-application>` whose `.v-application--wrap` carries
-    # `min-height: 100vh`. So every card reserves a full viewport height — in the
-    # Recipe dialog this pushed the Create/Load buttons ~1000px below their cards
-    # (cards visible, buttons off-screen); Aux/Overview/AOI/Filter had the same
-    # latent over-tall layout. Collapse that min-height for embedded mini-apps
-    # INSIDE dialog cards and the right panel (form tiles only — these never hold
-    # the shared map, so nothing that needs viewport height is affected; the
-    # Analysis "step" maps live outside both selectors and keep their height).
     solara.Style(
-        ".step-content-container { z-index: 801 !important; }\n"
+        # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
+        # `solara.display(card)`, and ipyvuetify wraps each standalone display in
+        # its OWN Vuetify `<v-application>` whose `.v-application--wrap` carries
+        # `min-height: 100vh`, so every card would reserve a full viewport height.
         ".dialog-card .v-application--wrap,\n"
         ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
-        # Hide the shared map while the Analysis workspace owns the step stage so
-        # its leaflet layer-control menu can't bleed over the panel.
+        # Hide the shared map while the Analysis stage owns the screen, so its
+        # leaflet layer-control menu can't bleed over the panel.
         ".defo-map-hidden { display: none !important; }\n"
-        # The Analysis step-content panel above is lifted to z-index 801, which sits
-        # over MapApp's drawer collapse/expand arrow (`.sidebar-controls`, z-index 5)
-        # docked at the drawer edge — burying that control so the left nav drawer
-        # can't be collapsed while on the Analysis step. Lift the control above the
-        # step panel (still below the dialog scrim ~1005, so dialogs cover it). The
-        # `.v-application` prefix raises specificity above MapApp's own
-        # `.sidebar-controls { z-index: 5 !important }` (equal specificity would lose
-        # on source order).
+        # The Analysis stage: an app-owned fixed overlay between the left rail
+        # and the right panel (StageHost). MapApp pushes the live rail and panel
+        # widths onto :root; z-index 801 sits above the fullscreen map (800).
+        ".defo-stage {\n"
+        "  position: fixed; top: 0; bottom: var(--sepal-bottom-reserved, 0px);\n"
+        "  left: var(--sepal-drawer-width, 60px);\n"
+        "  right: var(--sepal-right-panel-width, 0px);\n"
+        "  z-index: 801; padding: 16px; overflow: auto;\n"
+        "  background-color: var(--v-background-base, #ffffff);\n"
+        "  transition: left 0.3s ease, right 0.3s ease;\n"
+        "}\n"
+        # Keep the rail collapse/expand arrow (`.sidebar-controls`, z-index 5)
+        # clickable over the stage; still below the dialog scrim (~1005).
         ".v-application .sidebar-controls { z-index: 802 !important; }\n"
-        # Center modal dialogs over the MAP area (viewport minus the left nav
-        # drawer), not the whole viewport — otherwise a wide dialog (About is
-        # 1300px) centers across the drawer and its left edge sits under the
-        # drawer's collapse/expand handle (`.sidebar-controls`) docked at the
-        # drawer edge. The card is centered by `.v-dialog__content` — a FIXED,
-        # full-viewport flex box (`justify-content: center`); the `dialog-container`
-        # class from `content-class` lands on the inner `.v-dialog` (position:
-        # static), so size/offset must go on the `.v-dialog__content` parent, not
-        # `.dialog-container` (overriding the latter's width would force the card
-        # wider, the opposite of what we want). Shrink that fixed flex box by the
-        # live drawer width (`--sepal-drawer-width`, pushed onto :root by MapApp)
-        # and push its left edge in, so the card centers over the map only. Scoped
-        # with `:has` to MapApp's dialogs (the ones using `dialog-container`).
+        # Center modal dialogs over the MAP area (viewport minus the left rail):
+        # `.v-dialog__content` is a fixed full-viewport flex box; shrink it by the
+        # live rail width so a wide dialog (About is 1300px) is not tucked under
+        # the rail's collapse handle. Scoped with :has to MapApp's dialogs.
         ".v-dialog__content:has(> .dialog-container) {\n"
         "  left: var(--sepal-drawer-width, 0px) !important;\n"
         "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
         "}\n"
-        # Justify the About prose inside its dialog (scoped via AboutTile's
-        # `.about-content` wrapper so the form dialogs are untouched).
         ".about-content { text-align: justify; }"
     )
 
@@ -437,154 +418,111 @@ def Page():
     )
 
     # -----------------------------------------------------------------------
-    # Right-panel foundation (pysepal single-map model).
+    # Two-view right panel (spatial_risk parity + the Overview view).
     #
-    # Map-bearing tiles (Overview now; AOI/Filter as they are migrated) render
-    # their CONTROLS in MapApp's docked right panel — NOT as opaque "step" panels
-    # — so the one shared map stays visible + interactive behind a side card,
-    # with per-feature info shown as map popups. ``panel_host`` is a stable
-    # container whose single child is swapped to the active tile's controls;
-    # ``nav_model.current_step`` (linked to ``MapApp.current_step`` via ``model=``)
-    # tells us which tile's drawer step is active.
-    #
-    # A right-panel tile's drawer step uses ``display:"panel"`` (a value MapApp.vue
-    # does not render as a step/dialog → nothing covers the map) + a throwaway
-    # ``content`` (so ``current_step`` updates on activation) + ``right_panel_action``
-    # ("open" to reveal the panel; "close" on non-panel steps to hide it).
+    # Workflow view: PipelineHeader + the active workflow step's controls
+    # (AOI/Date, Filter, Analysis). Overview view: today's Overview tile
+    # (summary table, exports, status clusters on the shared map), entered
+    # from its rail button. Which view shows is app_state.panel_view; which
+    # workflow step is active is app_state.active_step. nav_model.current_step
+    # tracks the rail (dialogs + the highlighted Overview item).
     # -----------------------------------------------------------------------
     nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
-    # Throwaway content for "panel" steps: never rendered (display != step/dialog),
-    # but a non-empty content list is what makes MapApp set current_step on click.
+    # Throwaway content for the Overview "panel" rail entry: never rendered
+    # (display != step/dialog), but a non-empty content list is what makes
+    # MapApp set current_step on click.
     panel_sentinel = solara.use_memo(lambda: v.Html(tag="div"), dependencies=[])
 
-    # Each right-panel tile's controls wrapped in a div we SHOW/HIDE. ALL
-    # wrappers stay mounted in panel_host at all times; on step change we toggle
+    # Every panel view's controls wrapped in a div we SHOW/HIDE. ALL wrappers
+    # stay mounted in panel_host at all times; on view/step change we toggle
     # their visibility instead of swapping panel_host.children.
     # WHY (not a children swap): swapping detaches the previous widget, and a
-    # tile's `solara.display`-captured controls live in an `Output` whose view is
-    # NOT recreated when the widget is reattached — so AOI/Filter cards vanished
-    # after navigating away and back (same class of bug as the Recipe/Aux dialogs
-    # on reopen). `display:none` keeps the DOM — and the widget views — alive, so
-    # the controls survive. Which steps have panel controls — and their ids —
-    # derives from the STEPS registry; AOI is the default-visible one (the
-    # initial step is the About dialog, which leaves the panel closed).
+    # tile's `solara.display`-captured controls live in an `Output` whose view
+    # is NOT recreated when the widget is reattached — so AOI/Filter cards
+    # vanished after navigating away and back. `display:none` keeps the DOM —
+    # and the widget views — alive. Keyed by step key / rail key; AOI is the
+    # default-visible one (active_step 0, panel_view "workflow").
     panel_controls = {
         "aoi": aoi_widget,
         "filter": filter_widget,
-        "overview": overview_widget,
         "analysis": analysis_controls_widget,
+        "overview": overview_widget,
     }
-    panel_wrappers = solara.use_memo(
-        lambda: {
-            s.step_id: v.Html(
-                tag="div",
-                children=[panel_controls[s.key]],
-                style_="" if s.key == "aoi" else "display: none;",
-            )
-            for s in STEPS
-            if s.key in panel_controls
-        },
+
+    def _wrap(key, visible):
+        return v.Html(
+            tag="div",
+            children=[panel_controls[key]],
+            style_="" if visible else "display: none;",
+        )
+
+    panel_step_wrappers = solara.use_memo(
+        lambda: {s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS},
+        dependencies=[],
+    )
+    panel_rail_wrappers = solara.use_memo(
+        lambda: {r.key: _wrap(r.key, False) for r in RAIL_ITEMS if r.display == "panel"},
+        dependencies=[],
+    )
+    panel_wrappers = {**panel_step_wrappers, **panel_rail_wrappers}
+    # The pipeline header: rendered detached (MapApp's right_panel_content is a
+    # widget slot, not a reacton child), memoized so it is stable across Page
+    # re-renders, and wrapped so the Overview view can hide it. It re-renders
+    # on its own when the AppState reactives it reads change.
+    header_wrapper = solara.use_memo(
+        lambda: v.Html(
+            tag="div",
+            children=[_render_detached(lambda: WorkflowHeader(app_state=app_state))],
+        ),
         dependencies=[],
     )
     panel_host = solara.use_memo(
         lambda: v.Container(
             fluid=True,
             class_="pa-0 ma-0",
-            children=[
-                panel_wrappers[s.step_id]
-                for s in STEPS
-                if s.step_id in panel_wrappers
-            ],
+            children=[header_wrapper, *panel_wrappers.values()],
         ),
         dependencies=[],
     )
 
-    # Derived from the STEPS registry (single source of truth): the right-panel
-    # steps that OWN layers on the shared map, and the full-stage steps that
-    # hide the shared map while active.
-    map_owner_step_ids = tuple(s.step_id for s in STEPS if s.owns_map)
-    map_hidden_step_ids = {s.step_id for s in STEPS if s.hides_shared_map}
+    # The Analysis two-map stage, hosted by the app (not MapApp's step slot) in
+    # a fixed overlay between the rail and the panel. Hidden until the Analysis
+    # step is active in the Workflow view; the host nudges leaflet with a
+    # window resize on show.
+    stage_host = solara.use_memo(
+        lambda: StageHost(content=[analysis_stage_widget]), dependencies=[]
+    )
 
-    def _wire_panel_swap():
-        def _on_step(change):
-            sid = change["new"]
-            if sid in panel_wrappers:
-                for step_id, wrap in panel_wrappers.items():
-                    wrap.style_ = "" if step_id == sid else "display: none;"
-            # Hide the shared map while a full-stage workspace (Analysis) owns
-            # the stage, so its leaflet layer-control menu can't bleed over the
-            # step panel (the bug that originally forced Analysis to be a
-            # dialog). The shared map + other tiles' layers stay mounted and
-            # return on leave. Which steps hide the map derives from STEPS.
-            if sid in map_hidden_step_ids:
-                map_.add_class("defo-map-hidden")
-            else:
-                map_.remove_class("defo-map-hidden")
-            # Right-panel tiles that OWN layers on the shared map (owns_map in
-            # STEPS: AOI/Filter/Overview). Analysis renders its controls in the
-            # panel too but owns its OWN maps, so it is excluded — activating it
-            # must NOT change the active map view (else it would clear the
-            # underlying tile's layers).
-            map_view = active_map_view_for_step(sid, map_owner_step_ids)
-            if map_view is not None and app_state.active_map_view.value != map_view:
-                app_state.active_map_view.value = map_view
-            # Reverse sync: keep current_page_view a faithful mirror of the active
-            # step (so a manual drawer click updates it, and a *repeated* trigger
-            # — e.g. searching twice — still changes the value and re-fires the
-            # nav effect). The _NavBridge guard makes the resulting effect run a
-            # no-op when this only echoes the current step.
-            view = page_view_for_step(sid)
-            if view is not None and app_state.current_page_view.value != view:
-                app_state.current_page_view.value = view
-
-        nav_model.observe(_on_step, "current_step")
-        return lambda: nav_model.unobserve(_on_step, "current_step")
-
-    solara.use_effect(_wire_panel_swap, dependencies=[])
-
-    right_panel_config = {
-        "title": cm.app.title,
+    WORKFLOW_PANEL_CONFIG = {
+        "title": t("app.panel_workflow_title"),
         "icon": "mdi-tune",
-        "width": 460,
-        "description": "",
+        "width": 480,
+        "toggle_icon": "mdi-chevron-right",
     }
-    right_panel_content = [
-        {
-            "title": "",
-            "icon": "",
-            "content": [panel_host],
-            "divider": False,
-            "description": "",
-        }
-    ]
+    right_panel_content = [{"content": [panel_host]}]
 
-    # MapApp drawer entries derive from the STEPS registry (gui/store/
-    # workflow_steps.py) — the single source of truth for step order, ids,
-    # labels, icons, display types and right-panel actions. Only each step's
-    # CONTENT widget is supplied here: dialogs get their rendered tile, panel
-    # steps get the throwaway sentinel (their controls live in panel_host),
-    # and the Analysis full-stage step gets the two-map stage widget (its
-    # controls render in the right panel like the panel steps).
-    step_content = {
+    # MapApp drawer entries derive from RAIL_ITEMS (gui/store/workflow_steps.py).
+    # Dialogs get their rendered tile; the Overview panel item gets the
+    # sentinel (its controls live in panel_host) and opens the right panel.
+    # Dialogs carry no right_panel_action — the panel stays as the user left
+    # it behind a dialog, as in spatial_risk.
+    rail_content = {
         "about": about_widget,
         "recipes": recipe_widget,
-        "aux": aux_widget,
-        "aoi": panel_sentinel,
-        "filter": panel_sentinel,
         "overview": panel_sentinel,
-        "analysis": analysis_stage_widget,
+        "aux": aux_widget,
     }
     steps_data = [
         {
-            "id": s.step_id,
-            "name": t(s.label_key),
-            "icon": s.icon,
-            "display": s.display,
-            "content": step_content[s.key],
-            "right_panel_action": s.panel_action,
-            **({"width": s.dialog_width} if s.dialog_width else {}),
+            "id": r.step_id,
+            "name": t(r.label_key),
+            "icon": r.icon,
+            "display": r.display,
+            "content": rail_content[r.key],
+            **({"width": r.dialog_width} if r.dialog_width else {}),
+            **({"right_panel_action": "open"} if r.display == "panel" else {}),
         }
-        for s in STEPS
+        for r in RAIL_ITEMS
     ]
 
     app_element = MapApp.element(
@@ -593,24 +531,21 @@ def Page():
         repo_url="https://github.com/sepal-contrib/deforestation-alerts-module",
         main_map=[map_],
         steps_data=steps_data,
-        initial_step=1,
+        initial_step=1,  # auto-open About at startup (rail step id 1)
         theme_state=theme_state,
         model=nav_model,
-        right_panel_config=right_panel_config,
+        right_panel_config=WORKFLOW_PANEL_CONFIG,
         right_panel_content=right_panel_content,
+        right_panel_open=True,
+        is_pinned=False,  # start as the 60px icon rail
         # Without a translator, MapApp's default LocaleSelect() falls back to
         # English-only. Pass our translator so es-ES and fr are also offered.
         language_selector=[LocaleSelect(translator=cm)],
     )
 
-    # Programmatic tile navigation: translate tiles' current_page_view writes into
-    # MapApp step changes (+ right-panel / dialog handling). step_display is derived
-    # from steps_data so there is a single source of truth for tile display types.
-    step_display = {s["id"]: s["display"] for s in steps_data}
-    # Per-step right-panel action, the single source of truth resolve_navigation
-    # uses so the Analysis "step" tile opens the panel (a display-derived rule
-    # would resolve "step" to "close").
-    step_actions = {s["id"]: s.get("right_panel_action") for s in steps_data}
+    # The stage overlay is a sibling of MapApp (like LogConsole): a fixed
+    # element inside the right drawer would be re-rooted by its transform.
+    solara.display(stage_host)
 
     # Resolve the rendered MapApp widget ONCE here, in Page's own context — where
     # ``app_element`` is valid (``solara.get_widget`` must be called from the
@@ -627,12 +562,15 @@ def Page():
 
     solara.use_effect(_resolve_mapapp, dependencies=[])
 
-    _NavBridge(
+    _NavBridge(app_state=app_state, nav_model=nav_model, mapapp_ref=mapapp_ref)
+    _PanelBridge(
         app_state=app_state,
-        nav_model=nav_model,
+        panel_wrappers=panel_wrappers,
+        header_wrapper=header_wrapper,
+        stage_host=stage_host,
+        map_=map_,
         mapapp_ref=mapapp_ref,
-        step_display=step_display,
-        step_actions=step_actions,
+        workflow_config=WORKFLOW_PANEL_CONFIG,
     )
 
     # Floating, collapsible process-log console pinned to the map's lower-right
