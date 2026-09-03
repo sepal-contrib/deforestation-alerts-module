@@ -57,6 +57,9 @@
         },
 
     "aoi_tile": {
+            "description": "Elige el área y las fechas para buscar alertas. Cada paso posterior queda recortado a esta selección.",
+            "info_header": "Acerca de AOI y fechas",
+            "info_md": "Elige un área administrativa, dibuja un polígono o carga un activo, y luego define las fechas de inicio y fin. **Buscar alertas** encuentra las fuentes de alertas disponibles para esa ventana.",
             "search_button": "Buscar alertas",
             "search_done": "Búsqueda de alertas completada — {n} fuente(s) disponible(s)",
             "aoi_selection_title":"Selección de AOI", 
@@ -72,6 +75,9 @@
         },
     
     "filter_tile": {
+            "description": "Elige las fuentes de alertas y los filtros, luego analiza para construir la base de alertas.",
+            "info_header": "Acerca del filtrado",
+            "info_md": "Cada fuente es un ráster de alertas para tu ventana. Los filtros restringen por tamaño, confianza y área. **Analizar alertas** vectoriza el resultado en la base de alertas usada por el Resumen y el Análisis.",
             "analyze_alerts_button": "Analizar alertas",
             "analyze_status_joining": "Uniendo {n} fuente(s) de alertas…",
             "analyze_status_downloading": "Descargando ráster de alertas…",
@@ -127,6 +133,9 @@
     },
 
     "analysis_tile": {
+            "description": "Revisa cada alerta con imágenes de antes y después, confírmala, define la causa de pérdida y guarda.",
+            "info_header": "Acerca del análisis",
+            "info_md": "Usa el navegador para moverte entre alertas. Los mapas de antes/después muestran las imágenes más cercanas sin nubes. Dibuja o edita el polígono de la alerta, márcala como confirmada o falsa, y **Guardar** escribe los atributos de vuelta en la base de alertas.",
             "img_selection": {
                 "prev_image_title": "Imagen Anterior",
                 "post_image_title": "Imagen Posterior",

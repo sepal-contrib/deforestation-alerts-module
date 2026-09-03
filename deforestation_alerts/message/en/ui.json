@@ -57,6 +57,9 @@
         },
 
     "aoi_tile": {
+            "description": "Choose the area and the dates to search for alerts. Every later step is clipped to this selection.",
+            "info_header": "About AOI and dates",
+            "info_md": "Pick an administrative area, draw a polygon or load an asset, then set the start and end dates. **Search alerts** finds the alert sources available for that window.",
             "search_button": "Search alerts",
             "search_done": "Alert search complete — {n} source(s) available",
             "aoi_selection_title":"AOI selection", 
@@ -72,6 +75,9 @@
         },
     
     "filter_tile": {
+            "description": "Pick the alert sources and filters, then analyze to build the alert store.",
+            "info_header": "About filtering",
+            "info_md": "Each source is a raster of alerts for your window. Filters restrict by size, confidence and area. **Analyze alerts** vectorizes the result into the alert store used by Overview and Analysis.",
             "analyze_alerts_button": "Analyze alerts",
             "analyze_status_joining": "Joining {n} alert source(s)…",
             "analyze_status_downloading": "Downloading alert raster…",
@@ -127,6 +133,9 @@
     },
 
     "analysis_tile": {
+            "description": "Review each alert with before and after imagery, confirm it, set the loss driver, then save.",
+            "info_header": "About analysis",
+            "info_md": "Use the navigator to move between alerts. The before/after maps show the closest cloud-free images. Draw or edit the alert polygon, mark it confirmed or false, and **Save** writes the attributes back to the alert store.",
             "img_selection": {
                 "prev_image_title": "Before image",
                 "post_image_title": "After image",

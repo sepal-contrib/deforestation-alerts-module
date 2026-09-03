@@ -72,7 +72,7 @@ from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.imagery import build_imagery
 from gui.tile.analysis.navigator import build_navigator
-from gui.tile.analysis.widgets import AnalysisWidgets
+from gui.tile.analysis.widgets import AnalysisWidgets, info_button
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -418,6 +418,7 @@ def build_analysis_layout(
         tag="div",
         class_="pa-0 ma-0",
         children=[
+            info_button(cm.analysis_tile.description, cm.analysis_tile.info_header, cm.analysis_tile.info_md),
             alert_info_card,
             build_navigator(app_state=app_state, id_field=id_field),
             build_review_panel(

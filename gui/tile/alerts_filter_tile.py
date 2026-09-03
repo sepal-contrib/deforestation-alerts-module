@@ -93,6 +93,7 @@ from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
 from deforestation_alerts.scripts.naming import alert_artifact_name
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
+from gui.widget.help import InfoButton
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
 
@@ -1141,6 +1142,9 @@ def AlertsFilterTile(
     # content). The alert/AOI/aux layers are drawn on the single shared map.
     # ------------------------------------------------------------------
     with solara.Column(style="padding: 0;"):
+        with solara.Row(style="gap:4px;align-items:center;padding:0 12px;"):
+            solara.Text(cm.filter_tile.description)
+            InfoButton(cm.filter_tile.info_header, cm.filter_tile.info_md)
         solara.display(cards["no_alerts"])
         solara.display(cards["source"])
         solara.display(cards["min_area"])

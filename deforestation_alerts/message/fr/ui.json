@@ -57,6 +57,9 @@
         },
 
     "aoi_tile": {
+            "description": "Choisissez la zone et les dates pour rechercher des alertes. Chaque étape suivante est limitée à cette sélection.",
+            "info_header": "À propos de l'AOI et des dates",
+            "info_md": "Choisissez une zone administrative, dessinez un polygone ou chargez un asset, puis définissez les dates de début et de fin. **Rechercher des alertes** trouve les sources d'alertes disponibles pour cette période.",
             "search_button": "Rechercher des alertes",
             "search_done": "Recherche d'alertes terminée — {n} source(s) disponible(s)",
             "aoi_selection_title":"Sélection de l'AOI", 
@@ -72,6 +75,9 @@
         },
     
     "filter_tile": {
+            "description": "Choisissez les sources d'alertes et les filtres, puis analysez pour construire la base d'alertes.",
+            "info_header": "À propos du filtrage",
+            "info_md": "Chaque source est un raster d'alertes pour votre période. Les filtres restreignent par taille, confiance et zone. **Analyser les alertes** vectorise le résultat dans la base d'alertes utilisée par la Vue d'ensemble et l'Analyse.",
             "analyze_alerts_button": "Analyser les alertes",
             "analyze_status_joining": "Fusion de {n} source(s) d'alertes…",
             "analyze_status_downloading": "Téléchargement du raster d'alertes…",
@@ -128,6 +134,9 @@
     },
     
     "analysis_tile": {
+            "description": "Passez en revue chaque alerte avec les images avant et après, confirmez-la, définissez la cause de la perte, puis enregistrez.",
+            "info_header": "À propos de l'analyse",
+            "info_md": "Utilisez le navigateur pour vous déplacer entre les alertes. Les cartes avant/après affichent les images les plus proches sans nuages. Dessinez ou modifiez le polygone de l'alerte, marquez-la comme confirmée ou fausse, et **Enregistrer** réécrit les attributs dans la base d'alertes.",
             "img_selection": {
                 "prev_image_title": "Image précédente",
                 "post_image_title": "Image postérieure",

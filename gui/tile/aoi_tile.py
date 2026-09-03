@@ -81,6 +81,7 @@ from deforestation_alerts.scripts.aoi_helper import (
     remove_custom_alerts_dictionary,
 )
 from gui.scripts.solara_threads import spawn_in_context
+from gui.widget.help import InfoButton
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.aoi")
 
@@ -602,6 +603,9 @@ def AoiTile(
     )
 
     with solara.Column(style="padding: 0;"):
+        with solara.Row(style="gap:4px;align-items:center;padding:0 12px;"):
+            solara.Text(cm.aoi_tile.description)
+            InfoButton(cm.aoi_tile.info_header, cm.aoi_tile.info_md)
         solara.display(aoi_card)
         solara.display(date_card)
         with solara.Div(style="padding: 12px;"):

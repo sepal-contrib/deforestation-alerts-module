@@ -121,6 +121,30 @@ def _build_image_selector():
     )
 
 
+def info_button(description: str, header: str, md: str) -> v.Html:
+    """Description text + an info icon that opens a Markdown popup (raw-widget
+    twin of gui.widget.help.InfoButton for builders that never render via
+    reacton)."""
+    dialog = v.Dialog(
+        v_model=False,
+        max_width="640px",
+        children=[
+            v.Card(children=[
+                v.CardTitle(children=[header]),
+                v.CardText(children=[sw.Markdown(md)]),
+            ])
+        ],
+    )
+    btn = v.Btn(icon=True, small=True, children=[v.Icon(children=["mdi-information-outline"])])
+    btn.on_event("click", lambda *_: setattr(dialog, "v_model", True))
+    return v.Html(
+        tag="div",
+        class_="d-flex align-center px-3",
+        style_="gap: 4px;",
+        children=[v.Html(tag="span", style_="flex: 1 1 auto;", children=[description]), btn, dialog],
+    )
+
+
 class AnalysisWidgets:
     """Container for the analysis tile's shared heavy widgets + per-alert scratch.
 

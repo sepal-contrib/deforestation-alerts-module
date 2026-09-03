@@ -279,3 +279,14 @@ def test_aoi_name_is_mirrored_from_the_aoi_model():
         )
     assert "app_state.aoi_name.set(aoi_name_from_model(aoi_date_model))" in page_body
     assert "solara.use_effect(_mirror_aoi_name, dependencies=[])" in page_body
+
+
+def test_workflow_tiles_open_with_description_and_info_button():
+    for rel in (
+        "gui/tile/aoi_tile.py",
+        "gui/tile/alerts_filter_tile.py",
+        "gui/tile/analysis/analysis_tile.py",
+    ):
+        src = _src(rel)
+        assert "InfoButton(" in src or "info_button(" in src, rel
+        assert ".description" in src, rel
