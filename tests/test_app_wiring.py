@@ -181,3 +181,12 @@ def test_notification_provider_mounted_before_tiles():
         page_body.index("_render_detached("), page_body.index("MapApp.element")
     )
     assert provider_at < first_tile_at, "provider must mount before tiles/MapApp"
+
+
+def test_overview_view_has_back_and_review_buttons():
+    src = _src("gui/tile/overview_tile.py")
+    assert "cm.overview_tile.back_to_workflow" in src
+    assert "cm.overview_tile.review_button" in src
+    assert 'app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view' in src
+    assert 'app_state.current_page_view.value = "analysis_tile"' in src
+    assert "rv.Btn(" not in src

@@ -73,6 +73,7 @@ from deforestation_alerts.scripts.overview_helper import (
 )
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from gui.scripts.solara_threads import spawn_in_context
+from gui.store.workflow_steps import STEPS
 
 # MarkerCluster layers added by this tile are named with this prefix so a
 # name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
@@ -506,7 +507,33 @@ def OverviewTile(
         children=[section_title, info_table],
     )
 
+    has_alerts = alerts_gdf is not None and len(alerts_gdf) > 0
+
+    def _back_to_workflow():
+        # Return the right panel to the Workflow view at the step the user was
+        # on; the navigation bridge also un-highlights the Overview rail item.
+        app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view
+
+    def _review_alerts():
+        app_state.current_page_view.value = "analysis_tile"
+
     with solara.Column(style="padding: 0;"):
+        with solara.Row(style="gap: 8px; align-items: center; padding: 0 12px;"):
+            solara.Button(
+                cm.overview_tile.back_to_workflow,
+                icon_name="mdi-arrow-left",
+                text=True,
+                small=True,
+                on_click=_back_to_workflow,
+            )
+            solara.v.Spacer()
+            solara.Button(
+                cm.overview_tile.review_button,
+                color="primary",
+                small=True,
+                disabled=not has_alerts,
+                on_click=_review_alerts,
+            )
         solara.display(info_card)
         # Export menu (replaces the old single-CSV download button). Shown only
         # when a recipe is loaded AND there are alerts. Each format is generated
