@@ -20,6 +20,18 @@ class AppState:
         # (the initial step is the About dialog). See gui/store/navigation.py:
         # active_map_view_for_step and the _on_step handler in solara_app.py.
         self.active_map_view = solara.reactive("")
+        # Workflow position: index into gui.store.workflow_steps.STEPS. Owned by
+        # the shell; set by the pipeline header (user clicks) and by the
+        # navigation bridge (tiles' current_page_view writes).
+        self.active_step = solara.reactive(0)
+        # Which view the right panel shows: "workflow" (pipeline header + the
+        # active step's controls) or a panel rail item's key ("overview").
+        self.panel_view = solara.reactive("workflow")
+        # Mirror of aoi_date_model.name, maintained by a traitlets observer
+        # installed in Page(). The header cannot subscribe to a traitlets model,
+        # so this reactive is what re-renders the strip when an AOI is chosen or
+        # cleared. None when no AOI is selected.
+        self.aoi_name = solara.reactive(None)
         # alert review
         self.actual_alert_id = solara.reactive(-1)
         self.alerts_gdf = solara.reactive(None)  # ref to the domain gdf

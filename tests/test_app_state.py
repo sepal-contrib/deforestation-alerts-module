@@ -30,3 +30,30 @@ def test_navigation_helpers():
     s.go_to(4)
     s.go_next()  # clamp at last
     assert s.actual_alert_id.value == 4
+
+
+def test_workflow_position_defaults_to_the_first_step():
+    s = AppState()
+    assert s.active_step.value == 0
+    s.active_step.set(2)
+    assert s.active_step.value == 2
+
+
+def test_panel_view_defaults_to_workflow():
+    s = AppState()
+    assert s.panel_view.value == "workflow"
+    s.panel_view.set("overview")
+    assert s.panel_view.value == "overview"
+
+
+def test_aoi_name_mirror_defaults_to_none():
+    s = AppState()
+    assert s.aoi_name.value is None
+    s.aoi_name.set("Canindeyú")
+    assert s.aoi_name.value == "Canindeyú"
+
+
+def test_navigation_signal_and_map_owner_are_unchanged():
+    s = AppState()
+    assert s.current_page_view.value == "about_tile"
+    assert s.active_map_view.value == ""
