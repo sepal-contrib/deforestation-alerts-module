@@ -1,124 +1,79 @@
-"""Pure navigation logic for the single-map Solara shell.
+"""Pure navigation logic for the Workflow-panel shell.
 
-Translates the ``app_state.current_page_view`` name (the original Voila app's
-navigation signal) into the ``MapApp`` step id + the per-transition right-panel /
-dialog actions. Kept side-effect-free (no solara, no EE, no widgets) so it is
-unit-testable offline; ``gui.solara_app._NavBridge`` applies the result to the
-rendered ``MapApp`` widget.
+Tiles keep writing ``app_state.current_page_view`` (the original Voila app's
+navigation signal). This module maps that string to either a **workflow**
+index (a step in the right panel's Workflow view, driven by
+``app_state.active_step``) or a **rail** step id (a MapApp ``steps_data``
+entry: a dialog, or the Overview panel view). Side-effect-free (no solara
+rendering, no EE, no widgets) so it is unit-testable offline;
+``gui.solara_app._NavBridge`` applies the result.
 
-Layout note: the drawer tiles map 1:1 to step ids in drawer order. Only a few
-are exercised by the current navigation triggers; the rest are mapped for
-completeness and to back the step -> view reverse sync (so a manual drawer click
-keeps ``current_page_view`` faithful, which in turn lets a *repeated* trigger
-re-fire). See docs/superpowers/specs/2026-06-10-programmatic-tile-navigation-design.md.
-
-The view->step mapping derives from the ``gui.store.workflow_steps.STEPS``
-registry — the single source of truth for step identity. Never hand-edit ids
-here.
+All maps derive from ``gui.store.workflow_steps`` — never hand-edit ids here.
 """
 
 from collections import namedtuple
 
-from gui.store.workflow_steps import STEPS
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 
-# current_page_view name -> drawer step id (drawer order), derived from the
-# STEPS registry. "filter_alerts" (not "filter_tile") is intentional: it is
-# the exact string the AOI tile sets.
-PAGE_VIEW_TO_STEP = {s.page_view: s.step_id for s in STEPS}
+PAGE_VIEW_TO_WORKFLOW = {s.page_view: i for i, s in enumerate(STEPS)}
+PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS}
+RAIL_STEP_TO_PAGE_VIEW = {r.step_id: r.page_view for r in RAIL_ITEMS}
 
-STEP_TO_PAGE_VIEW = {step: view for view, step in PAGE_VIEW_TO_STEP.items()}
-
-#: Result of :func:`resolve_navigation`.
-#:
-#: * ``step_id``      -- the ``MapApp.current_step`` to activate.
-#: * ``panel_action`` -- ``"open"`` for right-panel tiles, ``"close"`` otherwise;
-#:   fed to ``MapApp.vue_handle_right_panel_action``.
-#: * ``close_dialog`` -- ``True`` when the target is not a dialog, so the bridge
-#:   sets ``MapApp.step_open = False`` to dismiss any lingering dialog (a no-op
-#:   when none is open).
-NavAction = namedtuple("NavAction", ["step_id", "panel_action", "close_dialog"])
+#: ``kind`` is ``"workflow"`` (``target`` = index into STEPS) or ``"rail"``
+#: (``target`` = MapApp step id of the rail item).
+NavAction = namedtuple("NavAction", ["kind", "target"])
 
 
-def page_view_for_step(step_id):
-    """Return the current_page_view name for a step id, or ``None`` if unknown."""
-    return STEP_TO_PAGE_VIEW.get(step_id)
+def page_view_for_rail_step(step_id):
+    """current_page_view name of a rail step id, or ``None``."""
+    return RAIL_STEP_TO_PAGE_VIEW.get(step_id)
 
 
-def active_map_view_for_step(step_id, panel_step_ids):
-    """Return the view name that should become the active *map* tile, or ``None``.
-
-    The "active map tile" is the right-panel tile that owns the layers drawn on the
-    single shared map (AOI / Filter / Overview). It is deliberately distinct from
-    ``current_page_view`` (the navigation signal, which mirrors *every* tile): only
-    a right-panel tile activation may change it. A popup/dialog tile (About,
-    Recipes, Aux, Analysis) merely overlays the map without owning its content, so
-    activating one returns ``None`` here — the caller leaves the active map view
-    unchanged and the underlying panel tile's layers persist behind the popup and
-    survive its close.
-
-    Args:
-        step_id: the newly activated ``MapApp`` step id.
-        panel_step_ids: the right-panel tiles' step ids (``solara_app``'s
-            ``panel_wrappers`` keys: AOI 4, Filter 5, Overview 6).
-
-    Returns:
-        The panel tile's ``current_page_view`` name when ``step_id`` is a panel
-        tile, else ``None`` (meaning "leave the active map view unchanged").
-    """
-    if step_id not in panel_step_ids:
-        return None
-    return page_view_for_step(step_id)
+def resolve_navigation(view):
+    """Map a ``current_page_view`` string to a :class:`NavAction` or ``None``."""
+    if view in PAGE_VIEW_TO_WORKFLOW:
+        return NavAction("workflow", PAGE_VIEW_TO_WORKFLOW[view])
+    if view in PAGE_VIEW_TO_RAIL:
+        return NavAction("rail", PAGE_VIEW_TO_RAIL[view])
+    return None
 
 
-def resolve_navigation(view, step_display, step_actions=None):
-    """Decide the navigation actions for a target ``current_page_view``.
+def _open_panel(mapapp):
+    """Dismiss a lingering dialog and make sure the right panel is open.
 
-    Args:
-        view: the ``current_page_view`` string (e.g. ``"filter_alerts"``).
-        step_display: mapping of ``step_id -> display`` (``"panel"`` / ``"dialog"``
-            / ``"step"``), built by the shell from its ``steps_data``.
-        step_actions: optional mapping of ``step_id -> right_panel_action``
-            (``"open"`` / ``"close"``), also built from ``steps_data``. When a step
-            supplies one it is used verbatim; otherwise the action is derived from
-            ``display``. This lets a ``"step"`` tile (Analysis) open the right panel
-            — which the display-derived rule cannot express, since ``"step"`` would
-            otherwise resolve to ``"close"``.
-
-    Returns:
-        A :class:`NavAction`, or ``None`` when ``view`` is not a known tile (the
-        caller should no-op).
-    """
-    step_id = PAGE_VIEW_TO_STEP.get(view)
-    if step_id is None:
-        return None
-    display = step_display.get(step_id)
-    if step_actions is not None and step_actions.get(step_id) is not None:
-        panel_action = step_actions[step_id]
-    else:
-        panel_action = "open" if display == "panel" else "close"
-    close_dialog = display != "dialog"
-    return NavAction(step_id=step_id, panel_action=panel_action, close_dialog=close_dialog)
-
-
-def apply_navigation(mapapp, nav_model, action):
-    """Apply a resolved :class:`NavAction` to the rendered MapApp + nav model.
-
-    The Vue ``current_step`` watcher only swaps content + opens dialog targets, so
-    we drive the right panel / lingering dialog explicitly (the part a drawer
-    click does but the watcher does not):
-
-    1. ``mapapp.vue_handle_right_panel_action(panel_action)`` -- open the right
-       panel for panel tiles, close it otherwise.
-    2. when ``close_dialog`` -- set ``mapapp.step_open = False`` to dismiss any
-       open dialog (the Vue ``step_open`` watcher; a no-op when none is open).
-    3. set ``nav_model.current_step`` (linked to ``MapApp.current_step``) to switch
-       the active step.
-
-    ``mapapp`` may be ``None`` (widget not mounted yet) -- the step is still set so
-    content switches; the panel/dialog handling is simply skipped.
+    ``step_open=False`` is MapApp.vue's close watcher; the Vue ``current_step``
+    watcher does not apply ``right_panel_action`` for programmatic changes, so
+    the panel is opened explicitly.
     """
     if mapapp is not None:
-        mapapp.vue_handle_right_panel_action(action.panel_action)
-        if action.close_dialog:
-            mapapp.step_open = False
-    nav_model.current_step = action.step_id
+        mapapp.step_open = False
+        mapapp.vue_handle_right_panel_action("open")
+
+
+def apply_navigation(mapapp, nav_model, app_state, action):
+    """Apply a resolved :class:`NavAction`.
+
+    Workflow target: open the panel, return it to the Workflow view, clear the
+    MapApp step (un-highlights a panel rail item such as Overview) and move the
+    workflow position. Programmatic navigation is deliberately NOT gated: a
+    tile jumps forward only after producing the output that unlocks the
+    target, and the header's gates protect user clicks.
+
+    Rail target: a panel item (Overview) opens the panel and switches the view;
+    a dialog item only sets the MapApp step and MapApp opens the dialog itself.
+    Dialogs never change ``panel_view``.
+
+    ``mapapp`` may be ``None`` (widget not mounted yet) — the state still
+    moves; only the panel/dialog handling is skipped.
+    """
+    if action.kind == "workflow":
+        _open_panel(mapapp)
+        nav_model.current_step = None
+        app_state.panel_view.set("workflow")
+        app_state.active_step.set(action.target)
+        return
+    item = rail_item_for_step(action.target)
+    if item is not None and item.display == "panel":
+        _open_panel(mapapp)
+        app_state.panel_view.set(item.key)
+    nav_model.current_step = action.target
