@@ -601,6 +601,21 @@ def Page():
 
     solara.use_effect(_mirror_aoi_name, dependencies=[])
 
+    # Theme mirror for the pipeline header's "primary" accent. The app's theme
+    # is owned by pysepal's ThemeState (MapApp's toggle), not by Solara's own
+    # dark mode, so solara.lab.use_dark_effective() reports the wrong value in
+    # this shell; and the header is rendered detached, so a toggle would not
+    # re-render it anyway. Mirroring the trait into a reactive fixes both.
+    def _mirror_theme():
+        def _on_theme(change=None):
+            app_state.dark.set(bool(theme_state.dark))
+
+        theme_state.observe(_on_theme, names=["dark"])
+        _on_theme()
+        return lambda: theme_state.unobserve(_on_theme, names=["dark"])
+
+    solara.use_effect(_mirror_theme, dependencies=[])
+
     WORKFLOW_PANEL_CONFIG = {
         "title": t("app.panel_workflow_title"),
         "icon": "mdi-tune",

@@ -174,3 +174,10 @@ def test_recipe_load_notifies_the_aoi_mirror(gee):
     m.import_from_dictionary({"aoi_name": "PRY_Canindeyu"})
     assert m.object_set == before + 1, "recipe load must bump object_set"
     assert seen[-1] == "PRY_Canindeyu"
+
+
+def test_dark_theme_mirror_defaults_to_light():
+    s = AppState()
+    assert s.dark.value is False
+    s.dark.set(True)
+    assert s.dark.value is True

@@ -107,13 +107,20 @@ def _JumpMenuRow(
 
 
 @solara.component
-def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name):
+def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=None):
     """Pipeline map + step navigation.
 
     Takes the app_state *reactives* (not their values — reacton's prop-equality
     bailout would eat gdf-only changes) plus the active index and a navigate
     callback. ``alerts_gdf`` holds the alert-store GeoDataFrame or None;
     ``aoi_name`` the selected AOI's name or None.
+
+    ``dark`` is an optional reactive mirroring pysepal's ``ThemeState.dark``.
+    This app's theme is owned by ``theme_state``/``MapApp``, NOT by Solara's own
+    dark mode, so ``solara.lab.use_dark_effective()`` reports the wrong value
+    here (it is always True, which painted the strip and badge gold even in the
+    light theme) and never re-renders on a toggle. When the reactive is passed
+    it wins; the Solara hook stays as the fallback for a standalone render.
     """
     gdf = alerts_gdf.value
     aoi = aoi_name.value
@@ -125,9 +132,11 @@ def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name):
     # accent (green in light mode, gold in dark) — the same colour as the Next
     # button and every color="primary" control, so the strip matches the app.
     themes = solara.lab.theme.themes
-    primary = (
-        themes.dark.primary if solara.lab.use_dark_effective() else themes.light.primary
-    )
+    # The hook must be called unconditionally (rules of hooks) even when the
+    # `dark` reactive overrides it.
+    solara_dark = solara.lab.use_dark_effective()
+    is_dark = solara_dark if dark is None else dark.value
+    primary = themes.dark.primary if is_dark else themes.light.primary
     ring_css = f"box-shadow: 0 0 0 2px {_rgba(primary, 0.55)};"
 
     def _seg_style(i: int) -> str:

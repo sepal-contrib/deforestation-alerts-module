@@ -290,3 +290,22 @@ def test_workflow_tiles_open_with_description_and_info_button():
         src = _src(rel)
         assert "InfoButton(" in src or "info_button(" in src, rel
         assert ".description" in src, rel
+
+
+def test_pipeline_header_accent_follows_the_app_theme_not_solara():
+    """The app's theme is pysepal's ThemeState (MapApp's toggle), not Solara's
+    own dark mode. Reading solara.lab.use_dark_effective() here always returned
+    True, so the strip and the step badge stayed gold in the light theme, and a
+    detached-rendered header never re-rendered on a toggle. Page() mirrors the
+    trait into app_state.dark and the header prefers it."""
+    page_body = _src("gui/solara_app.py")
+    page_body = page_body[page_body.index("def Page():"):]
+    assert 'theme_state.observe(_on_theme, names=["dark"])' in page_body
+    assert "app_state.dark.set(bool(theme_state.dark))" in page_body
+    assert "solara.use_effect(_mirror_theme, dependencies=[])" in page_body
+    assert 'theme_state.unobserve(_on_theme, names=["dark"])' in page_body
+
+    header = _src("gui/widget/pipeline_header.py")
+    assert "is_dark = solara_dark if dark is None else dark.value" in header
+    assert "primary = themes.dark.primary if is_dark else themes.light.primary" in header
+    assert "dark=app_state.dark" in _src("gui/widget/workflow_header.py")

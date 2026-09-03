@@ -27,13 +27,14 @@ def _spy_on_pipeline_header(monkeypatch):
     calls = []
 
     @solara.component
-    def _Recorder(active_step, on_navigate, alerts_gdf, aoi_name):
+    def _Recorder(active_step, on_navigate, alerts_gdf, aoi_name, dark):
         calls.append(
             {
                 "active_step": active_step,
                 "on_navigate": on_navigate,
                 "alerts_gdf": alerts_gdf,
                 "aoi_name": aoi_name,
+                "dark": dark,
             }
         )
 
@@ -78,6 +79,9 @@ def test_hands_over_the_reactives_not_their_values(monkeypatch):
     box, rc = reacton.render(WorkflowHeader(app_state=state), handle_error=False)
     assert calls[-1]["alerts_gdf"] is state.alerts_gdf
     assert calls[-1]["aoi_name"] is state.aoi_name
+    # Same rule for the theme mirror: the header repaints its accent from this
+    # reactive, so handing over `.value` would freeze the strip at boot colour.
+    assert calls[-1]["dark"] is state.dark
     rc.close()
 
 

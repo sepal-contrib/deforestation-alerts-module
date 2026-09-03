@@ -32,6 +32,13 @@ class AppState:
         # so this reactive is what re-renders the strip when an AOI is chosen or
         # cleared. None when no AOI is selected.
         self.aoi_name = solara.reactive(None)
+        # Mirror of pysepal ThemeState.dark, maintained by a traitlets observer
+        # installed in Page(). The pipeline header paints its filled segments,
+        # ring and badge with the theme "primary" accent; it cannot read the
+        # app's theme from Solara (solara.lab.use_dark_effective() tracks
+        # Solara's own dark mode, not MapApp's), and a detached render has
+        # nothing to re-render it on a toggle. This reactive is both.
+        self.dark = solara.reactive(False)
         # alert review
         self.actual_alert_id = solara.reactive(-1)
         self.alerts_gdf = solara.reactive(None)  # ref to the domain gdf
