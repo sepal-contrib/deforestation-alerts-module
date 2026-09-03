@@ -14,6 +14,16 @@ resolves to the wrong module; the ``fakes`` fixture hands the classes to the few
 tests that need them by name (signature-drift guards, constructor error paths).
 """
 
+# Reacton's first ``t()`` call *during* a first render corrupts its internal
+# widget map and surfaces later as a ``use_event`` KeyError (only reproduces in
+# isolated single-test runs). Warm the translator once at collection time so
+# every render test (``test_pipeline_header`` mounts ``rv.use_event`` rows) is
+# covered. Must be import-time, not an autouse fixture: conftest is imported
+# before any test module and its component imports.
+from gui.i18n import t as _warm_t  # noqa: E402
+
+_warm_t("common.cancel")
+
 import types
 from pathlib import PurePosixPath
 
