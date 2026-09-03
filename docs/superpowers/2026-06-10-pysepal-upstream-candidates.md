@@ -64,6 +64,7 @@ Sequenced in three waves. **Wave 1** = surgical correctness fixes, each independ
 - **Test:** programmatic `activate_step(panel_id)` opens the right panel; `activate_step(step_id)` from an open dialog closes the dialog; `on_step_change` fires with the new id.
 - **Backward-compat:** the watcher now applies `right_panel_action` — but that already matches drawer-click behavior, so it's the intended semantics. Keep `current_step`-as-trait working.
 - **Retires in app:** `_NavBridge` (`solara_app.py:105-139`), `gui/store/navigation.py` resolver, the `nav_model` shadow `HasTraits`, and the `solara.get_widget(...)` holder dance (`solara_app.py:545-553`).
+- **Superseded on 2026-09-03:** the workflow steps no longer are MapApp steps; only the rail entries use `current_step`.
 
 #### PR-3 — Make `right_panel_open` a real (two-way) control trait
 - **Problem:** `right_panel_open = Bool().tag(sync=True)` (`vue_app.py:40`) only drives CSS and is *written* from the panel by `_on_right_panel_change` (`:358-360`); setting it from Python after init is a no-op. The only way to open/close is `vue_handle_right_panel_action()` (`:318-327`). It's special-cased exactly once in `__init__` (`:131-132`).
