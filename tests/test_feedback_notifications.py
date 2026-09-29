@@ -185,8 +185,6 @@ class _AoiDateStub:
         self.imported = params
 
 
-
-
 # ---------------------------------------------------------------------------
 # recipe_tile — raw ipyvuetify layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
@@ -710,6 +708,64 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
     feedback.assert_one_error_after_fail(equals="disk full")
     assert toolbar.viz is False
     assert download_btn.loading is False and download_btn.disabled is False
+
+
+def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
+    export_card, monkeypatch, ws
+):
+    """The post-download apply step runs inside the tracked job: a download path
+    ``workspace.home_relative`` rejects (outside the SEPAL home / ``..``) must be a
+    FAILED task + one error toast, not a green pill with buttons that never show."""
+    export, card, _app_state, _app_tile_model = export_card
+    feedback = _record_feedback(monkeypatch, export)
+    monkeypatch.setattr(
+        export,
+        "_download_data",
+        lambda *a, **k: {
+            "zip_path": "/elsewhere/alert_0.zip",
+            "report_path": "/elsewhere/alert_0.docx",
+        },
+    )
+
+    def _reject(path):
+        raise ValueError(f"not under the SEPAL home: {path}")
+
+    monkeypatch.setattr(ws, "home_relative", _reject)
+
+    toolbar = _download_toolbar(card)
+    download_btn = _button(
+        card, cm.analysis_tile.export_labels.download_alert_data_btn
+    )
+    download_btn.fire_event("click", None)
+    feedback.join()
+
+    feedback.assert_one_error_after_fail(
+        equals="not under the SEPAL home: /elsewhere/alert_0.zip"
+    )
+    assert toolbar.viz is False
+    assert download_btn.loading is False and download_btn.disabled is False
+
+
+def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
+    export_card, monkeypatch
+):
+    """Same for the post-save apply step (enable download + alerts_gdf rebind)."""
+    export, card, app_state, _app_tile_model = export_card
+    feedback = _record_feedback(monkeypatch, export)
+    monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
+
+    class _Uncopyable:
+        def copy(self):
+            raise MemoryError("cannot copy the alerts")
+
+    app_state.alerts_gdf.value = _Uncopyable()
+
+    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    save_btn.fire_event("click", None)
+    feedback.join()
+
+    feedback.assert_one_error_after_fail(equals="cannot copy the alerts")
+    assert save_btn.loading is False and save_btn.disabled is False
 
 
 # ---------------------------------------------------------------------------

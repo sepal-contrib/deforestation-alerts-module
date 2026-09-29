@@ -36,8 +36,8 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   download body does the gpkg/image/zip/report (IO only) and RETURNS
   ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
   the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
-  END of the corresponding worker's success path (after the tracked block) with that
-  returned value. A failure is a FAILED task + one error toast, both published by
+  END of the corresponding worker's tracked block with that returned value (so a
+  failing apply is still a FAILED task); only the success toast follows the block. A failure is a FAILED task + one error toast, both published by
   ``tracked_job``; the worker's ``except`` only logs it. ipywidgets
   trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
   (recipe_tile / edit_tools do exactly this).
@@ -427,9 +427,10 @@ def build_export(
 
     # ------------------------------------------------------------------
     # Post-save apply (OLD save effect, success path) — enable the download button
-    # + poke the alerts_gdf reactive. Runs at the END of the save worker's success
-    # path (main thread previously; trait sets / reactive rebind from the worker
-    # thread are fine). The OLD error branch becomes the worker's except.
+    # + poke the alerts_gdf reactive. Runs at the END of the save worker's tracked
+    # block, only when the save wrote something (main thread previously; trait
+    # sets / reactive rebind from the worker thread are fine), so a failure here
+    # still fails the task. The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
     def _apply_save():
         ns["download_alert_data_btn"].disabled = False
@@ -444,8 +445,9 @@ def build_export(
 
     # ------------------------------------------------------------------
     # Post-download apply (OLD download effect, success path) — set the two
-    # DownloadBtn URLs + reveal the toolbar with the worker's computed paths. The
-    # OLD error branch becomes the worker's except.
+    # DownloadBtn URLs + reveal the toolbar with the worker's computed paths. Runs
+    # at the END of the download worker's tracked block (a failure here still
+    # fails the task). The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
     def _apply_download(result):
         # The zip/report live in the user's SEPAL workspace, so the buttons get
@@ -507,11 +509,14 @@ def build_export(
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: save refused — %s", reason)
+                    else:
+                        # Inside the tracked block: if the apply step raises, the
+                        # run is a FAILED task + one error toast, not a green pill.
+                        _apply_save()
             except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: save attributes failed")
             else:
                 if saved:
-                    _apply_save()
                     notifier.success(str(cm.analysis_tile.export_labels.save_done))
             finally:
                 ns["save_btn"].loading = False
@@ -569,11 +574,16 @@ def build_export(
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: download refused — %s", reason)
+                    else:
+                        # Inside the tracked block: ``workspace.home_relative``
+                        # raises InvalidPathError for a path outside the SEPAL
+                        # home, and that must be a FAILED task + one error toast,
+                        # not a green pill with download buttons that never show.
+                        _apply_download(result)
             except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: download data failed")
             else:
                 if result is not None:
-                    _apply_download(result)
                     notifier.success(
                         str(cm.analysis_tile.export_labels.download_done)
                     )
