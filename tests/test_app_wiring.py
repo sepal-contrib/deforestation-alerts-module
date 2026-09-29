@@ -370,3 +370,17 @@ def test_pipeline_header_accent_follows_the_app_theme_not_solara():
 def test_task_log_handler_is_installed_at_startup():
     src = _src("gui/solara_app.py")
     assert "install_task_log_handler()" in src
+
+
+def test_app_logger_is_raised_to_info_next_to_the_log_bridge():
+    """The bridge only sees records the app logger lets through.
+
+    Under a bare process, ``solara run`` and Voila the app logger's effective
+    level is the root's WARNING, which would make the INFO milestone bridge
+    inert; startup must raise it to INFO right where the bridge is installed.
+    """
+    src = _src("gui/solara_app.py")
+    install = src.index("install_task_log_handler()\n")
+    window = src[install : install + 800]
+    assert "logger.setLevel(logging.INFO)" in window
+    assert "logger.level > logging.INFO" in window or "logger.level == logging.NOTSET" in window

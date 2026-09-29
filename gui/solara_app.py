@@ -73,6 +73,13 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Forward INFO+ app log records of tracked jobs into pysepal's task pill (gui/scripts/notify_bridge.py).
 install_task_log_handler()
+# The bridge only sees records the app logger lets through. Nothing else
+# configures it, so under a bare process, `solara run` and Voila its effective
+# level is the root's WARNING and every INFO milestone would be dropped before
+# reaching the handler. Raise it to INFO — but never raise a level someone
+# deliberately set lower (e.g. DEBUG while troubleshooting).
+if logger.level == logging.NOTSET or logger.level > logging.INFO:
+    logger.setLevel(logging.INFO)
 
 # Point GDAL's temp-file allocator at a directory proven writable, ONCE per
 # process. This used to ride along on the import of the (now deleted)

@@ -132,4 +132,7 @@ def download_ee_image(
     finally:
         _DOWNLOAD_LOCK.release()
 
-    logger.info("Downloaded %s", filename)
+    # DEBUG, not INFO: INFO lines on a tracked job's thread become user-visible
+    # task milestones (gui/scripts/notify_bridge.py); this one would expose a
+    # container scratch path and count as an extra, unplanned step.
+    logger.debug("Downloaded %s", filename)
