@@ -20,10 +20,16 @@ async def to_thread_in_context(fn, *args, **kwargs):
     ``to_thread`` runs on a pool thread that has no kernel context, so any
     reactive publish made there (job status, notification-task milestones)
     never reaches the browser. This captures the caller's context (the
-    ``use_task`` body runs with one) and attaches it to the pool thread before
-    the work starts — the ``to_thread`` counterpart of ``spawn_in_context``.
-    Pool threads are reused, so the binding persists; harmless under the app's
-    single-user assumption (it is always the same session's context).
+    ``use_task`` body runs with one) and binds it to the pool thread for the
+    duration of the call — the ``to_thread`` counterpart of
+    ``spawn_in_context``.
+
+    Pool threads are reused across calls, and pysepal 4 app-launcher
+    containers are multi-user, so one pool thread can serve different kernels
+    in turn. The binding is therefore made unconditionally on every call (a
+    stale binding from a previous caller must not win) and removed again in a
+    ``finally`` once the work returns, so no kernel stays attached to an idle
+    pool thread.
     """
     from solara.server import kernel_context
 
@@ -33,9 +39,14 @@ async def to_thread_in_context(fn, *args, **kwargs):
         ctx = None
 
     def _with_context():
-        if ctx is not None and not kernel_context.has_current_context():
-            kernel_context.set_context_for_thread(ctx, threading.current_thread())
-        return fn(*args, **kwargs)
+        if ctx is None:
+            return fn(*args, **kwargs)
+        thread = threading.current_thread()
+        kernel_context.set_context_for_thread(ctx, thread)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            kernel_context.clear_context_for_thread(thread)
 
     return await asyncio.to_thread(_with_context)
 

@@ -18,8 +18,21 @@ from pysepal.solara.notifications.state import TaskStatus, ToastType
 from gui.scripts import notify_bridge
 
 
+@pytest.fixture(autouse=True)
+def _restore_app_logger_level():
+    """``_fresh`` drops the app logger to DEBUG; put the previous level back."""
+    logger = logging.getLogger("SEPALUI.deforestation_alerts")
+    previous = logger.level
+    yield
+    logger.setLevel(previous)
+
+
 def _fresh():
-    """Real app logger with the bridge handler + a private bus."""
+    """Real app logger with the bridge handler + a private bus.
+
+    The DEBUG level it sets is undone after each test by the autouse
+    ``_restore_app_logger_level`` fixture.
+    """
     notify_bridge.install_task_log_handler()
     logger = logging.getLogger("SEPALUI.deforestation_alerts")
     logger.setLevel(logging.DEBUG)
@@ -171,6 +184,49 @@ def test_to_thread_in_context_without_context_still_runs(monkeypatch):
 
     monkeypatch.setattr(kernel_context, "get_current_context", _raise)
     assert asyncio.run(to_thread_in_context(lambda: "ok")) == "ok"
+
+
+def test_to_thread_in_context_rebinds_a_reused_pool_thread_per_call(monkeypatch):
+    """A reused pool thread must publish into *each* caller's kernel.
+
+    pysepal 4 app-launcher containers are multi-user: the same ``to_thread``
+    pool thread can serve one kernel's job and then another's. Each call must
+    bind the pool thread to its own caller's context (not keep the first one
+    it ever saw) and unbind it afterwards so nothing stale lingers.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    from solara.server import kernel_context
+
+    from gui.scripts.solara_threads import to_thread_in_context
+
+    ctx_a, ctx_b = object(), object()
+    caller_ctx = [None]
+    # Isolated registry; the real set/clear/has helpers operate on it.
+    monkeypatch.setattr(kernel_context, "current_context", {})
+    monkeypatch.setattr(kernel_context, "get_current_context", lambda: caller_ctx[0])
+
+    def bound_context():
+        key = kernel_context.get_thread_key(threading.current_thread())
+        return threading.current_thread(), kernel_context.current_context.get(key)
+
+    async def main():
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(max_workers=1)
+        )
+        caller_ctx[0] = ctx_a
+        first = await to_thread_in_context(bound_context)
+        caller_ctx[0] = ctx_b
+        second = await to_thread_in_context(bound_context)
+        return first, second
+
+    (thread_1, seen_1), (thread_2, seen_2) = asyncio.run(main())
+    assert thread_1 is thread_2, "single-worker pool must reuse its thread"
+    assert seen_1 is ctx_a
+    assert seen_2 is ctx_b
+    pool_key = kernel_context.get_thread_key(thread_2)
+    assert pool_key not in kernel_context.current_context
 
 
 def test_nested_tracked_jobs_restore_the_outer_tracker():
