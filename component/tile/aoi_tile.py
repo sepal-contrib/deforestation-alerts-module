@@ -70,9 +70,8 @@ class AoiTile(sw.Layout):
             )
         )
         # Create map
-        self.map_1 = SepalMap()
+        self.map_1 = SepalMap(basemaps=["SATELLITE"])
         self.map_1.add_class("custom-map-class")
-        self.map_1.add_basemap("SATELLITE")
 
         # Create user interface components
         # Create AOI selection widget

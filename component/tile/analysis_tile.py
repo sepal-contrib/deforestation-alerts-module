@@ -164,13 +164,11 @@ class AnalysisTile(sw.Layout):
         self.active_after_button = None
 
         # Create map
-        self.map_31 = SepalMap()
+        self.map_31 = SepalMap(basemaps=["SATELLITE"])
         self.map_31.add_class("custom-map-class2")
-        self.map_31.add_basemap("SATELLITE")
 
-        self.map_32 = SepalMap()
+        self.map_32 = SepalMap(basemaps=["SATELLITE"])
         self.map_32.add_class("custom-map-class2")
-        self.map_32.add_basemap("SATELLITE")
 
         # Link the center and zoom between both maps
         center_link = link((self.map_31, "center"), (self.map_32, "center"))

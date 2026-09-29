@@ -99,9 +99,8 @@ class AlertsFilterTile(sw.Layout):
             )
         )
         # Create map
-        self.map_1 = SepalMap()
+        self.map_1 = SepalMap(basemaps=["SATELLITE"])
         self.map_1.add_class("custom-map-class")
-        self.map_1.add_basemap("SATELLITE")
         self.drawn_item = DrawControl(self.map_1)
         self.map_1.add(self.drawn_item)
         self.map_1.add(InspectorControl(self.map_1))
