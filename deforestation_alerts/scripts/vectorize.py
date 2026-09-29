@@ -126,7 +126,10 @@ def vectorize_alert_raster(
         src_crs = src.crs
 
         if block_rows is None:
-            block_rows, _ = optimal_block_shape(height, width, 2, ram_gb=4.0)
+            itemsize = np.dtype(src.dtypes[alert_band - 1]).itemsize
+            block_rows, _ = optimal_block_shape(
+                height, width, 2, ram_gb=4.0, bytes_per_value=itemsize
+            )
 
         if block_rows >= height:
             alert = src.read(alert_band)
