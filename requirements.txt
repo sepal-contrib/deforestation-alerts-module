@@ -29,3 +29,5 @@ geedim==1.8.1
 MightyMosaic==1.2.3
 python-docx==1.1.2
 matplotlib-scalebar==0.8.1
+# pinned: sepal_ui 2.x expects GAUL 2015; pygaul 0.4 switched to GAUL 2024
+pygaul>=0.3.1,<0.4

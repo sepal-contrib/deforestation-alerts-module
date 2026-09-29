@@ -13,7 +13,7 @@ dependencies:
   - ipyevents>=2.0
   - ipyleaflet>=0.19
   - ipython>=8.12
-  - ipyvuetify>=1.10.0
+  - ipyvuetify>=1.10.0,<2  # sepal_ui 2.x breaks on ipyvuetify 3 (Vuetify 3 API)
   - ipywidgets>=8.1
   - matplotlib>=3.9
   - numpy>=1.26,<2
@@ -37,4 +37,4 @@ dependencies:
       - sepal_ui==2.22.1
       - tomli==2.0.2
       - voila==0.5.8
-      - pygaul<=4
+      - pygaul>=0.3.1,<0.4  # sepal_ui 2.x expects GAUL 2015 (ADM0_CODE); pygaul 0.4 switched to GAUL 2024
