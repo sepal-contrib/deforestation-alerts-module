@@ -19,6 +19,7 @@ from pysepal.sepalwidgets.file_input import FileInput
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.raster_attribute import band_names, build_attribute_config
 from deforestation_alerts.scripts.attribute_source import gee_band_names
+from gui.widget.text_style import MUTED
 
 
 @solara.component
@@ -81,20 +82,25 @@ def _remote_band_names(workspace, remote_path):
         workspace.discard_scratch(local)
 
 
-def _build_attribute_card(aux_model, workspace, gee_interface=None):
-    """Card: pick a GEE asset OR local raster, 'Load bands', then per-band
-    include/stat/column rows. Writes the assembled config to
+def _build_attribute_controls(aux_model, workspace, gee_interface=None):
+    """Controls: pick a GEE asset OR a workspace raster, 'Load bands', then
+    per-band include/stat/column rows. Writes the assembled config to
     aux_model.attribute_raster on any change."""
-    title = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.attribute_title])
     asset_input = sw.inputs.AssetSelect(
-        types=["IMAGE"], label=cm.aux_tile.attribute_asset_hint, gee_interface=gee_interface
+        gee_interface=gee_interface, label=cm.aux_tile.asset_label
     )
     file_input = _remote_file_input(
         workspace, [".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint
     )
-    load_btn = v.Btn(class_="ma-1", small=True, children=[cm.aux_tile.attribute_load_bands])
+    load_btn = v.Btn(
+        small=True, outlined=True, color="primary",
+        children=[cm.aux_tile.attribute_load_bands],
+    )
     rows_box = v.Container(class_="pa-0 ma-0", children=[])
-    status = v.Html(tag="div", class_="pa-1 ma-1 caption", children=[])
+    status = v.Html(tag="div", class_="caption ml-3", children=[])
+    actions = v.Html(
+        tag="div", class_="d-flex align-center mt-3", children=[load_btn, status]
+    )
 
     # Mutable holder of the live per-band row widgets (for config assembly).
     state = {"rows": [], "source": None, "kind": None}
@@ -161,12 +167,60 @@ def _build_attribute_card(aux_model, workspace, gee_interface=None):
         _collect()
 
     load_btn.on_event("click", _on_load)
-    return v.Card(class_="pa-2 ma-0", outlined=True, hover=True,
-                  children=[title, asset_input, file_input, load_btn, status, rows_box])
+    return [asset_input, file_input, actions, rows_box]
+
+
+def _status_icon(owner, names, is_set):
+    """Leading icon of a setting row: a filled check once the setting holds a
+    value, an empty ring while it is still unset. Tracks ``owner``'s ``names``
+    traits so a recipe load or a cleared input updates it too."""
+    icon = v.Icon(small=True, class_="mr-2", children=["mdi-circle-outline"])
+
+    def _update(*_):
+        done = bool(is_set())
+        text = cm.aux_tile.status_set if done else cm.aux_tile.status_empty
+        icon.children = ["mdi-check-circle" if done else "mdi-circle-outline"]
+        icon.color = "primary" if done else None
+        icon.style_ = "" if done else MUTED
+        icon.attributes = {"title": text, "aria-label": text}
+
+    owner.observe(_update, names=names)
+    _update()
+    return icon
+
+
+def _setting_row(icon, title, description, controls):
+    """One setting: what it is and what it does on the left, its inputs on the
+    right. Stacks into a single column on narrow screens."""
+    about = v.Col(cols=12, md=4, class_="py-3", children=[
+        v.Html(tag="div", class_="d-flex align-center font-weight-medium",
+               children=[icon, title]),
+        # Indented by the icon's width + margin so the text lines up under the title.
+        v.Html(tag="div", class_="body-2 mt-1", style_=f"{MUTED} padding-left: 24px;",
+               children=[description]),
+    ])
+    inputs = v.Col(cols=12, md=8, class_="py-3", children=controls)
+    return v.Row(class_="ma-0 px-1", children=[about, inputs])
+
+
+def _group(heading, rows):
+    """A titled, outlined block of related setting rows separated by dividers."""
+    body = []
+    for i, row in enumerate(rows):
+        if i:
+            body.append(v.Divider())
+        body.append(row)
+    return v.Html(tag="section", class_="mb-5", children=[
+        v.Html(tag="div", class_="subtitle-1 font-weight-medium mb-2", children=[heading]),
+        # The bundled Vuetify has no outlined sheet; a mid-grey hairline at low
+        # alpha reads as a border in both the light and the dark theme.
+        v.Sheet(class_="rounded", style_="border: thin solid rgba(128, 128, 128, 0.3);",
+                children=body),
+    ])
 
 
 def build_aux_layout(aux_model, workspace, gee_interface=None):
-    """Build the full card layout and bind widgets to aux_model traits.
+    """Build the settings list and bind widgets to aux_model traits.
 
     Returns the outermost ipyvuetify layout widget. ``Page`` hands this RAW
     widget straight to MapApp as the dialog content (no ``solara.display`` /
@@ -177,89 +231,86 @@ def build_aux_layout(aux_model, workspace, gee_interface=None):
     model on reopen like any ipywidget, so it survives. (The ``AuxTile``
     component above keeps the solara.display form for any standalone use.)
     """
-    # Card 1 — CCDC alerts asset
-    title1 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.ccdc_alerts_title])
+    t = cm.aux_tile
+
+    # Every input here is optional, so the dialog reads as a settings list:
+    # related settings grouped by where they take effect, each row saying what
+    # it does next to its inputs and showing whether it is set yet.
+
+    # Extra alert sources, added to the source select of the Filter step.
     ccdc_alerts_input = sw.inputs.AssetSelect(
-        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.ccdc_alerts_hint,
-        gee_interface=gee_interface,
+        gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"], label=t.asset_label
     )
-    card1 = v.Card(
-        class_="pa-2 ma-0", outlined=True, hover=True, children=[title1, ccdc_alerts_input]
-    )
-
-    # Card 1b — Custom alert source (RADD-shaped), placed right after CCDC. A named
-    # GEE asset (Alert + Date bands, RADD encoding) added as a selectable alert
-    # source in the Filter tile.
-    title_custom = v.CardTitle(
-        class_="pa-1 ma-1", children=[cm.aux_tile.custom_alerts_title]
-    )
-    custom_name_input = sw.TextField(
-        label=cm.aux_tile.custom_alerts_name_hint, v_model=None
-    )
+    # Custom alert source: a named, RADD-shaped GEE asset (Alert + Date bands).
+    custom_name_input = sw.TextField(label=t.custom_alerts_name_hint, v_model=None)
     custom_alerts_input = sw.inputs.AssetSelect(
-        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.custom_alerts_hint,
-        gee_interface=gee_interface,
-    )
-    card_custom = v.Card(
-        class_="pa-2 ma-0", outlined=True,
-        hover=True,
-        children=[title_custom, custom_name_input, custom_alerts_input],
+        gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"], label=t.asset_label
     )
 
-    # Card 2 — Forest mask asset
-    title2 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.mask_asset_title])
+    # Map layers: the mask clips alerts, the auxiliary layer is reference only.
     fnf_input = sw.inputs.AssetSelect(
-        types=["IMAGE"], label=cm.aux_tile.mask_asset_hint,
-        gee_interface=gee_interface,
+        gee_interface=gee_interface, types=["IMAGE"], label=t.asset_label
     )
-    card2 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title2, fnf_input])
-
-    # Card 3 — Auxiliary asset + viz params
-    title3 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.aux_asset_title])
     aux_input = sw.inputs.AssetSelect(
-        types=["IMAGE"], label=cm.aux_tile.aux_asset_hint,
-        gee_interface=gee_interface,
+        gee_interface=gee_interface, types=["IMAGE"], label=t.asset_label
     )
-    aux_viz = sw.TextField(label=cm.aux_tile.aux_viz, v_model=None)
-    card3 = v.Card(
-        class_="pa-2 ma-0", outlined=True, hover=True, children=[title3, aux_input, aux_viz]
-    )
+    aux_viz = sw.TextField(label=t.aux_viz, v_model=None)
 
-    # Card 3b — Attribute alerts from a (multiband) raster.
-    card_attr = _build_attribute_card(aux_model, workspace, gee_interface)
+    attribute_controls = _build_attribute_controls(aux_model, workspace, gee_interface)
 
-    # Card 4 — Report template upload
-    title4 = v.CardTitle(
-        class_="pa-1 ma-1", children=[cm.aux_tile.report_template_title]
-    )
-    form_input = _remote_file_input(workspace, [".docx"])
-    card4 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title4, form_input])
+    form_input = _remote_file_input(workspace, [".docx"], label=t.report_template_pick)
 
-    # Card 5 — Planet login. PlanetView itself is unchanged; note the OLD tile
-    # built card5 but never added it to its layout (only cards 1-4 shipped), so
-    # the Planet login UI was invisible. We render it here (second column),
-    # restoring the clearly-intended UI.
-    title5 = v.CardTitle(
-        class_="pa-1 ma-1", children=[cm.aux_tile.planet_login_title]
-    )
+    # Planet login. The OLD tile built this card but never added it to its
+    # layout, so the Planet login UI was invisible; it is restored here. The
+    # subscription chips stay disabled until a login succeeds, so they are
+    # hidden until then rather than shown as an empty strip.
     planet_view = PlanetView()
-    card5 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title5, planet_view])
+    planet_model = planet_view.planet_model
 
-    # Responsive grid: all cards flow left-to-right and wrap into rows so the
-    # popup stays compact and needs no inner scroll. 3 across on wide viewports,
-    # 2 on medium, 1 on narrow; align="start" keeps cards top-aligned so a taller
-    # card (the 2-input ones) doesn't stretch its row-mates. The step panel's own
-    # opaque background covers the fullscreen main map (see the z-index rule in
-    # solara_app.py), so no extra backdrop is needed here.
-    cards = [card1, card_custom, card2, card3, card_attr, card4, card5]
-    layout = sw.Row(
-        class_="ma-0",
-        align="start",
-        children=[
-            sw.Col(cols=12, sm=6, md=4, class_="pa-1", children=[c])
-            for c in cards
-        ],
-    )
+    def _toggle_subscriptions(*_):
+        if planet_model.authenticated:
+            planet_view.w_info_view.show()
+        else:
+            planet_view.w_info_view.hide()
+
+    planet_model.observe(_toggle_subscriptions, "authenticated")
+    _toggle_subscriptions()
+
+    def _row(names, title, description, controls, owner=aux_model):
+        icon = _status_icon(owner, names, lambda: all(getattr(owner, n) for n in names))
+        return _setting_row(icon, title, description, controls)
+
+    groups = [
+        _group(t.group_sources, [
+            _row(["ccdc_layer"], t.ccdc_alerts_title, t.ccdc_alerts_desc,
+                 [ccdc_alerts_input]),
+            _row(["custom_alert_name", "custom_alert_layer"], t.custom_alerts_title,
+                 t.custom_alerts_desc, [custom_name_input, custom_alerts_input]),
+        ]),
+        _group(t.group_layers, [
+            _row(["mask_layer"], t.mask_asset_title, t.mask_asset_desc, [fnf_input]),
+            _row(["aux_layer"], t.aux_asset_title, t.aux_asset_desc, [aux_input, aux_viz]),
+        ]),
+        _group(t.group_attributes, [
+            _row(["attribute_raster"], t.attribute_title, t.attribute_desc,
+                 attribute_controls),
+        ]),
+        _group(t.group_report, [
+            _row(["custom_report_template"], t.report_template_title,
+                 t.report_template_desc, [form_input]),
+        ]),
+        _group(t.group_planet, [
+            _row(["authenticated"], t.planet_login_title, t.planet_login_desc,
+                 [planet_view], owner=planet_model),
+        ]),
+    ]
+
+    # The step panel's own opaque background covers the fullscreen main map
+    # (see the z-index rule in solara_app.py), so no extra backdrop is needed.
+    layout = v.Html(tag="div", class_="pa-1", children=[
+        v.Html(tag="p", class_="body-2 mb-5", style_=MUTED, children=[t.intro]),
+        *groups,
+    ])
 
     # Bind widgets to model traits (traitlets linking; stable because this
     # function runs exactly once inside use_memo).
