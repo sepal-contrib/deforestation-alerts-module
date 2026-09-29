@@ -7,18 +7,24 @@ previous card wired the click to an ``sw.DownloadBtn``, whose ``path="#"``
 default disables it in ``__init__``, so the export could never be triggered from
 the UI at all even though a direct call to the handler worked.
 
-The export worker runs on a real daemon thread (``spawn_in_context``); the
-notification globals are replaced with recorders so what is asserted is the
-message a real run publishes.
+The export worker runs on a real daemon thread (``spawn_in_context``) under
+``notify_bridge.tracked_job``; the module's ``current_notifier`` is pointed at a
+real pysepal ``NotificationBus`` so what is asserted is the task + toasts a real
+run publishes. Error toasts are counted on a ``Notifier.error`` spy because the
+bus replaces earlier error toasts.
 """
 
 import geopandas as gpd
 import pytest
 from pysepal import sepalwidgets as sw
+from pysepal.solara.notifications.bus import NotificationBus
+from pysepal.solara.notifications.notifier import Notifier
+from pysepal.solara.notifications.state import TaskStatus, ToastType
 from shapely.geometry import Polygon
 
 import gui.tile.overview_tile as overview_tile
 from deforestation_alerts.message import cm
+from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 
 
@@ -34,31 +40,21 @@ def _gdf():
 
 @pytest.fixture()
 def feedback(monkeypatch):
-    """Record the toasts/task events the export worker publishes, and hand back
-    a joiner for the real worker threads."""
-    events = []
+    """A real bus for the export worker, an error-toast spy, and a joiner for
+    the real worker threads. Returns ``(bus, errors, join)``."""
+    bus = NotificationBus()
+    errors = []
     threads = []
 
-    monkeypatch.setattr(
-        overview_tile,
-        "notify",
-        lambda message, type_="info", **kw: events.append(("toast", type_, message)),
-    )
+    monkeypatch.setattr(overview_tile, "current_notifier", lambda: Notifier(bus))
 
-    class _Task:
-        def __init__(self, title, total_steps=None):
-            events.append(("task:start", title, total_steps))
+    real_error = Notifier.error
 
-        def step(self, message):
-            events.append(("task:step", message))
+    def _spy_error(self, message, *, timeout=None):
+        errors.append((message, timeout, tuple(t.status for t in bus.tasks.value)))
+        real_error(self, message, timeout=timeout)
 
-        def complete(self, message=None):
-            events.append(("task:complete", message))
-
-        def fail(self, message):
-            events.append(("task:fail", message))
-
-    monkeypatch.setattr(overview_tile, "track_task", _Task)
+    monkeypatch.setattr(Notifier, "error", _spy_error)
 
     def _spawn(target, args=(), **kwargs):
         thread = spawn_in_context(target, args, **kwargs)
@@ -72,7 +68,15 @@ def feedback(monkeypatch):
             thread.join(timeout=30)
             assert not thread.is_alive(), "export worker did not finish"
 
-    return events, _join
+    return bus, errors, _join
+
+
+def _non_error_toasts(bus):
+    return [
+        (t.type.value, t.message)
+        for t in bus.toasts.value
+        if t.type is not ToastType.ERROR
+    ]
 
 
 def _card(ws, folder, fmt_index=1):
@@ -104,7 +108,7 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     enabled + visible with a URL ``su.create_download_link`` can turn into a
     working SEPAL link. A container-absolute path would 404 silently, so the
     home-relative shape is the point of the assertion."""
-    events, join = feedback
+    bus, errors, join = feedback
     folder = ws.results_dir("recipe_a")
     card, gen_btn, dl_btn = _card(ws, folder)
 
@@ -120,8 +124,11 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     )
     # the generate button is released, and the run reported success
     assert gen_btn.loading is False and gen_btn.disabled is False
-    assert [e for e in events if e[0] == "toast"] == [
-        ("toast", "success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
+    (task,) = bus.tasks.value
+    assert task.status == TaskStatus.COMPLETED
+    assert errors == []
+    assert _non_error_toasts(bus) == [
+        ("success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
     ]
 
 
@@ -130,7 +137,7 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
 ):
     """An export that blows up used to be swallowed into the log: the user saw a
     dead button and no explanation."""
-    events, join = feedback
+    bus, errors, join = feedback
     card, gen_btn, dl_btn = _card(ws, ws.results_dir("recipe_a"), fmt_index=0)
 
     def _boom(*_a, **_kw):
@@ -143,11 +150,12 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
 
     assert dl_btn.disabled is True and dl_btn.viz is False
     assert ws.client.files.files == {}
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    # fail() before the toast, so the run is logged as FAILED before the message
-    assert kinds.index("task:fail") < kinds.index("toast")
-    assert [e for e in events if e[0] == "toast"] == [
-        ("toast", "error", "unsupported driver")
+    (task,) = bus.tasks.value
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message == "unsupported driver"
+    # exactly one error toast, published once the run was already FAILED
+    assert errors == [
+        ("unsupported driver", ERROR_TOAST_TIMEOUT, (TaskStatus.FAILED,))
     ]
+    assert _non_error_toasts(bus) == []
     assert gen_btn.loading is False and gen_btn.disabled is False

@@ -36,9 +36,12 @@ rendered in the right-panel card.
 
 Export card feedback (the one place this component publishes): ``build_export_card``
 and its click handler are module-level RAW ipyvuetify builders whose worker runs on
-a daemon thread (``spawn_in_context``), where no Solara hook can run — so they use
-the notification GLOBALS (``notify`` / ``track_task``), like ``recipe_tile`` and
-``analysis/export``, not ``use_notifications()``.
+a daemon thread (``spawn_in_context``), where no Solara hook can run — so, like
+``recipe_tile`` and ``analysis/export``, the worker resolves a notifier from its
+kernel context (``notify_bridge.current_notifier``) and runs its body under
+``notify_bridge.tracked_job``, not ``use_notifications()``. ``tracked_job`` opens
+the task, turns the worker thread's app log lines into its milestones, and on a
+failure marks it FAILED before publishing the one error toast.
 
 Known service-layer concern: overview_helper.py (a *service* module) still imports
 ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
@@ -63,7 +66,6 @@ import reacton.ipyvuetify as rv
 import solara
 from ipyleaflet import MarkerCluster, Popup
 from pysepal import sepalwidgets as sw
-from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.overview_helper import (
@@ -72,6 +74,7 @@ from deforestation_alerts.scripts.overview_helper import (
     create_markers_ipyvuetify,
 )
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
+from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.workflow_steps import STEPS
 
@@ -100,8 +103,9 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
 
     Threading + feedback: writing a GPKG/GeoJSON and uploading it is blocking IO,
     so the work runs on a daemon thread via ``spawn_in_context`` (which carries
-    the kernel context the notification globals resolve their bus from), wrapped
-    in a tracked task. A failure is an error toast, not a silent log line.
+    the kernel context ``current_notifier`` resolves the bus from), under
+    ``tracked_job``. A failure is a FAILED task + one error toast, not a silent
+    log line.
 
     The export lands in the user's SEPAL workspace, so the button gets the
     HOME-RELATIVE remote path: ``set_url`` -> ``su.create_download_link`` builds
@@ -114,28 +118,29 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
         gen_btn.disabled = True
 
         def _worker():
-            # Imperative tracker (not ``with``): the context manager publishes its
-            # own raw-exception toast on failure, which would duplicate the one
-            # below. One opaque phase (write + upload), so no ``total_steps``.
-            task = track_task(str(cm.overview_tile.export_task_title))
+            # One opaque phase (write + upload), so no ``total_steps``. On a
+            # failure tracked_job fails the task and publishes the one error
+            # toast (the raw exception text), then re-raises into the except.
+            notifier = current_notifier()
             try:
-                task.step(str(cm.overview_tile.export_step).format(fmt=fmt.upper()))
-                path = export_alerts_gdf(
-                    gdf, workspace, folder, fmt, sources, start, end
-                )
-                dl_btn.set_url(path=workspace.home_relative(path))
+                with tracked_job(
+                    notifier, str(cm.overview_tile.export_task_title)
+                ) as task:
+                    task.step(
+                        str(cm.overview_tile.export_step).format(fmt=fmt.upper())
+                    )
+                    path = export_alerts_gdf(
+                        gdf, workspace, folder, fmt, sources, start, end
+                    )
+                    url_path = workspace.home_relative(path)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
+                logger.exception("Overview: export %s failed", fmt)
+            else:
+                dl_btn.set_url(path=url_path)
                 dl_btn.show()
-                task.complete()
-                notify(
-                    str(cm.overview_tile.export_done).format(fmt=fmt.upper()),
-                    type_="success",
+                notifier.success(
+                    str(cm.overview_tile.export_done).format(fmt=fmt.upper())
                 )
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
-                logger.error("Overview: export %s failed", fmt, exc_info=e)
-                # fail() before the toast, so the run is already recorded as
-                # FAILED (with its reason) in the task log when the message lands.
-                task.fail(str(e))
-                notify(str(e), type_="error")
             finally:
                 gen_btn.loading = False
                 gen_btn.disabled = False

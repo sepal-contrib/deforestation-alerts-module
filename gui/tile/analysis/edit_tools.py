@@ -39,7 +39,10 @@ Threading (FIXED by the task contract):
   ``enable_dl*`` apply step with that path: stores ``predN_path`` /
   ``analyzed_alerts_model.modelN_prediction_file`` and shows the add/remove buttons.
   The run button spins (``.loading``/``.disabled``) for the duration, the run is a
-  tracked task in the notification pill and the outcome is a toast. ipywidgets trait
+  tracked task in the notification pill (``notify_bridge.tracked_job``; the
+  composite download drives its progress ring) and the outcome is a toast. Every
+  run failure — download, inference or the verify/apply step — reaches the user as
+  the friendly ``model_labels.dl_404`` text. ipywidgets trait
   sets from the worker thread are fine (recipe_tile does exactly this).
 * add/remove prediction are main-thread click handlers reading the stored
   prediction path.
@@ -53,11 +56,14 @@ but the CNN/edit click paths are not exercised, and the defo-layer observer is
 registered but ``defo_dl_layer`` stays ``None``. EE / raster / file failures are
 caught and published as an error toast (or logged) so a failure never breaks render.
 
-Feedback uses the pysepal notification **globals** (``notify`` / ``track_task``),
-not the ``use_notifications()`` hook: this module builds raw ipyvuetify widgets
-and publishes from daemon worker threads, so there is no component render to hold
-a hook. ``spawn_in_context`` carries the kernel context the globals resolve the
-bus from.
+Feedback: the CNN run workers publish through ``notify_bridge.tracked_job`` +
+``current_notifier``, not the ``use_notifications()`` hook: this module builds raw
+ipyvuetify widgets and publishes from daemon worker threads, so there is no
+component render to hold a hook. ``spawn_in_context`` carries the kernel context
+``current_notifier`` resolves the bus from. ``tracked_job`` turns the worker
+thread's app log lines into task milestones and, on a failure, marks the task
+FAILED before it publishes the one error toast. The main-thread add-prediction
+handler (no task) still uses the ``notify`` global for its error toast.
 
 Props
 -----
@@ -83,11 +89,12 @@ import ipyvuetify as v
 import solara
 from ipyleaflet import GeoData
 from pysepal import color, sepalwidgets as sw
-from pysepal.solara.notifications import notify, track_task
+from pysepal.solara.notifications import notify
 
 from deforestation_alerts import gdal_env
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
+from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import (
     convertir_formato3,
     filter_features_by_color,
@@ -95,6 +102,11 @@ from deforestation_alerts.scripts.mosaics_helper import (
     raster_to_gdf,
     simplify_and_extract_features,
     verify_raster,
+)
+from gui.scripts.notify_bridge import (
+    current_notifier,
+    tile_progress_reporter,
+    tracked_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.tile.analysis.paths import stage_alert_image
@@ -128,7 +140,15 @@ class _EditionButton(v.Btn, sw.SepalWidget):
 
 
 def _run_cnn_model(
-    model_repo, model_file, suffix, widgets, app_state, app_tile_model, workspace
+    model_repo,
+    model_file,
+    suffix,
+    widgets,
+    app_state,
+    app_tile_model,
+    workspace,
+    *,
+    task=None,
 ):
     """Body of the OLD ``run_dl_model_*`` (worker side), without widget mutation.
 
@@ -149,21 +169,30 @@ def _run_cnn_model(
     ``gui/solara_app.py`` runs (``gui.scripts.scratch_registry``). Repeated CNN
     runs in ONE session therefore still accumulate one composite + one prediction
     each — bounded by the session, not by the container's lifetime.
+
+    ``task`` (the worker's ``TaskTracker``, optional) gets the composite
+    download's geedim tile ticks as progress, and is handed back to
+    indeterminate before the model pull + inference. A cache hit produces no
+    ticks.
     """
     from huggingface_hub import hf_hub_download
 
     actual_alert_id = app_state.actual_alert_id.value
 
-    image_local, _ = stage_alert_image(
-        workspace,
-        app_tile_model.recipe_folder_path,
-        actual_alert_id,
-        widgets.selected_img_before_info_list,
-        widgets.selected_img_after_info_list,
-        widgets.selected_img_before,
-        widgets.selected_img_after,
-        widgets.actual_alert_grid,
-    )
+    on_tiles = tile_progress_reporter(task) if task is not None else None
+    with geedim_tile_progress(on_tiles):
+        image_local, _ = stage_alert_image(
+            workspace,
+            app_tile_model.recipe_folder_path,
+            actual_alert_id,
+            widgets.selected_img_before_info_list,
+            widgets.selected_img_after_info_list,
+            widgets.selected_img_before,
+            widgets.selected_img_after,
+            widgets.actual_alert_grid,
+        )
+    if task is not None:
+        task.set_progress(None)  # model pull + inference: back to indeterminate
 
     # The CNN weights are a container-local cache, not user data — but they must
     # land in the one directory this app has proven writable, not a hard-coded
@@ -331,29 +360,18 @@ def build_edit_tools(
     # path with the worker's computed prediction path (replaces the OLD
     # model*_prediction_time observer / the use_task-value effect).
     # ------------------------------------------------------------------
-    # Both return whether the apply succeeded, so the calling worker knows not to
-    # publish a success toast on top of the error toast published here.
-    def _apply_model1(pred_path) -> bool:
-        try:
-            pred1_path.value = pred_path
-            analyzed_alerts_model.model1_prediction_file = pred_path
-            _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
-            return True
-        except Exception:
-            logger.exception("Analysis: model 1 verify failed")
-            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
-            return False
+    # Both run INSIDE the worker's tracked job and simply raise on failure: a
+    # verify failure then fails the task and publishes the one dl_404 error toast
+    # through tracked_job, exactly like a failed download/inference.
+    def _apply_model1(pred_path):
+        pred1_path.value = pred_path
+        analyzed_alerts_model.model1_prediction_file = pred_path
+        _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
 
-    def _apply_model2(pred_path) -> bool:
-        try:
-            pred2_path.value = pred_path
-            analyzed_alerts_model.model2_prediction_file = pred_path
-            _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
-            return True
-        except Exception:
-            logger.exception("Analysis: model 2 verify failed")
-            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
-            return False
+    def _apply_model2(pred_path):
+        pred2_path.value = pred_path
+        analyzed_alerts_model.model2_prediction_file = pred_path
+        _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
 
     # ------------------------------------------------------------------
     # add/remove prediction (OLD) — main-thread click handlers mutating
@@ -490,8 +508,15 @@ def build_edit_tools(
     # CNN run handlers: button-triggered daemon threads (CPU/IO-bound; never
     # auto-run). The worker runs _run_cnn_model -> prediction path, then on the
     # success path applies the OLD verify/enable step with that path. The run
-    # button spins for the duration; errors are logged + published as toasts.
+    # button spins for the duration; errors are published by tracked_job (FAILED
+    # task + one dl_404 error toast) and logged by the worker.
     # ------------------------------------------------------------------
+    def _dl_404(_exc):
+        # Every CNN run failure (composite download, HF model pull, inference,
+        # verify) has always reached the user as this one friendly message; the
+        # raw exception stays in the log.
+        return str(cm.analysis_tile.model_labels.dl_404)
+
     def _on_dl1_run(*_):
         ns["dl1_add"].disabled = True
         ns["dl1_remove"].disabled = True
@@ -499,34 +524,26 @@ def build_edit_tools(
         ns["dl1_run"].disabled = True
 
         def _worker():
-            # Imperative tracker (not ``with``): the context manager publishes its
-            # own raw-exception toast on failure, which would land on top of the
-            # friendlier dl_404 message below. No ``total_steps`` — the run is one
-            # opaque download+inference phase, so an indeterminate pill is honest.
-            task = track_task(cm.analysis_tile.model_labels.dl_task_title)
+            # No ``total_steps`` — the run is one download+inference phase; the
+            # composite download drives the ring, the rest is indeterminate.
+            notifier = current_notifier()
             try:
-                task.step(str(cm.analysis_tile.model_labels.dl_step_run))
-                pred_path = _run_cnn_model(
-                    _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                    widgets, app_state, app_tile_model, workspace,
-                )
-                if _apply_model1(pred_path):
-                    task.complete()
-                    notify(
-                        str(cm.analysis_tile.model_labels.dl_done), type_="success"
+                with tracked_job(
+                    notifier,
+                    str(cm.analysis_tile.model_labels.dl_task_title),
+                    error_format=_dl_404,
+                ) as task:
+                    task.step(str(cm.analysis_tile.model_labels.dl_step_run))
+                    pred_path = _run_cnn_model(
+                        _MODEL1_REPO, _MODEL1_FILE, "_m1",
+                        widgets, app_state, app_tile_model, workspace,
+                        task=task,
                     )
-                else:
-                    # _apply_model1 already published the dl_404 error toast;
-                    # mark the pill FAILED rather than completing it.
-                    task.fail(str(cm.analysis_tile.model_labels.dl_404))
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
+                    _apply_model1(pred_path)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: model 1 run failed")
-                # fail() before the toast, so the run is already recorded as
-                # FAILED (with its reason) in the task log when the message
-                # lands. The pill itself only shows RUNNING tasks, so it
-                # disappears at that point rather than staying on screen.
-                task.fail(str(e))
-                notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
+            else:
+                notifier.success(str(cm.analysis_tile.model_labels.dl_done))
             finally:
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
@@ -540,27 +557,25 @@ def build_edit_tools(
         ns["dl2_run"].disabled = True
 
         def _worker():
-            # Same imperative-tracker rationale as _on_dl1_run above.
-            task = track_task(cm.analysis_tile.model_labels.dl_task_title)
+            # Same tracked_job shape as _on_dl1_run above.
+            notifier = current_notifier()
             try:
-                task.step(str(cm.analysis_tile.model_labels.dl_step_run))
-                pred_path = _run_cnn_model(
-                    _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                    widgets, app_state, app_tile_model, workspace,
-                )
-                if _apply_model2(pred_path):
-                    task.complete()
-                    notify(
-                        str(cm.analysis_tile.model_labels.dl_done), type_="success"
+                with tracked_job(
+                    notifier,
+                    str(cm.analysis_tile.model_labels.dl_task_title),
+                    error_format=_dl_404,
+                ) as task:
+                    task.step(str(cm.analysis_tile.model_labels.dl_step_run))
+                    pred_path = _run_cnn_model(
+                        _MODEL2_REPO, _MODEL2_FILE, "_m2",
+                        widgets, app_state, app_tile_model, workspace,
+                        task=task,
                     )
-                else:
-                    # _apply_model2 already published the dl_404 error toast;
-                    # mark the pill FAILED rather than completing it.
-                    task.fail(str(cm.analysis_tile.model_labels.dl_404))
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
+                    _apply_model2(pred_path)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: model 2 run failed")
-                task.fail(str(e))
-                notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
+            else:
+                notifier.success(str(cm.analysis_tile.model_labels.dl_done))
             finally:
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False

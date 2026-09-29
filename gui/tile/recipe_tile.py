@@ -15,13 +15,16 @@ same pattern as ``aux_tile.build_aux_layout``.
 The async **load** that the earlier Solara port ran via ``solara.lab.use_task``
 is here a daemon thread that toggles the Load button's spinner.
 
-**Feedback goes through the pysepal notification GLOBALS** (``notify`` /
-``track_task``), not the ``use_notifications()`` hook: this module builds raw
-ipyvuetify widgets and its outcomes are published from daemon worker threads, so
-there is no Solara component render in which a hook could be called. The globals
-resolve the bus from the current kernel context, which ``spawn_in_context``
-propagates onto the worker thread. The inline ``sw.Alert`` surfaces that the load
-and save flows used to write to are gone — the toast IS the feedback.
+**Feedback goes through ``notify_bridge.tracked_job``**, not the
+``use_notifications()`` hook: this module builds raw ipyvuetify widgets and its
+outcomes are published from daemon worker threads, so there is no Solara
+component render in which a hook could be called. Each worker resolves a notifier
+with ``notify_bridge.current_notifier`` — the bus of the current kernel context,
+which ``spawn_in_context`` propagates onto the worker thread — and runs its body
+under ``tracked_job``: the task shows in the pill and the task log, the worker
+thread's app log lines become its milestones, and a failure marks it FAILED
+before the one error toast is published. The inline ``sw.Alert`` surfaces that
+the load and save flows used to write to are gone — the toast IS the feedback.
 
 The three handlers are re-architected around the shared **models + services**
 (unchanged from the Solara port):
@@ -56,7 +59,6 @@ from pathlib import PurePosixPath
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 from pysepal.sepalwidgets.file_input import FileInput
-from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.recipe_helper import (
@@ -65,6 +67,7 @@ from deforestation_alerts.scripts.recipe_helper import (
     load_alert_store,
     save_model_parameters_to_json,
 )
+from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
 
@@ -340,25 +343,25 @@ def build_recipe_layout(
         load_btn.disabled = True
 
         def _worker():
-            # The tracker is driven imperatively rather than with ``with``: the
-            # context manager publishes its own raw-exception toast on failure,
-            # which would land on top of the friendlier one below.
-            task = track_task(cm.recipe_tile.load_task_title, total_steps=2)
+            # On a failure tracked_job marks the task FAILED (with the message
+            # below as its reason) BEFORE it publishes the one error toast, so
+            # the run is already recorded in the task log when the user reads
+            # it; then it re-raises into the except.
+            notifier = current_notifier()
             try:
-                _run_load(task)
-                task.complete()
-                notify(cm.recipe_tile.alert_load_recipe_done, type_="success")
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
+                with tracked_job(
+                    notifier,
+                    str(cm.recipe_tile.load_task_title),
+                    total_steps=2,
+                    error_format=lambda e: (
+                        f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}"
+                    ),
+                ) as task:
+                    _run_load(task)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Recipe load failed")
-                # fail() before the toast, so the run is already recorded as
-                # FAILED (with its reason) in the task log by the time the
-                # user reads the message. The pill only shows RUNNING tasks,
-                # so it disappears rather than staying on screen.
-                task.fail(str(e))
-                notify(
-                    f"{cm.recipe_tile.input_hint_load_recipe_name}: {e}",
-                    type_="error",
-                )
+            else:
+                notifier.success(str(cm.recipe_tile.alert_load_recipe_done))
             finally:
                 load_btn.loading = False
                 load_btn.disabled = False
@@ -374,8 +377,8 @@ def build_recipe_layout(
     # Save. Persist every model to <recipe_folder>/recipe_parameters.json via
     # the shared service. Requires an existing recipe folder (the card is hidden
     # until one exists; the guard is a safety net). Runs on a daemon thread for
-    # parity with load; the button spins and success/errors are published as
-    # toasts.
+    # parity with load, as a tracked task; the button spins and success/errors
+    # are published as toasts.
     # ------------------------------------------------------------------
     def _run_save():
         folder = app_state.recipe_folder_path.value
@@ -399,21 +402,27 @@ def build_recipe_layout(
         save_btn.disabled = True
 
         def _worker():
+            # A tracked task too (titled like its card), so a save shows in the
+            # pill and lands in the task log like every other job; a failure is
+            # a FAILED task + one error toast, both via tracked_job.
+            notifier = current_notifier()
             try:
-                # Writer tracking: while the recipe files are being written the
-                # recipe is registered in project_writers, so any future
-                # delete/close path can refuse to act mid-write.
-                with writing(app_state.recipe_name.value or "recipe"):
-                    _run_save()
-                # No task pill for save: it is a single json dump, short enough
-                # that the button spinner is the whole progress story.
-                notify(cm.recipe_tile.alert_save_recipe_done, type_="success")
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
+                with tracked_job(
+                    notifier,
+                    str(cm.recipe_tile.card_title_save_recipe),
+                    error_format=lambda e: (
+                        f"{cm.recipe_tile.input_hint_save_recipe_error}: {e}"
+                    ),
+                ):
+                    # Writer tracking: while the recipe files are being written
+                    # the recipe is registered in project_writers, so any future
+                    # delete/close path can refuse to act mid-write.
+                    with writing(app_state.recipe_name.value or "recipe"):
+                        _run_save()
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Recipe save failed")
-                notify(
-                    f"{cm.recipe_tile.input_hint_save_recipe_error}: {e}",
-                    type_="error",
-                )
+            else:
+                notifier.success(str(cm.recipe_tile.alert_save_recipe_done))
             finally:
                 save_btn.loading = False
                 save_btn.disabled = False

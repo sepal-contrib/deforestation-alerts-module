@@ -28,15 +28,17 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
 * **Save + Download each run button-triggered via ``spawn_in_context``** (both
   do blocking GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the
   click handler toggles that button's ``.loading``/``.disabled`` and starts the
-  worker; the worker runs the blocking work in ``try/except/finally``, wrapped in a
-  tracked task so the notification pill shows it running.
+  worker; the worker runs the blocking work under ``notify_bridge.tracked_job``
+  (inside a ``try/except/else/finally``) so the notification pill shows it
+  running and the worker thread's app log lines become its milestones.
 * **No widget mutation inside the blocking bodies.** The save body does the gdf
   mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
   download body does the gpkg/image/zip/report (IO only) and RETURNS
   ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
   the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
-  END of the corresponding worker's success path with that returned value. Errors are
-  logged + published as an error toast in the worker's ``except``. ipywidgets
+  END of the corresponding worker's success path (after the tracked block) with that
+  returned value. A failure is a FAILED task + one error toast, both published by
+  ``tracked_job``; the worker's ``except`` only logs it. ipywidgets
   trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
   (recipe_tile / edit_tools do exactly this).
 * The buttons + toolbars are **built once** (the builder runs once per build) so the
@@ -44,11 +46,13 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   download buttons start in a hidden ``toolBarDownloads`` and the "Download alert data"
   button starts disabled (enabled by the save worker's success path).
 
-Feedback uses the pysepal notification **globals** (``notify`` / ``track_task``),
-not the ``use_notifications()`` hook: this module builds raw ipyvuetify widgets and
+Feedback goes through ``notify_bridge.tracked_job`` + ``current_notifier``, not the
+``use_notifications()`` hook: this module builds raw ipyvuetify widgets and
 publishes from daemon worker threads, so there is no component render to hold a
-hook. ``spawn_in_context`` carries the kernel context the globals resolve the bus
-from. There is no inline ``sw.Alert`` any more.
+hook. ``spawn_in_context`` carries the kernel context ``current_notifier``
+resolves the bus from. The download's before/after composite drives the task's
+progress ring (geedim tile ticks via ``gee_progress.geedim_tile_progress``). There
+is no inline ``sw.Alert`` any more.
 
 Source-of-truth adaptation (Task 9): OLD read/wrote
 ``self.analyzed_alerts_model.alerts_gdf``; in the new architecture that GeoDataFrame
@@ -90,9 +94,9 @@ import ee
 import geopandas as gpd
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
-from pysepal.solara.notifications import notify, track_task
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from deforestation_alerts.scripts.report_builder import (
@@ -100,6 +104,11 @@ from deforestation_alerts.scripts.report_builder import (
     ensure_list,
     format_list,
     generate_deforestation_report_with_word_template,
+)
+from gui.scripts.notify_bridge import (
+    current_notifier,
+    tile_progress_reporter,
+    tracked_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
@@ -235,7 +244,9 @@ def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
     )
 
 
-def _download_data(widgets, app_state, aux_model, app_tile_model, workspace):
+def _download_data(
+    widgets, app_state, aux_model, app_tile_model, workspace, *, task=None
+):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
@@ -249,6 +260,10 @@ def _download_data(widgets, app_state, aux_model, app_tile_model, workspace):
     a20-a25 + c14/c16). The cached-GeoTIFF probe is a remote ``exists``, and a
     cache hit is staged back down so the zip and the report can read it.
     Everything staged is released in the ``finally``.
+
+    ``task`` (the worker's ``TaskTracker``, optional) gets the composite
+    download's geedim tile ticks as progress, and is handed back to
+    indeterminate once the composite is staged. A cache hit produces no ticks.
     """
     alertas_gdf = app_state.alerts_gdf.value
     actual_alert_id = app_state.actual_alert_id.value
@@ -305,17 +320,21 @@ def _download_data(widgets, app_state, aux_model, app_tile_model, workspace):
         # Before/after image GeoTIFF (downloaded only if not already in the recipe
         # folder). Built via the shared helper so it resolves to the same cached
         # file the CNN run (edit_tools) wrote.
-        image_local, _ = stage_alert_image(
-            workspace,
-            str(recipe_folder),
-            actual_alert_id,
-            widgets.selected_img_before_info_list,
-            widgets.selected_img_after_info_list,
-            widgets.selected_img_before,
-            widgets.selected_img_after,
-            widgets.actual_alert_grid,
-        )
+        on_tiles = tile_progress_reporter(task) if task is not None else None
+        with geedim_tile_progress(on_tiles):
+            image_local, _ = stage_alert_image(
+                workspace,
+                str(recipe_folder),
+                actual_alert_id,
+                widgets.selected_img_before_info_list,
+                widgets.selected_img_after_info_list,
+                widgets.selected_img_before,
+                widgets.selected_img_after,
+                widgets.actual_alert_grid,
+            )
         staged.append(image_local)
+        if task is not None:
+            task.set_progress(None)  # zip + report: back to indeterminate
 
         # Zip the image + gpkg.
         zip_remote = recipe_folder / f"alert_{actual_alert_id}.zip"
@@ -443,57 +462,57 @@ def build_export(
     # ------------------------------------------------------------------
     # Save handler: button-triggered daemon thread (blocking GEE .getInfo() / CSV
     # write; never auto-run). The button spins for the duration; on success the
-    # worker applies the OLD save effect, on failure it logs + publishes the error
-    # (incl. the OLD "confirmation==No but a polygon is drawn" guard) as a toast.
+    # worker applies the OLD save effect, on failure tracked_job publishes the
+    # error (incl. the OLD "confirmation==No but a polygon is drawn" guard) as a
+    # toast and the worker logs it.
     # ------------------------------------------------------------------
     def _on_save(*_):
         ns["save_btn"].loading = True
         ns["save_btn"].disabled = True
 
         def _worker():
-            # Imperative tracker (not ``with``): the context manager publishes its
-            # own error toast on failure, which would duplicate the one below. No
-            # ``total_steps`` — the save is a single opaque phase (GEE admin
+            # No ``total_steps`` — the save is a single opaque phase (GEE admin
             # lookups + the alert-store write), so the pill stays indeterminate.
-            task = track_task(cm.analysis_tile.export_labels.save_task_title)
+            # On an exception tracked_job fails the task and publishes the one
+            # error toast (the raw exception text), then re-raises into except.
+            notifier = current_notifier()
             try:
-                task.step(str(cm.analysis_tile.export_labels.save_step))
-                # Writer tracking: register the recipe while its alert store is
-                # written so future delete/close paths can refuse to act mid-write.
-                with writing(app_state.recipe_name.value or "recipe"):
-                    saved = _save_attributes(
-                        widgets,
-                        app_state,
-                        analyzed_alerts_model,
-                        app_tile_model,
-                        workspace,
-                    )
+                with tracked_job(
+                    notifier, str(cm.analysis_tile.export_labels.save_task_title)
+                ) as task:
+                    task.step(str(cm.analysis_tile.export_labels.save_step))
+                    # Writer tracking: register the recipe while its alert store
+                    # is written so future delete/close paths can refuse to act
+                    # mid-write.
+                    with writing(app_state.recipe_name.value or "recipe"):
+                        saved = _save_attributes(
+                            widgets,
+                            app_state,
+                            analyzed_alerts_model,
+                            app_tile_model,
+                            workspace,
+                        )
+                    if not saved:
+                        # `_save_attributes` refused: nothing was written and the
+                        # download button stays disabled, so completing the task
+                        # would record a DONE run for a no-op the user cannot
+                        # explain. A WARNING outcome, not an error: fail() BEFORE
+                        # the toast, so the run is already recorded as FAILED
+                        # with its reason when the message lands. (The only way
+                        # `_save_attributes` returns False is a missing/invalid
+                        # alert id, which is what the message says.) The log line
+                        # comes last: once the task is FAILED it is not echoed as
+                        # a milestone.
+                        reason = str(cm.analysis_tile.export_labels.save_no_alert)
+                        task.fail(reason)
+                        notifier.warning(reason)
+                        logger.warning("Analysis: save refused — %s", reason)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
+                logger.exception("Analysis: save attributes failed")
+            else:
                 if saved:
-                    task.complete()
                     _apply_save()
-                    notify(
-                        str(cm.analysis_tile.export_labels.save_done),
-                        type_="success",
-                    )
-                else:
-                    # `_save_attributes` refused: nothing was written and the
-                    # download button stays disabled, so completing the task here
-                    # would record a DONE run for a no-op the user cannot
-                    # explain. Same refusal shape as `_on_download` below —
-                    # fail() BEFORE the toast, so the run is already recorded as
-                    # FAILED with its reason when the message lands. (The only
-                    # way `_save_attributes` returns False is a missing/invalid
-                    # alert id, which is what the message says.)
-                    reason = str(cm.analysis_tile.export_labels.save_no_alert)
-                    logger.warning("Analysis: save refused — %s", reason)
-                    task.fail(reason)
-                    notify(reason, type_="warning")
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
-                logger.error("Analysis: save attributes failed", exc_info=e)
-                # fail() before the toast, so the run is already recorded as
-                # FAILED (with its reason) in the task log when the message lands.
-                task.fail(str(e))
-                notify(str(e), type_="error")
+                    notifier.success(str(cm.analysis_tile.export_labels.save_done))
             finally:
                 ns["save_btn"].loading = False
                 ns["save_btn"].disabled = False
@@ -503,54 +522,61 @@ def build_export(
     # ------------------------------------------------------------------
     # Download handler: button-triggered daemon thread (heavy report generation /
     # IO). On success the worker applies the OLD download effect with the returned
-    # zip/report paths; on failure it logs + publishes the error as a toast.
+    # zip/report paths; on failure tracked_job publishes the error as a toast and
+    # the worker logs it.
     # ------------------------------------------------------------------
     def _on_download(*_):
         ns["download_alert_data_btn"].loading = True
         ns["download_alert_data_btn"].disabled = True
 
         def _worker():
-            # Same imperative-tracker rationale as _on_save above; the report/zip
-            # build is one opaque long phase.
-            task = track_task(cm.analysis_tile.export_labels.download_task_title)
+            # Same tracked_job shape as _on_save above; the report/zip build is
+            # one opaque long phase, but the composite download inside it drives
+            # the progress ring (``task=`` below).
+            notifier = current_notifier()
             try:
-                task.step(str(cm.analysis_tile.export_labels.download_step))
-                # Writer tracking: the report/zip generation writes into the
-                # recipe folder — register it for the duration.
-                with writing(app_state.recipe_name.value or "recipe"):
-                    result = _download_data(
-                        widgets, app_state, aux_model, app_tile_model, workspace
-                    )
-                if result is None:
-                    # `_download_data` refused: nothing was written and no
-                    # download button will be revealed, so completing the task
-                    # here would show a green pill for a no-op the user cannot
-                    # explain. Report WHY through the notification system, the
-                    # same way the except branch below reports a crash — and
-                    # fail() BEFORE the toast, so the run is already recorded as
-                    # FAILED (with its reason) in the task log when the message
-                    # lands. (The two causes are re-derived here rather than
-                    # returned, so `_download_data` keeps its "paths or nothing"
-                    # contract.)
-                    reason = str(
-                        cm.analysis_tile.export_labels.download_no_recipe
-                        if not app_tile_model.recipe_folder_path
-                        else cm.analysis_tile.export_labels.download_no_alert
-                    )
-                    logger.warning("Analysis: download refused — %s", reason)
-                    task.fail(reason)
-                    notify(reason, type_="warning")
-                else:
-                    task.complete()
+                with tracked_job(
+                    notifier, str(cm.analysis_tile.export_labels.download_task_title)
+                ) as task:
+                    task.step(str(cm.analysis_tile.export_labels.download_step))
+                    # Writer tracking: the report/zip generation writes into the
+                    # recipe folder — register it for the duration.
+                    with writing(app_state.recipe_name.value or "recipe"):
+                        result = _download_data(
+                            widgets,
+                            app_state,
+                            aux_model,
+                            app_tile_model,
+                            workspace,
+                            task=task,
+                        )
+                    if result is None:
+                        # `_download_data` refused: nothing was written and no
+                        # download button will be revealed, so completing the
+                        # task would show a green pill for a no-op the user
+                        # cannot explain. A WARNING outcome: fail() BEFORE the
+                        # toast, so the run is already recorded as FAILED (with
+                        # its reason) in the task log when the message lands.
+                        # (The two causes are re-derived here rather than
+                        # returned, so `_download_data` keeps its "paths or
+                        # nothing" contract.) Log last: a FAILED task takes no
+                        # more milestones.
+                        reason = str(
+                            cm.analysis_tile.export_labels.download_no_recipe
+                            if not app_tile_model.recipe_folder_path
+                            else cm.analysis_tile.export_labels.download_no_alert
+                        )
+                        task.fail(reason)
+                        notifier.warning(reason)
+                        logger.warning("Analysis: download refused — %s", reason)
+            except Exception:  # noqa: BLE001 — tracked_job already toasted it
+                logger.exception("Analysis: download data failed")
+            else:
+                if result is not None:
                     _apply_download(result)
-                    notify(
-                        str(cm.analysis_tile.export_labels.download_done),
-                        type_="success",
+                    notifier.success(
+                        str(cm.analysis_tile.export_labels.download_done)
                     )
-            except Exception as e:  # noqa: BLE001 — surfaced as an error toast
-                logger.error("Analysis: download data failed", exc_info=e)
-                task.fail(str(e))
-                notify(str(e), type_="error")
             finally:
                 ns["download_alert_data_btn"].loading = False
                 ns["download_alert_data_btn"].disabled = False

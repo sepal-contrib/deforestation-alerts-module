@@ -5,10 +5,17 @@ Task 7 removed every inline feedback surface from the app (``solara.Error`` /
 notification bus. These tests assert at the **module boundary**: the notifier the
 ``use_notifications()`` hook returns is a silent ``NoopNotifier`` when no
 ``NotificationProvider`` is mounted, so a test that mounted nothing would pass
-against a completely unwired app. Instead each raw-widget module's ``notify`` /
-``track_task`` globals are replaced with recorders and the real click handler +
-worker is driven end to end, so what is asserted is the message that a real run
-actually publishes — plus the state change it accompanies.
+against a completely unwired app. Instead each raw-widget module's
+``current_notifier`` is pointed at a REAL pysepal ``NotificationBus`` and the real
+click handler + worker is driven end to end, so what is asserted is the task and
+the toasts a real run actually leaves on the bus — plus the state change they
+accompany.
+
+The raw-layout workers run their body under ``notify_bridge.tracked_job``, so a
+failure is reported by the bridge: the task is FAILED first, then exactly ONE
+error toast (``ERROR_TOAST_TIMEOUT``) is published. pysepal's bus REPLACES earlier
+error toasts, so counting ``bus.toasts`` could hide a duplicate — the error count
+is asserted on a ``Notifier.error`` spy instead.
 
 Solara-tile coverage (``aoi_tile`` / ``alerts_filter_tile``): DELIBERATELY not
 render-based. This suite has no headless reacton/Solara render harness (every
@@ -23,93 +30,117 @@ No GEE, no browser.
 """
 
 import ast
+import logging
 from pathlib import Path
 
 import pytest
+from pysepal.solara.notifications.bus import NotificationBus
+from pysepal.solara.notifications.notifier import Notifier
+from pysepal.solara.notifications.state import TaskStatus, ToastType
 
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.alerts_model import SelectedAlertsModel
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.model.app_model import AppTileModel
 from deforestation_alerts.model.aux_model import AuxModel
+from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 
 
 # ---------------------------------------------------------------------------
-# Recorders
+# A real bus per test
 # ---------------------------------------------------------------------------
-class _RecordingTask:
-    """Stand-in for a pysepal ``TaskTracker``.
+class _Feedback:
+    """What one real run published on a private ``NotificationBus``."""
 
-    Appends into the SAME event list the ``notify`` recorder writes to, so a test
-    can assert the *ordering* between a tracker transition and a toast (the
-    contract is: ``fail()`` first, so the run is already recorded as FAILED —
-    with its reason — by the time the error toast appears).
-    """
+    def __init__(self, bus):
+        self.bus = bus
+        # One entry per Notifier.error call: (message, timeout, statuses of every
+        # task on the bus at the moment the toast was published).
+        self.errors = []
+        self.threads = []
 
-    def __init__(self, events, title, total_steps=None):
-        self._events = events
-        events.append(("task:start", title, total_steps))
+    def join(self):
+        for thread in self.threads:
+            thread.join(timeout=30)
+            assert not thread.is_alive(), "worker thread did not finish"
 
-    def step(self, message):
-        self._events.append(("task:step", message))
+    def task(self):
+        """The one task the run opened."""
+        tasks = list(self.bus.tasks.value)
+        assert len(tasks) == 1, [t.title for t in tasks]
+        return tasks[0]
 
-    def complete(self, message=None):
-        self._events.append(("task:complete", message))
+    def milestones(self):
+        return [m.message for m in self.task().milestones]
 
-    def fail(self, message):
-        self._events.append(("task:fail", message))
+    def toasts(self, *types):
+        """``(type, message)`` of the non-error toasts on the bus (or ``types``)."""
+        wanted = types or tuple(t for t in ToastType if t is not ToastType.ERROR)
+        return [
+            (t.type.value, t.message) for t in self.bus.toasts.value if t.type in wanted
+        ]
 
-    def cancel(self):
-        self._events.append(("task:cancel", None))
-
-    def set_progress(self, value, detail=None):
-        pass
-
-    def update(self, title):
-        pass
+    def assert_one_error_after_fail(self, startswith=None, equals=None):
+        """Exactly one error toast, published after the task was FAILED."""
+        assert len(self.errors) == 1, self.errors
+        message, timeout, statuses = self.errors[0]
+        assert timeout == ERROR_TOAST_TIMEOUT
+        # fail() lands BEFORE the toast: the run is already recorded as FAILED
+        # (with its reason) in the task log by the time the user reads it.
+        assert statuses == (TaskStatus.FAILED,)
+        task = self.task()
+        assert task.status == TaskStatus.FAILED
+        assert task.error_message == message
+        assert self.toasts() == []  # and no success/warning next to it
+        if equals is not None:
+            assert message == str(equals)
+        if startswith is not None:
+            assert message.startswith(str(startswith))
+        return message
 
 
 def _record_feedback(monkeypatch, module):
-    """Replace ``module``'s notification globals with recorders.
+    """Point ``module``'s notifier at a real bus and spy the error toasts.
 
     The real ``spawn_in_context`` still runs (real daemon thread, real kernel-
     context bridge); the wrapper only keeps the handles so the test can join.
-    Returns ``(events, threads)``.
+    Any ``notify`` global the module still uses is routed to the same bus.
     """
-    events = []
-    threads = []
+    bus = NotificationBus()
+    feedback = _Feedback(bus)
 
+    monkeypatch.setattr(module, "current_notifier", lambda: Notifier(bus))
     monkeypatch.setattr(
         module,
         "notify",
-        lambda message, type_="info", **kw: events.append(("toast", type_, message)),
+        lambda message, type_="info": getattr(Notifier(bus), type_)(message),
+        raising=False,
     )
-    monkeypatch.setattr(
-        module,
-        "track_task",
-        lambda title, total_steps=None: _RecordingTask(events, title, total_steps),
-    )
+
+    real_error = Notifier.error
+
+    def _spy_error(self, message, *, timeout=None):
+        feedback.errors.append(
+            (message, timeout, tuple(t.status for t in bus.tasks.value))
+        )
+        real_error(self, message, timeout=timeout)
+
+    monkeypatch.setattr(Notifier, "error", _spy_error)
 
     def _spawn(target, args=(), **kwargs):
         thread = spawn_in_context(target, args, **kwargs)
-        threads.append(thread)
+        feedback.threads.append(thread)
         return thread
 
     monkeypatch.setattr(module, "spawn_in_context", _spawn)
-    return events, threads
+    return feedback
 
 
-def _join(threads):
-    for thread in threads:
-        thread.join(timeout=30)
-        assert not thread.is_alive(), "worker thread did not finish"
-
-
-def _toasts(events):
-    return [(type_, message) for kind, type_, message in
-            (e for e in events if e[0] == "toast")]
+def _is_subsequence(expected, actual):
+    it = iter(actual)
+    return all(any(item == got for got in it) for item in expected)
 
 
 def _widgets(root):
@@ -154,8 +185,10 @@ class _AoiDateStub:
         self.imported = params
 
 
+
+
 # ---------------------------------------------------------------------------
-# recipe_tile — raw ipyvuetify layout + daemon workers -> notify()/track_task()
+# recipe_tile — raw ipyvuetify layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def recipe_layout(ws):
@@ -188,42 +221,52 @@ def recipe_layout(ws):
 
 def test_recipe_save_publishes_a_success_toast(recipe_layout, ws, monkeypatch):
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
     folder = ws.ensure_dir("recipe_test")
     app_state.recipe_folder_path.value = folder
 
-    _button(layout, cm.recipe_tile.button_save_recipe).fire_event("click", None)
-    _join(threads)
+    save_btn = _button(layout, cm.recipe_tile.button_save_recipe)
+    save_btn.fire_event("click", None)
+    feedback.join()
 
     # the toast reports a save that really happened -- in the user's workspace
     assert ws.exists(folder + "/recipe_parameters.json")
-    assert _toasts(events) == [("success", cm.recipe_tile.alert_save_recipe_done)]
+    # the save is a tracked task now (pill + task log), completed
+    task = feedback.task()
+    assert task.title == str(cm.recipe_tile.card_title_save_recipe)
+    assert task.status == TaskStatus.COMPLETED
+    assert feedback.errors == []
+    assert feedback.toasts() == [("success", cm.recipe_tile.alert_save_recipe_done)]
+    assert save_btn.loading is False and save_btn.disabled is False
 
 
-def test_recipe_save_failure_publishes_an_error_toast(
+def test_recipe_save_failure_fails_the_task_and_publishes_one_error_toast(
     recipe_layout, ws, monkeypatch
 ):
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
     # a folder that does not exist -> _run_save raises FileNotFoundError
     gone = ws.results_dir("gone")
     app_state.recipe_folder_path.value = gone
 
-    _button(layout, cm.recipe_tile.button_save_recipe).fire_event("click", None)
-    _join(threads)
+    save_btn = _button(layout, cm.recipe_tile.button_save_recipe)
+    save_btn.fire_event("click", None)
+    feedback.join()
 
     assert not ws.exists(gone)
     assert ws.client.files.files == {}  # and nothing was written anyway
-    (type_, message), = _toasts(events)
-    assert type_ == "error"
-    assert message.startswith(cm.recipe_tile.input_hint_save_recipe_error)
+    feedback.assert_one_error_after_fail(
+        startswith=f"{cm.recipe_tile.input_hint_save_recipe_error}: "
+    )
+    # the button is released on the failure path too
+    assert save_btn.loading is False and save_btn.disabled is False
 
 
 def test_recipe_load_tracks_its_phases_and_publishes_success(
     recipe_layout, ws, monkeypatch
 ):
     recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
 
     params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
     folder = ws.results_dir("recipe_from_disk")
@@ -231,21 +274,26 @@ def test_recipe_load_tracks_its_phases_and_publishes_success(
     ws.write_json(recipe_file, params)
     _find_load_input(layout).v_model = recipe_file
 
-    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    _join(threads)
+    load_btn = _button(layout, cm.recipe_tile.button_load_recipe)
+    load_btn.fire_event("click", None)
+    feedback.join()
 
     # the load really ran: models imported and the folder published
     assert aoi_date.imported == params
     assert app_tile_model.recipe_name == "recipe_from_disk"
     assert app_state.recipe_folder_path.value == folder
     # and it was reported as a 2-phase tracked task followed by one success toast
-    assert events[0] == ("task:start", cm.recipe_tile.load_task_title, 2)
-    assert [e for e in events if e[0] == "task:step"] == [
-        ("task:step", cm.recipe_tile.load_step_parameters),
-        ("task:step", cm.recipe_tile.loader_loading_alert_db),
-    ]
-    assert events[-2] == ("task:complete", None)
-    assert _toasts(events) == [("success", cm.recipe_tile.alert_load_recipe_done)]
+    task = feedback.task()
+    assert task.title == str(cm.recipe_tile.load_task_title)
+    assert task.total_steps == 2
+    assert task.status == TaskStatus.COMPLETED
+    assert _is_subsequence(
+        [cm.recipe_tile.load_step_parameters, cm.recipe_tile.loader_loading_alert_db],
+        feedback.milestones(),
+    )
+    assert feedback.errors == []
+    assert feedback.toasts() == [("success", cm.recipe_tile.alert_load_recipe_done)]
+    assert load_btn.loading is False and load_btn.disabled is False
 
 
 @pytest.mark.parametrize("shape", ["home_relative", "root_relative"])
@@ -257,7 +305,7 @@ def test_recipe_load_normalizes_a_non_absolute_picked_path(
     is not absolute must still resolve to the right remote recipe folder rather
     than failing the load or anchoring the alert store somewhere else."""
     recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
 
     params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
     folder = ws.results_dir("recipe_from_disk")
@@ -272,13 +320,13 @@ def test_recipe_load_normalizes_a_non_absolute_picked_path(
     _find_load_input(layout).v_model = picked
 
     _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
     assert aoi_date.imported == params
     # the store is anchored on the ABSOLUTE remote folder, not on the echo
     assert app_state.recipe_folder_path.value == folder
     assert app_tile_model.recipe_folder_path == folder
-    assert _toasts(events) == [("success", cm.recipe_tile.alert_load_recipe_done)]
+    assert feedback.toasts() == [("success", cm.recipe_tile.alert_load_recipe_done)]
 
 
 def test_recipe_load_refuses_a_picked_path_outside_the_workspace(
@@ -287,36 +335,37 @@ def test_recipe_load_refuses_a_picked_path_outside_the_workspace(
     """An echoed path pointing somewhere else entirely must fail visibly instead
     of silently pointing the alert store at another folder."""
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
     _find_load_input(layout).v_model = "/home/other-user/recipe_parameters.json"
 
     _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
     assert app_state.recipe_folder_path.value in (None, "")
-    (type_, message), = _toasts(events)
-    assert type_ == "error"
-    assert message.startswith(cm.recipe_tile.input_hint_load_recipe_name)
+    feedback.assert_one_error_after_fail(
+        startswith=cm.recipe_tile.input_hint_load_recipe_name
+    )
 
 
 def test_recipe_load_failure_fails_the_task_before_the_error_toast(
     recipe_layout, monkeypatch
 ):
     recipe_tile, layout, _app_state, _model, _aoi = recipe_layout
-    events, threads = _record_feedback(monkeypatch, recipe_tile)
+    feedback = _record_feedback(monkeypatch, recipe_tile)
     _find_load_input(layout).v_model = ""  # nothing selected -> FileNotFoundError
 
-    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    _join(threads)
+    load_btn = _button(layout, cm.recipe_tile.button_load_recipe)
+    load_btn.fire_event("click", None)
+    feedback.join()
 
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    # fail() lands BEFORE the toast: the pill is already FAILED (and so stays on
-    # screen) by the time the user reads the message.
-    assert kinds.index("task:fail") < kinds.index("toast")
-    (type_, message), = _toasts(events)
-    assert type_ == "error"
-    assert message.startswith(cm.recipe_tile.input_hint_load_recipe_name)
+    # same text as before the migration: "<hint>: <exception>"
+    feedback.assert_one_error_after_fail(
+        equals=(
+            f"{cm.recipe_tile.input_hint_load_recipe_name}: "
+            f"{cm.recipe_tile.input_hint_load_recipe_name}"
+        )
+    )
+    assert load_btn.loading is False and load_btn.disabled is False
 
 
 def _find_load_input(layout):
@@ -331,7 +380,98 @@ def _find_load_input(layout):
 
 
 # ---------------------------------------------------------------------------
-# analysis/export — raw layout + daemon workers -> notify()/track_task()
+# overview_tile export card — raw widget builder, worker under tracked_job
+# ---------------------------------------------------------------------------
+def _overview_gdf():
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gdf = gpd.GeoDataFrame(
+        {"area_ha": [1.0], "alert_polygon": [None]},
+        geometry=[box(0, 0, 1, 1)],
+        crs="EPSG:4326",
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    gdf["point"] = gdf.geometry.centroid
+    return gdf
+
+
+@pytest.fixture()
+def app_logger_at_info():
+    """Let INFO records through the app logger (restored afterwards)."""
+    app_logger = logging.getLogger("SEPALUI.deforestation_alerts")
+    previous = app_logger.level
+    app_logger.setLevel(logging.INFO)
+    yield app_logger
+    app_logger.setLevel(previous)
+
+
+def test_overview_export_worker_log_lines_become_task_milestones(
+    ws, monkeypatch, app_logger_at_info
+):
+    """The point of running the body under ``tracked_job``: an app log line the
+    export emits on the worker thread shows up as a milestone of ITS task."""
+    import gui.tile.overview_tile as overview_tile
+
+    feedback = _record_feedback(monkeypatch, overview_tile)
+    folder = ws.ensure_dir("recipe_a")
+
+    def _export(gdf, workspace, folder_, fmt, sources, start, end):
+        logging.getLogger("SEPALUI.deforestation_alerts.alert_export").info(
+            "Writing 1 alert"
+        )
+        return f"{folder_}/alerts.{fmt}"
+
+    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
+    card = overview_tile.build_export_card(
+        _overview_gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12"
+    )
+    gen_btn = card.children[1].children[1]
+    dl_btn = card.children[2].children[1]
+
+    gen_btn.fire_event("click", None)
+    feedback.join()
+
+    task = feedback.task()
+    assert task.title == str(cm.overview_tile.export_task_title)
+    assert task.status == TaskStatus.COMPLETED
+    assert feedback.milestones() == [
+        str(cm.overview_tile.export_step).format(fmt="GPKG"),
+        "Writing 1 alert",
+    ]
+    assert dl_btn.disabled is False and dl_btn.viz is True
+    assert feedback.toasts() == [
+        ("success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
+    ]
+
+
+def test_overview_export_failure_fails_the_task_with_one_error_toast(
+    ws, monkeypatch
+):
+    import gui.tile.overview_tile as overview_tile
+
+    feedback = _record_feedback(monkeypatch, overview_tile)
+
+    def _boom(*_a, **_kw):
+        raise ValueError("unsupported driver")
+
+    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
+    card = overview_tile.build_export_card(
+        _overview_gdf(), ws, ws.results_dir("recipe_a"), ["GLAD-L"], "a", "b"
+    )
+    gen_btn = card.children[1].children[0]
+    dl_btn = card.children[2].children[0]
+
+    gen_btn.fire_event("click", None)
+    feedback.join()
+
+    feedback.assert_one_error_after_fail(equals="unsupported driver")
+    assert dl_btn.disabled is True and dl_btn.viz is False
+    assert gen_btn.loading is False and gen_btn.disabled is False
+
+
+# ---------------------------------------------------------------------------
+# analysis/export — raw layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def export_card(monkeypatch, ws):
@@ -354,23 +494,28 @@ def test_export_save_publishes_success_and_enables_the_download(
     export_card, monkeypatch
 ):
     export, card, _app_state, _app_tile_model = export_card
-    events, threads = _record_feedback(monkeypatch, export)
+    feedback = _record_feedback(monkeypatch, export)
     monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
 
     download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
     assert download_btn.disabled is True
 
-    _button(card, cm.analysis_tile.export_labels.save_btn).fire_event("click", None)
-    _join(threads)
+    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    save_btn.fire_event("click", None)
+    feedback.join()
 
     # the success toast accompanies the real post-save apply step
     assert download_btn.disabled is False
-    assert events[0] == ("task:start", cm.analysis_tile.export_labels.save_task_title, None)
-    assert ("task:step", cm.analysis_tile.export_labels.save_step) in events
-    assert ("task:complete", None) in events
-    assert _toasts(events) == [
+    task = feedback.task()
+    assert task.title == str(cm.analysis_tile.export_labels.save_task_title)
+    assert task.total_steps is None
+    assert str(cm.analysis_tile.export_labels.save_step) in feedback.milestones()
+    assert task.status == TaskStatus.COMPLETED
+    assert feedback.errors == []
+    assert feedback.toasts() == [
         ("success", cm.analysis_tile.export_labels.save_done)
     ]
+    assert save_btn.loading is False and save_btn.disabled is False
 
 
 @pytest.mark.parametrize(
@@ -392,9 +537,10 @@ def test_export_save_refusal_fails_the_task_and_says_why(
     touching ``widgets``). It used to call ``task.complete()`` unconditionally
     and then skip the toast and the button enable: a DONE run, no file, no
     explanation, and a download button still disabled for no stated reason.
+    The refusal is a WARNING outcome (not an error toast).
     """
     export, card, app_state, _app_tile_model = export_card
-    events, threads = _record_feedback(monkeypatch, export)
+    feedback = _record_feedback(monkeypatch, export)
 
     if with_alerts:
         app_state.alerts_gdf.value = _one_row_gdf()
@@ -403,15 +549,14 @@ def test_export_save_refusal_fails_the_task_and_says_why(
     save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
     download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
     save_btn.fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
     expected = str(cm.analysis_tile.export_labels.save_no_alert)
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    # fail() before the toast, so the run is logged as FAILED before the message
-    assert kinds.index("task:fail") < kinds.index("toast")
-    assert ("task:fail", expected) in events
-    assert _toasts(events) == [("warning", expected)]
+    task = feedback.task()
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message == expected
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", expected)]
     # nothing was enabled, and the save button is released
     assert download_btn.disabled is True
     assert save_btn.loading is False and save_btn.disabled is False
@@ -421,7 +566,7 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):
     export, card, _app_state, _app_tile_model = export_card
-    events, threads = _record_feedback(monkeypatch, export)
+    feedback = _record_feedback(monkeypatch, export)
 
     def _boom(*a, **k):
         raise ValueError("no alert selected")
@@ -429,16 +574,15 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
     monkeypatch.setattr(export, "_save_attributes", _boom)
 
     save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
     save_btn.fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
     # the button is released even on the failure path
     assert save_btn.loading is False and save_btn.disabled is False
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    assert kinds.index("task:fail") < kinds.index("toast")
+    assert download_btn.disabled is True
     # the exception text is what reaches the user, not a bool/placeholder
-    assert _toasts(events) == [("error", "no alert selected")]
+    feedback.assert_one_error_after_fail(equals="no alert selected")
 
 
 def _one_row_gdf():
@@ -486,10 +630,10 @@ def test_export_download_refusal_fails_the_task_and_says_why(
     ``_download_data`` runs for REAL here (it refuses before touching
     ``widgets``), so this drives the actual refusal, not a stub. It used to call
     ``task.complete()`` and then silently skip the toast and the reveal: a green
-    pill, no files, no explanation.
+    pill, no files, no explanation. The refusal is a WARNING outcome.
     """
     export, card, app_state, app_tile_model = export_card
-    events, threads = _record_feedback(monkeypatch, export)
+    feedback = _record_feedback(monkeypatch, export)
 
     app_tile_model.recipe_folder_path = recipe_folder
     if with_alerts:
@@ -501,21 +645,75 @@ def test_export_download_refusal_fails_the_task_and_says_why(
         card, cm.analysis_tile.export_labels.download_alert_data_btn
     )
     download_btn.fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    # fail() before the toast, so the pill is already FAILED when it appears
-    assert kinds.index("task:fail") < kinds.index("toast")
-    assert ("task:fail", str(expected)) in events
-    assert _toasts(events) == [("warning", str(expected))]
+    task = feedback.task()
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message == str(expected)
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", str(expected))]
     # nothing was revealed, and the button is released
     assert toolbar.viz is False
     assert download_btn.loading is False and download_btn.disabled is False
 
 
+def test_export_download_success_reveals_the_files(export_card, monkeypatch, ws):
+    export, card, _app_state, _app_tile_model = export_card
+    feedback = _record_feedback(monkeypatch, export)
+    folder = ws.results_dir("r")
+    monkeypatch.setattr(
+        export,
+        "_download_data",
+        lambda *a, **k: {
+            "zip_path": f"{folder}/alert_0.zip",
+            "report_path": f"{folder}/alert_0.docx",
+        },
+    )
+
+    toolbar = _download_toolbar(card)
+    download_btn = _button(
+        card, cm.analysis_tile.export_labels.download_alert_data_btn
+    )
+    download_btn.fire_event("click", None)
+    feedback.join()
+
+    task = feedback.task()
+    assert task.title == str(cm.analysis_tile.export_labels.download_task_title)
+    assert task.status == TaskStatus.COMPLETED
+    assert str(cm.analysis_tile.export_labels.download_step) in feedback.milestones()
+    assert feedback.errors == []
+    assert feedback.toasts() == [
+        ("success", str(cm.analysis_tile.export_labels.download_done))
+    ]
+    assert toolbar.viz is True
+    assert download_btn.loading is False and download_btn.disabled is False
+
+
+def test_export_download_failure_fails_the_task_with_one_error_toast(
+    export_card, monkeypatch
+):
+    export, card, _app_state, _app_tile_model = export_card
+    feedback = _record_feedback(monkeypatch, export)
+
+    def _boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(export, "_download_data", _boom)
+
+    toolbar = _download_toolbar(card)
+    download_btn = _button(
+        card, cm.analysis_tile.export_labels.download_alert_data_btn
+    )
+    download_btn.fire_event("click", None)
+    feedback.join()
+
+    feedback.assert_one_error_after_fail(equals="disk full")
+    assert toolbar.viz is False
+    assert download_btn.loading is False and download_btn.disabled is False
+
+
 # ---------------------------------------------------------------------------
-# analysis/edit_tools — raw layout + daemon workers -> notify()/track_task()
+# analysis/edit_tools — CNN run workers under tracked_job (dl_404 mapping)
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def edit_tools_card(ws):
@@ -539,49 +737,129 @@ def _dl_run_button(card, label):
     raise AssertionError(f"no DL run button {label!r} in the card")
 
 
-def test_edit_tools_model_run_publishes_success(edit_tools_card, monkeypatch):
+@pytest.mark.parametrize("label, attr", [("M 1", "model1_prediction_file"),
+                                         ("M 2", "model2_prediction_file")])
+def test_edit_tools_model_run_publishes_success(
+    edit_tools_card, monkeypatch, label, attr
+):
     edit_tools, card, analyzed_alerts_model = edit_tools_card
-    events, threads = _record_feedback(monkeypatch, edit_tools)
-    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred_m1.tif")
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
 
-    _dl_run_button(card, "M 1").fire_event("click", None)
-    _join(threads)
+    run_btn = _dl_run_button(card, label)
+    run_btn.fire_event("click", None)
+    feedback.join()
 
     # the toast accompanies the real apply step (the prediction is on the model)
-    assert analyzed_alerts_model.model1_prediction_file == "/tmp/pred_m1.tif"
-    assert events[0] == (
-        "task:start", cm.analysis_tile.model_labels.dl_task_title, None
-    )
-    assert ("task:step", str(cm.analysis_tile.model_labels.dl_step_run)) in events
-    assert ("task:complete", None) in events
-    assert _toasts(events) == [
+    assert getattr(analyzed_alerts_model, attr) == "/tmp/pred.tif"
+    task = feedback.task()
+    assert task.title == str(cm.analysis_tile.model_labels.dl_task_title)
+    assert task.total_steps is None
+    assert str(cm.analysis_tile.model_labels.dl_step_run) in feedback.milestones()
+    assert task.status == TaskStatus.COMPLETED
+    assert feedback.errors == []
+    assert feedback.toasts() == [
         ("success", str(cm.analysis_tile.model_labels.dl_done))
     ]
+    assert run_btn.loading is False and run_btn.disabled is False
 
 
+@pytest.mark.parametrize("label", ["M 1", "M 2"])
 def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
-    edit_tools_card, monkeypatch
+    edit_tools_card, monkeypatch, label
 ):
     edit_tools, card, _model = edit_tools_card
-    events, threads = _record_feedback(monkeypatch, edit_tools)
+    feedback = _record_feedback(monkeypatch, edit_tools)
 
     def _boom(*a, **k):
         raise RuntimeError("model download failed")
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
 
-    run_btn = _dl_run_button(card, "M 1")
+    run_btn = _dl_run_button(card, label)
     run_btn.fire_event("click", None)
-    _join(threads)
+    feedback.join()
 
     assert run_btn.loading is False and run_btn.disabled is False
-    kinds = [e[0] for e in events]
-    assert "task:complete" not in kinds
-    assert kinds.index("task:fail") < kinds.index("toast")
-    assert _toasts(events) == [
-        ("error", str(cm.analysis_tile.model_labels.dl_404))
-    ]
+    # every run failure maps to the friendly dl_404 text, as before
+    feedback.assert_one_error_after_fail(
+        equals=cm.analysis_tile.model_labels.dl_404
+    )
+
+
+@pytest.mark.parametrize("label", ["M 1", "M 2"])
+def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
+    edit_tools_card, monkeypatch, label
+):
+    """The verify/apply step used to publish its own dl_404 toast and let the
+    worker fail the task AFTER it; it now fails inside the tracked job, so the
+    task is FAILED first and there is still exactly one error toast."""
+    edit_tools, card, _model = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+
+    def _bad_raster(path, threshold):
+        raise OSError("not a raster")
+
+    monkeypatch.setattr(edit_tools, "verify_raster", _bad_raster)
+
+    run_btn = _dl_run_button(card, label)
+    run_btn.fire_event("click", None)
+    feedback.join()
+
+    assert run_btn.loading is False and run_btn.disabled is False
+    feedback.assert_one_error_after_fail(
+        equals=cm.analysis_tile.model_labels.dl_404
+    )
+
+
+def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
+    """The before/after composite download reports geedim tile ticks as task
+    progress, then hands the ring back to indeterminate for the inference."""
+    import huggingface_hub
+
+    import gui.tile.analysis.edit_tools as edit_tools
+    from deforestation_alerts.scripts import gee_progress
+
+    def _fake_stage(*_a, **_k):
+        callback = gee_progress._local.callback
+        callback(1, 4)
+        callback(2, 4)
+        callback(4, 4)
+        return "/tmp/composite.tif", None
+
+    order = []
+    monkeypatch.setattr(edit_tools, "stage_alert_image", _fake_stage)
+    monkeypatch.setattr(
+        huggingface_hub, "hf_hub_download", lambda **kw: "/tmp/model.h5"
+    )
+    monkeypatch.setattr(
+        edit_tools,
+        "apply_dl_model",
+        lambda image, model, suffix: order.append("inference") or "/tmp/pred.tif",
+    )
+
+    class _Task:
+        def set_progress(self, value):
+            order.append(value)
+
+    app_state = AppState()
+    app_state.actual_alert_id.value = 0
+    widgets = type("W", (), {
+        "selected_img_before_info_list": None,
+        "selected_img_after_info_list": None,
+        "selected_img_before": None,
+        "selected_img_after": None,
+        "actual_alert_grid": None,
+    })()
+
+    result = edit_tools._run_cnn_model(
+        "repo", "file", "_m1", widgets, app_state, AppTileModel(), ws, task=_Task()
+    )
+
+    assert result == "/tmp/pred.tif"
+    assert order == [0.25, 0.5, 1.0, None, "inference"]
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +882,7 @@ RAW_LAYOUTS = [
     "gui/tile/analysis/export.py",
     # Hybrid: a Solara component, but its export card is a module-level raw
     # widget builder whose worker publishes from a daemon thread, where no hook
-    # can run — so it belongs on the globals side of this boundary.
+    # can run — so it belongs on the raw-layout side of this boundary.
     "gui/tile/overview_tile.py",
 ]
 
@@ -669,22 +947,43 @@ def test_solara_tiles_use_the_hook_not_the_globals():
             )
 
 
-def test_raw_layouts_use_the_globals_not_the_hook():
-    """Raw widget layouts publish from worker threads, where no hook can run."""
+def test_raw_layouts_publish_through_the_bridge_not_the_hook():
+    """Raw widget layouts publish from worker threads, where no hook can run.
+
+    They resolve a notifier from the worker's kernel context
+    (notify_bridge.current_notifier) and run their body under
+    tracked_job, which owns the task + the one error toast.
+    """
     for rel in RAW_LAYOUTS:
         called = _called(rel)
         imported = _imported_names(rel)
-        assert "pysepal.solara.notifications.notify" in imported, (
-            f"{rel} does not import the notify() global"
+        assert "gui.scripts.notify_bridge.tracked_job" in imported, (
+            f"{rel} does not import tracked_job"
         )
-        assert "pysepal.solara.notifications.track_task" in imported, (
-            f"{rel} does not import the track_task() global"
+        assert "gui.scripts.notify_bridge.current_notifier" in imported, (
+            f"{rel} does not import current_notifier"
         )
-        assert "notify" in called, f"{rel} publishes no toast"
-        assert "track_task" in called, f"{rel} tracks no long-running work"
+        assert "tracked_job" in called, f"{rel} tracks no long-running work"
+        assert "current_notifier" in called, f"{rel} resolves no notifier"
+        assert "notifier.success" in called, f"{rel} publishes no success toast"
+        assert "pysepal.solara.notifications.track_task" not in imported, (
+            f"{rel} still imports the track_task() global"
+        )
         assert "use_notifications" not in called, (
             f"{rel} is a raw layout: it must not call the use_notifications() hook"
         )
+
+
+def test_raw_layout_workers_use_tracked_job():
+    for rel in (
+        "gui/tile/recipe_tile.py",
+        "gui/tile/overview_tile.py",
+        "gui/tile/analysis/export.py",
+        "gui/tile/analysis/edit_tools.py",
+    ):
+        src = _src(rel)
+        assert "tracked_job(" in src, rel
+        assert "track_task(" not in src, rel
 
 
 def test_task_error_toasts_use_the_exception_not_the_error_flag():

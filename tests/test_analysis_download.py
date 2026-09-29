@@ -150,3 +150,43 @@ def test_download_is_a_noop_without_a_recipe(download_ctx):
     ctx.app_tile_model.recipe_folder_path = ""
 
     assert _run(ctx) is None
+
+
+def test_composite_download_drives_the_task_progress_ring(download_ctx, monkeypatch):
+    """The before/after composite download reports geedim tile ticks as task
+    progress and then hands the ring back to indeterminate for the zip/report;
+    a cache hit downloads nothing, so it only resets the ring."""
+    from deforestation_alerts.scripts import gee_progress
+    from gui.tile.analysis import paths
+
+    ctx = download_ctx
+    fake_download = paths.download_both_images
+
+    def _ticking_download(*args, **kwargs):
+        callback = gee_progress._local.callback
+        callback(1, 2)
+        callback(2, 2)
+        return fake_download(*args, **kwargs)
+
+    monkeypatch.setattr(paths, "download_both_images", _ticking_download)
+
+    class _Task:
+        def __init__(self):
+            self.progress = []
+
+        def set_progress(self, value):
+            self.progress.append(value)
+
+    first = _Task()
+    export_mod._download_data(
+        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model, ctx.ws,
+        task=first,
+    )
+    assert first.progress == [0.5, 1.0, None]
+
+    cached = _Task()
+    export_mod._download_data(
+        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model, ctx.ws,
+        task=cached,
+    )
+    assert cached.progress == [None]
