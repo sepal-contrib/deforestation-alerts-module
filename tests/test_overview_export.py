@@ -34,7 +34,7 @@ def _gdf():
         geometry=gpd.GeoSeries([Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326"),
     )
     g["bounding_box"] = g.geometry.envelope
-    g["point"] = g.geometry.centroid
+    g["point"] = g.geometry.representative_point()
     return g
 
 

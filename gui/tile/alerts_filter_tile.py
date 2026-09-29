@@ -593,7 +593,9 @@ def _download_alert_raster(plan: AnalyzePlan, on_tiles=None, on_wait=None) -> st
     """Export the filtered alert raster to a local GeoTIFF. Pure, thread-only.
 
     First half of the OLD ``run_local_vectorize._work``. Blocking EE + network,
-    so it only ever runs inside ``asyncio.to_thread``.
+    so it only ever runs on a worker thread — via ``to_thread_in_context``
+    (gui/scripts/solara_threads.py), which binds the caller's kernel context so
+    the tile progress and milestones it reports reach the browser.
 
     Concurrent geedim exports are serialized inside ``download_ee_image`` itself
     (geedim has ONE process-wide asyncio runner). That matters here because

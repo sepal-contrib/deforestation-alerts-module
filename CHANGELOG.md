@@ -2,6 +2,25 @@
 
 ### Changed
 
+- Moved to the official **pysepal 4.1.0** release (with solara 1.62.0 and
+  ee-client >= 3.2.1), replacing the pysepal 3.8 fork-SHA pin described further
+  down: pysepal 4 resolves Voila sessions from runtime topology, so the fork's
+  voila-local-sessions patch is no longer needed. The app now mounts pysepal's
+  `NotificationProvider` and passes the session `gee_interface` to every
+  Earth Engine-backed widget.
+- Removed the on-map `LogConsole` (and its log bridge) in favour of pysepal
+  notifications: toasts and the task pill are now the only feedback channel.
+- Recipe load, exports, the Analysis CNN run and the Filter step's Analyze each
+  run as a tracked job with its own entry in the pysepal task pill; the app's
+  INFO log lines emitted by that job surface there as step milestones, and a
+  failure fails the task with a single error toast.
+- Earth Engine downloads report tile-by-tile progress, show a one-time "queued"
+  notice when another download is already running, and export only the AOI's
+  bounding box as the request region (the footprint is still applied by the
+  clip), so very detailed AOIs no longer fail with "Description length exceeds
+  maximum".
+- Fixed: selecting a drawn AOI failed under pysepal 4 with a `TasksResponse`
+  validation error, because ee-client rejected Earth Engine's empty task list.
 - The app adopts the Spatial Risk workflow side panel: AOI/Date → Filter →
   Analysis live in a "Workflow" right-panel view under a pipeline header
   (segment strip, Back/Next, step picker with lock reasons and output counts).

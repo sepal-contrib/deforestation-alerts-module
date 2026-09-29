@@ -390,7 +390,7 @@ def _overview_gdf():
         crs="EPSG:4326",
     )
     gdf["bounding_box"] = gdf.geometry.envelope
-    gdf["point"] = gdf.geometry.centroid
+    gdf["point"] = gdf.geometry.representative_point()
     return gdf
 
 
