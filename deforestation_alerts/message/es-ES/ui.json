@@ -81,6 +81,7 @@
             "analyze_alerts_button": "Analizar alertas",
             "analyze_status_joining": "Uniendo {n} fuente(s) de alertas…",
             "analyze_status_downloading": "Descargando ráster de alertas…",
+            "analyze_status_queued": "Esperando a que termine otra descarga…",
             "analyze_status_vectorizing": "Vectorizando agrupaciones…",
             "analyze_status_found": "Se encontraron {n} alertas — ensamblando…",
             "analyze_task_title": "Analizando alertas",

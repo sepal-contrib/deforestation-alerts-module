@@ -81,6 +81,7 @@
             "analyze_alerts_button": "Analyze alerts",
             "analyze_status_joining": "Joining {n} alert source(s)…",
             "analyze_status_downloading": "Downloading alert raster…",
+            "analyze_status_queued": "Waiting for another download to finish…",
             "analyze_status_vectorizing": "Vectorizing clusters…",
             "analyze_status_found": "Found {n} alerts — assembling…",
             "analyze_task_title": "Analyzing alerts",

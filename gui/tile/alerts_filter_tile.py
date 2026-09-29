@@ -93,6 +93,8 @@ from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
 from deforestation_alerts.scripts.naming import alert_artifact_name
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
+from gui.scripts.notify_bridge import forward_logs_to, tile_progress_reporter
+from gui.scripts.solara_threads import to_thread_in_context
 from gui.widget.help import InfoButton
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.filter")
@@ -587,7 +589,7 @@ def _prepare_analyze_sync(request: AnalyzeRequest, workspace) -> AnalyzePlan:
     )
 
 
-def _download_alert_raster(plan: AnalyzePlan) -> str:
+def _download_alert_raster(plan: AnalyzePlan, on_tiles=None, on_wait=None) -> str:
     """Export the filtered alert raster to a local GeoTIFF. Pure, thread-only.
 
     First half of the OLD ``run_local_vectorize._work``. Blocking EE + network,
@@ -598,23 +600,27 @@ def _download_alert_raster(plan: AnalyzePlan) -> str:
     cancelling Analyze abandons the coroutine but not this thread, so an
     immediately restarted run would otherwise collide with the download it just
     walked away from — as would the Analysis dialog's imagery/export threads.
+
+    ``on_tiles(done, total)`` and ``on_wait()`` are called on the calling
+    thread — the caller's own worker thread, never the kernel loop — while the
+    download runs; either may be ``None`` to register no callback.
     """
-    # geedim exports over an ee.Geometry; the AOI / drawn poly is a
-    # FeatureCollection, so pass its geometry.
-    region = plan.region
-    export_region = (
-        region.geometry() if isinstance(region, ee.FeatureCollection) else region
+    from deforestation_alerts.scripts.gee_progress import (
+        geedim_download_wait,
+        geedim_tile_progress,
     )
+
     # alert raster: band order [alert, date]; 0 = no-alert so unmask to 255.
-    download_ee_image(
-        plan.filtered_alert_raster.select(["alert", "date"]),
-        plan.out_tif,
-        region=export_region,
-        scale=plan.pixel_size,
-        crs="EPSG:4326",
-        unmask_value=255,
-        nodata_value=255,
-    )
+    with geedim_tile_progress(on_tiles), geedim_download_wait(on_wait):
+        download_ee_image(
+            plan.filtered_alert_raster.select(["alert", "date"]),
+            plan.out_tif,
+            region=plan.region,
+            scale=plan.pixel_size,
+            crs="EPSG:4326",
+            unmask_value=255,
+            nodata_value=255,
+        )
     return plan.out_tif
 
 
@@ -945,7 +951,22 @@ def AlertsFilterTile(
 
                 # Download + vectorize locally (replaces the OLD GEE reduceToVectors).
                 task.step(cm.filter_tile.analyze_status_downloading)
-                await asyncio.to_thread(_download_alert_raster, plan)
+
+                on_tiles = tile_progress_reporter(task)
+
+                def _on_wait():
+                    task.step(cm.filter_tile.analyze_status_queued)
+
+                def _download_tracked():
+                    # On the pool thread: its app log lines become milestones
+                    # of this task, and geedim's tile ticks drive the ring.
+                    with forward_logs_to(task):
+                        return _download_alert_raster(
+                            plan, on_tiles=on_tiles, on_wait=_on_wait
+                        )
+
+                await to_thread_in_context(_download_tracked)
+                task.set_progress(None)
                 await asyncio.to_thread(_publish_alert_raster, plan, workspace)
 
                 task.step(cm.filter_tile.analyze_status_vectorizing)

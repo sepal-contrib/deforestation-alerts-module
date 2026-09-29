@@ -81,6 +81,7 @@
             "analyze_alerts_button": "Analyser les alertes",
             "analyze_status_joining": "Fusion de {n} source(s) d'alertes…",
             "analyze_status_downloading": "Téléchargement du raster d'alertes…",
+            "analyze_status_queued": "En attente de la fin d'un autre téléchargement…",
             "analyze_status_vectorizing": "Vectorisation des agrégats…",
             "analyze_status_found": "{n} alertes trouvées — assemblage…",
             "analyze_task_title": "Analyse des alertes",
