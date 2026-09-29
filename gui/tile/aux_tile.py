@@ -1,16 +1,15 @@
-"""Aux tile as a Solara component (Phase 4 port of the old ipyvuetify class).
+"""Aux tile layout (Phase 4 port of the old ipyvuetify class).
 
-Architecture layer: view — imports solara and ipyvuetify for UI only.
+Architecture layer: view — ipyvuetify widgets for UI only.
 No GEE calls; bindings use traitlets `.bind()` on a memoized widget tree.
 
-NOTE: all ipyvuetify widgets (cards, inputs) are created inside use_memo
-(dependencies=[]) so they are stable across re-renders and the .bind() chain
-is attached exactly once.  Rebuilding them as plain Python objects on each
+NOTE: ``Page`` (gui/solara_app.py) builds this layout inside use_memo
+(dependencies=[]) so the widgets are stable across re-renders and the .bind()
+chain is attached exactly once.  Rebuilding them as plain Python objects on each
 render would reattach bindings on every re-render and lose entered values.
 See overview_tile.py for the same pattern with v.SimpleTable.
 """
 
-import solara
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 from pysepal.planetapi import PlanetView
@@ -19,34 +18,6 @@ from pysepal.sepalwidgets.file_input import FileInput
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.raster_attribute import band_names, build_attribute_config
 from deforestation_alerts.scripts.attribute_source import gee_band_names
-
-
-@solara.component
-def AuxTile(aux_model, workspace):
-    """Solara port of the old AuxTile ipyvuetify widget.
-
-    Parameters
-    ----------
-    aux_model : AuxModel
-        Domain model holding the auxiliary layer configuration traits.
-        Widgets are bound to it once via the traitlets `.bind()` chain
-        inside use_memo; no observers, no GEE calls.
-    workspace : Workspace
-        The session user-file adapter. Its client backs the two file pickers so
-        they browse the user's SEPAL workspace, not the container's disk.
-    """
-
-    # ------------------------------------------------------------------
-    # Memoized widget tree — created once per kernel, stable across
-    # re-renders.  The .bind() chain is executed as part of the builder
-    # so bindings are attached exactly once.
-    # ------------------------------------------------------------------
-    layout_widget = solara.use_memo(
-        lambda: build_aux_layout(aux_model, workspace),
-        dependencies=[],
-    )
-
-    solara.display(layout_widget)
 
 
 _STATS = ["majority", "mean", "min", "max", "median"]
@@ -174,8 +145,7 @@ def build_aux_layout(aux_model, workspace, gee_interface=None):
     inside an ``Output`` whose view is NOT recreated when MapApp destroys the
     dialog DOM (v-if) on close and rebuilds it on reopen — the card content
     vanishes on the 2nd open. A raw ipyvuetify widget tree is re-viewed from its
-    model on reopen like any ipywidget, so it survives. (The ``AuxTile``
-    component above keeps the solara.display form for any standalone use.)
+    model on reopen like any ipywidget, so it survives.
     """
     # Card 1 — CCDC alerts asset
     title1 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.ccdc_alerts_title])
