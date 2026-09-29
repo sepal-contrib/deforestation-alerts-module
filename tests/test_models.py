@@ -31,15 +31,17 @@ def test_aux_model_roundtrip():
     m = AuxModel()
     m.aux_layer = "projects/x/aux"
     m.aux_layer_vis = {"palette": ["#000000"]}
-    m.custom_alert_layer = "projects/x/custom"
-    m.custom_alert_name = "MyAlerts"
+    m.custom_alerts = [
+        {"name": "MyAlerts", "asset": "projects/x/custom"},
+        {"name": "Other", "asset": "projects/x/other"},
+    ]
     m.attribute_raster = {
         "source": "projects/x/forest", "kind": "gee",
         "bands": [{"band": "forest", "stat": "majority", "column": "forest"}],
     }
     exported = m.export_dictionary()
     assert set(exported) == {
-        "ccdc_layer", "custom_alert_layer", "custom_alert_name",
+        "ccdc_layer", "custom_alerts",
         "mask_layer", "aux_layer", "aux_layer_vis",
         "custom_report_template", "attribute_raster",
     }
@@ -48,12 +50,47 @@ def test_aux_model_roundtrip():
     loaded.import_from_dictionary(exported)
     assert loaded.aux_layer == "projects/x/aux"
     assert loaded.aux_layer_vis == {"palette": ["#000000"]}
-    assert loaded.custom_alert_layer == "projects/x/custom"
-    assert loaded.custom_alert_name == "MyAlerts"
+    assert loaded.custom_alerts == [
+        {"name": "MyAlerts", "asset": "projects/x/custom"},
+        {"name": "Other", "asset": "projects/x/other"},
+    ]
     assert loaded.attribute_raster == {
         "source": "projects/x/forest", "kind": "gee",
         "bands": [{"band": "forest", "stat": "majority", "column": "forest"}],
     }
+
+
+def test_aux_model_imports_legacy_single_custom_source():
+    loaded = AuxModel()
+    loaded.import_from_dictionary(
+        {"custom_alert_layer": "projects/x/custom", "custom_alert_name": "MyAlerts"}
+    )
+    assert loaded.custom_alerts == [{"name": "MyAlerts", "asset": "projects/x/custom"}]
+
+
+def test_aux_model_legacy_partial_or_reserved_is_ignored():
+    loaded = AuxModel()
+    loaded.import_from_dictionary({"custom_alert_layer": "projects/x/custom"})
+    assert loaded.custom_alerts == []
+    loaded.import_from_dictionary(
+        {"custom_alert_layer": "projects/x/c", "custom_alert_name": "RADD"}
+    )
+    assert loaded.custom_alerts == []
+
+
+def test_aux_model_import_without_custom_keys_keeps_current():
+    m = AuxModel()
+    m.custom_alerts = [{"name": "Keep", "asset": "a"}]
+    m.import_from_dictionary({"mask_layer": "projects/x/mask"})
+    assert m.custom_alerts == [{"name": "Keep", "asset": "a"}]
+
+
+def test_aux_model_import_cleans_new_key():
+    m = AuxModel()
+    m.import_from_dictionary(
+        {"custom_alerts": [{"name": "ccdc", "asset": "a"}, {"name": "Ok", "asset": "b"}]}
+    )
+    assert m.custom_alerts == [{"name": "Ok", "asset": "b"}]
 
 
 def test_selected_alerts_model_export_keys_and_numeric_codes():
