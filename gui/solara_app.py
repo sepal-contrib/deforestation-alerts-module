@@ -53,6 +53,7 @@ from gui.store.navigation import (
 from gui.i18n import app_available_locales, t
 from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
 from gui.store.state_manager import AppState, aoi_name_from_model
+from gui.scripts.notify_bridge import install_task_log_handler
 from gui.scripts.reacton_widgets import find_rendered_widget
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 from gui.tile.about_tile import AboutTile
@@ -68,6 +69,9 @@ from gui.widget.workflow_header import WorkflowHeader
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+# Forward INFO+ app log records of tracked jobs into pysepal's task pill (gui/scripts/notify_bridge.py).
+install_task_log_handler()
 
 # Point GDAL's temp-file allocator at a directory proven writable, ONCE per
 # process. This used to ride along on the import of the (now deleted)

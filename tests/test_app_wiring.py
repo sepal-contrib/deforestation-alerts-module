@@ -365,3 +365,8 @@ def test_pipeline_header_accent_follows_the_app_theme_not_solara():
     assert "is_dark = solara_dark if dark is None else dark.value" in header
     assert "primary = themes.dark.primary if is_dark else themes.light.primary" in header
     assert "dark=app_state.dark" in _src("gui/widget/workflow_header.py")
+
+
+def test_task_log_handler_is_installed_at_startup():
+    src = _src("gui/solara_app.py")
+    assert "install_task_log_handler()" in src
