@@ -30,6 +30,18 @@ class AoiDateModel(AoiModel):
         The end date of the retrieved alerts (format: YYYY-MM-DD).
     """
 
+    def export_to_asset(self):
+        """Keep drawn / uploaded AOIs in memory; never export them as assets.
+
+        pysepal's AoiModel exports every DRAW / SHAPE / POINTS selection to a
+        GEE asset as a side effect, checking the user's task list first. The
+        app never reads that asset (``dst_asset_id``): it works from the
+        in-memory ``feature_collection``, like spatial_risk's Solara AoiView
+        does for drawn shapes. Skipping the export also avoids ee-client
+        3.2.1 rejecting an empty task list, which broke every drawn AOI.
+        """
+        return self
+
     def export_dictionary(self):
         dictionary = {
             "aoi_admin": self.admin,

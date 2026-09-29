@@ -38,7 +38,6 @@ from pysepal.solara import (
 from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.gdal_env import configure_gdal_tmpdir
-from deforestation_alerts.scripts.eeclient_compat import patch_empty_task_list
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
 from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
@@ -233,10 +232,6 @@ def _PanelBridge(
 
 init_ee()
 setup_solara_server()
-
-# ee-client 3.2.1 rejects Earth Engine's empty task list, which breaks every
-# drawn AOI (pysepal checks for a running export first). See eeclient_compat.
-patch_empty_task_list()
 
 # PYSEPAL_DEV_AUTH (local dev against a real SEPAL) logs in with a blocking
 # POST; prime it once here so it stays off the render path. prime_dev_auth()

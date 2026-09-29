@@ -207,3 +207,39 @@ def test_aoi_date_model_import_roundtrips_aoi_vector_json(gee):
     )
     assert dst.vector_json == {"pathname": "/x.shp", "column": "ALL", "value": None}
     assert dst.start_date == "2021-01-01"
+
+
+def test_drawn_aoi_stays_in_memory_and_never_exports_an_asset(gee):
+    """A drawn AOI is used as an in-memory ee.FeatureCollection, like
+    spatial_risk's Solara AoiView. pysepal's AoiModel would also export it as a
+    GEE asset, checking the task list first -- a side effect the app never
+    reads, and the call that broke drawing on ee-client 3.2.1."""
+    from unittest.mock import MagicMock
+
+    import ee
+
+    from deforestation_alerts.model.aoi_date_model import AoiDateModel
+
+    gee_interface = MagicMock()
+    m = AoiDateModel(gee_interface=gee_interface)
+    m.name = "drawn"
+    m._from_geo_json(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"style": {}},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert isinstance(m.feature_collection, ee.FeatureCollection)
+    gee_interface.is_running.assert_not_called()
+    gee_interface.export_table_to_asset.assert_not_called()
+    gee_interface.get_asset.assert_not_called()
