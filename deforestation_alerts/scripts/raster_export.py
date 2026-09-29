@@ -12,10 +12,15 @@ the alert-raster export, the attribute-raster materialization
 the ones started from ``spawn_in_context`` daemon threads.
 """
 
+import logging
 import threading
 from typing import Any, Optional, Union
 
 import ee
+
+from deforestation_alerts.scripts.gee_progress import notify_download_wait
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts.raster_export")
 
 # Serializes the geedim export section (see the module docstring).
 _DOWNLOAD_LOCK = threading.Lock()
@@ -28,6 +33,23 @@ _DOWNLOAD_LOCK = threading.Lock()
 # TimeoutError, and cancelling an export does NOT stop its thread, so an
 # unbounded wait could otherwise strand a second user indefinitely.
 _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
+
+
+def _export_bounds(region: Any) -> Any:
+    """The export region for geedim: the *bounds* of ``region``, never its geometry.
+
+    Putting the computed ``.geometry()`` of a table asset in a download request
+    makes Earth Engine materialise it into the request description; for a
+    large AOI (a single-feature asset of ~1.1M coordinates reproduced this,
+    2026-09-11) the server answers "Description length exceeds maximum" on
+    every tile. The export grid only depends on the bounding rectangle anyway
+    — ``bounds()`` yields the identical transform and shape — while the
+    footprint itself is applied by ``clip``, which accepts the collection.
+    """
+    if region is None:
+        return None
+    geom = region.geometry() if hasattr(region, "geometry") else region
+    return geom.bounds()
 
 
 def download_ee_image(
@@ -49,8 +71,12 @@ def download_ee_image(
     nodata_value: Optional[int] = None,
     **kwargs: Any,
 ) -> None:
-    """Download `image` as a GeoTIFF at `filename`. Tiled automatically by geedim
-    (`max_tile_size`/`max_tile_dim`), so national-scale exports stream safely (D4).
+    """Download `image` as a GeoTIFF at `filename`. Tiling (so national-scale
+    exports stream safely, D4) is controlled by `max_tile_size` (MB) /
+    `max_tile_dim` (px); `num_threads` maps to geedim's `max_requests`.
+
+    The export region handed to geedim is always the *bounds* of `region` — the
+    footprint itself is applied by the clip (see `_export_bounds`).
 
     Set `unmask_value` to treat zeros as data (the alert raster uses 0 = no-alert,
     so pass e.g. 255 to distinguish masked-out from genuine zero). `nodata_value`
@@ -64,29 +90,46 @@ def download_ee_image(
     if not isinstance(image, ee.Image):  # pragma: no cover
         raise ValueError("image must be an ee.Image.")
 
+    # Clip with the region object as given (Geometry, Feature or
+    # FeatureCollection) -- never ``region.geometry()``, see ``_export_bounds``.
     if unmask_value is not None:
-        if isinstance(region, (ee.Geometry, ee.FeatureCollection)):
+        if region is not None:
             image = image.clip(region)
         image = image.unmask(unmask_value, sameFootprint=False)
 
-    # One export at a time, process-wide (see the module docstring).
-    if not _DOWNLOAD_LOCK.acquire(timeout=_DOWNLOAD_LOCK_TIMEOUT_S):
-        raise TimeoutError(
-            f"Timed out after {_DOWNLOAD_LOCK_TIMEOUT_S}s waiting for another "
-            f"Earth Engine export to finish; {filename} was not downloaded."
-        )
+    prepare_opts = {"crs_transform": crs_transform, "shape": shape}
+    prepare_opts = {k: v for k, v in prepare_opts.items() if v is not None}
+    tiff_opts = {
+        "max_tile_size": max_tile_size,
+        "max_tile_dim": max_tile_dim,
+        "max_requests": num_threads,
+    }
+    tiff_opts = {k: v for k, v in tiff_opts.items() if v is not None}
+
+    # One export at a time, process-wide (see the module docstring). A
+    # download that has to wait says so once before blocking.
+    if not _DOWNLOAD_LOCK.acquire(blocking=False):
+        notify_download_wait()
+        if not _DOWNLOAD_LOCK.acquire(timeout=_DOWNLOAD_LOCK_TIMEOUT_S):
+            raise TimeoutError(
+                f"Timed out after {_DOWNLOAD_LOCK_TIMEOUT_S}s waiting for another "
+                f"Earth Engine export to finish; {filename} was not downloaded."
+            )
     try:
         img = image.gd.prepareForExport(
-            crs=crs, region=region, scale=scale, resampling=resampling, dtype=dtype
+            crs=crs,
+            region=_export_bounds(region),
+            scale=scale,
+            resampling=resampling,
+            dtype=dtype,
+            scale_offset=scale_offset,
+            **prepare_opts,
         )
-
-        if nodata_value is None:
-            img.gd.toGeoTIFF(file=filename, overwrite=overwrite, nodata=True, **kwargs)
-        else:
-            img.gd.toGeoTIFF(
-                file=filename, overwrite=overwrite, nodata=nodata_value, **kwargs
-            )
+        nodata = True if nodata_value is None else nodata_value
+        img.gd.toGeoTIFF(
+            file=filename, overwrite=overwrite, nodata=nodata, **tiff_opts, **kwargs
+        )
     finally:
         _DOWNLOAD_LOCK.release()
 
-    print(f"File {filename}, downloaded")
+    logger.info("Downloaded %s", filename)

@@ -202,32 +202,28 @@ def scaleS2v2(image):
     return result
 
 
+def _scale_for_source(image, source):
+    if source in ("Sentinel 2", "Landsat"):
+        return scaleS2v2(image)
+    if source == "Planet NICFI":
+        return scalePlanet(image)
+    raise ValueError(f"Unsupported imagery source: {source!r}")
+
+
 def download_both_images(image1, image2, image_name, source1, source2, region):
     from deforestation_alerts.scripts.raster_export import download_ee_image
-    import ee
-    import os
 
-    if source1 in ["Sentinel 2", "Landsat"]:
-        rimage1 = scaleS2v2(image1)
-    elif source1 == "Planet NICFI":
-        rimage1 = scalePlanet(image1)
+    rimage1 = _scale_for_source(image1, source1)
+    rimage2 = _scale_for_source(image2, source2)
 
-    if source2 in ["Sentinel 2", "Landsat"]:
-        rimage2 = scaleS2v2(image2)
-    elif source2 == "Planet NICFI":
-        rimage2 = scalePlanet(image2)
-
-    if os.path.exists(image_name):
-        pass
-    else:
-        download_ee_image(
-            rimage1.addBands(rimage2),
-            image_name,
-            scale=4.77,
-            crs="EPSG:3857",
-            region=region,
-            overwrite=True,
-        )
+    download_ee_image(
+        rimage1.addBands(rimage2),
+        image_name,
+        scale=4.77,
+        crs="EPSG:3857",
+        region=region,
+        overwrite=True,
+    )
 
     return image_name
 

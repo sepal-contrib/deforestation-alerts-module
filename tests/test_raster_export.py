@@ -1,0 +1,273 @@
+"""``download_ee_image`` must never put the AOI's *computed* geometry in the request.
+
+Earth Engine rejects a download request whose region (or clip area) is the
+``.geometry()`` of a large table asset with "Description length exceeds
+maximum" — the server inlines the materialised geometry into the request
+description. Reproduced 2026-09-11 with a single-feature asset of ~1.1M
+coordinates: every variant using ``fc.geometry()`` failed, while clipping with
+the collection itself and exporting over ``geometry().bounds()`` succeeded and
+produced the very same export grid.
+
+The rule under test:
+
+- the clip uses the region object as given (Geometry, Feature or
+  FeatureCollection are all valid ``clip`` areas);
+- the export region handed to geedim is the *bounds* of the region — a
+  four-corner rectangle regardless of how heavy the AOI is.
+
+This file also covers the single-flight lock around geedim's shared asyncio
+runner: two overlapping downloads must take turns rather than crashing, a
+download that has to wait must fire its queued-notice callback exactly once,
+and a wedged download must surface as a visible ``TimeoutError`` rather than
+hanging forever.
+"""
+
+import asyncio
+import threading
+import time
+from unittest.mock import MagicMock
+
+import ee
+import geedim.utils  # noqa: F401 -- registers ee.Image.gd before any test below
+# monkeypatches ee.Image; otherwise the accessor gets registered on whichever
+# class ee.Image points to at that moment instead of the real one (order-dependent
+# flake if this file runs standalone rather than after test_gee_progress.py).
+import pytest
+
+import deforestation_alerts.scripts.raster_export as export_module
+from deforestation_alerts.scripts.raster_export import download_ee_image
+
+
+class _Bounds:
+    """Sentinel for ``<geometry>.bounds()``."""
+
+
+class _FakeGeometry:
+    """Stand-in for an ee.Geometry: has ``bounds`` but no ``geometry``."""
+
+    def __init__(self):
+        self.bounds_result = _Bounds()
+
+    def bounds(self):
+        return self.bounds_result
+
+
+class _FakeCollection:
+    """Stand-in for an ee.FeatureCollection / ee.Feature."""
+
+    def __init__(self):
+        self.geom = _FakeGeometry()
+
+    def geometry(self):
+        return self.geom
+
+
+class _FakeAccessor:
+    """Stand-in for the ``image.gd`` geedim accessor."""
+
+    def __init__(self, image):
+        self._image = image
+
+    def prepareForExport(self, **kwargs):
+        self._image.calls.append(("prepareForExport", kwargs))
+        return self._image  # geedim returns an ee.Image carrying ``.gd`` again
+
+    def toGeoTIFF(self, **kwargs):
+        self._image.calls.append(("toGeoTIFF", kwargs))
+
+
+class _FakeImage:
+    """Stand-in for an ee.Image recording clip/unmask and the geedim calls."""
+
+    def __init__(self):
+        self.calls = []
+        self.gd = _FakeAccessor(self)
+
+    def clip(self, area):
+        self.calls.append(("clip", area))
+        return self
+
+    def unmask(self, value, sameFootprint):
+        self.calls.append(("unmask", value))
+        return self
+
+
+@pytest.fixture()
+def fake_ee(monkeypatch):
+    """Make the helper's ``isinstance(image, ee.Image)`` guard accept the fake."""
+    monkeypatch.setattr(export_module.ee, "Image", _FakeImage)
+
+
+def _run(region):
+    image = _FakeImage()
+    download_ee_image(
+        image,
+        "out.tif",
+        region=region,
+        scale=30,
+        crs="EPSG:4326",
+        unmask_value=255,
+        nodata_value=255,
+    )
+    return image.calls
+
+
+def test_collection_region_clips_with_collection_and_exports_its_bounds(fake_ee):
+    """Collection/Feature AOI: clip(fc), export region = fc.geometry().bounds()."""
+    fc = _FakeCollection()
+    calls = _run(fc)
+
+    clip_areas = [area for name, area in calls if name == "clip"]
+    assert clip_areas == [fc], "clip must use the collection, not its geometry"
+
+    ((_, prepare_kwargs),) = [c for c in calls if c[0] == "prepareForExport"]
+    assert prepare_kwargs["region"] is fc.geom.bounds_result
+
+
+def test_geometry_region_exports_its_bounds(fake_ee):
+    """A bare ee.Geometry AOI: clip(geom), export region = geom.bounds()."""
+    geom = _FakeGeometry()
+    calls = _run(geom)
+
+    clip_areas = [area for name, area in calls if name == "clip"]
+    assert clip_areas == [geom]
+
+    ((_, prepare_kwargs),) = [c for c in calls if c[0] == "prepareForExport"]
+    assert prepare_kwargs["region"] is geom.bounds_result
+
+
+def test_no_region_leaves_export_unbounded(fake_ee):
+    """Without a region nothing is clipped and geedim gets region=None."""
+    calls = _run(None)
+    assert not [c for c in calls if c[0] == "clip"]
+    ((_, prepare_kwargs),) = [c for c in calls if c[0] == "prepareForExport"]
+    assert prepare_kwargs["region"] is None
+
+
+def _fake_image():
+    """An ``ee.Image`` stand-in whose geedim export blocks on the shared runner."""
+    from geedim.utils import AsyncRunner
+
+    image = MagicMock(spec=ee.Image)
+    prepared = MagicMock()
+
+    def to_geotiff(**_kw):
+        AsyncRunner().run(asyncio.sleep(0.3))
+
+    prepared.gd.toGeoTIFF.side_effect = to_geotiff
+    image.gd.prepareForExport.return_value = prepared
+    return image
+
+
+def test_two_threads_downloading_at_once_both_succeed(tmp_path):
+    """Two downloads on two threads take turns instead of the second one crashing."""
+    from geedim.utils import AsyncRunner
+
+    # The app's first download creates the singleton; only a *second* download
+    # started while another runs hits the shared loop. (Two threads creating
+    # it simultaneously get two runners — geedim's ``singleton`` has no lock —
+    # which would mask the bug.)
+    AsyncRunner().run(asyncio.sleep(0))
+    errors = []
+
+    def worker(i):
+        try:
+            download_ee_image(_fake_image(), str(tmp_path / f"{i}.tif"))
+        except Exception as exc:  # the assertion below reads the list
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert errors == []
+
+
+def test_wait_notice_fires_only_for_the_download_that_queues(tmp_path):
+    """The thread stuck behind the lock reports it; the running one stays silent."""
+    from deforestation_alerts.scripts import raster_export
+    from deforestation_alerts.scripts.gee_progress import geedim_download_wait
+
+    notices = []
+    first_in_geedim = threading.Event()
+
+    def make_image(name):
+        image = MagicMock(spec=ee.Image)
+        prepared = MagicMock()
+
+        def to_geotiff(**_kw):
+            first_in_geedim.set()
+            time.sleep(0.3)
+
+        prepared.gd.toGeoTIFF.side_effect = to_geotiff
+        image.gd.prepareForExport.return_value = prepared
+        return image
+
+    def worker(name):
+        with geedim_download_wait(lambda: notices.append(name)):
+            raster_export.download_ee_image(
+                make_image(name), str(tmp_path / f"{name}.tif")
+            )
+
+    first = threading.Thread(target=worker, args=("first",))
+    first.start()
+    assert first_in_geedim.wait(5)
+    second = threading.Thread(target=worker, args=("second",))
+    second.start()
+    first.join(timeout=10)
+    second.join(timeout=10)
+
+    assert notices == ["second"]
+
+
+def test_lock_timeout_still_raises(tmp_path, monkeypatch):
+    """A wedged download must still become a visible TimeoutError."""
+    from unittest.mock import MagicMock
+
+    import ee
+
+    from deforestation_alerts.scripts import raster_export
+
+    monkeypatch.setattr(raster_export, "_DOWNLOAD_LOCK_TIMEOUT_S", 0.05)
+    assert raster_export._DOWNLOAD_LOCK.acquire(blocking=False)
+    try:
+        with pytest.raises(TimeoutError):
+            raster_export.download_ee_image(
+                MagicMock(spec=ee.Image), str(tmp_path / "x.tif")
+            )
+    finally:
+        raster_export._DOWNLOAD_LOCK.release()
+
+
+def test_export_options_reach_geedim(tmp_path):
+    """Options the signature accepts are forwarded, not silently dropped."""
+    from unittest.mock import MagicMock
+
+    import ee
+
+    from deforestation_alerts.scripts.raster_export import download_ee_image
+
+    image = MagicMock(spec=ee.Image)
+    prepared = MagicMock()
+    image.gd.prepareForExport.return_value = prepared
+    download_ee_image(
+        image,
+        str(tmp_path / "x.tif"),
+        crs="EPSG:3857",
+        crs_transform=[1, 0, 0, 0, -1, 0],
+        shape=(10, 20),
+        scale_offset=True,
+        max_tile_size=8,
+        max_tile_dim=2000,
+        num_threads=4,
+    )
+    prep = image.gd.prepareForExport.call_args.kwargs
+    assert prep["crs_transform"] == [1, 0, 0, 0, -1, 0]
+    assert prep["shape"] == (10, 20)
+    assert prep["scale_offset"] is True
+    geo = prepared.gd.toGeoTIFF.call_args.kwargs
+    assert geo["max_tile_size"] == 8
+    assert geo["max_tile_dim"] == 2000
+    assert geo["max_requests"] == 4

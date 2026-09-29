@@ -36,10 +36,10 @@ def materialize_attribute_raster(config, region, workspace):
     """Return a LOCAL GeoTIFF path for the attribution raster.
 
     local -> `config["source"]` is a remote workspace path, staged down. gee ->
-    download ee.Image(source) clipped to `region` at its native scale into
+    download ee.Image(source), bounded by `region`, at its native scale into
     `workspace` scratch, stamping band descriptions. `region` may be an
-    ee.Geometry or ee.FeatureCollection (a FeatureCollection is reduced to its
-    geometry before download).
+    ee.Geometry or ee.FeatureCollection, passed through as-is to
+    `download_ee_image` (see its docstring for how the region is used).
 
     The caller owns the returned path and should ``workspace.discard_scratch`` it
     once the attribution pass has read it.
@@ -50,18 +50,13 @@ def materialize_attribute_raster(config, region, workspace):
     asset_id = config["source"]
     img = ee.Image(asset_id)
     names = gee_band_names(asset_id)
-    # geedim's prepareForExport (called inside download_ee_image) expects an
-    # ee.Geometry, so unwrap a FeatureCollection's geometry up front.
-    region_geom = (
-        region.geometry() if isinstance(region, ee.FeatureCollection) else region
-    )
     out_tif = str(
         workspace.scratch_file(name=f"attribute_{safe_token(asset_id)}.tif")
     )
     # Native scale keeps categorical values intact; near resampling avoids blending.
     native_scale = img.projection().nominalScale().getInfo()
     download_ee_image(
-        img, out_tif, region=region_geom, crs="EPSG:4326",
+        img, out_tif, region=region, crs="EPSG:4326",
         scale=native_scale, resampling="near",
     )
     _set_band_descriptions(out_tif, names)
