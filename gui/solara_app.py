@@ -6,6 +6,7 @@ Run: solara run gui/solara_app.py --port 8900 --no-open
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -23,11 +24,12 @@ from traitlets import HasTraits, Int
 
 from pysepal.scripts.utils import init_ee
 from pysepal.mapping import SepalMap
-from pysepal.sepalwidgets.vue_app import MapApp, LocaleSelect
+from pysepal.sepalwidgets.vue_app import MapApp
 from pysepal.solara import (
     get_current_gee_interface,
     get_current_sepal_client,
     get_current_theme_state,
+    prime_dev_auth,
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
@@ -48,10 +50,10 @@ from gui.store.navigation import (
     page_view_for_rail_step,
     resolve_navigation,
 )
-from gui.i18n import t
-from gui.scripts.log_bridge import install_log_console_handler
+from gui.i18n import app_available_locales, t
 from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
 from gui.store.state_manager import AppState, aoi_name_from_model
+from gui.scripts.reacton_widgets import find_rendered_widget
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 from gui.tile.about_tile import AboutTile
 from gui.tile.aoi_tile import AoiTile
@@ -60,18 +62,12 @@ from gui.tile.analysis import build_analysis_layout
 from gui.tile.aux_tile import build_aux_layout
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.recipe_tile import build_recipe_layout
-from gui.widget.log_console import LogConsole
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-
-# Bridge the app logger tree into the on-map LogConsole (idempotent; survives
-# Solara hot-reload). Worker-thread emits reach the browser once the console
-# binds its kernel context on mount.
-install_log_console_handler()
 
 # Point GDAL's temp-file allocator at a directory proven writable, ONCE per
 # process. This used to ride along on the import of the (now deleted)
@@ -237,6 +233,12 @@ def _PanelBridge(
 init_ee()
 setup_solara_server()
 
+# PYSEPAL_DEV_AUTH (local dev against a real SEPAL) logs in with a blocking
+# POST; prime it once here so it stays off the render path. prime_dev_auth()
+# raises when the flag is not armed, hence the guard.
+if os.getenv("PYSEPAL_DEV_AUTH", "").strip().lower() in {"1", "true", "yes", "on"}:
+    prime_dev_auth()
+
 
 @solara.lab.on_kernel_start
 def on_kernel_start():
@@ -269,6 +271,19 @@ def on_kernel_start():
 def Page():
     setup_theme_colors()
 
+    # Centralized user feedback, mounted ABOVE the shell. pysepal 4's
+    # use_notifications() raises when no bus exists, and the provider creates
+    # the bus when it renders -- after its parent's body has run. The tiles
+    # are built with solara.render_fixed inside the shell's body, so the
+    # provider must render first, as an earlier sibling of _AppShell. MapApp
+    # publishes --sepal-notification-right-offset so the pill tracks the
+    # right panel.
+    NotificationProvider()
+    _AppShell()
+
+
+@solara.component
+def _AppShell():
     solara.Style(
         # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
         # `solara.display(card)`, and ipyvuetify wraps each standalone display in
@@ -328,13 +343,6 @@ def Page():
 
     workspace = solara.use_memo(_make_workspace, dependencies=[])
 
-    # Centralized user feedback. Mounted BEFORE the tiles are constructed so
-    # use_notifications() inside them binds the real kernel-scoped bus (a
-    # later mount would hand first renders a silent NoopNotifier). MapApp
-    # publishes --sepal-notification-right-offset so the pill tracks the
-    # right panel.
-    NotificationProvider()
-
     # Ephemeral UI/nav state — memoized so it is not re-created on every
     # Page re-render (which would discard all reactive values mid-session).
     app_state = solara.use_memo(lambda: AppState(), dependencies=[])
@@ -346,7 +354,9 @@ def Page():
     # use_memo pattern.
     # -----------------------------------------------------------------------
     aux_model = solara.use_memo(lambda: AuxModel(), dependencies=[])
-    aoi_date_model = solara.use_memo(lambda: AoiDateModel(), dependencies=[])
+    aoi_date_model = solara.use_memo(
+        lambda: AoiDateModel(gee_interface=gee_interface), dependencies=[]
+    )
     alert_filter_model = solara.use_memo(lambda: AlertFilterModel(), dependencies=[])
     selected_alerts_model = solara.use_memo(
         lambda: SelectedAlertsModel(), dependencies=[]
@@ -404,7 +414,7 @@ def Page():
     # recreated when MapApp destroys the dialog DOM on close and rebuilds it on
     # reopen, so the cards vanish on the 2nd open. A raw widget survives reopen.
     aux_widget = solara.use_memo(
-        lambda: build_aux_layout(aux_model, workspace),
+        lambda: build_aux_layout(aux_model, workspace, gee_interface),
         dependencies=[],
     )
 
@@ -661,12 +671,13 @@ def Page():
         right_panel_content=right_panel_content,
         right_panel_open=True,
         is_pinned=False,  # start as the 60px icon rail
-        # Without a translator, MapApp's default LocaleSelect() falls back to
-        # English-only. Pass our translator so es-ES and fr are also offered.
-        language_selector=[LocaleSelect(translator=cm)],
+        # Offer every catalog we ship (en, es-ES, fr); without it the default
+        # LocaleSelect is English-only. The selector writes pysepal's Solara
+        # locale, which gui.i18n.t() reads.
+        locales=app_available_locales(),
     )
 
-    # The stage overlay is a sibling of MapApp (like LogConsole): a fixed
+    # The stage overlay is a sibling of MapApp: a fixed
     # element inside the right drawer would be re-rooted by its transform.
     solara.display(stage_host)
 
@@ -680,8 +691,15 @@ def Page():
     def _resolve_mapapp():
         try:
             mapapp_ref["widget"] = solara.get_widget(app_element)
-        except Exception:
-            logger.exception("Navigation: could not resolve the MapApp widget")
+        except KeyError:
+            # A re-render before the mount effects run (a reactive set while a
+            # child renders) leaves reacton's element->widget map keyed by the
+            # FIRST pass's MapApp element, so get_widget() misses the element
+            # this closure holds. The widget itself is the same one.
+            widget = find_rendered_widget(MapApp)
+            if widget is None:
+                logger.error("Navigation: could not resolve the MapApp widget")
+            mapapp_ref["widget"] = widget
 
     solara.use_effect(_resolve_mapapp, dependencies=[])
 
@@ -695,9 +713,3 @@ def Page():
         mapapp_ref=mapapp_ref,
         workflow_config=WORKFLOW_PANEL_CONFIG,
     )
-
-    # Floating, collapsible process-log console pinned to the map's lower-right
-    # corner (Tier-1 scaffold widget). Renders the records captured by the
-    # ReactiveLogHandler installed at boot; mounting it binds this session's
-    # kernel context so worker-thread log emits reach the browser.
-    LogConsole()

@@ -3,7 +3,7 @@ from traitlets import Any, HasTraits, Unicode, link, observe
 from pysepal.scripts import utils as su
 from pysepal.scripts import decorator
 from functools import wraps
-from pysepal.message import ms
+from pysepal.message import msg
 from pysepal.frontend.resize_trigger import rt
 from copy import deepcopy
 import geopandas as gpd
@@ -373,8 +373,8 @@ def decorator_loading_v2(
             # set btn and alert
             # Change name of variable to assign it again in this scope
             # check if they exist in the parent object if alert is not set manually
-            assert hasattr(self, "alert") or alert, ms.decorator.no_alert
-            assert hasattr(self, "btn") or button, ms.decorator.no_button
+            assert hasattr(self, "alert") or alert, msg("decorator.no_alert")
+            assert hasattr(self, "btn") or button, msg("decorator.no_button")
             button_ = self.btn if not button else button
             alert_ = self.alert if not alert else alert
 

@@ -20,13 +20,13 @@ SCAFFOLD_NAMESPACES = ["common", "dialog", "widgets", "workflow"]
 
 
 @pytest.fixture(autouse=True)
-def _pin_english(monkeypatch):
-    """Pin the active translator to English so assertions are deterministic."""
-    from pysepal.translator import Translator
+def _pin_english():
+    """Pin the active locale to English so assertions are deterministic."""
+    from pysepal.i18n import set_locale
 
-    monkeypatch.setattr(
-        i18n._translator, "value", Translator(i18n.MESSAGES_DIR, target="en")
-    )
+    set_locale("en")
+    yield
+    set_locale("en")
 
 
 def test_t_resolves_and_formats():
@@ -40,6 +40,16 @@ def test_t_missing_key_returns_key():
 def test_plural_picks_singular_and_plural():
     assert i18n.plural(1, "common._test_one", "common._test_other") == "1 item"
     assert i18n.plural(3, "common._test_one", "common._test_other") == "3 items"
+
+
+def test_t_follows_the_pysepal_locale():
+    from pysepal.i18n import set_locale
+
+    en = i18n.t("common._test_fmt", name="you")
+    set_locale("fr")
+    assert i18n.get_translator()._target == "fr"
+    set_locale("en")
+    assert i18n.t("common._test_fmt", name="you") == en
 
 
 def test_available_locales():

@@ -51,10 +51,13 @@ def test_navigation_maps_derive_from_the_registries():
     assert "PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS}" in src
 
 
-def test_log_console_is_wired():
+def test_no_custom_log_console():
+    """User feedback goes through pysepal's notifications (toasts + task pill);
+    the old on-map process-log console is gone and must not come back."""
     src = _src("gui/solara_app.py")
-    assert "install_log_console_handler()" in src
-    assert "LogConsole()" in src
+    assert "LogConsole" not in src
+    assert "log_bridge" not in src
+    assert not (ROOT / "gui/widget/log_console.py").exists()
 
 
 def test_no_bare_daemon_threads_in_tiles():
@@ -176,20 +179,73 @@ def test_alert_store_is_written_off_the_loop_after_a_cancellation_recheck():
 
 
 def test_notification_provider_mounted_before_tiles():
+    """pysepal 4's use_notifications() raises when no bus exists yet, and the
+    provider only creates the bus when it renders -- after its parent's body.
+    The tiles are built with render_fixed inside a body, so Page must mount
+    the provider as an earlier sibling of _AppShell, which builds the tiles."""
     src = _src("gui/solara_app.py")
-    # Slice to Page()'s body: _render_detached is *defined* earlier in the
-    # file (well before the mount point), so a whole-file index comparison
-    # would find that definition and report a false ordering failure even
-    # when the mount is correctly placed. Scoping to the function body
-    # leaves only the call sites inside Page(), matching what
-    # inspect.getsource(Page.f) would give without importing the module
-    # (gui.solara_app calls init_ee() at import time — see module docstring).
-    page_body = src[src.index("def Page():"):]
-    provider_at = page_body.index("NotificationProvider()")
-    first_tile_at = min(
-        page_body.index("_render_detached("), page_body.index("MapApp.element")
-    )
-    assert provider_at < first_tile_at, "provider must mount before tiles/MapApp"
+    # Source slices, not inspect.getsource: gui.solara_app calls init_ee() at
+    # import time (see module docstring).
+    page_body = src[src.index("def Page():"):src.index("def _AppShell():")]
+    shell_body = src[src.index("def _AppShell():"):]
+    assert page_body.index("NotificationProvider()") < page_body.index("_AppShell()")
+    assert "_render_detached(" not in page_body and "MapApp.element" not in page_body
+    assert "NotificationProvider()" not in shell_body
+    assert "_render_detached(" in shell_body and "MapApp.element" in shell_body
+
+
+def test_render_fixed_tile_needs_the_provider_rendered_first():
+    """The mechanism the shell split relies on, against real pysepal 4: a tile
+    render_fixed inside the provider's parent body finds no bus (and would
+    raise NotificationProviderError); inside a later sibling it finds one."""
+    import reacton
+    import solara
+    from pysepal.solara.notifications import NotificationProvider
+    from pysepal.solara.notifications.bus import get_current_bus
+
+    seen = []
+
+    @solara.component
+    def Tile():
+        seen.append(get_current_bus() is not None)
+        return solara.Text("tile")
+
+    @solara.component
+    def Shell():
+        solara.render_fixed(Tile())
+        solara.Text("shell")
+
+    @solara.component
+    def SplitPage():
+        NotificationProvider()
+        Shell()
+
+    @solara.component
+    def FlatPage():
+        NotificationProvider()
+        solara.render_fixed(Tile())  # runs before the provider renders
+
+    for page, expected in ((FlatPage, False), (SplitPage, True)):
+        seen.clear()
+        _, rc = reacton.render(page(), handle_error=False)
+        try:
+            assert seen[0] is expected, page.__name__
+        finally:
+            rc.close()
+
+
+def test_gee_widgets_get_the_session_interface():
+    """pysepal 4 raises SepalSessionError when an AoiModel or AssetSelect
+    builds its own GEEInterface under a per-connection Solara server, so each
+    one must receive the Page's session interface."""
+    aux = _src("gui/tile/aux_tile.py")
+    calls = aux.split("sw.inputs.AssetSelect(")[1:]
+    assert len(calls) == 5
+    for call in calls:
+        assert "gee_interface=gee_interface" in call[: call.index(")")]
+    shell = _src("gui/solara_app.py")
+    assert "AoiDateModel(gee_interface=gee_interface)" in shell
+    assert "build_aux_layout(aux_model, workspace, gee_interface)" in shell
 
 
 def test_overview_view_has_back_and_review_buttons():

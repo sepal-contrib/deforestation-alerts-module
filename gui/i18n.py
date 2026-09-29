@@ -1,9 +1,10 @@
 """Internationalization for the Forest Cover Loss Alerts GUI.
 
 Reuses pysepal's Translator (JSON locale folders with es->en fallback). The
-active translator is rebuilt per kernel start from ~/.sepal-ui-config so a page
-reload applies a newly selected language. No string may be resolved at import
-time — always call t()/plural() inside a component render.
+target language is pysepal 4's per-kernel Solara locale (``current_locale()``),
+which MapApp's LocaleSelect writes, so a language switch re-renders t() strings
+in place. No string may be resolved at import time — always call t()/plural()
+inside a component render.
 
 The catalog is the app's existing ``deforestation_alerts/message`` tree (the
 same one ``deforestation_alerts.message.cm`` reads) — NOT a second parallel
@@ -14,24 +15,22 @@ the LocaleSelect language switch applies to both.
 
 from pathlib import Path
 
-import solara
+from pysepal.i18n import current_locale
 from pysepal.translator import Translator
 
 MESSAGES_DIR = Path(__file__).resolve().parents[1] / "deforestation_alerts" / "message"
 
-# Active translator for THIS session. Re-created on kernel start (reload-aware).
-_translator = solara.reactive(None)
+# One Translator per locale code; the catalog is read-only, so sharing across
+# kernels is safe.
+_translators: dict = {}
 
 
 def get_translator() -> Translator:
-    if _translator.value is None:
-        _translator.value = Translator(MESSAGES_DIR)  # target="" -> reads config
-    return _translator.value
-
-
-def reset_translator() -> None:
-    """Re-read the configured locale. Call from on_kernel_start."""
-    _translator.value = Translator(MESSAGES_DIR)
+    """Translator for the current kernel's locale (subscribes during a render)."""
+    locale = current_locale()
+    if locale not in _translators:
+        _translators[locale] = Translator(MESSAGES_DIR, target=locale)
+    return _translators[locale]
 
 
 def t(key: str, /, **fmt) -> str:

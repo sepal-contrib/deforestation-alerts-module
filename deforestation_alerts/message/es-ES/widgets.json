@@ -21,10 +21,6 @@
     "confirm_default_label": "Eliminar"
   },
   "widgets": {
-    "log_console": {
-      "header": "Registro de procesos",
-      "empty": "Sin actividad todavía."
-    },
     "product_table": {
       "status_running": "en ejecución",
       "status_ready": "listo",

@@ -81,12 +81,14 @@ def _remote_band_names(workspace, remote_path):
         workspace.discard_scratch(local)
 
 
-def _build_attribute_card(aux_model, workspace):
+def _build_attribute_card(aux_model, workspace, gee_interface=None):
     """Card: pick a GEE asset OR local raster, 'Load bands', then per-band
     include/stat/column rows. Writes the assembled config to
     aux_model.attribute_raster on any change."""
     title = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.attribute_title])
-    asset_input = sw.inputs.AssetSelect(types=["IMAGE"], label=cm.aux_tile.attribute_asset_hint)
+    asset_input = sw.inputs.AssetSelect(
+        types=["IMAGE"], label=cm.aux_tile.attribute_asset_hint, gee_interface=gee_interface
+    )
     file_input = _remote_file_input(
         workspace, [".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint
     )
@@ -163,7 +165,7 @@ def _build_attribute_card(aux_model, workspace):
                   children=[title, asset_input, file_input, load_btn, status, rows_box])
 
 
-def build_aux_layout(aux_model, workspace):
+def build_aux_layout(aux_model, workspace, gee_interface=None):
     """Build the full card layout and bind widgets to aux_model traits.
 
     Returns the outermost ipyvuetify layout widget. ``Page`` hands this RAW
@@ -178,7 +180,8 @@ def build_aux_layout(aux_model, workspace):
     # Card 1 — CCDC alerts asset
     title1 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.ccdc_alerts_title])
     ccdc_alerts_input = sw.inputs.AssetSelect(
-        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.ccdc_alerts_hint
+        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.ccdc_alerts_hint,
+        gee_interface=gee_interface,
     )
     card1 = v.Card(
         class_="pa-2 ma-0", outlined=True, hover=True, children=[title1, ccdc_alerts_input]
@@ -194,7 +197,8 @@ def build_aux_layout(aux_model, workspace):
         label=cm.aux_tile.custom_alerts_name_hint, v_model=None
     )
     custom_alerts_input = sw.inputs.AssetSelect(
-        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.custom_alerts_hint
+        types=["IMAGE", "IMAGE_COLLECTION"], label=cm.aux_tile.custom_alerts_hint,
+        gee_interface=gee_interface,
     )
     card_custom = v.Card(
         class_="pa-2 ma-0", outlined=True,
@@ -205,14 +209,16 @@ def build_aux_layout(aux_model, workspace):
     # Card 2 — Forest mask asset
     title2 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.mask_asset_title])
     fnf_input = sw.inputs.AssetSelect(
-        types=["IMAGE"], label=cm.aux_tile.mask_asset_hint
+        types=["IMAGE"], label=cm.aux_tile.mask_asset_hint,
+        gee_interface=gee_interface,
     )
     card2 = v.Card(class_="pa-2 ma-0", outlined=True, hover=True, children=[title2, fnf_input])
 
     # Card 3 — Auxiliary asset + viz params
     title3 = v.CardTitle(class_="pa-1 ma-1", children=[cm.aux_tile.aux_asset_title])
     aux_input = sw.inputs.AssetSelect(
-        types=["IMAGE"], label=cm.aux_tile.aux_asset_hint
+        types=["IMAGE"], label=cm.aux_tile.aux_asset_hint,
+        gee_interface=gee_interface,
     )
     aux_viz = sw.TextField(label=cm.aux_tile.aux_viz, v_model=None)
     card3 = v.Card(
@@ -220,7 +226,7 @@ def build_aux_layout(aux_model, workspace):
     )
 
     # Card 3b — Attribute alerts from a (multiband) raster.
-    card_attr = _build_attribute_card(aux_model, workspace)
+    card_attr = _build_attribute_card(aux_model, workspace, gee_interface)
 
     # Card 4 — Report template upload
     title4 = v.CardTitle(

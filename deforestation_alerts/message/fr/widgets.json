@@ -21,10 +21,6 @@
     "confirm_default_label": "Supprimer"
   },
   "widgets": {
-    "log_console": {
-      "header": "Journal des processus",
-      "empty": "Aucune activité pour le moment."
-    },
     "product_table": {
       "status_running": "en cours",
       "status_ready": "prêt",

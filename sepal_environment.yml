@@ -37,7 +37,7 @@ dependencies:
   - pip
   - pip:
       # Earth Engine — SEPAL's custom build. v1.1.5rc0 conflicts with
-      # pysepal 3.8's earthengine-api>1.6.0 requirement; v1.6.14 is the
+      # pysepal's earthengine-api>1.6.0 requirement; v1.6.14 is the
       # build spatial_risk deploys with.
       - "earthengine-api @ git+https://github.com/openforis/earthengine-api.git@v1.6.14#subdirectory=python"
       - geedim==2.0.0
@@ -46,14 +46,15 @@ dependencies:
       - MightyMosaic==1.2.3
       - python-docx==1.2.0
       - pygaul==0.4.2
-      # Decision 4 fallback: stock pysepal 3.8.0 (and 3.8.1) lack the
-      # voila/Jupyter local-credential session path (in_solara_server_context),
-      # without which with_sepal_sessions waits forever for headers that voila
-      # can never supply, breaking the dual-target requirement (Decision 1).
-      # Pinned to the tip of origin/spatial-risk (pip-fetchable; the local
-      # fix/aoi-restore-draw-seed HEAD is not on any remote).
-      - "pysepal @ git+https://github.com/SerafiniJose/pysepal.git@054db183"
-      - solara==1.57.4
+      # pysepal 4.x resolves the credential source from runtime topology, so
+      # Voila/Jupyter get a PROCESS session without the old fork's
+      # in_solara_server_context patch (Decision 4 fallback retired).
+      # solara is pinned: pysepal 4 relies on two private solara APIs and
+      # has reviewed 1.60.0-1.62.0 (docs/guides/solara-upstream.md).
+      - pysepal==4.1.0
+      # pysepal 4 floor (assets cache survives a cancelled fetch)
+      - "ee-client>=3.2.1,<4"
+      - solara==1.62.0
       # tensorflow: pip, not conda. conda-forge's tensorflow=2.17 defaults to
       # CUDA builds gated on the __cuda virtual package; when that package is
       # absent (this dev box, and SEPAL's GPU-less app-launcher containers

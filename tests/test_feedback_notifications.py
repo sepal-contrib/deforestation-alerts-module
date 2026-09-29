@@ -701,8 +701,6 @@ def test_no_inline_feedback_surfaces_are_left():
     """The notification system is the app's single user-feedback channel.
 
     ``sw.Alert`` / ``solara.Error`` / ``solara.Info`` are all gone from the tiles.
-    ``LogConsole`` is deliberately out of scope: it is a diagnostics view of the
-    logger stream (Decision 6), not a user-feedback channel.
     """
     for rel in SOLARA_TILES + RAW_LAYOUTS:
         called = _called(rel)
