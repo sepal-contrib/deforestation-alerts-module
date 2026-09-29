@@ -1,41 +1,47 @@
-"""Custom alert source (GEE-id) dictionary wiring — Tier-1 logic.
+"""Custom alert sources in aoi_helper — slot-aware raster build.
 
-aoi_helper runs init_ee() at import, so these import it inside the test and depend
-on the `gee` fixture; they skip cleanly offline. The logic under test is pure dict
-manipulation (no EE round-trip).
+aoi_helper runs init_ee() at import, so everything is imported inside the test
+and depends on the ``gee`` fixture (skips without Earth Engine).
 """
 
 
-def test_add_custom_evicts_prior_custom_and_keeps_builtins(gee):
-    from deforestation_alerts.scripts.aoi_helper import (
-        add_custom_alerts_dictionary,
-        remove_custom_alerts_dictionary,
+def test_filtered_raster_dictionary_carries_custom_slot(gee, monkeypatch):
+    from deforestation_alerts.scripts import aoi_helper
+
+    calls = []
+
+    def fake_get_alerts(collection, start, end, aoi, asset, slot=0):
+        calls.append((collection, asset, slot))
+        return f"img:{collection}:{asset}:{slot}"
+
+    monkeypatch.setattr(aoi_helper, "get_alerts", fake_get_alerts)
+    full = {"RADD": {"collection": "x"}}
+    aoi_helper.set_custom_alerts_dictionary(
+        full,
+        [{"name": "A", "asset": "users/x/a"}, {"name": "B", "asset": "users/x/b"}],
+        "2015-01-01",
+        "2026-09-30",
     )
+    out = aoi_helper.create_filtered_alert_raster_dictionary(
+        ["RADD", "B"], "aoi", "2020-01-01", "2021-01-01", None, full_dictionary=full
+    )
+    assert out["RADD"] == {"alert_raster": "img:RADD:None:0"}
+    assert out["B"] == {"alert_raster": "img:CUSTOM:users/x/b:1", "custom_slot": 1}
+    assert ("CUSTOM", "users/x/b", 1) in calls
 
-    md = {
-        "GLAD-L": {
-            "collection": "projects/glad/alert/UpdResult",
-            "start_date": "2018-01-01",
-            "end_date": "2026-01-01",
-        }
-    }
 
-    add_custom_alerts_dictionary(md, "First", "users/x/a", "2015-01-01", "2026-06-10")
-    assert md["First"] == {
-        "collection": "users/x/a",
-        "kind": "CUSTOM",
-        "start_date": "2015-01-01",
-        "end_date": "2026-06-10",
-    }
+def test_from_custom_writes_slot_codes_as_int32(gee, tiny_aoi, monkeypatch):
+    import ee
+    from deforestation_alerts.scripts import aoi_helper
 
-    # Renaming: there is exactly one custom source, so adding under a new name
-    # evicts the previous custom entry (built-ins are untouched).
-    add_custom_alerts_dictionary(md, "Second", "users/x/b", "2015-01-01", "2026-06-10")
-    assert "First" not in md
-    assert md["Second"]["collection"] == "users/x/b"
-    assert "GLAD-L" in md
+    # A synthetic RADD-shaped image stands in for the asset: ee.Image(img)
+    # returns img unchanged, and getAsset is stubbed to report an IMAGE.
+    monkeypatch.setattr(aoi_helper.ee.data, "getAsset", lambda _id: {"type": "IMAGE"})
+    confirmed = ee.Image.constant([3, 23001]).rename(["Alert", "Date"])
+    img = aoi_helper._from_custom("2022-01-01", "2024-01-01", tiny_aoi, confirmed, slot=2)
 
-    # Removing drops the custom entry (whatever its current name) and nothing else.
-    remove_custom_alerts_dictionary(md)
-    assert "Second" not in md
-    assert "GLAD-L" in md
+    assert img.bandTypes().getInfo()["alert"]["precision"] == "int"
+    stats = img.select("alert").reduceRegion(
+        ee.Reducer.max(), tiny_aoi, 30
+    ).getInfo()
+    assert stats["alert"] == 10**6

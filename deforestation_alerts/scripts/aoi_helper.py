@@ -7,6 +7,13 @@ import geopandas as gpd
 import ee
 import pandas as pd
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.custom_sources import (  # noqa: F401 (re-exported)
+    CUSTOM_KIND,
+    is_custom_entry,
+    remove_custom_alerts_dictionary,
+    set_custom_alerts_dictionary,
+    slot_value,
+)
 
 init_ee()
 
@@ -164,41 +171,6 @@ def remove_ccdc_alerts_dictionary(alert_metadata):
     return alert_metadata
 
 
-def _custom_alert_keys(alert_metadata):
-    """Keys of any user-defined custom alert entries (kind == 'CUSTOM')."""
-    return [
-        k
-        for k, v in alert_metadata.items()
-        if isinstance(v, dict) and v.get("kind") == "CUSTOM"
-    ]
-
-
-def add_custom_alerts_dictionary(alert_metadata, name, asset, start_date, end_date):
-    """Add (or replace) the single user-defined custom alert source.
-
-    There is exactly one custom source, so any existing ``kind == "CUSTOM"`` entry
-    is evicted first — this handles a rename without tracking the previous name.
-    The entry is RADD-shaped and dispatched by its ``kind`` marker (see
-    ``get_alerts``); ``name`` is the dictionary key shown in the Filter source-select.
-    """
-    for key in _custom_alert_keys(alert_metadata):
-        del alert_metadata[key]
-    alert_metadata[name] = {
-        "collection": asset,
-        "kind": "CUSTOM",
-        "start_date": start_date,
-        "end_date": end_date,
-    }
-    return alert_metadata
-
-
-def remove_custom_alerts_dictionary(alert_metadata):
-    """Remove the custom alert source entry (whatever its current name)."""
-    for key in _custom_alert_keys(alert_metadata):
-        del alert_metadata[key]
-    return alert_metadata
-
-
 def create_available_alert_dictionary(dataset, aoi, date1, date2):
     """Perform test over alert collection to check date and aoi availability"""
     result = []
@@ -208,7 +180,7 @@ def create_available_alert_dictionary(dataset, aoi, date1, date2):
         # ambiguous). Treat it as always available; the date mask + AOI clip in
         # ``_from_custom`` handle correctness (an out-of-area asset just yields no
         # alerts).
-        if isinstance(data, dict) and data.get("kind") == "CUSTOM":
+        if is_custom_entry(data):
             result.append(name)
             continue
         start_date = data["start_date"]
@@ -242,20 +214,24 @@ def create_filtered_alert_raster_dictionary(
     result = {}
     for nombre in dataset:
         entry = full_dictionary.get(nombre, {})
-        if isinstance(entry, dict) and entry.get("kind") == "CUSTOM":
+        if is_custom_entry(entry):
+            slot = entry.get("slot", 0)
             raster = get_alerts(
-                "CUSTOM", start_date, end_date, aoi, entry["collection"]
+                CUSTOM_KIND, start_date, end_date, aoi, entry["collection"], slot=slot
             )
+            # The slot travels with the raster: the Filter step decodes names
+            # from here, never from the live Aux settings.
+            result[nombre] = {"alert_raster": raster, "custom_slot": slot}
         else:
             raster = get_alerts(nombre, start_date, end_date, aoi, ccdc_asset)
-        result[nombre] = {"alert_raster": raster}
+            result[nombre] = {"alert_raster": raster}
     return result
 
 
 # functions taken from https://github.com/sepal-contrib/alert_module/blob/main/component/scripts/alert.py
 
 
-def get_alerts(collection, start, end, aoi, asset):
+def get_alerts(collection, start, end, aoi, asset, slot=0):
     """
     get the alerts restricted to the aoi and the specified dates.
     The Returned images will embed mandatory and optional bands:
@@ -269,6 +245,7 @@ def get_alerts(collection, start, end, aoi, asset):
         end (str): the end day of the analysis (YYYY-MM-DD)
         aoi (ee.FeatureCollection): the selected aoi
         asset (str): the asset Id of the Image
+        slot (int): custom source slot, CUSTOM only
 
     Returns:
         (ee.Image) the alert Image
@@ -283,7 +260,7 @@ def get_alerts(collection, start, end, aoi, asset):
     elif collection == "GLAD-S2":
         alerts = _from_glad_s(start, end, aoi)
     elif collection == "CUSTOM":
-        alerts = _from_custom(start, end, aoi, asset)
+        alerts = _from_custom(start, end, aoi, asset, slot)
     else:
         raise Exception("Collection not supported")
 
@@ -482,15 +459,15 @@ def _from_radd(start, end, aoi):
     return all_alerts.clip(aoi)
 
 
-def _from_custom(start, end, aoi, asset):
+def _from_custom(start, end, aoi, asset, slot=0):
     """Reformat a user-defined custom alert raster (RADD-shaped) for the module.
 
     The asset is assumed to use RADD's raw encoding: an ``Alert`` band with values
     ``0/1/2/3`` and a ``Date`` band as ``days/1000 + 2000`` (the "RADD-identical raw"
-    contract). It is normalized exactly like RADD, except the alert codes target the
-    **ten-thousands** slot (``10000``/``20000``) instead of RADD's tens slot — this
-    keeps the custom source distinct in the multi-source union sum and lets it decode
-    to its own user-given name (see ``report_builder.get_unique_alerts``).
+    contract). It is normalized exactly like RADD, except the alert codes target
+    digit 10^(4+slot) instead of RADD's tens slot — this keeps the custom source
+    distinct in the multi-source union sum and lets it decode to its own
+    user-given name (see ``report_builder.get_unique_alerts``).
 
     Accepts an IMAGE or IMAGE_COLLECTION asset.
     """
@@ -511,11 +488,13 @@ def _from_custom(start, end, aoi, asset):
         alerts.select("Date").gt(start).And(alerts.select("Date").lt(end))
     )
 
-    # unique alert band in the ten-thousands slot (10000=potential, 20000=confirmed)
+    # unique alert band in this source's digit (v = confirmed, 2v = potential,
+    # as RADD's remap); Int32 because slots 1+ exceed Int16.
+    value = slot_value(slot)
     alert_band = (
         alerts.select("Alert")
-        .remap([0, 1, 2, 3], [0, 0, 20000, 10000])
-        .toInt16()
+        .remap([0, 1, 2, 3], [0, 0, 2 * value, value])
+        .toInt32()
         .rename("alert")
     )
 
