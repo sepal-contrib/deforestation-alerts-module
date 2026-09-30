@@ -15,10 +15,13 @@ dependencies:
   - rasterio>=1.4
   - shapely>=2.0
   - pyproj
+  - tippecanoe
   # Scientific
   - matplotlib>=3.9
   - pandas>=2.2
   - pyarrow
+  - pydantic>=2.7
+  - scipy
   # GUI / widgets
   - geemap>=0.35.0
   - ipyevents>=2.0
@@ -27,8 +30,7 @@ dependencies:
   - ipyvuetify<3
   - ipywidgets>=8.1
   - traitlets>=5.14
-  # Serving (Decision 1: dual-target — voila for the classic SEPAL path,
-  # solara-server for dev + the app-launcher container)
+  # Serving: Voila in the user's SEPAL sandbox (ui.ipynb). No container.
   - voila
   # Env plumbing
   - ipykernel
@@ -41,6 +43,9 @@ dependencies:
       # build spatial_risk deploys with.
       - "earthengine-api @ git+https://github.com/openforis/earthengine-api.git@v1.6.14#subdirectory=python"
       - geedim==2.0.0
+      - localtileserver==1.0.0   # conda-forge has only 0.11.x
+      - vectortileserver==0.3.0  # PMTiles server; NEVER unpinned (the pyvectortiles rename broke a deploy)
+      - "jupyter-loopback[comm]==0.3.3"
       - huggingface_hub==1.29.0   # CNN model download (gui/tile/analysis/edit_tools.py)
       - matplotlib-scalebar==0.9.0
       - MightyMosaic==1.2.3
@@ -63,8 +68,8 @@ dependencies:
       # converges in practice. The tested dev env installs tensorflow via pip
       # for the same reason. Do NOT move this back to the conda block.
       - tensorflow==2.17.0
-      # NOTE: no `-e .` — the app runs in place (supervisord launches
-      # `solara run gui/solara_app.py`; gui/solara_app.py shims sys.path,
+      # NOTE: no `-e .` — the app runs in place (ui.ipynb imports
+      # gui.solara_app; gui/solara_app.py shims sys.path,
       # pytest uses pyproject's pythonpath=["."]).
 
 # KNOWN BENIGN pip resolver warning at build time (investigated, not a live

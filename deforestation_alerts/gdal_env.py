@@ -122,3 +122,60 @@ def configure_gdal_tmpdir() -> Path:
     os.environ["CPL_TMPDIR"] = str(d)
     gdal.SetConfigOption("CPL_TMPDIR", str(d))
     return d
+
+
+LOCAL_SCRATCH_ENV = "DEFORESTATION_ALERTS_LOCAL_SCRATCH"
+NUM_THREADS_ENV = "DEFORESTATION_ALERTS_NUM_THREADS"
+
+#: The container overlay is the only local disk on SEPAL; /var/tmp lives there.
+_LOCAL_SCRATCH_ROOTS = (Path("/var/tmp"),)
+
+
+def local_scratch_dir() -> Path:
+    """A scratch directory on local disk for small, seek-heavy writers.
+
+    tippecanoe (PMTiles) and sqlite rewrite their output constantly, and on
+    SEPAL both the home and /tmp are NFS: a PMTiles build took 57-70 s there and
+    1 s on /var/tmp (spatial_risk, SEPAL c8, 2026-09-21). Build such files here,
+    then move the result into place. Rasters go straight to NFS.
+    """
+    env = os.environ.get(LOCAL_SCRATCH_ENV)
+    if env and _is_usable(Path(env)):
+        return Path(env)
+    for root in _LOCAL_SCRATCH_ROOTS:
+        candidate = Path(root) / f"deforestation_alerts_{os.getuid()}"
+        if _is_usable(candidate):
+            return candidate
+    return scratch_dir()
+
+
+def keep_gdal_sidecars_visible() -> None:
+    """Let GDAL see ``.ovr`` sidecars after the map's tile server starts.
+
+    localtileserver's app setup does
+    ``os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")``,
+    process-wide, which hides every external overview pyramid: each tile then
+    decodes the whole raster (spatial_risk measured ~50 s vs ~1 s a tile).
+    Set outright, in the environment (rasterio's wheel bundles its own libgdal,
+    which only reads the environment).
+    """
+    os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] = "FALSE"
+
+
+def _available_cores() -> int:
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:  # pragma: no cover - not Linux
+        return os.cpu_count() or 1
+
+
+def pin_gdal_num_threads() -> None:
+    """Give GDAL half the cores app-wide (override: DEFORESTATION_ALERTS_NUM_THREADS).
+
+    localtileserver's setdefault("GDAL_NUM_THREADS", "ALL_CPUS") otherwise makes
+    every raster write run on one thread before the first map layer and on all
+    cores after it.
+    """
+    override = os.environ.get(NUM_THREADS_ENV)
+    threads = int(override) if override else _available_cores() // 2
+    os.environ["GDAL_NUM_THREADS"] = str(max(1, threads))

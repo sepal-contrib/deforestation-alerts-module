@@ -37,7 +37,12 @@ from pysepal.solara import (
 )
 from pysepal.solara.notifications import NotificationProvider
 
-from deforestation_alerts.gdal_env import configure_gdal_tmpdir
+from deforestation_alerts.gdal_env import (
+    configure_gdal_tmpdir,
+    keep_gdal_sidecars_visible,
+    pin_gdal_num_threads,
+)
+from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.aoi_date_model import AoiDateModel
 from deforestation_alerts.model.alerts_model import AlertFilterModel, SelectedAlertsModel
@@ -88,6 +93,15 @@ if logger.level == logging.NOTSET or logger.level > logging.INFO:
 # gui/solara_app.py`` and ``ui.ipynb`` both import it), and it is import-time,
 # not render-time: it is a local mkdir + write probe, never a network call.
 configure_gdal_tmpdir()
+
+# Tile transport and GDAL guards, before any TileClient exists. On SEPAL the
+# sandbox sets LOCALTILESERVER_CLIENT_PREFIX=/api/sandbox/jupyter/proxy/{port};
+# PMTiles borrow it and both tile servers skip the comm bridge (verified on
+# test.sepal.io 2026-09-28 in spatial_risk: rasters 200, PMTiles 206).
+keep_gdal_sidecars_visible()
+pin_gdal_num_threads()
+borrow_localtileserver_prefix()
+prefer_http_proxy()
 
 
 class _NavModel(HasTraits):
