@@ -1,10 +1,88 @@
-"""AppState: ephemeral reactive UI/nav state (D8)."""
+"""AppState: the per-session Project lifecycle plus reactive UI/nav state (spec §5.4)."""
 
+from datetime import datetime
+
+from deforestation_alerts.project.models import Project
 from gui.store.state_manager import AppState
 
 
+def _p(name="a"):
+    return Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
+
+
+def test_commit_publishes_a_new_identity():
+    s = AppState()
+    p = _p()
+    s.new_project_state(p)
+    first = s.project.value
+    first.look_back_days = 30
+    s.commit(first)
+    assert s.project.value is not first and s.project.value.look_back_days == 30
+
+
+def test_load_bumps_signal_and_sets_last_saved():
+    s = AppState()
+    before = s.project_loaded_signal.value
+    s.load_project_state(_p())
+    assert s.project_loaded_signal.value == before + 1 and s.last_saved.value is not None
+
+
+def test_update_project_only_touches_the_open_project():
+    s = AppState()
+    s.new_project_state(_p("a"))
+    assert s.update_project("a", lambda p: setattr(p, "look_back_days", 7)) is True
+    assert s.project.value.look_back_days == 7
+    assert s.update_project("other", lambda p: setattr(p, "look_back_days", 1)) is False
+    s.close_project_state()
+    assert s.update_project("a", lambda p: None) is False
+
+
+def test_new_project_clears_session_aoi_and_alerts():
+    s = AppState()
+    s.aoi_result.set("old")
+    s.alerts_gdf.set("gdf")
+    s.new_project_state(_p())
+    assert s.aoi_result.value is None and s.alerts_gdf.value is None
+
+
+def test_project_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    assert s.project_dir is None
+    s.new_project_state(_p("demo"))
+    assert s.project_dir == tmp_path / "demo"
+
+
+def test_installing_a_project_runs_inside_the_restoring_window():
+    """Effects that react to the project swap (the AOI step's attach) must be
+    able to tell a restore from a user edit while the new project lands."""
+    s = AppState()
+    seen = []
+    s.project.subscribe(lambda p: seen.append(s.restoring))
+    s.new_project_state(_p("a"))
+    s.load_project_state(_p("b"))
+    s.close_project_state()
+    assert seen == [True, True, True] and s.restoring is False
+
+
+def test_a_new_or_closed_project_forgets_the_previous_save_time():
+    s = AppState()
+    s.load_project_state(_p("a"))
+    assert s.last_saved.value is not None
+    s.new_project_state(_p("b"))  # no auto-save installed: never saved
+    assert s.last_saved.value is None
+    s.load_project_state(_p("a"))
+    s.close_project_state()
+    assert s.last_saved.value is None
+
+
+# ---------------------------------------------------------------------------
+# Navigation and the reactives the recipe-era shell still reads (unchanged
+# until Task 22 removes the legacy ones).
+# ---------------------------------------------------------------------------
 def test_defaults():
     s = AppState()
+    assert s.project.value is None
     assert s.current_page_view.value == "about_tile"
     assert s.actual_alert_id.value == -1
     assert s.alerts_gdf.value is None
@@ -53,14 +131,16 @@ def test_aoi_name_mirror_defaults_to_none():
     assert s.aoi_name.value == "Canindeyú"
 
 
-def test_navigation_signal_and_map_owner_are_unchanged():
+def test_dark_theme_mirror_defaults_to_light():
     s = AppState()
-    assert s.current_page_view.value == "about_tile"
-    assert s.active_map_view.value == ""
+    assert s.dark.value is False
+    s.dark.set(True)
+    assert s.dark.value is True
 
 
 # ---------------------------------------------------------------------------
-# aoi_name_from_model + the trait contract the Page() mirror depends on.
+# aoi_name_from_model + the trait contract the Page() mirror depends on
+# (kept until Task 22 removes the helper with the old shell).
 #
 # Regression (Task 10 review): the mirror observed ``feature_collection``, which
 # is NOT a traitlet on AoiModel, so it never fired -- app_state.aoi_name stayed
@@ -174,10 +254,3 @@ def test_recipe_load_notifies_the_aoi_mirror(gee):
     m.import_from_dictionary({"aoi_name": "PRY_Canindeyu"})
     assert m.object_set == before + 1, "recipe load must bump object_set"
     assert seen[-1] == "PRY_Canindeyu"
-
-
-def test_dark_theme_mirror_defaults_to_light():
-    s = AppState()
-    assert s.dark.value is False
-    s.dark.set(True)
-    assert s.dark.value is True
