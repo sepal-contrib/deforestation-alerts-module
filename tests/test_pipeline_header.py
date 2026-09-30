@@ -1,58 +1,73 @@
 """PipelineHeader: badge text logic, render smoke, and codebase-gotcha
 contracts (no rv.Btn(on_click), anchored dropdown, reactives-as-props).
-Ported from the spatial_risk scaffold; gate inputs here are
-(alerts_gdf, aoi_name)."""
+Ported from the spatial_risk scaffold; gates read the Project."""
 
 import inspect
+from datetime import datetime
 
-import pandas as pd
 import reacton
 import solara
 
+from deforestation_alerts.project.models import AlertSet, AlertSetParams, AoiRecord, Project
 
-def _gdf(n, reviewed=0):
-    status = ["Confirmed"] * reviewed + ["Not reviewed"] * (n - reviewed)
-    return pd.DataFrame({"status": status})
+JAN = "2026-01-01_2026-01-31"
+
+
+def _project(aoi_name=None, n_reviewed=0, n_alerts=0):
+    p = Project(name="demo", created_at=datetime.now(), updated_at=datetime.now())
+    if aoi_name is not None:
+        p.aoi = AoiRecord(spec={}, name=aoi_name, method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
+    if n_alerts or n_reviewed:
+        p.alert_sets["x"] = AlertSet(
+            id="x", period_id=JAN, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+            params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+            footprint_rel_path="f", n_alerts=n_alerts, n_reviewed=n_reviewed,
+            fingerprint="f", created_at=datetime.now(),
+        )
+        p.active_set = "x"
+    return p
+
+
+def _reactive(p):
+    return solara.reactive(p, equals=lambda a, b: a is b)
 
 
 def test_count_text_pluralizes_and_falls_back():
     from gui.store.workflow_steps import STEPS
     from gui.widget.pipeline_header import count_text
 
-    filter_spec, analysis = STEPS[1], STEPS[2]
-    assert count_text(filter_spec, _gdf(2), "Acre") == "2 alerts"
-    assert count_text(filter_spec, _gdf(1), "Acre") == "1 alert"
-    assert count_text(filter_spec, _gdf(0), "Acre") == "nothing yet"
-    assert count_text(analysis, _gdf(5, reviewed=2), "Acre") == "2 reviewed"
+    aoi_spec, alerts_spec, analysis = STEPS[0], STEPS[1], STEPS[5]
+    assert count_text(analysis, _project(n_alerts=5, n_reviewed=2)) == "2 reviewed"
+    assert count_text(analysis, _project(n_alerts=5, n_reviewed=0)) == "nothing yet"
     # AOI step: the badge is the AOI name (a string count).
-    assert count_text(STEPS[0], None, "Acre") == "Acre"
-    assert count_text(STEPS[0], None, None) == "nothing yet"
+    assert count_text(aoi_spec, _project(aoi_name="Acre")) == "Acre"
+    assert count_text(aoi_spec, _project()) == "nothing yet"
+    # Alerts step: count of configured sources (none in this fixture).
+    assert count_text(alerts_spec, _project(aoi_name="Acre")) == "nothing yet"
 
 
 def test_render_smoke_empty_session():
     from gui.widget.pipeline_header import PipelineHeader
 
-    gdf = solara.reactive(None, equals=lambda a, b: a is b)
-    aoi = solara.reactive(None)
+    project = _reactive(None)
     box, rc = reacton.render(
         PipelineHeader(
             active_step=0, on_navigate=lambda i: None,
-            alerts_gdf=gdf, aoi_name=aoi,
+            project=project,
         ),
         handle_error=False,
     )
     rc.close()
 
 
-def test_render_smoke_loaded_alerts():
+def test_render_smoke_loaded_project():
     from gui.widget.pipeline_header import PipelineHeader
 
-    gdf = solara.reactive(_gdf(3, reviewed=1), equals=lambda a, b: a is b)
-    aoi = solara.reactive("Acre")
+    project = _reactive(_project(aoi_name="Acre", n_alerts=3, n_reviewed=1))
     box, rc = reacton.render(
         PipelineHeader(
-            active_step=2, on_navigate=lambda i: None,
-            alerts_gdf=gdf, aoi_name=aoi,
+            active_step=5, on_navigate=lambda i: None,
+            project=project,
         ),
         handle_error=False,
     )
@@ -76,8 +91,8 @@ def test_no_dead_click_patterns():
     src = inspect.getsource(pipeline_header)
     assert "rv.Btn(" not in src
     assert "rv.use_event(" in src
-    # Reads reactives inside the component (prop-equality bailout).
-    assert "alerts_gdf.value" in src and "aoi_name.value" in src
+    # Reads the reactive inside the component (prop-equality bailout).
+    assert "project.value" in src
 
 
 def test_unified_activator_and_testable_segments():

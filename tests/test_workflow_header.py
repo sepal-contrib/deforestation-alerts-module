@@ -1,6 +1,6 @@
 """WorkflowHeader binds the pipeline header to AppState: it passes the live
-active_step down, hands PipelineHeader the reactives themselves (not their
-values) and navigates by setting active_step.
+active_step down, hands PipelineHeader the ``project`` reactive itself (not
+its value) and navigates by setting active_step.
 
 The binding is asserted behaviourally, through a spy standing in for
 PipelineHeader. A source grep cannot do it: ``inspect.getsource`` returns the
@@ -27,13 +27,12 @@ def _spy_on_pipeline_header(monkeypatch):
     calls = []
 
     @solara.component
-    def _Recorder(active_step, on_navigate, alerts_gdf, aoi_name, dark):
+    def _Recorder(active_step, on_navigate, project, dark):
         calls.append(
             {
                 "active_step": active_step,
                 "on_navigate": on_navigate,
-                "alerts_gdf": alerts_gdf,
-                "aoi_name": aoi_name,
+                "project": project,
                 "dark": dark,
             }
         )
@@ -71,14 +70,13 @@ def test_passes_the_live_active_step_down(monkeypatch):
 
 def test_hands_over_the_reactives_not_their_values(monkeypatch):
     """The prop-equality-bailout rule: PipelineHeader gets the reactive objects
-    and reads them itself, so a gdf-only change still reaches it."""
+    and reads them itself, so a project-only change still reaches it."""
     calls = _spy_on_pipeline_header(monkeypatch)
     from gui.widget.workflow_header import WorkflowHeader
 
     state = AppState()
     box, rc = reacton.render(WorkflowHeader(app_state=state), handle_error=False)
-    assert calls[-1]["alerts_gdf"] is state.alerts_gdf
-    assert calls[-1]["aoi_name"] is state.aoi_name
+    assert calls[-1]["project"] is state.project
     # Same rule for the theme mirror: the header repaints its accent from this
     # reactive, so handing over `.value` would freeze the strip at boot colour.
     assert calls[-1]["dark"] is state.dark

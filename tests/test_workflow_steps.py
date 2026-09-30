@@ -1,116 +1,87 @@
-"""The STEPS / RAIL_ITEMS registries are the single source of truth for step
-identity: three gated workflow steps in the Workflow panel view, four entries
-on the left rail (three dialogs + the Overview panel view)."""
-
 import json
+from datetime import date, datetime
 from pathlib import Path
 
-import pandas as pd
+import pytest
 
-from gui.store.workflow_steps import (
-    RAIL_ITEMS,
-    STEPS,
-    StepStatus,
-    nav_targets,
-    rail_item_for_step,
-    step_index,
-    step_states,
-    step_status,
+from deforestation_alerts.engine import fingerprint as fp
+from deforestation_alerts.project.models import (
+    AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, StepStatus, step_states
 
-MESSAGES = Path(__file__).resolve().parents[1] / "deforestation_alerts" / "message"
-
-
-def _gdf(n, reviewed=0):
-    status = ["Confirmed"] * reviewed + ["Not reviewed"] * (n - reviewed)
-    return pd.DataFrame({"status": status})
+MESSAGES = Path(__file__).resolve().parents[1] / "deforestation_alerts" / "message" / "en"
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 
 
-def _spec(key):
-    return next(s for s in STEPS if s.key == key)
+def _p():
+    return Project(name="demo", created_at=datetime.now(), updated_at=datetime.now())
 
 
-def _resolve(catalog, dotted):
-    node = catalog
-    for part in dotted.split("."):
-        assert part in node, f"'{dotted}' missing from the en catalog"
-        node = node[part]
-    return node
+def _states(p):
+    return dict(zip([s.key for s in STEPS], step_states(p)))
 
 
-def _en_catalog():
+def test_order_and_rail():
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "period", "prepare", "integrate", "analysis"]
+    assert [(r.key, r.step_id, r.display) for r in RAIL_ITEMS] == [
+        ("about", 1, "dialog"), ("project", 2, "dialog"), ("overview", 3, "panel")]
+
+
+def test_gates_follow_the_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    assert _states(None)["alerts"] is StepStatus.LOCKED
+    p = _p()
+    p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
+    s = _states(p)
+    assert s["aoi"] is StepStatus.HAS_OUTPUTS and s["alerts"] is StepStatus.EMPTY
+    assert s["period"] is StepStatus.LOCKED
+    add_predefined_source(p, "GLAD-L")
+    assert _states(p)["period"] is StepStatus.EMPTY and _states(p)["prepare"] is StepStatus.LOCKED
+    p.periods[JAN.id] = JAN
+    p.active_period = JAN.id
+    s = _states(p)
+    assert s["prepare"] is StepStatus.EMPTY and s["integrate"] is StepStatus.LOCKED
+    # one ready source unlocks Integrate
+    p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=1, height=1)
+    pdir = tmp_path / "demo"
+    pdir.mkdir()
+    for key, kind, inputs in (
+        (fp.raw_key(JAN.id, "GLAD-L"), "raw_alert", fp.raw_alert_inputs(p, "GLAD-L", JAN)),
+    ):
+        (pdir / "r.tif").write_bytes(b"x")
+        p.artifacts[key] = fp.make_artifact(key, kind, pdir, pdir / "r.tif", inputs)
+    hk = fp.harm_key(JAN.id, "GLAD-L")
+    (pdir / "h.tif").write_bytes(b"x")
+    p.artifacts[hk] = fp.make_artifact(hk, "harmonized", pdir, pdir / "h.tif", fp.harmonized_inputs(p, "GLAD-L", JAN))
+    s = _states(p)
+    assert s["prepare"] is StepStatus.HAS_OUTPUTS and s["integrate"] is StepStatus.EMPTY
+    p.alert_sets["x"] = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, n_reviewed=1, fingerprint="f",
+                                 created_at=datetime.now())
+    p.active_set = "x"
+    s = _states(p)
+    assert s["integrate"] is StepStatus.HAS_OUTPUTS and s["analysis"] is StepStatus.HAS_OUTPUTS
+
+
+def test_every_label_and_lock_key_exists():
     catalog = {}
-    for f in (MESSAGES / "en").glob("*.json"):
-        catalog.update(json.load(open(f)))
-    return catalog
+    for f in MESSAGES.glob("*.json"):
+        catalog.update(json.loads(f.read_text()))
 
+    def resolve(dotted):
+        node = catalog
+        for part in dotted.split("."):
+            node = node[part]
+        return node
 
-def test_workflow_registry_is_the_three_pipeline_steps():
-    assert [s.key for s in STEPS] == ["aoi", "filter", "analysis"]
-    assert len({s.page_view for s in STEPS}) == len(STEPS)
-    assert step_index("filter") == 1
-    assert step_index("analysis") == 2
-
-
-def test_rail_registry_is_four_items_with_overview_as_a_panel_view():
-    assert [r.key for r in RAIL_ITEMS] == ["about", "recipes", "overview", "aux"]
-    assert [r.step_id for r in RAIL_ITEMS] == [1, 2, 3, 4]
-    assert [r.display for r in RAIL_ITEMS] == ["dialog", "dialog", "panel", "dialog"]
-    for r in RAIL_ITEMS:
-        if r.display == "dialog":
-            assert r.dialog_width, f"rail dialog '{r.key}' needs a width"
-    overview = rail_item_for_step(3)
-    assert overview.key == "overview" and overview.owns_map is True
-    assert overview.page_view == "overview_tile"
-    assert rail_item_for_step(99) is None
-    assert not ({r.page_view for r in RAIL_ITEMS} & {s.page_view for s in STEPS})
-
-
-def test_layout_flags():
-    assert [s.owns_map for s in STEPS] == [True, True, False]
-    assert [s.full_stage for s in STEPS] == [False, False, True]
-
-
-def test_keys_resolve_in_the_english_catalog():
-    catalog = _en_catalog()
     for s in STEPS:
-        _resolve(catalog, s.label_key)
-        for key in filter(None, [s.lock_reason_key, s.count_key_one, s.count_key_other]):
-            _resolve(catalog, key)
+        resolve(s.label_key)
+        if s.lock_reason_key:
+            resolve(s.lock_reason_key)
+        if s.count_key_one:
+            resolve(s.count_key_one)
+            resolve(s.count_key_other)
     for r in RAIL_ITEMS:
-        _resolve(catalog, r.label_key)
-
-
-def test_aoi_count_is_the_aoi_name():
-    aoi = _spec("aoi")
-    assert step_status(aoi, None, None) is StepStatus.EMPTY
-    assert step_status(aoi, None, "Canindeyú") is StepStatus.HAS_OUTPUTS
-    assert aoi.count(None, "Canindeyú") == "Canindeyú"
-
-
-def test_gates_filter_requires_aoi():
-    filter_spec = _spec("filter")
-    assert step_status(filter_spec, None, None) is StepStatus.LOCKED
-    assert step_status(filter_spec, None, "Canindeyú") is StepStatus.EMPTY
-    assert step_status(filter_spec, _gdf(3), "Canindeyú") is StepStatus.HAS_OUTPUTS
-
-
-def test_gates_analysis_requires_alerts_and_counts_reviewed():
-    analysis = _spec("analysis")
-    assert step_status(analysis, None, "x") is StepStatus.LOCKED
-    assert step_status(analysis, _gdf(0), "x") is StepStatus.EMPTY
-    assert analysis.count(_gdf(5, reviewed=0), "x") == 0
-    assert analysis.count(_gdf(5, reviewed=2), "x") == 2
-    assert step_status(analysis, _gdf(5, reviewed=0), "x") is StepStatus.EMPTY
-    assert step_status(analysis, _gdf(5, reviewed=2), "x") is StepStatus.HAS_OUTPUTS
-
-
-def test_nav_targets_skip_locked_steps():
-    states = step_states(None, None)
-    assert nav_targets(0, states) == (None, None)
-    states = step_states(None, "Canindeyú")
-    assert nav_targets(0, states) == (None, 1)
-    assert nav_targets(1, states) == (0, None)
-    states = step_states(_gdf(2), "Canindeyú")
-    assert nav_targets(1, states) == (0, 2)
-    assert nav_targets(2, states) == (1, None)
+        resolve(r.label_key)

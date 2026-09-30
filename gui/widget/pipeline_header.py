@@ -35,9 +35,9 @@ def _rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
-def count_text(spec, gdf, aoi) -> str:
+def count_text(spec, p) -> str:
     """Human badge for a step: outputs count, AOI name, or 'nothing yet'."""
-    c = spec.count(gdf, aoi)
+    c = spec.count(p)
     if isinstance(c, str) and c:
         return c
     n = int(c or 0)
@@ -107,13 +107,12 @@ def _JumpMenuRow(
 
 
 @solara.component
-def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=None):
+def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     """Pipeline map + step navigation.
 
-    Takes the app_state *reactives* (not their values — reacton's prop-equality
-    bailout would eat gdf-only changes) plus the active index and a navigate
-    callback. ``alerts_gdf`` holds the alert-store GeoDataFrame or None;
-    ``aoi_name`` the selected AOI's name or None.
+    Takes the ``project`` reactive (not its value — reacton's prop-equality
+    bailout would eat project-only changes) plus the active index and a
+    navigate callback.
 
     ``dark`` is an optional reactive mirroring pysepal's ``ThemeState.dark``.
     This app's theme is owned by ``theme_state``/``MapApp``, NOT by Solara's own
@@ -122,9 +121,8 @@ def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=Non
     light theme) and never re-renders on a toggle. When the reactive is passed
     it wins; the Solara hook stays as the fallback for a standalone render.
     """
-    gdf = alerts_gdf.value
-    aoi = aoi_name.value
-    states = step_states(gdf, aoi)
+    p = project.value
+    states = step_states(p)
     prev_t, next_t = nav_targets(active_step, states)
     menu_open, set_menu_open = solara.use_state(False)
 
@@ -176,7 +174,7 @@ def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=Non
                     key=spec.key,
                     tip=t(spec.lock_reason_key)
                     if locked
-                    else f"{t(spec.label_key)} · {count_text(spec, gdf, aoi)}",
+                    else f"{t(spec.label_key)} · {count_text(spec, p)}",
                     seg_style=_seg_style(i),
                     locked=locked,
                     on_activate=lambda i=i: on_navigate(i),
@@ -230,7 +228,7 @@ def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=Non
                         " padding: 2px 6px; white-space: nowrap;",
                     )
                     solara.Text(t(active.label_key), style="font-weight: 700;")
-                    rv.Chip(children=[count_text(active, gdf, aoi)], x_small=True)
+                    rv.Chip(children=[count_text(active, p)], x_small=True)
                     rv.Icon(
                         children=["mdi-menu-down"],
                         small=True,
@@ -264,7 +262,7 @@ def PipelineHeader(active_step: int, on_navigate, alerts_gdf, aoi_name, dark=Non
                                 label=t(spec.label_key),
                                 sub_text=t(spec.lock_reason_key)
                                 if locked
-                                else count_text(spec, gdf, aoi),
+                                else count_text(spec, p),
                                 locked=locked,
                                 active=i == active_step,
                                 on_jump=_jump,
