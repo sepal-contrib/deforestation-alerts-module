@@ -365,3 +365,27 @@ def test_pipeline_header_accent_follows_the_app_theme_not_solara():
     assert "is_dark = solara_dark if dark is None else dark.value" in header
     assert "primary = themes.dark.primary if is_dark else themes.light.primary" in header
     assert "dark=app_state.dark" in _src("gui/widget/workflow_header.py")
+
+
+def test_filter_decodes_custom_names_from_the_search_rasters():
+    """Names must come from the rasters the union is built from (spec
+    constraint 6), never from the live Aux settings."""
+    src = _src("gui/tile/alerts_filter_tile.py")
+    flat = " ".join(src.split())  # whitespace-insensitive
+    assert "custom_alert_name" not in src
+    assert (
+        "custom_names=custom_names_from_rasters( "
+        "alert_filter_model.available_alerts_raster_list )"
+    ) in flat
+    assert "convert_to_geopandas(gdf, custom_names=request.custom_names)" in flat
+    assert '.select("alert").toInt32()' in flat
+
+
+def test_aoi_search_passes_custom_alerts_snapshot():
+    """AOI's SearchRequest must carry a frozen snapshot of the aux_model custom
+    alert sources at click time, not a live reference."""
+    src = _src("gui/tile/aoi_tile.py")
+    flat = " ".join(src.split())
+    assert (
+        "custom_alerts=tuple(dict(s) for s in aux_model.custom_alerts)"
+    ) in flat
