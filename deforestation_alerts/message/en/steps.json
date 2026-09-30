@@ -64,6 +64,22 @@
       "delete_title": "Remove {name}?",
       "delete_message": "The source is removed from the project. Its downloaded files stay until they are replaced.",
       "delete_used": "{n} alert set(s) used this source. They keep their alerts; new sets won't include it."
+    },
+    "period": {
+      "title": "Period",
+      "description": "The monitoring period. Alerts dated inside it (plus the look-back days before it, to catch late-published alerts) are downloaded for every source.",
+      "start": "Start",
+      "end": "End",
+      "look_back": "Look-back (days)",
+      "look_back_hint": "Days before the start that are searched too. Pixels already reported by an earlier period are skipped.",
+      "window": "Search window: {start} → {end}",
+      "save": "Save period",
+      "saved": "Period saved",
+      "locked": "This period already has an alert set, so its dates are fixed. More periods per project arrive in a later version.",
+      "error_bad_date": "Enter both dates.",
+      "error_order": "The end date must be after the start date.",
+      "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
+      "error_locked": "This period already has an alert set; its dates can't change."
     }
   }
 }
