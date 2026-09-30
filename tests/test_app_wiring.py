@@ -240,9 +240,14 @@ def test_gee_widgets_get_the_session_interface():
     one must receive the Page's session interface."""
     aux = _src("gui/tile/aux_tile.py")
     calls = aux.split("sw.inputs.AssetSelect(")[1:]
-    assert len(calls) == 5
+    assert len(calls) == 4  # ccdc, mask, reference layer, raster attributes
     for call in calls:
         assert "gee_interface=gee_interface" in call[: call.index(")")]
+    custom = _src("gui/widget/custom_source_list.py")
+    custom_calls = custom.split("sw.inputs.AssetSelect(")[1:]
+    assert len(custom_calls) == 1
+    assert "gee_interface=gee_interface" in custom_calls[0][: custom_calls[0].index(")")]
+    assert "CustomSourceList(aux_model, gee_interface)" in aux
     shell = _src("gui/solara_app.py")
     assert "AoiDateModel(gee_interface=gee_interface)" in shell
     assert "build_aux_layout(aux_model, workspace, gee_interface)" in shell
