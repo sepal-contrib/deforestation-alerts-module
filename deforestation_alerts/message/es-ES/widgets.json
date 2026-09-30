@@ -26,7 +26,10 @@
       "status_ready": "listo",
       "status_completed": "completado",
       "status_failed": "fallido",
-      "status_cancelled": "cancelado"
+      "status_cancelled": "cancelado",
+      "status_stale": "out of date",
+      "status_missing": "missing",
+      "status_no_data": "no data"
     },
     "artifact_name": {
       "label": "Nombre",

@@ -80,6 +80,32 @@
       "error_order": "The end date must be after the start date.",
       "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
       "error_locked": "This period already has an alert set; its dates can't change."
+    },
+    "prepare": {
+      "title": "Download & harmonize",
+      "description": "Each source is downloaded for the period's search window in its own projection, then aligned onto the project grid (harmonized). Nothing whose inputs are unchanged is downloaded twice; a grid change only re-harmonizes.",
+      "grid_title": "Project grid",
+      "grid_epsg": "EPSG",
+      "grid_resolution": "Resolution",
+      "grid_size": "{w} × {h} pixels, about {gb} GB per source before compression",
+      "grid_large": "This grid is large: downloads will take a while and use disk space.",
+      "grid_save": "Save grid",
+      "grid_saved": "Grid saved ({w} × {h} pixels)",
+      "grid_locked": "The grid is locked because the project has alert sets.",
+      "grid_need_epsg": "Enter an EPSG code.",
+      "grid_bad_epsg": "Unknown EPSG code.",
+      "grid_geographic": "Use a projected CRS in metres (the ⌖ button picks the UTM zone of the AOI).",
+      "grid_bad_resolution": "Enter a resolution in metres, greater than 0.",
+      "list_title": "Sources for this period",
+      "col_source": "Source",
+      "col_download": "Download",
+      "col_harmonize": "Harmonize",
+      "empty": "Add alert sources first.",
+      "run_all": "Run {n} pending",
+      "stop": "Stop after this row",
+      "job_title": "Download & harmonize",
+      "job_row": "Preparing {source}",
+      "row_failed": "{source}: {error}"
     }
   }
 }

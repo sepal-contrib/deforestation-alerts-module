@@ -49,6 +49,9 @@ STATUS_COLORS = {
     "completed": "success",
     "failed": "error",
     "cancelled": "grey",
+    "stale": "warning",
+    "missing": "grey",
+    "no_data": "grey",
 }
 STATUS_ICONS = {
     "running": "mdi-loading mdi-spin",
@@ -57,12 +60,16 @@ STATUS_ICONS = {
     "completed": "mdi-check-circle",
     "failed": "mdi-alert-circle",
     "cancelled": "mdi-cancel",
+    "stale": "mdi-alert",
+    "missing": "mdi-circle-outline",
+    "no_data": "mdi-minus-circle-outline",
 }
 
 _ACTION_ICONS = {
     "edit": "mdi-pencil-outline",
     "delete": "mdi-delete-outline",
     "download": "mdi-cloud-download-outline",
+    "redownload": "mdi-cloud-refresh",  # forces a refresh of a live catalogue (spec §5.3)
     "cancel": "mdi-stop-circle",
     "open": "mdi-table-eye",
     "dismiss": "mdi-close",

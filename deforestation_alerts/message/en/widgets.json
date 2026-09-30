@@ -26,7 +26,10 @@
       "status_ready": "ready",
       "status_completed": "completed",
       "status_failed": "failed",
-      "status_cancelled": "cancelled"
+      "status_cancelled": "cancelled",
+      "status_stale": "out of date",
+      "status_missing": "missing",
+      "status_no_data": "no data"
     },
     "artifact_name": {
       "label": "Name",
