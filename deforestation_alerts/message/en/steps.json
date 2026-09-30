@@ -34,6 +34,14 @@
       "deleted": "Deleted {name}",
       "duplicate_title": "Duplicate {name}",
       "duplicate_hint": "The copy keeps the AOI, sources and grid, without periods or alert sets."
+    },
+    "aoi": {
+      "title": "Area of interest",
+      "description": "Pick the area to monitor. It is saved with the project and every download is cut to it.",
+      "saved": "AOI saved: {name}",
+      "failed": "Could not save the AOI: {error}",
+      "locked": "This project already has alert sets, so its AOI is locked. Duplicate the project (Project dialog) to monitor another area.",
+      "no_geometry": "The AOI has no usable geometry; select it again in the AOI step."
     }
   }
 }
