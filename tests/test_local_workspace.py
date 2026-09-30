@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 import pytest
@@ -66,3 +67,89 @@ def test_cleanup_scratch(local_ws):
     (d / "f").write_text("1")
     local_ws.cleanup_scratch()
     assert not d.exists()
+
+
+def test_tmp_sibling_is_unique_per_call(tmp_path):
+    """Regression: write_bytes/upload_from_scratch used to build the tmp
+    sibling from `dest.name` alone, so two concurrent writers targeting the
+    same destination shared one tmp file. `_tmp_sibling` must hand back a
+    distinct path every time, even for the same destination."""
+    dest = tmp_path / "data" / "p" / "x.json"
+    a = Workspace._tmp_sibling(dest)
+    b = Workspace._tmp_sibling(dest)
+    assert a != b
+    assert a.parent == dest.parent
+    assert b.parent == dest.parent
+
+
+def test_concurrent_writes_to_the_same_destination_do_not_corrupt_it(
+    local_ws, tmp_path
+):
+    """Regression for the fixed-name `.part` race: two threads writing
+    different, same-length payloads to the SAME destination at once must
+    each write to their own tmp file. The loser of the final atomic rename
+    is simply overwritten (last-writer-wins is unchanged and fine), but the
+    file on disk must always be exactly one writer's complete payload --
+    never a byte-level mix of both, and never truncated -- and no stray
+    `.part` file should be left behind afterwards.
+    """
+    dest = tmp_path / "data" / "shared.bin"
+    payload_a = b"A" * 200_000
+    payload_b = b"B" * 200_000
+    start = threading.Barrier(2)
+
+    def write(payload):
+        start.wait()
+        local_ws.write_bytes(str(dest), payload)
+
+    threads = [
+        threading.Thread(target=write, args=(payload_a,)),
+        threading.Thread(target=write, args=(payload_b,)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    result = dest.read_bytes()
+    assert result in (payload_a, payload_b)
+    assert list(dest.parent.glob("*.part")) == []
+
+
+def test_create_only_write_is_atomic_under_concurrency(local_ws, tmp_path):
+    """Regression for the `overwrite=False` TOCTOU: a `dest.exists()` check
+    followed by a separate write-and-rename leaves a window where two
+    concurrent create-only writers can both see "does not exist" and both
+    "succeed", silently defeating the create-only guarantee. With the fix
+    (an atomic `os.link` into place), exactly one of two simultaneous
+    create-only writers to the same destination must win; the other must
+    see `FileExistsError`, deterministically, every time.
+    """
+    dest = tmp_path / "data" / "once.bin"
+    start = threading.Barrier(2)
+    results: list[tuple[str, bytes]] = []
+    lock = threading.Lock()
+
+    def attempt(payload):
+        start.wait()
+        try:
+            local_ws.write_bytes(str(dest), payload, overwrite=False)
+            outcome = "ok"
+        except FileExistsError:
+            outcome = "exists"
+        with lock:
+            results.append((outcome, payload))
+
+    threads = [
+        threading.Thread(target=attempt, args=(b"A",)),
+        threading.Thread(target=attempt, args=(b"B",)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    oks = [payload for outcome, payload in results if outcome == "ok"]
+    assert len(oks) == 1
+    assert dest.read_bytes() == oks[0]
+    assert list(dest.parent.glob("*.part")) == []

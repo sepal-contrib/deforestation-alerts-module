@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import tempfile
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -133,23 +135,59 @@ class Workspace:
     def read_json(self, path: Any) -> Any:
         return json.loads(self.read_text(path))
 
+    @staticmethod
+    def _tmp_sibling(dest: Path) -> Path:
+        """A ``.part`` path next to ``dest`` that is unique to this call.
+
+        Two overlapping writers targeting the *same* ``dest`` (e.g. two
+        clicks of a save button, or a background job racing a manual save)
+        must never share a tmp file: writing to a shared name lets one
+        writer's bytes interleave with or clobber the other's before either
+        ``replace()`` runs, corrupting whichever one loses the rename race.
+        A per-call UUID suffix (matching ``project/io.py``'s
+        ``.{name}.{uuid4}.tmp`` convention) makes that impossible -- each
+        call owns a distinct inode until it renames into place.
+        """
+        return dest.with_name(f"{dest.name}.{uuid.uuid4().hex}.part")
+
+    @staticmethod
+    def _rename_into_place(tmp: Path, dest: Path, *, overwrite: bool) -> None:
+        """Move ``tmp`` to ``dest``, atomically, honouring ``overwrite``.
+
+        ``overwrite=True`` is a plain atomic rename (last writer wins, same
+        as before). ``overwrite=False`` must not do "check dest.exists(),
+        then rename" -- that gap is a TOCTOU: another writer could create
+        ``dest`` between the check and the rename. ``os.link`` has no such
+        gap: it fails atomically, at the filesystem level, iff ``dest``
+        already exists, with nothing to race.
+        """
+        if overwrite:
+            tmp.replace(dest)
+        else:
+            try:
+                os.link(tmp, dest)
+            except FileExistsError:
+                raise FileExistsError(str(dest)) from None
+
     def write_bytes(self, path: Any, data: bytes, *, overwrite: bool = True) -> str:
         """Write ``data`` to ``path``; returns the path written.
 
-        The parent directory is created first. Written via a ``.part``
-        sibling + atomic rename, so a crash mid-write never leaves a
-        truncated file where a reader expects a complete one. ``overwrite``
-        defaults to **True**: every write here is a save of app state the
-        user asked to re-save. Pass ``overwrite=False`` for a genuine
-        create-only write.
+        The parent directory is created first. Written to a private ``.part``
+        sibling, then moved into place, so a crash mid-write never leaves a
+        truncated file where a reader expects a complete one, and a
+        concurrent write to the same ``path`` never corrupts this one (see
+        :meth:`_tmp_sibling`). ``overwrite`` defaults to **True**: every
+        write here is a save of app state the user asked to re-save. Pass
+        ``overwrite=False`` for a genuine create-only write.
         """
         p = Path(str(path))
-        if p.exists() and not overwrite:
-            raise FileExistsError(str(p))
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".part")
-        tmp.write_bytes(data)
-        tmp.replace(p)
+        tmp = self._tmp_sibling(p)
+        try:
+            tmp.write_bytes(data)
+            self._rename_into_place(tmp, p, overwrite=overwrite)
+        finally:
+            tmp.unlink(missing_ok=True)
         return str(p)
 
     def write_text(self, path: Any, text: str, *, overwrite: bool = True) -> str:
@@ -238,17 +276,21 @@ class Workspace:
     ) -> str:
         """Copy a staged local file to ``path``; returns that path.
 
-        The local file is left in place: callers routinely reuse it. Copies
-        (rather than moves) so a caller that reuses the staged file after
-        uploading it keeps working -- discard it explicitly when done.
+        The local file is left in place: callers routinely reuse it. Copied
+        (rather than moved) via a private ``.part`` sibling + atomic rename
+        -- same crash-safety and same-destination concurrency guarantees as
+        :meth:`write_bytes` (see :meth:`_tmp_sibling`) -- so a caller that
+        reuses the staged file after uploading it keeps working; discard it
+        explicitly when done.
         """
         dest = Path(str(path))
-        if dest.exists() and not overwrite:
-            raise FileExistsError(str(dest))
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_name(dest.name + ".part")
-        shutil.copyfile(local, tmp)
-        tmp.replace(dest)
+        tmp = self._tmp_sibling(dest)
+        try:
+            shutil.copyfile(local, tmp)
+            self._rename_into_place(tmp, dest, overwrite=overwrite)
+        finally:
+            tmp.unlink(missing_ok=True)
         return str(dest)
 
     def discard_scratch(self, local: Any) -> None:
