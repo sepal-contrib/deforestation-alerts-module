@@ -1,0 +1,106 @@
+import os
+
+import numpy as np
+import pytest
+import rasterio
+
+from deforestation_alerts.engine import raster_io
+from deforestation_alerts.project.models import GridSpec
+
+GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=1200, height=900)
+
+
+def test_write_grid_raster_int32_nodata0_nearest_overviews(tmp_path):
+    out = tmp_path / "a.tif"
+    data = np.zeros((GRID.height, GRID.width), dtype="int32")
+    data[100:110, 200:210] = 222222222  # the largest 9-source code
+    # A 2x2 cell of 4 distinct codes: at the first overview level (factor 2)
+    # it decimates to one pixel, so only nearest-neighbour resampling can
+    # avoid inventing a 5th value (average/bilinear would blend them).
+    corner_codes = {1000001, 2000002, 3000003, 4000004}
+    data[300, 300] = 1000001
+    data[300, 301] = 2000002
+    data[301, 300] = 3000003
+    data[301, 301] = 4000004
+    with raster_io.write_grid_raster(out, GRID, count=1) as dst:
+        for w in raster_io.row_windows(GRID, rows=256):
+            dst.write(data[w.row_off:w.row_off + w.height, :], 1, window=w)
+    assert out.exists() and not (tmp_path / "a.tif.part").exists()
+    with rasterio.open(out) as src:
+        assert src.dtypes[0] == "int32" and src.nodata == 0
+        assert src.overviews(1)  # internal pyramid
+        assert src.tags(ns="rio_overview").get("resampling") == "nearest"
+        assert src.read(1)[105, 205] == 222222222
+        ovr = src.read(1, out_shape=(GRID.height // 2, GRID.width // 2))
+        assert set(np.unique(ovr)) <= ({0, 222222222} | corner_codes)  # no invented codes
+        assert ovr[150, 150] in corner_codes  # decimated 2x2 cell: one of its own pixels
+
+
+def test_failed_write_leaves_nothing(tmp_path):
+    out = tmp_path / "b.tif"
+    with pytest.raises(RuntimeError):
+        with raster_io.write_grid_raster(out, GRID, count=1):
+            raise RuntimeError("boom")
+    assert not out.exists() and not (tmp_path / "b.tif.part").exists()
+
+
+def test_check_header_rejects_other_grid(tmp_path):
+    out = tmp_path / "c.tif"
+    with raster_io.write_grid_raster(out, GRID, count=1):
+        pass
+    raster_io.check_header(out, GRID)
+    other = GRID.model_copy(update={"xmin": 500010})
+    with pytest.raises(raster_io.GridMismatchError):
+        raster_io.check_header(out, other)
+
+
+def test_ensure_free_space(tmp_path):
+    raster_io.ensure_free_space(tmp_path, 1)
+    with pytest.raises(raster_io.NotEnoughSpaceError):
+        raster_io.ensure_free_space(tmp_path, 10**18)
+
+
+def test_row_windows_cover_grid_once():
+    rows = sum(w.height for w in raster_io.row_windows(GRID, rows=256))
+    assert rows == GRID.height
+
+
+def _write_plain_geotiff(path, size=600):
+    """A small Int32 raster on the project grid profile with *no* internal
+    overviews -- mirrors a plain user GeoTIFF ``ensure_overviews`` targets."""
+    data = np.zeros((size, size), dtype="int32")
+    profile = raster_io.grid_profile(
+        GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=size, height=size),
+        count=1,
+    )
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(data, 1)
+
+
+def test_ensure_overviews_builds_external_sidecar(tmp_path):
+    tif = tmp_path / "user.tif"
+    _write_plain_geotiff(tif)
+    before = tif.read_bytes()
+
+    assert raster_io.ensure_overviews(tif) is True
+    sidecar = tmp_path / "user.tif.ovr"
+    assert sidecar.exists()
+    assert tif.read_bytes() == before  # the source raster is byte-identical
+
+
+def test_ensure_overviews_skips_when_present(tmp_path):
+    tif = tmp_path / "user.tif"
+    _write_plain_geotiff(tif)
+    assert raster_io.ensure_overviews(tif) is True
+    assert raster_io.ensure_overviews(tif) is False
+
+
+def test_ensure_overviews_rebuilds_when_stale(tmp_path):
+    tif = tmp_path / "user.tif"
+    _write_plain_geotiff(tif)
+    assert raster_io.ensure_overviews(tif) is True
+    sidecar = tmp_path / "user.tif.ovr"
+    built_at = sidecar.stat().st_mtime
+    os.utime(tif, (built_at + 10, built_at + 10))
+    assert raster_io.ensure_overviews(tif) is True  # rebuilt, not skipped
+    assert sidecar.stat().st_mtime != built_at
