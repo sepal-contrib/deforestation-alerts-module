@@ -1,0 +1,39 @@
+{
+  "steps": {
+    "project": {
+      "title": "Project",
+      "none_open": "No project is open. Create one, open one, or pick an area of interest in the first step to start one automatically.",
+      "new": "New project",
+      "open": "Open",
+      "duplicate": "Duplicate",
+      "name_label": "Project name",
+      "name_empty": "Enter a name.",
+      "name_chars": "Use letters, digits, spaces, '-' and '_' only.",
+      "name_exists": "A project with this name already exists.",
+      "summary": "{aoi} · {sources} · {periods} · {sets}",
+      "count_sources_one": "{n} source",
+      "count_sources_other": "{n} sources",
+      "count_periods_one": "{n} period",
+      "count_periods_other": "{n} periods",
+      "count_sets_one": "{n} alert set",
+      "count_sets_other": "{n} alert sets",
+      "no_aoi": "no AOI yet",
+      "saved_at": "Saved at {time}",
+      "save_failed": "Saving failed: {error}",
+      "list_title": "Projects",
+      "list_empty": "No saved projects yet.",
+      "col_name": "Name",
+      "col_counts": "Sources / periods / sets",
+      "col_updated": "Updated",
+      "opened": "Opened {name}",
+      "open_failed": "Could not open {name}: {error}",
+      "delete_title": "Delete {name}?",
+      "delete_message": "This deletes the project folder and every file in it. Type the project name to confirm.",
+      "delete_busy": "A task is still writing into this project. Wait for it to finish, then delete.",
+      "delete_failed": "Could not delete {name}: {error}",
+      "deleted": "Deleted {name}",
+      "duplicate_title": "Duplicate {name}",
+      "duplicate_hint": "The copy keeps the AOI, sources and grid, without periods or alert sets."
+    }
+  }
+}

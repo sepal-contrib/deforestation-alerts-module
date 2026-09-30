@@ -1,0 +1,210 @@
+"""The Project rail dialog (spec §4.1): the open project, New, Open, Duplicate
+and Delete. Auto-save means there is no Save button (D11)."""
+
+import asyncio
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import reacton.ipyvuetify as rv
+import solara
+from pysepal.solara.notifications import use_notifications
+
+from deforestation_alerts.project import io, paths
+from deforestation_alerts.project.models import Project
+from gui.i18n import plural, t
+from gui.store.project_writers import is_writing
+from gui.widget.creation_dialog import CreationDialog
+from gui.widget.product_table import ProductTable
+
+_NAME_ERRORS = {"empty": "steps.project.name_empty", "chars": "steps.project.name_chars",
+                "exists": "steps.project.name_exists"}
+
+
+def create_project(name: str) -> Project:
+    now = datetime.now()
+    return Project(name=name.strip(), created_at=now, updated_at=now)
+
+
+def duplicate_with_sidecar(p: Project, new_name: str, root: Optional[Path] = None) -> Project:
+    q = io.duplicate_project(p, new_name.strip())
+    if p.aoi and p.aoi.geometry_file:
+        src = paths.project_dir(p.name, root) / p.aoi.geometry_file
+        if src.exists():
+            dst = paths.project_dir(q.name, root) / p.aoi.geometry_file
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    return q
+
+
+def delete_blocked(name: str) -> Optional[str]:
+    return "steps.project.delete_busy" if is_writing(name) else None
+
+
+@solara.component
+def _NameForm(title, create_label, open_, existing, on_create, hint=None):
+    name, set_name = solara.use_state("")
+
+    def validate():
+        err = io.validate_project_name(name, existing)
+        return t(_NAME_ERRORS[err]) if err else None
+
+    CreationDialog(
+        open_=open_, title=title, create_label=create_label, validate=validate,
+        will_replace=lambda: None, launch=lambda: on_create(name.strip()),
+        on_close=lambda: set_name(""),
+        children=[
+            rv.TextField(label=t("steps.project.name_label"), v_model=name, on_v_model=set_name,
+                         dense=True, outlined=True, hint=hint or "", persistent_hint=bool(hint)),
+        ],
+    )
+
+
+@solara.component
+def ProjectDialog(app_state):
+    notifications = use_notifications()
+    p = app_state.project.value
+    refresh, set_refresh = solara.use_state(0)
+    new_open = solara.use_reactive(False)
+    dup_open = solara.use_reactive(False)
+    pending_delete, set_pending_delete = solara.use_state(None)
+    typed, set_typed = solara.use_state("")
+
+    async def _list():
+        return await asyncio.to_thread(io.list_projects)
+
+    infos_task = solara.lab.use_task(
+        _list, dependencies=[refresh, p is None], prefer_threaded=False, raise_error=False
+    )
+    infos = infos_task.value or []
+    names = [i.name for i in infos]
+
+    async def _load(name):
+        try:
+            loaded = await asyncio.to_thread(io.load_project, name)
+        except io.ProjectLoadError as exc:
+            notifications.error(t("steps.project.open_failed", name=name, error=str(exc)))
+            return
+        app_state.load_project_state(loaded)
+        app_state.current_page_view.value = "aoi_tile"
+        notifications.success(t("steps.project.opened", name=name))
+
+    load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _open(name):
+        load_task(name)
+
+    def _ask_delete(name):
+        set_typed("")
+        set_pending_delete(name)
+
+    def _create(name):
+        app_state.new_project_state(create_project(name))
+        set_refresh(refresh + 1)
+        app_state.current_page_view.value = "aoi_tile"
+
+    def _duplicate(name):
+        app_state.new_project_state(duplicate_with_sidecar(p, name))
+        set_refresh(refresh + 1)
+
+    async def _delete():
+        name = pending_delete
+        blocked = delete_blocked(name)
+        if blocked:
+            notifications.warning(t(blocked))
+            return
+        try:
+            await asyncio.to_thread(io.delete_project, name)
+        except OSError as exc:
+            # delete_project raises (FileNotFoundError, PermissionError, ...) on
+            # disk trouble (ruling #62): a toast, not a crash, and the dialog
+            # stays open on the name so the user can retry or cancel.
+            notifications.error(t("steps.project.delete_failed", name=name, error=str(exc)))
+            return
+        if p is not None and p.name == name:
+            app_state.close_project_state()
+        set_pending_delete(None)
+        set_typed("")
+        set_refresh(refresh + 1)
+        notifications.success(t("steps.project.deleted", name=name))
+
+    delete_task = solara.lab.use_task(_delete, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    with solara.Column(style="gap:16px;padding:8px;"):
+        solara.Markdown(f"### {t('steps.project.title')}")
+        if p is None:
+            solara.Text(t("steps.project.none_open"), classes=["text--secondary"])
+        else:
+            solara.Text(p.name, style="font-weight:600;font-size:1.1rem;")
+            solara.Text(t(
+                "steps.project.summary",
+                aoi=p.aoi.name if p.aoi else t("steps.project.no_aoi"),
+                sources=plural(len(p.sources), "steps.project.count_sources_one",
+                                "steps.project.count_sources_other"),
+                periods=plural(len(p.periods), "steps.project.count_periods_one",
+                                "steps.project.count_periods_other"),
+                sets=plural(len(p.alert_sets), "steps.project.count_sets_one",
+                            "steps.project.count_sets_other"),
+            ))
+            # KEPT INLINE ON PURPOSE (ruling #62) — the global rule routes
+            # feedback through notifications/tracked_job/the task pill, but this
+            # line names the *current, persistent* save state of the open
+            # project (not a one-off outcome a toast would fit), so it stays
+            # pinned under the summary like the autosave status spec §4.1 asks
+            # for, instead of flashing and disappearing.
+            if app_state.save_error.value:
+                solara.Text(t("steps.project.save_failed", error=app_state.save_error.value),
+                            classes=["error--text"])
+            elif app_state.last_saved.value:
+                solara.Text(t("steps.project.saved_at", time=app_state.last_saved.value.strftime("%H:%M:%S")),
+                            classes=["text--secondary"])
+        with solara.Row(style="gap:8px;"):
+            solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True,
+                          on_click=lambda: new_open.set(True))
+            solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", small=True,
+                          outlined=True, disabled=p is None, on_click=lambda: dup_open.set(True))
+        rows = [
+            {
+                "key": i.name,
+                "cells": [
+                    {"value": i.name},
+                    {"value": f"{i.n_sources} / {i.n_periods} / {i.n_sets}", "muted": True},
+                    {"value": i.updated_at.strftime("%Y-%m-%d %H:%M") if i.updated_at else "", "muted": True},
+                ],
+                "actions": [
+                    {"kind": "open", "on_click": (lambda n=i.name: _open(n))},
+                    {"kind": "delete", "on_click": (lambda n=i.name: _ask_delete(n))},
+                ],
+            }
+            for i in infos
+        ]
+        ProductTable(
+            title=t("steps.project.list_title"),
+            columns=[{"label": t("steps.project.col_name")},
+                     {"label": t("steps.project.col_counts"), "width": "140px"},
+                     {"label": t("steps.project.col_updated"), "width": "130px"}],
+            rows=rows, empty_text=t("steps.project.list_empty"),
+        )
+
+    _NameForm(t("steps.project.new"), t("common.create"), new_open, names, _create)
+    if p is not None:
+        _NameForm(t("steps.project.duplicate_title", name=p.name), t("common.create"), dup_open, names,
+                  _duplicate, hint=t("steps.project.duplicate_hint"))
+
+    with rv.Dialog(v_model=pending_delete is not None,
+                   on_v_model=lambda v: None if v else set_pending_delete(None),
+                   max_width="420px", eager=True):
+        with rv.Card():
+            with rv.CardTitle():
+                solara.Text(t("steps.project.delete_title", name=pending_delete or ""))
+            with rv.CardText():
+                solara.Text(t("steps.project.delete_message"))
+                rv.TextField(v_model=typed, on_v_model=set_typed, dense=True, outlined=True)
+            with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
+                solara.Button(t("common.cancel"), text=True, small=True,
+                              on_click=lambda: set_pending_delete(None))
+                solara.Button(t("common.delete"), color="error", small=True,
+                              disabled=typed != (pending_delete or "") or delete_task.pending,
+                              loading=delete_task.pending,
+                              on_click=lambda: delete_task())
