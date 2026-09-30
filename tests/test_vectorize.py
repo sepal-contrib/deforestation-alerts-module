@@ -167,3 +167,35 @@ def test_blockwise_stitches_cluster_across_block_boundary(tmp_path):
     assert len(gdf) == 1               # stitched, not two block fragments
     assert gdf.iloc[0]["count"] == 8
     assert int(gdf.iloc[0]["alert_type_unique"][0]) == 1
+
+
+def test_optimal_block_shape_scales_with_bytes_per_value():
+    rows4, _ = optimal_block_shape(10**7, 10000, 1, ram_gb=1.0)
+    rows8, _ = optimal_block_shape(10**7, 10000, 1, ram_gb=1.0, bytes_per_value=8)
+    assert rows8 == rows4 // 2
+
+
+def test_float64_high_slot_code_survives_vectorize(tmp_path):
+    """A slot-4 custom code in a float64 raster (what geedim exports for an
+    Int32 alert + float32 date) must come out exact, and nodata 255 must not
+    be read as an alert."""
+    from rasterio.transform import from_origin
+    from deforestation_alerts.scripts.report_builder import get_unique_alerts
+
+    code = 2 * 10**8 + 20  # slot 4 potential + RADD code 2
+    alert = np.full((6, 6), 255.0)
+    alert[1:4, 1:4] = code
+    date = np.full((6, 6), 255.0)
+    date[1:4, 1:4] = 2023.5
+    path = tmp_path / "f64.tif"
+    with rasterio.open(
+        path, "w", driver="GTiff", height=6, width=6, count=2, dtype="float64",
+        crs="EPSG:4326", transform=from_origin(10.0, 0.0, 0.01, 0.01), nodata=255,
+    ) as dst:
+        dst.write(alert, 1)
+        dst.write(date, 2)
+
+    gdf = vectorize_alert_raster(str(path), min_cluster_size=1, connectivity=8)
+    codes = [c for row in gdf["alert_type_unique"] for c in row]
+    assert codes == [code]
+    assert set(get_unique_alerts(codes, custom_names={4: "Planet"})) == {"RADD", "Planet"}

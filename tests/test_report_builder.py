@@ -39,22 +39,34 @@ def test_get_unique_alerts_decodes_digit_encoding(value, expected):
 
 
 @pytest.mark.parametrize(
-    "value, custom_name, expected",
+    "value, expected",
     [
-        (10000, "MyAlerts", {"MyAlerts"}),                 # ten-thousands, code 1
-        (20000, "MyAlerts", {"MyAlerts"}),                 # ten-thousands, code 2
-        (10001, "MyAlerts", {"GLAD-L", "MyAlerts"}),       # union with GLAD-L
-        (11000, "MyAlerts", {"CCDC", "MyAlerts"}),         # union w/ CCDC (position-bounded)
-        (1, "MyAlerts", {"GLAD-L"}),                       # custom slot empty -> name absent
+        (10000, {"MyAlerts"}),                       # slot 0, code 1
+        (20000, {"MyAlerts"}),                       # slot 0, code 2
+        (10001, {"GLAD-L", "MyAlerts"}),             # union with GLAD-L
+        (11000, {"CCDC", "MyAlerts"}),               # CCDC stays position-bounded
+        (1, {"GLAD-L"}),                             # custom digits empty
+        (100000, {"Sentinel"}),                      # slot 1
+        (200000020, {"RADD", "Planet"}),             # slot 4 code 2 + RADD code 2
+        (210010, {"RADD", "MyAlerts", "Sentinel"}),  # RADD + slot 0 (1) + slot 1 (2)
+        (1010010, {"RADD", "MyAlerts", "Other"}),    # RADD + slot 0 + slot 2
     ],
 )
-def test_get_unique_alerts_decodes_custom_tenthousands(value, custom_name, expected):
-    assert set(get_unique_alerts([value], custom_name=custom_name)) == expected
+def test_get_unique_alerts_decodes_custom_slots(value, expected):
+    names = {0: "MyAlerts", 1: "Sentinel", 2: "Other", 4: "Planet"}
+    assert set(get_unique_alerts([value], custom_names=names)) == expected
 
 
-def test_get_unique_alerts_custom_defaults_to_generic_label():
-    # No name supplied -> a generic "Custom" label rather than nothing.
-    assert set(get_unique_alerts([10000])) == {"Custom"}
+def test_get_unique_alerts_unnamed_slot_falls_back_to_numbered_label():
+    assert set(get_unique_alerts([10000])) == {"Custom 1"}
+    assert set(get_unique_alerts([1000000], custom_names={0: "A"})) == {"Custom 3"}
+
+
+@pytest.mark.parametrize("value", [10000.0, "10000", "10000.0", "[10000.0]"])
+def test_get_unique_alerts_accepts_float_codes(value):
+    # The float64 export and CSV round-trips hand codes over as floats/strings.
+    arg = value if isinstance(value, str) and value.startswith("[") else [value]
+    assert set(get_unique_alerts(arg, custom_names={0: "A"})) == {"A"}
 
 
 def test_get_unique_alerts_accepts_stringified_list():

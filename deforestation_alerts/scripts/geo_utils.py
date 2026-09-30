@@ -25,10 +25,14 @@ def get_utm_proj_str_from_lat_lon(lon, lat):
     return f"EPSG:{epsg_code}"
 
 
-def optimal_block_shape(ny, nx, nband, ram_gb, ram_fraction=0.7):
-    """Return (blk_rows, blk_cols) for memory-bounded sequential reading (float32)."""
+def optimal_block_shape(ny, nx, nband, ram_gb, ram_fraction=0.7, bytes_per_value=4):
+    """Return (blk_rows, blk_cols) for memory-bounded sequential reading.
+
+    ``bytes_per_value`` is the raster's itemsize: the alert export is float64
+    (8) once the alert band is Int32, float32 (4) before.
+    """
     target_gb = ram_gb * ram_fraction
-    bytes_per_row = nx * nband * 4  # float32
+    bytes_per_row = nx * nband * bytes_per_value
     max_rows = int((target_gb * 1024**3) / bytes_per_row)
     max_rows = max(1, min(ny, max_rows))
     return max_rows, nx

@@ -306,10 +306,30 @@ def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
         map_.remove_layer(_OVERVIEW_AOI_LAYER, none_ok=True)
     except Exception:
         logger.exception("Overview: failed to remove the AOI layer")
+    # TEMP DIAGNOSTIC (remove after root-causing the missing AOI outline): report
+    # whether we even get to the draw, and the map's current view vs the AOI's
+    # bounds, so we can tell "layer not added" from "added but off-screen".
+    logger.warning(
+        "OVERVIEW-AOI-DEBUG show=%s fc_is_none=%s map_center=%s map_zoom=%s",
+        show, feature_collection is None,
+        getattr(map_, "center", "?"), getattr(map_, "zoom", "?"),
+    )
     if not show or feature_collection is None:
         return
     try:
         map_.add_ee_layer(feature_collection, {}, _OVERVIEW_AOI_LAYER)
+        present = any(
+            str(getattr(lyr, "name", "")) == _OVERVIEW_AOI_LAYER
+            for lyr in list(map_.layers)
+        )
+        try:
+            fc_bounds = feature_collection.geometry().bounds().getInfo()
+        except Exception:
+            fc_bounds = "<could not compute>"
+        logger.warning(
+            "OVERVIEW-AOI-DEBUG added=%s layer_present=%s aoi_bounds=%s",
+            True, present, fc_bounds,
+        )
     except Exception:
         logger.exception("Overview: failed to add the AOI layer")
 

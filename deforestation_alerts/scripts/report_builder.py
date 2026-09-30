@@ -14,6 +14,7 @@ import cartopy.io.img_tiles as cimgt
 from shapely.geometry import box
 from pathlib import Path
 import ast
+from deforestation_alerts.scripts.custom_sources import MAX_CUSTOM_SOURCES, slot_value
 
 def ensure_list(input_data):
     if isinstance(input_data, str):
@@ -331,7 +332,7 @@ def _render_report(
     return workspace.upload_from_scratch(local_doc, output_path)
 
 
-def get_unique_alerts(alert_list, custom_name=None):
+def get_unique_alerts(alert_list, custom_names=None):
     """
     Given a list of integers representing sums of alert values,
     return a list of unique alert types found.
@@ -341,12 +342,12 @@ def get_unique_alerts(alert_list, custom_name=None):
     - RADD: tens digit (10 or 20 → digit 1 or 2 if triggered)
     - GLAD-S2: hundreds digit (100 or 200 → digit 1 or 2 if triggered)
     - CCDC: thousands digit (1000 or 2000 → digit 1 or 2 if triggered)
-    - custom: ten-thousands digit (10000 or 20000 → digit 1 or 2 if triggered)
+    - custom slot s (0–4): digit 10^(4+s) (1 or 2 if triggered)
 
     Parameters:
         alert_list (list): A list of integers (or strings representing numbers).
-        custom_name (str | None): label for the user-defined custom alert source
-            (the ten-thousands slot). Falls back to "Custom" when not provided.
+        custom_names (dict[int, str] | None): ``{slot: name}`` for the custom
+            sources of the run; a slot without a name decodes as "Custom <s+1>".
 
     Returns:
         List[str]: Unique alert type names found in the list.
@@ -366,10 +367,11 @@ def get_unique_alerts(alert_list, custom_name=None):
     unique_alerts = set()
 
     for value in alert_list:
-        # Ensure value is an integer
         try:
-            value = int(value)  # Convert to int if it's a string
-        except ValueError:
+            # float() first: the float64 export yields 10000.0, and CSV
+            # round-trips can hand the same over as "10000.0".
+            value = int(float(value))
+        except (TypeError, ValueError):
             continue  # Skip invalid entries
 
         # Check GLAD-L (ones digit)
@@ -389,9 +391,12 @@ def get_unique_alerts(alert_list, custom_name=None):
         if (value % 10000) // 1000 in [1, 2]:
             unique_alerts.add("CCDC")
 
-        # Check custom source (ten-thousands digit)
-        if (value % 100000) // 10000 in [1, 2]:
-            unique_alerts.add(custom_name or "Custom")
+        # Custom sources: slot s owns digit 10^(4+s).
+        for slot in range(MAX_CUSTOM_SOURCES):
+            if (value // slot_value(slot)) % 10 in (1, 2):
+                unique_alerts.add(
+                    (custom_names or {}).get(slot) or f"Custom {slot + 1}"
+                )
 
     return list(unique_alerts)
 

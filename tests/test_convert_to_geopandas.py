@@ -52,8 +52,8 @@ def _custom_coded_gdf():
     )
 
 
-def test_convert_threads_custom_name_into_alert_sources():
-    out = convert_to_geopandas(_custom_coded_gdf(), custom_name="MyAlerts")
+def test_convert_threads_custom_names_into_alert_sources():
+    out = convert_to_geopandas(_custom_coded_gdf(), custom_names={0: "MyAlerts"})
     assert out["alert_sources"].iloc[0] == "MyAlerts"
     parts = out["alert_sources"].iloc[1].replace(" and ", ", ").split(", ")
     assert set(parts) == {"GLAD-L", "MyAlerts"}

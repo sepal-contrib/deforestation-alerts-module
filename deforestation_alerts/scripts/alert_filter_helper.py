@@ -77,7 +77,7 @@ def custom_reduce_image_collection(image_collection):
     return combined_image
 
 
-def convert_to_geopandas(vectorized_gdf, custom_name=None):
+def convert_to_geopandas(vectorized_gdf, custom_names=None):
     """Assemble alerts_gdf from the local-vectorize output.
 
     Input: gpd.GeoDataFrame with columns geometry(Polygon), alert_type_unique(list),
@@ -86,8 +86,8 @@ def convert_to_geopandas(vectorized_gdf, custom_name=None):
     plus the back-compat `bounding_box`, `point`, decoded `alert_sources`, and the
     empty user-review columns. Preserves the integer alert-code decoding.
 
-    ``custom_name`` labels the user-defined custom alert source (the ten-thousands
-    code slot) in ``alert_sources``; falls back to "Custom" when not provided.
+    ``custom_names`` (``{slot: name}``) labels the user-defined custom alert
+    sources in ``alert_sources``; unnamed slots decode as "Custom <n>".
     """
     gdf = vectorized_gdf.copy()
 
@@ -97,7 +97,7 @@ def convert_to_geopandas(vectorized_gdf, custom_name=None):
 
     gdf["status"] = "Not reviewed"
     gdf["alert_sources"] = gdf["alert_type_unique"].apply(
-        lambda x: format_list(get_unique_alerts(x, custom_name=custom_name))
+        lambda x: format_list(get_unique_alerts(x, custom_names=custom_names))
     )
     gdf["before_img"] = pd.Series([], dtype="str")
     gdf["before_img_info"] = pd.Series([], dtype="object")

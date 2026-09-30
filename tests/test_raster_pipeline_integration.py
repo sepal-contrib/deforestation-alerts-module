@@ -41,3 +41,21 @@ def test_download_then_vectorize_produces_expected_columns(tiny_aoi, tmp_path):
         assert col in gdf.columns
     assert gdf.geometry.iloc[0].geom_type == "Polygon"
     assert "GLAD-L" in gdf["alert_sources"].iloc[0]
+
+
+def test_high_slot_int32_code_survives_export_and_vectorize(tiny_aoi, tmp_path):
+    """Int32 alert + float32 date exports as float64; a slot-4 code must survive
+    exactly and nodata 255 must not become an alert."""
+    import ee
+    code = 2 * 10**8 + 20
+    alert = ee.Image.constant(code).toInt32().rename("alert")
+    date = ee.Image.constant(2023.5).toFloat().rename("date")
+    out = str(tmp_path / "slot4.tif")
+    download_ee_image(alert.addBands(date), out, region=tiny_aoi, scale=30,
+                      crs="EPSG:4326", unmask_value=255, nodata_value=255)
+    with rasterio.open(out) as src:
+        assert src.dtypes[0] == "float64"
+        present = set(np.unique(src.read(1)).tolist()) - {255}
+    assert present == {code}
+    vgdf = vectorize_alert_raster(out, min_cluster_size=1, connectivity=8)
+    assert {c for row in vgdf["alert_type_unique"] for c in row} == {code}
