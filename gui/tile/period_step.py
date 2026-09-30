@@ -15,6 +15,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine.fingerprint import harm_key, raw_key
 from deforestation_alerts.project.models import Period, period_id
 from gui.i18n import t
+from gui.store import workflow_steps
 
 
 def _has_sets(p, pid) -> bool:
@@ -61,7 +62,7 @@ def apply_period(p, start: str, end: str, look_back) -> Optional[str]:
 
 
 def default_dates(p, today: date) -> tuple:
-    period = p.periods.get(p.active_period) if p.active_period else None
+    period = workflow_steps.active_period(p)
     if period is not None:
         return period.start.isoformat(), period.end.isoformat()
     return today.replace(day=1).isoformat(), today.isoformat()
@@ -118,7 +119,7 @@ def _PeriodForm(app_state):
         else:
             notifications.success(t("steps.period.saved"))
 
-    period = p.periods.get(p.active_period) if p.active_period else None
+    period = workflow_steps.active_period(p)
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.period.title')}")
         solara.Text(t("steps.period.description"), classes=["text--secondary"])
