@@ -54,9 +54,10 @@ def use_catalogue_meta(app_state, gee_interface) -> dict:
             fetched = await fetch_meta(gee_interface, missing)
             app_state.catalogue_meta.set({**app_state.catalogue_meta.value, **fetched})
 
-    # dependencies=[p is not None]: fetch once, the first time a project is
-    # open; the catalogue is session-wide, not per-project, so a later
-    # project switch must not refetch it.
+    # dependencies=[p is not None]: runs on mount, then again only when a
+    # project opens or closes (not on every project switch) -- the catalogue
+    # is session-wide, not per-project, so ``missing`` is empty and the task
+    # is a no-op on every rerun after the first successful fetch.
     task = solara.lab.use_task(_load, dependencies=[p is not None], prefer_threaded=False, raise_error=False)
 
     def _on_error():
