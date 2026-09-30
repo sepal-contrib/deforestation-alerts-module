@@ -23,7 +23,7 @@ from pysepal.solara.notifications.bus import get_current_bus
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import (
     AoiRecord,
     Artifact,
@@ -96,42 +96,105 @@ def _ctx(app_state, cancel=None, **overrides):
     return prepare_jobs.PrepareContext(**fields)
 
 
-def test_run_rows_applies_artifacts_and_stops_on_project_switch(monkeypatch):
+def test_run_rows_applies_artifacts_and_stops_on_project_switch(monkeypatch, tmp_path):
+    """Review focus 5 and spec §12: nothing lands in the project open now. The
+    row that finished after the switch is recorded in its own project's saved
+    manifest, which must keep describing the files the row just wrote in that
+    project's folder (spec §5.2, §5.3).
+    """
     s = AppState()
-    s.new_project_state(_project("d", "GLAD-L", "RADD", "GLAD-S2"))
+    d = _project("d", "GLAD-L", "RADD", "GLAD-S2")
+    io.save_project(d, root=tmp_path)  # "d" as last saved
+    s.new_project_state(d)
     other = _project("other", "GLAD-L", "RADD", "GLAD-S2")
-    ran, seen = [], {}
+    ran, seen, written = [], {}, {}
 
     def fake_run(job, on_tiles=None, on_wait=None):
         ran.append(job.source)
         if job.source == "RADD":
             seen["d"] = s.project.value  # "d" as the user leaves it
             s.new_project_state(other)  # the user opens another project mid-row
-        return _arts(job.source)
+        written[job.source] = _arts(job.source)
+        return written[job.source]
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    prepare_jobs.run_rows(_ctx(s), ["GLAD-L", "RADD", "GLAD-S2"])
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d"), ["GLAD-L", "RADD", "GLAD-S2"])
 
     assert ran == ["GLAD-L", "RADD"]  # GLAD-S2 never started: the project is gone
-    d = seen["d"]
-    assert raw_key(JAN.id, "GLAD-L") in d.artifacts and harm_key(JAN.id, "GLAD-L") in d.artifacts
-    assert raw_key(JAN.id, "RADD") not in d.artifacts  # its result was dropped, not applied late
+    live = seen["d"]
+    assert raw_key(JAN.id, "GLAD-L") in live.artifacts and harm_key(JAN.id, "GLAD-L") in live.artifacts
+    assert raw_key(JAN.id, "RADD") not in live.artifacts  # not applied to the left project's live object
     assert s.project.value is other and other.artifacts == {}  # nothing landed in the new project
+    assert not (tmp_path / "other").exists()
+    saved = io.load_project("d", root=tmp_path)
+    for key in (raw_key(JAN.id, "RADD"), harm_key(JAN.id, "RADD")):
+        assert saved.artifacts[key] == written["RADD"][key]  # recorded in "d"'s own manifest
 
 
-def test_run_rows_stops_when_the_project_is_closed(monkeypatch):
+def test_run_rows_stops_when_the_project_is_closed(monkeypatch, tmp_path):
     s = AppState()
-    s.new_project_state(_project("d", "GLAD-L", "RADD"))
-    ran = []
+    d = _project("d", "GLAD-L", "RADD")
+    io.save_project(d, root=tmp_path)
+    s.new_project_state(d)
+    ran, written = [], {}
 
     def fake_run(job, on_tiles=None, on_wait=None):
         ran.append(job.source)
         s.close_project_state()  # the user closes the project mid-row
+        written[job.source] = _arts(job.source)
+        return written[job.source]
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d"), ["GLAD-L", "RADD"])
+    assert ran == ["GLAD-L"] and s.project.value is None
+    saved = io.load_project("d", root=tmp_path)
+    assert {k: saved.artifacts[k] for k in written["GLAD-L"]} == written["GLAD-L"]
+
+
+def test_a_late_row_is_not_recorded_for_a_period_its_saved_project_no_longer_has(monkeypatch, tmp_path):
+    """The saved manifest is the left project's own truth: a period removed
+    there gets no orphan records.
+    """
+    s = AppState()
+    saved_without_jan = _project("d", "GLAD-L")
+    saved_without_jan.periods, saved_without_jan.active_period = {}, None
+    io.save_project(saved_without_jan, root=tmp_path)
+    s.new_project_state(_project("d", "GLAD-L"))
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        s.close_project_state()
         return _arts(job.source)
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    prepare_jobs.run_rows(_ctx(s), ["GLAD-L", "RADD"])
-    assert ran == ["GLAD-L"] and s.project.value is None
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d"), ["GLAD-L"])
+    assert io.load_project("d", root=tmp_path).artifacts == {}
+
+
+def test_a_late_row_that_cannot_be_recorded_does_not_fail_the_job(monkeypatch, tmp_path, caplog):
+    """No manifest to record into (never saved, or unreadable): the error is
+    logged, the job ends normally, and no project is created from nothing.
+    """
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L"))
+
+    class _Notifier(NoopNotifier):
+        def __init__(self):
+            self.errors = []
+
+        def error(self, message, *, timeout=None):
+            self.errors.append(message)
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        s.close_project_state()
+        return _arts(job.source)
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    notifier = _Notifier()
+    with caplog.at_level("ERROR", logger="SEPALUI.deforestation_alerts"):
+        prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d", notifier=notifier), ["GLAD-L"])
+    assert notifier.errors == []  # tracked_job saw no failure
+    assert any("d" in r.getMessage() and r.exc_info for r in caplog.records)
+    assert not (tmp_path / "d").exists()
 
 
 @pytest.mark.parametrize("change", ["aoi", "period"])
@@ -436,6 +499,91 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
         assert [ctx.name for ctx, _, _ in step.started] == ["b"]
     finally:
         rc.close()
+
+
+def test_stop_reaches_a_run_all_after_another_row_started(step, monkeypatch):
+    """Spec §7.3/§12: Stop cancels a running download between rows. A later
+    start in the same project and period (here a Re-download of a ready row)
+    must not take Stop away from the Run all still in its current row.
+    """
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING),
+              PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True),
+                   meta={"GLAD-L": {}, "RADD": {}})
+    contexts = {}
+
+    box, rc = _render(state)
+
+    def run_all_blocked_mid_row(ctx, sources, force=False):
+        contexts[tuple(sources)] = ctx
+        if sources == ["GLAD-L"]:  # Run all, still in its current row
+            step.table[-1][1]["actions"][1]["on_click"]()  # Re-download the ready RADD row
+            stop = _button(rc, t("steps.prepare.stop"))
+            assert not stop.disabled
+            stop.fire_event("click", None)
+
+    monkeypatch.setattr(prepare_step, "run_rows", run_all_blocked_mid_row)
+    try:
+        _button(rc, t("steps.prepare.run_all", n=1)).fire_event("click", None)
+        step.run_jobs()
+        assert set(contexts) == {("GLAD-L",), ("RADD",)}
+        assert contexts[("GLAD-L",)].cancel.is_set()  # Run all stops after this row
+        assert contexts[("RADD",)].cancel.is_set()  # and so does every job of this project and period
+        assert _button(rc, t("steps.prepare.stop")).disabled  # every job ended
+    finally:
+        rc.close()
+
+
+def test_stop_in_one_project_leaves_another_projects_job_running(step, monkeypatch):
+    """Stop acts on the jobs of the open project and period only, the same
+    scope as the in-flight keys that enable it. Each job has its own Event: a
+    job started after a Stop is not born stopped, and an ended job's Event
+    leaves the session-wide registry.
+    """
+    registries = []
+
+    class _Recording(prepare_step._StopEvents):
+        def __init__(self):
+            super().__init__()
+            registries.append(self)
+
+    monkeypatch.setattr(prepare_step, "_StopEvents", _Recording)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.STALE))
+    state = _state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()  # a's GLAD-L job: queued, so still running
+        state.new_project_state(_project("b", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
+        step.table[-1][0]["actions"][0]["on_click"]()  # b's job, started last
+        state.new_project_state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
+        _button(rc, t("steps.prepare.stop")).fire_event("click", None)
+        step.table[-1][1]["actions"][0]["on_click"]()  # a's RADD job, while GLAD-L's still runs
+        step.run_jobs()
+
+        stopped = {(ctx.name, *sources): ctx.cancel.is_set() for ctx, sources, _ in step.started}
+        assert stopped == {("a", "GLAD-L"): True, ("b", "GLAD-L"): False, ("a", "RADD"): False}
+        [stops] = registries
+        assert stops._events == {}
+    finally:
+        rc.close()
+
+
+def test_stop_events_are_scoped_and_forgotten_when_their_job_ends():
+    """The registry lives as long as the session: an ended job's Event must
+    not stay in it.
+    """
+    stops = prepare_step._StopEvents()
+    a1, a2, b = stops.add(("a", JAN.id)), stops.add(("a", JAN.id)), stops.add(("b", JAN.id))
+    stops.stop(("a", JAN.id))
+    assert a1.is_set() and a2.is_set() and not b.is_set()
+
+    for scope, event in ((("a", JAN.id), a1), (("a", JAN.id), a2), (("b", JAN.id), b)):
+        stops.discard(scope, event)
+    assert stops._events == {}
+    stops.stop(("b", JAN.id))  # nothing left to stop
+    assert not b.is_set()
 
 
 def test_row_errors_are_cleared_when_the_project_changes(step, monkeypatch):

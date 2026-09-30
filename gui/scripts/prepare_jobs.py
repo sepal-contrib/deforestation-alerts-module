@@ -9,6 +9,12 @@ on a deep copy, and its artifacts are applied only while the project is still
 the open one (``AppState.update_project``), so a late row never writes into
 another project (review focus 5). Its files stay in its own project folder,
 which is marked as being written for the whole run so it can't be deleted.
+
+A row that finishes after its project was closed or switched has already
+written (or replaced, or superseded) files in that project's folder, so its
+artifacts are recorded in that project's own saved manifest instead, and the
+run stops (the Integrate ruling #75, applied to rows). Nothing touches the
+project open now, the map or the row errors.
 """
 
 import logging
@@ -26,7 +32,7 @@ from deforestation_alerts.engine.runner import (
     apply_artifacts,
     run_source_row,
 )
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
 from gui.i18n import t
 from gui.scripts import raster_map
@@ -87,6 +93,29 @@ def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None
     ctx.row_errors.set(errors)
 
 
+def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
+    """Record a late row's artifacts in its own project's saved manifest.
+
+    Called under the run's ``writing(ctx.name)``, once ``update_project`` has
+    refused them because that project is no longer open. The row already
+    wrote its files in that project's folder: without the record, a forced
+    refresh would keep the old content_id over new bytes (spec §5.3), and a
+    superseded file the manifest still points at would read as missing
+    (spec §5.2). A failure is logged and never fails the run.
+    """
+    if not arts:
+        return
+    try:
+        root = Path(ctx.pdir).parent
+        own = io.load_project(ctx.name, root=root)
+        if ctx.period.id not in own.periods:
+            return  # the period was removed there: no orphan records
+        apply_artifacts(own, arts)
+        io.save_project(own, root=root)
+    except Exception:  # noqa: BLE001 - the row's files are written; only the record is lost
+        logger.exception("could not record a late row in project %s", ctx.name)
+
+
 def row_cells(row: PrepareRow, running: bool) -> list:
     def cell(s):
         return {"type": "status", "status": "running" if running else _CELL_STATUS[s]}
@@ -122,6 +151,7 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 continue
             _set_error(ctx, source, None)
             if not ctx.app_state.update_project(ctx.name, lambda p, a=arts: apply_artifacts(p, a)):
+                _record_in_own_project(ctx, arts)  # the project was left mid-row
                 return
             harm = arts.get(harm_key(ctx.period.id, source))
             key = f"src:{source}"

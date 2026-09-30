@@ -8,6 +8,11 @@ In-flight keys carry the project name (``prep:{project}:{period}:{source}``):
 a job still finishing a row for a project the user left neither shows as
 running in, nor blocks, the project now open, while reopening its own project
 still finds its rows claimed until it ends.
+
+Stop has the same scope: every job started in the open project and period
+gets its own cancel Event, and Stop sets all of them, so a later start (even a
+no-op click on a ready row) never takes Stop away from a Run all still going,
+nor points it at another project's job.
 """
 
 import threading
@@ -34,6 +39,37 @@ def _inflight_key(project: str, period_id: str, source: str) -> str:
     return f"prep:{project}:{period_id}:{source}"
 
 
+class _StopEvents:
+    """The cancel Events of the running jobs, by (project, period id).
+
+    Clicks add and stop, and workers discard, so every access takes the lock.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._events: dict[tuple, set] = {}
+
+    def add(self, scope: tuple) -> threading.Event:
+        event = threading.Event()
+        with self._lock:
+            self._events.setdefault(scope, set()).add(event)
+        return event
+
+    def discard(self, scope: tuple, event: threading.Event) -> None:
+        with self._lock:
+            events = self._events.get(scope)
+            if events is not None:
+                events.discard(event)
+                if not events:
+                    del self._events[scope]
+
+    def stop(self, scope: tuple) -> None:
+        with self._lock:
+            events = list(self._events.get(scope, ()))
+        for event in events:
+            event.set()
+
+
 @solara.component
 def PrepareStep(app_state, map_, gee_interface, layers):
     notifications = use_notifications()
@@ -44,7 +80,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     running = inflight.value
     on = layers.on.value
     building = layers.inflight.value
-    cancel = solara.use_ref(threading.Event())
+    stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
     row_errors = solara.use_reactive({})
     catalogue_meta.use_catalogue_meta(app_state, gee_interface)
     # A row's error belongs to the project and period it ran for.
@@ -79,15 +115,17 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 notifications.error(str(exc))
                 return
             aoi = None
-        cancel.current = threading.Event()
+        scope = (p.name, period.id)
+        cancel = stops.add(scope)
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
-                             name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel.current,
+                             name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
                              row_errors=row_errors)
 
         def _job():
             try:
                 run_rows(ctx, sources, force=force)
             finally:
+                stops.discard(scope, cancel)
                 inflight.release(*keys)
 
         spawn_in_context(_job)
@@ -135,4 +173,4 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                               icon_name="mdi-play", disabled=not pending or bool(mine),
                               on_click=lambda: _start(pending))
                 solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
-                              on_click=lambda: cancel.current.set())
+                              on_click=lambda: stops.stop((p.name, period.id)))
