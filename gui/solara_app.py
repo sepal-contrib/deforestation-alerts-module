@@ -385,10 +385,7 @@ def _AppShell():
     # the satellite context.
     def _make_shared_map():
         m = SepalMap(
-            gee_interface=gee_interface,
-            fullscreen=True,
-            theme_state=theme_state,
-            min_zoom=3,
+            gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
         )
         try:
             m.add_basemap("SATELLITE")
