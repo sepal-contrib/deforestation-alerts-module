@@ -20,6 +20,9 @@ EXEMPT = {
     # (project_writers.py:4, solara_threads.py:86).
     "gui/store/project_writers.py",
     "gui/scripts/solara_threads.py",
+    # grep noise: the custom-source list editor's own `save()` method (Save
+    # button of its add/edit modal) writes AuxModel.custom_alerts, not a file.
+    "gui/widget/custom_source_list.py",
 }
 
 
