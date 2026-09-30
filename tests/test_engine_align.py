@@ -39,7 +39,14 @@ def _source(path):
     return alert, dates
 
 
-def test_reprojection_is_nearest_exact(tmp_path):
+# The production chunks put this small grid in one block; 16 px source and 64 px
+# destination chunks split it into 5 row bands of 3 blocks, partial ones last,
+# so every block is written at its own window.
+@pytest.mark.parametrize("src_chunk, dst_chunk", [(align.SRC_CHUNK, align.DST_CHUNK), (16, 64)],
+                         ids=["one-block", "5-row-bands"])
+def test_reprojection_is_nearest_exact(tmp_path, monkeypatch, src_chunk, dst_chunk):
+    monkeypatch.setattr(align, "SRC_CHUNK", src_chunk)
+    monkeypatch.setattr(align, "DST_CHUNK", dst_chunk)
     src_alert, src_dates = _source(tmp_path / "src.tif")
     out = tmp_path / "out.tif"
     align.reproject_to_grid(tmp_path / "src.tif", GRID, out)
@@ -95,42 +102,47 @@ def test_a_source_with_its_own_nodata_becomes_nodata_zero(tmp_path):
         assert set(np.unique(ds.read(1))) == {0, 1}
 
 
-# ---- streaming guard (spatial_risk tests/test_xr_reproject_streaming.py) ----
+# ---- streaming guards (spatial_risk tests/test_xr_reproject_streaming.py) ----
 #
 # With rioxarray's default lock=None the whole grid is evaluated into one numpy
-# array before the first write, so the peak grows with the grid's *area*.
-# Streamed, it grows only with its *width* (dask keeps a strip of source tiles
-# in flight). The guard warps the same synthetic source at two sizes, 2x wider
-# and 4x the area, with 512 px chunks so both sizes reach the steady state
-# cheaply (the chunk size moves the constant, not the growth). Measured
-# 2026-09-30, 2 workers: 79 MB for the 125 MB output streamed, 251 MB with
-# lock=None; 43 -> 79 MB (1.8x) from 2000 to 4000 px streamed, 3.9x with lock=None.
+# array before the first write, so the peak grows with the grid's *area*. One
+# dask.array.store over the whole grid (rio.to_raster with lock=True) still
+# grew with the area at scale (2.2 GB RSS for a 24k px grid, 3.9 GB for 32k),
+# so align stores one destination row band at a time and the peak follows only
+# the grid's *width* (the band's strip of source tiles). The guards warp the
+# same synthetic source at several sizes with 512 px chunks, so every size
+# reaches the steady state cheaply (the chunk size moves the constant, not the
+# growth). Measured 2026-09-30, 2 workers, traced numpy peak:
+#   2x wider (2000 -> 4000 px square, 125 MB output): 33-37 -> 51-53 MB band by
+#     band, 41-43 -> 79 MB with one store, 64 -> 251 MB with lock=None;
+#   4x taller (2000 x 2000 -> 2000 x 8000 px, 100 m): 26 -> 26 MB band by band,
+#     26-27 -> 47 MB with one store, 78 -> 316 MB with lock=None.
 
 
-def _sparse_source(path, side):
-    """A ``side``-px 2-band Int32 alert raster at 0.001 deg, alerts on every 97th row."""
-    profile = dict(driver="GTiff", dtype="int32", nodata=0, count=2, width=side, height=side,
+def _sparse_source(path, width, height):
+    """A ``width`` x ``height`` px 2-band Int32 alert raster at 0.001 deg, alerts on every 97th row."""
+    profile = dict(driver="GTiff", dtype="int32", nodata=0, count=2, width=width, height=height,
                    crs="EPSG:4326", transform=Affine(0.001, 0, -66.0, 0, -0.001, -14.0),
                    tiled=True, blockxsize=512, blockysize=512, compress="deflate")
     with rasterio.open(path, "w", **profile) as dst:
-        for row0 in range(0, side, 512):
-            h = min(512, side - row0)
+        for row0 in range(0, height, 512):
+            h = min(512, height - row0)
             rows = np.arange(row0, row0 + h)[:, None]
-            alert = np.broadcast_to(np.where(rows % 97 == 0, 1, 0), (h, side)).astype("int32")
-            window = Window(0, row0, side, h)
+            alert = np.broadcast_to(np.where(rows % 97 == 0, 1, 0), (h, width)).astype("int32")
+            window = Window(0, row0, width, h)
             dst.write(alert, 1, window=window)
             dst.write(alert * 2026001, 2, window=window)
 
 
-def _traced_peak(tmp_path, side):
-    """Peak traced (numpy) allocation while aligning a ``side``-px source onto a
-    UTM grid over the same footprint: rotated, so every destination tile pulls
-    from several source tiles -- the shape of a real harmonize."""
-    src = tmp_path / f"src{side}.tif"
-    _sparse_source(src, side)
-    deg = side * 0.001
-    grid = build_grid((-66.0, -14.0 - deg, -66.0 + deg, -14.0), "EPSG:32720", 111)
-    out = tmp_path / f"out{side}.tif"
+def _traced_peak(tmp_path, width, height, resolution=111):
+    """Peak traced (numpy) allocation while aligning a ``width`` x ``height`` px
+    source onto a UTM grid over the same footprint: rotated, so every
+    destination tile pulls from several source tiles -- the shape of a real
+    harmonize."""
+    src = tmp_path / f"src{width}x{height}.tif"
+    _sparse_source(src, width, height)
+    grid = build_grid((-66.0, -14.0 - height * 0.001, -66.0 + width * 0.001, -14.0), "EPSG:32720", resolution)
+    out = tmp_path / f"out{width}x{height}.tif"
     tracemalloc.start()
     try:
         tracemalloc.reset_peak()
@@ -144,20 +156,43 @@ def _traced_peak(tmp_path, side):
     return peak, grid.width * grid.height * 2 * 4  # two Int32 bands
 
 
-def test_warp_streams_instead_of_holding_the_output(tmp_path, monkeypatch):
-    """Doubling the grid's width, not its area, is what the warp's peak follows."""
+@pytest.fixture
+def small_chunks(monkeypatch):
     monkeypatch.setenv("DEFORESTATION_ALERTS_NUM_THREADS", "2")
     monkeypatch.setattr(align, "SRC_CHUNK", 512)
     monkeypatch.setattr(align, "DST_CHUNK", 512)
     # one GDAL thread whatever earlier tests left behind (a config option, not setenv)
     with rasterio.Env(GDAL_NUM_THREADS=1):
-        peak_small, _ = _traced_peak(tmp_path, 2000)
-        peak_large, out_large = _traced_peak(tmp_path, 4000)
+        yield
+
+
+def test_warp_streams_instead_of_holding_the_output(tmp_path, small_chunks):
+    """Doubling the grid's width, not its area, is what the warp's peak follows."""
+    peak_small, _ = _traced_peak(tmp_path, 2000, 2000)
+    peak_large, out_large = _traced_peak(tmp_path, 4000, 4000)
     assert peak_large < 2.5 * peak_small, (
         f"peak grew {peak_small / 1e6:.0f} MB -> {peak_large / 1e6:.0f} MB for 4x the area: "
         "the warp is materialising the grid, not streaming it"
     )
     assert peak_large < out_large, f"peak {peak_large / 1e6:.0f} MB >= the {out_large / 1e6:.0f} MB output"
+
+
+def test_warp_peak_does_not_grow_with_the_grid_height(tmp_path, small_chunks):
+    """Four times taller at the same width: the same peak, because the grid is
+    stored one row band at a time.
+
+    At 100 m a destination tile (51 km) is smaller than a source tile (53-57
+    km), so none straddles more than 2 x 2 source tiles and the peak is the
+    band's strip. At 111 m the tiles are the same size, some straddle 3 x 2 or
+    3 x 3, and the peak follows which of those the scheduler runs together
+    (1.1-1.5x here, run to run).
+    """
+    peak_short, _ = _traced_peak(tmp_path, 2000, 2000, resolution=100)
+    peak_tall, _ = _traced_peak(tmp_path, 2000, 8000, resolution=100)
+    assert peak_tall < 1.3 * peak_short, (
+        f"peak grew {peak_short / 1e6:.0f} MB -> {peak_tall / 1e6:.0f} MB for a 4x taller grid: "
+        "the warp is not stored band by band"
+    )
 
 
 @pytest.mark.parametrize("resampling", ["bilinear", "average"])

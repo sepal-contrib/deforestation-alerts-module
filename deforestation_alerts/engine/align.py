@@ -5,37 +5,47 @@ Earth Engine sources are downloaded in their native projection and aligned here
 spatial_risk's ``geo_utils.xr_reproject`` (odc-geo on dask), keeping what keeps
 its memory from growing with the grid's area, all measured there on a
 country-scale project that had killed a 16 GB kernel (spatial_risk memory
-harmonize-all-oom-root-cause):
+harmonize-all-oom-root-cause), with one change to how it writes:
 
-* ``lock=True`` in ``rio.to_raster``. rioxarray's default ``lock=None`` takes
-  its non-dask branch, which evaluates the whole grid into one numpy array
-  before the first write. With a lock it streams through ``dask.array.store``,
-  one destination tile at a time.
+* The warp is stored one destination row band (``DST_CHUNK`` rows) at a time:
+  one ``dask.array.store`` per band into one open dataset, under a lock.
+  spatial_risk writes with ``rio.to_raster(lock=True)``, a single store over
+  the whole grid (rioxarray's default ``lock=None`` is worse: it evaluates the
+  whole grid into one numpy array before the first write). Here that single
+  store's peak still grew with the grid's area, in held numpy arrays: measured
+  2026-09-30 (2-band Int32 rotated onto UTM, 2 workers, VmRSS), 1.15, 2.16 and
+  3.87 GB for 12k, 24k and 32k px grids, against 0.85, 0.99 and 1.19 GB band by
+  band (2.56 GB with 8 workers), pixel-identical and faster (32k: 48 s, not 60).
 * source and destination chunks of 2048 px (see ``DST_CHUNK``/``SRC_CHUNK``);
 * dask's threaded scheduler capped at ``gdal_env.worker_threads()`` (half the
   cores): every worker holds its own source window and destination tile;
 * GDAL's block cache capped at 64 MiB during the warp.
 
-What is left grows with the grid's *width*: dask keeps a strip of source tiles
-in flight. Measured here (2026-09-30, 2-band Int32 rasters rotated onto UTM, 2
-workers, traced numpy peak): 507 MB for a 6000 px square source, 670 MB for
-8000 px; tests/test_engine_align.py guards the difference from ``lock=None``.
+What is left grows with the grid's *width* (a band's strip of source tiles) and
+with the workers: each holds a source window of up to 3 x 3 16 MiB tiles and its
+assembled copy, which sets the peak on small grids (traced numpy, 2 workers:
+591 and 504 MB for 6000 and 8000 px, 507 and 670 MB with the single store).
+tests/test_engine_align.py guards both: the width against ``lock=None``, the
+height against the single store.
 
 Nearest-neighbour only: the bands hold alert codes and integer dates, and any
 other resampling would invent values.
 """
 
+import threading
 import warnings
 from pathlib import Path
 
 import dask
+import dask.array
 import rasterio
 import rioxarray
 from odc.geo import xr as odc_xr
 from odc.geo.geobox import GeoBox
 from rasterio.errors import NotGeoreferencedWarning
+from rasterio.windows import Window
 
-from deforestation_alerts.engine.raster_io import BLOCK
+from deforestation_alerts.engine.raster_io import grid_profile
 from deforestation_alerts.gdal_env import worker_threads
 from deforestation_alerts.project.models import GridSpec
 
@@ -54,6 +64,21 @@ WARP_CACHEMAX_BYTES = 64 * 1024 * 1024
 
 def _geobox(grid: GridSpec) -> GeoBox:
     return GeoBox((grid.height, grid.width), grid.affine, grid.epsg)
+
+
+class _WindowWriter:
+    """``dask.array.store`` target that writes each (band, y, x) block into an
+    open dataset at its window. The store's lock serialises the calls: a
+    rasterio dataset must not be written from two threads at once."""
+
+    def __init__(self, dst):
+        self._dst = dst
+
+    def __setitem__(self, key, block):
+        bands, ys, xs = key
+        indexes = [i + 1 for i in range(*bands.indices(self._dst.count))]
+        window = Window.from_slices(ys, xs, height=self._dst.height, width=self._dst.width)
+        self._dst.write(block, indexes=indexes, window=window)
 
 
 def reproject_to_grid(src_path, grid: GridSpec, out_part_path, *, resampling: str = "nearest") -> Path:
@@ -103,18 +128,21 @@ def reproject_to_grid(src_path, grid: GridSpec, out_part_path, *, resampling: st
                 dtype="int32",
                 chunks=(min(DST_CHUNK, ny), min(DST_CHUNK, nx)),
             )
-            aligned.rio.to_raster(
-                out_part_path,
-                driver="GTiff",
-                dtype="int32",
-                compress="DEFLATE",
-                predictor=2,
-                bigtiff="IF_SAFER",
-                tiled=True,
-                blockxsize=BLOCK,
-                blockysize=BLOCK,
-                lock=True,  # stream: never lock=None (see the module docstring)
-            )
+            # One store per destination row band (see the module docstring):
+            # dask only ever sees one band's graph, so what it holds cannot
+            # grow with the grid's height. The lock serialises the writes;
+            # never lock=None.
+            blocks, write_lock = aligned.data, threading.Lock()
+            with rasterio.open(out_part_path, "w", **grid_profile(grid, count=blocks.shape[0])) as dst:
+                writer = _WindowWriter(dst)
+                for y0 in range(0, ny, DST_CHUNK):
+                    y1 = min(y0 + DST_CHUNK, ny)
+                    dask.array.store(
+                        blocks[:, y0:y1, :],
+                        writer,
+                        regions=(slice(None), slice(y0, y1), slice(None)),
+                        lock=write_lock,
+                    )
         finally:
             opened.close()
     return out_part_path
