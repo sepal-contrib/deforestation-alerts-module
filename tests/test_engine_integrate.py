@@ -1,3 +1,4 @@
+import hashlib
 from datetime import date, datetime
 
 import geopandas as gpd
@@ -208,14 +209,18 @@ def test_run_integration_attributes_the_stored_alerts(ready_project):
     assert list(gpd.read_parquet(pdir / res.alert_set.store_rel_path)["attr"]) == [7, 7]
 
 
+def _record(p, res):
+    """Apply a result to ``p`` like the UI does."""
+    p.artifacts.update(res.artifacts)
+    p.alert_sets[res.alert_set.id] = res.alert_set
+    return res.alert_set
+
+
 def _earlier_set(p, pdir):
     """December's set over the same pixels, applied to ``p`` like the UI does."""
     p.periods[DEC.id] = DEC
     _prepare(p, pdir, DEC, _clusters(), 2025340)
-    res = integrate.run_integration(_job(p, pdir, DEC, AlertSetParams(min_size_ha=0.1)))
-    p.artifacts.update(res.artifacts)
-    p.alert_sets[res.alert_set.id] = res.alert_set
-    return res.alert_set
+    return _record(p, integrate.run_integration(_job(p, pdir, DEC, AlertSetParams(min_size_ha=0.1))))
 
 
 @_LONLAT_CENTROID
@@ -243,3 +248,98 @@ def test_run_integration_refuses_a_missing_earlier_footprint(ready_project):
     (pdir / dec.footprint_rel_path).unlink()
     with pytest.raises(ValueError, match="footprint"):
         integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
+
+
+def _set_files(pdir, s):
+    return [pdir / s.combined_rel_path, pdir / s.footprint_rel_path, pdir / s.store_rel_path]
+
+
+def _snapshot(files):
+    return {f.name: (hashlib.sha256(f.read_bytes()).hexdigest(), f.stat().st_mtime_ns) for f in files}
+
+
+def _leftovers(pdir):
+    """Staged or half-written files anywhere in the project folder."""
+    return sorted(str(f) for f in pdir.rglob("*") if f.is_file() and (".staged" in f.name or f.name.endswith(".part")))
+
+
+_STEPS = ["steps.integrate.step_combine", "steps.integrate.step_vectorize",
+          "steps.integrate.step_store", "steps.integrate.step_footprint"]
+
+
+@_LONLAT_CENTROID
+def test_a_replace_swaps_all_three_files_and_reports_each_step_once(ready_project):
+    p, pdir = ready_project
+    old = _record(p, integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1))))
+    old_ids = {k: p.artifacts[k].content_id
+               for k in (fp.combined_key(old.id), fp.footprint_key(old.id), fp.store_key(old.id))}
+    steps = []
+    res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1, max_alerts=1)),
+                                    on_step=steps.append)
+    s = res.alert_set
+    assert steps == _STEPS
+    # same set, same files, new content
+    assert (s.id, s.combined_rel_path, s.footprint_rel_path, s.store_rel_path) == (
+        old.id, old.combined_rel_path, old.footprint_rel_path, old.store_rel_path)
+    with rasterio.open(pdir / s.footprint_rel_path) as src:
+        assert int(src.read(1).sum()) == 64
+    assert len(gpd.read_parquet(pdir / s.store_rel_path)) == 1 == s.n_alerts
+    for key, art in res.artifacts.items():
+        assert art.content_id != old_ids[key]
+        assert art.size_bytes == (pdir / art.rel_path).stat().st_size > 0
+    assert _leftovers(pdir) == []
+
+
+class _Interrupted(BaseException):
+    """Not an Exception: the cleanup must not depend on the error's class."""
+
+
+def _unreadable_attribute(monkeypatch, pdir):
+    bad = pdir / "attribute.tif"
+    bad.write_bytes(b"not a raster")
+    return {"source": str(bad), "kind": "local", "bands": [{"band": "band_1", "stat": "max", "column": "attr"}]}
+
+
+def _interrupted_after_footprint(monkeypatch, pdir):
+    real = integrate.rasterize_footprint
+
+    def rasterize_then_stop(*args, **kwargs):
+        real(*args, **kwargs)  # every staged file now exists
+        raise _Interrupted()
+
+    monkeypatch.setattr(integrate, "rasterize_footprint", rasterize_then_stop)
+    return None
+
+
+@_LONLAT_CENTROID
+@pytest.mark.parametrize("fail, error", [
+    (_unreadable_attribute, rasterio.errors.RasterioIOError),  # the attribute step, like a failed GEE export
+    (_interrupted_after_footprint, _Interrupted),                # the last step before the swap
+], ids=["attribute", "after-footprint"])
+def test_a_failed_replace_leaves_the_recorded_set_untouched(ready_project, monkeypatch, fail, error):
+    """Spec §5.3/§12: the manifest keeps the old content ids, so a failed Replace
+    must leave the recorded set's files byte-identical and untouched."""
+    p, pdir = ready_project
+    old = _record(p, integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1))))
+    files = _set_files(pdir, old)
+    before, listing = _snapshot(files), sorted(f.name for f in files[0].parent.iterdir())
+    config = fail(monkeypatch, pdir)
+    # the replace would write a different set: one alert, a 64-px footprint
+    params = AlertSetParams(min_size_ha=0.1, max_alerts=1, attribute_config=config)
+    with pytest.raises(error):
+        integrate.run_integration(_job(p, pdir, JAN, params))
+    assert _snapshot(files) == before
+    assert sorted(f.name for f in files[0].parent.iterdir()) == listing
+    assert _leftovers(pdir) == []
+
+
+@_LONLAT_CENTROID
+def test_a_failed_first_run_leaves_no_files(ready_project, monkeypatch):
+    p, pdir = ready_project
+    config = _unreadable_attribute(monkeypatch, pdir)
+    job = _job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1, attribute_config=config))
+    with pytest.raises(rasterio.errors.RasterioIOError):
+        integrate.run_integration(job)
+    sdir = paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"])
+    assert not sdir.exists() or list(sdir.iterdir()) == []
+    assert _leftovers(pdir) == []

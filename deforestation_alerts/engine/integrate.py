@@ -7,6 +7,7 @@ memory (spec §11) and every tile is decompressed and written once.
 """
 
 import math
+import os
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
@@ -170,6 +171,11 @@ class IntegrationResult:
     alerts: gpd.GeoDataFrame  # EPSG:4326, as stored
 
 
+def _staged(path: Path) -> Path:
+    """The name a set file is built under until the whole run has succeeded."""
+    return path.with_name(f"{path.stem}.staged{path.suffix}")
+
+
 def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], None]] = None) -> IntegrationResult:
     """Build one alert set from the job's harmonized, current sources (spec §7.4).
 
@@ -178,6 +184,12 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
     when a source is not harmonized and current for the period, or an earlier
     set's footprint is missing.
+
+    The three files are built under staged names and moved onto the set's own
+    names only once every step has succeeded. A run that fails, including one
+    that replaces a recorded set, deletes what it staged and leaves the set's
+    files as they were, still matching the manifest's content ids (spec §5.3,
+    §12).
     """
     step = on_step or (lambda key: None)
     p, pdir, period = job.project, Path(job.pdir), job.period
@@ -189,6 +201,9 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     inputs_fp = set_inputs(p, period, sources, job.params)
     sid = make_set_id(period.id, sources)
     sdir = paths.set_dir(pdir, period.id, sources)
+    # A replaced set's old files stay until the swap, so the staged combined
+    # raster, footprint and store all sit beside them; together they are well
+    # under this bound.
     ensure_free_space(sdir, 3 * estimate_bytes(p.grid, bands=3))
 
     step("steps.integrate.step_combine")
@@ -200,59 +215,75 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             raise ValueError(f"the footprint of set {s.id} is missing; re-run that set first")
         fp_paths.append(paths.resolve(pdir, art.rel_path))
     combined = paths.combined_path(sdir, sources, period.start, period.end)
+    footprint = paths.footprint_path(sdir)
+    store = paths.store_path(sdir)
+    staged = {final: _staged(final) for final in (combined, footprint, store)}
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
         for s in sources
     ]
-    combine(harm_paths, p.grid, combined, footprints=fp_paths,
-            area_geojson=job.params.area_geojson if job.params.area_mode == "drawn" else None)
-
-    step("steps.integrate.step_vectorize")
-    vgdf = vectorize_alerts(combined, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution))
-    vgdf = sort_and_cut(vgdf, job.params.sorting, job.params.max_alerts)
-
-    step("steps.integrate.step_footprint")
-    footprint = rasterize_footprint(vgdf, p.grid, paths.footprint_path(sdir))
-
-    step("steps.integrate.step_store")
     digit_map = {p.sources[s].digit: s for s in sources}
-    alerts = convert_to_geopandas(vgdf.to_crs(epsg=4326), digit_map=digit_map)
-    alerts["alert_id"] = range(len(alerts))
-    alerts["set_id"] = sid
-    if job.params.attribute_config:
-        region = None
-        if job.params.attribute_config.get("kind") == "gee":
-            import ee  # only a GEE attribute raster needs an export region
+    try:
+        combine(harm_paths, p.grid, staged[combined], footprints=fp_paths,
+                area_geojson=job.params.area_geojson if job.params.area_mode == "drawn" else None)
 
-            minx, miny, maxx, maxy = p.aoi.bounds
-            region = ee.Geometry.Rectangle([minx, miny, maxx, maxy])
-        alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region, job.workspace)
-    store = paths.store_path(sdir)
-    save_gdf_to_parquet(alerts, job.workspace, str(store))
+        step("steps.integrate.step_vectorize")
+        vgdf = vectorize_alerts(
+            staged[combined], min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution)
+        )
+        vgdf = sort_and_cut(vgdf, job.params.sorting, job.params.max_alerts)
 
+        # The alerts, attribute statistics included, are built before the
+        # footprint: the attribute raster (an Earth Engine export for "gee") is
+        # the step most likely to fail.
+        step("steps.integrate.step_store")
+        alerts = convert_to_geopandas(vgdf.to_crs(epsg=4326), digit_map=digit_map)
+        alerts["alert_id"] = range(len(alerts))
+        alerts["set_id"] = sid
+        if job.params.attribute_config:
+            region = None
+            if job.params.attribute_config.get("kind") == "gee":
+                import ee  # only a GEE attribute raster needs an export region
+
+                minx, miny, maxx, maxy = p.aoi.bounds
+                region = ee.Geometry.Rectangle([minx, miny, maxx, maxy])
+            alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region, job.workspace)
+        save_gdf_to_parquet(alerts, job.workspace, str(staged[store]))
+
+        step("steps.integrate.step_footprint")
+        rasterize_footprint(vgdf, p.grid, staged[footprint])
+
+        alert_set = AlertSet(
+            id=sid,
+            period_id=period.id,
+            sources=sources,
+            digit_map=digit_map,
+            params=job.params,
+            masks_used=[
+                {"name": n, "mode": m.mode, "content_id": p.artifacts[mask_key(n)].content_id}
+                for n, m in sorted(p.masks.items()) if m.enabled
+            ],
+            footprint_from=[s.id for s in earlier],
+            store_rel_path=paths.rel(pdir, store),
+            combined_rel_path=paths.rel(pdir, combined),
+            footprint_rel_path=paths.rel(pdir, footprint),
+            n_alerts=len(alerts),
+            n_reviewed=0,
+            last_alert_index=0,
+            fingerprint=fingerprint(inputs_fp),
+            created_at=datetime.now(),
+        )
+        for final, part in staged.items():
+            os.replace(part, final)
+    except BaseException:
+        for part in staged.values():
+            part.unlink(missing_ok=True)
+        raise
+
+    # New content ids and sizes, taken from the files now in place (spec §5.3).
     artifacts = {
         combined_key(sid): make_artifact(combined_key(sid), "combined", pdir, combined, inputs_fp),
         footprint_key(sid): make_artifact(footprint_key(sid), "footprint", pdir, footprint, inputs_fp),
         store_key(sid): make_artifact(store_key(sid), "store", pdir, store, inputs_fp),
     }
-    alert_set = AlertSet(
-        id=sid,
-        period_id=period.id,
-        sources=sources,
-        digit_map=digit_map,
-        params=job.params,
-        masks_used=[
-            {"name": n, "mode": m.mode, "content_id": p.artifacts[mask_key(n)].content_id}
-            for n, m in sorted(p.masks.items()) if m.enabled
-        ],
-        footprint_from=[s.id for s in earlier],
-        store_rel_path=paths.rel(pdir, store),
-        combined_rel_path=paths.rel(pdir, combined),
-        footprint_rel_path=paths.rel(pdir, footprint),
-        n_alerts=len(alerts),
-        n_reviewed=0,
-        last_alert_index=0,
-        fingerprint=fingerprint(inputs_fp),
-        created_at=datetime.now(),
-    )
     return IntegrationResult(alert_set=alert_set, artifacts=artifacts, alerts=alerts)
