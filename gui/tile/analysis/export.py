@@ -73,13 +73,14 @@ widgets : AnalysisWidgets
     ``actual_alert_grid``, ``actual_bb``.
 app_state : AppState
     Navigation + alerts source of truth (``alerts_gdf`` / ``actual_alert_id``).
-aux_model : AuxModel
-    ``custom_report_template`` for the report generation.
+aux_model : SetContext
+    ``custom_report_template`` (the project's) for the report generation.
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` (drawn polygon) / ``last_save_time`` (save stamp).
-app_tile_model : AppTileModel
-    ``recipe_folder_path`` for the output paths + ``alert_db.parquet``. It is a
-    REMOTE path in the user's SEPAL workspace.
+app_tile_model : SetContext
+    ``recipe_folder_path`` (the active set's folder) for the output paths +
+    ``alert_db.parquet``, and ``record_review``, which keeps the set's reviewed
+    count after a store save.
 workspace : Workspace
     The session user-file adapter. Every artifact this card produces — the alert
     store, the gpkg, the composite GeoTIFF, the zip and the Word report — is user
@@ -122,6 +123,13 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 _DEFAULT_REPORT_TEMPLATE = str(
     Path(__file__).resolve().parents[3] / "data" / "report_template.docx"
 )
+
+
+def _writer_name(app_state) -> str:
+    """The open project's name, the key the Project dialog's delete guard
+    checks (``project_writers.is_writing``); ``""`` with no project open."""
+    p = app_state.project.value
+    return p.name if p is not None else ""
 
 
 def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
@@ -231,8 +239,9 @@ def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
 
     Writes ``<recipe_folder>/alert_db.parquet`` (all geometry columns preserved)
     into the user's SEPAL workspace through ``workspace``; ``recipe_folder_path``
-    is a REMOTE path, so the join is posix, not ``os.path``.
-    Guard: skip if ``recipe_folder_path`` is empty (smoke / no recipe yet).
+    is a REMOTE path, so the join is posix, not ``os.path``. Then records the
+    set's reviewed count (``record_review``, when the model has one).
+    Guard: skip if ``recipe_folder_path`` is empty (smoke / no set yet).
     """
     recipe_folder = app_tile_model.recipe_folder_path
     if not recipe_folder:
@@ -242,6 +251,9 @@ def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
         workspace,
         str(PurePosixPath(recipe_folder) / "alert_db.parquet"),
     )
+    record = getattr(app_tile_model, "record_review", None)
+    if record is not None:
+        record(alertas_gdf)  # keeps the set's reviewed count (the Analysis badge) current
 
 
 def _download_data(
@@ -483,10 +495,10 @@ def build_export(
                     notifier, str(cm.analysis_tile.export_labels.save_task_title)
                 ) as task:
                     task.step(str(cm.analysis_tile.export_labels.save_step))
-                    # Writer tracking: register the recipe while its alert store
-                    # is written so future delete/close paths can refuse to act
-                    # mid-write.
-                    with writing(app_state.recipe_name.value or "recipe"):
+                    # Writer tracking: register the open project while the
+                    # set's alert store is written, so deleting the project
+                    # refuses mid-write.
+                    with writing(_writer_name(app_state)):
                         saved = _save_attributes(
                             widgets,
                             app_state,
@@ -545,8 +557,8 @@ def build_export(
                 ) as task:
                     task.step(str(cm.analysis_tile.export_labels.download_step))
                     # Writer tracking: the report/zip generation writes into the
-                    # recipe folder — register it for the duration.
-                    with writing(app_state.recipe_name.value or "recipe"):
+                    # set's folder — register the open project for the duration.
+                    with writing(_writer_name(app_state)):
                         result = _download_data(
                             widgets,
                             app_state,

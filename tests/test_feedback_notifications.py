@@ -560,6 +560,42 @@ def test_export_save_refusal_fails_the_task_and_says_why(
     assert save_btn.loading is False and save_btn.disabled is False
 
 
+@pytest.mark.parametrize(
+    "label, body",
+    [
+        (cm.analysis_tile.export_labels.save_btn, "_save_attributes"),
+        (cm.analysis_tile.export_labels.download_alert_data_btn, "_download_data"),
+    ],
+    ids=["save", "download"],
+)
+def test_export_marks_the_open_project_as_being_written(
+    export_card, monkeypatch, label, body
+):
+    """Ruling #21: Save and Download write into the active set's folder, so
+    the Project dialog's delete guard must see the open project's name while
+    they run (the recipe-era key was the recipe name, or "recipe")."""
+    from datetime import datetime
+
+    from deforestation_alerts.project.models import Project
+    from gui.store.project_writers import is_writing
+
+    export, card, app_state, _app_tile_model = export_card
+    feedback = _record_feedback(monkeypatch, export)
+    now = datetime.now()
+    app_state.new_project_state(Project(name="d", created_at=now, updated_at=now))
+    busy = []
+
+    def _write(*_a, **_k):
+        busy.append(is_writing("d"))  # returns None: the worker's refusal path
+
+    monkeypatch.setattr(export, body, _write)
+
+    _button(card, label).fire_event("click", None)
+    feedback.join()
+
+    assert busy == [True] and not is_writing("d")
+
+
 def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):

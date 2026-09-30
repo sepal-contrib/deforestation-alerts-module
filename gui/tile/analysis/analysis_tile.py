@@ -66,7 +66,6 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
 )
-from deforestation_alerts.scripts.recipe_helper import update_saved_dictionary
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
@@ -88,7 +87,7 @@ _ALERT_BB_STYLE = {
 
 
 def view_actual_alert(
-    widgets, app_state, analyzed_alerts_model, app_tile_model, id_field, workspace
+    widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
 ):
     """Per-alert orchestration owned by the foundation.
 
@@ -96,8 +95,9 @@ def view_actual_alert(
     the alert row, refresh the alert-info card + nav id field, reset
     ``defo_dl_layer``, rebuild the bbox overlay on both maps, center/zoom, compute
     the ee bbox + covering grid (stored on ``widgets``), register the AOI, set the
-    default image-collection flags, and persist ``actual_alert_id`` to the recipe
-    json (only when a recipe folder is set).
+    default image-collection flags, and remember the position on the active
+    alert set (``SetContext.remember_position``; spec §10 replaces the recipe
+    json's ``actual_alert_id``).
 
     Guards: returns early when no alerts are loaded or the id is out of range — so
     it is safe at smoke time (no EE/imagery work runs) and idempotent under the
@@ -142,18 +142,13 @@ def view_actual_alert(
     # --- reset per-alert defo layer scratch (Task 9.3 repopulates it) ---
     analyzed_alerts_model.defo_dl_layer = None
 
-    # --- persist actual_alert_id to the recipe json (only if a folder is set) ---
-    recipe_folder = app_tile_model.recipe_folder_path
-    if recipe_folder:
+    # --- remember the position on the alert set (auto-saved with the project) ---
+    remember = getattr(app_tile_model, "remember_position", None)
+    if remember is not None:
         try:
-            update_saved_dictionary(
-                workspace,
-                recipe_folder + "/recipe_parameters.json",
-                "actual_alert_id",
-                alert_id,
-            )
+            remember(alert_id)
         except Exception:
-            logger.exception("Analysis: failed to persist actual_alert_id to recipe")
+            logger.exception("Analysis: failed to remember the alert position")
 
     # ------------------------------------------------------------------
     # EE-touching map work. Wrapped so a transient EE failure (or a malformed
@@ -227,6 +222,22 @@ def view_actual_alert(
         logger.exception("Analysis: view_actual_alert map update failed")
 
 
+def select_start_alert(app_state, app_tile_model):
+    """Select an alert when alerts arrive with none selected: the active set's
+    saved position (``go_to`` clamps it), else the first alert.
+
+    Starting from the saved position matters because a set load publishes its
+    alerts before it reads ``last_alert_index``: going to 0 here would make
+    ``view_actual_alert`` save 0 over that position first. The recipe-era
+    models carry no ``alert_set``, so they start at 0. Only auto-selects from
+    the unset (-1) state, so it never fights manual navigation.
+    """
+    gdf = app_state.alerts_gdf.value
+    if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
+        start = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
+        app_state.go_to(start)
+
+
 def build_analysis_layout(
     aux_model,
     selected_alerts_model,
@@ -247,23 +258,27 @@ def build_analysis_layout(
 
     Parameters
     ----------
-    aux_model : AuxModel
-        Auxiliary model (custom report template; used by ``build_export``).
-    selected_alerts_model : SelectedAlertsModel
-        Filter selections + ``filtered_alert_raster`` (used by ``build_imagery``).
+    aux_model : SetContext
+        ``custom_report_template`` (the project's; used by ``build_export``).
+    selected_alerts_model : SetContext
+        ``combined_path``, the set's combined raster: the "Original Alert"
+        layer (used by ``build_imagery``).
     analyzed_alerts_model : AlertAnalysisModel
         Per-alert scratch state (imagery dicts, predictions, ``defo_dl_layer``,
         ``last_save_time``). The parent only resets ``defo_dl_layer`` and reads
         the planet image dicts (in ``view_actual_alert``).
-    app_tile_model : AppTileModel
-        ``recipe_folder_path`` for the recipe json + output paths.
+    app_tile_model : SetContext
+        ``recipe_folder_path`` (the active set's folder) for the output paths,
+        ``alert_set`` + ``remember_position`` for the review position and
+        ``record_review`` for the reviewed count. The shell passes the same
+        ``SetContext`` for all three models (spec §10).
     app_state : AppState
         Source of truth for the alerts table + navigation.
     gee_interface : GEEInterface
         Session GEE interface, forwarded to both maps.
     workspace : Workspace
-        Session user-file adapter (built in ``Page()``); the recipe JSON and the
-        alert store are read/written through it.
+        Session user-file adapter (built in ``Page()``); the alert store and
+        the per-alert files are read/written through it.
     theme_state : ThemeState, optional
         Shared app theme state, forwarded to both maps so they track the app's
         light/dark theme exactly as the shared main map does.
@@ -338,24 +353,20 @@ def build_analysis_layout(
             analyzed_alerts_model,
             app_tile_model,
             id_field,
-            workspace,
         )
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
     view_actual_alert(
-        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field, workspace
+        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
     )
 
-    # Select alert 0 when an alert set first arrives (OLD create_gdf set
-    # actual_alert_id = 0 on gdf arrival). The Filter publish / recipe load only
-    # sets app_state.alerts_gdf and leaves actual_alert_id at -1, so without this
-    # the tile would render empty until the user clicks "next". Only auto-selects
-    # from the unset (-1) state, so it never fights manual navigation. Replaces the
-    # former use_effect with a subscribe + one immediate call.
+    # Select an alert when an alert set first arrives (OLD create_gdf set
+    # actual_alert_id = 0 on gdf arrival). Publishing a set's alerts leaves
+    # actual_alert_id at -1, so without this the tile would render empty until
+    # the user clicks "next". Replaces the former use_effect with a subscribe +
+    # one immediate call.
     def _select_first_alert_cb(*_):
-        gdf = app_state.alerts_gdf.value
-        if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
-            app_state.go_to(0)
+        select_start_alert(app_state, app_tile_model)
 
     app_state.alerts_gdf.subscribe(_select_first_alert_cb)
     _select_first_alert_cb()

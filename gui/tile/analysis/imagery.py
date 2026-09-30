@@ -56,8 +56,9 @@ widgets : AnalysisWidgets
     ``imagery_ctx`` reactive published by the parent).
 app_state : AppState
     Navigation + alerts source of truth (unused directly; kept for contract parity).
-selected_alerts_model : SelectedAlertsModel
-    Holds ``filtered_alert_raster`` (the original-alert overlay layer source).
+selected_alerts_model : SetContext
+    ``combined_path``: the set's combined raster, whose band 3 is the
+    original-alert overlay layer.
 analyzed_alerts_model : AlertAnalysisModel
     Per-alert imagery dicts (before/after S2/Landsat/Planet); unused directly now
     that the per-alert handoff goes through ``widgets.imagery_ctx`` (kept for parity).
@@ -81,6 +82,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     get_sentinel2_dates,
     harmonizeL8ToS2_scaled,
 )
+from gui.scripts import raster_map
 from gui.scripts.solara_threads import spawn_in_context
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -105,10 +107,10 @@ def image_slider_map_callback(
 ):
     """Add the chosen image's True/False-color + original-alert layers to a map.
 
-    Ports OLD ``AnalysisTile.image_slider_map_callback`` byte-faithfully. Reads the
-    per-alert grid / bbox from ``widgets`` and the original-alert raster from
-    ``selected_alerts_model``. Stores the chosen ee.Image back on ``widgets`` per
-    pane (``model_att`` 0 = before, 1 = after).
+    Ports OLD ``AnalysisTile.image_slider_map_callback``. Reads the per-alert
+    grid from ``widgets`` and the set's combined raster (``combined_path``) from
+    ``selected_alerts_model`` (a ``SetContext``). Stores the chosen ee.Image back
+    on ``widgets`` per pane (``model_att`` 0 = before, 1 = after).
     """
     widgets.imgSelection1.disabled = True
     widgets.imgSelection2.disabled = True
@@ -176,19 +178,21 @@ def image_slider_map_callback(
     elif model_att == 1:
         widgets.selected_img_after = img
 
-    orig_alert = ee.Image(selected_alerts_model.filtered_alert_raster).clip(
-        widgets.actual_bb.geometry()
-    )
-
     map_element.addLayer(img, vis1, "True Color", True)
     map_element.addLayer(img, vis2, "False Color", False)
-    map_element.addLayer(
-        orig_alert.select("alert"),
-        {"min": 1, "max": 2, "palette": ["orange", "purple"]},
-        "Original Alert",
-        False,
-        0.5,
-    )
+    # "Original Alert": the set's combined raster, band 3 (display), through
+    # localtileserver (spec §10). Starting the tile server blocks and can fail;
+    # a failure must not leave the image selectors disabled.
+    combined = getattr(selected_alerts_model, "combined_path", None)
+    if combined is not None and combined.exists():
+        try:
+            layer = raster_map.add_raster_layer(
+                map_element, combined, key="original-alert", name="Original Alert",
+                band=3, opacity=0.5,
+            )
+            layer.visible = False  # off by default, as before; the map's layer control shows it
+        except Exception:
+            logger.exception("Analysis imagery: failed to add the Original Alert layer")
     widgets.imgSelection1.disabled = False
     widgets.imgSelection2.disabled = False
 
