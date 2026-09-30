@@ -1,7 +1,7 @@
 """The two call sites that persist ``alert_db.parquet`` write it to the user's
 SEPAL workspace through ``Workspace``, and still skip when there is no recipe.
 
-``recipe_folder_path`` now holds a REMOTE path (``Workspace.results_dir(...)``),
+``recipe_folder_path`` holds a path built with ``Workspace.results_dir(...)``,
 so both writers are handed the workspace alongside it.
 """
 
@@ -35,11 +35,11 @@ def test_save_writes_parquet(ws):
     assert back["status"].iloc[0] == "Confirmed"
 
 
-def test_save_skips_without_recipe_folder(ws):
+def test_save_skips_without_recipe_folder(ws, data_files):
     model = types.SimpleNamespace(recipe_folder_path="")
     _save_alerts_to_gdf(_gdf(), model, ws)  # must not raise
-    # nothing was uploaded anywhere in the user's workspace
-    assert ws.client.files.files == {}
+    # nothing was written anywhere in the user's workspace
+    assert data_files(ws) == []
 
 
 def test_filter_persist_writes_parquet(ws):
@@ -55,14 +55,16 @@ def test_filter_persist_writes_parquet(ws):
     assert back["status"].iloc[0] == "Confirmed"
 
 
-def test_filter_persist_skips_without_recipe_folder(ws):
+def test_filter_persist_skips_without_recipe_folder(ws, data_files):
     from gui.tile.alerts_filter_tile import _persist_alerts_gdf
 
     assert _persist_alerts_gdf(_gdf(), "", ws) is None  # must not raise
-    assert ws.client.files.files == {}
+    assert data_files(ws) == []
 
 
-def test_filter_persist_reports_a_failed_write_instead_of_raising(ws):
+def test_filter_persist_reports_a_failed_write_instead_of_raising(
+    ws, monkeypatch, data_files
+):
     """A store write that fails must neither kill the analyze (the alerts are
     already in memory) nor pass silently: it comes back as a message."""
     from gui.tile.alerts_filter_tile import _persist_alerts_gdf
@@ -70,12 +72,14 @@ def test_filter_persist_reports_a_failed_write_instead_of_raising(ws):
     def _boom(*_a, **_kw):
         raise OSError("workspace is full")
 
-    ws.client.files.write = _boom
+    # The parquet write goes through `upload_from_scratch` (`write_bytes` is
+    # never reached), so that is the seam to patch.
+    monkeypatch.setattr(ws, "upload_from_scratch", _boom)
 
     error = _persist_alerts_gdf(_gdf(), ws.results_dir("recipe_test"), ws)
 
     assert error == "workspace is full"
-    assert ws.client.files.files == {}
+    assert data_files(ws) == []
 
 
 def test_a_failed_store_write_is_reported_as_an_error_not_a_success():

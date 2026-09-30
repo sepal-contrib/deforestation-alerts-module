@@ -27,17 +27,17 @@ def _write_raster(path, band, *, descriptions=None):
     return str(path)
 
 
-def test_materialize_local_stages_the_users_raster_down(ws, tmp_path):
-    """`kind == "local"` is a path the user picked in their SEPAL workspace, so
-    it must be STAGED, not handed straight to rasterio: the container has no
-    such file."""
+def test_materialize_local_returns_the_users_raster_unchanged(ws, tmp_path):
+    """`kind == "local"` is a path the user already picked on the local sandbox
+    disk (D14), so it is handed straight back -- there is no remote copy to
+    stage down any more."""
     remote = ws.results_dir("forest.tif")
     ws.write_bytes(remote, b"tif-bytes")
     cfg = {"source": remote, "kind": "local", "bands": []}
 
     local = asrc.materialize_attribute_raster(cfg, region=None, workspace=ws)
 
-    assert local != remote
+    assert local == remote
     assert Path(local).read_bytes() == b"tif-bytes"
     assert Path(local).is_relative_to(tmp_path)
 

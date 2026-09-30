@@ -1,47 +1,25 @@
-"""The one boundary every *user* file in this app is read and written through.
+"""User files on the SEPAL sandbox disk, behind the method names the Analysis,
+export, report and CNN code already call.
 
 Why it exists
 -------------
-On the classic SEPAL path the app runs inside the user's own sandbox, so
-``~/module_results/deforestation_alerts`` *is* the user's workspace and plain
-``open()`` works. In the app-launcher container it is not: the container
-filesystem is the app's, not the user's, and a recipe written to
-``Path.home()`` there is invisible to the user and gone when the container
-dies. Every runtime read/write/list/mkdir of *user data* therefore has to go
-through the session ``SepalClient``'s user-files API.
+The app used to run inside SEPAL's app-launcher container, where user files
+were remote and had to be staged through the SEPAL files API -- ``Workspace``
+was that indirection. It now runs as Voila in the user's own sandbox (spec
+D14), so ``~/module_results/deforestation_alerts`` *is* the user's workspace
+and plain ``pathlib``/``open()`` work. This class keeps the OLD surface (same
+method names, same shapes) purely so the Analysis, export, report and CNN
+code that calls it keeps working unchanged in this slice; it is deleted in
+slice 2 when that code is rewritten against the plain filesystem directly.
 
-``Workspace`` is that indirection, and deliberately the only one: there is no
-``DEPLOY_ENV`` switch and no local fallback, so a single code path serves
-voila-in-sandbox and the container alike. What legitimately stays
-container-local is (a) packaged read-only assets shipped with the code (the
-report template, the message JSONs) and (b) scratch files that a library which
-only speaks local paths (rasterio, pyarrow, geopandas, python-docx, zipfile)
-writes and we then upload -- which is what :meth:`Workspace.scratch_file`,
-:meth:`Workspace.download_to_scratch` and :meth:`Workspace.upload_from_scratch`
-are for.
-
-Construction
-------------
-Built once in ``Page()`` from ``get_current_sepal_client()`` and passed down
-like ``gee_interface``. Never fetch the client at module import time: it is
-per-kernel session state and does not exist yet at import.
-
-Notes on the client surface this binds to
------------------------------------------
-* It calls ``client.files.*`` (``pysepal_api.UserFilesEndpoint``), not the
-  legacy ``client.get_file`` / ``set_file`` / ``list_files`` /
-  ``get_remote_dir`` verbs. Those four live in ``pysepal.scripts.sepal_client``
-  purely as a deprecation shim: each emits a ``DeprecationWarning`` and
-  delegates to the very ``files.*`` methods used here, and they are scheduled
-  for removal in pysepal 4.0. Absorbing that is exactly a boundary's job.
-* ``client.results_path`` is *pure* -- ``module_results_path(module_name)``,
-  computed in ``__init__`` with no I/O -- so :meth:`results_dir` is pure path
-  arithmetic and safe to call on a UI render path.
-  ``client.ensure_results_dir()`` is the opposite (a network mkdir its own
-  docstring says to call once at startup, never per write) and is never called
-  from here: ``files.mkdir(..., parents=True)`` creates the root as a
-  by-product of creating any folder under it, and every directory this adapter
-  creates is remembered so it is created at most once per session.
+"Scratch" files still exist for libraries that build a file before it is
+moved into place (rasterio, pyarrow, python-docx, zipfile): those write
+locally and are then "uploaded" (now just copied) into the results tree.
+``download_to_scratch`` no longer stages a copy -- the user's file already IS
+local, so it is returned as-is -- and ``discard_scratch`` therefore only ever
+deletes paths strictly inside this Workspace's own scratch root: a path
+outside it (including the user file ``download_to_scratch`` just handed back)
+is left untouched.
 """
 
 from __future__ import annotations
@@ -51,102 +29,67 @@ import logging
 import shutil
 import tempfile
 import threading
-from pathlib import Path, PurePosixPath
-from typing import Any, Sequence
-
-from pysepal_api.errors import NotFound
-# `sanitize_write_path` is the exact rule the client applies to every write, so
-# reusing it makes `home_relative` agree with what the server would accept
-# instead of re-deriving the home prefix here.
-from pysepal_api.paths import BASE_REMOTE_PATH, sanitize_write_path
+from pathlib import Path
+from typing import Any, Optional, Sequence
 
 from deforestation_alerts import gdal_env
+from deforestation_alerts.project import paths
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 
-def _as_posix(path: Any) -> PurePosixPath:
-    """Coerce a remote path (str / PurePosixPath / Path) to ``PurePosixPath``."""
-    return PurePosixPath(str(path))
-
-
 class Workspace:
-    """User-file IO against the session's SEPAL workspace.
+    """User-file IO against the local sandbox disk.
 
     Args:
-        sepal_client: the per-session client from ``get_current_sepal_client()``.
-            Must be a real client created with a ``module_name`` -- both a
-            ``None`` client (no SEPAL session) and a module-less one are
-            programming errors here, and are raised at construction so they
-            surface at startup rather than halfway through a user's save.
+        root: results root (default: :func:`paths.data_dir`).
+        scratch_parent: parent directory for this Workspace's private scratch
+            tree (default: :func:`gdal_env.scratch_dir`).
     """
 
-    def __init__(self, sepal_client: Any) -> None:
-        if sepal_client is None:
-            raise ValueError(
-                "Workspace requires a SepalClient; get_current_sepal_client() "
-                "returned None, which means no SEPAL session is available. "
-                "Construct the Workspace inside a @with_sepal_sessions Page()."
-            )
-        files = getattr(sepal_client, "files", None)
-        if files is None:
-            raise TypeError(
-                "Workspace requires a pysepal_api SepalClient exposing `.files`; "
-                f"got {type(sepal_client).__name__}"
-            )
-        results_path = getattr(sepal_client, "results_path", None)
-        if results_path is None:
-            raise ValueError(
-                "SepalClient has no results_path: it was created without a "
-                "module_name. Pass module_name='deforestation_alerts'."
-            )
-
-        self._client = sepal_client
-        self._files = files
-        self._root = _as_posix(results_path)
-        # Remote directories already created in this session. `files.mkdir` is
-        # idempotent but is still a round trip, and writes happen in loops
-        # (one per alert), so remember them.
-        self._ensured: set[str] = set()
+    def __init__(
+        self, root: Optional[Path] = None, scratch_parent: Optional[Path] = None
+    ) -> None:
+        self._root = Path(root) if root else paths.data_dir()
+        self._scratch_parent_dir = Path(scratch_parent) if scratch_parent else None
         # Created lazily: a Workspace that never stages a file makes no dirs.
         # Guarded because a Workspace is shared across the app's worker threads
         # and a race here would orphan a scratch tree.
-        self._scratch_root: Path | None = None
+        self._scratch_root: Optional[Path] = None
         self._scratch_lock = threading.Lock()
 
     # ------------------------------------------------------------------
-    # Remote paths
+    # Paths
     # ------------------------------------------------------------------
 
     @property
     def client(self) -> Any:
-        """The underlying ``SepalClient`` (for tasks/recipes endpoints)."""
-        return self._client
+        """``None`` -- there is no remote client any more. Kept so callers
+        that still read ``workspace.client`` (e.g. to hand a SEPAL-aware
+        widget its session) keep working; they degrade to the widget's local
+        default rather than raising."""
+        return None
 
     @property
     def root(self) -> str:
-        """Absolute remote results root, e.g.
+        """Absolute results root, e.g.
         ``/home/sepal-user/module_results/deforestation_alerts``."""
         return str(self._root)
 
     @property
     def home(self) -> str:
-        """The SEPAL user's remote home, e.g. ``/home/sepal-user``.
+        """The user's home directory, e.g. ``/home/sepal-user``.
 
-        The browse root for the file pickers that let a user point at a raster or
-        a report template they keep ANYWHERE in their workspace, not just under
-        this module's results dir. Derived from ``BASE_REMOTE_PATH`` rather than
-        by trimming :attr:`root`, so it cannot drift if the results layout
-        changes; :func:`pysepal_api.paths.sanitize_write_path` enforces the same
-        constant for every write, so this is the exact boundary the server does.
+        The browse root for file pickers that let a user point at a raster or
+        a report template they keep ANYWHERE in their workspace, not just
+        under this module's results dir.
         """
-        return BASE_REMOTE_PATH
+        return str(Path.home())
 
     def results_dir(self, *parts: Any) -> str:
-        """Remote path under the results root. Pure -- no I/O, no network.
-
-        Safe to call on a render path. Nothing is created; use
-        :meth:`ensure_dir` (or just write, which creates the parent) for that.
+        """Path under the results root. Pure -- no I/O. Nothing is created;
+        use :meth:`ensure_dir` (or just write, which creates the parent) for
+        that.
 
         Raises:
             ValueError: if a part is absolute or contains ``..`` -- either
@@ -154,7 +97,7 @@ class Workspace:
         """
         path = self._root
         for part in parts:
-            p = _as_posix(part)
+            p = Path(str(part))
             if p.is_absolute():
                 raise ValueError(f"results_dir part must be relative, got {part!r}")
             if ".." in p.parts:
@@ -162,101 +105,61 @@ class Workspace:
             path = path / p
         return str(path)
 
-    def home_relative(self, remote_path: Any) -> str:
-        """``remote_path`` relative to the SEPAL user's home.
-
-        What a ``DownloadBtn`` needs: ``sw.DownloadBtn.set_url`` builds
-        ``https://sepal.io/api/sandbox/jupyter/files/<p>`` where ``<p>`` is
-        ``Path(path).relative_to(Path.home())`` -- and in the container
-        ``Path.home()`` is the *container's* home, so that call raises and the
-        link degrades to a container-absolute path that resolves to nothing.
-        Handing it a home-relative path instead produces the correct URL on
-        both targets.
+    def home_relative(self, path: Any) -> str:
+        """``path`` relative to the user's home, e.g. for a SEPAL
+        ``DownloadBtn`` URL.
 
         Raises:
-            pysepal_api.InvalidPathError: for an absolute path outside the
-                SEPAL home, or one containing ``..``.
+            ValueError: for a path outside the home directory.
         """
-        return str(sanitize_write_path(str(remote_path)))
+        return Path(str(path)).resolve().relative_to(Path.home().resolve()).as_posix()
 
     def ensure_dir(self, *parts: Any) -> str:
-        """Create a directory under the results root and return its path.
-
-        Network I/O on the first call for a given path, then free: the created
-        paths are remembered for the life of the Workspace. Creates the results
-        root itself as a by-product (``parents=True``), which is why
-        ``ensure_results_dir()`` is never needed.
-        """
-        return self._ensure_remote_dir(self.results_dir(*parts))
-
-    def _ensure_remote_dir(self, remote_dir: str) -> str:
-        # A bare filename's parent is "."; there is nothing to create, and
-        # createFolder on it would be a pointless (and odd) round trip. A
-        # duplicate mkdir from two threads is harmless -- it is idempotent
-        # server-side -- so the memo needs no lock.
-        if remote_dir in (".", "", "/"):
-            return remote_dir
-        if remote_dir not in self._ensured:
-            self._files.mkdir(remote_dir, parents=True)
-            self._ensured.add(remote_dir)
-        return remote_dir
+        """Create a directory under the results root and return its path."""
+        d = Path(self.results_dir(*parts))
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d)
 
     # ------------------------------------------------------------------
     # Read / write
     # ------------------------------------------------------------------
 
-    def read_bytes(self, remote_path: Any) -> bytes:
-        """Download ``remote_path``. Raises ``pysepal_api.NotFound`` if absent."""
-        return self._files.read_bytes(str(remote_path))
+    def read_bytes(self, path: Any) -> bytes:
+        return Path(str(path)).read_bytes()
 
-    def read_text(self, remote_path: Any) -> str:
-        """Download ``remote_path`` and decode it as UTF-8.
+    def read_text(self, path: Any) -> str:
+        return self.read_bytes(path).decode("utf-8")
 
-        Deliberately NOT ``files.read_text``: that decodes with "the charset
-        from the response", which means httpx *guesses* when SEPAL sends no
-        charset -- while :meth:`write_text` always encodes UTF-8. The asymmetry
-        would corrupt exactly the strings this app is full of: recipe and alert
-        names are user-supplied free text and the UI ships en / es-ES / fr, so
-        non-ASCII round-trips are the norm, and a mojibake'd recipe name is
-        silent data corruption rather than a visible failure.
+    def read_json(self, path: Any) -> Any:
+        return json.loads(self.read_text(path))
+
+    def write_bytes(self, path: Any, data: bytes, *, overwrite: bool = True) -> str:
+        """Write ``data`` to ``path``; returns the path written.
+
+        The parent directory is created first. Written via a ``.part``
+        sibling + atomic rename, so a crash mid-write never leaves a
+        truncated file where a reader expects a complete one. ``overwrite``
+        defaults to **True**: every write here is a save of app state the
+        user asked to re-save. Pass ``overwrite=False`` for a genuine
+        create-only write.
         """
-        return self.read_bytes(remote_path).decode("utf-8")
+        p = Path(str(path))
+        if p.exists() and not overwrite:
+            raise FileExistsError(str(p))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(p)
+        return str(p)
 
-    def read_json(self, remote_path: Any) -> Any:
-        """Download ``remote_path`` and parse it as JSON.
-
-        Goes through :meth:`read_text` (forced UTF-8), NOT ``files.read_json``,
-        for exactly the reason spelled out there: this is the production
-        recipe-load path and recipe names are user-supplied free text, so the
-        charset-guessing decode must not be reachable from it either.
-        """
-        return json.loads(self.read_text(remote_path))
-
-    def write_bytes(self, remote_path: Any, data: bytes, *, overwrite: bool = True) -> str:
-        """Upload ``data`` to ``remote_path``; returns the path written.
-
-        The parent directory is created first (once per session). ``overwrite``
-        defaults to **True**, unlike the raw client: every write here is a save
-        of app state the user asked to re-save (``alert_db.parquet``,
-        ``recipe_parameters.json``, exports), and the client's ``False`` default
-        would make the second save of a session raise ``Conflict``. Pass
-        ``overwrite=False`` for a genuine create-only write.
-        """
-        path = _as_posix(remote_path)
-        self._ensure_remote_dir(str(path.parent))
-        self._files.write(str(path), data, overwrite=overwrite)
-        return str(path)
-
-    def write_text(self, remote_path: Any, text: str, *, overwrite: bool = True) -> str:
-        """Upload ``text`` (UTF-8) to ``remote_path``."""
-        return self.write_bytes(remote_path, text.encode("utf-8"), overwrite=overwrite)
+    def write_text(self, path: Any, text: str, *, overwrite: bool = True) -> str:
+        return self.write_bytes(path, text.encode("utf-8"), overwrite=overwrite)
 
     def write_json(
-        self, remote_path: Any, obj: Any, *, overwrite: bool = True, **dumps_kwargs: Any
+        self, path: Any, data: Any, *, overwrite: bool = True, indent: int = 2
     ) -> str:
-        """Serialize ``obj`` as JSON and upload it to ``remote_path``."""
         return self.write_text(
-            remote_path, json.dumps(obj, **dumps_kwargs), overwrite=overwrite
+            path, json.dumps(data, indent=indent, default=str), overwrite=overwrite
         )
 
     # ------------------------------------------------------------------
@@ -265,177 +168,130 @@ class Workspace:
 
     def list(
         self,
-        remote_path: Any = None,
+        folder: Any = None,
         *,
-        extensions: Sequence[str] | None = None,
-        dirs_only: bool = False,
-        files_only: bool = False,
+        extensions: Optional[Sequence[str]] = None,
         include_hidden: bool = False,
     ) -> list[str]:
-        """Sorted child paths of ``remote_path`` (default: the results root).
+        """Sorted child paths of ``folder`` (default: the results root).
 
-        Returns full paths built from the folder argument, not the server's
-        echoed ``path`` field, so a relative argument yields relative children
-        and an absolute one absolute children. A folder that does not exist
-        yet lists as empty -- a recipe picker asking before the first recipe
-        exists is normal, not an error.
-
-        .. note::
-
-           The "missing folder -> empty list" behaviour rests on SEPAL's
-           ``listFiles`` answering **404** for a path that does not exist. That
-           was **UNVERIFIED** when this adapter was written -- nothing in the
-           libraries establishes it (``UserFilesEndpoint.list`` only parses
-           whatever comes back, and pysepal's ``get_remote_files`` swallows
-           *every* exception), so it was asserted solely by this repo's test
-           fake. **Task 11 verified it against sepal.io on 2026-09-01** in a
-           real session for a real user: listing a folder that has never
-           existed returns ``[]``, and probing a file under it returns
-           ``False``.
-
-           The ``except`` stays narrow, so the caveat is now only about OTHER
-           statuses: if some deployment answers 403 or 500 for a missing folder,
-           this call **raises** where it should return ``[]`` -- and the tests
-           stay green, because the signature-drift guard compares signatures,
-           not response semantics. The user-visible failure would be a first-run
-           recipe picker erroring out before anything has ever been saved.
-           Nothing calls ``ensure_results_dir()`` to paper over the first-run
-           case: that would be a blocking round trip on the ``Page()`` render
-           path, which this module forbids. The root is created at write time
-           by ``files.mkdir(..., parents=True)``, and until then the verified
-           semantics (list -> ``[]``, exists -> ``False``) cover first run.
+        A folder that does not exist yet lists as empty -- a picker asking
+        before anything has ever been saved is normal, not an error.
         """
-        folder = str(remote_path) if remote_path is not None else self.root
-        try:
-            listing = self._files.list(
-                folder, extensions=extensions, include_hidden=include_hidden
-            )
-        except NotFound:  # verified status for "no such folder" -- see the note
+        d = Path(str(folder)) if folder is not None else self._root
+        if not d.is_dir():
             return []
-        base = _as_posix(folder)
+        exts = {e.lower() for e in (extensions or [])}
         out = []
-        for entry in listing:
-            is_dir = entry.type == "directory"
-            if (dirs_only and not is_dir) or (files_only and is_dir):
+        for child in d.iterdir():
+            if not include_hidden and child.name.startswith("."):
                 continue
-            out.append(str(base / entry.name))
+            if exts and child.suffix.lower() not in exts:
+                continue
+            out.append(str(child))
         return sorted(out)
 
-    def exists(self, remote_path: Any) -> bool:
-        """Whether a file or directory exists remotely (one listing round trip).
-
-        .. note::
-
-           Same 404 assumption as :meth:`list`, verified with it against
-           sepal.io on 2026-09-01 (see the note there): a missing *parent*
-           folder is taken to mean 404, and so "does not exist". If some other
-           deployment answers 403/500 instead, this raises
-           instead of returning ``False`` -- and it is the load-recipe path that
-           breaks (the alert-store probe in ``recipe_helper.load_alert_store``,
-           the cached-GeoTIFF probe in ``analysis/export.py``, and the recipe
-           guards in ``recipe_tile`` / ``custom_sw``: inventory rows a13, a21,
-           a35, a36).
-        """
-        path = _as_posix(remote_path)
-        try:
-            listing = self._files.list(str(path.parent), include_hidden=True)
-        except NotFound:  # verified status for "no such folder" -- see the note
-            return False
-        return any(entry.name == path.name for entry in listing)
+    def exists(self, path: Any) -> bool:
+        return Path(str(path)).exists()
 
     # ------------------------------------------------------------------
-    # Container-local scratch staging
+    # Scratch staging
     # ------------------------------------------------------------------
 
     def _scratch_parent(self) -> Path:
-        """This Workspace's private scratch root, created on first use.
-
-        Sits under :func:`deforestation_alerts.gdal_env.scratch_dir` -- the
-        directory already proven writable by a real write probe, and never the
-        (possibly read-only) process CWD.
-        """
+        """This Workspace's private scratch root, created on first use."""
         with self._scratch_lock:
-            if self._scratch_root is None or not self._scratch_root.is_dir():
-                self._scratch_root = Path(
-                    tempfile.mkdtemp(prefix="workspace_", dir=gdal_env.scratch_dir())
-                )
+            if self._scratch_root is None:
+                parent = self._scratch_parent_dir or gdal_env.scratch_dir()
+                parent.mkdir(parents=True, exist_ok=True)
+                self._scratch_root = Path(tempfile.mkdtemp(prefix="ws_", dir=parent))
             return self._scratch_root
 
     def scratch_dir(self) -> Path:
-        """A fresh, empty, container-local directory. For multi-file artifacts
-        (a GPKG plus sidecars, the report's intermediate JPEGs, a zip staging
+        """A fresh, empty, private directory. For multi-file artifacts (a
+        GPKG plus sidecars, the report's intermediate JPEGs, a zip staging
         area) that must not collide with another job's."""
         return Path(tempfile.mkdtemp(dir=self._scratch_parent()))
 
-    def scratch_file(self, suffix: str = "", *, name: str | None = None) -> Path:
-        """A fresh container-local path for a library that only writes local files.
+    def scratch_file(self, suffix: str = "", *, name: Optional[str] = None) -> Path:
+        """A fresh path for a library that only writes local files.
 
         The file is **not** created (GDAL/GeoPandas writers want to create it
         themselves); only its private parent directory is, so two calls never
-        collide even with the same ``name``. Upload the result with
-        :meth:`upload_from_scratch` -- nothing under scratch is user-visible.
+        collide even with the same ``name``.
         """
         return self.scratch_dir() / (name or f"scratch{suffix}")
 
-    def download_to_scratch(self, remote_path: Any) -> Path:
-        """Stage a remote file locally and return its path.
+    def download_to_scratch(self, path: Any) -> Path:
+        """Return ``path`` unchanged: it is already a local file.
 
-        Keeps the remote basename -- rasterio/pyarrow/GDAL dispatch on the
-        extension, and the report embeds image filenames -- in a private
-        directory, so two recipes' ``alert_db.parquet`` do not overwrite each
-        other.
+        Kept so callers written against the remote-staging contract (stage,
+        read, ``discard_scratch``) keep working -- but nothing is copied any
+        more, and the returned path IS the user's own file. Callers must
+        still call :meth:`discard_scratch` on it (as before); it is a no-op
+        here since the path is outside this Workspace's scratch root.
         """
-        path = _as_posix(remote_path)
-        local = self.scratch_dir() / path.name
-        local.write_bytes(self.read_bytes(path))
-        return local
+        return Path(str(path))
 
     def upload_from_scratch(
-        self, local_path: Any, remote_path: Any, *, overwrite: bool = True
+        self, local: Any, path: Any, *, overwrite: bool = True
     ) -> str:
-        """Upload a staged local file to ``remote_path``; returns that path.
+        """Copy a staged local file to ``path``; returns that path.
 
-        The local file is left in place: callers routinely reuse it (the report
-        zips the same GeoTIFF it just uploaded). A caller that is done with it
-        should call :meth:`discard_scratch` right away -- especially on a
-        per-alert path; :meth:`cleanup_scratch` is the bulk sweep.
+        The local file is left in place: callers routinely reuse it. Copies
+        (rather than moves) so a caller that reuses the staged file after
+        uploading it keeps working -- discard it explicitly when done.
         """
-        return self.write_bytes(
-            remote_path, Path(local_path).read_bytes(), overwrite=overwrite
-        )
+        dest = Path(str(path))
+        if dest.exists() and not overwrite:
+            raise FileExistsError(str(dest))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.name + ".part")
+        shutil.copyfile(local, tmp)
+        tmp.replace(dest)
+        return str(dest)
 
-    def discard_scratch(self, local_path: Any) -> None:
-        """Delete one staged file and the private directory it was created in.
+    def discard_scratch(self, local: Any) -> None:
+        """Delete the private scratch directory ``local`` was staged in.
 
-        Every ``scratch_file`` / ``download_to_scratch`` call makes its own
-        ``mkdtemp`` directory, so dropping the parent drops the file and nothing
-        else. Call it as soon as a staged file has been uploaded (or read) on a
-        hot path -- the alert store is staged once per alert save, and without
-        this every save leaves a full copy of ``alert_db.parquet`` in the
-        container's tmp for the life of the session. A path outside this
-        Workspace's scratch root is ignored: this must never be able to delete
-        user data or a packaged asset.
+        Every :meth:`scratch_file` (via :meth:`scratch_dir`) call makes its
+        own private ``mkdtemp`` directory, so dropping it drops ``local`` and
+        nothing else built alongside it. A path outside this Workspace's
+        scratch root -- including the user's own file, now handed back
+        unchanged by :meth:`download_to_scratch` -- is left untouched: this
+        must never be able to delete user data or a packaged asset.
         """
-        path = Path(local_path)
-        root = self._scratch_root
-        if root is None:
+        if self._scratch_root is None:
             return
-        parent = path.parent
+        p = Path(str(local))
         try:
-            inside = parent != root and root in parent.parents
+            p_resolved = p.resolve()
+            root_resolved = self._scratch_root.resolve()
         except (OSError, ValueError):  # pragma: no cover -- defensive
             return
-        if inside:
+        if p_resolved == root_resolved or root_resolved not in p_resolved.parents:
+            return  # the scratch root itself, or not ours at all
+        if p_resolved.is_dir():
+            shutil.rmtree(p_resolved, ignore_errors=True)
+            return
+        parent = p_resolved.parent
+        if parent == root_resolved:
+            # A file sitting directly under the root (no private mkdtemp of
+            # its own) -- drop just the file, never the root.
+            p_resolved.unlink(missing_ok=True)
+        else:
+            # The common case: `local` was made by `scratch_file`, whose
+            # parent is a private mkdtemp under the root holding only this
+            # artifact's files -- drop the whole directory.
             shutil.rmtree(parent, ignore_errors=True)
 
     def cleanup_scratch(self) -> None:
-        """Delete everything this Workspace staged locally. Safe to call twice;
-        a later ``scratch_*`` call transparently re-creates the root."""
+        """Delete everything this Workspace staged locally. Safe to call
+        twice; a later ``scratch_*`` call transparently re-creates the root."""
         with self._scratch_lock:
-            if self._scratch_root is None:
-                return
-            shutil.rmtree(self._scratch_root, ignore_errors=True)
-            self._scratch_root = None
+            if self._scratch_root is not None:
+                shutil.rmtree(self._scratch_root, ignore_errors=True)
+                self._scratch_root = None
 
     def __repr__(self) -> str:
         return f"Workspace(root={self.root!r})"

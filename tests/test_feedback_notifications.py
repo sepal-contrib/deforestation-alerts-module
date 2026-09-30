@@ -239,7 +239,7 @@ def test_recipe_save_publishes_a_success_toast(recipe_layout, ws, monkeypatch):
 
 
 def test_recipe_save_failure_fails_the_task_and_publishes_one_error_toast(
-    recipe_layout, ws, monkeypatch
+    recipe_layout, ws, monkeypatch, data_files
 ):
     recipe_tile, layout, app_state, _model, _aoi = recipe_layout
     feedback = _record_feedback(monkeypatch, recipe_tile)
@@ -252,7 +252,7 @@ def test_recipe_save_failure_fails_the_task_and_publishes_one_error_toast(
     feedback.join()
 
     assert not ws.exists(gone)
-    assert ws.client.files.files == {}  # and nothing was written anyway
+    assert data_files(ws) == []  # and nothing was written anyway
     feedback.assert_one_error_after_fail(
         startswith=f"{cm.recipe_tile.input_hint_save_recipe_error}: "
     )

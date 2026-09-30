@@ -362,7 +362,7 @@ def _AppShell():
     # this kernel goes away (registration is a dict insert — no I/O on the render
     # path).
     def _make_workspace():
-        ws = Workspace(sepal_client)
+        ws = Workspace()
         register_scratch_owner(ws)
         return ws
 

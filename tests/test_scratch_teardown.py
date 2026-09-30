@@ -1,13 +1,13 @@
-"""Container-local scratch is swept when the kernel that created it goes away.
+"""Local scratch is swept when the kernel that created it goes away.
 
-``Workspace`` stages full-size rasters on the container's disk. Before this,
+``Workspace`` stages full-size rasters on local scratch disk. Before this,
 ``Workspace.cleanup_scratch()`` had no caller at all, so every analyze run / CNN
 run / staged alert store survived the session. The registry in
 ``gui.scripts.scratch_registry`` is the seam between the per-Page ``Workspace``
 and the module-level ``on_kernel_start`` teardown; these tests drive the real
-registry against a real ``Workspace`` (over the fake client), plus a source
-contract for the wiring in ``gui/solara_app.py`` (which cannot be imported here —
-it calls ``init_ee()`` at import time).
+registry against a real ``Workspace``, plus a source contract for the wiring in
+``gui/solara_app.py`` (which cannot be imported here — it calls ``init_ee()`` at
+import time).
 """
 
 from pathlib import Path
@@ -57,12 +57,12 @@ def test_the_workspace_still_works_after_a_sweep(ws):
     assert again.exists()
 
 
-def test_the_sweep_only_touches_the_calling_kernels_workspaces(ws, monkeypatch, fakes):
+def test_the_sweep_only_touches_the_calling_kernels_workspaces(ws, monkeypatch, tmp_path):
     """Several kernels share one container process; a teardown must not delete
     the scratch another, still-running kernel is reading."""
     from deforestation_alerts.scripts.workspace import Workspace
 
-    other = Workspace(fakes.FakeSepalClient())
+    other = Workspace(root=tmp_path / "other", scratch_parent=tmp_path / "scratch2")
 
     monkeypatch.setattr(scratch_registry, "_kernel_key", lambda: "kernel-a")
     scratch_registry.register_scratch_owner(ws)

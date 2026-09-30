@@ -133,7 +133,7 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
 
 
 def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
-    ws, feedback, monkeypatch
+    ws, feedback, monkeypatch, data_files
 ):
     """An export that blows up used to be swallowed into the log: the user saw a
     dead button and no explanation."""
@@ -149,7 +149,7 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
     join()
 
     assert dl_btn.disabled is True and dl_btn.viz is False
-    assert ws.client.files.files == {}
+    assert data_files(ws) == []
     (task,) = bus.tasks.value
     assert task.status == TaskStatus.FAILED
     assert task.error_message == "unsupported driver"

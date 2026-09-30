@@ -1,8 +1,7 @@
-"""The on-demand exports land in the USER's SEPAL workspace, not the container.
+"""The on-demand exports land in the user's SEPAL workspace (results root).
 
-Every assertion reads the produced bytes back out of the fake client's
-in-memory workspace (``ws.client.files``), so a regression that wrote to the
-container's disk would fail here even though the file "exists" locally.
+Every assertion reads the produced bytes back out through ``ws``, so a
+regression that wrote somewhere else in the workspace would fail here.
 """
 
 import pandas as pd
@@ -81,10 +80,10 @@ def test_export_csv_keeps_columns_as_wkt(ws):
     assert "POINT" in ws.read_text(path)  # point column preserved as WKT
 
 
-def test_export_rejects_unknown_format(ws):
+def test_export_rejects_unknown_format(ws, data_files):
     with pytest.raises(ValueError):
         export_alerts_gdf(_gdf(), ws, ws.results_dir("recipe_a"), "shp", [], "", "")
-    assert ws.client.files.files == {}
+    assert data_files(ws) == []
 
 
 def test_export_leaves_no_scratch_residue(ws, tmp_path):

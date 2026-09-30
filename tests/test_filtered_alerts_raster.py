@@ -52,9 +52,9 @@ def test_publish_uploads_the_staged_raster(ws):
     assert ws.read_bytes(remote) == b"geotiff-bytes"
 
 
-def test_publish_is_a_noop_without_a_recipe(ws):
+def test_publish_is_a_noop_without_a_recipe(ws, data_files):
     local, remote = _filtered_alerts_path(ws, "", *_ARGS)
     Path(local).write_bytes(b"geotiff-bytes")
 
     assert _publish_alert_raster(_plan(local, remote), ws) is None
-    assert ws.client.files.files == {}
+    assert data_files(ws) == []
