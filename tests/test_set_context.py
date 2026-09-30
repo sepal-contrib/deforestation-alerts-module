@@ -12,6 +12,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
 from gui.scripts.set_context import SetContext
@@ -176,6 +177,175 @@ def test_a_review_save_writes_the_sets_store_and_its_reviewed_count(tmp_path, mo
 
     assert (tmp_path / "d" / "periods" / "per" / "sets" / "glad-l" / "alert_db.parquet").exists()
     assert s.project.value.alert_sets["x"].n_reviewed == 2
+
+
+# A review Save pins its set before the Earth Engine admin lookups, which block
+# for seconds: the live context follows whatever is opened meanwhile.
+def _alert_set(sid, slug):
+    rel = f"periods/per/sets/{slug}"
+    return AlertSet(id=sid, period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                    params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
+                    combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
+                    fingerprint="f", created_at=datetime.now())
+
+
+def _store(tmp_path, project, slug, content=None):
+    """A set's ``alert_db.parquet``; with ``content``, one already written."""
+    path = tmp_path.joinpath(project, "periods", "per", "sets", slug, "alert_db.parquet")
+    if content is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return path
+
+
+def _review_alerts(set_id="x", n=2):
+    """A set's alerts as Integrate stores them: unreviewed, three geometries."""
+    import geopandas as gpd
+    from shapely.geometry import Point, box
+
+    polys = [box(i, 0, i + 1, 1) for i in range(n)]
+    gdf = gpd.GeoDataFrame({"status": ["Not reviewed"] * n, "set_id": [set_id] * n},
+                           geometry=polys, crs="EPSG:4326")
+    gdf["bounding_box"] = gpd.GeoSeries(polys, crs="EPSG:4326")
+    gdf["point"] = gpd.GeoSeries([Point(i + 0.5, 0.5) for i in range(n)], crs="EPSG:4326")
+    for col in ("alert_polygon", "description", "before_img", "after_img",
+                "before_img_info", "after_img_info", "admin1", "admin2", "admin3", "area_ha"):
+        gdf[col] = pd.Series([None] * n, dtype="object")
+    return gdf
+
+
+class _AdminLookups:
+    """Stands in for ``export.ee``: the FAO/GAUL lookup chain. Its first
+    blocking ``getInfo`` runs ``during``, what the user does while it blocks."""
+
+    def __init__(self, during=None):
+        self.during = during
+        self.calls = 0
+
+    def __getattr__(self, name):  # FeatureCollection, String, filterBounds, iterate...
+        return lambda *a, **k: self
+
+    def getInfo(self):  # noqa: N802 - Earth Engine's name
+        self.calls += 1
+        during, self.during = self.during, None
+        if during is not None:
+            during()
+        return "Brasil, "
+
+
+def _save(s, ctx, ws, monkeypatch, lookups=None):
+    """Press Save on alert 0 (Confirmed, no drawn polygon), for real."""
+    from deforestation_alerts.message import cm
+    from gui.tile.analysis import export
+
+    monkeypatch.setattr(export, "ee", lookups or _AdminLookups())
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
+        selected_img_before_info_list=["Planet NICFI", 1, None, "before", "_b"],
+        selected_img_after_info_list=["Planet NICFI", 2, None, "after", "_a"],
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    s.actual_alert_id.set(0)
+    return export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=None), ctx, ws)
+
+
+def _saved_status(path):
+    return pd.read_parquet(path, columns=["status"])["status"].tolist()
+
+
+def test_a_set_activated_mid_save_keeps_its_store(tmp_path, monkeypatch, ws):
+    """An Integrate that finishes during the lookups makes its new set active
+    (``apply_result``). The review lands in the reviewed set's store; the new
+    set's freshly integrated store is not overwritten."""
+    from gui.scripts.integrate_jobs import apply_result
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    fresh = _store(tmp_path, "d", "glad-s2", b"set y, freshly integrated")
+
+    def _integrate_finishes():
+        result = SimpleNamespace(artifacts={}, alert_set=_alert_set("y", "glad-s2"))
+        assert s.update_project("d", lambda p: apply_result(p, result))
+
+    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_integrate_finishes)) is True
+
+    assert s.project.value.active_set == "y"
+    assert fresh.read_bytes() == b"set y, freshly integrated"
+    assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
+    sets = s.project.value.alert_sets
+    assert sets["x"].n_reviewed == 1 and sets["y"].n_reviewed == 0
+
+
+@pytest.mark.parametrize("switch", ["close", "open-another"])
+def test_a_project_switch_mid_save_writes_into_the_reviewed_project(tmp_path, monkeypatch, ws, switch):
+    """The writer mark protects the project the Save started in, so that is
+    where the store is written. Set ids repeat across projects (period +
+    sources), so project e's set "x" is neither written nor counted."""
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    other = _store(tmp_path, "e", "glad-l", b"project e's store")
+
+    def _switch():
+        if switch == "close":
+            s.close_project_state()
+        else:
+            e = Project(name="e", created_at=datetime.now(), updated_at=datetime.now())
+            e.alert_sets["x"] = _alert_set("x", "glad-l")
+            e.active_set = "x"
+            s.new_project_state(e)
+
+    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_switch)) is True
+
+    assert other.read_bytes() == b"project e's store"
+    assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
+    if switch == "open-another":
+        assert s.project.value.name == "e" and s.project.value.alert_sets["x"].n_reviewed == 0
+
+
+def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeypatch, ws):
+    """Integrate records a new set before it publishes that set's alerts: for
+    that moment the alerts on hand are the previous set's. A Save then fails
+    (the task's error toast) before it looks anything up or changes a row."""
+    from deforestation_alerts.message import cm
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("y"))
+    store = _store(tmp_path, "d", "glad-l", b"set x's store")
+
+    lookups = _AdminLookups()
+    with pytest.raises(ValueError) as refused:
+        _save(s, ctx, ws, monkeypatch, lookups)
+
+    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_other_set)
+    assert store.read_bytes() == b"set x's store"
+    assert lookups.calls == 0
+    assert s.alerts_gdf.value["status"].tolist() == ["Not reviewed", "Not reviewed"]
+    assert s.project.value.alert_sets["x"].n_reviewed == 0
+
+
+def test_the_store_writer_refuses_another_sets_alerts(tmp_path, monkeypatch, ws):
+    """The guard sits right before the write too, for every caller."""
+    from gui.tile.analysis.export import _save_alerts_to_gdf
+
+    s = _state(tmp_path, monkeypatch)
+    store = _store(tmp_path, "d", "glad-l", b"set x's store")
+    with pytest.raises(ValueError):
+        _save_alerts_to_gdf(_review_alerts("y"), SetContext(s), ws)
+    assert store.read_bytes() == b"set x's store"
+
+
+def test_a_pin_is_the_active_set_as_it_was(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    target = ctx.pin()
+    s.close_project_state()
+    assert target.project == "d" and target.alert_set.id == "x"
+    assert target.folder == tmp_path.joinpath("d", *SET_DIR)
+    assert ctx.pin() is None
 
 
 # ---------------------------------------------------------------------------

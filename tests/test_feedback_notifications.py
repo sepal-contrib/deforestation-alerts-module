@@ -596,6 +596,70 @@ def test_export_marks_the_open_project_as_being_written(
     assert busy == [True] and not is_writing("d")
 
 
+def test_export_save_of_another_sets_alerts_fails_the_task_with_one_error_toast(
+    monkeypatch, ws, tmp_path
+):
+    """While the alerts on hand are another set's (Integrate records a new set
+    before it publishes that set's alerts), a Save must not write them into
+    the active set's store: the task fails and the one error toast says why."""
+    from datetime import datetime
+
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    import gui.tile.analysis.export as export
+    from deforestation_alerts.project.models import (
+        AlertSet,
+        AlertSetParams,
+        Project,
+    )
+    from gui.scripts.set_context import SetContext
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    now = datetime.now()
+    rel = "periods/per/sets/glad-l"
+    p = Project(name="d", created_at=now, updated_at=now)
+    p.alert_sets["x"] = AlertSet(
+        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
+        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
+        fingerprint="f", created_at=now,
+    )
+    p.active_set = "x"
+    app_state = AppState()
+    app_state.new_project_state(p)
+    store = tmp_path / "d" / rel / "alert_db.parquet"
+    store.parent.mkdir(parents=True)
+    store.write_bytes(b"set x's store")
+    app_state.alerts_gdf.value = gpd.GeoDataFrame(
+        {"status": ["Not reviewed"], "set_id": ["y"]},
+        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
+    )
+    app_state.actual_alert_id.value = 0
+    ctx = SetContext(app_state)
+    card = export.build_export(
+        widgets=None,  # the refusal comes before any widget is read
+        app_state=app_state,
+        aux_model=ctx,
+        analyzed_alerts_model=AlertAnalysisModel(),
+        app_tile_model=ctx,
+        workspace=ws,
+    )
+    feedback = _record_feedback(monkeypatch, export)
+
+    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    save_btn.fire_event("click", None)
+    feedback.join()
+
+    feedback.assert_one_error_after_fail(
+        equals=cm.analysis_tile.export_labels.save_other_set
+    )
+    assert store.read_bytes() == b"set x's store"
+    assert download_btn.disabled is True
+    assert save_btn.loading is False and save_btn.disabled is False
+
+
 def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):

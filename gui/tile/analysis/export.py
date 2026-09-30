@@ -78,9 +78,10 @@ aux_model : SetContext
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` (drawn polygon) / ``last_save_time`` (save stamp).
 app_tile_model : SetContext
-    ``recipe_folder_path`` (the active set's folder) for the output paths +
-    ``alert_db.parquet``, and ``record_review``, which keeps the set's reviewed
-    count after a store save.
+    ``recipe_folder_path`` (the active set's folder) for the output paths,
+    ``pin`` (the active set, read once) for where a Save writes
+    ``alert_db.parquet``, and ``record_review``, which keeps that set's
+    reviewed count after a store save.
 workspace : Workspace
     The session user-file adapter. Every artifact this card produces — the alert
     store, the gpkg, the composite GeoTIFF, the zip and the Word report — is user
@@ -106,6 +107,7 @@ from deforestation_alerts.scripts.report_builder import (
     format_list,
     generate_deforestation_report_with_word_template,
 )
+from gui.scripts import set_store
 from gui.scripts.notify_bridge import (
     current_notifier,
     tile_progress_reporter,
@@ -132,6 +134,33 @@ def _writer_name(app_state) -> str:
     return p.name if p is not None else ""
 
 
+def _save_target(app_tile_model):
+    """Where a Save writes, read once: ``(folder, target)``.
+
+    A ``SetContext`` pins its active set (``target``: that set and its
+    project) and the folder is that set's. A recipe-era model (the old shell,
+    test fakes) has only ``recipe_folder_path``, and no target. The folder is
+    ``""`` when there is nowhere to write.
+    """
+    pin = getattr(app_tile_model, "pin", None)
+    if pin is None:
+        return app_tile_model.recipe_folder_path, None
+    target = pin()
+    return (str(target.folder), target) if target is not None else ("", None)
+
+
+def _refuse_other_sets_alerts(alertas_gdf, target) -> None:
+    """Raise when the alerts on hand are not ``target``'s set's.
+
+    ``alerts_gdf`` and the active set are separate reactives: Integrate records
+    a new set before it publishes that set's alerts, so for a moment the alerts
+    on hand are the previous set's. Saved, they would overwrite the new set's
+    store. The raise fails the Save task with its error toast.
+    """
+    if target is not None and not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
+        raise ValueError(str(cm.analysis_tile.export_labels.save_other_set))
+
+
 def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
@@ -139,8 +168,16 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
     (faithful to OLD), does the blocking GEE admin lookup, persists
     ``alert_db.parquet``, and stamps ``last_save_time``. Returns ``True`` on success.
     Guards on the gdf being present + the id in range (smoke-safe). Raises the OLD
-    "confirmation==No but a polygon is drawn" guard, surfaced by the save effect.
+    "confirmation==No but a polygon is drawn" guard, surfaced by the save effect,
+    and refuses (raises) alerts of another set than the one it writes for.
+
+    The store it writes is the active set's AS THE SAVE STARTS: the admin
+    lookups below block for seconds, and the live ``SetContext`` (ruling #84)
+    follows an Integrate that activates a new set, or a project switch,
+    meanwhile. That set's project is the one the worker's writer mark
+    protects.
     """
+    folder, target = _save_target(app_tile_model)
     alertas_gdf = app_state.alerts_gdf.value
     actual_alert_id = app_state.actual_alert_id.value
 
@@ -149,6 +186,8 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
         return False
     if actual_alert_id >= len(alertas_gdf):
         return False
+    # Before any row changes or a lookup blocks; the store writer checks again.
+    _refuse_other_sets_alerts(alertas_gdf, target)
 
     confirmation = widgets.confirmation_select.v_model
 
@@ -227,33 +266,45 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
             analyzed_alerts_model.defo_dl_layer
         )
 
-    # Persist the alert DB (OLD save_alerts_to_gdf). Skip if no recipe folder.
-    _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace)
+    # Persist the alert DB (OLD save_alerts_to_gdf) where the save started.
+    # Skip if there is no folder.
+    _save_alerts_to_gdf(
+        alertas_gdf, app_tile_model, workspace, folder=folder, target=target
+    )
 
     analyzed_alerts_model.last_save_time = datetime.today().timestamp()
     return True
 
 
-def _save_alerts_to_gdf(alertas_gdf, app_tile_model, workspace):
+def _save_alerts_to_gdf(
+    alertas_gdf, app_tile_model, workspace, *, folder=None, target=None
+):
     """Persist the alerts gdf to the canonical GeoParquet store.
 
-    Writes ``<recipe_folder>/alert_db.parquet`` (all geometry columns preserved)
-    into the user's SEPAL workspace through ``workspace``; ``recipe_folder_path``
-    is a REMOTE path, so the join is posix, not ``os.path``. Then records the
+    Writes ``<folder>/alert_db.parquet`` (all geometry columns preserved)
+    into the user's SEPAL workspace through ``workspace``; the folder is a
+    REMOTE path, so the join is posix, not ``os.path``. Then records the
     set's reviewed count (``record_review``, when the model has one).
-    Guard: skip if ``recipe_folder_path`` is empty (smoke / no set yet).
+
+    ``folder`` and ``target`` are where the Save started (``_save_target``);
+    without ``folder`` both are read now. Raises, writing nothing, when the
+    alerts are not ``target``'s set's.
+    Guard: skip if the folder is empty (smoke / no set yet).
     """
-    recipe_folder = app_tile_model.recipe_folder_path
-    if not recipe_folder:
+    if folder is None:
+        folder, target = _save_target(app_tile_model)
+    if not folder:
         return
+    _refuse_other_sets_alerts(alertas_gdf, target)
     save_gdf_to_parquet(
         alertas_gdf,
         workspace,
-        str(PurePosixPath(recipe_folder) / "alert_db.parquet"),
+        str(PurePosixPath(folder) / "alert_db.parquet"),
     )
     record = getattr(app_tile_model, "record_review", None)
     if record is not None:
-        record(alertas_gdf)  # keeps the set's reviewed count (the Analysis badge) current
+        # The count of the set this store belongs to (the Analysis badge).
+        record(alertas_gdf, target)
 
 
 def _download_data(

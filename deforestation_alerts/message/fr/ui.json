@@ -237,7 +237,8 @@
                 "download_done": "Téléchargement de l'alerte prêt.",
                 "download_no_recipe": "Aucune recette n'est chargée : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans votre espace de travail SEPAL. Créez ou chargez d'abord une recette.",
                 "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger.",
-                "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer."
+                "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer.",
+                "save_other_set": "Ces alertes appartiennent à un autre jeu d'alertes que le jeu actif : elles n'y ont donc pas été enregistrées."
         }
     }
 }
