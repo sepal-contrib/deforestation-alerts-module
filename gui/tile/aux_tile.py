@@ -88,7 +88,7 @@ def _build_attribute_controls(aux_model, workspace, gee_interface=None):
     per-band include/stat/column rows. Writes the assembled config to
     aux_model.attribute_raster on any change."""
     asset_input = sw.inputs.AssetSelect(
-        gee_interface=gee_interface, label=cm.aux_tile.asset_label
+        gee_interface=gee_interface, types=["IMAGE"], label=cm.aux_tile.asset_label
     )
     file_input = _remote_file_input(
         workspace, [".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint

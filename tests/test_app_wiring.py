@@ -253,6 +253,16 @@ def test_gee_widgets_get_the_session_interface():
     assert "build_aux_layout(aux_model, workspace, gee_interface)" in shell
 
 
+def test_raster_attribute_picker_accepts_images_only():
+    """'Load bands' reads image bands, so the Raster attributes AssetSelect must
+    not fall back to pysepal's default ["IMAGE", "TABLE"] (a table can never
+    load bands)."""
+    aux = _src("gui/tile/aux_tile.py")
+    body = aux.split("def _build_attribute_controls(")[1]
+    call = body.split("sw.inputs.AssetSelect(")[1]
+    assert 'types=["IMAGE"]' in call[: call.index(")")]
+
+
 def test_overview_view_has_back_and_review_buttons():
     src = _src("gui/tile/overview_tile.py")
     assert "cm.overview_tile.back_to_workflow" in src
