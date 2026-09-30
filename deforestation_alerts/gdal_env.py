@@ -66,8 +66,10 @@ def _fallback_candidates() -> list:
     # exactly right here and exactly wrong for user data -- that goes through
     # ``scripts/workspace.Workspace`` and the SepalClient. This is the last copy
     # of the arithmetic the deleted ``parameter.directory`` module used, and it
-    # survived that deletion on purpose; do not re-couple the two. The old
-    # ``DEFORESTATION_ALERTS_DATA_DIR`` override went with it -- redirecting
+    # survived that deletion on purpose; do not re-couple the two.
+    # ``DEFORESTATION_ALERTS_DATA_DIR`` came back in Task 3 (see
+    # ``deforestation_alerts.project.paths.data_dir()``), but it names the
+    # user's *data* folder, not GDAL's scratch directory -- redirecting
     # scratch is what ``DEFORESTATION_ALERTS_GDAL_TMPDIR`` above is for, and a
     # second knob pointing at "the data dir" would read as a local-mode switch.
     out.append(Path.home() / "module_results" / "deforestation_alerts" / ".gdal_tmp")
