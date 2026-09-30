@@ -22,6 +22,17 @@ LABEL_KEYS = {
     "GLAD-S2": "steps.alerts.label_glad_s2",
 }
 COVERAGE_START = {"GLAD-L": date(2018, 1, 1), "RADD": date(2019, 1, 1), "GLAD-S2": date(2019, 1, 1)}
+#: Each source's native projection as (crs, Earth Engine nominal scale in
+#: metres), like spatial_risk's per-variable default_crs/default_scale: the raw
+#: download is made in it (download.export_native) and aligned onto the project
+#: grid locally. Static, so no metadata round trip: GLAD-L is 0.00025 deg,
+#: RADD 0.0000898315 deg (10 m) and GLAD-S2 0.0001 deg, all EPSG:4326 (checked
+#: on Earth Engine 2026-09-30; tests/test_engine_prepare_ee.py re-checks it).
+NATIVE = {
+    "GLAD-L": ("EPSG:4326", 27.829872698318393),
+    "RADD": ("EPSG:4326", 10.0),
+    "GLAD-S2": ("EPSG:4326", 11.131949079327358),
+}
 
 GLAD_L_UPD = "projects/glad/alert/UpdResult"
 # GLAD-L yearly archives: year -> (collection, last day it holds). Each

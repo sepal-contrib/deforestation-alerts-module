@@ -54,16 +54,33 @@ def test_raw_status_lifecycle(proj):
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
 
 
-def test_grid_or_aoi_change_makes_raw_stale(proj):
+def test_aoi_change_makes_raw_stale(proj):
     p, pdir = proj
     _prepare(p, pdir, JAN, "GLAD-L")
     key = fp.raw_key(JAN.id, "GLAD-L")
-    grid, aoi = p.grid, p.aoi
-    p.grid = grid.model_copy(update={"resolution": 30})
+    p.aoi = p.aoi.model_copy(update={"digest": "g2"})
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
-    p.grid = grid
-    assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.CURRENT
-    p.aoi = aoi.model_copy(update={"digest": "g2"})
+
+
+def test_grid_change_leaves_raw_current_and_makes_harmonized_stale(proj):
+    """Raw files are in the source's native projection: only harmonizing depends on the grid."""
+    p, pdir = proj
+    _prepare(p, pdir, JAN, "GLAD-L")
+    rkey, hkey = fp.raw_key(JAN.id, "GLAD-L"), fp.harm_key(JAN.id, "GLAD-L")
+    p.grid = p.grid.model_copy(update={"resolution": 30})
+    assert fp.status(p, pdir, rkey, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.CURRENT
+    assert fp.status(p, pdir, hkey, fp.harmonized_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
+    row = plan_prepare(p, pdir, JAN)[0]
+    assert row.raw is fp.Status.CURRENT and row.needs_run and not row.ready
+
+
+def test_native_projection_change_makes_raw_stale(proj, monkeypatch):
+    from deforestation_alerts.engine import catalogue
+
+    p, pdir = proj
+    _prepare(p, pdir, JAN, "GLAD-L")
+    key = fp.raw_key(JAN.id, "GLAD-L")
+    monkeypatch.setitem(catalogue.NATIVE, "GLAD-L", ("EPSG:4326", 30.0))
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
 
 

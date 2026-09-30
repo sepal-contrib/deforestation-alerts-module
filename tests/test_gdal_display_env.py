@@ -80,6 +80,14 @@ def test_num_threads_never_zero(monkeypatch):
     assert os.environ["GDAL_NUM_THREADS"] == "1"
 
 
+def test_worker_threads_follow_the_same_policy(monkeypatch):
+    """The harmonize warp's dask pool is sized like GDAL's threads."""
+    monkeypatch.setattr(gdal_env, "_available_cores", lambda: 8)
+    assert gdal_env.worker_threads() == 4
+    os.environ["DEFORESTATION_ALERTS_NUM_THREADS"] = "3"
+    assert gdal_env.worker_threads() == 3
+
+
 def test_local_scratch_env_override(tmp_path):
     target = tmp_path / "local"
     os.environ["DEFORESTATION_ALERTS_LOCAL_SCRATCH"] = str(target)

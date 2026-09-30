@@ -171,6 +171,15 @@ def _available_cores() -> int:
         return os.cpu_count() or 1
 
 
+def worker_threads() -> int:
+    """Threads for a raster job: half the cores, at least 1 (override:
+    DEFORESTATION_ALERTS_NUM_THREADS). Half leaves room for the Solara server
+    and a concurrent job on the same instance (spatial_risk ``worker_threads``)."""
+    override = os.environ.get(NUM_THREADS_ENV)
+    threads = int(override) if override else _available_cores() // 2
+    return max(1, threads)
+
+
 def pin_gdal_num_threads() -> None:
     """Give GDAL half the cores app-wide (override: DEFORESTATION_ALERTS_NUM_THREADS).
 
@@ -178,6 +187,4 @@ def pin_gdal_num_threads() -> None:
     every raster write run on one thread before the first map layer and on all
     cores after it.
     """
-    override = os.environ.get(NUM_THREADS_ENV)
-    threads = int(override) if override else _available_cores() // 2
-    os.environ["GDAL_NUM_THREADS"] = str(max(1, threads))
+    os.environ["GDAL_NUM_THREADS"] = str(worker_threads())

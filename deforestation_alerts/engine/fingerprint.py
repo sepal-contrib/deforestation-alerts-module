@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from deforestation_alerts.engine import catalogue
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Artifact, Period, Project
 
@@ -75,19 +76,33 @@ def _source_def(src) -> dict:
     return d
 
 
+def _native(src) -> Optional[list]:
+    """The projection a source is downloaded in; custom sources come in slice 3."""
+    if src.kind != "predefined":
+        return None
+    crs, scale = catalogue.NATIVE[src.catalogue_key]
+    return [crs, scale]
+
+
 def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
+    """The raw download is in the source's native projection, not on the grid
+    (user decision 2026-09-30), so a grid change never makes it out of date."""
     win_start, win_end = period.search_window(p.look_back_days)
+    src = p.sources[source]
     return {
         "stage": "raw_alert",
-        "source": _source_def(p.sources[source]),
+        "source": _source_def(src),
         "window": [win_start.isoformat(), win_end.isoformat()],
         "aoi": p.aoi.digest if p.aoi else None,
-        "grid": p.grid.signature if p.grid else None,
+        "native": _native(src),
     }
 
 
 def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]:
-    """None while the raw artifact or an enabled mask's artifact is not recorded."""
+    """None while the raw artifact or an enabled mask's artifact is not recorded.
+
+    Harmonizing aligns the raw file onto the grid, so the grid is an input here.
+    """
     raw = p.artifacts.get(raw_key(period.id, source))
     if raw is None:
         return None
@@ -97,7 +112,12 @@ def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]
         if art is None:
             return None
         masks.append([name, p.masks[name].mode, art.content_id])
-    return {"stage": "harmonized", "raw": raw.content_id, "masks": masks}
+    return {
+        "stage": "harmonized",
+        "raw": raw.content_id,
+        "grid": p.grid.signature if p.grid else None,
+        "masks": masks,
+    }
 
 
 def earlier_sets(p: Project, period: Period) -> list[AlertSet]:

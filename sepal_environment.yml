@@ -16,6 +16,12 @@ dependencies:
   - shapely>=2.0
   - pyproj
   - tippecanoe
+  # Harmonize: native Earth Engine downloads aligned onto the project grid,
+  # streamed (engine/align.py, ported from spatial_risk's xr_reproject)
+  - odc-geo
+  - rioxarray
+  - xarray
+  - dask
   # Scientific
   - matplotlib>=3.9
   - pandas>=2.2

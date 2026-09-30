@@ -63,23 +63,36 @@ def _overview_levels(width: int, height: int) -> list[int]:
 
 
 @contextlib.contextmanager
-def write_grid_raster(path: Path, grid: GridSpec, count: int):
+def part_file(path: Path, grid: GridSpec) -> Iterator[Path]:
+    """Yield ``<path>.part`` to be written; on success check it is on ``grid``
+    and rename it to ``path``, on any failure delete it (spec §5.2)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(path.name + ".part")
     part.unlink(missing_ok=True)
     try:
-        with rasterio.open(part, "w", **grid_profile(grid, count)) as dst:
-            yield dst
-            levels = _overview_levels(grid.width, grid.height)
-            if levels:
-                dst.build_overviews(levels, Resampling.nearest)
-                dst.update_tags(ns="rio_overview", resampling="nearest")
+        yield part
         check_header(part, grid)
         part.replace(path)
     except BaseException:
         part.unlink(missing_ok=True)
         raise
+
+
+def build_nearest_overviews(dst) -> None:
+    """Internal overviews of an open, writable raster, nearest-neighbour."""
+    levels = _overview_levels(dst.width, dst.height)
+    if levels:
+        dst.build_overviews(levels, Resampling.nearest)
+        dst.update_tags(ns="rio_overview", resampling="nearest")
+
+
+@contextlib.contextmanager
+def write_grid_raster(path: Path, grid: GridSpec, count: int):
+    with part_file(path, grid) as part:
+        with rasterio.open(part, "w", **grid_profile(grid, count)) as dst:
+            yield dst
+            build_nearest_overviews(dst)
 
 
 def check_header(path, grid: GridSpec) -> None:
