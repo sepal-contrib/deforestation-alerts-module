@@ -384,3 +384,17 @@ def test_app_logger_is_raised_to_info_next_to_the_log_bridge():
     window = src[install : install + 800]
     assert "logger.setLevel(logging.INFO)" in window
     assert "logger.level > logging.INFO" in window or "logger.level == logging.NOTSET" in window
+
+
+def test_filter_decodes_custom_names_from_the_search_rasters():
+    """Names must come from the rasters the union is built from (spec
+    constraint 6), never from the live Aux settings."""
+    src = _src("gui/tile/alerts_filter_tile.py")
+    flat = " ".join(src.split())  # whitespace-insensitive
+    assert "custom_alert_name" not in src
+    assert (
+        "custom_names=custom_names_from_rasters( "
+        "alert_filter_model.available_alerts_raster_list )"
+    ) in flat
+    assert "convert_to_geopandas(gdf, custom_names=request.custom_names)" in flat
+    assert '.select("alert").toInt32()' in flat
