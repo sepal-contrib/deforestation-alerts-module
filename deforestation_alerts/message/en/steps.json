@@ -42,6 +42,28 @@
       "failed": "Could not save the AOI: {error}",
       "locked": "This project already has alert sets, so its AOI is locked. Duplicate the project (Project dialog) to monitor another area.",
       "no_geometry": "The AOI has no usable geometry; select it again in the AOI step."
+    },
+    "alerts": {
+      "title": "Alert sources",
+      "description": "The alert datasets this project monitors. Each is downloaded separately for every period, cut to the AOI and the period's dates.",
+      "list_title": "Sources",
+      "col_source": "Source",
+      "col_kind": "Kind",
+      "col_coverage": "Coverage",
+      "empty": "No alert source yet. Add at least one.",
+      "add": "Add source",
+      "add_title": "Add an alert source",
+      "predefined_label": "Predefined source",
+      "all_added": "Every predefined source is already in this project.",
+      "kind_predefined": "predefined",
+      "label_glad_l": "GLAD-L (Landsat, 30 m)",
+      "label_radd": "RADD (Sentinel-1, 10 m)",
+      "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
+      "meta_loading": "Still reading the catalogue dates; try again in a moment.",
+      "meta_failed": "Could not load the catalogue dates: {error}",
+      "delete_title": "Remove {name}?",
+      "delete_message": "The source is removed from the project. Its downloaded files stay until they are replaced.",
+      "delete_used": "{n} alert set(s) used this source. They keep their alerts; new sets won't include it."
     }
   }
 }

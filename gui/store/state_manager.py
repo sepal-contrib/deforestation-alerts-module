@@ -41,6 +41,9 @@ class AppState:
         self.save_error = solara.reactive(None)
         # pysepal AoiResult of the current selection (holds ee objects; not saved)
         self.aoi_result = solara.reactive(None)
+        # predefined-source catalogue metadata (coverage end, GLAD-L bands),
+        # fetched once per session by gui.scripts.catalogue_meta; not saved
+        self.catalogue_meta = solara.reactive({})
         self._restoring_depth = solara.reactive(0)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the
