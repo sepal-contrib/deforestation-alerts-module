@@ -91,7 +91,6 @@ from deforestation_alerts.scripts.alert_filter_helper import (
 from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.vectorize import vectorize_alert_raster
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
-from deforestation_alerts.scripts.custom_sources import custom_names_from_rasters
 from deforestation_alerts.scripts.naming import alert_artifact_name
 from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from gui.scripts.notify_bridge import forward_logs_to, tile_progress_reporter
@@ -161,8 +160,7 @@ class AnalyzeRequest:
     end_date: Any
     recipe_folder: Any
     attribute_raster: Any
-    # {slot: name} of the custom sources, read from the search's rasters.
-    custom_names: Any
+    custom_alert_name: Any
 
 
 @dataclasses.dataclass(frozen=True)
@@ -239,7 +237,6 @@ def create_filtered_alert_raster(
     Unioning multiple sources uses ``custom_reduce_image_collection`` (sum of
     alerts, min of date). When the area method is "drawn polygon" the result is
     clipped to that polygon; otherwise the AOI clip happens downstream at export.
-    The ``alert`` band is cast to Int32 in both branches.
     """
     if len(alert_source) == 1:
         alert_union = ee.Image(
@@ -253,12 +250,6 @@ def create_filtered_alert_raster(
             )
         img_collection_alertas = ee.ImageCollection.fromImages(selected_alert_list)
         alert_union = custom_reduce_image_collection(img_collection_alertas)
-
-    # Int32 alert band whatever the inputs: custom slots reach 2·10^8, and a
-    # fixed type makes the export dtype (float64 with the float date) stable.
-    alert_union = alert_union.addBands(
-        alert_union.select("alert").toInt32(), overwrite=True
-    )
 
     alerta = alert_union
 
@@ -659,8 +650,8 @@ def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
     """Assemble the final outcome from the raw vectorize result. Pure.
 
     ``convert_to_geopandas`` builds the status/point/alert_sources columns that
-    Overview + the analysis tile consume; ``custom_names`` labels the custom
-    sources' slots in the decoded ``alert_sources`` column.
+    Overview + the analysis tile consume; ``custom_name`` labels the user-defined
+    source (ten-thousands code slot) in the decoded ``alert_sources`` column.
     Nothing is published here — the completion effect owns that.
     """
     max_number_alerts = plan.selections.max_number_alerts
@@ -669,7 +660,7 @@ def _finish_analyze_sync(request: AnalyzeRequest, plan: AnalyzePlan, gdf):
         filtered_alert_raster=plan.filtered_alert_raster,
         alerts_total_bbs=gdf,
         alerts_bbs=gdf.head(max_number_alerts),
-        alerts_gdf=convert_to_geopandas(gdf, custom_names=request.custom_names),
+        alerts_gdf=convert_to_geopandas(gdf, custom_name=request.custom_alert_name),
         alert_count=len(gdf),
         # Carried from the click-time snapshot so the completion effect writes
         # the store into the folder THIS run was configured with, even if a
@@ -1078,9 +1069,7 @@ def AlertsFilterTile(
                 end_date=aoi_date_model.end_date,
                 recipe_folder=app_state.recipe_folder_path.value,
                 attribute_raster=aux_model.attribute_raster,
-                custom_names=custom_names_from_rasters(
-                    alert_filter_model.available_alerts_raster_list
-                ),
+                custom_alert_name=aux_model.custom_alert_name,
             )
         )
 
