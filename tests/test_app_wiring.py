@@ -240,12 +240,27 @@ def test_gee_widgets_get_the_session_interface():
     one must receive the Page's session interface."""
     aux = _src("gui/tile/aux_tile.py")
     calls = aux.split("sw.inputs.AssetSelect(")[1:]
-    assert len(calls) == 5
+    assert len(calls) == 4  # ccdc, mask, reference layer, raster attributes
     for call in calls:
         assert "gee_interface=gee_interface" in call[: call.index(")")]
+    custom = _src("gui/widget/custom_source_list.py")
+    custom_calls = custom.split("sw.inputs.AssetSelect(")[1:]
+    assert len(custom_calls) == 1
+    assert "gee_interface=gee_interface" in custom_calls[0][: custom_calls[0].index(")")]
+    assert "CustomSourceList(aux_model, gee_interface)" in aux
     shell = _src("gui/solara_app.py")
     assert "AoiDateModel(gee_interface=gee_interface)" in shell
     assert "build_aux_layout(aux_model, workspace, gee_interface)" in shell
+
+
+def test_raster_attribute_picker_accepts_images_only():
+    """'Load bands' reads image bands, so the Raster attributes AssetSelect must
+    not fall back to pysepal's default ["IMAGE", "TABLE"] (a table can never
+    load bands)."""
+    aux = _src("gui/tile/aux_tile.py")
+    body = aux.split("def _build_attribute_controls(")[1]
+    call = body.split("sw.inputs.AssetSelect(")[1]
+    assert 'types=["IMAGE"]' in call[: call.index(")")]
 
 
 def test_overview_view_has_back_and_review_buttons():
@@ -384,3 +399,27 @@ def test_app_logger_is_raised_to_info_next_to_the_log_bridge():
     window = src[install : install + 800]
     assert "logger.setLevel(logging.INFO)" in window
     assert "logger.level > logging.INFO" in window or "logger.level == logging.NOTSET" in window
+
+
+def test_filter_decodes_custom_names_from_the_search_rasters():
+    """Names must come from the rasters the union is built from (spec
+    constraint 6), never from the live Aux settings."""
+    src = _src("gui/tile/alerts_filter_tile.py")
+    flat = " ".join(src.split())  # whitespace-insensitive
+    assert "custom_alert_name" not in src
+    assert (
+        "custom_names=custom_names_from_rasters( "
+        "alert_filter_model.available_alerts_raster_list )"
+    ) in flat
+    assert "convert_to_geopandas(gdf, custom_names=request.custom_names)" in flat
+    assert '.select("alert").toInt32()' in flat
+
+
+def test_aoi_search_passes_custom_alerts_snapshot():
+    """AOI's SearchRequest must carry a frozen snapshot of the aux_model custom
+    alert sources at click time, not a live reference."""
+    src = _src("gui/tile/aoi_tile.py")
+    flat = " ".join(src.split())
+    assert (
+        "custom_alerts=tuple(dict(s) for s in aux_model.custom_alerts)"
+    ) in flat

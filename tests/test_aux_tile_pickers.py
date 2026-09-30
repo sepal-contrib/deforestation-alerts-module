@@ -70,3 +70,22 @@ def test_band_names_stage_the_users_raster_down(ws, tmp_path):
 
     assert _remote_band_names(ws, remote) == ["forest"]
     assert [p for p in (tmp_path / "scratch").rglob("*") if p.is_file()] == []
+
+
+def test_layout_hosts_the_custom_source_list(ws, monkeypatch):
+    import ipyvuetify as v
+    from pysepal import sepalwidgets as sw
+    from gui.widget.custom_source_list import CustomSourceList
+
+    monkeypatch.setattr(sw.inputs, "AssetSelect", lambda **kwargs: v.Select(items=[], v_model=None))
+    model = AuxModel()
+    layout = build_aux_layout(model, ws)
+
+    def walk(w):
+        yield w
+        for c in getattr(w, "children", None) or []:
+            if hasattr(c, "children"):
+                yield from walk(c)
+
+    lists = [w for w in walk(layout) if isinstance(w, CustomSourceList)]
+    assert len(lists) == 1 and lists[0].aux_model is model

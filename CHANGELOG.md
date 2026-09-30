@@ -21,6 +21,7 @@
   maximum".
 - Fixed: selecting a drawn AOI failed under pysepal 4 with a `TasksResponse`
   validation error, because ee-client rejected Earth Engine's empty task list.
+- Optional files: add up to five custom alert sources (RADD-format Earth Engine assets), each with its own name in the Filter step and in the alert list. Recipes with the previous single custom source still load.
 - The app adopts the Spatial Risk workflow side panel: AOI/Date → Filter →
   Analysis live in a "Workflow" right-panel view under a pipeline header
   (segment strip, Back/Next, step picker with lock reasons and output counts).

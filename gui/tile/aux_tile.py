@@ -18,6 +18,7 @@ from pysepal.sepalwidgets.file_input import FileInput
 from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.raster_attribute import band_names, build_attribute_config
 from deforestation_alerts.scripts.attribute_source import gee_band_names
+from gui.widget.custom_source_list import CustomSourceList
 from gui.widget.text_style import MUTED
 
 
@@ -58,7 +59,7 @@ def _build_attribute_controls(aux_model, workspace, gee_interface=None):
     per-band include/stat/column rows. Writes the assembled config to
     aux_model.attribute_raster on any change."""
     asset_input = sw.inputs.AssetSelect(
-        gee_interface=gee_interface, label=cm.aux_tile.asset_label
+        gee_interface=gee_interface, types=["IMAGE"], label=cm.aux_tile.asset_label
     )
     file_input = _remote_file_input(
         workspace, [".tif", ".tiff"], label=cm.aux_tile.attribute_file_hint
@@ -211,11 +212,8 @@ def build_aux_layout(aux_model, workspace, gee_interface=None):
     ccdc_alerts_input = sw.inputs.AssetSelect(
         gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"], label=t.asset_label
     )
-    # Custom alert source: a named, RADD-shaped GEE asset (Alert + Date bands).
-    custom_name_input = sw.TextField(label=t.custom_alerts_name_hint, v_model=None)
-    custom_alerts_input = sw.inputs.AssetSelect(
-        gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"], label=t.asset_label
-    )
+    # Custom alert sources: a list of named, RADD-shaped GEE assets (up to 5).
+    custom_list = CustomSourceList(aux_model, gee_interface)
 
     # Map layers: the mask clips alerts, the auxiliary layer is reference only.
     fnf_input = sw.inputs.AssetSelect(
@@ -254,8 +252,8 @@ def build_aux_layout(aux_model, workspace, gee_interface=None):
         _group(t.group_sources, [
             _row(["ccdc_layer"], t.ccdc_alerts_title, t.ccdc_alerts_desc,
                  [ccdc_alerts_input]),
-            _row(["custom_alert_name", "custom_alert_layer"], t.custom_alerts_title,
-                 t.custom_alerts_desc, [custom_name_input, custom_alerts_input]),
+            _row(["custom_alerts"], t.custom_alerts_title, t.custom_alerts_desc,
+                 [custom_list]),
         ]),
         _group(t.group_layers, [
             _row(["mask_layer"], t.mask_asset_title, t.mask_asset_desc, [fnf_input]),
@@ -285,8 +283,6 @@ def build_aux_layout(aux_model, workspace, gee_interface=None):
     # Bind widgets to model traits (traitlets linking; stable because this
     # function runs exactly once inside use_memo).
     aux_model.bind(ccdc_alerts_input, "ccdc_layer").bind(
-        custom_name_input, "custom_alert_name"
-    ).bind(custom_alerts_input, "custom_alert_layer").bind(
         fnf_input, "mask_layer"
     ).bind(aux_input, "aux_layer").bind(aux_viz, "aux_layer_vis").bind(
         form_input, "custom_report_template"
