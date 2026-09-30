@@ -52,7 +52,7 @@ def test_add_writes_the_model_and_closes(make):
     assert w.save_btn.disabled  # nothing filled yet
     _fill(w, "  Sentinel-1 ", "users/x/s1")
     assert not w.save_btn.disabled
-    w.save()
+    w.submit()
     assert model.custom_alerts == [{"name": "Sentinel-1", "asset": "users/x/s1"}]
     assert w.dialog.v_model is False
     assert len(_rows(w)) == 1
@@ -64,7 +64,7 @@ def test_edit_keeps_position_and_own_name_is_fine(make):
     assert w.name_field.v_model == "A" and w.asset_field.v_model == "users/x/a"
     assert not w.save_btn.disabled  # unchanged own name is not a duplicate
     _fill(w, "A2", "users/x/a2")
-    w.save()
+    w.submit()
     assert model.custom_alerts == [
         {"name": "A2", "asset": "users/x/a2"},
         {"name": "B", "asset": "users/x/b"},
@@ -81,7 +81,7 @@ def test_bad_names_disable_save_with_a_message(make, name, message):
     _fill(w, name, "users/x/new")
     assert w.save_btn.disabled
     assert w.name_field.error_messages == [getattr(cm.aux_tile, message)]
-    w.save()  # ignored while invalid
+    w.submit()  # ignored while invalid
     assert len(model.custom_alerts) == 2
 
 
@@ -120,3 +120,22 @@ def test_model_changes_rerender(make):
     model.custom_alerts = TWO
     assert len(_rows(w)) == 2
     assert w.counter.children == [cm.aux_tile.custom_count.format(n=2, max=5)]
+
+
+def test_invalid_or_validating_asset_disables_save(make):
+    # AssetSelect flags a wrong-type / inaccessible / half-typed id with
+    # ``error`` and runs its check with ``loading`` on; neither may be saved.
+    model, w = make()
+    w.open_add()
+    _fill(w, "A", "users/x/a")
+    assert not w.save_btn.disabled
+    w.asset_field.loading = True
+    assert w.save_btn.disabled
+    w.asset_field.loading = False
+    assert not w.save_btn.disabled
+    w.asset_field.error = True
+    assert w.save_btn.disabled
+    w.submit()  # ignored while the asset is invalid
+    assert model.custom_alerts == []
+    w.asset_field.error = False
+    assert not w.save_btn.disabled

@@ -36,8 +36,12 @@ class CustomSourceList(v.Html):
 
         # Add / edit modal.
         self.name_field = sw.TextField(label=t.custom_alerts_name_hint, v_model=None)
+        # The dense combobox floats its label above the input, into its top
+        # margin; my-5 (pysepal's current default, pinned here) keeps that
+        # label clear of the name field's error message.
         self.asset_field = sw.inputs.AssetSelect(
-            gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"], label=t.asset_label
+            gee_interface=gee_interface, types=["IMAGE", "IMAGE_COLLECTION"],
+            label=t.asset_label, class_="my-5",
         )
         self.modal_title = v.CardTitle(children=[t.custom_modal_add_title])
         self.save_btn = v.Btn(color="primary", depressed=True, disabled=True,
@@ -68,11 +72,13 @@ class CustomSourceList(v.Html):
 
         self.add_btn.on_event("click", lambda *_: self.open_add())
         cancel_btn.on_event("click", lambda *_: self.close_modal())
-        self.save_btn.on_event("click", lambda *_: self.save())
+        self.save_btn.on_event("click", lambda *_: self.submit())
         keep_btn.on_event("click", lambda *_: self.cancel_remove())
         self.remove_btn.on_event("click", lambda *_: self.confirm_remove())
         self.name_field.observe(self._validate, "v_model")
-        self.asset_field.observe(self._validate, "v_model")
+        # AssetSelect checks the id asynchronously: `loading` while it runs,
+        # `error` once it rejects the asset (wrong type, no access, bad id).
+        self.asset_field.observe(self._validate, ["v_model", "loading", "error"])
         aux_model.observe(self._render, "custom_alerts")
         self._render()
 
@@ -89,7 +95,10 @@ class CustomSourceList(v.Html):
         self.name_field.error_messages = (
             [getattr(cm.aux_tile, f"custom_name_{shown}")] if shown else []
         )
-        self.save_btn.disabled = bool(error) or not self.asset_field.v_model
+        asset = self.asset_field
+        self.save_btn.disabled = (
+            bool(error) or not asset.v_model or bool(asset.loading) or bool(asset.error)
+        )
 
     # -- add / edit -----------------------------------------------------------
     def _open(self, index, title, name, asset):
@@ -114,7 +123,7 @@ class CustomSourceList(v.Html):
         self.dialog.v_model = False
         self._editing = None
 
-    def save(self):
+    def submit(self):
         self._validate()
         if self.save_btn.disabled:
             return
