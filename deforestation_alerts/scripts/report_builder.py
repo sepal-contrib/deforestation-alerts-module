@@ -332,7 +332,7 @@ def _render_report(
     return workspace.upload_from_scratch(local_doc, output_path)
 
 
-def get_unique_alerts(alert_list, custom_names=None):
+def get_unique_alerts(alert_list, custom_names=None, digit_map=None):
     """
     Given a list of integers representing sums of alert values,
     return a list of unique alert types found.
@@ -348,6 +348,9 @@ def get_unique_alerts(alert_list, custom_names=None):
         alert_list (list): A list of integers (or strings representing numbers).
         custom_names (dict[int, str] | None): ``{slot: name}`` for the custom
             sources of the run; a slot without a name decodes as "Custom <s+1>".
+        digit_map (dict[int, str] | None): ``{digit: name}`` of the alert set;
+            when given, it alone decides the names (the fixed layout above and
+            ``custom_names`` are ignored).
 
     Returns:
         List[str]: Unique alert type names found in the list.
@@ -365,6 +368,17 @@ def get_unique_alerts(alert_list, custom_names=None):
         alert_list = [alert_list]
     
     unique_alerts = set()
+
+    if digit_map:
+        for value in alert_list:
+            try:
+                value = int(float(value))
+            except (TypeError, ValueError):
+                continue
+            for digit, name in digit_map.items():
+                if (value // 10 ** int(digit)) % 10 in (1, 2):
+                    unique_alerts.add(name)
+        return list(unique_alerts)
 
     for value in alert_list:
         try:

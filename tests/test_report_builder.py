@@ -78,6 +78,16 @@ def test_get_unique_alerts_invalid_string_returns_empty():
     assert get_unique_alerts("not a list") == []
 
 
+def test_digit_map_decides_names():
+    assert set(get_unique_alerts([21], digit_map={0: "GLAD-L", 1: "RADD"})) == {"GLAD-L", "RADD"}
+    assert set(get_unique_alerts([1000], digit_map={3: "My CCDC"})) == {"My CCDC"}
+
+
+def test_digit_map_nine_digits():
+    names = {d: f"s{d}" for d in range(9)}
+    assert len(get_unique_alerts([222222222], digit_map=names)) == 9
+
+
 def test_format_list_join_rules():
     assert format_list([]) == ""
     assert format_list(["GLAD-L"]) == "GLAD-L"
