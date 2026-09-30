@@ -82,3 +82,47 @@ def test_glad_s2_dates_are_the_calendar_days_of_its_day_counts(gee):
     for got, count in zip(pixels["date"], pixels["days"]):
         assert got == cat.yyyyddd(cat.GLAD_S2_ORIGIN + timedelta(days=count)), count
     assert {d // 1000 for d in pixels["date"]} == {2025, 2026}
+
+
+# Outside South America, where RADD's legacy radd_* images sort after the
+# weekly versions of their geography (system:index order).
+RADD_BOXES = {
+    "africa": [25.0, 0.3, 25.3, 0.6],  # DRC
+    "asia": [113.8, -1.2, 114.1, -0.9],  # Borneo
+}
+
+
+@pytest.mark.parametrize("geography", RADD_BOXES)
+def test_radd_is_the_latest_version_of_its_geography(gee, geography):
+    import ee
+
+    start, end = date(2025, 1, 1), date(2025, 12, 31)
+    region = ee.Geometry.Rectangle(RADD_BOXES[geography])
+    meta = cat.meta_request("RADD").getInfo()
+    img = cat.build_image("RADD", start, end, region, meta)
+    latest = (
+        ee.ImageCollection(cat.RADD_COLLECTION)
+        .filterMetadata("layer", "contains", "alert")
+        .filter(ee.Filter.eq("geography", geography))
+        .sort("system:time_end", False)
+        .first()
+    )
+    d = latest.select("Date")
+    in_window = d.gte(cat.yyddd(start)).And(d.lte(cat.yyddd(end)))
+    # Alert 3 confirmed -> 1, 2 probable -> 2; anything else is masked
+    want = latest.select("Alert").remap([2, 3], [2, 1]).updateMask(in_window).rename("alert").clip(region)
+    native = latest.select("Alert").projection()
+
+    def counts(image):
+        hist = (
+            image.select("alert")
+            .reduceRegion(ee.Reducer.frequencyHistogram().unweighted(), region, crs=native, maxPixels=1e9)
+            .getInfo()["alert"]
+        )
+        return {"confirmed": hist.get("1", 0), "probable": hist.get("2", 0)}
+
+    expected = counts(want)
+    assert expected["confirmed"], f"no confirmed RADD alert in the {geography} box in 2025"
+    # a mosaic of every weekly version would add the probable alerts RADD later
+    # withdrew (thousands here, against tens in the latest version)
+    assert counts(img) == expected

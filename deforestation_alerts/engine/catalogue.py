@@ -157,13 +157,29 @@ def _glad_l(win_start, win_end, aoi, meta):
     return ee.ImageCollection.fromImages(images).mosaic()
 
 
+def _radd_latest(col: ee.ImageCollection) -> ee.ImageCollection:
+    """The latest version (largest ``system:time_end``) of each geography in ``col``.
+
+    RADD publishes a full snapshot of each geography (africa, asia, ca, sa)
+    every week and keeps the old ones, plus legacy ``radd_*`` images. A mosaic
+    of them all would be the union of every alert ever published, including
+    unconfirmed alerts RADD later withdrew, and the legacy images would sit on
+    top outside South America (``system:index`` order). The latest snapshot
+    still holds the confirmed alerts back to 2019. Sorted oldest first, so
+    where two geographies overlap the more recent one is mosaicked on top.
+    """
+    latest = col.aggregate_array("geography").distinct().map(
+        lambda g: col.filter(ee.Filter.eq("geography", g)).sort("system:time_end", False).first()
+    )
+    return ee.ImageCollection.fromImages(latest).sort("system:time_end")
+
+
 def _radd(win_start, win_end, aoi, meta):
-    col = (
+    col = _radd_latest(
         ee.ImageCollection(RADD_COLLECTION)
         .filterBounds(_export_bounds(aoi))
         .filterMetadata("layer", "contains", "alert")
-        .mosaic()
-    )
+    ).mosaic()
     d = col.select("Date")  # yyddd
     in_window = d.gte(yyddd(win_start)).And(d.lte(yyddd(win_end)))
     alert = col.select("Alert").remap([0, 1, 2, 3], [0, 0, 2, 1])
