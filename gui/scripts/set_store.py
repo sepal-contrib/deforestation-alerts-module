@@ -3,7 +3,8 @@ fallback and a map hit test (spec §9.2, §9.3). Solara-free.
 
 The tiles are out of date when ``alert_db.parquet`` is newer than
 ``alerts.pmtiles`` (spec §5.3: a review save rewrites the store). No pmtiles
-artifact is recorded in the manifest (ruling #79): the two mtimes decide.
+artifact is recorded in the manifest (ruling #79): the two mtimes decide. So
+tiles are only ever built from the set's own alerts (``alerts_belong_to``).
 """
 
 from pathlib import Path
@@ -53,10 +54,31 @@ def pmtiles_stale(p, s) -> bool:
     return store.exists() and store.stat().st_mtime > pm.stat().st_mtime
 
 
+def alerts_belong_to(gdf, s) -> bool:
+    """False when ``gdf`` holds alerts of another set than ``s``.
+
+    The engine writes each alert's ``set_id`` into the store (integrate.py).
+    No alerts, and alerts without that column (a store written before it, the
+    legacy feeds), hold nothing of another set, so they pass.
+    ``alerts_gdf`` and the project's active set are separate reactives, and
+    Integrate records a new set before it publishes that set's alerts: this is
+    how Overview tells that the alerts on hand are not the active set's yet.
+    """
+    if gdf is None or "set_id" not in gdf.columns:
+        return True
+    return bool((gdf["set_id"] == s.id).all())
+
+
 def ensure_pmtiles(p, s, alerts) -> Optional[Path]:
     """The set's tiles, rebuilt from ``alerts`` first when stale; None without
     tippecanoe. Blocking (tippecanoe): call from a worker thread.
+
+    Raises ValueError, writing nothing, when ``alerts`` hold another set's
+    alerts: tiles built from them would be newer than this set's store, so
+    ``pmtiles_stale`` would keep them as current.
     """
+    if not alerts_belong_to(alerts, s):
+        raise ValueError(f"these alerts are not set {s.id!r}'s: its tiles are not built from them")
     if not pmt.tippecanoe_available():
         return None
     pm = _pmtiles_path(p, s)

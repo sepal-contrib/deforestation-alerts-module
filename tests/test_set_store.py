@@ -88,6 +88,34 @@ def _alerts():
     )
 
 
+def test_alerts_belong_to_their_own_set_only(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    assert set_store.alerts_belong_to(_alerts(), s)  # every set_id is "s"
+    assert set_store.alerts_belong_to(_gdf(), s)  # no set_id column (a store written before it existed)
+    assert set_store.alerts_belong_to(None, s)
+    assert set_store.alerts_belong_to(_alerts().iloc[0:0], s)
+    assert not set_store.alerts_belong_to(_alerts().assign(set_id="other"), s)
+    mixed = _alerts()
+    mixed.loc[1, "set_id"] = "other"
+    assert not set_store.alerts_belong_to(mixed, s)
+
+
+@pytest.mark.parametrize("tippecanoe", [True, False])
+def test_ensure_pmtiles_refuses_another_sets_alerts(tmp_path, monkeypatch, tippecanoe):
+    """Tiles written from another set's alerts would be newer than this set's
+    store, so the mtime rule would keep them as current."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    built = []
+    monkeypatch.setattr(pmt, "tippecanoe_available", lambda: tippecanoe)
+    monkeypatch.setattr(pmt, "alerts_to_pmtiles", lambda alerts, pm: built.append(alerts))
+    with pytest.raises(ValueError, match="'s'"):
+        set_store.ensure_pmtiles(p, s, _alerts().assign(set_id="other"))
+    assert built == [] and not (store.parent / "alerts.pmtiles").exists()
+    own = _alerts()
+    set_store.ensure_pmtiles(p, s, own)
+    assert [alerts is own for alerts in built] == ([True] if tippecanoe else [])
+
+
 def test_ensure_pmtiles_without_tippecanoe_is_none(tmp_path, monkeypatch):
     p, s, store = _project_with_set(tmp_path, monkeypatch)
     monkeypatch.setattr(pmt, "tippecanoe_available", lambda: False)

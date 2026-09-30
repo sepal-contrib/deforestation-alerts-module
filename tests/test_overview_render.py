@@ -47,14 +47,19 @@ SET_DIR = f"periods/{JAN.id}/sets/glad-l"
 KEY = "overview:set"
 
 
-def _alerts():
-    return gpd.GeoDataFrame(
+def _alerts(set_id=None):
+    """Four alerts, one per status. ``set_id``: the column the engine writes
+    (integrate.py), naming the set the alerts belong to."""
+    gdf = gpd.GeoDataFrame(
         {"alert_id": [0, 1, 2, 3],
          "status": ["Confirmed", "False Positive", "Need revision", "Not reviewed"],
          "area_ha": [1.5, 0.25, 2.0, 0.75]},
         geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01), box(2, 2, 2.01, 2.01), box(3, 3, 3.01, 3.01)],
         crs="EPSG:4326",
     )
+    if set_id is not None:
+        gdf["set_id"] = set_id
+    return gdf
 
 
 def _project(tmp_path, name="d", *, current=True):
@@ -316,10 +321,78 @@ def test_an_empty_set_or_no_set_draws_nothing(ov, tmp_path):
         rc.close()
 
 
+def _record_radd_set(p, tmp_path):
+    """What Integrate's ``apply_result`` does for a second set (RADD, January):
+    record it and make it the active set. Its files are on disk first, as a run
+    writes them before recording the set. Its fingerprint is not the point here."""
+    add_predefined_source(p, "RADD")
+    sid = make_set_id(JAN.id, ["RADD"])
+    folder = f"periods/{JAN.id}/sets/radd"
+    s = AlertSet(id=sid, period_id=JAN.id, sources=["RADD"], digit_map={1: "RADD"}, params=AlertSetParams(),
+                 store_rel_path=f"{folder}/alert_db.parquet", combined_rel_path=f"{folder}/c.tif",
+                 footprint_rel_path=f"{folder}/footprint.tif", n_alerts=4, fingerprint="x", created_at=datetime.now())
+    store = tmp_path / p.name / s.store_rel_path
+    store.parent.mkdir(parents=True, exist_ok=True)
+    _alerts(set_id=sid).to_parquet(store)
+    p.alert_sets[sid] = s
+    p.active_set = sid
+    return sid
+
+
+def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
+    """Integrate records a new set before it publishes that set's alerts
+    (integrate_jobs.run_integration_job), and the set selector (spec §9.3)
+    loads them in a worker after the selection. Until they arrive, the alerts
+    on hand are the previous set's: they are never tiled as the new set's (its
+    alerts.pmtiles would then be newer than its store, so the mtime rule would
+    keep the wrong tiles), nor drawn, counted, exported or clicked as its own."""
+    p = _project(tmp_path)
+    a = p.active_set
+    a_alerts = _alerts(set_id=a)
+    state = _state(p, a_alerts)
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()
+        [(_, sid, built_from)] = ov.ensured
+        assert sid == a and built_from is a_alerts
+
+        b = None
+
+        def _record(live):
+            nonlocal b
+            b = _record_radd_set(live, tmp_path)
+
+        assert state.update_project("d", _record)  # set B is active; A's alerts are still published
+        assert not layers.is_on(KEY) and map_.find_layer(KEY, none_ok=True) is None
+        ov.run_jobs()
+        assert len(ov.ensured) == 1  # nothing was tiled for B
+        assert _export_cards(rc) == [] and set(_summary(rc).values()) == {0}
+        _click(map_, 1.005, 1.005)  # on one of A's alerts
+        assert _popups(map_) == []
+
+        b_alerts = _alerts(set_id=b)
+        state.alerts_gdf.set(b_alerts)  # _publish_alerts
+        assert layers.is_on(KEY)
+        ov.run_jobs()
+        [(_, sid, built_from)] = ov.ensured[1:]
+        assert sid == b and built_from is b_alerts
+        assert map_.find_layer(KEY, none_ok=True) is not None and len(_export_cards(rc)) == 1
+        assert not [call for call in ov.ensured if call[1] == b and call[2] is a_alerts]
+    finally:
+        rc.close()
+
+
 def _centroid_layer(map_):
     layer = map_.find_layer(KEY, none_ok=True)
     assert isinstance(layer, ipyleaflet.GeoJSON)
     return layer
+
+
+def _browser_style(layer, feature):
+    """The style the browser draws ``feature`` with: ipyleaflet's GeoJSON view
+    merges ``{...feature.properties.style, ...layer.style}`` (the layer's own
+    style wins) and Leaflet applies it over ``point_style``."""
+    return {**layer.point_style, **feature["properties"]["style"], **layer.style}
 
 
 def test_without_tippecanoe_the_alerts_fall_back_to_centroid_points(ov, tmp_path):
@@ -334,9 +407,11 @@ def test_without_tippecanoe_the_alerts_fall_back_to_centroid_points(ov, tmp_path
         layer = _centroid_layer(map_)
         expected = set_store.centroid_geojson(_alerts())["features"]
         assert [f["geometry"] for f in layer.data["features"]] == [f["geometry"] for f in expected]
-        for feature in layer.data["features"]:  # coloured like the tiles' points
+        for feature in layer.data["features"]:  # filled with the tiles' point colours, as drawn
             code = feature["properties"]["status_code"]
-            assert feature["properties"]["style"]["fillColor"] == STATUS_COLORS[code]
+            drawn = _browser_style(layer, feature)
+            assert drawn["color"] == drawn["fillColor"] == STATUS_COLORS[code]
+            assert drawn["fill"] and drawn["fillOpacity"] > 0 and drawn["radius"] == 4
         assert [f["properties"]["status_code"] for f in layer.data["features"]] == [1, 2, 3, 0]
         assert layer.name == t("steps.overview.layer_name")
         assert _toasts(ov, "warning") == [t("steps.integrate.no_tippecanoe")]

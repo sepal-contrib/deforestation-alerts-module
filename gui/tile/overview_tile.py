@@ -12,6 +12,9 @@ from the shell (it never creates a map of its own):
   missing, or the tiles cannot be built or served, the alerts fall back to a
   GeoJSON layer of centroid points under the same key, with one warning toast
   (spec §9.2, §12). A build that finds the view already closed does nothing.
+  Published alerts that are still another set's (a new set is recorded before
+  its alerts are published) count as not loaded yet, so a set's tiles are
+  never built from another set's alerts (``set_store.alerts_belong_to``).
 - **Click to review.** While the view is open, a click on the map hit-tests the
   loaded alerts (``set_store.hit_alert``) and opens a popup with the alert's
   summary and **Review**, which selects that alert and opens Analysis. This
@@ -200,17 +203,41 @@ def _centroid_style(feature):
     return {"color": color, "fillColor": color}
 
 
+#: The centroid layer's own style. It must be non-empty and carry no colour:
+#: ipyleaflet's GeoJSON view draws each feature with
+#: ``{...feature.properties.style, ...layer.style}``, so the layer's style wins,
+#: and ``SepalMap.add_layer`` gives a layer with an empty style pysepal's
+#: default (hollow, weight 2, the theme's primary colour), which would paint
+#: every point alike. The per-status colours come from ``_centroid_style``.
+_CENTROID_LAYER_STYLE = {"stroke": True, "weight": 1, "opacity": 1, "fill": True, "fillOpacity": 0.9}
+
+
 def _add_centroid_layer(map_, alerts, name: str) -> None:
     """Draw ``alerts`` as centroid points coloured by status under
     ``SET_LAYER_KEY``: the fallback when the set's tiles cannot be shown
     (spec §9.2, §12)."""
     layer = GeoJSON(
         data=set_store.centroid_geojson(alerts),
-        point_style={"radius": 4, "weight": 1, "fillOpacity": 0.9},
+        point_style={"radius": 4},
+        style=_CENTROID_LAYER_STYLE,
         style_callback=_centroid_style,
         name=name,
     )
     map_.add_layer(layer, key=SET_LAYER_KEY)
+
+
+def _set_alerts(project, gdf):
+    """``gdf`` when it holds the active set's alerts, else None.
+
+    ``alerts_gdf`` and the active set are separate reactives: Integrate records
+    a new set before it publishes that set's alerts, and the set selector
+    (spec §9.3) loads them in a worker after the selection. Until they arrive,
+    the alerts on hand are the previous set's, and the tile treats them as not
+    loaded yet: it never tiles, draws, counts, exports or reviews them as the
+    new set's. Without an active set, ``gdf`` is kept as it is.
+    """
+    s = active_set(project)
+    return gdf if s is None or set_store.alerts_belong_to(gdf, s) else None
 
 
 def _error_text(exc: BaseException) -> str:
@@ -246,7 +273,9 @@ def OverviewTile(app_state, map_, workspace, layers):
     )
     popup_ref = solara.use_ref(None)
     p = app_state.project.value
-    gdf = app_state.alerts_gdf.value
+    # None while the published alerts are still another set's (_set_alerts):
+    # the publish that follows re-runs everything keyed on it.
+    gdf = _set_alerts(p, app_state.alerts_gdf.value)
     active = app_state.panel_view.value == OVERVIEW_VIEW
     s = active_set(p)
     has_alerts = gdf is not None and len(gdf) > 0
@@ -308,7 +337,7 @@ def OverviewTile(app_state, map_, workspace, layers):
         if kwargs.get("type") != "click" or app_state.panel_view.value != OVERVIEW_VIEW:
             return
         lat, lon = kwargs["coordinates"]
-        current = app_state.alerts_gdf.value
+        current = _set_alerts(app_state.project.value, app_state.alerts_gdf.value)
         i = set_store.hit_alert(current, lon, lat)
         _close_popup()
         if i is None:
