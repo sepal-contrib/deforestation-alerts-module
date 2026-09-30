@@ -1,91 +1,67 @@
-"""Overview tile as a Solara component (Phase 4 port of the old ipyvuetify class).
+"""Overview of the active alert set (spec §9.2, §9.3), a right-panel view.
 
-Architecture layer: view — imports solara and ipyvuetify (via reacton) for UI only.
-No GEE calls here; map-layer updates use pure ipyleaflet/pysepal APIs on the
-**single shared** ``SepalMap`` passed in from ``solara_app.Page`` (the same map
-``MapApp`` renders fullscreen). This tile does NOT create its own map: per the
-pysepal single-map model every tile draws on the one shared map and renders its
-controls as a right-panel section / map popups (see the migration memory).
+Architecture layer: view. It renders the set's status summary and exports in
+the right panel, and draws on the **single shared** ``SepalMap`` passed in
+from the shell (it never creates a map of its own):
 
-Alert rendering matches the ORIGINAL Voila tile: one ``MarkerCluster`` per alert
-status (``AwesomeIcon`` markers with Start/End/ID + "Go" popups) plus a
-``MenuControl`` of per-status toggle checkboxes — built by
-``overview_helper.build_status_marker_clusters`` and drawn on the single shared
-map.
+- **The set's tiles.** While the Overview view is open, the active set's
+  ``alerts.pmtiles`` is drawn under the ``MapLayers`` key ``"overview:set"``
+  and hidden again when the view closes. The build runs on a worker thread
+  (tippecanoe, the tile server) and rebuilds tiles older than the set's
+  ``alert_db.parquet`` (``set_store.ensure_pmtiles``). When tippecanoe is
+  missing, or the tiles cannot be built or served, the alerts fall back to a
+  GeoJSON layer of centroid points under the same key, with one warning toast
+  (spec §9.2, §12). A build that finds the view already closed does nothing.
+- **Click to review.** While the view is open, a click on the map hit-tests the
+  loaded alerts (``set_store.hit_alert``) and opens a popup with the alert's
+  summary and **Review**, which selects that alert and opens Analysis. This
+  replaces the status marker clusters. The popup is added with a key
+  (``"overview:popup"``): pysepal's key lookups read ``.key`` on every layer,
+  and a Popup added without one breaks them. It is removed when the view
+  closes or the alerts change.
 
-Layer ownership on the shared map: the tile only adds/removes its OWN layers — the
-status ``MarkerCluster`` layers (named ``overview-cluster-<status>``) and its
-``MenuControl``. It must never call ``map_.remove_all()`` (that would wipe other
-tiles' layers + the basemap); ``_clear_overview_layers`` removes just this tile's
-clusters (tracked handles + a name-prefix sweep) and its menu control before each
-refresh and whenever the tile is deactivated (single-map per-tile isolation).
+Feedback is hybrid. The component reports map-layer problems through
+``use_notifications()``. The export card (``build_export_card``) is a
+module-level RAW ipyvuetify builder whose worker runs on a daemon thread
+(``spawn_in_context``), where no Solara hook can run, so, like
+``analysis/export``, that worker resolves a notifier from its kernel context
+(``notify_bridge.current_notifier``) and runs its body under
+``notify_bridge.tracked_job``. ``tracked_job`` opens the task, turns the
+worker thread's app log lines into its milestones, and on a failure marks it
+FAILED before publishing the one error toast.
 
-AOI context layer: the AOI tile draws its AOI outline (layer name ``"aoi"``) only
-while it is active and REMOVES it on deactivation, so the AOI is gone by the time
-the user reaches the Overview. To show alerts in their AOI context, this tile
-draws the AOI too — but on its OWN layer name (``_OVERVIEW_AOI_LAYER`` =
-``"overview-aoi"``), never the AOI tile's ``"aoi"``, so the two tiles can't race
-on a shared layer (same per-tile ownership rule as the ``overview-cluster-*``
-clusters). It reuses the AOI tile's ``map_.add_ee_layer`` rendering call (a map
-draw of an already-built ``feature_collection`` — no new GEE *computation* in the
-view; AoiView is built ``gee=True`` throughout this app).
-
-Scope note: the old tile also drew the forest-mask / aux / drawn-selection layers,
-which were `ee.*` calls in the view; those remain omitted. The alert exports are
-rendered in the right-panel card.
-
-Export card feedback (the one place this component publishes): ``build_export_card``
-and its click handler are module-level RAW ipyvuetify builders whose worker runs on
-a daemon thread (``spawn_in_context``), where no Solara hook can run — so, like
-``recipe_tile`` and ``analysis/export``, the worker resolves a notifier from its
-kernel context (``notify_bridge.current_notifier``) and runs its body under
-``notify_bridge.tracked_job``, not ``use_notifications()``. ``tracked_job`` opens
-the task, turns the worker thread's app log lines into its milestones, and on a
-failure marks it FAILED before publishing the one error toast.
-
-Known service-layer concern: overview_helper.py (a *service* module) still imports
-ipyvuetify for its `create_table_rows` / `create_markers_ipyvuetify` /
-`build_status_marker_clusters` helpers.
-- `calculate_alert_classes` is pure (no UI imports) — used directly here.
-- `create_table_rows` uses `v.Html` — reproduced locally as `_make_summary_rows` to
-  avoid pulling ipyvuetify widgets through the service layer into this component.
-  The helper version is left untouched; refactoring overview_helper is deferred to a
-  later task.
-- `create_markers_ipyvuetify` / `build_status_marker_clusters` use `v.*` for
-  ipyleaflet marker popups + the menu-control card only (never Solara reacton
-  children), so calling them here is safe.
+``calculate_alert_classes`` comes from the service module ``overview_helper``
+(it is pure); the summary rows are built locally by ``_make_summary_rows`` so
+that module's ipyvuetify helpers stay out of this component.
 """
 
-import asyncio
-import dataclasses
 import logging
-from typing import Any
 
 import ipyvuetify as v
 import reacton.ipyvuetify as rv
 import solara
-from ipyleaflet import MarkerCluster, Popup
+from ipyleaflet import GeoJSON, Popup
 from pysepal import sepalwidgets as sw
+from pysepal.solara.notifications import use_notifications
 
+from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.message import cm
-from deforestation_alerts.scripts.overview_helper import (
-    build_status_marker_clusters,
-    calculate_alert_classes,
-    create_markers_ipyvuetify,
-)
+from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
+from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
+from gui.i18n import t
+from gui.scripts import set_store
 from gui.scripts.notify_bridge import current_notifier, tracked_job
+from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
 from gui.scripts.solara_threads import spawn_in_context
-from gui.store.workflow_steps import STEPS
+from gui.store.workflow_steps import STEPS, active_set
 
-# MarkerCluster layers added by this tile are named with this prefix so a
-# name-prefix sweep can catch any stale ones (e.g. a render_fixed double-mount)
-# that the tracked handles missed.
-_CLUSTER_NAME_PREFIX = "overview-cluster"
-
-# AOI outline layer this tile owns on the shared map (distinct from the AOI tile's
-# "aoi" layer so the two tiles never fight over a shared name).
-_OVERVIEW_AOI_LAYER = "overview-aoi"
+#: MapLayers key of the active set's tiles (or their centroid fallback)
+SET_LAYER_KEY = "overview:set"
+#: map key of the click popup
+POPUP_KEY = "overview:popup"
+#: ``app_state.panel_view`` while the Overview view is open
+OVERVIEW_VIEW = "overview"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
@@ -219,300 +195,173 @@ def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
     ]
 
 
-def _clear_overview_layers(map_, holder) -> None:
-    """Remove only THIS tile's layers + control from the shared map.
-
-    The overview owns the status ``MarkerCluster`` layers and its ``MenuControl``.
-    Everything else on the shared map (basemap, AOI, alert rasters from other
-    tiles) is left untouched. Never use ``map_.remove_all()`` on the shared map.
-
-    ``holder`` is a session-stable dict (``{"clusters": [...], "menu": ...}``)
-    tracking the widgets this tile added; we remove those plus any stale cluster
-    found by the ``_CLUSTER_NAME_PREFIX`` name sweep (covers a render_fixed
-    double-mount), then reset the holder.
-    """
-    menu = holder.get("menu")
-    if menu is not None:
-        removed = False
-        for remover in ("remove_control", "remove"):
-            try:
-                getattr(map_, remover)(menu)
-                removed = True
-                break
-            except Exception:
-                continue
-        if not removed:
-            logger.warning("Overview: could not remove the marker menu control")
-        holder["menu"] = None
-
-    tracked = list(holder.get("clusters", []))
-    holder["clusters"] = []
-    by_name = [
-        layer
-        for layer in list(map_.layers)
-        if isinstance(layer, MarkerCluster)
-        and str(getattr(layer, "name", "")).startswith(_CLUSTER_NAME_PREFIX)
-    ]
-    # also drop any stray click Popups the markers may have left on the map
-    stray_popups = [layer for layer in list(map_.layers) if isinstance(layer, Popup)]
-    for layer in set(tracked) | set(by_name) | set(stray_popups):
-        try:
-            if layer in map_.layers:
-                map_.remove_layer(layer)
-        except Exception:
-            logger.exception("Overview: failed to remove a layer during clear")
+def _centroid_style(feature):
+    color = STATUS_COLORS.get(feature["properties"].get("status_code"), STATUS_COLORS[0])
+    return {"color": color, "fillColor": color}
 
 
-def _loop_is_running() -> bool:
-    """True when the calling thread has a running asyncio event loop.
-
-    Same contract as ``gui.tile.aoi_tile._loop_is_running``: a
-    ``prefer_threaded=False`` task is scheduled with a bare
-    ``asyncio.create_task`` and raises without one, and an effect body must never
-    raise.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return False
-    return True
+def _add_centroid_layer(map_, alerts, name: str) -> None:
+    """Draw ``alerts`` as centroid points coloured by status under
+    ``SET_LAYER_KEY``: the fallback when the set's tiles cannot be shown
+    (spec §9.2, §12)."""
+    layer = GeoJSON(
+        data=set_store.centroid_geojson(alerts),
+        point_style={"radius": 4, "weight": 1, "fillOpacity": 0.9},
+        style_callback=_centroid_style,
+        name=name,
+    )
+    map_.add_layer(layer, key=SET_LAYER_KEY)
 
 
-@dataclasses.dataclass(frozen=True)
-class OverviewAoiLayerRequest:
-    """Immutable snapshot for one Overview AOI-outline sync."""
-
-    feature_collection: Any
-    show: bool
-    token: int
-
-
-def sync_overview_aoi_layer(map_, feature_collection, *, show) -> None:
-    """Add/remove the Overview's own AOI outline on the shared map (idempotent).
-
-    Mirrors the AOI tile's ``_redraw_aoi_layer`` / ``_clear_aoi_layer`` but on the
-    tile-owned ``_OVERVIEW_AOI_LAYER`` name so it never touches the AOI tile's
-    ``"aoi"`` layer. Always removes first (so a stale outline / render_fixed
-    double-mount can't leave two), then re-adds when ``show`` is True and an AOI is
-    selected. ``feature_collection`` is the AOI ``ee`` object (AoiView is
-    ``gee=True`` here), drawn with ``add_ee_layer`` exactly as the AOI tile does.
-
-    ``add_ee_layer`` blocks while EE resolves the tile-map id, so the component
-    never calls this from an effect body: it goes through the component's
-    ``aoi_layer_task`` + ``asyncio.to_thread``. It stays a plain module function
-    so it remains directly testable.
-    """
-    try:
-        map_.remove_layer(_OVERVIEW_AOI_LAYER, none_ok=True)
-    except Exception:
-        logger.exception("Overview: failed to remove the AOI layer")
-    if not show or feature_collection is None:
-        return
-    try:
-        map_.add_ee_layer(feature_collection, {}, _OVERVIEW_AOI_LAYER)
-    except Exception:
-        logger.exception("Overview: failed to add the AOI layer")
+def _error_text(exc: BaseException) -> str:
+    return str(exc) or exc.__class__.__name__
 
 
 @solara.component
-def OverviewTile(
-    app_state, map_, workspace, aoi_date_model=None, selected_alerts_model=None
-):
-    """Solara port of the old OverviewTile ipyvuetify widget.
-
-    Renders the alert-status summary card (+ download button) as a right-panel
-    section; the status marker clusters (+ a toggle menu control) and their "Go"
-    popups are drawn on the single shared map.
+def OverviewTile(app_state, map_, workspace, layers):
+    """Overview of the active alert set (spec §9.3): the status summary, exports,
+    the set's PMTiles on the shared map while this view is open, and a click on
+    the map opens the nearest alert in Analysis.
 
     Parameters
     ----------
     app_state : AppState
-        The shared ephemeral reactive store.  The component reacts to
-        ``app_state.alerts_gdf`` via a ``use_effect``.
+        The session state: the project (its active set), ``alerts_gdf`` (the
+        active set's alerts, loaded by the shell), ``panel_view`` and the
+        navigation reactives.
     map_ : SepalMap
-        The single shared map (the same instance ``MapApp`` renders fullscreen).
-        Layers + popups are added/removed on this map.
+        The single shared map.
     workspace : Workspace
-        The session user-file adapter built in ``Page()``. The format exports are
-        user data and are written through it, into the recipe folder in the
-        user's SEPAL workspace.
-    aoi_date_model : AoiDateModel, optional
-        The recipe AOI model; its ``feature_collection`` is drawn as the Overview's
-        AOI-context outline while this tile is active. ``None`` (or no AOI selected)
-        simply skips the outline.
+        The session user-file adapter the exports are written through, into the
+        set's own folder.
+    layers : MapLayers
+        The session's map-layer registry; the set's layer is its
+        ``"overview:set"`` key.
     """
-    # --------------------------------------------------------------------------
-    # Summary table body — held in a Ref so use_effect can mutate it in place.
-    # --------------------------------------------------------------------------
+    notifications = use_notifications()
+    # Summary table body, mutated in place by _sync_table: a concrete widget,
+    # so the table below is raw ipyvuetify, not a reacton element.
     tbody_ref = solara.use_memo(
-        lambda: v.Html(
-            tag="tbody",
-            children=_make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS),
-        ),
-        dependencies=[],
+        lambda: v.Html(tag="tbody", children=_make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)), []
     )
+    popup_ref = solara.use_ref(None)
+    p = app_state.project.value
+    gdf = app_state.alerts_gdf.value
+    active = app_state.panel_view.value == OVERVIEW_VIEW
+    s = active_set(p)
+    has_alerts = gdf is not None and len(gdf) > 0
 
-    # Session-stable handles for the cluster layers + menu control this tile adds
-    # to the shared map, so the effect can remove exactly its own widgets on
-    # refresh / deactivation (never the other tiles' layers).
-    overview_layers = solara.use_memo(
-        lambda: {"clusters": [], "menu": None}, dependencies=[]
-    )
+    def _sync_table():
+        counts = (calculate_alert_classes(gdf, "Confirmed", "False Positive", "Need revision")
+                  if has_alerts else [0, 0, 0, 0, 0])
+        tbody_ref.children = _make_summary_rows(counts, _ALERT_LABELS)
 
-    # --------------------------------------------------------------------------
-    # Reactive effect: refresh map layers + summary table whenever alerts_gdf
-    # changes.  Replaces the old `analyzed_alerts_model.observe(…, "alerts_gdf")`
-    # and `analyzed_alerts_model.observe(…, "last_save_time")` observers.
-    # --------------------------------------------------------------------------
-    alerts_gdf = app_state.alerts_gdf.value
-    # Folder of the loaded recipe (set by RecipeTile load). Read reactively so
-    # the download button appears once a recipe is loaded.
-    recipe_folder = app_state.recipe_folder_path.value
-    # Single shared map -> per-tile layer isolation: this tile draws its alert
-    # points only while it is the active map tile, and clears them otherwise (so
-    # they don't bleed into AOI/Filter). Keyed on active_map_view (NOT
-    # current_page_view) so opening a popup over the map (e.g. clicking a marker's
-    # "Go" -> the Analysis dialog) leaves the points drawn underneath. Read
-    # reactively so the effect re-runs on navigation between right-panel tiles.
-    active = app_state.active_map_view.value == "overview_tile"
+    solara.use_effect(_sync_table, [gdf])
 
-    # Callback: "Go" button in a marker popup → navigate to that alert. Thin: read
-    # widget value → write reactive state. Defined before _sync_overview because
-    # the effect hands it to create_markers_ipyvuetify.
-    def _on_go_click(widget, event, data):
-        try:
-            app_state.actual_alert_id.value = int(widget.value)
-            app_state.current_page_view.value = "analysis_tile"
-        except Exception:
-            logger.exception("Overview: on_go_click failed")
-
-    def _sync_overview():
-        """Refresh the summary table + this tile's map layers.
-
-        Runs on mount and whenever ``alerts_gdf`` changes OR this tile is
-        activated/deactivated. The summary table (right-panel only) always tracks
-        the data; the status marker clusters + their menu control are drawn on the
-        shared map ONLY while this tile is active, and cleared otherwise
-        (single-map isolation).
-        """
-        has_data = alerts_gdf is not None and len(alerts_gdf) > 0
-        if has_data:
-            counts = calculate_alert_classes(
-                alerts_gdf, "Confirmed", "False Positive", "Need revision"
-            )
-            tbody_ref.children = _make_summary_rows(counts, _ALERT_LABELS)
-        else:
-            tbody_ref.children = _make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)
-
-        # Always start by removing only THIS tile's layers + control (idempotent).
-        try:
-            _clear_overview_layers(map_, overview_layers)
-            if active and has_data:
-                # One MarkerCluster per status (AwesomeIcon markers + Start/End/ID
-                # "Go" popups) + a MenuControl status toggle — the original tile's
-                # UX, on the shared map. Markers carry point locations + their own
-                # popups, so (unlike GeoData) no geometry column is JSON-serialized.
-                markers = create_markers_ipyvuetify(
-                    alerts_gdf,
-                    "point",
-                    ["alert_date_min", "alert_date_max"],
-                    "status",
-                    _on_go_click,
-                )
-                clusters, menu = build_status_marker_clusters(
-                    map_, markers, name_prefix=_CLUSTER_NAME_PREFIX
-                )
-                overview_layers["clusters"] = clusters
-                overview_layers["menu"] = menu
-        except Exception:
-            logger.exception("Overview: failed to refresh map layers")
-
-    solara.use_effect(_sync_overview, [alerts_gdf, active])
-
-    # AOI-context outline: draw the AOI on the shared map while the Overview is
-    # active, remove it otherwise. Keyed on `active` ONLY (not alerts_gdf) so a
-    # filter run elsewhere can't make this effect strip the outline while another
-    # tile is showing — the AOI is read at activation time (it is selected long
-    # before the user reaches the Overview), mirroring the AOI tile's _sync_aoi.
-    #
-    # The draw itself is an ``add_ee_layer``, which blocks on EE — so the effect
-    # only schedules the async task (kernel loop, ``prefer_threaded=False``) and
-    # the map work happens in ``asyncio.to_thread``. ``aoi_layer_generation``
-    # makes a superseded sync a no-op: cancelling the task abandons the coroutine
-    # but the thread it started keeps running, so a slow draw could otherwise
-    # re-add the outline after a later clear.
-    aoi_fc = getattr(aoi_date_model, "feature_collection", None)
-    aoi_layer_generation = solara.use_memo(lambda: {"value": 0}, dependencies=[])
-
-    def _apply_overview_aoi(request: OverviewAoiLayerRequest):
-        if aoi_layer_generation["value"] != request.token:
+    def _sync_layer():
+        if not active or s is None or not has_alerts:
+            layers.hide(SET_LAYER_KEY)
             return
-        sync_overview_aoi_layer(
-            map_, request.feature_collection, show=request.show
-        )
+        project, alert_set, alerts = p, s, gdf
+        name = t("steps.overview.layer_name")
 
-    async def _sync_overview_aoi_task(request: OverviewAoiLayerRequest):
-        await asyncio.to_thread(_apply_overview_aoi, request)
-        return request
+        def _still_open():
+            # Ruling #57: a build that starts, or finishes tippecanoe, after the
+            # view closed does nothing more (the hide has already bumped the
+            # key, so MapLayers would drop its layer anyway). Only the view is
+            # checked, not ``layers.is_on``: the published ``on`` can lag a
+            # moment behind a show while another key's worker re-publishes,
+            # and a false "off" here would leave the set undrawn.
+            return app_state.panel_view.value == OVERVIEW_VIEW
 
-    aoi_layer_task = solara.lab.use_task(
-        _sync_overview_aoi_task,
-        dependencies=None,
-        prefer_threaded=False,
-        raise_error=False,
-    )
+        def build():
+            if not _still_open():
+                return
+            try:
+                pm = set_store.ensure_pmtiles(project, alert_set, alerts)
+                warning = None if pm is not None else t("steps.integrate.no_tippecanoe")
+            except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
+                logger.exception("could not build the tiles of set %s", alert_set.id)
+                pm, warning = None, t("steps.overview.tiles_failed", error=_error_text(exc))
+            if not _still_open():
+                return
+            if pm is not None:
+                try:
+                    add_set_pmtiles(map_, pm, key=SET_LAYER_KEY, name=name)
+                    return
+                except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
+                    logger.exception("could not show the tiles of set %s", alert_set.id)
+                    warning = t("steps.overview.tiles_failed", error=_error_text(exc))
+            notifications.warning(warning)
+            _add_centroid_layer(map_, alerts, name)
 
-    def _sync_overview_aoi():
-        aoi_layer_generation["value"] += 1
-        request = OverviewAoiLayerRequest(
-            feature_collection=aoi_fc,
-            show=active,
-            token=aoi_layer_generation["value"],
-        )
-        if _loop_is_running():
-            aoi_layer_task(request)
-        else:
-            # This effect runs on the tile's FIRST render, which happens inside
-            # solara_app._render_detached -> render_fixed and can land on a
-            # thread with no running loop; solara's prefer_threaded=False task
-            # would then raise out of the effect and take that render down
-            # (reacton masks it as "you are not using a container"). Effects must
-            # never raise: fall back to the pre-refactor inline call.
-            _apply_overview_aoi(request)
+        layers.show(SET_LAYER_KEY, build, content_id=f"{alert_set.id}:{len(alerts)}", notifier=notifications)
 
-    solara.use_effect(_sync_overview_aoi, [active])
+    solara.use_effect(_sync_layer, [active, s.id if s else None, gdf])
 
-    # --------------------------------------------------------------------------
-    # Info table (stable ipyvuetify widget; tbody_ref is mutated by use_effect)
-    # --------------------------------------------------------------------------
-    # NOTE: raw ipyvuetify `v.SimpleTable` (not reacton `rv.*`) on purpose — the
+    def _close_popup():
+        if popup_ref.current is not None:
+            map_.remove_layer(popup_ref.current, none_ok=True)
+            popup_ref.current = None
+
+    def _on_map(**kwargs):
+        if kwargs.get("type") != "click" or app_state.panel_view.value != OVERVIEW_VIEW:
+            return
+        lat, lon = kwargs["coordinates"]
+        current = app_state.alerts_gdf.value
+        i = set_store.hit_alert(current, lon, lat)
+        _close_popup()
+        if i is None:
+            return
+        row = current.iloc[i]
+        go = v.Btn(small=True, color="primary", children=[t("steps.overview.go")])
+
+        def _go(*_):
+            app_state.actual_alert_id.value = i
+            app_state.current_page_view.value = "analysis_tile"
+
+        go.on_event("click", _go)
+        summary = t("steps.overview.popup", id=int(row.get("alert_id", i)), status=row.get("status", ""),
+                    area=f"{float(row.get('area_ha', 0)):.2f}")
+        body = v.Html(tag="div", children=[v.Html(tag="div", children=[summary]), go])
+        popup = Popup(location=(lat, lon), child=body, close_button=True, auto_close=True)
+        map_.add_layer(popup, key=POPUP_KEY)
+        popup_ref.current = popup
+
+    def _wire_clicks():
+        if not active:
+            return None
+        map_.on_interaction(_on_map)
+
+        def _unwire():
+            map_.on_interaction(_on_map, remove=True)
+            _close_popup()  # also after the user closed it: a closed Popup stays in map_.layers
+
+        return _unwire
+
+    # Keyed on the alerts too: a popup's Review index belongs to the alerts it
+    # was opened on.
+    solara.use_effect(_wire_clicks, [active, gdf])
+
+    # NOTE: raw ipyvuetify `v.SimpleTable` (not reacton `rv.*`) on purpose: the
     # effect mutates `tbody_ref.children` in place, which requires a concrete
-    # widget instance. Do not "simplify" this to `rv.SimpleTable`: a reacton
-    # element is rebuilt each render and can't be imperatively mutated.
-    info_table = solara.use_memo(
-        lambda: v.SimpleTable(
-            dense=False,
-            children=[tbody_ref],
-        ),
-        dependencies=[],
-    )
+    # widget instance.
+    info_table = solara.use_memo(lambda: v.SimpleTable(dense=False, children=[tbody_ref]), [])
+    info_card = rv.Card(class_="pa-3 ma-3", hover=True,
+                        children=[rv.CardTitle(class_="pa-1 ma-1", children=[cm.overview_tile.title]), info_table])
 
-    # --------------------------------------------------------------------------
-    # Render layout — controls ONLY (this widget IS the right-panel section
-    # content). No map here: the single shared map shows the alert points.
-    # --------------------------------------------------------------------------
-    section_title = rv.CardTitle(
-        class_="pa-1 ma-1",
-        children=[cm.overview_tile.title],
+    # The export card is built only when its inputs change, so a re-render (a
+    # project save, a view switch) keeps the download buttons already revealed.
+    period = p.periods.get(s.period_id) if s is not None else None
+    folder = str(set_store.set_folder(p, s)) if s is not None else None
+    sources = tuple(s.sources) if s is not None else ()
+    start = period.start.isoformat() if period is not None else ""
+    end = period.end.isoformat() if period is not None else ""
+    export_card = solara.use_memo(
+        lambda: build_export_card(gdf, workspace, folder, list(sources), start, end)
+        if s is not None and has_alerts else None,
+        [gdf, folder, sources, start, end],
     )
-
-    info_card = rv.Card(
-        class_="pa-3 ma-3",
-        hover=True,
-        children=[section_title, info_table],
-    )
-
-    has_alerts = alerts_gdf is not None and len(alerts_gdf) > 0
 
     def _back_to_workflow():
         # Return the right panel to the Workflow view at the step the user was
@@ -524,33 +373,18 @@ def OverviewTile(
 
     with solara.Column(style="padding: 0;"):
         with solara.Row(style="gap: 8px; align-items: center; padding: 0 12px;"):
-            solara.Button(
-                cm.overview_tile.back_to_workflow,
-                icon_name="mdi-arrow-left",
-                text=True,
-                small=True,
-                on_click=_back_to_workflow,
-            )
+            solara.Button(cm.overview_tile.back_to_workflow, icon_name="mdi-arrow-left", text=True, small=True,
+                          on_click=_back_to_workflow)
             solara.v.Spacer()
-            solara.Button(
-                cm.overview_tile.review_button,
-                color="primary",
-                small=True,
-                disabled=not has_alerts,
-                on_click=_review_alerts,
-            )
+            solara.Button(cm.overview_tile.review_button, color="primary", small=True, disabled=not has_alerts,
+                          on_click=_review_alerts)
+        if s is not None:
+            solara.Text(t("steps.overview.set_label", period=s.period_id, sources=" + ".join(s.sources),
+                          n=s.n_alerts, reviewed=s.n_reviewed), style="padding: 0 16px;")
+            if set_status(p, paths.project_dir(p.name), s) is Status.STALE:
+                solara.Text(t("steps.overview.stale"), classes=["warning--text"], style="padding: 0 16px;")
         solara.display(info_card)
-        # Export menu (replaces the old single-CSV download button). Shown only
-        # when a recipe is loaded AND there are alerts. Each format is generated
-        # on demand from the in-memory gdf into the recipe folder, named with
-        # source + date range. The canonical store is parquet; these are exports.
-        gdf = app_state.alerts_gdf.value
-        if recipe_folder and gdf is not None and len(gdf) > 0:
-            sources = getattr(selected_alerts_model, "selected_alert_sources", None) or []
-            start = getattr(aoi_date_model, "start_date", "") or ""
-            end = getattr(aoi_date_model, "end_date", "") or ""
-            solara.display(
-                build_export_card(
-                    gdf, workspace, recipe_folder, sources, start, end
-                )
-            )
+        if export_card is not None:
+            # A child of a reacton element, like the raw info table above, so
+            # the card is part of the rendered tree itself.
+            rv.Html(tag="div", children=[export_card])

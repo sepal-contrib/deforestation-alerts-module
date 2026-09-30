@@ -941,6 +941,10 @@ RAW_LAYOUTS = [
     # can run — so it belongs on the raw-layout side of this boundary.
     "gui/tile/overview_tile.py",
 ]
+# Raw layouts whose component also reports through the hook: the Overview's
+# map-layer warnings come from its render context (``use_notifications()``),
+# while its export card still publishes through the bridge.
+HYBRID_LAYOUTS = ["gui/tile/overview_tile.py"]
 
 
 def _src(rel):
@@ -1025,9 +1029,10 @@ def test_raw_layouts_publish_through_the_bridge_not_the_hook():
         assert "pysepal.solara.notifications.track_task" not in imported, (
             f"{rel} still imports the track_task() global"
         )
-        assert "use_notifications" not in called, (
-            f"{rel} is a raw layout: it must not call the use_notifications() hook"
-        )
+        if rel not in HYBRID_LAYOUTS:
+            assert "use_notifications" not in called, (
+                f"{rel} is a raw layout: it must not call the use_notifications() hook"
+            )
 
 
 def test_raw_layout_workers_use_tracked_job():

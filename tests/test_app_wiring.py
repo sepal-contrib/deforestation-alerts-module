@@ -72,7 +72,6 @@ def test_no_bare_daemon_threads_in_tiles():
 GEE_TASK_FILES = [
     "gui/tile/aoi_tile.py",
     "gui/tile/alerts_filter_tile.py",
-    "gui/tile/overview_tile.py",
 ]
 
 

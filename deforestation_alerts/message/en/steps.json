@@ -152,6 +152,14 @@
       "error_min_size": "Enter a minimum size in hectares, 0 or more.",
       "error_max_alerts": "Enter a whole number, 0 or more.",
       "error_no_drawing": "Draw at least one polygon on the map first."
+    },
+    "overview": {
+      "layer_name": "Alerts (active set)",
+      "set_label": "{period} · {sources} · {n} alerts · {reviewed} reviewed",
+      "go": "Review",
+      "popup": "Alert {id} · {status} · {area} ha",
+      "stale": "This set was built from inputs that have changed since. Re-run Integrate & vectorize to rebuild it (that discards its reviews).",
+      "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons."
     }
   }
 }
