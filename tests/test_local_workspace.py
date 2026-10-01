@@ -62,6 +62,17 @@ def test_home_relative(local_ws):
     assert local_ws.home_relative(str(p)) == "module_results/x.zip"
 
 
+@pytest.mark.parametrize("outside", ["/var/tmp/x.zip", "{home}/../elsewhere/x.zip"])
+def test_home_relative_rejects_a_path_outside_home(local_ws, tmp_path, monkeypatch, outside):
+    """A download link is only valid under the user's home: Analysis Download
+    and the Overview export rely on this refusal, never on a ``../`` link."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    with pytest.raises(ValueError):
+        local_ws.home_relative(outside.format(home=home))
+
+
 def test_cleanup_scratch(local_ws):
     d = local_ws.scratch_dir()
     (d / "f").write_text("1")
