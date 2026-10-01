@@ -14,6 +14,12 @@ must record it, whatever happens next:
   that finishes after its project was closed or switched records the set in
   that project's own saved manifest instead, never in the project open now
   (ruling #75), and touches nothing in the session.
+- Either record is refused when the project's period, AOI or grid changed
+  while the run was going (a project's first Integrate leaves all three
+  editable): a set of a period that is gone would be an orphan that locks the
+  project for good, and one built on another AOI or grid would freeze a
+  project whose grid is gone. The files the run swapped in stay on disk; the
+  user is told to run again, and the previous record, if any, reads STALE.
 - An empty set is still recorded, gets no tiles, and stays on the step with an
   info toast (review focus 1, spec §12).
 """
@@ -21,6 +27,7 @@ must record it, whatever happens next:
 import logging
 import math
 from pathlib import Path
+from typing import Optional
 
 from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.engine.integrate import run_integration
@@ -59,6 +66,31 @@ def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, at
         max_alerts=cap,
         attribute_config=attribute_config,
     ), None
+
+
+def _digest(aoi) -> Optional[str]:
+    return aoi.digest if aoi is not None else None
+
+
+def _signature(grid) -> Optional[str]:
+    return grid.signature if grid is not None else None
+
+
+def changed_since(job, project) -> Optional[str]:
+    """What ``project`` no longer shares with the project ``job`` ran on:
+    ``"period"``, ``"aoi"`` or ``"grid"``, else None (the set may be recorded)."""
+    if job.period.id not in project.periods:
+        return "period"
+    if _digest(project.aoi) != _digest(job.project.aoi):
+        return "aoi"
+    if _signature(project.grid) != _signature(job.project.grid):
+        return "grid"
+    return None
+
+
+class _ProjectChanged(Exception):
+    """Raised inside the ``update_project`` callback: nothing is recorded or
+    published (``update_project`` publishes only when the callback returns)."""
 
 
 def reviewed_in(project, set_id: str) -> int:
@@ -107,8 +139,11 @@ def _record_in_own_project(job, result) -> None:
     try:
         root = Path(job.pdir).parent
         own = io.load_project(name, root=root)
-        if job.period.id not in own.periods:
-            return  # the period was removed there: no orphan set
+        changed = changed_since(job, own)
+        if changed is not None:
+            logger.warning("set %s is not recorded in project %s: its %s changed during the run",
+                           result.alert_set.id, name, changed)
+            return  # a removed period would leave an orphan set; another AOI or grid is not this set's
         apply_result(own, result)
         io.save_project(own, root=root)
     except Exception:  # noqa: BLE001 - the set's files are written; only the record is lost
@@ -140,8 +175,27 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True) -> N
         if n:
             task.step(t("steps.integrate.step_tiles"))
             _build_tiles(job, result, notifier)
-        if not app_state.update_project(name, lambda p: apply_result(p, result)):
+        changed = []
+
+        def _record(p):
+            why = changed_since(job, p)
+            if why is not None:
+                changed.append(why)
+                raise _ProjectChanged(why)
+            apply_result(p, result)
+
+        try:
+            recorded = app_state.update_project(name, _record)
+        except _ProjectChanged:
+            recorded = True  # the project is still open: nothing else to record into
+        if not recorded:
             _record_in_own_project(job, result)
+            return
+        if changed:
+            logger.warning("set %s is not recorded in project %s: its %s changed during the run",
+                           result.alert_set.id, name, changed[0])
+            if notifier is not None:
+                notifier.warning(t("steps.integrate.project_changed"))
             return
         if not _publish_alerts(app_state, name, result):
             return

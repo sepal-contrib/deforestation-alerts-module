@@ -150,6 +150,7 @@
       "tiles_failed": "The map tiles could not be built ({error}); Overview builds them again when it opens.",
       "done": "{n} alerts ready for review",
       "done_empty": "No new alerts in this period: the alert set is empty.",
+      "project_changed": "The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded. Run Integrate & vectorize again.",
       "error_min_size": "Enter a minimum size in hectares, 0 or more.",
       "error_max_alerts": "Enter a whole number, 0 or more.",
       "error_no_drawing": "Draw at least one polygon on the map first."

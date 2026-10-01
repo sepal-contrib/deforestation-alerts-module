@@ -160,8 +160,11 @@ def _open(name="d"):
     return state
 
 
-def _job(name="d", pdir=None):
-    return SimpleNamespace(project=SimpleNamespace(name=name), pdir=pdir, period=JAN)
+def _job(name="d", pdir=None, project=None):
+    """A job as the step builds it: ``project`` is the deep copy the run used
+    (name, AOI and grid are what the record is checked against)."""
+    project = project or SimpleNamespace(name=name, aoi=None, grid=None)
+    return SimpleNamespace(project=project, pdir=pdir, period=JAN)
 
 
 def _art(key, kind="store"):
@@ -193,8 +196,7 @@ def test_zero_alerts_still_records_the_set_and_skips_tiles(monkeypatch):
     """Review focus 1 and spec §12: an empty set is recorded and announced with
     an info toast; no tiles, and no jump to an Analysis with nothing to review.
     """
-    state = AppState()
-    state.new_project_state(Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
+    state = _open("d")
     monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: _result(0))
     built = _tiles(monkeypatch)
     notifier = _Notifier()
@@ -318,6 +320,71 @@ def test_a_late_set_is_not_recorded_for_a_period_its_saved_project_no_longer_has
     monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: _result(2))
     _tiles(monkeypatch, available=False)
     integrate_jobs.run_integration_job(AppState(), None, _job(pdir=tmp_path / "d"))
+    assert io.load_project("d", root=tmp_path).alert_sets == {}
+
+
+def _edit(change):
+    """What the user saves on another step while the worker runs."""
+    from gui.tile.period_step import apply_period
+
+    def period(live):
+        assert apply_period(live, "2026-02-01", "2026-02-28", 30) is None
+
+    def aoi(live):  # AoiStep's _apply
+        live.aoi = live.aoi.model_copy(update={"digest": "moved"})
+        live.grid = None
+        live.artifacts = {}
+
+    def grid(live):  # the grid form's _apply
+        live.grid = gridmod.build_grid(PARAGUAY, "EPSG:32721", 10.0)
+
+    return {"period": period, "aoi": aoi, "grid": grid}[change]
+
+
+@pytest.mark.parametrize("change", ["period", "aoi", "grid"])
+def test_a_set_is_not_recorded_when_the_period_aoi_or_grid_changed_during_the_run(monkeypatch, tmp_path, change):
+    """A project's first Integrate leaves the period, AOI and grid editable.
+    A set recorded after one of them changed would be an orphan that locks
+    the project for good (period), a locked project without a grid (AOI), or
+    a set built on another grid: the record is refused with a warning, and
+    nothing reaches Analysis."""
+    state = _open("d")
+    state.new_project_state(_project("d", "GLAD-L"))
+    before = state.project.value
+    job = _job(pdir=tmp_path / "d", project=before.model_copy(deep=True))
+
+    def fake_run(job, on_step=None):
+        assert state.update_project("d", _edit(change))
+        return _result(2)
+
+    monkeypatch.setattr(integrate_jobs, "run_integration", fake_run)
+    _tiles(monkeypatch)
+    notifier = _Notifier()
+    integrate_jobs.run_integration_job(state, notifier, job)
+
+    live = state.project.value
+    assert live.alert_sets == {} and live.active_set is None and live.artifacts == {} and not live.locked
+    assert state.alerts_gdf.value is None and state.current_page_view.value != "analysis_tile"
+    assert notifier.toasts == [("warning", t("steps.integrate.project_changed"))]
+    if change == "period":
+        assert JAN.id not in live.periods
+    elif change == "aoi":
+        assert live.grid is None  # and not locked: the AOI step can still set a new one
+
+
+@pytest.mark.parametrize("change", ["aoi", "grid"])
+def test_a_late_set_is_not_recorded_in_a_saved_project_whose_aoi_or_grid_changed(monkeypatch, tmp_path, change):
+    """The own-project record (ruling #75) checks the same three things as
+    the live one; the period is covered above."""
+    saved = _project("d", "GLAD-L")
+    _edit(change)(saved)
+    io.save_project(saved, root=tmp_path)
+    job = _job(pdir=tmp_path / "d", project=_project("d", "GLAD-L"))
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: _result(2))
+    _tiles(monkeypatch, available=False)
+
+    integrate_jobs.run_integration_job(AppState(), None, job)
+
     assert io.load_project("d", root=tmp_path).alert_sets == {}
 
 
