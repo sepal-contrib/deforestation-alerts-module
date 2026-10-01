@@ -10,10 +10,12 @@ ADM{n}_CODE). Paraguay is GAUL-2015 level0 code 194; Canindeyú is level1 code 2
 Files go to ``--out``, by default ``<DATA_DIR>/_measure`` (``DATA_DIR`` is
 ``$DEFORESTATION_ALERTS_DATA_DIR``, else ``~/module_results/deforestation_alerts``):
 the project disk, where the app itself writes its rasters (spec §11). ``/var/tmp``
-is SEPAL's small local disk, kept for tippecanoe; a national raster does not fit
-there (the free-space gate refuses it before the first tile), so ``--out`` may
-not point into it. The alert store is staged in ``<out>/scratch``, which is
-removed at the end. Delete ``<out>`` when the numbers are copied.
+is SEPAL's small local disk, kept for tippecanoe, so ``--out`` may not point into
+it: at national 10 m the free-space gates, which ask for twice the compressed
+size estimate (``raster_io.compressed_estimate``), want ~7 GB per Download &
+harmonize row and ~13 GB for Integrate. The alert store is staged in
+``<out>/scratch``, which is removed at the end. Delete ``<out>`` when the
+numbers are copied.
 
 Prints, per source: wall time, raw + harmonized file size, the harmonize-phase
 peak RSS (a VmRSS sampler around the actual reproject-and-mask call) and the
