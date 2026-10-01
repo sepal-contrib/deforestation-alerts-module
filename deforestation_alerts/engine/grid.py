@@ -69,6 +69,9 @@ def build_grid(bounds, epsg: str, resolution: float) -> GridSpec:
 
 
 def estimate_bytes(grid: GridSpec, bands: int = 2, itemsize: int = 4) -> int:
+    """Uncompressed size of a ``bands``-band raster on ``grid`` (two Int32 bands
+    by default). The free-space gates scale it with
+    ``raster_io.compressed_estimate``; the grid form's size hint shows it as is."""
     return grid.width * grid.height * bands * itemsize
 
 

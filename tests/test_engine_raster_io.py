@@ -60,6 +60,33 @@ def test_ensure_free_space(tmp_path):
         raster_io.ensure_free_space(tmp_path, 10**18)
 
 
+def test_compressed_estimate_is_the_documented_fraction():
+    assert raster_io.COMPRESSED_FRACTION == 0.05  # user decision 2026-10-01
+    assert raster_io.compressed_estimate(1_000_000) == 50_000
+    assert raster_io.compressed_estimate(0) == 0
+    assert raster_io.compressed_estimate(1) == 1  # rounded up, never 0 for a real file
+    assert raster_io.compressed_estimate(21) == 2  # 1.05 -> 2
+    assert isinstance(raster_io.compressed_estimate(10**12), int)
+
+
+def test_compressed_estimate_holds_for_dense_clustered_alerts(tmp_path):
+    """85 % of the pixels alerted in 16-px patches, one code and date per patch
+    (far denser than any real AOI): the file our writer produces, overviews
+    included, stays under the estimate."""
+    n, k = 1024, 16
+    grid = GRID.model_copy(update={"width": n, "height": n})
+    rng = np.random.default_rng(0)
+    hit = rng.random((n // k, n // k)) < 0.85
+    code = np.where(hit, rng.integers(1, 3, hit.shape), 0).astype("int32")
+    dates = np.where(hit, 2026001 + rng.integers(0, 120, hit.shape), 0).astype("int32")
+    patch = np.ones((k, k), dtype="int32")
+    out = tmp_path / "dense.tif"
+    with raster_io.write_grid_raster(out, grid, count=2) as dst:
+        dst.write(np.kron(code, patch), 1)
+        dst.write(np.kron(dates, patch), 2)
+    assert os.path.getsize(out) < raster_io.compressed_estimate(n * n * 2 * 4)
+
+
 def test_row_windows_cover_grid_once():
     rows = sum(w.height for w in raster_io.row_windows(GRID, rows=256))
     assert rows == GRID.height

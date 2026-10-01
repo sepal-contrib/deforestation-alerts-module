@@ -4,6 +4,8 @@ Every engine raster is Int32 with no-data 0 (spec D16), tiled 512 px, DEFLATE,
 with *internal* overviews built with nearest-neighbour (averaging would invent
 alert codes). Files are written as ``<name>.part`` in the destination folder and
 renamed when complete, so a reader never opens half a file (spec §5.2).
+Before a run writes one, ``ensure_free_space`` checks the project disk against
+a multiple of the raster's *compressed* size estimate (``compressed_estimate``).
 """
 
 import contextlib
@@ -107,7 +109,30 @@ def check_header(path, grid: GridSpec) -> None:
         )
 
 
+#: What an alert raster takes on disk, as a fraction of its uncompressed size
+#: (``grid.estimate_bytes`` / ``download.estimate_native_bytes``). Every
+#: free-space gate asks for a multiple of ``compressed_estimate`` (user decision
+#: 2026-10-01; spec §11 asked for twice the uncompressed size). Our rasters are
+#: Int32, DEFLATE, 512-px tiles, no-data 0 (geedim writes the raw downloads the
+#: same way) and mostly no-data. Measured, overviews included: real GLAD/RADD
+#: alert rasters 0.001-0.005; synthetic 4096-px rasters with 85 % of the pixels
+#: alerted in 16-px patches (one code and date each) 0.016; per-pixel random
+#: codes and dates, which real alerts are not, 0.05 with 5 % of the pixels
+#: alerted and 0.30-0.39 with 85 %. A raster denser than the fraction passes the
+#: gate and can then fail on a full disk: its ``.part`` is deleted, so only the
+#: run time is lost.
+COMPRESSED_FRACTION = 0.05
+
+
+def compressed_estimate(uncompressed_bytes: int) -> int:
+    """The bytes a raster of ``uncompressed_bytes`` is expected to take on disk."""
+    return math.ceil(uncompressed_bytes * COMPRESSED_FRACTION)
+
+
 def ensure_free_space(folder: Path, needed_bytes: int) -> None:
+    """Raise ``NotEnoughSpaceError`` when ``folder``'s disk (or that of its
+    nearest existing parent) has less than ``needed_bytes`` free. Callers pass
+    a multiple of ``compressed_estimate``."""
     folder = Path(folder)
     probe = folder
     while not probe.exists():

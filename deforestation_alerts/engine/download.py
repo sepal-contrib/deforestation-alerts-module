@@ -49,7 +49,8 @@ def native_pixel_size(key_or_native) -> float:
 
 
 def estimate_native_bytes(bounds, key_or_native) -> int:
-    """Uncompressed size of a raw download of the WGS84 ``bounds``: two Int32 bands."""
+    """Uncompressed size of a raw download of the WGS84 ``bounds``: two Int32 bands.
+    The download's free-space gate scales it with ``raster_io.compressed_estimate``."""
     crs, _ = _native(key_or_native)
     minx, miny, maxx, maxy = Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform_bounds(*bounds)
     size = native_pixel_size(key_or_native)
