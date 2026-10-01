@@ -2,8 +2,16 @@
 one alert set (spec §7.4). Entirely local; runs on a worker thread.
 
 Every raster is read and written window by window: whole rows of 512-px tiles,
-about ``WINDOW_PIXELS`` pixels at a time, so a national grid never sits in
-memory (spec §11) and every tile is decompressed and written once.
+about ``WINDOW_PIXELS`` pixels at a time but never less than one tile row, so a
+national grid never sits in memory (spec §11) and every tile is decompressed
+and written once. Above ~39,000 px wide (``WINDOW_PIXELS`` / 512) the one-row
+floor wins and a window grows with the width: 512 x 88,236 px, 181 MB per Int32
+array, for Paraguay at 10 m. ``combine`` holds ten window-sized Int32 arrays
+at its peak (traced 2026-10-01 with two sources: 0.78 GB at 38,000 px wide,
+1.8 GB at 88,236 px). The vectorizer reads its own blocks (vectorize.py).
+Harmonize's band-by-band warp already takes 1.19 GB at 32,000 px with two
+workers and also grows with the width (align.py), so at national scale it, not
+this module, is expected to set a run's peak.
 """
 
 import math
@@ -44,7 +52,8 @@ from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_
 from deforestation_alerts.scripts.workspace import Workspace
 
 #: Pixels per window (the vectorizer's default block): about 80 MB per Int32
-#: array, whatever the grid's width.
+#: array, until the one-tile-row floor of ``_windows`` takes over above
+#: ~39,000 px wide (see the module docstring).
 WINDOW_PIXELS = 20_000_000
 
 
