@@ -107,6 +107,23 @@ def test_footprint_and_area_clip(tmp_path):
     assert code[20, 30] == 0    # outside it
 
 
+@pytest.mark.parametrize("which", ["input", "footprint"])
+def test_combine_refuses_a_raster_off_the_grid(tmp_path, which):
+    """The window reads assume every raster shares the grid's pixels: one
+    pixel of shift must fail before anything is written."""
+    a = _blank()
+    a[5:8, 5:8] = 1
+    good = _write(tmp_path / "a.tif", a, np.where(a > 0, 2026001, 0))
+    shifted = GRID.model_copy(update={"xmin": GRID.xmin + GRID.resolution})
+    off = tmp_path / "off.tif"
+    with raster_io.write_grid_raster(off, shifted, count=2 if which == "input" else 1) as dst:
+        dst.write(a.astype("int32"), 1)
+    inputs, footprints = ([(good, 0), (off, 1)], []) if which == "input" else ([(good, 0)], [off])
+    with pytest.raises(raster_io.GridMismatchError, match="off.tif"):
+        integrate.combine(inputs, GRID, tmp_path / "c.tif", footprints=footprints)
+    assert not (tmp_path / "c.tif").exists() and not (tmp_path / "c.tif.part").exists()
+
+
 def test_windows_do_not_change_the_result(tmp_path, monkeypatch):
     """The test grid is one window at the production size; 7-row windows cut
     it into six, so every per-window offset (reads, writes, the drawn area,

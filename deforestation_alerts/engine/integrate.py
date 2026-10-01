@@ -30,7 +30,9 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
-from deforestation_alerts.engine.raster_io import BLOCK, ensure_free_space, row_windows, write_grid_raster
+from deforestation_alerts.engine.raster_io import (
+    BLOCK, check_header, ensure_free_space, row_windows, write_grid_raster,
+)
 from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
@@ -81,12 +83,16 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
             footprints: Sequence[Path] = (), area_geojson: Optional[dict] = None) -> int:
     """Write the combined 3-band raster (spec §7.4 steps 1-4); return its alert pixel count.
 
-    ``inputs`` are ``(harmonized raster, digit)`` pairs on ``grid``. Band 1 is
+    ``inputs`` are ``(harmonized raster, digit)`` pairs on ``grid`` (checked:
+    an input or footprint off the grid raises ``GridMismatchError``). Band 1 is
     ``Σ alert · 10^digit``, band 2 the earliest date among the sources with an
     alert at the pixel, band 3 the display class: 1 if any source is confirmed
     there, 2 if all are probable. Pixels set in any of the ``footprints`` (0/1
     rasters of earlier sets) or outside ``area_geojson`` (WGS84) are 0 in every band.
     """
+    # The window reads below assume every input shares the grid's pixels.
+    for path in [p for p, _ in inputs] + list(footprints):
+        check_header(path, grid)
     area = _area_in_grid(area_geojson, grid) if area_geojson else None
     total = 0
     with ExitStack() as stack:
