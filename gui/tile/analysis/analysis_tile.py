@@ -61,7 +61,9 @@ import ee
 import ipyvuetify as v
 from ipyleaflet import GeoJSON
 
+from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.message import cm
+from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -71,6 +73,8 @@ from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.imagery import build_imagery
 from gui.tile.analysis.navigator import build_navigator
+from gui.i18n import t
+from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -236,6 +240,32 @@ def select_start_alert(app_state, app_tile_model):
     if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
         start = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
         app_state.go_to(start)
+
+
+#: set status -> the banner's message key (the same text Overview shows)
+_SET_STATUS_KEYS = {Status.STALE: "steps.overview.stale", Status.MISSING: "steps.overview.missing"}
+
+
+def build_set_status_banner(app_state) -> v.Html:
+    """The spec §5.3 banner over the Analysis controls: the active set was
+    built from inputs that have changed since (out of date), or its files are
+    gone (missing), in the words Overview uses. It never blocks the review
+    (rebuilding discards it). A raw widget, like the rest of the layout,
+    updated on every project publish: the status is the manifest plus one
+    ``os.stat``, so the subscriber is cheap and calls nothing back."""
+    banner = v.Html(tag="div", class_="warning--text px-4 py-2", children=[], style_="display: none;")
+
+    def _sync(*_):
+        p = app_state.project.value
+        s = active_set(p)
+        status = set_status(p, paths.project_dir(p.name), s) if s is not None else None
+        key = _SET_STATUS_KEYS.get(status)
+        banner.children = [t(key)] if key else []
+        banner.style_ = "" if key else "display: none;"
+
+    app_state.project.subscribe(_sync)
+    _sync()
+    return banner
 
 
 def build_analysis_layout(
@@ -430,6 +460,7 @@ def build_analysis_layout(
         class_="pa-0 ma-0",
         children=[
             info_button(cm.analysis_tile.description, cm.analysis_tile.info_header, cm.analysis_tile.info_md),
+            build_set_status_banner(app_state),
             alert_info_card,
             build_navigator(app_state=app_state, id_field=id_field),
             build_review_panel(

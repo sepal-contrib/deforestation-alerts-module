@@ -730,6 +730,34 @@ def test_the_form_starts_from_the_active_set_and_resets_for_another_project(step
         rc.close()
 
 
+@pytest.mark.parametrize("status", ["current", "stale", "missing"])
+def test_the_step_names_an_active_set_that_is_out_of_date_or_missing(step, tmp_path, status):
+    """Spec §5.3 and review focus 4: the step says when the active set must be
+    run again, and why; a current set gets no line."""
+    from deforestation_alerts.engine.fingerprint import fingerprint, harm_key, set_inputs
+
+    step.ready = ["GLAD-L"]
+    p = _project("d", "GLAD-L")
+    p.artifacts[harm_key(JAN.id, "GLAD-L")] = _art(harm_key(JAN.id, "GLAD-L"), "harmonized")
+    s = _set("x", 0)
+    if status != "stale":
+        s = s.model_copy(update={"fingerprint": fingerprint(set_inputs(p, JAN, ["GLAD-L"], s.params))})
+    if status != "missing":
+        store = tmp_path / "d" / s.store_rel_path
+        store.parent.mkdir(parents=True)
+        store.write_bytes(b"store")
+    p.alert_sets[s.id] = s
+    p.active_set = s.id
+    map_, rc = _render(_state(p))
+    try:
+        texts = _texts(rc)
+        label = f"{JAN.id} · GLAD-L"
+        lines = {kind: t(f"steps.integrate.set_{kind}", set=label) for kind in ("stale", "missing")}
+        assert [kind for kind, line in lines.items() if line in texts] == ([status] if status != "current" else [])
+    finally:
+        rc.close()
+
+
 def test_the_attribute_raster_form_mounts_when_opened_and_reaches_the_job(step):
     """Mounting it lists the user's Earth Engine assets, so it waits for the
     panel to open, then stays mounted."""

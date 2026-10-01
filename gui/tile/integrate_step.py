@@ -26,6 +26,7 @@ import solara
 from pysepal.mapping.draw_control import DrawControl
 from pysepal.solara.notifications import use_notifications
 
+from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.engine.integrate import IntegrationJob, min_cluster_pixels
 from deforestation_alerts.engine.plan import ready_sources
 from deforestation_alerts.project import paths
@@ -62,16 +63,21 @@ def IntegrateStep(app_state, map_, gee_interface, workspace):
     active = workflow_steps.active_set(p)
     showing = (app_state.panel_view.value == "workflow"
                and app_state.active_step.value == workflow_steps.step_index("integrate"))
+    # The active set's status (spec §5.3, review focus 4): "stale" or
+    # "missing" shows a line that says to run again; a current set shows none.
+    status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
         app_state=app_state, map_=map_, gee_interface=gee_interface, workspace=workspace, inflight=inflight,
         name=p.name, period=period, ready=ready, resolution=p.grid.resolution,
         last=active.params if active is not None else None, showing=showing,
+        active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
+        active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
     ).key(f"integrate-{app_state.project_loaded_signal.value}-{p.name}-{period.id}")
 
 
 @solara.component
 def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, period, ready, resolution, last,
-                   showing):
+                   showing, active_label=None, active_status=None):
     notifications = use_notifications()
     draw = solara.use_memo(lambda: DrawControl(map_), [])
     draw_shown = solara.use_ref(False)
@@ -172,6 +178,8 @@ def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, pe
                 with rv.ExpansionPanelContent():
                     if attribute_opened:
                         AttributeForm(gee_interface=gee_interface, value=attribute, on_value=set_attribute)
+        if active_status is not None:
+            solara.Text(t(f"steps.integrate.set_{active_status}", set=active_label), classes=["warning--text"])
         if sid:
             solara.Text(t("steps.integrate.will_create", period=period.id, sources=" + ".join(chosen)),
                         classes=["text--secondary"])

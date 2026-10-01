@@ -359,6 +359,12 @@ def _ActiveSetLoader(app_state, workspace, layers, map_):
         def _load():
             if _kept():
                 return
+            store = set_store.active_store_path(p)
+            if store is not None and not store.exists() and loads.current["run"] == run:
+                # Review focus 4: the set's files were deleted or moved. The
+                # set is left unloaded (nothing to review) and the user is
+                # told where the store was and what rebuilds it.
+                notifications.warning(t("steps.project.set_missing", path=str(store)))
             try:
                 gdf = set_store.load_active_alerts(p, workspace)
             except Exception as exc:  # noqa: BLE001 - reported, the set stays unloaded

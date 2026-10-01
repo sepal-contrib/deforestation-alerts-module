@@ -444,8 +444,11 @@ def OverviewTile(app_state, map_, workspace, layers):
         if s is not None:
             solara.Text(t("steps.overview.set_label", period=s.period_id, sources=" + ".join(s.sources),
                           n=s.n_alerts, reviewed=s.n_reviewed), style="padding: 0 16px;")
-            if set_status(p, paths.project_dir(p.name), s) is Status.STALE:
+            status = set_status(p, paths.project_dir(p.name), s)
+            if status is Status.STALE:
                 solara.Text(t("steps.overview.stale"), classes=["warning--text"], style="padding: 0 16px;")
+            elif status is Status.MISSING:
+                solara.Text(t("steps.overview.missing"), classes=["warning--text"], style="padding: 0 16px;")
         solara.display(info_card)
         if export_card is not None:
             # A child of a reacton element, like the raw info table above, so

@@ -22,6 +22,7 @@ from shapely.geometry import box
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, AoiRecord, Project
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.scripts import set_store
+from gui.i18n import t as t_
 from gui.scripts.integrate_jobs import _publish_alerts, apply_result
 from gui.store.state_manager import AppState
 
@@ -192,6 +193,29 @@ def test_integrates_first_set_is_kept_as_published_and_the_render_happens_on_its
     assert errors == []
     assert loader.state.alerts_gdf.value is published
     assert loader.state.actual_alert_id.value == 1
+
+
+def test_a_set_whose_store_is_missing_is_reported_and_left_unloaded(loader, monkeypatch):
+    """Review focus 4: a project reopened after its set's files were deleted
+    or moved. ``load_active_alerts`` returns None, as for no set at all, so
+    the loader says what is missing and where; nothing is published."""
+    from pysepal.solara.notifications.notifier import Notifier
+
+    warnings = []
+    monkeypatch.setattr(Notifier, "warning", lambda self, message, **kw: warnings.append(message))
+    p = _project("a", loader.ws, n=3)
+    store = Path(loader.ws.root) / "a" / p.alert_sets[SET].store_rel_path
+    store.unlink()
+
+    loader.state.load_project_state(p)
+    loader.settle()
+
+    assert loader.state.alerts_gdf.value is None and loader.state.actual_alert_id.value == -1
+    assert warnings == [t_("steps.project.set_missing", path=str(store))]
+
+    loader.state.load_project_state(_project("b", loader.ws, n=2))  # a project whose store is there
+    loader.settle()
+    assert len(loader.state.alerts_gdf.value) == 2 and len(warnings) == 1
 
 
 def test_a_set_whose_store_cannot_be_read_is_reported(loader, monkeypatch):

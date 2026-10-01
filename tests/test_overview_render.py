@@ -246,6 +246,22 @@ def test_an_out_of_date_set_shows_the_warning_banner(ov, tmp_path):
     map_, layers, rc = ov.render(state)
     try:
         assert t("steps.overview.stale") in _texts(rc)
+        assert t("steps.overview.missing") not in _texts(rc)
+    finally:
+        rc.close()
+
+
+def test_a_set_whose_files_are_missing_says_so(ov, tmp_path):
+    """Review focus 4: the set's store was deleted or moved. The label still
+    counts the manifest's alerts, so without this line the Overview would
+    read "4 alerts" over an empty table with nothing to say why."""
+    p = _project(tmp_path)
+    (tmp_path / "d" / p.alert_sets[p.active_set].store_rel_path).unlink()
+    state = _state(p, None)
+    map_, layers, rc = ov.render(state)
+    try:
+        assert t("steps.overview.missing") in _texts(rc)
+        assert t("steps.overview.stale") not in _texts(rc)
     finally:
         rc.close()
 

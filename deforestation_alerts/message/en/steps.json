@@ -28,6 +28,7 @@
       "opened": "Opened {name}",
       "open_failed": "Could not open {name}: {error}",
       "set_load_failed": "Could not load the alerts of the active set: {error}",
+      "set_missing": "The active alert set's files are missing ({path}). Re-run Integrate & vectorize to rebuild it.",
       "delete_title": "Delete {name}?",
       "delete_message": "This deletes the project folder and every file in it. Type the project name to confirm.",
       "delete_busy": "A task is still writing into this project. Wait for it to finish, then delete.",
@@ -137,6 +138,8 @@
       "attr_stat_max": "Maximum",
       "attr_stat_median": "Median",
       "will_create": "Creates or replaces the alert set {period} · {sources}",
+      "set_stale": "The active set ({set}) was built from inputs that have changed since. Run Integrate & vectorize again to rebuild it (that discards its reviews).",
+      "set_missing": "The active set's files ({set}) are missing from the project folder. Run Integrate & vectorize again to rebuild it.",
       "run": "Integrate & vectorize",
       "replace_title": "Replace this alert set?",
       "replace_message": "{n} reviewed alert(s) in this set will be discarded.",
@@ -161,6 +164,7 @@
       "go": "Review",
       "popup": "Alert {id} · {status} · {area} ha",
       "stale": "This set was built from inputs that have changed since. Re-run Integrate & vectorize to rebuild it (that discards its reviews).",
+      "missing": "This set's files are missing from the project folder. Re-run Integrate & vectorize to rebuild it.",
       "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons."
     }
   }
