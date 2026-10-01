@@ -270,3 +270,21 @@ def test_switching_projects_remounts_the_form_and_drops_unsaved_input(monkeypatc
         assert _field(rc, t("steps.period.look_back")).v_model == str(b.look_back_days)
     finally:
         rc.close()
+
+
+def test_closing_the_open_project_unmounts_the_form_without_reading_it():
+    """The form reads the project itself: closing the project re-renders it
+    once before the gate unmounts it. Reading the closed project there raised
+    out of ``close_project_state``, which left the project half closed (the
+    install signal never bumped) and a delete of the open project undone."""
+    state = AppState()
+    state.new_project_state(_p_with_source())
+
+    box, rc = _render(state)
+    try:
+        assert _field(rc, t("steps.period.look_back"))
+        state.close_project_state()
+        assert rc.find(v.TextField).widgets == []
+        assert state.project_loaded_signal.value == 2 and state.active_step.value == 0
+    finally:
+        rc.close()

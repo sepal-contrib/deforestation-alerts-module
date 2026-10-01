@@ -97,7 +97,12 @@ def _PeriodForm(app_state):
     d_start, d_end = default_dates(p, date.today())
     start, set_start = solara.use_state(d_start)
     end, set_end = solara.use_state(d_end)
-    look_back, set_look_back = solara.use_state(str(p.look_back_days))
+    look_back, set_look_back = solara.use_state(str(p.look_back_days) if p is not None else "")
+    if p is None:
+        # The project was closed: this form reads it itself, so it can render
+        # once more before the gate above unmounts it. Every hook ran already.
+        # Reading the closed project here raised out of close_project_state.
+        return
     locked = bool(p.active_period) and _has_sets(p, p.active_period)
 
     def _save():
