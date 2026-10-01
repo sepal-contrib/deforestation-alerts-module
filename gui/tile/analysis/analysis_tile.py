@@ -90,6 +90,46 @@ _ALERT_BB_STYLE = {
 }
 
 
+def refresh_alert_info(widgets, app_state):
+    """Fill the Alert info card (source, dates, status) for the selected alert.
+
+    Returns the alert's ``(first date, last date)`` as shown, or None with no
+    alert selected (the card is left as it is). Run on every alert change and
+    again when the alerts are rebound with the same alert still selected: a
+    review Save writes the status into the row and then rebinds
+    ``alerts_gdf`` to a copy (``export._apply_save``), and the card kept
+    reading "Not reviewed" until the next alert change.
+    """
+    gdf = app_state.alerts_gdf.value
+    alert_id = app_state.actual_alert_id.value
+    if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):
+        return None
+    alerta = gdf.iloc[alert_id]
+    fecha1 = convert_julian_to_date(alerta["alert_date_min"])
+    fecha2 = convert_julian_to_date(alerta["alert_date_max"])
+    alert_source = alerta["alert_sources"]
+
+    if alerta["status"] != "Not reviewed":
+        alert_st = cm.analysis_tile.alert_info.status_reviewed
+    else:
+        alert_st = cm.analysis_tile.alert_info.status_not_reviewed
+
+    widgets.selected_alert_info.children = [
+        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.alert_source]),
+        str(alert_source),
+        v.Html(tag="br"),
+        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
+        fecha1,
+        v.Html(tag="br"),
+        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.last_date]),
+        fecha2,
+        v.Html(tag="br"),
+        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
+        alert_st,
+    ]
+    return fecha1, fecha2
+
+
 def view_actual_alert(
     widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
 ):
@@ -117,28 +157,7 @@ def view_actual_alert(
     alerta = gdf.iloc[alert_id]
 
     # --- alert-info card (source / dates / status) ---
-    fecha1 = convert_julian_to_date(alerta["alert_date_min"])
-    fecha2 = convert_julian_to_date(alerta["alert_date_max"])
-    alert_source = alerta["alert_sources"]
-
-    if alerta["status"] != "Not reviewed":
-        alert_st = cm.analysis_tile.alert_info.status_reviewed
-    else:
-        alert_st = cm.analysis_tile.alert_info.status_not_reviewed
-
-    widgets.selected_alert_info.children = [
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.alert_source]),
-        str(alert_source),
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
-        fecha1,
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.last_date]),
-        fecha2,
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
-        alert_st,
-    ]
+    fecha1, fecha2 = refresh_alert_info(widgets, app_state)
 
     # --- sync the nav id field ---
     id_field.v_model = alert_id
@@ -240,6 +259,41 @@ def select_start_alert(app_state, app_tile_model):
     if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
         start = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
         app_state.go_to(start)
+
+
+def wire_alert_navigation(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field) -> None:
+    """The subscriptions that drive the per-alert view (``build_analysis_layout``
+    registers them once; the layout is built once per session).
+
+    - ``actual_alert_id``: the per-alert orchestration re-runs whenever the
+      current alert changes (navigation drives it), plus one immediate call so
+      a pre-selected alert renders on first build. ``view_actual_alert`` no-ops
+      with no alerts loaded, so this is safe at mount/smoke time and idempotent.
+    - ``alerts_gdf``, first: the Alert info card is refreshed for the alert
+      still selected when the alerts are rebound (a review Save, see
+      ``refresh_alert_info``); with none selected it does nothing.
+    - ``alerts_gdf``, then: an alert is selected when a set first arrives (a
+      publish leaves ``actual_alert_id`` at -1, and the tile would otherwise
+      stay empty until "next"), plus one immediate call. Registered after the
+      refresh so a new set's first alert is drawn once, by the selection.
+    """
+
+    def _on_alert_change(*_):
+        view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
+
+    app_state.actual_alert_id.subscribe(_on_alert_change)
+    view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
+
+    def _refresh_info_cb(*_):
+        refresh_alert_info(widgets, app_state)
+
+    app_state.alerts_gdf.subscribe(_refresh_info_cb)
+
+    def _select_first_alert_cb(*_):
+        select_start_alert(app_state, app_tile_model)
+
+    app_state.alerts_gdf.subscribe(_select_first_alert_cb)
+    _select_first_alert_cb()
 
 
 #: set status -> the banner's message key (the same text Overview shows)
@@ -371,35 +425,7 @@ def build_analysis_layout(
         ],
     )
 
-    # Per-alert orchestration: re-run whenever the current alert id changes
-    # (navigation drives app_state.actual_alert_id). Replaces the former
-    # use_effect with a subscribe + one immediate call (so a pre-selected alert
-    # renders on first build). Guarded inside view_actual_alert to no-op when no
-    # alerts are loaded, so it is safe at mount/smoke time and idempotent.
-    def _on_alert_change(*_):
-        view_actual_alert(
-            widgets,
-            app_state,
-            analyzed_alerts_model,
-            app_tile_model,
-            id_field,
-        )
-
-    app_state.actual_alert_id.subscribe(_on_alert_change)
-    view_actual_alert(
-        widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
-    )
-
-    # Select an alert when an alert set first arrives (OLD create_gdf set
-    # actual_alert_id = 0 on gdf arrival). Publishing a set's alerts leaves
-    # actual_alert_id at -1, so without this the tile would render empty until
-    # the user clicks "next". Replaces the former use_effect with a subscribe +
-    # one immediate call.
-    def _select_first_alert_cb(*_):
-        select_start_alert(app_state, app_tile_model)
-
-    app_state.alerts_gdf.subscribe(_select_first_alert_cb)
-    _select_first_alert_cb()
+    wire_alert_navigation(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
 
     # TODO(recipe-load): the OLD tile rebuilt/merged alerts_gdf from the
     # selected-alerts traits here (create_gdf_partial/create_gdf_full + the
