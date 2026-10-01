@@ -354,6 +354,21 @@ def _save_alerts_to_gdf(
         record(alertas_gdf, target)
 
 
+def _alert_selected(app_state) -> bool:
+    """An alert set is loaded and the selected index points into it."""
+    gdf = app_state.alerts_gdf.value
+    alert_id = app_state.actual_alert_id.value
+    return gdf is not None and alert_id is not None and 0 <= alert_id < len(gdf)
+
+
+def _images_picked(widgets) -> bool:
+    """A before and an after image are selected for the alert under review."""
+    return (
+        widgets.selected_img_before_info_list is not None
+        and widgets.selected_img_after_info_list is not None
+    )
+
+
 def _download_data(
     widgets, app_state, aux_model, app_tile_model, workspace, *, task=None
 ):
@@ -388,6 +403,14 @@ def _download_data(
     if not app_tile_model.recipe_folder_path:
         return None
     recipe_folder = PurePosixPath(app_tile_model.recipe_folder_path)
+
+    # The composite needs a before and an after image (their info lists carry
+    # the date suffix and the image id, see paths.alert_image_name), and both
+    # are None until an image is picked for this alert, which nothing does by
+    # itself. Refused here, before any file is written: the TypeError this
+    # raised further down used to leave a partial alert_<id>.gpkg behind.
+    if not _images_picked(widgets):
+        return None
 
     # Single-row GeoDataFrame for the selected alert.
     selected_element = alertas_gdf.iloc[actual_alert_id]
@@ -676,15 +699,18 @@ def build_export(
                         # cannot explain. A WARNING outcome: fail() BEFORE the
                         # toast, so the run is already recorded as FAILED (with
                         # its reason) in the task log when the message lands.
-                        # (The two causes are re-derived here rather than
+                        # (The three causes are re-derived here rather than
                         # returned, so `_download_data` keeps its "paths or
                         # nothing" contract.) Log last: a FAILED task takes no
                         # more milestones.
-                        reason = str(
-                            cm.analysis_tile.export_labels.download_no_recipe
-                            if not app_tile_model.recipe_folder_path
-                            else cm.analysis_tile.export_labels.download_no_alert
-                        )
+                        labels = cm.analysis_tile.export_labels
+                        if not app_tile_model.recipe_folder_path:
+                            reason = labels.download_no_recipe
+                        elif not _alert_selected(app_state):
+                            reason = labels.download_no_alert
+                        else:
+                            reason = labels.download_no_images
+                        reason = str(reason)
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: download refused — %s", reason)

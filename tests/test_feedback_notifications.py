@@ -548,6 +548,53 @@ def test_export_download_refusal_fails_the_task_and_says_why(
     assert download_btn.loading is False and download_btn.disabled is False
 
 
+def test_export_download_without_images_is_refused_before_any_file_is_written(
+    monkeypatch, ws, data_files
+):
+    """The composite needs a before and an after image, and nothing picks them
+    by itself (no Planet login, Sentinel-2 needs a manual pick). It used to be
+    a raw "'NoneType' object is not subscriptable" error toast, raised after
+    the alert's gpkg had already been uploaded: a partial alert_<id>.gpkg in
+    the set's folder. Refused like the Save guard: a WARNING outcome, nothing
+    written."""
+    import gui.tile.analysis.export as export
+
+    app_state = AppState()
+    app_tile_model = SimpleNamespace(
+        recipe_folder_path=ws.ensure_dir("r"), custom_report_template=None
+    )
+    widgets = SimpleNamespace(  # as AnalysisWidgets starts: no image picked
+        selected_img_before_info_list=None, selected_img_after_info_list=None,
+        selected_img_before=None, selected_img_after=None, actual_alert_grid=None,
+    )
+    card = export.build_export(
+        widgets=widgets,
+        app_state=app_state,
+        aux_model=_set_context_fake(),
+        analyzed_alerts_model=AlertAnalysisModel(),
+        app_tile_model=app_tile_model,
+        workspace=ws,
+    )
+    feedback = _record_feedback(monkeypatch, export)
+    app_state.alerts_gdf.value = _one_row_gdf()
+    app_state.actual_alert_id.value = 0
+
+    toolbar = _download_toolbar(card)
+    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    download_btn.fire_event("click", None)
+    feedback.join()
+
+    expected = str(cm.analysis_tile.export_labels.download_no_images)
+    task = feedback.task()
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message == expected
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", expected)]
+    assert data_files(ws) == []  # no alert_0.gpkg left behind
+    assert toolbar.viz is False
+    assert download_btn.loading is False and download_btn.disabled is False
+
+
 def test_export_download_success_reveals_the_files(export_card, monkeypatch, ws):
     export, card, _app_state, _app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)

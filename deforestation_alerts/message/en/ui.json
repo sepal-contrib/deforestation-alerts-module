@@ -236,6 +236,7 @@
                 "download_done": "Alert download ready.",
                 "download_no_recipe": "No alert set is active, so there is nowhere in the project to save the alert files. Run Integrate & vectorize first.",
                 "download_no_alert": "No alert is selected, so there is nothing to download.",
+                "download_no_images": "No before and after images are selected for this alert, so its files cannot be built. Pick a before and an after image first.",
                 "save_no_alert": "No alert is selected, so there is nothing to save.",
                 "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",
                 "save_set_changed": "The active alert set changed while saving, so this review was not saved.",

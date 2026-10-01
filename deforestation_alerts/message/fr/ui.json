@@ -237,6 +237,7 @@
                 "download_done": "Téléchargement de l'alerte prêt.",
                 "download_no_recipe": "Aucun jeu d'alertes n'est actif : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans le projet. Lancez d'abord Integrate & vectorize.",
                 "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger.",
+                "download_no_images": "Aucune image avant et après n'est sélectionnée pour cette alerte : ses fichiers ne peuvent donc pas être générés. Choisissez d'abord une image avant et une image après.",
                 "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer.",
                 "save_other_set": "Ces alertes appartiennent à un autre jeu d'alertes que le jeu actif : elles n'y ont donc pas été enregistrées.",
                 "save_set_changed": "Le jeu d'alertes actif a changé pendant l'enregistrement : cette révision n'a donc pas été enregistrée.",
