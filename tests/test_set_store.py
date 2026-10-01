@@ -305,7 +305,6 @@ def test_store_generation_follows_every_rewrite(tmp_path, monkeypatch, ws):
     save_gdf_to_parquet(_alerts(), ws, str(store))  # a review Save's upload (copy + rename)
     second = set_store.store_generation(store)
     assert second != first
-    os.replace(store.with_name("staged.parquet"), store) if False else None
     staged = store.with_name("alert_db.staged.parquet")
     _alerts().to_parquet(staged)
     os.replace(staged, store)  # Integrate's swap
