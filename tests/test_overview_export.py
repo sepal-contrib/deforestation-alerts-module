@@ -82,7 +82,7 @@ def _non_error_toasts(bus):
 def _card(ws, folder, fmt_index=1):
     """The real export card plus the (generate, download) pair for one format."""
     card = overview_tile.build_export_card(
-        _gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12"
+        _gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
     )
     gen_row, dl_row = card.children[1], card.children[2]
     return card, gen_row.children[fmt_index], dl_row.children[fmt_index]
@@ -130,6 +130,31 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     assert _non_error_toasts(bus) == [
         ("success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
     ]
+
+
+def test_the_export_marks_its_project_as_being_written(ws, feedback, monkeypatch):
+    """Spec §12: the export writes into the set's folder, so the Project
+    dialog's delete guard must see the project's name while it runs; without
+    the mark a delete mid-export removed the folder and the export re-created
+    it, a half-project with no manifest."""
+    from gui.store.project_writers import is_writing
+
+    bus, errors, join = feedback
+    folder = ws.results_dir("recipe_a")
+    card, gen_btn, dl_btn = _card(ws, folder)
+    busy = []
+
+    def _export(gdf, workspace, folder_, fmt, sources, start, end):
+        busy.append(is_writing("d"))
+        return f"{folder_}/alerts.{fmt}"
+
+    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
+
+    gen_btn.fire_event("click", None)
+    join()
+
+    assert busy == [True] and not is_writing("d")
+    assert errors == [] and dl_btn.viz is True
 
 
 def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(

@@ -212,7 +212,7 @@ def test_overview_export_worker_log_lines_become_task_milestones(
 
     monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
     card = overview_tile.build_export_card(
-        _overview_gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12"
+        _overview_gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
     )
     gen_btn = card.children[1].children[1]
     dl_btn = card.children[2].children[1]
@@ -245,7 +245,7 @@ def test_overview_export_failure_fails_the_task_with_one_error_toast(
 
     monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
     card = overview_tile.build_export_card(
-        _overview_gdf(), ws, ws.results_dir("recipe_a"), ["GLAD-L"], "a", "b"
+        _overview_gdf(), ws, ws.results_dir("recipe_a"), ["GLAD-L"], "a", "b", "d"
     )
     gen_btn = card.children[1].children[0]
     dl_btn = card.children[2].children[0]
@@ -712,6 +712,47 @@ def test_edit_tools_model_run_publishes_success(
         ("success", str(cm.analysis_tile.model_labels.dl_done))
     ]
     assert run_btn.loading is False and run_btn.disabled is False
+
+
+@pytest.mark.parametrize("label", ["M 1", "M 2"])
+def test_edit_tools_model_run_marks_the_open_project_as_being_written(
+    monkeypatch, ws, label
+):
+    """Spec §12: the CNN composite lands in the set's folder, so the Project
+    dialog's delete guard must see the open project's name for the whole run
+    (without it, a delete mid-download removed the folder and the composite
+    upload re-created it as a manifest-less half-project)."""
+    from datetime import datetime
+
+    import gui.tile.analysis.edit_tools as edit_tools
+    from deforestation_alerts.project.models import Project
+    from gui.store.project_writers import is_writing
+
+    app_state = AppState()
+    now = datetime.now()
+    app_state.new_project_state(Project(name="d", created_at=now, updated_at=now))
+    card = edit_tools.build_edit_tools(
+        widgets=None,
+        app_state=app_state,
+        analyzed_alerts_model=AlertAnalysisModel(),
+        app_tile_model=_set_context_fake(),
+        workspace=ws,
+    )
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    busy = []
+
+    def _run(*_a, **_k):
+        busy.append(is_writing("d"))
+        return "/tmp/pred.tif"
+
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", _run)
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+
+    _dl_run_button(card, label).fire_event("click", None)
+    feedback.join()
+
+    assert busy == [True] and not is_writing("d")
+    assert feedback.errors == []
 
 
 @pytest.mark.parametrize("label", ["M 1", "M 2"])

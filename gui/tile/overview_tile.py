@@ -57,6 +57,7 @@ from gui.scripts import set_store
 from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
 from gui.scripts.solara_threads import spawn_in_context
+from gui.store.project_writers import writing
 from gui.store.workflow_steps import STEPS, active_set
 
 #: MapLayers key of the active set's tiles (or their centroid fallback)
@@ -69,9 +70,12 @@ OVERVIEW_VIEW = "overview"
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
 
-def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end):
+def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end, project):
     """Return the click handler that generates the ``fmt`` export and reveals its
-    download button.
+    download button. ``project`` is the name of the project the set folder
+    belongs to, captured when the card was built: the export marks it as
+    being written for its duration (spec §12), so a delete is refused instead
+    of the export re-creating the deleted folder.
 
     TWO buttons, not one: ``sw.DownloadBtn`` starts life *disabled* (its default
     ``path="#"`` makes ``set_url`` disable it), so a DownloadBtn wired to a click
@@ -108,9 +112,10 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
                     task.step(
                         str(cm.overview_tile.export_step).format(fmt=fmt.upper())
                     )
-                    path = export_alerts_gdf(
-                        gdf, workspace, folder, fmt, sources, start, end
-                    )
+                    with writing(project):
+                        path = export_alerts_gdf(
+                            gdf, workspace, folder, fmt, sources, start, end
+                        )
                     url_path = workspace.home_relative(path)
             except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Overview: export %s failed", fmt)
@@ -129,9 +134,10 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
     return _on_click
 
 
-def build_export_card(gdf, workspace, folder, sources, start, end):
+def build_export_card(gdf, workspace, folder, sources, start, end, project):
     """Build the export card: one generate button per format + its hidden
-    DownloadBtn, revealed when that format has been written.
+    DownloadBtn, revealed when that format has been written. ``project`` is
+    the name of the project ``folder`` belongs to (see ``_bind_export``).
 
     A module function (not inline in the component) so the buttons a user
     actually clicks — including their enabled/hidden state — are directly
@@ -152,7 +158,7 @@ def build_export_card(gdf, workspace, folder, sources, start, end):
         gen_btn.on_event(
             "click",
             _bind_export(
-                gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end
+                gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end, project
             ),
         )
         gen_buttons.append(gen_btn)
@@ -387,7 +393,7 @@ def OverviewTile(app_state, map_, workspace, layers):
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
     export_card = solara.use_memo(
-        lambda: build_export_card(gdf, workspace, folder, list(sources), start, end)
+        lambda: build_export_card(gdf, workspace, folder, list(sources), start, end, p.name)
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end],
     )

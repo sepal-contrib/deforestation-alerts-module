@@ -233,7 +233,7 @@ def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(o
     state = _state(_project(tmp_path), alerts)
     map_, layers, rc = ov.render(state)
     try:
-        assert calls == [(alerts, "WS", str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31")]
+        assert calls == [(alerts, "WS", str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d")]
         state.panel_view.set("workflow")  # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1

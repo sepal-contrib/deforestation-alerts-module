@@ -109,6 +109,7 @@ from gui.scripts.notify_bridge import (
     tracked_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
+from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -522,6 +523,11 @@ def build_edit_tools(
         ns["dl1_remove"].disabled = True
         ns["dl1_run"].loading = True
         ns["dl1_run"].disabled = True
+        # Writer tracking (spec §12): the composite lands in the set's folder,
+        # so the project is marked for the run and a delete is refused
+        # meanwhile. The name is read now, at the click: the run keeps marking
+        # the project it writes into after the user switched to another one.
+        project = writer_name(app_state)
 
         def _worker():
             # No ``total_steps`` — the run is one download+inference phase; the
@@ -534,11 +540,12 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(str(cm.analysis_tile.model_labels.dl_step_run))
-                    pred_path = _run_cnn_model(
-                        _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                        widgets, app_state, app_tile_model, workspace,
-                        task=task,
-                    )
+                    with writing(project):
+                        pred_path = _run_cnn_model(
+                            _MODEL1_REPO, _MODEL1_FILE, "_m1",
+                            widgets, app_state, app_tile_model, workspace,
+                            task=task,
+                        )
                     _apply_model1(pred_path)
             except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: model 1 run failed")
@@ -555,6 +562,7 @@ def build_edit_tools(
         ns["dl2_remove"].disabled = True
         ns["dl2_run"].loading = True
         ns["dl2_run"].disabled = True
+        project = writer_name(app_state)  # as in _on_dl1_run
 
         def _worker():
             # Same tracked_job shape as _on_dl1_run above.
@@ -566,11 +574,12 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(str(cm.analysis_tile.model_labels.dl_step_run))
-                    pred_path = _run_cnn_model(
-                        _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                        widgets, app_state, app_tile_model, workspace,
-                        task=task,
-                    )
+                    with writing(project):
+                        pred_path = _run_cnn_model(
+                            _MODEL2_REPO, _MODEL2_FILE, "_m2",
+                            widgets, app_state, app_tile_model, workspace,
+                            task=task,
+                        )
                     _apply_model2(pred_path)
             except Exception:  # noqa: BLE001 — tracked_job already toasted it
                 logger.exception("Analysis: model 2 run failed")

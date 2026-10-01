@@ -118,7 +118,7 @@ from gui.scripts.notify_bridge import (
     tracked_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
-from gui.store.project_writers import writing
+from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -129,13 +129,6 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 _DEFAULT_REPORT_TEMPLATE = str(
     Path(__file__).resolve().parents[3] / "data" / "report_template.docx"
 )
-
-
-def _writer_name(app_state) -> str:
-    """The open project's name, the key the Project dialog's delete guard
-    checks (``project_writers.is_writing``); ``""`` with no project open."""
-    p = app_state.project.value
-    return p.name if p is not None else ""
 
 
 def _save_target(app_tile_model):
@@ -580,7 +573,7 @@ def build_export(
                     # Writer tracking: register the open project while the
                     # set's alert store is written, so deleting the project
                     # refuses mid-write.
-                    with writing(_writer_name(app_state)):
+                    with writing(writer_name(app_state)):
                         try:
                             saved = _save_attributes(
                                 widgets,
@@ -644,7 +637,7 @@ def build_export(
                     task.step(str(cm.analysis_tile.export_labels.download_step))
                     # Writer tracking: the report/zip generation writes into the
                     # set's folder — register the open project for the duration.
-                    with writing(_writer_name(app_state)):
+                    with writing(writer_name(app_state)):
                         result = _download_data(
                             widgets,
                             app_state,

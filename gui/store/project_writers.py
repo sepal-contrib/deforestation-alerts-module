@@ -55,3 +55,12 @@ def writing(project_name: str):
 def is_writing(project_name: str) -> bool:
     """True when a background task is writing into this project's folder."""
     return project_writers.value.get(project_name, 0) > 0
+
+
+def writer_name(app_state) -> str:
+    """The open project's name, the key the Project dialog's delete guard
+    checks (``is_writing``); ``""`` with no project open. Read it when the
+    work starts, so a worker keeps marking the project it writes into after
+    the user switched to another one."""
+    p = app_state.project.value
+    return p.name if p is not None else ""
