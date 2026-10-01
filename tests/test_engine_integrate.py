@@ -343,6 +343,24 @@ def test_a_replace_swaps_all_three_files_and_reports_each_step_once(ready_projec
     assert _leftovers(pdir) == []
 
 
+@_LONLAT_CENTROID
+@pytest.mark.parametrize("params", [
+    AlertSetParams(min_size_ha=0.1, max_alerts=1),  # fewer alerts
+    AlertSetParams(min_size_ha=100),                # none: 10,000 px minimum
+], ids=["fewer-alerts", "empty"])
+def test_a_replace_deletes_the_previous_sets_tiles(ready_project, params):
+    """Spec §5.2: the superseded tiles go. An empty replacement builds no tiles,
+    so the old ones would otherwise outlive the alerts they show."""
+    p, pdir = ready_project
+    old = _record(p, integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1))))
+    tiles = paths.pmtiles_path((pdir / old.store_rel_path).parent)
+    tiles.write_bytes(b"the previous alerts' tiles")
+    res = integrate.run_integration(_job(p, pdir, JAN, params))
+    assert res.alert_set.n_alerts == (1 if params.max_alerts else 0)
+    assert not tiles.exists()
+    assert _leftovers(pdir) == []
+
+
 class _Interrupted(BaseException):
     """Not an Exception: the cleanup must not depend on the error's class."""
 
@@ -374,7 +392,9 @@ def test_a_failed_replace_leaves_the_recorded_set_untouched(ready_project, monke
     must leave the recorded set's files byte-identical and untouched."""
     p, pdir = ready_project
     old = _record(p, integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1))))
-    files = _set_files(pdir, old)
+    tiles = paths.pmtiles_path((pdir / old.store_rel_path).parent)
+    tiles.write_bytes(b"the recorded set's tiles")
+    files = _set_files(pdir, old) + [tiles]
     before, listing = _snapshot(files), sorted(f.name for f in files[0].parent.iterdir())
     config = fail(monkeypatch, pdir)
     # the replace would write a different set: one alert, a 64-px footprint

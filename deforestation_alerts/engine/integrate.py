@@ -286,6 +286,11 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             fingerprint=fingerprint(inputs_fp),
             created_at=datetime.now(),
         )
+        # A replaced set's tiles show its previous alerts: they are superseded
+        # (spec §5.2), and the caller builds the new ones from the new store.
+        # Dropped before the swap, so a failure here still leaves the recorded
+        # set's own files as they were (its tiles are rebuilt on demand).
+        paths.pmtiles_path(sdir).unlink(missing_ok=True)
         for final, part in staged.items():
             os.replace(part, final)
     except BaseException:
