@@ -627,3 +627,55 @@ def test_a_failed_original_alert_layer_leaves_the_selectors_usable(tmp_path, mon
     map_, widgets = _pick_image(ctx, monkeypatch, _boom)
     assert map_.ee_layers == ["True Color", "False Color"]
     assert not widgets.imgSelection1.disabled and not widgets.imgSelection2.disabled
+
+
+def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monkeypatch, ws):
+    """Integrate stores each alert's area (its pixels on the grid). Confirming
+    the alert without drawing a polygon must not wipe it to 0: alert_db.parquet
+    feeds the exports, the map tiles and the report (live walk F2: alert 0,
+    387 px = 3.87 ha, read 0.00 after the Save)."""
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    alerts = _review_alerts("x")
+    alerts["area_ha"] = [3.87, 1.25]
+    s.alerts_gdf.set(alerts)
+
+    assert _save(s, ctx, ws, monkeypatch) is True
+
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["status", "area_ha", "alert_polygon"])
+    assert saved.loc[0, "status"] == "Confirmed"
+    assert saved["area_ha"].tolist() == pytest.approx([3.87, 1.25])
+    assert saved.loc[0, "alert_polygon"] is None
+    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(3.87)
+
+
+def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch, ws):
+    """The drawn-polygon branch is unchanged: the drawing replaces the area."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from deforestation_alerts.message import cm
+    from gui.tile.analysis import export
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    alerts = _review_alerts("x")
+    alerts["area_ha"] = [3.87, 1.25]
+    s.alerts_gdf.set(alerts)
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
+        selected_img_before_info_list=None,
+        selected_img_after_info_list=None,
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
+    s.actual_alert_id.set(0)
+    assert export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=drawn), ctx, ws) is True
+
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
+    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
+    assert saved.loc[0, "alert_polygon"] is not None
+    assert saved.loc[1, "area_ha"] == pytest.approx(1.25)

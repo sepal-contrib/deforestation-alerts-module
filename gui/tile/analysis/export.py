@@ -292,10 +292,11 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
     ):
         raise Exception(cm.analysis_tile.questionarie.confirmation_q)
 
-    # alert_polygon + area_ha from the drawn defo layer (if any).
+    # alert_polygon + area_ha from the drawn defo layer (if any). With nothing
+    # drawn, area_ha keeps the alert's own area, which Integrate stored: the
+    # store feeds the exports, the map tiles and the report.
     if analyzed_alerts_model.defo_dl_layer is None:
         alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
-        alertas_gdf.at[actual_alert_id, "area_ha"] = 0
     else:
         alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
             analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
