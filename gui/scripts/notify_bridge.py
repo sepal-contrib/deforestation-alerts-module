@@ -17,10 +17,19 @@ toast + re-raise on exception).
 Threads without a Solara kernel context (``asyncio.to_thread`` pool threads)
 cannot publish reactives to the browser — run those job bodies via
 ``solara_threads.to_thread_in_context`` so the tracker's bus updates land.
+
+The server log. The app logger's only handler used to be the milestone
+bridge, and a handler on the logger silences Python's last-resort stderr
+fallback, so a worker's ``logger.exception`` reached nothing but the toast.
+``install_server_log_handler`` puts WARNING+ records, tracebacks included, on
+the server process's own stderr (``sys.__stderr__``: in a Voila kernel
+``sys.stderr`` is the browser's, which Voila never shows), and ``tracked_job``
+logs every failure it reports, so each failed job leaves one traceback there.
 """
 
 import asyncio
 import logging
+import sys
 import threading
 from contextlib import contextmanager
 
@@ -77,6 +86,31 @@ def install_task_log_handler(level: int = logging.INFO) -> TaskStepLogHandler:
         return handler
 
 
+class ServerLogHandler(logging.StreamHandler):
+    """WARNING+ app records on the server's stderr, with their tracebacks."""
+
+
+_SERVER_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s [%(threadName)s] %(message)s"
+
+
+def install_server_log_handler(level: int = logging.WARNING, stream=None) -> ServerLogHandler:
+    """Attach a single ``ServerLogHandler`` to the app logger (idempotent).
+
+    ``stream`` defaults to the process's original stderr (``sys.__stderr__``),
+    the server log under Voila and jupyter-server; a test passes its own.
+    """
+    logger = logging.getLogger(_LOGGER_NAME)
+    with _install_lock:
+        for h in logger.handlers:
+            if isinstance(h, ServerLogHandler):
+                return h
+        handler = ServerLogHandler(stream or sys.__stderr__ or sys.stderr)
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter(_SERVER_LOG_FORMAT))
+        logger.addHandler(handler)
+        return handler
+
+
 @contextmanager
 def forward_logs_to(task):
     """Forward this thread's INFO+ app log records to ``task`` as milestones.
@@ -116,7 +150,10 @@ def tracked_job(notifier, title: str, total_steps=None, error_format=None):
     task is marked FAILED with that message *before* the toast is published:
     pysepal's ``_TaskTrackerContextManager.__exit__`` only raises its own
     bare-exception toast while the task is not already FAILED, so failing first
-    is what keeps this to exactly one toast.
+    is what keeps this to exactly one toast. The failure is logged with its
+    traceback once the task is FAILED (a FAILED task takes no more milestones,
+    so the record is not echoed into the pill), for the server log; callers
+    need not log it again.
     """
     if notifier is None:
         from pysepal.solara.notifications.notifier import NoopNotifier
@@ -137,6 +174,7 @@ def tracked_job(notifier, title: str, total_steps=None, error_format=None):
                     logging.getLogger(_LOGGER_NAME).exception("error_format failed")
                     message = str(exc)
                 task.fail(message)
+                logging.getLogger(_LOGGER_NAME).error("Task %r failed: %s", title, message, exc_info=exc)
                 notifier.error(message, timeout=ERROR_TOAST_TIMEOUT)
                 raise
 

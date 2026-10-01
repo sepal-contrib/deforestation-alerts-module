@@ -576,7 +576,7 @@ def build_export(
     # write; never auto-run). The button spins for the duration; on success the
     # worker applies the OLD save effect, on failure tracked_job publishes the
     # error (incl. the OLD "confirmation==No but a polygon is drawn" guard) as a
-    # toast and the worker logs it.
+    # toast and logs its traceback.
     # ------------------------------------------------------------------
     def _on_save(*_):
         ns["save_btn"].loading = True
@@ -627,8 +627,8 @@ def build_export(
                         # Inside the tracked block: if the apply step raises, the
                         # run is a FAILED task + one error toast, not a green pill.
                         _apply_save()
-            except Exception:  # noqa: BLE001 — tracked_job already toasted it
-                logger.exception("Analysis: save attributes failed")
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
             else:
                 if saved:
                     notifier.success(str(cm.analysis_tile.export_labels.save_done))
@@ -642,7 +642,7 @@ def build_export(
     # Download handler: button-triggered daemon thread (heavy report generation /
     # IO). On success the worker applies the OLD download effect with the returned
     # zip/report paths; on failure tracked_job publishes the error as a toast and
-    # the worker logs it.
+    # logs its traceback.
     # ------------------------------------------------------------------
     def _on_download(*_):
         ns["download_alert_data_btn"].loading = True
@@ -694,8 +694,8 @@ def build_export(
                         # home, and that must be a FAILED task + one error toast,
                         # not a green pill with download buttons that never show.
                         _apply_download(result)
-            except Exception:  # noqa: BLE001 — tracked_job already toasted it
-                logger.exception("Analysis: download data failed")
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
             else:
                 if result is not None:
                     notifier.success(

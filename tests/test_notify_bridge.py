@@ -363,3 +363,77 @@ def test_no_provider_falls_back_to_noop():
     assert isinstance(notify_bridge.current_notifier(), NoopNotifier)
     with notify_bridge.tracked_job(None, "orphan") as task:
         task.step("still fine")
+
+
+# ---------------------------------------------------------------------------
+# The server log: failures leave a traceback on the server's stderr
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def server_log():
+    """The app logger's server-log handler on a private stream, removed after."""
+    import io
+
+    logger = logging.getLogger("SEPALUI.deforestation_alerts")
+    for h in list(logger.handlers):
+        if isinstance(h, notify_bridge.ServerLogHandler):
+            logger.removeHandler(h)
+    stream = io.StringIO()
+    handler = notify_bridge.install_server_log_handler(stream=stream)
+    yield stream
+    logger.removeHandler(handler)
+
+
+def test_a_failed_job_is_logged_with_its_traceback_once_it_is_failed(caplog):
+    """The record carries the task's title and the exception (traceback
+    included), goes out after ``fail()`` so it is not echoed as a milestone,
+    and sits next to exactly one error toast."""
+    logger, bus, notifier = _fresh()  # DEBUG: the milestone must still get through
+    with pytest.raises(ValueError, match="boom"):
+        with notify_bridge.tracked_job(notifier, "Doomed job"):
+            logger.info("about to fail")
+            raise ValueError("boom")
+    [record] = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert "Doomed job" in record.getMessage() and "boom" in record.getMessage()
+    assert record.exc_info is not None and isinstance(record.exc_info[1], ValueError)
+    assert _milestones(bus, "Doomed job") == ["about to fail"]
+    assert _status(bus, "Doomed job") == TaskStatus.FAILED
+    assert [t.message for t in bus.toasts.value if t.type == ToastType.ERROR] == ["boom"]
+
+
+def test_the_server_log_handler_prints_warnings_and_tracebacks_not_milestones(server_log):
+    logger, _bus, _notifier = _fresh()
+    logger.info("a milestone")
+    logger.warning("careful")
+    try:
+        raise ValueError("bad")
+    except ValueError:
+        logger.exception("the row failed")
+    out = server_log.getvalue()
+    assert "a milestone" not in out
+    assert "WARNING SEPALUI.deforestation_alerts" in out and "careful" in out
+    assert "ERROR" in out and "the row failed" in out
+    assert "Traceback (most recent call last)" in out and "ValueError: bad" in out
+    assert notify_bridge.install_server_log_handler() is next(
+        h for h in logger.handlers if isinstance(h, notify_bridge.ServerLogHandler))
+    assert sum(isinstance(h, notify_bridge.ServerLogHandler) for h in logger.handlers) == 1
+
+
+def test_a_failed_tracked_job_reaches_the_server_log_once(server_log):
+    """A worker's failure (a Prepare row, an Integrate, a Save) is findable in
+    the server log with its traceback, once: callers do not log it again."""
+    logger, bus, notifier = _fresh()
+
+    def job():
+        with notify_bridge.tracked_job(notifier, "Integrate & vectorize"):
+            logger.info("combining")
+            raise RuntimeError("tippecanoe died")
+
+    thread = threading.Thread(target=job, name="integrate-worker")
+    thread.start()
+    thread.join(timeout=10)
+    out = server_log.getvalue()
+    assert out.count("Traceback (most recent call last)") == 1
+    assert "Task 'Integrate & vectorize' failed: tippecanoe died" in out
+    assert "RuntimeError: tippecanoe died" in out and "[integrate-worker]" in out
+    assert "combining" not in out  # milestones stay in the task pill
+    assert _milestones(bus, "Integrate & vectorize") == ["combining"]
