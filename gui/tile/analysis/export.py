@@ -219,19 +219,33 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
     drivers_list = ensure_list(widgets.driver_combobox.v_model)
     alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
 
-    # before/after image name + info.
-    alertas_gdf.at[actual_alert_id, "before_img"] = (
-        widgets.selected_img_before_info_list[3]
-    )
-    alertas_gdf.at[actual_alert_id, "after_img"] = (
-        widgets.selected_img_after_info_list[3]
-    )
-    alertas_gdf.at[actual_alert_id, "before_img_info"] = (
-        widgets.selected_img_before_info_list[1]
-    )
-    alertas_gdf.at[actual_alert_id, "after_img_info"] = (
-        widgets.selected_img_after_info_list[1]
-    )
+    # before/after image name + info. Guarded (fix round 1): both default to
+    # None (widgets.py:275-276) until an image is actually picked
+    # (imagery.py:214/216), e.g. no Planet login yet and no S2/Landsat chosen
+    # for this alert; unconditionally subscripting raised
+    # "'NoneType' object is not subscriptable" and lost the whole review, the
+    # same way the drawn-polygon case below is guarded on
+    # ``defo_dl_layer is None``.
+    if widgets.selected_img_before_info_list is None:
+        alertas_gdf.at[actual_alert_id, "before_img"] = None
+        alertas_gdf.at[actual_alert_id, "before_img_info"] = None
+    else:
+        alertas_gdf.at[actual_alert_id, "before_img"] = (
+            widgets.selected_img_before_info_list[3]
+        )
+        alertas_gdf.at[actual_alert_id, "before_img_info"] = (
+            widgets.selected_img_before_info_list[1]
+        )
+    if widgets.selected_img_after_info_list is None:
+        alertas_gdf.at[actual_alert_id, "after_img"] = None
+        alertas_gdf.at[actual_alert_id, "after_img_info"] = None
+    else:
+        alertas_gdf.at[actual_alert_id, "after_img"] = (
+            widgets.selected_img_after_info_list[3]
+        )
+        alertas_gdf.at[actual_alert_id, "after_img_info"] = (
+            widgets.selected_img_after_info_list[1]
+        )
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")

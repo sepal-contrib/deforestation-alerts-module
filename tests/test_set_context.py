@@ -334,6 +334,43 @@ def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, mon
     assert s.project.value.alert_sets["x"].n_reviewed == 1
 
 
+def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch, ws):
+    """Before any Planet/S2/Landsat image is picked for the alert under
+    review, ``selected_img_before_info_list`` / ``_after`` are still ``None``
+    (widgets.py:275-276; only populated by imagery.py:214/216 once an image
+    is chosen). Save must not crash subscripting them (fix-round regression
+    for the Task 23 review finding) and persists the review with the
+    before/after image columns left empty."""
+    from deforestation_alerts.message import cm
+    from gui.tile.analysis import export
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
+        selected_img_before_info_list=None,
+        selected_img_after_info_list=None,
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    s.actual_alert_id.set(0)
+
+    assert export._save_attributes(
+        widgets, s, SimpleNamespace(defo_dl_layer=None), ctx, ws
+    ) is True
+
+    saved = pd.read_parquet(
+        _store(tmp_path, "d", "glad-l"),
+        columns=["status", "before_img", "after_img", "before_img_info", "after_img_info"],
+    )
+    assert saved.loc[0, "status"] == "Confirmed"
+    assert saved.loc[0, ["before_img", "after_img", "before_img_info", "after_img_info"]].isna().all()
+    assert s.project.value.alert_sets["x"].n_reviewed == 1
+
+
 def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeypatch, ws):
     """Integrate records a new set before it publishes that set's alerts: for
     that moment the alerts on hand are the previous set's. A Save is then
