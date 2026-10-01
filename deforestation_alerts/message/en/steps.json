@@ -90,6 +90,7 @@
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolution",
       "grid_size": "{w} × {h} pixels, about {gb} GB per source before compression",
+      "grid_size_mb": "{w} × {h} pixels, about {mb} MB per source before compression",
       "grid_large": "This grid is large: downloads will take a while and use disk space.",
       "grid_save": "Save grid",
       "grid_saved": "Grid saved ({w} × {h} pixels)",

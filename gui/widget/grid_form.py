@@ -15,6 +15,15 @@ def grid_error_key(epsg, resolution):
     return f"steps.prepare.grid_{err}" if err else None
 
 
+def grid_size_text(grid) -> str:
+    """The grid's pixels and its uncompressed per-source size (spec §7.1):
+    in GB from 1 GB up, in MB below it (a small AOI read "about 0.0 GB")."""
+    size = gridmod.estimate_bytes(grid)
+    if size >= 1e9:
+        return t("steps.prepare.grid_size", w=grid.width, h=grid.height, gb=f"{size / 1e9:.1f}")
+    return t("steps.prepare.grid_size_mb", w=grid.width, h=grid.height, mb=f"{max(size / 1e6, 0.1):.1f}")
+
+
 def _metres(value) -> str:
     """A resolution as the field shows it: 10.0 -> "10", 2.5 -> "2.5"."""
     value = float(value)
@@ -94,10 +103,8 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
         # rv.use_event is a hook: called unconditionally (spec §11)
         rv.use_event(epsg_field, "click:append", lambda *_: None if locked else _auto())
         if preview is not None:
-            size = gridmod.estimate_bytes(preview)
-            solara.Text(t("steps.prepare.grid_size", w=preview.width, h=preview.height, gb=f"{size / 1e9:.1f}"),
-                        classes=["text--secondary"])
-            if size > LARGE_BYTES:
+            solara.Text(grid_size_text(preview), classes=["text--secondary"])
+            if gridmod.estimate_bytes(preview) > LARGE_BYTES:
                 solara.Text(t("steps.prepare.grid_large"), classes=["warning--text"])
         if locked:
             solara.Text(t("steps.prepare.grid_locked"), classes=["text--secondary"])

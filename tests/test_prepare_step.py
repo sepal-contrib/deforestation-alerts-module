@@ -845,3 +845,47 @@ def test_closing_the_project_shows_the_lock_message(step):
         assert rc.find(v.Alert, children=[t("workflow.lock_prepare")]).widgets
     finally:
         rc.close()
+
+
+# ---------------------------------------------------------------------------
+# The grid size hint
+# ---------------------------------------------------------------------------
+TINY = (-55.05, -24.05, -55.0, -24.0)  # a few km: a few MB per source at 10 m
+
+
+def test_the_grid_size_hint_reads_mb_below_a_gb():
+    """A small AOI read "about 0.0 GB per source"; below 1 GB the hint is in
+    MB (never "0.0"), from 1 GB up it stays in GB."""
+    from gui.widget.grid_form import grid_size_text
+
+    small = gridmod.build_grid(TINY, "EPSG:32721", 10.0)
+    text = grid_size_text(small)
+    assert text == t("steps.prepare.grid_size_mb", w=small.width, h=small.height,
+                     mb=f"{gridmod.estimate_bytes(small) / 1e6:.1f}")
+    assert " MB " in text and "GB" not in text and "0.0" not in text
+    national = gridmod.build_grid((-62.7, -27.6, -54.2, -19.3), "EPSG:32721", 10.0)
+    assert " GB " in grid_size_text(national) and "MB" not in grid_size_text(national)
+    speck = gridmod.build_grid((-55.001, -24.001, -55.0, -24.0), "EPSG:32721", 10.0)
+    assert "about 0.1 MB" in grid_size_text(speck)  # never "0.0"
+
+
+def test_the_grid_card_shows_the_hint_in_mb_for_a_small_aoi(tmp_path, monkeypatch):
+    from gui.widget.grid_form import GridForm
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    state = AppState()
+    state.project.value = _project("d", "RADD", bounds=TINY)
+
+    @solara.component
+    def _Harness():
+        NotificationProvider()
+        GridForm(app_state=state)
+
+    box, rc = reacton.render(_Harness(), handle_error=False)
+    try:
+        texts = [c for w in rc.find(v.Html, tag="span").widgets for c in w.children if isinstance(c, str)]
+        [hint] = [text for text in texts if "per source" in text]
+        assert " MB " in hint and "GB" not in hint
+        assert t("steps.prepare.grid_large") not in texts  # well under the 2 GB warning
+    finally:
+        rc.close()
