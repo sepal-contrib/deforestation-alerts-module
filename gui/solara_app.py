@@ -225,11 +225,18 @@ def _PanelBridge(
         # Full-stage step (Analysis, Workflow view only): show the overlay and
         # hide the shared map so its leaflet layer-control menu can't bleed
         # over the panel. Other steps' layers stay mounted and return on leave.
-        stage_host.visible = workflow and spec.full_stage
-        if stage_host.visible:
+        # Order matters on leave: the shared map is displayed again BEFORE
+        # the stage hides. Leaflet measured it as 0x0 while it was hidden, and
+        # the stage's hide nudge (a window resize, see StageHost) must find it
+        # displayed to re-measure it; the frontend applies these two messages
+        # in the order they are sent. The stage also always covers the map
+        # while it hides or comes back, so nothing flashes.
+        if workflow and spec.full_stage:
+            stage_host.visible = True
             map_.add_class("defo-map-hidden")
         else:
             map_.remove_class("defo-map-hidden")
+            stage_host.visible = False
         # Panel title/icon follow the view (pysepal RightPanel.config is a
         # synced trait; keep the width so the config observer is a no-op).
         mapapp = mapapp_ref.get("widget")
@@ -581,7 +588,8 @@ def _AppShell():
     # The Analysis two-map stage, hosted by the app (not MapApp's step slot) in
     # a fixed overlay between the rail and the panel. Hidden until the Analysis
     # step is active in the Workflow view; the host nudges leaflet with a
-    # window resize on show.
+    # window resize on show and on hide (the hide nudge re-measures the
+    # shared map, see _PanelBridge).
     stage_host = solara.use_memo(
         lambda: StageHost(content=[analysis_stage_widget]), dependencies=[]
     )

@@ -1,8 +1,10 @@
 """StageHost: the app-owned fixed overlay that hosts the Analysis two-map stage.
 
-ipyleaflet only recomputes its canvas on a window resize, so a map first shown
-inside a previously hidden container renders grey tiles; the template must
-nudge the window when it becomes visible (same trick MapApp.vue uses)."""
+Leaflet only re-measures a map on a window resize, and a map hidden at that
+moment measures 0x0 and keeps drawing tiles for that size once shown again. The
+template must nudge the window when the stage shows (its own maps were hidden)
+AND when it hides (the shell's shared map was hidden while it showed) — the
+same trick MapApp.vue uses."""
 
 import re
 
@@ -27,7 +29,7 @@ def test_visible_trait_round_trips_and_hosts_content():
     assert host.content == [stage]
 
 
-def test_template_hides_with_v_show_and_nudges_leaflet_on_show():
+def test_template_hides_with_v_show_and_nudges_leaflet_on_both_edges():
     from gui.widget.stage_host import StageHost
 
     tpl = StageHost().template
@@ -45,15 +47,14 @@ def test_template_hides_with_v_show_and_nudges_leaflet_on_show():
     assert "module.exports" in script
     assert "export default" not in script
 
-    # The nudge must hang off the *visible* watcher and fire only on the true
-    # edge: watching any other trait leaves a first-shown map grey, which is the
-    # whole reason this widget exists. Bind the pieces together rather than
+    # The nudge must hang off the *visible* watcher (watching any other trait
+    # leaves a first-shown stage map grey) and fire on BOTH edges: gated to the
+    # true edge, leaving Analysis left the shared map drawing tiles for the 0x0
+    # size leaflet measured while it was hidden — only its top-left corner
+    # filled in until a window resize. Bind the pieces together rather than
     # checking that each token appears somewhere in the template.
-    nudge = re.search(
-        r"watch:\s*\{\s*visible\((\w+)\)\s*\{\s*if \(\1\)\s*\{(.*?)\n\s*\}",
-        script,
-        re.S,
-    )
-    assert nudge, script
-    assert "$nextTick" in nudge.group(2)
-    assert "new Event('resize')" in nudge.group(2)
+    watcher = re.search(r"watch:\s*\{\s*visible\(\w*\)\s*\{(.*?)\n\s*\},\s*\},", script, re.S)
+    assert watcher, script
+    body = watcher.group(1)
+    assert "$nextTick" in body and "window.dispatchEvent(new Event('resize'))" in body, body
+    assert "if" not in re.findall(r"\b\w+\b", body), "the nudge must not depend on the edge: " + body

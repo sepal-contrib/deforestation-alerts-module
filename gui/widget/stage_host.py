@@ -10,10 +10,16 @@ child cannot host a fixed overlay because the drawer's transform re-roots
 ``position: fixed``.
 
 The stage is mounted once and toggled with ``v-show`` (DOM kept, so the raw
-ipyvuetify/ipyleaflet widgets never lose their views). ipyleaflet recomputes
-its canvas only on a window resize, so a map first shown after being hidden
-would render grey; the ``visible`` watcher dispatches that resize on the next
-tick — the same nudge ``MapApp.vue`` uses for its narrow layout.
+ipyvuetify/ipyleaflet widgets never lose their views). Leaflet re-measures a
+map only on a window resize, and a map that is hidden at that moment measures
+0x0 and keeps drawing tiles for that size once it is shown again. So the
+``visible`` watcher dispatches a resize on the next tick on BOTH edges — the
+same nudge ``MapApp.vue`` uses for its narrow layout:
+
+* on show, for the stage's own maps, hidden until now;
+* on hide, for the shell's shared map, hidden while the stage showed. The shell
+  re-displays that map *before* it hides the stage (``_PanelBridge``), and the
+  frontend applies kernel messages in order, so the nudge finds it displayed.
 """
 
 import ipyvuetify as v
@@ -41,10 +47,8 @@ class StageHost(v.VuetifyTemplate):
 <script>
 module.exports = {
   watch: {
-    visible(shown) {
-      if (shown) {
-        this.$nextTick(() => window.dispatchEvent(new Event('resize')));
-      }
+    visible() {
+      this.$nextTick(() => window.dispatchEvent(new Event('resize')));
     },
   },
 };

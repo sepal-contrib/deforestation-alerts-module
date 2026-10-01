@@ -153,8 +153,10 @@ def test_panel_bridge_drives_views_stage_and_title():
     body = body[: body.index("\ninit_ee()")]
     assert "app_state.panel_view.value" in body and "app_state.active_step.value" in body
     assert 'header_wrapper.style_ = "" if workflow else "display: none;"' in body
-    assert "stage_host.visible = workflow and spec.full_stage" in body
+    # The order of these writes is pinned by tests/test_panel_bridge.py.
+    assert "stage_host.visible = True" in body and "stage_host.visible = False" in body
     assert 'map_.add_class("defo-map-hidden")' in body
+    assert 'map_.remove_class("defo-map-hidden")' in body
     assert "rail_item_for_step" in body
     assert "panel.config = {**workflow_config" in body
     assert "app_state.current_page_view.value = " in body
