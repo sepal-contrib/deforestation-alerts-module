@@ -6,6 +6,7 @@ import pytest
 import reacton
 import solara
 from pysepal.solara.notifications import NotificationProvider
+from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import AoiRecord, add_predefined_source
@@ -13,6 +14,7 @@ from gui.i18n import t
 from gui.store.autosave import install_autosave
 from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
+from gui.store.workflow_steps import step_index
 from gui.tile import project_dialog as pd
 
 
@@ -111,6 +113,10 @@ def _submit_name(rc, name):
     _button(form, t("common.create")).fire_event("click", None)
 
 
+def _toasts(kind):
+    return [toast.message for toast in get_current_bus().toasts.value if toast.type.value == kind]
+
+
 def test_the_list_follows_the_open_projects_saves(dialog):
     """The counts and time of the open project are read again on every save,
     not only when a project is installed or closed."""
@@ -178,6 +184,69 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
             assert dialog.state.project.value.name == expected
             assert dialog.state.current_page_view.value == "aoi_tile"
             assert dialog.dismissed == (2 if how == "duplicate" else 1)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _delete(rc, dialog, name):
+    _row_action(dialog, name, "delete")()
+    confirm = rc.find(v.Dialog, v_model=True)
+    confirm.find(v.TextField).widget.v_model = name
+    _button(confirm, t("common.delete")).fire_event("click", None)
+
+
+def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monkeypatch):
+    """Closed first, no auto-save can write the manifest back into the folder
+    being deleted; the workflow returns to AOI and the dialog stays open."""
+    seen = []
+    real_delete = io.delete_project
+
+    def spy(name, root=None):
+        seen.append(dialog.state.project.peek())
+        real_delete(name, root)
+
+    monkeypatch.setattr(io, "delete_project", spy)
+
+    async def main():
+        box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            dialog.state.active_step.set(step_index("period"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+            _delete(rc, dialog, "a")
+            await _settle(lambda: _toasts("success"), "the delete finished")
+            assert seen == [None]
+            assert not (dialog.root / "a").exists()
+            assert dialog.state.project.value is None and dialog.state.active_step.value == 0
+            assert _toasts("success") == [t("steps.project.deleted", name="a")] and dialog.dismissed == 0
+            await _settle(lambda: _listed(dialog) == {}, "the list emptied")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch):
+    def denied(name, root=None):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(io, "delete_project", denied)
+
+    async def main():
+        box, rc = dialog.render()
+        try:
+            p = pd.create_project("a")
+            add_predefined_source(p, "RADD")
+            dialog.state.new_project_state(p)
+            await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed")
+            _delete(rc, dialog, "a")
+            await _settle(lambda: _toasts("error"), "the delete failed")
+            assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
+            live = dialog.state.project.value
+            assert live is not None and live.name == "a" and list(live.sources) == ["RADD"]
+            assert rc.find(v.Dialog, v_model=True).find(v.TextField).widget.v_model == "a"  # still asking
         finally:
             rc.close()
 

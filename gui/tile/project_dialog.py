@@ -7,7 +7,8 @@ against the folders on disk when Create is clicked, not against that list: a
 project created in another tab since must never be overwritten.
 
 A new, opened or duplicated project starts the workflow at its AOI and closes
-the dialog (``dismiss``, from the shell).
+the dialog (``dismiss``, from the shell). Deleting the open project closes it
+first, so no auto-save can write its manifest back while the folder goes.
 """
 
 import asyncio
@@ -82,6 +83,14 @@ def _NameForm(title, create_label, open_, on_create, hint=None):
     )
 
 
+def _reopen(name: str) -> Optional[Project]:
+    """The project as its manifest now reads, or None once that is gone."""
+    try:
+        return io.load_project(name)
+    except io.ProjectLoadError:
+        return None
+
+
 @solara.component
 def ProjectDialog(app_state, dismiss=lambda: None):
     """``dismiss`` closes the dialog (the shell's MapApp handle)."""
@@ -146,16 +155,26 @@ def ProjectDialog(app_state, dismiss=lambda: None):
         if blocked:
             notifications.warning(t(blocked))
             return
+        open_ = app_state.project.peek()
+        was_open = open_ is not None and open_.name == name
+        if was_open:
+            # Closed before the folder goes: an auto-save landing in between
+            # would write the manifest back into a half-deleted folder.
+            app_state.close_project_state()
         try:
             await asyncio.to_thread(io.delete_project, name)
         except OSError as exc:
             # delete_project raises (FileNotFoundError, PermissionError, ...) on
             # disk trouble (ruling #62): a toast, not a crash, and the dialog
-            # stays open on the name so the user can retry or cancel.
+            # stays open on the name so the user can retry or cancel. The
+            # manifest goes last, so a failed delete usually leaves the project
+            # readable: it is opened again as it now reads.
+            if was_open:
+                reopened = await asyncio.to_thread(_reopen, name)
+                if reopened is not None:
+                    app_state.load_project_state(reopened)
             notifications.error(t("steps.project.delete_failed", name=name, error=str(exc)))
             return
-        if p is not None and p.name == name:
-            app_state.close_project_state()
         set_pending_delete(None)
         set_typed("")
         set_refresh(refresh + 1)
