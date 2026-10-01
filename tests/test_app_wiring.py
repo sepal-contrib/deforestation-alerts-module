@@ -5,6 +5,8 @@ read the source text instead of importing the module — same contract lock,
 credential-free.
 """
 
+import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -160,6 +162,34 @@ def test_panel_bridge_drives_views_stage_and_title():
     assert "rail_item_for_step" in body
     assert "panel.config = {**workflow_config" in body
     assert "app_state.current_page_view.value = " in body
+
+
+def _shell_css() -> str:
+    """The stylesheet ``_AppShell`` mounts (its ``solara.Style`` argument)."""
+    tree = ast.parse(_src("gui/solara_app.py"))
+    shell = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_AppShell")
+    call = next(n for n in ast.walk(shell) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute) and n.func.attr == "Style")
+    return call.args[0].value
+
+
+def _z_index(css: str, selector: str) -> int:
+    rules = {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    return int(re.search(r"z-index:\s*(\d+)", rules[selector]).group(1))
+
+
+def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_stage():
+    """Vuetify stacks every overlay from small z-indexes, measured live in the
+    app: the rail and the right panel at 6, menus from 8, pysepal's task pill
+    at 170, the dialog scrim at 201 and dialogs from 202. The stage at 801
+    covered the About and Project dialogs (elementFromPoint on their content
+    hit the stage's map). It must stay above the map (0) and below all of
+    them, with the rail's collapse arrow, which sits on its left edge, above
+    it."""
+    css = _shell_css()
+    stage = _z_index(css, ".defo-stage")
+    arrow = _z_index(css, ".v-application .sidebar-controls")
+    assert 0 < stage < arrow < 6
 
 
 def test_rail_mirror_switches_panel_view_for_panel_items_only():

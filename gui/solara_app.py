@@ -411,18 +411,30 @@ def _AppShell():
         ".defo-map-hidden { display: none !important; }\n"
         # The Analysis stage: an app-owned fixed overlay between the left rail
         # and the right panel (StageHost). MapApp pushes the live rail and panel
-        # widths onto :root; z-index 801 sits above the fullscreen map (800).
+        # widths onto :root.
+        # Its z-index is the LOWEST that still covers the map, because the
+        # layers that must show over it are stacked from small values (measured
+        # in the running app): MapApp's `.map-background` (the shared map's
+        # stacking context) 0 < stage 4 < the rail collapse arrow 5 < the rail
+        # and the right panel 6 < menus 8 < the task pill 170 < the dialog
+        # scrim 201 < dialogs 202+ (Vuetify's stack minimum, raised by 2 per
+        # open dialog) < toasts 9999. At 801 the stage covered the About and
+        # Project dialogs and the task pill.
+        # The stage's own maps and menus stack inside it (a fixed, z-indexed
+        # element is its own stacking context), and a menu opened from the
+        # stage is placed above it (Vuetify starts from the activator's z).
         ".defo-stage {\n"
         "  position: fixed; top: 0; bottom: var(--sepal-bottom-reserved, 0px);\n"
         "  left: var(--sepal-drawer-width, 60px);\n"
         "  right: var(--sepal-right-panel-width, 0px);\n"
-        "  z-index: 801; padding: 16px; overflow: auto;\n"
+        "  z-index: 4; padding: 16px; overflow: auto;\n"
         "  background-color: var(--v-background-base, #ffffff);\n"
         "  transition: left 0.3s ease, right 0.3s ease;\n"
         "}\n"
-        # Keep the rail collapse/expand arrow (`.sidebar-controls`, z-index 5)
-        # clickable over the stage; still below the dialog scrim (~1005).
-        ".v-application .sidebar-controls { z-index: 802 !important; }\n"
+        # The rail collapse/expand arrow sits on the stage's left edge: keep it
+        # above the stage (MapApp's own value, restated here so the whole order
+        # above is in one place) and below the dialogs.
+        ".v-application .sidebar-controls { z-index: 5 !important; }\n"
         # Center modal dialogs over the MAP area (viewport minus the left rail):
         # `.v-dialog__content` is a fixed full-viewport flex box; shrink it by the
         # live rail width so a wide dialog (About is 1300px) is not tucked under
