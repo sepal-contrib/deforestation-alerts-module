@@ -19,7 +19,7 @@ from deforestation_alerts.engine import catalogue, download, raster_io, runner
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine import harmonize as hz
 from deforestation_alerts.project.models import (
-    AoiRecord, GridSpec, Period, Project, add_predefined_source,
+    AoiRecord, GridSpec, MaskLayer, Period, Project, add_predefined_source,
 )
 from deforestation_alerts.scripts import gee_progress
 
@@ -170,6 +170,87 @@ def test_not_enough_space_for_harmonizing_fails_before_it(job_factory, tmp_path)
         runner.run_source_row(make())
     assert len(calls) == 1
     assert not list(tmp_path.rglob("*.part"))
+
+
+def test_not_enough_space_to_harmonize_a_download_fails_before_downloading(job_factory, tmp_path):
+    """The raw file fits but its harmonized file would not: hours of download
+    must not come first (the harmonize demand can be ~7x the raw one)."""
+    p, make, calls = job_factory
+    p.grid = GRID.model_copy(update={"width": 10**6, "height": 10**6})  # 8 TB uncompressed
+    with pytest.raises(raster_io.NotEnoughSpaceError):
+        runner.run_source_row(make())
+    assert calls == []
+    assert not [f for f in tmp_path.rglob("*") if f.is_file()]
+
+
+def test_a_missing_mask_fails_before_downloading(job_factory):
+    p, make, calls = job_factory
+    p.masks["forest"] = MaskLayer(name="forest", origin="gee", ref="users/x/forest")
+    with pytest.raises(RuntimeError, match="mask"):
+        runner.run_source_row(make())
+    assert calls == []
+
+
+def _harmonize_raises(monkeypatch):
+    def boom(*args, **kwargs):
+        raise OSError("disk I/O error")
+
+    monkeypatch.setattr(runner, "harmonize", boom)
+
+
+def _space_gone_after_download(monkeypatch):
+    """The disk fills up while the download runs: the post-download check fails."""
+    real, seen = runner.ensure_free_space, []
+
+    def check(folder, needed):
+        seen.append(folder)
+        if len(seen) > 2:  # the two pre-download checks passed
+            raise raster_io.NotEnoughSpaceError("needs 1 GB free")
+        return real(folder, needed)
+
+    monkeypatch.setattr(runner, "ensure_free_space", check)
+
+
+@pytest.mark.parametrize("fail", [_harmonize_raises, _space_gone_after_download],
+                         ids=["harmonize-raises", "space-gone"])
+@pytest.mark.parametrize("force", [False, True], ids=["first-run", "forced-refresh"])
+def test_a_harmonize_failing_after_a_download_keeps_the_raw_record(job_factory, tmp_path, monkeypatch, fail, force):
+    """The raw file is on disk: the failure carries its record, so the next run
+    re-harmonizes without downloading, and a forced refresh's new bytes are
+    recorded under a new content id instead of the old one (spec §5.3)."""
+    p, make, calls = job_factory
+    if force:
+        runner.apply_artifacts(p, runner.run_source_row(make()))
+    old_raw = p.artifacts.get(RKEY)
+    n_calls = len(calls)
+    with monkeypatch.context() as m:
+        fail(m)
+        with pytest.raises(runner.HarmonizeFailed) as info:
+            runner.run_source_row(make(force=force))
+    assert len(calls) == n_calls + 1
+    assert set(info.value.artifacts) == {RKEY} and info.value.__cause__ is not None
+    raw = info.value.artifacts[RKEY]
+    assert (tmp_path / raw.rel_path).exists()
+    assert old_raw is None or raw.content_id != old_raw.content_id
+    assert not list(tmp_path.rglob("*.part"))
+
+    runner.apply_artifacts(p, info.value.artifacts)
+    row = runner.plan_prepare(p, tmp_path, JAN)[0]
+    assert row.raw is fp.Status.CURRENT and row.needs_run and not row.ready
+    arts = runner.run_source_row(make())
+    assert set(arts) == {HKEY} and len(calls) == n_calls + 1  # no second download
+    runner.apply_artifacts(p, arts)
+    assert runner.plan_prepare(p, tmp_path, JAN)[0].ready
+
+
+def test_a_harmonize_failing_without_a_download_raises_as_is(job_factory, monkeypatch):
+    p, make, calls = job_factory
+    runner.apply_artifacts(p, runner.run_source_row(make()))
+    p.grid = GRID.model_copy(update={"resolution": 20, "width": 15, "height": 10})
+    _harmonize_raises(monkeypatch)
+    with pytest.raises(OSError, match="disk I/O error") as info:
+        runner.run_source_row(make())
+    assert not isinstance(info.value, runner.HarmonizeFailed)
 
 
 def test_harmonize_keep_and_exclude_masks(tmp_path):

@@ -28,6 +28,7 @@ import solara
 from deforestation_alerts.engine.fingerprint import Status, harm_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import (
+    HarmonizeFailed,
     SourceJob,
     apply_artifacts,
     run_source_row,
@@ -148,6 +149,13 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 if ctx.notifier is not None:
                     ctx.notifier.error(t("steps.prepare.row_failed", source=source, error=message),
                                        timeout=ERROR_TOAST_TIMEOUT)
+                if isinstance(exc, HarmonizeFailed) and exc.artifacts:
+                    # The download succeeded: record it, so the next run only
+                    # re-harmonizes from the file on disk.
+                    kept = exc.artifacts
+                    if not ctx.app_state.update_project(ctx.name, lambda p, a=kept: apply_artifacts(p, a)):
+                        _record_in_own_project(ctx, kept)  # the project was left mid-row
+                        return
                 continue
             _set_error(ctx, source, None)
             if not ctx.app_state.update_project(ctx.name, lambda p, a=arts: apply_artifacts(p, a)):

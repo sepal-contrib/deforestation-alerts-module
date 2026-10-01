@@ -23,6 +23,7 @@ from pysepal.solara.notifications.bus import get_current_bus
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
+from deforestation_alerts.engine.runner import HarmonizeFailed
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import (
     AoiRecord,
@@ -247,6 +248,47 @@ def test_a_failed_row_does_not_stop_the_next(monkeypatch):
     prepare_jobs.run_rows(ctx, ["GLAD-L", "RADD"])
     assert ran == ["GLAD-L", "RADD"] and errors.value == {"GLAD-L": "quota exceeded"}
     assert ctx.notifier.errors == [t("steps.prepare.row_failed", source="GLAD-L", error="quota exceeded")]
+
+
+@pytest.mark.parametrize("left", [False, True], ids=["open", "closed-mid-row"])
+def test_a_harmonize_failing_after_a_download_still_records_the_download(monkeypatch, tmp_path, left):
+    """The row fails (error shown) but its new raw file is recorded, in the
+    open project or, once left, in its own saved manifest, so the next run
+    re-harmonizes instead of downloading again."""
+    s = AppState()
+    d = _project("d", "GLAD-L", "RADD")
+    io.save_project(d, root=tmp_path)
+    s.new_project_state(d)
+    rkey = raw_key(JAN.id, "GLAD-L")
+    kept = {rkey: _art(rkey, "raw_alert")}
+    ran = []
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        ran.append(job.source)
+        if job.source != "GLAD-L":
+            return {}
+        if left:
+            s.close_project_state()
+        raise HarmonizeFailed(OSError("disk I/O error"), kept)
+
+    class _Notifier(NoopNotifier):
+        def __init__(self):
+            self.errors = []
+
+        def error(self, message, *, timeout=None):
+            self.errors.append(message)
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    errors, notifier = solara.reactive({}), _Notifier()
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d", row_errors=errors, notifier=notifier), ["GLAD-L", "RADD"])
+    assert notifier.errors == [t("steps.prepare.row_failed", source="GLAD-L", error="disk I/O error")]
+    if left:
+        assert ran == ["GLAD-L"] and s.project.value is None
+        assert io.load_project("d", root=tmp_path).artifacts == kept
+    else:
+        assert ran == ["GLAD-L", "RADD"]  # the next row still runs
+        assert errors.value == {"GLAD-L": "disk I/O error"}
+        assert s.project.value.artifacts == kept
 
 
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
