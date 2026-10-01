@@ -136,7 +136,7 @@ def _native_raw(path, grid):
 def test_the_engine_runs_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd, unconfigured_tmpdir):
     import rasterio
 
-    from deforestation_alerts.engine import integrate, pmtiles, raster_io
+    from deforestation_alerts.engine import integrate, raster_io
     from deforestation_alerts.engine.harmonize import harmonize
     from deforestation_alerts.engine.vectorize import vectorize_alerts
     from deforestation_alerts.project.models import GridSpec
@@ -173,10 +173,35 @@ def test_the_engine_runs_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly
     with rasterio.open(out / "footprint.tif") as src:
         assert int(src.read(1).sum()) == n
 
-    # the set's tiles (tippecanoe builds in the local scratch, never the CWD)
-    if pmtiles.tippecanoe_available():
-        alerts = gdf.to_crs(epsg=4326).assign(alert_id=range(len(gdf)), status="Not reviewed", set_id="s")
-        assert pmtiles.alerts_to_pmtiles(alerts, out / "alerts.pmtiles").stat().st_size > 0
+    assert list(readonly_cwd.iterdir()) == []
+    assert not list(out.rglob("*.part"))
+
+
+def _tippecanoe_available():
+    from deforestation_alerts.engine import pmtiles
+
+    return pmtiles.tippecanoe_available()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+@pytest.mark.skipif(not _tippecanoe_available(), reason="tippecanoe not installed")
+@pytest.mark.filterwarnings("ignore:Geometry is in a geographic CRS:UserWarning")
+def test_the_tiles_build_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd, unconfigured_tmpdir):
+    """The set's tiles: tippecanoe builds in the local scratch, never the CWD.
+    Its own test, skipped without tippecanoe, so a missing binary is reported
+    rather than passed over inside the engine test above."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from deforestation_alerts.engine import pmtiles
+
+    assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
+    out = tmp_path / "project"
+    out.mkdir()
+    alerts = gpd.GeoDataFrame({"alert_id": [0, 1], "status": ["Not reviewed", "Confirmed"], "set_id": ["s", "s"]},
+                              geometry=[box(-55.01, -24.01, -55.0, -24.0), box(-55.02, -24.02, -55.01, -24.01)],
+                              crs="EPSG:4326")
+    assert pmtiles.alerts_to_pmtiles(alerts, out / "alerts.pmtiles").stat().st_size > 0
 
     assert list(readonly_cwd.iterdir()) == []
     assert not list(out.rglob("*.part"))
