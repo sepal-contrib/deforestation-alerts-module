@@ -173,9 +173,12 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
     component re-renders on a nav event, so ``Page`` / ``MapApp`` are not
     rebuilt.
 
-    Threading: Integrate runs in a worker thread; it only sets the
-    reactive. Solara marshals this component's re-render + effect onto the
-    main thread, so all widget mutation here stays main-thread.
+    Threading: the render and the effect run in whichever thread set the
+    reactive. Integrate sets it from its worker thread, so ``_drive`` then
+    runs on that worker, not on the kernel's event loop (reacton renders
+    synchronously in the setting thread; see ``_ActiveSetLoader``). It may
+    only set traits and reactives, as the workers themselves do; it must
+    never start loop-only work (``use_task``, ``asyncio.create_task``).
     """
     view = app_state.current_page_view.value
 
