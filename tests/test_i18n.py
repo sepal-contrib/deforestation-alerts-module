@@ -5,6 +5,7 @@ The catalog under test is the app's single message tree
 """
 
 import json
+import re
 
 import pytest
 
@@ -93,3 +94,14 @@ def test_step_one_is_labelled_aoi(locale):
     """Dates moved to the Period step (spec §4.2): step 1 is "AOI"."""
     app = json.load(open(i18n.MESSAGES_DIR / locale / "app.json", encoding="utf-8"))
     assert app["app"]["drawer_item"]["aoi"] == "AOI"
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_the_download_refusal_points_at_integrate_not_at_recipes(locale):
+    """Recipes are gone: the files of an alert live in its set's folder, which
+    Integrate & vectorize creates (the step keeps its English name in es/fr,
+    which fall back to English for it until slice 6)."""
+    ui = json.load(open(i18n.MESSAGES_DIR / locale / "ui.json", encoding="utf-8"))
+    text = ui["analysis_tile"]["export_labels"]["download_no_recipe"]
+    assert "Integrate & vectorize" in text
+    assert not re.search(r"recipe|receta|recette", text, re.IGNORECASE), text

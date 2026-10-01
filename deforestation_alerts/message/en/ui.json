@@ -234,7 +234,7 @@
                 "download_task_title": "Preparing alert download",
                 "download_step": "Building files and report…",
                 "download_done": "Alert download ready.",
-                "download_no_recipe": "No recipe is loaded, so there is nowhere in your SEPAL workspace to save the alert files. Create or load a recipe first.",
+                "download_no_recipe": "No alert set is active, so there is nowhere in the project to save the alert files. Run Integrate & vectorize first.",
                 "download_no_alert": "No alert is selected, so there is nothing to download.",
                 "save_no_alert": "No alert is selected, so there is nothing to save.",
                 "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",

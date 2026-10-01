@@ -504,10 +504,10 @@ def _download_toolbar(card):
 @pytest.mark.parametrize(
     "recipe_folder, with_alerts, expected",
     [
-        # A recipe is what gives the files somewhere to live in the user's
-        # workspace; without one nothing can be written.
+        # The active alert set's folder is what gives the files somewhere to
+        # live in the project; without a set nothing can be written.
         ("", True, cm.analysis_tile.export_labels.download_no_recipe),
-        # With a recipe but no selected alert there is nothing to build.
+        # With a set but no selected alert there is nothing to build.
         ("/home/sepal-user/module_results/deforestation_alerts/r",
          False, cm.analysis_tile.export_labels.download_no_alert),
     ],
