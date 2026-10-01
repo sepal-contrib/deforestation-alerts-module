@@ -90,6 +90,12 @@ def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, pe
     # The attribute form lists the user's Earth Engine assets when it mounts:
     # it waits for its panel to be opened once, then stays mounted.
     attribute_opened, set_attribute_opened = solara.use_state(False)
+    # The panel's open index (None: closed). Passing it as v_model is what makes
+    # ipyvue bind the browser's v-model at all: left at its "!!disabled!!"
+    # default, a click opens the panel in the browser but never reaches
+    # _on_panel. A constant v_model is not enough either: the re-render that
+    # mounts the form would push it back and close the panel.
+    attribute_panel, set_attribute_panel = solara.use_state(None)
     confirm, set_confirm = solara.use_state(None)  # (params, reviewed alerts) awaiting Replace
 
     def _sync_draw():
@@ -151,6 +157,7 @@ def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, pe
         _launch(params)
 
     def _on_panel(open_index):
+        set_attribute_panel(open_index)
         if open_index is not None:
             set_attribute_opened(True)
 
@@ -172,7 +179,7 @@ def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, pe
         rv.TextField(label=t("steps.integrate.max_alerts"), v_model=max_alerts, on_v_model=set_max_alerts,
                      type="number", dense=True, outlined=True, hint=t("steps.integrate.max_alerts_hint"),
                      persistent_hint=True)
-        with rv.ExpansionPanels(flat=True, on_v_model=_on_panel):
+        with rv.ExpansionPanels(flat=True, v_model=attribute_panel, on_v_model=_on_panel):
             with rv.ExpansionPanel():
                 rv.ExpansionPanelHeader(children=[t("steps.integrate.attributes")])
                 with rv.ExpansionPanelContent():

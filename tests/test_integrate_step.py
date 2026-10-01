@@ -766,9 +766,15 @@ def test_the_attribute_raster_form_mounts_when_opened_and_reaches_the_job(step):
     try:
         assert step.attribute == []
         panels = rc.find(v.ExpansionPanels).widget
+        # ipyvue binds the browser's v-model only when the widget's v_model is
+        # not its "!!disabled!!" default: unbound, a click on the header opens
+        # the panel in the browser but never reaches Python, so the form never
+        # mounts (setting v_model below is what the bound frontend does).
+        assert panels.v_model is None
         panels.v_model = 0
         value, on_value = step.attribute[-1]
         assert value is None
+        assert panels.v_model == 0  # the re-render that mounted the form kept the panel open
         cfg = {"source": "users/me/landcover", "kind": "gee",
                "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]}
         on_value(cfg)
