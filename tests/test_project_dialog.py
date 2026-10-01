@@ -8,7 +8,7 @@ import solara
 from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.project import io, paths
-from deforestation_alerts.project.models import AoiRecord
+from deforestation_alerts.project.models import AoiRecord, add_predefined_source
 from gui.i18n import t
 from gui.store.autosave import install_autosave
 from gui.store.project_writers import writing
@@ -37,6 +37,14 @@ def test_delete_is_blocked_while_writing():
     assert pd.delete_blocked("x") is None
     with writing("x"):
         assert pd.delete_blocked("x") == "steps.project.delete_busy"
+
+
+def test_names_on_disk_counts_every_folder(tmp_path):
+    io.save_project(pd.create_project("listed"), root=tmp_path)
+    (tmp_path / "no_manifest").mkdir()
+    (tmp_path / "a_file").write_text("")
+    assert sorted(pd.names_on_disk(tmp_path)) == ["listed", "no_manifest"]
+    assert pd.names_on_disk(tmp_path / "missing") == []
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +109,50 @@ def _submit_name(rc, name):
     form = _open_form(rc)
     form.find(v.TextField, label=t("steps.project.name_label")).widget.v_model = name
     _button(form, t("common.create")).fire_event("click", None)
+
+
+def test_the_list_follows_the_open_projects_saves(dialog):
+    """The counts and time of the open project are read again on every save,
+    not only when a project is installed or closed."""
+    async def main():
+        box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
+            p = dialog.state.project.value
+            add_predefined_source(p, "GLAD-L")
+            dialog.state.commit(p)  # auto-saved
+            await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_name_taken_on_disk_since_the_list_was_read_is_refused(dialog):
+    """Another tab created "b" after this dialog read the list: Create must
+    check the disk, or the auto-save of a new "b" overwrites that project."""
+    async def main():
+        box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {}, "the empty list read")
+            other = pd.create_project("b")
+            other.look_back_days = 99
+            io.save_project(other)  # the other tab
+            manifest = dialog.root / "b" / paths.MANIFEST
+            before = manifest.read_text()
+
+            _button(rc, t("steps.project.new")).fire_event("click", None)
+            _submit_name(rc, "b")
+
+            assert _listed(dialog) == {}  # the list on screen did not know "b"
+            errors = [w.children for w in _open_form(rc).find(v.Alert).widgets]
+            assert errors == [[t("steps.project.name_exists")]]
+            assert dialog.state.project.value is None and manifest.read_text() == before
+        finally:
+            rc.close()
+
+    asyncio.run(main())
 
 
 @pytest.mark.parametrize("how", ["open", "new", "duplicate"])

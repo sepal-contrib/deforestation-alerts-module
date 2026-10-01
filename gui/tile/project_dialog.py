@@ -1,6 +1,11 @@
 """The Project rail dialog (spec §4.1): the open project, New, Open, Duplicate
 and Delete. Auto-save means there is no Save button (D11).
 
+The list is read again whenever the open project is saved, installed or
+closed, so its counts and times follow the session. A new name is checked
+against the folders on disk when Create is clicked, not against that list: a
+project created in another tab since must never be overwritten.
+
 A new, opened or duplicated project starts the workflow at its AOI and closes
 the dialog (``dismiss``, from the shell).
 """
@@ -46,12 +51,24 @@ def delete_blocked(name: str) -> Optional[str]:
     return "steps.project.delete_busy" if is_writing(name) else None
 
 
+def names_on_disk(root: Optional[Path] = None) -> list[str]:
+    """Every folder under the data directory, read now.
+
+    A folder counts even without a readable manifest (it is not listed): a new
+    project saved into it would overwrite whatever is there."""
+    base = Path(root) if root else paths.data_dir()
+    try:
+        return [d.name for d in base.iterdir() if d.is_dir()]
+    except OSError:  # no data directory yet
+        return []
+
+
 @solara.component
-def _NameForm(title, create_label, open_, existing, on_create, hint=None):
+def _NameForm(title, create_label, open_, on_create, hint=None):
     name, set_name = solara.use_state("")
 
     def validate():
-        err = io.validate_project_name(name, existing)
+        err = io.validate_project_name(name, names_on_disk())
         return t(_NAME_ERRORS[err]) if err else None
 
     CreationDialog(
@@ -79,11 +96,15 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     async def _list():
         return await asyncio.to_thread(io.list_projects)
 
+    # Read again on every save (counts and time of the open project), every
+    # install or close, and after a delete.
     infos_task = solara.lab.use_task(
-        _list, dependencies=[refresh, p is None], prefer_threaded=False, raise_error=False
+        _list,
+        dependencies=[refresh, app_state.project_loaded_signal.value, app_state.last_saved.value],
+        prefer_threaded=False,
+        raise_error=False,
     )
     infos = infos_task.value or []
-    names = [i.name for i in infos]
 
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it
@@ -112,13 +133,11 @@ def ProjectDialog(app_state, dismiss=lambda: None):
 
     def _create(name):
         app_state.new_project_state(create_project(name))
-        set_refresh(refresh + 1)
         _show_workflow()
 
     def _duplicate(name):
         # The copy is where another area gets monitored (spec D10): start at its AOI.
         app_state.new_project_state(duplicate_with_sidecar(p, name))
-        set_refresh(refresh + 1)
         _show_workflow()
 
     async def _delete():
@@ -200,9 +219,9 @@ def ProjectDialog(app_state, dismiss=lambda: None):
             rows=rows, empty_text=t("steps.project.list_empty"),
         )
 
-    _NameForm(t("steps.project.new"), t("common.create"), new_open, names, _create)
+    _NameForm(t("steps.project.new"), t("common.create"), new_open, _create)
     if p is not None:
-        _NameForm(t("steps.project.duplicate_title", name=p.name), t("common.create"), dup_open, names,
+        _NameForm(t("steps.project.duplicate_title", name=p.name), t("common.create"), dup_open,
                   _duplicate, hint=t("steps.project.duplicate_hint"))
 
     with rv.Dialog(v_model=pending_delete is not None,
