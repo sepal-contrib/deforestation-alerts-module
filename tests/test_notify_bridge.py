@@ -424,9 +424,12 @@ def test_a_failed_tracked_job_reaches_the_server_log_once(server_log):
     logger, bus, notifier = _fresh()
 
     def job():
-        with notify_bridge.tracked_job(notifier, "Integrate & vectorize"):
-            logger.info("combining")
-            raise RuntimeError("tippecanoe died")
+        try:
+            with notify_bridge.tracked_job(notifier, "Integrate & vectorize"):
+                logger.info("combining")
+                raise RuntimeError("tippecanoe died")
+        except RuntimeError:
+            pass  # re-raised by tracked_job, as the workers see it
 
     thread = threading.Thread(target=job, name="integrate-worker")
     thread.start()
