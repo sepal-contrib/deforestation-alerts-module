@@ -113,7 +113,7 @@ def ov(monkeypatch, tmp_path):
     # MapLayers' builds are queued, not started: the test runs them.
     monkeypatch.setattr(map_layers, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append((target, args)))
 
-    def ensure(p, s, workspace):
+    def ensure(p, s, workspace, on_wait=None):
         ns.ensured.append((p.name, s.id, workspace))
         if ns.during_ensure is not None:
             ns.during_ensure()
@@ -424,6 +424,43 @@ def test_stale_tiles_wait_for_the_projects_writer_and_are_rebuilt_after(ov, tmp_
             pass
         ov.run_jobs()
         assert len(ov.ensured) == 2
+    finally:
+        rc.close()
+
+
+def test_a_store_rewritten_under_the_build_is_retiled_once_the_build_is_done(ov, monkeypatch, tmp_path):
+    """``ensure_pmtiles`` builds under the project's writer mark and refuses
+    (``StoreBusy``) when it finds the store rewritten under it, from inside
+    that mark: the release, which is what re-runs the tile's retry effect,
+    comes before the exception reaches the tile. The retry is noted through
+    ``on_wait`` before the release, so the tiles are rebuilt from the new
+    store instead of the centroids standing in until the view is toggled."""
+    from gui.store.project_writers import writing
+
+    calls = []
+
+    def ensure(p, s, workspace, on_wait=None):
+        calls.append(s.id)
+        if len(calls) == 1:
+            with writing(p.name):  # the build's own mark, as set_store.ensure_pmtiles takes it
+                if on_wait is not None:
+                    on_wait()
+                raise set_store.StoreBusy("the store was rewritten while its tiles were built")
+        return ov.pm
+
+    monkeypatch.setattr(set_store, "ensure_pmtiles", ensure)
+    state = _state(_project(tmp_path), _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        # The refused build, then the retry its mark's release queued (the
+        # registry starts it once the refused build has cleaned up, in the
+        # same run here), from the store as it is now.
+        ov.run_jobs()
+        assert len(calls) == 2 and ov.drawn == [(ov.pm, KEY, t("steps.overview.layer_name"))]
+        assert isinstance(map_.find_layer(KEY, none_ok=True), ipyleaflet.TileLayer)
+        assert _toasts(ov, "warning") == [] and _toasts(ov, "error") == []
+        ov.run_jobs()
+        assert len(calls) == 2  # and nothing more
     finally:
         rc.close()
 

@@ -253,6 +253,35 @@ def test_a_store_rewritten_during_the_build_discards_the_tiles(tmp_path, monkeyp
     assert set_store.ensure_pmtiles(p, s, ws).exists() and built[-1]["alert_id"].tolist() == [0]
 
 
+def test_on_wait_runs_before_the_writer_mark_is_released(tmp_path, monkeypatch, ws):
+    """Overview retries a deferred build when the project's writers are done,
+    which it learns from the release of the writer mark. A ``StoreBusy``
+    raised by the guard inside the build's own mark reaches it after that
+    release, so the retry must be noted while the mark is still held."""
+    from gui.store.project_writers import is_writing, writing
+
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    built = []
+
+    def rerun_swaps_the_store():
+        if len(built) == 1:
+            _alerts().iloc[0:1].to_parquet(store)
+
+    _fake_tippecanoe(monkeypatch, built, during=rerun_swaps_the_store)
+    seen = []
+
+    with pytest.raises(set_store.StoreBusy):
+        set_store.ensure_pmtiles(p, s, ws, on_wait=lambda: seen.append(is_writing("d")))
+    assert seen == [True] and not is_writing("d")
+
+    with writing("d"):  # the other refusal, before any mark of the build's own
+        with pytest.raises(set_store.StoreBusy):
+            set_store.ensure_pmtiles(p, s, ws, on_wait=lambda: seen.append(is_writing("d")))
+    assert seen == [True, True]
+    assert set_store.ensure_pmtiles(p, s, ws, on_wait=lambda: seen.append("no")).exists()  # a build: not called
+    assert seen == [True, True]
+
+
 def test_ensure_pmtiles_without_tippecanoe_is_none(tmp_path, monkeypatch, ws):
     p, s, store = _project_with_set(tmp_path, monkeypatch)
     monkeypatch.setattr(pmt, "tippecanoe_available", lambda: False)

@@ -25,7 +25,7 @@ record are the new set's).
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from shapely.geometry import Point, mapping
 
@@ -159,7 +159,7 @@ def holds_set(gdf, s) -> bool:
     return gdf is not None and "set_id" in gdf.columns and len(gdf) > 0 and alerts_belong_to(gdf, s)
 
 
-def ensure_pmtiles(p, s, workspace) -> Optional[Path]:
+def ensure_pmtiles(p, s, workspace, on_wait: Optional[Callable[[], None]] = None) -> Optional[Path]:
     """The set's tiles, rebuilt first from the store on disk when they are
     stale; None without tippecanoe. Blocking (tippecanoe): call from a worker
     thread.
@@ -171,6 +171,12 @@ def ensure_pmtiles(p, s, workspace) -> Optional[Path]:
     would not match the store that ends up on disk. The caller shows what it
     can meanwhile and asks again once the writer is done. The build itself
     marks the project as being written (spec §12), after that check.
+
+    ``on_wait``, when given, is called right before a ``StoreBusy`` is raised,
+    while the build's own writer mark (if it took one) is still held. A caller
+    that asks again once the project's writers are done (Overview) notes there
+    that it has to: the release of that mark is what tells it the writers are
+    done, and it comes before the exception reaches the caller.
     """
     from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 
@@ -180,6 +186,7 @@ def ensure_pmtiles(p, s, workspace) -> Optional[Path]:
     if not pmtiles_stale(p, s):
         return pm
     if is_writing(p.name):
+        _about_to_wait(on_wait)
         raise StoreBusy(f"project {p.name!r} is being written: the tiles of set {s.id!r} are not rebuilt now")
     with writing(p.name):
         store = _store(p, s)
@@ -188,10 +195,16 @@ def ensure_pmtiles(p, s, workspace) -> Optional[Path]:
 
         def _still_the_store_read():
             if store_generation(store) != generation:
+                _about_to_wait(on_wait)
                 raise StoreBusy(f"the store of set {s.id!r} was rewritten while its tiles were built")
 
         pmt.alerts_to_pmtiles(alerts, pm, guard=_still_the_store_read)
     return pm
+
+
+def _about_to_wait(on_wait) -> None:
+    if on_wait is not None:
+        on_wait()
 
 
 def centroid_geojson(gdf) -> dict:

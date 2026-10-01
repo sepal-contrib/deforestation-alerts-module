@@ -328,19 +328,27 @@ def OverviewTile(app_state, map_, workspace, layers):
             # and a false "off" here would leave the set undrawn.
             return app_state.panel_view.value == OVERVIEW_VIEW
 
+        def _defer():
+            # Called by ensure_pmtiles right before it raises StoreBusy, while
+            # its own writer mark is still held: releasing that mark is what
+            # re-runs _retry_when_free, and it happens before the exception
+            # reaches the except below, which would note the retry too late.
+            deferred.current = True
+
         def build():
             if not _still_open():
                 return
             deferred.current = False
             try:
-                pm = set_store.ensure_pmtiles(project, alert_set, workspace)
+                pm = set_store.ensure_pmtiles(project, alert_set, workspace, on_wait=_defer)
                 warning = None if pm is not None else t("steps.integrate.no_tippecanoe")
             except set_store.StoreBusy as exc:
                 # Stale tiles while the project is being written (an Integrate
-                # swapping this set's store in, a review Save): the centroids
-                # stand in, silently, until the writer is done.
+                # swapping this set's store in, a review Save), or a store
+                # rewritten under the build: the centroids stand in, silently,
+                # until the writer is done.
                 logger.info("tiles of set %s not rebuilt now: %s", alert_set.id, exc)
-                deferred.current = True
+                deferred.current = True  # already noted by _defer when a mark was involved
                 pm, warning = None, None
             except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
                 logger.exception("could not build the tiles of set %s", alert_set.id)
