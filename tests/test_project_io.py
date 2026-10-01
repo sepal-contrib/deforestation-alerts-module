@@ -59,6 +59,35 @@ def test_load_rejects_garbage(root):
         io.load_project("bad")
 
 
+def test_a_folder_renamed_on_disk_reopens_under_its_new_name(root):
+    """The folder name wins over the manifest's: saving after the reopen must
+    write into the renamed folder, never re-create the old one (a ghost)."""
+    io.save_project(_project("paraguay"))
+    (root / "paraguay").rename(root / "paraguay_2026")
+    p = io.load_project("paraguay_2026")
+    assert p.name == "paraguay_2026"
+    io.save_project(p)
+    assert sorted(d.name for d in root.iterdir()) == ["paraguay_2026"]
+    saved = json.loads((root / "paraguay_2026" / "project.json").read_text())
+    assert saved["name"] == "paraguay_2026"
+    assert io.load_project("paraguay_2026").sources.keys() == {"GLAD-L"}
+
+
+def test_a_renamed_folder_never_takes_over_the_project_now_holding_its_old_name(root):
+    """Rename ``paraguay`` to free the name, create a new ``paraguay``, then
+    open and save the renamed one: the new project's manifest stays as it was."""
+    io.save_project(_project("paraguay"))
+    (root / "paraguay").rename(root / "paraguay_2026")
+    newer = _project("paraguay")
+    newer.sources.clear()
+    io.save_project(newer)
+    before = (root / "paraguay" / "project.json").read_bytes()
+    io.save_project(io.load_project("paraguay_2026"))
+    assert (root / "paraguay" / "project.json").read_bytes() == before
+    assert io.load_project("paraguay").sources == {}
+    assert io.load_project("paraguay_2026").sources.keys() == {"GLAD-L"}
+
+
 def test_list_skips_folders_without_manifest(root):
     io.save_project(_project("a"))
     io.save_project(_project("b"))

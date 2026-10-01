@@ -52,6 +52,15 @@ def save_project(p: Project, root: Optional[Path] = None) -> Path:
 
 
 def load_project(name: str, root: Optional[Path] = None) -> Project:
+    """Read ``<root>/<name>/project.json``.
+
+    The folder name wins over the ``name`` stored in the manifest: every path
+    is built from ``project.name``, and a folder renamed on disk must reopen
+    under its new name. Keeping the stored name would save the next commit
+    into the old folder (a ghost project, or another project's folder that has
+    since taken that name). Artifact paths are folder-relative, so they still
+    resolve.
+    """
     manifest = paths.project_dir(name, root) / paths.MANIFEST
     try:
         raw = json.loads(manifest.read_text(encoding="utf-8"))
@@ -64,6 +73,7 @@ def load_project(name: str, root: Optional[Path] = None) -> Project:
         raise ProjectLoadError(
             f"{manifest} has schema {version}; this app reads schema {SCHEMA_VERSION}"
         )
+    raw["name"] = name
     try:
         return Project.model_validate(raw)
     except ValidationError as exc:
