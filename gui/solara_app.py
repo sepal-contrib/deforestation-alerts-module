@@ -21,7 +21,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import ipyvuetify as v
-import reacton.ipyvuetify as rv
 import solara
 from traitlets import HasTraits, Int
 
@@ -62,7 +61,8 @@ from gui.scripts.set_context import SetContext
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
 from gui.store.state_manager import AppState
-from gui.scripts.notify_bridge import install_task_log_handler
+from gui.scripts.detached import render_detached
+from gui.scripts.notify_bridge import install_server_log_handler, install_task_log_handler
 from gui.scripts.reacton_widgets import find_rendered_widget
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set, rail_item_for_step
 from gui.tile.about_tile import AboutTile
@@ -90,6 +90,11 @@ install_task_log_handler()
 # deliberately set lower (e.g. DEBUG while troubleshooting).
 if logger.level == logging.NOTSET or logger.level > logging.INFO:
     logger.setLevel(logging.INFO)
+# WARNING+ records (a failed worker, with its traceback) also go to the
+# server's own stderr: the kernel's sys.stderr is the browser's, where Voila
+# shows nothing, and the task-pill handler above would otherwise be the only
+# handler, which silences Python's last-resort stderr fallback.
+install_server_log_handler()
 
 # Point GDAL's temp-file allocator at a directory proven writable, ONCE per
 # process. This used to ride along on the import of the (now deleted)
@@ -120,46 +125,6 @@ class _NavModel(HasTraits):
     """
 
     current_step = Int(allow_none=True, default_value=None)
-
-
-def _render_detached(make_element):
-    """Render a Solara tile component to a standalone widget for MapApp.
-
-    WHY THIS EXISTS (the alternative is a duplicate tile stacked over the map):
-    reacton auto-parents an ``Element`` into the active render context the moment
-    it is *constructed* (``Element.__init__`` calls ``container_adders[-1].add``).
-    So the obvious ``solara.render_fixed(SomeTile(...))`` builds ``SomeTile(...)``
-    while *Page's* render is active, which adds the tile to Page's OWN output tree
-    — every tile then renders twice: once leaked inline into Page (all tiles
-    stacked in one tall sheet, bleeding over the fullscreen map — e.g. the Aux
-    "Planet Login Data" card floating bottom-right) AND once via render_fixed for
-    MapApp's dialog/panel/step slot.
-
-    Building the element with Page's ``container_adders`` temporarily detached
-    means the construction does NOT auto-add to Page; only ``render_fixed`` (in
-    its own isolated context) renders it, and we hand MapApp that single widget.
-
-    The tile renders inside a plain ``div``: ``render_fixed`` has no container,
-    so its root widget must never change, but a step remounts its root on a
-    project switch (keyed on the install signal), and a new root widget raises
-    "You are not using a container" out of the reactive set that triggered it.
-
-    Args:
-        make_element: zero-arg callable that constructs the tile Element. Must be
-            a thunk (not a pre-built element) so the construction happens here,
-            after the adders are detached.
-    """
-    import reacton.core as _rcore
-
-    rc = _rcore.get_render_context(required=False)
-    if rc is None:
-        return solara.render_fixed(rv.Html(tag="div", children=[make_element()]))[0]
-    saved = rc.container_adders[:]
-    del rc.container_adders[:]
-    try:
-        return solara.render_fixed(rv.Html(tag="div", children=[make_element()]))[0]
-    finally:
-        rc.container_adders[:] = saved
 
 
 @solara.component
@@ -504,7 +469,7 @@ def _AppShell():
     # MapApp step/dialog content is a synced traitlets `Instance(DOMWidget)` slot
     # (MapApp.vue binds `:widget="activeStep.content"`), NOT a reacton child — so a
     # raw @solara.component element is not rendered there. Render each Solara tile to
-    # a concrete widget with solara.render_fixed and hand MapApp that single widget.
+    # a concrete widget (gui/scripts/detached.py) and hand MapApp that single widget.
     # Memoized so the widget is stable across re-renders, and each step is
     # mounted once per session: steps follow project switches themselves.
     # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
@@ -512,24 +477,29 @@ def _AppShell():
     # Both exist before the tiles so the Project dialog can close itself.
     nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
     mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
-    about_widget = solara.use_memo(lambda: _render_detached(lambda: AboutTile()), dependencies=[])
+    about_widget = solara.use_memo(
+        lambda: render_detached(lambda: AboutTile(), t("app.drawer_item.about"))[0], dependencies=[])
     project_widget = solara.use_memo(
-        lambda: _render_detached(lambda: ProjectDialog(
-            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model))),
+        lambda: render_detached(lambda: ProjectDialog(
+            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)), t("app.drawer_item.project"))[0],
         dependencies=[])
     overview_widget = solara.use_memo(
-        lambda: _render_detached(lambda: OverviewTile(app_state=app_state, map_=map_, workspace=workspace,
-                                                      layers=layers)), dependencies=[])
+        lambda: render_detached(lambda: OverviewTile(app_state=app_state, map_=map_, workspace=workspace,
+                                                     layers=layers), t("app.drawer_item.overview"))[0], dependencies=[])
     step_widgets = solara.use_memo(
         lambda: {
-            "aoi": _render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface)),
-            "alerts": _render_detached(lambda: AlertsStep(app_state=app_state, map_=map_,
-                                                          gee_interface=gee_interface, layers=layers)),
-            "period": _render_detached(lambda: PeriodStep(app_state=app_state)),
-            "prepare": _render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
-                                                            gee_interface=gee_interface, layers=layers)),
-            "integrate": _render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
-                                                                gee_interface=gee_interface, workspace=workspace)),
+            "aoi": render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface),
+                                   t("app.drawer_item.aoi"))[0],
+            "alerts": render_detached(lambda: AlertsStep(app_state=app_state, map_=map_,
+                                                         gee_interface=gee_interface, layers=layers),
+                                      t("app.drawer_item.alerts"))[0],
+            "period": render_detached(lambda: PeriodStep(app_state=app_state), t("app.drawer_item.period"))[0],
+            "prepare": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
+                                                           gee_interface=gee_interface, layers=layers),
+                                       t("app.drawer_item.prepare"))[0],
+            "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
+                                                               gee_interface=gee_interface, workspace=workspace),
+                                         t("app.drawer_item.integrate"))[0],
         },
         dependencies=[],
     )
@@ -600,7 +570,7 @@ def _AppShell():
     header_wrapper = solara.use_memo(
         lambda: v.Html(
             tag="div",
-            children=[_render_detached(lambda: WorkflowHeader(app_state=app_state))],
+            children=[render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]],
         ),
         dependencies=[],
     )

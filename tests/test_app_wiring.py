@@ -95,9 +95,9 @@ def test_notification_provider_mounted_before_tiles():
     page_body = src[src.index("def Page():"):src.index("def _AppShell():")]
     shell_body = src[src.index("def _AppShell():"):]
     assert page_body.index("NotificationProvider()") < page_body.index("_AppShell()")
-    assert "_render_detached(" not in page_body and "MapApp.element" not in page_body
+    assert "render_detached(" not in page_body and "MapApp.element" not in page_body
     assert "NotificationProvider()" not in shell_body
-    assert "_render_detached(" in shell_body and "MapApp.element" in shell_body
+    assert "render_detached(" in shell_body and "MapApp.element" in shell_body
 
 
 def test_render_fixed_tile_needs_the_provider_rendered_first():
@@ -363,10 +363,11 @@ def test_a_detached_tile_may_remount_its_root():
     widget raises "You are not using a container" out of whatever reactive set
     triggered that render: in the browser walk, opening a project failed half
     way through ``AppState._install``. The shell therefore renders every tile
-    under a stable root."""
+    into a container (``gui/scripts/detached.py``), where a remount is fine."""
     import reacton
-    import reacton.ipyvuetify as rv
     import solara
+
+    from gui.scripts.detached import render_detached
 
     signal = solara.reactive(0)
 
@@ -382,13 +383,14 @@ def test_a_detached_tile_may_remount_its_root():
     finally:
         rc.close()
 
-    widget, rc = reacton.render_fixed(rv.Html(tag="div", children=[Tile()]), handle_error=False)
+    container, rc = render_detached(lambda: Tile(), "tile", notify=False)
     try:
-        first = widget.children[0]
+        first = container.children[0]
         signal.set(2)
-        assert widget.children[0] is not first  # remounted, inside the same root
+        assert container.children[0] is not first  # remounted, inside the same container
     finally:
         rc.close()
 
-    body = _component_body(_src("gui/solara_app.py"), "_render_detached")
-    assert body.count('rv.Html(tag="div", children=[make_element()])') == 2
+    src = _src("gui/solara_app.py")
+    assert "render_fixed" not in _component_body(src, "_AppShell")
+    assert src.count("render_detached(lambda: ") == 9  # About, Project, Overview, five steps, the header

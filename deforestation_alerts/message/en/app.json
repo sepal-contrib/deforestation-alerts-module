@@ -2,6 +2,7 @@
     "app": {
         "title": "Forest Loss Alerts Analysis",
         "panel_workflow_title": "Workflow",
+        "tile_failed": "The {tile} tile failed to render ({error}). Reload the page; the details are in the server log.",
         "footer": "SEPAL \u00a9 {}",
         "banner": "This is my first app :)",
         "drawer_item": {
