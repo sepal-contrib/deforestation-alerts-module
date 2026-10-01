@@ -57,10 +57,6 @@ def store_key(set_id: str) -> str:
     return f"store:{set_id}"
 
 
-def pmtiles_key(set_id: str) -> str:
-    return f"pmtiles:{set_id}"
-
-
 def _file_stamp(path: str) -> dict:
     try:
         st = os.stat(path)
