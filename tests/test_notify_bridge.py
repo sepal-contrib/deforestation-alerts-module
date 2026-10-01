@@ -368,21 +368,8 @@ def test_no_provider_falls_back_to_noop():
 # ---------------------------------------------------------------------------
 # The server log: failures leave a traceback on the server's stderr
 # ---------------------------------------------------------------------------
-@pytest.fixture
-def server_log():
-    """The app logger's server-log handler on a private stream, removed after."""
-    import io
-
-    logger = logging.getLogger("SEPALUI.deforestation_alerts")
-    for h in list(logger.handlers):
-        if isinstance(h, notify_bridge.ServerLogHandler):
-            logger.removeHandler(h)
-    stream = io.StringIO()
-    handler = notify_bridge.install_server_log_handler(stream=stream)
-    yield stream
-    logger.removeHandler(handler)
-
-
+# (the ``server_log`` fixture lives in conftest.py: the workers' tests count
+# tracebacks in it too)
 def test_a_failed_job_is_logged_with_its_traceback_once_it_is_failed(caplog):
     """The record carries the task's title and the exception (traceback
     included), goes out after ``fail()`` so it is not echoed as a milestone,

@@ -510,7 +510,7 @@ def build_edit_tools(
     # auto-run). The worker runs _run_cnn_model -> prediction path, then on the
     # success path applies the OLD verify/enable step with that path. The run
     # button spins for the duration; errors are published by tracked_job (FAILED
-    # task + one dl_404 error toast) and logged by the worker.
+    # task + one dl_404 error toast), which also logs the raw traceback.
     # ------------------------------------------------------------------
     def _dl_404(_exc):
         # Every CNN run failure (composite download, HF model pull, inference,
@@ -547,8 +547,8 @@ def build_edit_tools(
                             task=task,
                         )
                     _apply_model1(pred_path)
-            except Exception:  # noqa: BLE001 — tracked_job already toasted it
-                logger.exception("Analysis: model 1 run failed")
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
             else:
                 notifier.success(str(cm.analysis_tile.model_labels.dl_done))
             finally:
@@ -581,8 +581,8 @@ def build_edit_tools(
                             task=task,
                         )
                     _apply_model2(pred_path)
-            except Exception:  # noqa: BLE001 — tracked_job already toasted it
-                logger.exception("Analysis: model 2 run failed")
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
             else:
                 notifier.success(str(cm.analysis_tile.model_labels.dl_done))
             finally:

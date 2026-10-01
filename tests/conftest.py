@@ -61,6 +61,28 @@ def data_files():
     return _data_files
 
 
+@pytest.fixture()
+def server_log():
+    """The app logger's server-log handler on a private stream, removed after.
+
+    Yields the stream: what a failure leaves in the server log (count
+    ``"Traceback (most recent call last)"`` for one traceback per failure).
+    """
+    import io
+    import logging
+
+    from gui.scripts import notify_bridge
+
+    logger = logging.getLogger("SEPALUI.deforestation_alerts")
+    for h in list(logger.handlers):
+        if isinstance(h, notify_bridge.ServerLogHandler):
+            logger.removeHandler(h)
+    stream = io.StringIO()
+    handler = notify_bridge.install_server_log_handler(stream=stream)
+    yield stream
+    logger.removeHandler(handler)
+
+
 @pytest.fixture(scope="session")
 def gee():
     """Initialize Earth Engine once; skip the module if unauthenticated."""

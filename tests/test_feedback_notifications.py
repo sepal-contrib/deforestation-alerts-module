@@ -826,6 +826,30 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
 
 
 @pytest.mark.parametrize("label", ["M 1", "M 2"])
+def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
+    edit_tools_card, monkeypatch, server_log, label
+):
+    """``tracked_job`` logs the failure with its traceback (the raw exception,
+    behind the friendly dl_404 toast); the run worker logged it again, so one
+    failed run printed two tracebacks."""
+    edit_tools, card, _model = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+
+    def _boom(*a, **k):
+        raise RuntimeError("model download failed")
+
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
+
+    _dl_run_button(card, label).fire_event("click", None)
+    feedback.join()
+
+    out = server_log.getvalue()
+    assert out.count("Traceback (most recent call last)") == 1
+    assert "RuntimeError: model download failed" in out
+    assert len(feedback.errors) == 1
+
+
+@pytest.mark.parametrize("label", ["M 1", "M 2"])
 def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
     edit_tools_card, monkeypatch, label
 ):

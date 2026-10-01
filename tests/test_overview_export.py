@@ -184,3 +184,26 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
     ]
     assert _non_error_toasts(bus) == []
     assert gen_btn.loading is False and gen_btn.disabled is False
+
+
+def test_a_failed_export_leaves_one_traceback_in_the_server_log(
+    ws, feedback, monkeypatch, server_log
+):
+    """``tracked_job`` logs every failure it reports, with the traceback; the
+    export worker logged the same failure again, so the server log showed
+    two tracebacks for one failed export."""
+    bus, errors, join = feedback
+    card, gen_btn, dl_btn = _card(ws, ws.results_dir("recipe_a"), fmt_index=0)
+
+    def _boom(*_a, **_kw):
+        raise ValueError("unsupported driver")
+
+    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
+
+    gen_btn.fire_event("click", None)
+    join()
+
+    out = server_log.getvalue()
+    assert out.count("Traceback (most recent call last)") == 1
+    assert "failed: unsupported driver" in out and "ValueError: unsupported driver" in out
+    assert len(errors) == 1 and gen_btn.loading is False

@@ -122,8 +122,8 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
                             gdf, workspace, folder, fmt, sources, start, end
                         )
                     url_path = workspace.home_relative(path)
-            except Exception:  # noqa: BLE001 — tracked_job already toasted it
-                logger.exception("Overview: export %s failed", fmt)
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
             else:
                 dl_btn.set_url(path=url_path)
                 dl_btn.show()
