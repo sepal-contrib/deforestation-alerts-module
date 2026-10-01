@@ -65,6 +65,19 @@ def test_installing_a_project_runs_inside_the_restoring_window():
     assert seen == [True, True, True] and s.restoring is False
 
 
+def test_closing_the_project_returns_the_workflow_to_the_aoi_step():
+    """Without a project every step but AOI is locked: closing (or deleting)
+    the open project must not leave the workflow parked on one."""
+    from gui.store.workflow_steps import STEPS, StepStatus, step_index, step_states
+
+    s = AppState()
+    s.load_project_state(_p("a"))
+    s.active_step.set(step_index("analysis"))
+    s.close_project_state()
+    assert s.active_step.value == 0 and STEPS[0].key == "aoi"
+    assert step_states(None)[s.active_step.value] is not StepStatus.LOCKED
+
+
 def test_a_new_or_closed_project_forgets_the_previous_save_time():
     s = AppState()
     s.load_project_state(_p("a"))

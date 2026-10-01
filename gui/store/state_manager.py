@@ -135,6 +135,9 @@ class AppState:
 
     def close_project_state(self) -> None:
         self._install(None, loading=True)
+        # Without a project every step but AOI (STEPS[0]) is locked: the
+        # workflow must not stay parked on one ("4 / 6 ... nothing yet").
+        self.active_step.set(0)
 
     # ---- alert navigation (unchanged) ------------------------------------
     @property
