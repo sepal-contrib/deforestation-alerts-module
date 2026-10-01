@@ -251,3 +251,55 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
             rc.close()
 
     asyncio.run(main())
+
+
+def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
+    """A finished Prepare row, an Integrate and a review Save publish the
+    project (``update_project``, ``commit``) from worker threads with no event
+    loop; the auto-save then sets ``last_saved`` there and the always-mounted
+    dialog re-renders on that thread. Rendered as the shell renders it, the
+    dialog must neither raise into those publishers nor fail its render, and
+    its list must still follow each save."""
+    import threading
+    import traceback
+
+    from gui.scripts import detached
+    from gui.scripts.detached import render_detached
+
+    reports = []
+    monkeypatch.setattr(detached, "_report", lambda name, text, notify: reports.append(text))
+
+    async def main():
+        container, rc = render_detached(lambda: _Harness(app_state=dialog.state, dismiss=lambda: None), "Project")
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
+            errors = []
+
+            def commit(source):
+                try:
+                    p = dialog.state.project.value
+                    add_predefined_source(p, source)
+                    dialog.state.commit(p)
+                except BaseException:  # noqa: BLE001 - reported below
+                    errors.append(traceback.format_exc())
+
+            def update(source):
+                try:
+                    dialog.state.update_project("a", lambda live: add_predefined_source(live, source))
+                except BaseException:  # noqa: BLE001 - reported below
+                    errors.append(traceback.format_exc())
+
+            for n, (publish, source) in enumerate([(commit, "GLAD-L"), (update, "RADD")], start=1):
+                worker = threading.Thread(target=publish, args=(source,))
+                worker.start()
+                while worker.is_alive():
+                    await asyncio.sleep(0.01)
+                assert errors == [], errors
+                await _settle(lambda: _listed(dialog) == {"a": f"{n} / 0 / 0"}, f"save {n} listed")
+            assert reports == []
+            assert dialog.state.last_saved.value is not None and dialog.state.save_error.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())

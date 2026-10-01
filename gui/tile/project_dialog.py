@@ -6,12 +6,20 @@ closed, so its counts and times follow the session. A new name is checked
 against the folders on disk when Create is clicked, not against that list: a
 project created in another tab since must never be overwritten.
 
+The list is read on a worker started from an effect, never in a
+``prefer_threaded=False`` task that depends on the save: the auto-save sets
+``last_saved`` in the thread that published the project, and a Prepare row,
+an Integrate and a review Save publish from worker threads with no event
+loop, where solara starts such a task with a bare ``asyncio.create_task``
+(the ``_ActiveSetLoader`` pattern in the shell).
+
 A new, opened or duplicated project starts the workflow at its AOI and closes
 the dialog (``dismiss``, from the shell). Deleting the open project closes it
 first, so no auto-save can write its manifest back while the folder goes.
 """
 
 import asyncio
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -24,9 +32,12 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Project
 from gui.i18n import plural, t
+from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing
 from gui.widget.creation_dialog import CreationDialog
 from gui.widget.product_table import ProductTable
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _NAME_ERRORS = {"empty": "steps.project.name_empty", "chars": "steps.project.name_chars",
                 "exists": "steps.project.name_exists"}
@@ -102,18 +113,30 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     pending_delete, set_pending_delete = solara.use_state(None)
     typed, set_typed = solara.use_state("")
 
-    async def _list():
-        return await asyncio.to_thread(io.list_projects)
+    infos, set_infos = solara.use_state([])
+    # The number of the last read started: a read overtaken by a newer one
+    # (a Run all saves a row every few seconds) must not publish an older list.
+    reads = solara.use_ref(0)
 
     # Read again on every save (counts and time of the open project), every
-    # install or close, and after a delete.
-    infos_task = solara.lab.use_task(
-        _list,
-        dependencies=[refresh, app_state.project_loaded_signal.value, app_state.last_saved.value],
-        prefer_threaded=False,
-        raise_error=False,
-    )
-    infos = infos_task.value or []
+    # install or close, and after a delete. On a worker, from an effect: see
+    # the module docstring.
+    def _start_read():
+        reads.current += 1
+        run = reads.current
+
+        def _read():
+            try:
+                listed = io.list_projects()
+            except Exception:  # noqa: BLE001 - the list on screen stays as it was
+                logger.exception("could not list the projects")
+                return
+            if reads.current == run:
+                set_infos(listed)
+
+        spawn_in_context(_read)
+
+    solara.use_effect(_start_read, [refresh, app_state.project_loaded_signal.value, app_state.last_saved.value])
 
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it
