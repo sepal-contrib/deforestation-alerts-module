@@ -56,8 +56,13 @@ def _window_transform(grid: GridSpec, w: Window) -> Affine:
 
 
 def min_cluster_pixels(min_size_ha: float, resolution: float) -> int:
-    """The minimum size in hectares as a pixel count, ``ceil(ha · 10⁴ / res²)``, at least 1."""
-    return max(1, math.ceil(float(min_size_ha) * 10_000 / float(resolution) ** 2))
+    """The minimum size in hectares as a pixel count, ``ceil(ha · 10⁴ / res²)``, at least 1.
+
+    The quotient is rounded to 9 decimals before ``ceil``: float noise such as
+    0.07 ha at 10 m giving 7.000000000000001 must not ask for an extra pixel,
+    or alerts exactly at the user's minimum would be dropped.
+    """
+    return max(1, math.ceil(round(float(min_size_ha) * 10_000 / float(resolution) ** 2, 9)))
 
 
 def _area_in_grid(area_geojson: dict, grid: GridSpec) -> list:

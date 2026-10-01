@@ -1,5 +1,7 @@
 import hashlib
+import math
 from datetime import date, datetime
+from fractions import Fraction
 
 import geopandas as gpd
 import numpy as np
@@ -42,6 +44,29 @@ def test_min_cluster_pixels():
     assert integrate.min_cluster_pixels(0.5, 10) == 50
     assert integrate.min_cluster_pixels(0.5, 30) == 6
     assert integrate.min_cluster_pixels(0, 10) == 1
+
+
+@pytest.mark.parametrize("ha, res, pixels", [
+    (0.07, 10, 7),   # 0.07 * 1e4 / 100 is 7.000000000000001 in floats
+    (0.81, 30, 9),   # 9.000000000000002
+    (0.29, 10, 29),
+    (0.82, 20, 21),  # 20.5: a real fraction still rounds up
+    (0.10, 30, 2),   # 1.11...
+    (0.01, 30, 1),   # 0.11..., never below one pixel
+])
+def test_min_cluster_pixels_ignores_float_noise(ha, res, pixels):
+    assert integrate.min_cluster_pixels(ha, res) == pixels
+
+
+@pytest.mark.parametrize("res", [10, 20, 30])
+def test_min_cluster_pixels_matches_exact_arithmetic_for_two_decimal_inputs(res):
+    """Every two-decimal size from 0.01 to 5.00 ha, against exact fractions."""
+    wrong = []
+    for i in range(1, 501):
+        exact = max(1, math.ceil(Fraction(i, 100) * 10_000 / res ** 2))
+        if integrate.min_cluster_pixels(i / 100, res) != exact:
+            wrong.append(i / 100)
+    assert wrong == []
 
 
 def test_combine_digits_dates_display(tmp_path):
