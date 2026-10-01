@@ -559,6 +559,36 @@ def test_a_download_whose_ee_aoi_fails_releases_its_rows(step, monkeypatch, erro
         rc.close()
 
 
+def _row_buttons(row):
+    """(disabled, loading) of a row's download and re-download actions."""
+    acts = {a["kind"]: a for a in row["actions"]}
+    return [(acts[k].get("disabled", False), acts[k].get("loading", False)) for k in ("download", "redownload")]
+
+
+def test_a_row_in_flight_disables_its_run_buttons_until_its_job_ends(step, monkeypatch):
+    """A second click on a running row is refused by its in-flight key, so the
+    buttons must say it: both disabled, the download one spinning. Only that
+    row: another row stays startable while it runs."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING),
+              PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True),
+                   meta={"GLAD-L": {}, "RADD": {}})
+
+    box, rc = _render(state)
+    try:
+        assert [_row_buttons(r) for r in step.table[-1]] == [[(False, False), (False, False)]] * 2
+        step.table[-1][0]["actions"][0]["on_click"]()  # GLAD-L runs
+        glad, radd = step.table[-1]
+        assert _row_buttons(glad) == [(True, True), (True, False)]
+        assert _row_buttons(radd) == [(False, False), (False, False)]
+
+        step.run_jobs()  # the job ends and gives the row back
+        assert [_row_buttons(r) for r in step.table[-1]] == [[(False, False), (False, False)]] * 2
+    finally:
+        rc.close()
+
+
 def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step):
     """Review focus 5 at the UI level: a job's in-flight keys belong to the
     project that started it.

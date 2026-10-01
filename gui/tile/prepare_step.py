@@ -147,20 +147,25 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     mine = {k for k in running if k.startswith(_inflight_key(p.name, period.id, ""))}
     pending = [r.source for r in rows if r.needs_run]
-    table_rows = [
-        {
+
+    def _row(r):
+        # A row in flight cannot be started again (the claim would refuse it
+        # silently): both buttons say so, the download one with its spinner.
+        busy = _inflight_key(p.name, period.id, r.source) in mine
+        return {
             "key": r.source,
-            "cells": row_cells(r, running=_inflight_key(p.name, period.id, r.source) in mine),
+            "cells": row_cells(r, running=busy),
             "error": row_errors.value.get(r.source),
             "actions": [
-                {"kind": "download", "on_click": (lambda s=r.source: _start([s]))},
-                {"kind": "redownload", "on_click": (lambda s=r.source: _start([s], force=True))},
+                {"kind": "download", "disabled": busy, "loading": busy,
+                 "on_click": (lambda s=r.source: _start([s]))},
+                {"kind": "redownload", "disabled": busy, "on_click": (lambda s=r.source: _start([s], force=True))},
                 {"kind": "map_toggle", "is_on": f"src:{r.source}" in on, "loading": f"src:{r.source}" in building,
                  "disabled": not r.ready, "on_click": (lambda s=r.source: _toggle_map(s))},
             ],
         }
-        for r in rows
-    ]
+
+    table_rows = [_row(r) for r in rows]
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.prepare.title')}")
