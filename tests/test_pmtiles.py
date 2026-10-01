@@ -21,11 +21,11 @@ def _alerts():
 def test_style_has_scalar_paints_and_numeric_filters():
     style = pmtiles_map.build_alert_style("http://x/a.pmtiles")
     layers = style["layers"]
-    assert {l["source-layer"] for l in layers} == {"alerts", "points"}
-    for l in layers:
-        assert l["filter"][0] == "==" and l["filter"][1] == "status_code"
-        assert isinstance(l["filter"][2], int)
-        for v in l["paint"].values():
+    assert {layer["source-layer"] for layer in layers} == {"alerts", "points"}
+    for layer in layers:
+        assert layer["filter"][0] == "==" and layer["filter"][1] == "status_code"
+        assert isinstance(layer["filter"][2], int)
+        for v in layer["paint"].values():
             assert not isinstance(v, (list, dict)), "protomaps json_style has no expressions"
     assert len(layers) == 3 * len(pmtiles_map.STATUS_COLORS)  # fill + line + circle per status
 

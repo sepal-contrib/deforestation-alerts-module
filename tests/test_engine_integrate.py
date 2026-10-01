@@ -71,8 +71,10 @@ def test_min_cluster_pixels_matches_exact_arithmetic_for_two_decimal_inputs(res)
 
 def test_combine_digits_dates_display(tmp_path):
     g, r = _blank(), _blank()
-    g[5:8, 5:8] = 1; r[6:9, 6:9] = 2
-    gd = np.where(g > 0, 2026020, 0); rd = np.where(r > 0, 2026010, 0)
+    g[5:8, 5:8] = 1
+    r[6:9, 6:9] = 2
+    gd = np.where(g > 0, 2026020, 0)
+    rd = np.where(r > 0, 2026010, 0)
     n = integrate.combine([(_write(tmp_path / "g.tif", g, gd), 0), (_write(tmp_path / "r.tif", r, rd), 1)],
                           GRID, tmp_path / "c.tif")
     with rasterio.open(tmp_path / "c.tif") as src:
@@ -93,9 +95,11 @@ def _drawn(cols, rows):
 
 
 def test_footprint_and_area_clip(tmp_path):
-    a = _blank(); a[0:40, 0:40] = 1
+    a = _blank()
+    a[0:40, 0:40] = 1
     src = _write(tmp_path / "a.tif", a, np.where(a > 0, 2026001, 0))
-    fpr = _blank(); fpr[0:10, :] = 1
+    fpr = _blank()
+    fpr[0:10, :] = 1
     with raster_io.write_grid_raster(tmp_path / "fp.tif", GRID, count=1) as dst:
         dst.write(fpr.astype("int32"), 1)
     area = _drawn((0, 20), (0, 40))  # the left half of the grid
@@ -129,11 +133,13 @@ def test_windows_do_not_change_the_result(tmp_path, monkeypatch):
     it into six, so every per-window offset (reads, writes, the drawn area,
     the footprint) is exercised."""
     rng = np.random.default_rng(7)
-    g = rng.integers(0, 3, (GRID.height, GRID.width)); r = rng.integers(0, 3, (GRID.height, GRID.width))
+    g = rng.integers(0, 3, (GRID.height, GRID.width))
+    r = rng.integers(0, 3, (GRID.height, GRID.width))
     gd = np.where(g > 0, 2026001 + rng.integers(0, 30, g.shape), 0)
     rd = np.where(r > 0, 2026001 + rng.integers(0, 30, r.shape), 0)
     inputs = [(_write(tmp_path / "g.tif", g, gd), 0), (_write(tmp_path / "r.tif", r, rd), 1)]
-    fpr = _blank(); fpr[12:17, 3:30] = 1
+    fpr = _blank()
+    fpr[12:17, 3:30] = 1
     with raster_io.write_grid_raster(tmp_path / "fp.tif", GRID, count=1) as dst:
         dst.write(fpr.astype("int32"), 1)
     polys = gpd.GeoDataFrame(geometry=[box(500050, 8899700, 500170, 8899880), box(500200, 8899640, 500310, 8899990)],
