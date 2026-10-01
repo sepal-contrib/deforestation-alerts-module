@@ -325,3 +325,35 @@ def test_a_show_during_a_slow_removal_is_not_undone_by_it(monkeypatch):
     assert not hider.is_alive(), "hide hung"
     _join(threads)
     assert layers.is_on("k") and m.layers == {"k": "new"}
+
+
+@pytest.mark.parametrize("published", ["on", "inflight"])
+def test_a_raising_subscriber_does_not_leave_the_key_building(monkeypatch, published):
+    """A subscriber of ``on`` or ``inflight`` (a render) runs synchronously
+    inside the publish and may raise. The pending build must still start, or
+    the key stays "building" for the session: a permanent spinner, and every
+    toggle on it a no-op."""
+    _run_sync(monkeypatch)
+    m = FakeMap()
+    layers = MapLayers(m)
+    raised = []
+
+    def bad_subscriber(keys):
+        if not raised:
+            raised.append(keys)
+            raise RuntimeError("a render failed")
+
+    getattr(layers, published).subscribe(bad_subscriber)
+    built = []
+
+    def build():
+        built.append("k")
+        m.add_layer("layer", key="k")
+
+    with pytest.raises(RuntimeError, match="a render failed"):
+        layers.show("k", build)
+
+    assert built == ["k"] and layers.is_on("k") and m.drawn == {"k"}
+    assert layers.inflight.value == frozenset()
+    layers.toggle("k", lambda: pytest.fail("the key is free: a click hides it, nothing is rebuilt"))
+    assert not layers.is_on("k") and m.drawn == set()

@@ -87,8 +87,10 @@ class MapLayers:
     def show(self, key, build, content_id=None, notifier=None) -> None:
         with self._lock:
             start = self._request(key, build, content_id, notifier)
-        self._publish()
-        self._start(start)
+        try:
+            self._publish()
+        finally:
+            self._start(start)
 
     def hide(self, key) -> None:
         self._hide(frozenset([key]))
@@ -110,8 +112,10 @@ class MapLayers:
             if key not in self._keys or self._content.get(key) == content_id:
                 return
             start = self._request(key, build, content_id, None)
-        self._publish()
-        self._start(start)
+        try:
+            self._publish()
+        finally:
+            self._start(start)
 
     def clear(self) -> None:
         self._hide(None)
@@ -165,9 +169,11 @@ class MapLayers:
                     if left:
                         self._removing[key] = left
                     starts.append(self._next(key))  # a show that arrived meanwhile
-            self._publish()
-            for start in starts:
-                self._start(start)
+            try:
+                self._publish()
+            finally:
+                for start in starts:
+                    self._start(start)
 
     def _build(self, key, generation, build, content_id, notifier):
         try:
@@ -195,13 +201,19 @@ class MapLayers:
                 self._building = self._building - {key}
                 self._version += 1
                 start = self._next(key)
-            self._publish()
-            self._start(start)
+            try:
+                self._publish()
+            finally:
+                self._start(start)
 
     def _publish(self) -> None:
         # Outside the lock (see the module docstring). Two threads can publish
         # out of order, so re-publish until nobody changed the registry
         # meanwhile: the values left in ``on`` and ``inflight`` are the latest.
+        # A subscriber of ``on`` or ``inflight`` runs synchronously inside the
+        # ``set`` and may raise; the callers start the pending build in a
+        # ``finally`` so a raising subscriber never leaves a key building for
+        # the rest of the session (a permanent spinner, toggles ignored).
         while True:
             with self._lock:
                 version, keys, building = self._version, self._keys, self._building
