@@ -113,8 +113,8 @@ def ov(monkeypatch, tmp_path):
     # MapLayers' builds are queued, not started: the test runs them.
     monkeypatch.setattr(map_layers, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append((target, args)))
 
-    def ensure(p, s, alerts):
-        ns.ensured.append((p.name, s.id, alerts))
+    def ensure(p, s, workspace):
+        ns.ensured.append((p.name, s.id, workspace))
         if ns.during_ensure is not None:
             ns.during_ensure()
         if ns.ensure_error is not None:
@@ -264,8 +264,8 @@ def test_the_set_layer_is_drawn_only_while_the_overview_is_open(ov, tmp_path):
         state.panel_view.set("overview")
         assert layers.is_on(KEY)
         ov.run_jobs()
-        [(name, sid, built_from)] = ov.ensured
-        assert (name, sid) == ("d", make_set_id(JAN.id, ["GLAD-L"])) and built_from is alerts
+        [(name, sid, workspace)] = ov.ensured
+        assert (name, sid) == ("d", make_set_id(JAN.id, ["GLAD-L"])) and workspace == "WS"
         assert ov.drawn == [(ov.pm, KEY, t("steps.overview.layer_name"))]
         assert map_.find_layer(KEY, none_ok=True) is not None
 
@@ -343,9 +343,8 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
     """Integrate records a new set before it publishes that set's alerts
     (integrate_jobs.run_integration_job), and the set selector (spec §9.3)
     loads them in a worker after the selection. Until they arrive, the alerts
-    on hand are the previous set's: they are never tiled as the new set's (its
-    alerts.pmtiles would then be newer than its store, so the mtime rule would
-    keep the wrong tiles), nor drawn, counted, exported or clicked as its own."""
+    on hand are the previous set's: nothing of the new set is tiled, drawn,
+    counted, exported or clicked from them."""
     p = _project(tmp_path)
     a = p.active_set
     a_alerts = _alerts(set_id=a)
@@ -353,8 +352,8 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
     map_, layers, rc = ov.render(state)
     try:
         ov.run_jobs()
-        [(_, sid, built_from)] = ov.ensured
-        assert sid == a and built_from is a_alerts
+        [(_, sid, _ws)] = ov.ensured
+        assert sid == a
 
         b = None
 
@@ -374,10 +373,41 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
         state.alerts_gdf.set(b_alerts)  # _publish_alerts
         assert layers.is_on(KEY)
         ov.run_jobs()
-        [(_, sid, built_from)] = ov.ensured[1:]
-        assert sid == b and built_from is b_alerts
+        [(_, sid, _ws)] = ov.ensured[1:]
+        assert sid == b
         assert map_.find_layer(KEY, none_ok=True) is not None and len(_export_cards(rc)) == 1
-        assert not [call for call in ov.ensured if call[1] == b and call[2] is a_alerts]
+    finally:
+        rc.close()
+
+
+def test_stale_tiles_wait_for_the_projects_writer_and_are_rebuilt_after(ov, tmp_path):
+    """Overview opened while an Integrate re-runs the same set (or a Save
+    rewrites its store): the tiles are not rebuilt from what is on hand, the
+    centroids stand in without a toast, and once the writer releases the
+    project the build is asked for again (I5)."""
+    from gui.store.project_writers import is_writing, writing
+
+    ov.ensure_error = set_store.StoreBusy("project 'd' is being written")
+    state = _state(_project(tmp_path), _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        with writing("d"):
+            ov.run_jobs()
+            assert len(ov.ensured) == 1 and ov.drawn == []
+            _centroid_layer(map_)
+            assert _toasts(ov, "warning") == [] and _toasts(ov, "error") == []
+            assert layers.is_on(KEY)
+            ov.ensure_error = None  # the writer finishes: the store on disk is the re-run's
+        assert not is_writing("d")
+
+        ov.run_jobs()  # the effect re-ran when the mark was released
+        assert len(ov.ensured) == 2 and ov.drawn == [(ov.pm, KEY, t("steps.overview.layer_name"))]
+        assert isinstance(map_.find_layer(KEY, none_ok=True), ipyleaflet.TileLayer)
+
+        with writing("d"):  # a later Save: current tiles are not touched, nothing is rebuilt
+            pass
+        ov.run_jobs()
+        assert len(ov.ensured) == 2
     finally:
         rc.close()
 

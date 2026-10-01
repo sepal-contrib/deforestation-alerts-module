@@ -163,45 +163,139 @@ def test_a_set_that_is_no_longer_active_is_not_published(tmp_path, monkeypatch):
     assert state.alerts_gdf.value is None and state.actual_alert_id.value == -1
 
 
-@pytest.mark.parametrize("tippecanoe", [True, False])
-def test_ensure_pmtiles_refuses_another_sets_alerts(tmp_path, monkeypatch, tippecanoe):
-    """Tiles written from another set's alerts would be newer than this set's
-    store, so the mtime rule would keep them as current."""
+def _fake_tippecanoe(monkeypatch, built, during=None):
+    """``pmt.alerts_to_pmtiles`` as a recorder of the alerts it was handed;
+    ``during`` runs in its place (what happens while tippecanoe runs)."""
+    def build(alerts, pm, *, guard=None):
+        built.append(alerts)
+        if during is not None:
+            during()
+        if guard is not None:
+            guard()
+        pm.write_bytes(b"PMTiles")
+        return pm
+
+    monkeypatch.setattr(pmt, "tippecanoe_available", lambda: True)
+    monkeypatch.setattr(pmt, "alerts_to_pmtiles", build)
+
+
+def test_ensure_pmtiles_builds_from_the_store_on_disk(tmp_path, monkeypatch, ws):
+    """During a re-run of the same set the alerts a session holds are the
+    previous ones (the set id is the same, so they pass as the set's): tiles
+    built from them would be newer than the new store, and kept. So the store
+    on disk is what the tiles are built from, whatever is on hand."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    _alerts().iloc[0:1].to_parquet(store)  # the re-run's store: one alert left
+    built = []
+    _fake_tippecanoe(monkeypatch, built)
+
+    pm = set_store.ensure_pmtiles(p, s, ws)
+
+    assert pm == store.parent / "alerts.pmtiles" and pm.exists()
+    [alerts] = built
+    assert alerts["alert_id"].tolist() == [0]
+
+
+def test_ensure_pmtiles_waits_while_the_project_is_being_written(tmp_path, monkeypatch, ws):
+    """An Integrate re-running the set holds the project's writer mark while
+    it swaps the store in and builds the tiles itself; a review Save holds it
+    while it rewrites the store. Stale tiles are not rebuilt meanwhile (the
+    caller retries when the mark is released), and current ones are served."""
+    from gui.store.project_writers import writing
+
     p, s, store = _project_with_set(tmp_path, monkeypatch)
     built = []
-    monkeypatch.setattr(pmt, "tippecanoe_available", lambda: tippecanoe)
-    monkeypatch.setattr(pmt, "alerts_to_pmtiles", lambda alerts, pm: built.append(alerts))
-    with pytest.raises(ValueError, match="'s'"):
-        set_store.ensure_pmtiles(p, s, _alerts().assign(set_id="other"))
-    assert built == [] and not (store.parent / "alerts.pmtiles").exists()
-    own = _alerts()
-    set_store.ensure_pmtiles(p, s, own)
-    assert [alerts is own for alerts in built] == ([True] if tippecanoe else [])
+    _fake_tippecanoe(monkeypatch, built)
+    pm = store.parent / "alerts.pmtiles"
+
+    with writing("d"):
+        with pytest.raises(set_store.StoreBusy):
+            set_store.ensure_pmtiles(p, s, ws)
+        assert built == [] and not pm.exists()
+        with writing("other"):  # another project's writer is not this one's
+            pass
+    assert set_store.ensure_pmtiles(p, s, ws) == pm and len(built) == 1  # the writer is done
+
+    with writing("d"):
+        assert set_store.ensure_pmtiles(p, s, ws) == pm and len(built) == 1  # current: served, not rebuilt
 
 
-def test_ensure_pmtiles_without_tippecanoe_is_none(tmp_path, monkeypatch):
+def test_ensure_pmtiles_marks_the_project_as_being_written(tmp_path, monkeypatch, ws):
+    """Spec §12: the tile build writes into the set's folder, so the Project
+    dialog's delete guard sees the project for its duration."""
+    from gui.store.project_writers import is_writing
+
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    busy = []
+    _fake_tippecanoe(monkeypatch, [], during=lambda: busy.append(is_writing("d")))
+    assert not is_writing("d")
+    set_store.ensure_pmtiles(p, s, ws)
+    assert busy == [True] and not is_writing("d")
+
+
+def test_a_store_rewritten_during_the_build_discards_the_tiles(tmp_path, monkeypatch, ws):
+    """Another session's Integrate (no shared writer mark) swaps the store in
+    while tippecanoe runs on the store read before: the tiles would be newer
+    than the new store yet show the old alerts, so they are dropped."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    built = []
+
+    def rerun_swaps_the_store():  # once, during the first build
+        if len(built) == 1:
+            _alerts().iloc[0:1].to_parquet(store)
+
+    _fake_tippecanoe(monkeypatch, built, during=rerun_swaps_the_store)
+
+    with pytest.raises(set_store.StoreBusy):
+        set_store.ensure_pmtiles(p, s, ws)
+    assert len(built) == 1 and not (store.parent / "alerts.pmtiles").exists()
+    assert set_store.pmtiles_stale(p, s)  # so the next ask rebuilds, from the new store
+    assert set_store.ensure_pmtiles(p, s, ws).exists() and built[-1]["alert_id"].tolist() == [0]
+
+
+def test_ensure_pmtiles_without_tippecanoe_is_none(tmp_path, monkeypatch, ws):
     p, s, store = _project_with_set(tmp_path, monkeypatch)
     monkeypatch.setattr(pmt, "tippecanoe_available", lambda: False)
-    assert set_store.ensure_pmtiles(p, s, _alerts()) is None
+    assert set_store.ensure_pmtiles(p, s, ws) is None
     assert not (store.parent / "alerts.pmtiles").exists()
 
 
 @pytest.mark.skipif(not pmt.tippecanoe_available(), reason="tippecanoe not installed")
-def test_ensure_pmtiles_builds_only_when_stale(tmp_path, monkeypatch):
+def test_ensure_pmtiles_builds_only_when_stale(tmp_path, monkeypatch, ws):
     p, s, store = _project_with_set(tmp_path, monkeypatch)
-    pm = set_store.ensure_pmtiles(p, s, _alerts())
+    _alerts().to_parquet(store)  # a store with the status and area columns the tiles carry
+    pm = set_store.ensure_pmtiles(p, s, ws)
     assert pm == store.parent / "alerts.pmtiles"
     assert pm.read_bytes()[:7] == b"PMTiles"
     built = pm.stat().st_mtime_ns
 
-    assert set_store.ensure_pmtiles(p, s, _alerts()) == pm
+    assert set_store.ensure_pmtiles(p, s, ws) == pm
     assert pm.stat().st_mtime_ns == built  # current: not rebuilt
 
     earlier = store.stat().st_mtime - 5
     os.utime(pm, (earlier, earlier))  # the store was rewritten after the tiles were built
     assert set_store.pmtiles_stale(p, s)
-    assert set_store.ensure_pmtiles(p, s, _alerts()) == pm
+    assert set_store.ensure_pmtiles(p, s, ws) == pm
     assert pm.stat().st_mtime > earlier and not set_store.pmtiles_stale(p, s)  # rebuilt
+    assert not list(store.parent.glob("*.part"))
+
+
+def test_store_generation_follows_every_rewrite(tmp_path, monkeypatch, ws):
+    from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    first = set_store.store_generation(store)
+    assert first is not None and set_store.store_generation(store) == first
+    save_gdf_to_parquet(_alerts(), ws, str(store))  # a review Save's upload (copy + rename)
+    second = set_store.store_generation(store)
+    assert second != first
+    os.replace(store.with_name("staged.parquet"), store) if False else None
+    staged = store.with_name("alert_db.staged.parquet")
+    _alerts().to_parquet(staged)
+    os.replace(staged, store)  # Integrate's swap
+    assert set_store.store_generation(store) not in (first, second)
+    store.unlink()
+    assert set_store.store_generation(store) is None
 
 
 def test_centroid_geojson_has_one_point_per_alert():

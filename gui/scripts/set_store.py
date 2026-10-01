@@ -5,9 +5,16 @@ the session (``publish_set_alerts``). Solara-free.
 The tiles are out of date when ``alert_db.parquet`` is newer than
 ``alerts.pmtiles`` (spec §5.3: a review save rewrites the store). No pmtiles
 artifact is recorded in the manifest (ruling #79): the two mtimes decide. So
-tiles are only ever built from the set's own alerts (``alerts_belong_to``).
+the tiles are only ever built from the store on disk (``ensure_pmtiles``),
+never from the alerts a session holds: during a re-run of the same set those
+are the previous alerts, and tiles built from them would be newer than the
+new store, so the mtime rule would keep them. A build is skipped while the
+set's project is being written (an Integrate, a review Save) and retried
+once the writer is done, and a build that finds the store rewritten under it
+discards what it built.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -15,7 +22,15 @@ from shapely.geometry import Point, mapping
 
 from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.project import paths
+from gui.store.project_writers import is_writing, writing
 from gui.store.workflow_steps import active_set
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
+
+
+class StoreBusy(RuntimeError):
+    """The set's tiles were not (re)built: its project is being written, or
+    its store was rewritten while the tiles were being built from it."""
 
 
 def _store(p, s) -> Path:
@@ -76,6 +91,17 @@ def pmtiles_stale(p, s) -> bool:
     return store.exists() and store.stat().st_mtime > pm.stat().st_mtime
 
 
+def store_generation(store) -> Optional[tuple]:
+    """Which write of ``store`` is on disk: ``(st_mtime_ns, st_size, st_ino)``,
+    or None when the file is missing. Every writer (Integrate's swap, a review
+    Save's upload) replaces the file, so a rewrite changes it."""
+    try:
+        st = Path(store).stat()
+    except FileNotFoundError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
 def alerts_belong_to(gdf, s) -> bool:
     """False when ``gdf`` holds alerts of another set than ``s``.
 
@@ -98,21 +124,38 @@ def holds_set(gdf, s) -> bool:
     return gdf is not None and "set_id" in gdf.columns and len(gdf) > 0 and alerts_belong_to(gdf, s)
 
 
-def ensure_pmtiles(p, s, alerts) -> Optional[Path]:
-    """The set's tiles, rebuilt from ``alerts`` first when stale; None without
-    tippecanoe. Blocking (tippecanoe): call from a worker thread.
+def ensure_pmtiles(p, s, workspace) -> Optional[Path]:
+    """The set's tiles, rebuilt first from the store on disk when they are
+    stale; None without tippecanoe. Blocking (tippecanoe): call from a worker
+    thread.
 
-    Raises ValueError, writing nothing, when ``alerts`` hold another set's
-    alerts: tiles built from them would be newer than this set's store, so
-    ``pmtiles_stale`` would keep them as current.
+    Raises ``StoreBusy``, leaving the tiles as they are, when they are stale
+    while the set's project is being written (``project_writers``: an
+    Integrate swapping the store in, a review Save), or when the store was
+    rewritten while the tiles were being built from it: either way the tiles
+    would not match the store that ends up on disk. The caller shows what it
+    can meanwhile and asks again once the writer is done. The build itself
+    marks the project as being written (spec §12), after that check.
     """
-    if not alerts_belong_to(alerts, s):
-        raise ValueError(f"these alerts are not set {s.id!r}'s: its tiles are not built from them")
+    from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
+
     if not pmt.tippecanoe_available():
         return None
     pm = _pmtiles_path(p, s)
-    if pmtiles_stale(p, s):
-        pmt.alerts_to_pmtiles(alerts, pm)
+    if not pmtiles_stale(p, s):
+        return pm
+    if is_writing(p.name):
+        raise StoreBusy(f"project {p.name!r} is being written: the tiles of set {s.id!r} are not rebuilt now")
+    with writing(p.name):
+        store = _store(p, s)
+        generation = store_generation(store)
+        alerts = load_gdf_from_parquet(workspace, str(store))
+
+        def _still_the_store_read():
+            if store_generation(store) != generation:
+                raise StoreBusy(f"the store of set {s.id!r} was rewritten while its tiles were built")
+
+        pmt.alerts_to_pmtiles(alerts, pm, guard=_still_the_store_read)
     return pm
 
 

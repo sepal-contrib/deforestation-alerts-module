@@ -68,6 +68,58 @@ def test_builds_two_layers_with_status_codes(monkeypatch, tmp_path):
     assert "-r1" in seen["cmd"]
 
 
+def _fake_tippecanoe(monkeypatch):
+    def fake_run(cmd, check, capture_output, text):
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"PMTiles")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(pmtiles, "resolve_tippecanoe", lambda: "tippecanoe")
+    monkeypatch.setattr(pmtiles.subprocess, "run", fake_run)
+
+
+def test_each_build_stages_under_its_own_part_name(monkeypatch, tmp_path):
+    """Integrate and Overview can build one set's tiles at the same time: two
+    builders sharing ``alerts.pmtiles.part`` would copy over each other's
+    half-written file. Each build stages beside the target under a unique
+    name and leaves nothing behind."""
+    _fake_tippecanoe(monkeypatch)
+    staged = []
+    real_copy = pmtiles.shutil.copyfile
+    monkeypatch.setattr(pmtiles.shutil, "copyfile", lambda src, dst: staged.append(Path(dst)) or real_copy(src, dst))
+    out = tmp_path / "set" / "alerts.pmtiles"
+
+    assert pmtiles.alerts_to_pmtiles(_alerts(), out) == out
+    assert pmtiles.alerts_to_pmtiles(_alerts(), out) == out
+
+    assert len(staged) == 2 and staged[0] != staged[1]
+    for part in staged:
+        assert part.parent == out.parent and part.name.startswith("alerts.pmtiles.") and part.suffix == ".part"
+    assert sorted(f.name for f in out.parent.iterdir()) == ["alerts.pmtiles"]
+
+
+def test_a_guard_that_raises_keeps_the_built_tiles_off_disk(monkeypatch, tmp_path):
+    """The guard runs right before the staged copy is moved onto the target:
+    a caller that built from a store on disk refuses there when that store
+    changed meanwhile, and the target is left as it was."""
+    _fake_tippecanoe(monkeypatch)
+    out = tmp_path / "alerts.pmtiles"
+    out.write_bytes(b"previous")
+    calls = []
+
+    def guard():
+        calls.append(sorted(f.name for f in tmp_path.iterdir()))
+        raise RuntimeError("the store was rewritten")
+
+    with pytest.raises(RuntimeError, match="rewritten"):
+        pmtiles.alerts_to_pmtiles(_alerts(), out, guard=guard)
+    [seen] = calls
+    assert any(name.endswith(".part") for name in seen)  # the guard ran after the staging copy
+    assert out.read_bytes() == b"previous" and sorted(f.name for f in tmp_path.iterdir()) == ["alerts.pmtiles"]
+
+    pmtiles.alerts_to_pmtiles(_alerts(), out, guard=lambda: None)
+    assert out.read_bytes() == b"PMTiles"
+
+
 @pytest.mark.skipif(not pmtiles.tippecanoe_available(), reason="tippecanoe not installed")
 def test_real_tippecanoe(tmp_path):
     out = pmtiles.alerts_to_pmtiles(_alerts(), tmp_path / "alerts.pmtiles")

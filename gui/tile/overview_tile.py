@@ -8,13 +8,18 @@ from the shell (it never creates a map of its own):
   ``alerts.pmtiles`` is drawn under the ``MapLayers`` key ``"overview:set"``
   and hidden again when the view closes. The build runs on a worker thread
   (tippecanoe, the tile server) and rebuilds tiles older than the set's
-  ``alert_db.parquet`` (``set_store.ensure_pmtiles``). When tippecanoe is
-  missing, or the tiles cannot be built or served, the alerts fall back to a
-  GeoJSON layer of centroid points under the same key, with one warning toast
-  (spec §9.2, §12). A build that finds the view already closed does nothing.
-  Published alerts that are still another set's (a new set is recorded before
-  its alerts are published) count as not loaded yet, so a set's tiles are
-  never built from another set's alerts (``set_store.alerts_belong_to``).
+  ``alert_db.parquet`` from that store on disk (``set_store.ensure_pmtiles``),
+  never from the alerts on hand. When tippecanoe is missing, or the tiles
+  cannot be built or served, the alerts fall back to a GeoJSON layer of
+  centroid points under the same key, with one warning toast (spec §9.2,
+  §12). While the project is being written (an Integrate re-running the set,
+  a review Save), stale tiles are not rebuilt: the centroids stand in without
+  a toast, and the build is asked for again once the writer is done (the
+  effect depends on ``project_writers``). A build that finds the view already
+  closed does nothing. Published alerts that are still another set's (a new
+  set is recorded before its alerts are published) count as not loaded yet,
+  so nothing of the new set is drawn, counted or exported from them
+  (``set_store.alerts_belong_to``).
 - **Click to review.** While the view is open, a click on the map hit-tests the
   loaded alerts (``set_store.hit_alert``) and opens a popup with the alert's
   summary and **Review**, which selects that alert and opens Analysis. This
@@ -57,7 +62,7 @@ from gui.scripts import set_store
 from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
 from gui.scripts.solara_threads import spawn_in_context
-from gui.store.project_writers import writing
+from gui.store.project_writers import is_writing, writing
 from gui.store.workflow_steps import STEPS, active_set
 
 #: MapLayers key of the active set's tiles (or their centroid fallback)
@@ -285,6 +290,20 @@ def OverviewTile(app_state, map_, workspace, layers):
     active = app_state.panel_view.value == OVERVIEW_VIEW
     s = active_set(p)
     has_alerts = gdf is not None and len(gdf) > 0
+    # Subscribes to project_writers: a build skipped while the project was
+    # being written (``deferred``) is asked for again once the writer is done,
+    # through ``retries``. Only a deferred build re-keys the layer effect, so
+    # a Save's own mark does not redraw tiles that are current.
+    busy = is_writing(p.name) if p is not None else False
+    deferred = solara.use_ref(False)
+    retries, set_retries = solara.use_state(0)
+
+    def _retry_when_free():
+        if not busy and deferred.current:
+            deferred.current = False
+            set_retries(retries + 1)
+
+    solara.use_effect(_retry_when_free, [busy])
 
     def _sync_table():
         counts = (calculate_alert_classes(gdf, "Confirmed", "False Positive", "Need revision")
@@ -312,9 +331,17 @@ def OverviewTile(app_state, map_, workspace, layers):
         def build():
             if not _still_open():
                 return
+            deferred.current = False
             try:
-                pm = set_store.ensure_pmtiles(project, alert_set, alerts)
+                pm = set_store.ensure_pmtiles(project, alert_set, workspace)
                 warning = None if pm is not None else t("steps.integrate.no_tippecanoe")
+            except set_store.StoreBusy as exc:
+                # Stale tiles while the project is being written (an Integrate
+                # swapping this set's store in, a review Save): the centroids
+                # stand in, silently, until the writer is done.
+                logger.info("tiles of set %s not rebuilt now: %s", alert_set.id, exc)
+                deferred.current = True
+                pm, warning = None, None
             except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
                 logger.exception("could not build the tiles of set %s", alert_set.id)
                 pm, warning = None, t("steps.overview.tiles_failed", error=_error_text(exc))
@@ -327,12 +354,13 @@ def OverviewTile(app_state, map_, workspace, layers):
                 except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
                     logger.exception("could not show the tiles of set %s", alert_set.id)
                     warning = t("steps.overview.tiles_failed", error=_error_text(exc))
-            notifications.warning(warning)
+            if warning is not None:
+                notifications.warning(warning)
             _add_centroid_layer(map_, alerts, name)
 
         layers.show(SET_LAYER_KEY, build, content_id=f"{alert_set.id}:{len(alerts)}", notifier=notifications)
 
-    solara.use_effect(_sync_layer, [active, s.id if s else None, gdf])
+    solara.use_effect(_sync_layer, [active, s.id if s else None, gdf, retries])
 
     def _close_popup():
         if popup_ref.current is not None:

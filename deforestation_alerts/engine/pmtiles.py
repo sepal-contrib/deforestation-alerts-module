@@ -4,17 +4,21 @@ Two layers: ``alerts`` (polygons, from zoom 11) and ``points`` (centroids at
 every zoom; ``-r1`` stops tippecanoe's default rate-dropping of points).
 ``status_code`` is an int: protomaps-leaflet filters compare with strict ===.
 The archive is assembled on local disk (tippecanoe seeks constantly; on SEPAL's
-NFS it is ~60x slower) and copied into place through a ``.part`` rename.
+NFS it is ~60x slower) and copied into place through a ``.part`` rename. The
+``.part`` name is unique per call: Integrate and Overview can build the same
+set's tiles at the same time, and two builders sharing one staging name would
+copy over each other's half-written file.
 """
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from deforestation_alerts.gdal_env import local_scratch_dir
 
@@ -64,7 +68,15 @@ def _write_layers(gdf, folder: Path) -> tuple[Path, Path]:
     return a, b
 
 
-def alerts_to_pmtiles(alerts_gdf, out_path) -> Path:
+def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None]] = None) -> Path:
+    """Build ``out_path`` from ``alerts_gdf``.
+
+    ``guard``, when given, runs after tippecanoe and right before the built
+    archive is moved onto ``out_path``: a caller that built from a store on
+    disk checks there that the store is still the one it read. If it raises,
+    nothing is moved into place, the staged copy is removed, and the
+    exception propagates.
+    """
     tippecanoe = resolve_tippecanoe()
     if tippecanoe is None:
         raise RuntimeError("tippecanoe not found on PATH or next to the interpreter")
@@ -80,9 +92,13 @@ def alerts_to_pmtiles(alerts_gdf, out_path) -> Path:
             "-L", json.dumps({"file": str(points), "layer": "points"}),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        partial = out_path.with_name(out_path.name + ".part")
+        fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=f"{out_path.name}.", suffix=".part")
+        os.close(fd)
+        partial = Path(name)
         try:
             shutil.copyfile(built, partial)
+            if guard is not None:
+                guard()
             partial.replace(out_path)
         except BaseException:
             partial.unlink(missing_ok=True)
