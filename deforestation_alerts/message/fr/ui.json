@@ -239,7 +239,8 @@
                 "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger.",
                 "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer.",
                 "save_other_set": "Ces alertes appartiennent à un autre jeu d'alertes que le jeu actif : elles n'y ont donc pas été enregistrées.",
-                "save_set_changed": "Le jeu d'alertes actif a changé pendant l'enregistrement : cette révision n'a donc pas été enregistrée."
+                "save_set_changed": "Le jeu d'alertes actif a changé pendant l'enregistrement : cette révision n'a donc pas été enregistrée.",
+                "save_store_changed": "Ce jeu d'alertes a été reconstruit pendant votre revue : les alertes à l'écran ne sont plus à jour et cette révision n'a donc pas été enregistrée. Reprenez la revue sur les alertes reconstruites."
         }
     }
 }

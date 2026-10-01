@@ -238,7 +238,8 @@
                 "download_no_alert": "No alert is selected, so there is nothing to download.",
                 "save_no_alert": "No alert is selected, so there is nothing to save.",
                 "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",
-                "save_set_changed": "The active alert set changed while saving, so this review was not saved."
+                "save_set_changed": "The active alert set changed while saving, so this review was not saved.",
+                "save_store_changed": "This alert set was rebuilt while you were reviewing it, so the alerts on screen are out of date and this review was not saved. Review the rebuilt alerts instead."
         }
     }
 }

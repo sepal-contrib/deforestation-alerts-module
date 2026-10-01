@@ -238,7 +238,8 @@
                 "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
                 "save_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que guardar.",
                 "save_other_set": "Estas alertas pertenecen a otro conjunto de alertas distinto del activo, así que no se han guardado en él.",
-                "save_set_changed": "El conjunto de alertas activo cambió durante el guardado, así que esta revisión no se ha guardado."
+                "save_set_changed": "El conjunto de alertas activo cambió durante el guardado, así que esta revisión no se ha guardado.",
+                "save_store_changed": "Este conjunto de alertas se reconstruyó mientras lo revisabas, así que las alertas en pantalla están desactualizadas y esta revisión no se ha guardado. Revisa las alertas reconstruidas."
         }
     }
 }

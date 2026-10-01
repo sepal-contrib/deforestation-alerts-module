@@ -151,6 +151,11 @@ class SaveRefused(Exception):
     The worker reports it as a warning, not as an error."""
 
 
+def _store_of(target) -> Path:
+    """Where ``target``'s set keeps its alerts: the store this Save rewrites."""
+    return Path(str(target.folder)) / "alert_db.parquet"
+
+
 def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
     """Raise ``SaveRefused`` unless the Save may still write for ``target``.
 
@@ -161,6 +166,14 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
     can activate another set, or the project can be switched: the alerts this
     Save edited then belong to a set that is no longer the open project's
     active set, so they are not written at all (Review Focus 5).
+
+    A re-run of the *same* set keeps its id, so those two checks pass while
+    the run swaps a new store in under the alerts on hand. The alerts carry
+    the generation of the store they were read from
+    (``set_store.stamp_generation``): once the store on disk is another
+    generation, writing them back would overwrite the new set, so the Save is
+    refused (``save_store_changed``). Checked before the lookups, and again
+    right before the file is moved into place (``_save_alerts_to_gdf``).
     """
     if target is None:
         return
@@ -168,6 +181,8 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
         raise SaveRefused(str(cm.analysis_tile.export_labels.save_other_set))
     if not app_tile_model.is_current(target):
         raise SaveRefused(str(cm.analysis_tile.export_labels.save_set_changed))
+    if set_store.generation_changed(alertas_gdf, _store_of(target)):
+        raise SaveRefused(str(cm.analysis_tile.export_labels.save_store_changed))
 
 
 def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
@@ -311,8 +326,12 @@ def _save_alerts_to_gdf(
 
     ``folder`` and ``target`` are where the Save started (``_save_target``);
     without ``folder`` both are read now. Raises ``SaveRefused``, writing
-    nothing, unless the alerts are ``target``'s set's and that set is still the
-    open project's active set.
+    nothing, unless the alerts are ``target``'s set's, that set is still the
+    open project's active set, and its store on disk is still the one the
+    alerts came from; the last check runs again right before the serialized
+    file is moved into place, so a store swapped in during the serialization
+    is not overwritten either. After the write the alerts are stamped with
+    the new store's generation, so the next Save of them lands.
     Guard: skip if the folder is empty (smoke / no set yet).
     """
     if folder is None:
@@ -320,11 +339,15 @@ def _save_alerts_to_gdf(
     if not folder:
         return
     _refuse_unless_current(alertas_gdf, app_tile_model, target)
+    store = str(PurePosixPath(folder) / "alert_db.parquet")
     save_gdf_to_parquet(
         alertas_gdf,
         workspace,
-        str(PurePosixPath(folder) / "alert_db.parquet"),
+        store,
+        guard=lambda: _refuse_unless_current(alertas_gdf, app_tile_model, target),
     )
+    if target is not None:
+        set_store.stamp_generation(alertas_gdf, store)
     record = getattr(app_tile_model, "record_review", None)
     if record is not None:
         # The count of the set this store belongs to (the Analysis badge).

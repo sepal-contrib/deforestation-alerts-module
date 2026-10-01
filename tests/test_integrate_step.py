@@ -192,7 +192,7 @@ def _tiles(monkeypatch, available=True, fail=None):
     return built
 
 
-def test_zero_alerts_still_records_the_set_and_skips_tiles(monkeypatch):
+def test_zero_alerts_still_records_the_set_and_skips_tiles(monkeypatch, tmp_path):
     """Review focus 1 and spec §12: an empty set is recorded and announced with
     an info toast; no tiles, and no jump to an Analysis with nothing to review.
     """
@@ -200,7 +200,7 @@ def test_zero_alerts_still_records_the_set_and_skips_tiles(monkeypatch):
     monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: _result(0))
     built = _tiles(monkeypatch)
     notifier = _Notifier()
-    integrate_jobs.run_integration_job(state, notifier, _job())
+    integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
     assert built == []
     assert state.project.value.active_set == "x"
     assert state.current_page_view.value != "analysis_tile"  # nothing to review
@@ -244,6 +244,25 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     assert state.current_page_view.value == "analysis_tile"
     assert notifier.toasts == [("success", t("steps.integrate.done", n=2))]
     assert busy == [True] and not is_writing("d")
+
+
+def test_the_published_alerts_are_stamped_with_the_store_the_run_wrote(monkeypatch, tmp_path):
+    """A review Save of these alerts checks that the set's store on disk is
+    still the one they came from (set_store.generation_changed)."""
+    from gui.scripts import set_store
+
+    state = _open("d")
+    result = _result(2)
+    store = tmp_path / "d" / SET_DIR / "alert_db.parquet"
+    store.parent.mkdir(parents=True)
+    result.alerts.to_parquet(store)  # run_integration swapped it in
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: result)
+    _tiles(monkeypatch)
+    integrate_jobs.run_integration_job(state, _Notifier(), _job(pdir=tmp_path / "d"))
+
+    assert state.alerts_gdf.value is result.alerts
+    assert result.alerts.attrs[set_store.STORE_GENERATION] == set_store.store_generation(store)
+    assert not set_store.generation_changed(result.alerts, store)
 
 
 def test_a_tile_failure_warns_and_still_records_the_set(monkeypatch, tmp_path):

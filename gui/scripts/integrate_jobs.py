@@ -34,6 +34,7 @@ from deforestation_alerts.engine.integrate import run_integration
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import AlertSetParams
 from gui.i18n import t
+from gui.scripts import set_store
 from gui.scripts.notify_bridge import tracked_job
 from gui.store.project_writers import writing
 
@@ -171,6 +172,9 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True) -> N
     name = job.project.name
     with writing(name), tracked_job(notifier, t("steps.integrate.job_title"), total_steps=5) as task:
         result = run_integration(job, on_step=lambda key: task.step(t(key)))
+        # The store these alerts are is on disk now: a review Save of them
+        # checks it is still that store (set_store.generation_changed).
+        set_store.stamp_generation(result.alerts, paths.resolve(job.pdir, result.alert_set.store_rel_path))
         n = len(result.alerts)
         if n:
             task.step(t("steps.integrate.step_tiles"))

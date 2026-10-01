@@ -233,8 +233,8 @@ class _AdminLookups:
         return "Brasil, "
 
 
-def _save(s, ctx, ws, monkeypatch, lookups=None):
-    """Press Save on alert 0 (Confirmed, no drawn polygon), for real."""
+def _save(s, ctx, ws, monkeypatch, lookups=None, alert_id=0):
+    """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
     from deforestation_alerts.message import cm
     from gui.tile.analysis import export
 
@@ -246,7 +246,7 @@ def _save(s, ctx, ws, monkeypatch, lookups=None):
         selected_img_after_info_list=["Planet NICFI", 2, None, "after", "_a"],
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
-    s.actual_alert_id.set(0)
+    s.actual_alert_id.set(alert_id)
     return export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=None), ctx, ws)
 
 
@@ -316,6 +316,114 @@ def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, 
     assert reviewed.read_bytes() == b"project d's store"
     if switch == "open-another":
         assert s.project.value.name == "e" and s.project.value.alert_sets["x"].n_reviewed == 0
+
+
+def _loaded(s, ws, alerts):
+    """``alerts`` as the shell's loader publishes them: written to the active
+    set's store, read back from it, and stamped with that store's generation."""
+    from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+    from gui.scripts import set_store
+
+    store = set_store.active_store_path(s.project.value)
+    save_gdf_to_parquet(alerts, ws, str(store))
+    gdf = set_store.load_active_alerts(s.project.value, ws)
+    s.alerts_gdf.set(gdf)
+    return gdf, store
+
+
+def _rerun(s, ws, store, alerts):
+    """What a re-run of the same set does: swap its store in (run_integration),
+    record the new set (apply_result) and publish its alerts."""
+    from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+    from gui.scripts.integrate_jobs import _publish_alerts, apply_result
+    from gui.scripts import set_store
+
+    save_gdf_to_parquet(alerts, ws, str(store))
+    set_store.stamp_generation(alerts, store)
+    new_set = _alert_set("x", "glad-l").model_copy(update={"n_alerts": len(alerts), "n_reviewed": 0})
+    result = SimpleNamespace(artifacts={}, alert_set=new_set, alerts=alerts)
+    assert s.update_project("d", lambda p: apply_result(p, result))
+    return result, lambda: _publish_alerts(s, "d", result)
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["recorded", "recorded-and-published"])
+def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, published):
+    """A re-run of the same period and sources keeps the set id, so the id
+    checks pass while the run swaps a new store in under the alerts on hand.
+    The Save that started on the old alerts (and blocked on the admin
+    lookups) must not write them, plus its review, over the re-run's store:
+    the alerts carry the generation of the store they were read from, and
+    the store on disk is another one by the time the write would land."""
+    from deforestation_alerts.message import cm
+    from gui.tile.analysis.export import SaveRefused
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    _, store = _loaded(s, ws, _review_alerts("x", n=2))
+    new = _review_alerts("x", n=5)
+
+    def _rerun_finishes():
+        _, publish = _rerun(s, ws, store, new)
+        if published:
+            assert publish()
+
+    with pytest.raises(SaveRefused) as refused:
+        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_rerun_finishes))
+
+    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_store_changed)
+    assert _saved_status(store) == ["Not reviewed"] * 5  # the re-run's store, untouched
+    rec = s.project.value.alert_sets["x"]
+    assert rec.n_alerts == 5 and rec.n_reviewed == 0
+    if published:
+        assert s.alerts_gdf.value is new and _save(s, ctx, ws, monkeypatch) is True  # the new alerts save fine
+        assert _saved_status(store)[0] == "Confirmed"
+
+
+def test_a_store_swapped_in_during_the_serialization_is_not_overwritten(tmp_path, monkeypatch, ws):
+    """The generation is checked again right before the serialized file is
+    moved onto the store, so a swap landing after the first check (during
+    the parquet write, seconds for a large set) is caught too."""
+    import geopandas as gpd
+
+    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    old, store = _loaded(s, ws, _review_alerts("x", n=2))
+    old.loc[0, "status"] = "Confirmed"
+    new = _review_alerts("x", n=5)
+    real = gpd.GeoDataFrame.to_parquet
+
+    def _swap_during_serialization(self, path, *args, **kwargs):
+        monkeypatch.setattr(gpd.GeoDataFrame, "to_parquet", real)  # once
+        _rerun(s, ws, store, new)
+        return real(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(gpd.GeoDataFrame, "to_parquet", _swap_during_serialization)
+    with pytest.raises(SaveRefused):
+        _save_alerts_to_gdf(old, ctx, ws)
+
+    assert _saved_status(store) == ["Not reviewed"] * 5
+    assert s.project.value.alert_sets["x"].n_reviewed == 0
+
+
+def test_consecutive_saves_of_the_same_alerts_all_land(tmp_path, monkeypatch, ws):
+    """Each Save rewrites the store: the alerts are re-stamped with the store
+    they just wrote, so the next Save of them is not refused. The stamp
+    survives the copy the save effect rebinds ``alerts_gdf`` to."""
+    from gui.scripts import set_store
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    gdf, store = _loaded(s, ws, _review_alerts("x", n=2))
+
+    assert _save(s, ctx, ws, monkeypatch) is True
+    assert gdf.attrs[set_store.STORE_GENERATION] == set_store.store_generation(store)
+    s.alerts_gdf.set(gdf.copy())  # export._apply_save
+    assert _save(s, ctx, ws, monkeypatch, alert_id=1) is True
+
+    assert _saved_status(store) == ["Confirmed", "Confirmed"]
+    assert s.project.value.alert_sets["x"].n_reviewed == 2
 
 
 def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, monkeypatch, ws):

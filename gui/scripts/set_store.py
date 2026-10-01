@@ -12,6 +12,15 @@ new store, so the mtime rule would keep them. A build is skipped while the
 set's project is being written (an Integrate, a review Save) and retried
 once the writer is done, and a build that finds the store rewritten under it
 discards what it built.
+
+A review Save writes the alerts a session holds back over the store. Those
+alerts are stamped with the generation of the store they were read from
+(``stamp_generation``: on load, when Integrate publishes a set it just wrote,
+and after each Save), and a Save is refused when the store on disk is not that
+generation any more (``generation_changed``): during a re-run of the same set
+the store is swapped under the session, and the old alerts plus a review would
+otherwise overwrite the new set, unnoticed (the set id and the manifest
+record are the new set's).
 """
 
 import logging
@@ -48,13 +57,19 @@ def active_store_path(p) -> Optional[Path]:
 
 
 def load_active_alerts(p, workspace):
-    """The active set's alerts, or None when there is no set or its store is gone."""
+    """The active set's alerts, stamped with their store's generation, or None
+    when there is no set or its store is gone."""
     from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 
     store = active_store_path(p)
     if store is None or not store.exists():
         return None
-    return load_gdf_from_parquet(workspace, str(store))
+    # The generation is read before the store: a store replaced during the
+    # read then reads as changed, and a Save of what was read is refused.
+    generation = store_generation(store)
+    gdf = load_gdf_from_parquet(workspace, str(store))
+    gdf.attrs[STORE_GENERATION] = generation
+    return gdf
 
 
 def publish_set_alerts(app_state, name: str, s, gdf) -> bool:
@@ -91,6 +106,10 @@ def pmtiles_stale(p, s) -> bool:
     return store.exists() and store.stat().st_mtime > pm.stat().st_mtime
 
 
+#: ``gdf.attrs`` key: the generation of the store the alerts were read from
+STORE_GENERATION = "store_generation"
+
+
 def store_generation(store) -> Optional[tuple]:
     """Which write of ``store`` is on disk: ``(st_mtime_ns, st_size, st_ino)``,
     or None when the file is missing. Every writer (Integrate's swap, a review
@@ -100,6 +119,22 @@ def store_generation(store) -> Optional[tuple]:
     except FileNotFoundError:
         return None
     return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def stamp_generation(gdf, store) -> None:
+    """Mark ``gdf`` as read from (or just written to) the ``store`` on disk
+    now. pandas carries ``attrs`` through ``copy``, slicing and ``to_crs``."""
+    if gdf is not None:
+        gdf.attrs[STORE_GENERATION] = store_generation(store)
+
+
+def generation_changed(gdf, store) -> bool:
+    """True when ``gdf`` was stamped and ``store`` is no longer that
+    generation: the alerts on hand are not what is on disk, so they must not
+    be written back. Unstamped alerts (recipe-era callers, test fakes) are
+    not checked."""
+    stamped = gdf.attrs.get(STORE_GENERATION) if gdf is not None else None
+    return stamped is not None and store_generation(store) != stamped
 
 
 def alerts_belong_to(gdf, s) -> bool:

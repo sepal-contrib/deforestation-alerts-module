@@ -36,7 +36,7 @@ def save_gdf_to_csv(gdf, path, geometry_cols):
     return path
 
 
-def save_gdf_to_parquet(gdf, workspace, remote_path):
+def save_gdf_to_parquet(gdf, workspace, remote_path, *, guard=None):
     """Write the alerts gdf to GeoParquet in the user's SEPAL workspace.
 
     GeoParquet supports multiple geometry columns; coerce the known secondary
@@ -49,6 +49,11 @@ def save_gdf_to_parquet(gdf, workspace, remote_path):
         workspace (Workspace): the session's user-file adapter.
         remote_path (str): REMOTE path of the store, e.g.
             ``workspace.results_dir(recipe, "alert_db.parquet")``.
+        guard: optional callable run once the file is serialized, right
+            before it is moved onto ``remote_path``. A review Save checks
+            there that the store it is about to replace is still the one its
+            alerts came from; if the guard raises, nothing is written and the
+            exception propagates.
 
     Returns:
         str: the remote path written.
@@ -74,6 +79,8 @@ def save_gdf_to_parquet(gdf, workspace, remote_path):
     local = workspace.scratch_file(".parquet")
     try:
         out.to_parquet(local)
+        if guard is not None:
+            guard()
         return workspace.upload_from_scratch(local, remote_path)
     finally:
         workspace.discard_scratch(local)

@@ -280,6 +280,22 @@ def test_ensure_pmtiles_builds_only_when_stale(tmp_path, monkeypatch, ws):
     assert not list(store.parent.glob("*.part"))
 
 
+def test_loaded_alerts_carry_their_stores_generation(tmp_path, monkeypatch, ws):
+    """The loader stamps what it reads; a rewrite of the store since (a
+    re-run's swap) reads as changed, so a Save of those alerts is refused."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    gdf = set_store.load_active_alerts(p, ws)
+    assert gdf.attrs[set_store.STORE_GENERATION] == set_store.store_generation(store)
+    assert not set_store.generation_changed(gdf, store)
+    assert not set_store.generation_changed(gdf.copy().iloc[0:1], store)  # the stamp follows pandas copies
+    staged = store.with_name("alert_db.staged.parquet")
+    _alerts().to_parquet(staged)
+    os.replace(staged, store)  # Integrate's swap
+    assert set_store.generation_changed(gdf, store)
+    assert not set_store.generation_changed(_gdf(), store)  # unstamped alerts are not checked
+    assert not set_store.generation_changed(None, store)
+
+
 def test_store_generation_follows_every_rewrite(tmp_path, monkeypatch, ws):
     from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 
