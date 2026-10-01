@@ -50,6 +50,27 @@ def test_editing_replaces_a_period_without_sets():
     assert list(p.periods) == ["2026-02-01_2026-02-28"] and p.look_back_days == 30
 
 
+def test_apply_period_replaces_the_shared_containers_instead_of_mutating_them():
+    """Every published snapshot shares the live project's ``periods`` and
+    ``artifacts`` (``AppState`` publishes shallow copies): a render iterating
+    them on another thread must not see them change size under the edit."""
+    p = _p_with_source()
+    apply_period(p, "2026-01-01", "2026-01-31", 90)
+    jan = p.active_period
+    p.artifacts[raw_key(jan, "RADD")] = Artifact(key=raw_key(jan, "RADD"), kind="raw_alert", rel_path="r.tif",
+                                               fingerprint="f", inputs={}, content_id="c", created_at=datetime.now())
+    snapshot = p.model_copy()
+    periods_being_iterated = iter(snapshot.periods.values())
+    artifacts_being_iterated = iter(snapshot.artifacts.values())
+
+    assert apply_period(p, "2026-02-01", "2026-02-28", 30) is None
+
+    assert [per.id for per in periods_being_iterated] == [jan]  # no "dictionary changed size during iteration"
+    assert len(list(artifacts_being_iterated)) == 1
+    assert list(snapshot.periods) == [jan] and list(snapshot.artifacts) == [raw_key(jan, "RADD")]
+    assert list(p.periods) == ["2026-02-01_2026-02-28"] and p.artifacts == {}
+
+
 def test_validation_errors():
     p = _p()
     assert apply_period(p, "nope", "2026-01-31", 90) == "bad_date"

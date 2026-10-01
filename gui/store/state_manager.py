@@ -7,6 +7,15 @@ updates. Worker threads never replace the project wholesale: they return what
 they produced and ``update_project`` applies it to the *live* project, only if
 that project is still the open one.
 
+The copy is shallow (spec §5.4), so every published snapshot shares the live
+project's dict fields (``sources``, ``periods``, ``artifacts``, ``alert_sets``,
+``masks``). A callback handed to ``commit`` or ``update_project`` therefore
+replaces a container it changes (``p.alert_sets = {**p.alert_sets, sid: s}``)
+and never mutates it in place: the publish runs on the caller's thread while a
+render on another thread may be iterating the same dict, and an in-place
+``[...] =`` or ``pop`` there is a "dictionary changed size during iteration"
+in that render. Setting a plain attribute, or a field of one entry, is fine.
+
 Lock ordering. ``_lock`` makes check-current + mutate + publish atomic against
 a project switch (close/new/load take it too). Publishing is not cheap: a
 reactive ``set`` runs its subscribers synchronously in the calling thread, so

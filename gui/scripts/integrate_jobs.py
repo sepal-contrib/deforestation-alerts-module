@@ -68,9 +68,14 @@ def reviewed_in(project, set_id: str) -> int:
 
 
 def apply_result(project, result) -> None:
-    """Record the set and its artifacts in ``project`` and make it the active set."""
-    project.artifacts.update(result.artifacts)
-    project.alert_sets[result.alert_set.id] = result.alert_set
+    """Record the set and its artifacts in ``project`` and make it the active set.
+
+    The containers are replaced, not mutated: the published snapshots share
+    them (``AppState`` publishes shallow copies), and a render iterating one
+    on another thread would otherwise see it change size.
+    """
+    project.artifacts = {**project.artifacts, **result.artifacts}
+    project.alert_sets = {**project.alert_sets, result.alert_set.id: result.alert_set}
     project.active_set = result.alert_set.id
 
 

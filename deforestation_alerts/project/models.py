@@ -200,7 +200,9 @@ def add_predefined_source(p: Project, key: str) -> PredefinedSource:
     if key in p.sources:
         raise ValueError(f"{key} is already a source")
     src = PredefinedSource(name=key, catalogue_key=key, digit=PREDEFINED_DIGITS[key])
-    p.sources[key] = src
+    # Replaced, not mutated: the app publishes shallow copies of the project
+    # that share this dict with a render on another thread.
+    p.sources = {**p.sources, key: src}
     return src
 
 
@@ -213,4 +215,4 @@ def next_custom_digit(p: Project) -> int:
 
 
 def remove_source(p: Project, name: str) -> None:
-    p.sources.pop(name, None)
+    p.sources = {k: s for k, s in p.sources.items() if k != name}

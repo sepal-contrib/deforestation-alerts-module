@@ -147,4 +147,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
 
 
 def apply_artifacts(project: Project, artifacts: dict[str, Artifact]) -> None:
-    project.artifacts.update(artifacts)
+    """Record ``artifacts`` in ``project``. The dict is replaced, not
+    mutated: the app publishes shallow copies of the project that share it,
+    and a render iterating it on another thread must not see it change."""
+    project.artifacts = {**project.artifacts, **artifacts}

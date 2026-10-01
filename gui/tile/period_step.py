@@ -27,10 +27,12 @@ def _drop_period_artifacts(p, old_period_id: str) -> None:
     once its id is gone from ``p.periods`` (ruling #69 on the Task 17
     pre-flight): drop them so the manifest doesn't accumulate orphans. The
     files themselves stay on disk (nothing downstream references them, and a
-    project can only reach this branch while the period has no alert set)."""
+    project can only reach this branch while the period has no alert set).
+    The dict is replaced, not mutated: the published snapshots share it."""
+    gone = set()
     for source in p.sources:
-        p.artifacts.pop(raw_key(old_period_id, source), None)
-        p.artifacts.pop(harm_key(old_period_id, source), None)
+        gone.update((raw_key(old_period_id, source), harm_key(old_period_id, source)))
+    p.artifacts = {k: a for k, a in p.artifacts.items() if k not in gone}
 
 
 def apply_period(p, start: str, end: str, look_back) -> Optional[str]:
@@ -52,10 +54,12 @@ def apply_period(p, start: str, end: str, look_back) -> Optional[str]:
     current = p.active_period
     if current and current != new_id and _has_sets(p, current):
         return "locked"
+    periods = dict(p.periods)  # replaced, not mutated: the published snapshots share it
     if current and current != new_id:
-        p.periods.pop(current, None)
+        periods.pop(current, None)
         _drop_period_artifacts(p, current)
-    p.periods[new_id] = Period(id=new_id, start=a, end=b)
+    periods[new_id] = Period(id=new_id, start=a, end=b)
+    p.periods = periods
     p.active_period = new_id
     p.look_back_days = lb
     return None

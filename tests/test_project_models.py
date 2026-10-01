@@ -78,6 +78,20 @@ def test_period_window_and_ids():
     assert set_id(per.id, ["RADD", "GLAD-L"]) == "2026-02-01_2026-02-28__glad-l-radd"
 
 
+def test_source_edits_replace_the_shared_sources_dict_instead_of_mutating_it():
+    """The app publishes shallow copies of the project, so every snapshot
+    shares ``sources``; a render iterating it on another thread must not see
+    it change size under an add or a remove."""
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    add_predefined_source(p, "GLAD-L")
+    snapshot = p.model_copy()
+    being_iterated = iter(snapshot.sources.values())
+    add_predefined_source(p, "RADD")
+    remove_source(p, "GLAD-L")
+    assert [s.name for s in being_iterated] == ["GLAD-L"]  # no "dictionary changed size during iteration"
+    assert list(snapshot.sources) == ["GLAD-L"] and list(p.sources) == ["RADD"]
+
+
 def test_locked_once_a_set_exists():
     p = _project()
     assert p.locked is False

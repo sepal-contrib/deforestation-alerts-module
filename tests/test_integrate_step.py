@@ -107,6 +107,26 @@ def test_apply_result_records_the_set_and_activates_it():
     assert p.artifacts == {"store:x": art}  # no pmtiles record: Overview uses mtimes (ruling #79)
 
 
+def test_apply_result_replaces_the_shared_containers_instead_of_mutating_them():
+    """``AppState`` publishes shallow copies, so every snapshot shares the
+    live project's dicts. A render iterating one on another thread (the Period
+    step's ``_has_sets``, the Alerts step's ``_sets_using``) must not see it
+    change size under the worker's record."""
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    p.alert_sets["y"] = _set("y", 0)
+    p.artifacts["store:y"] = SimpleNamespace(key="store:y")
+    snapshot = p.model_copy()
+    sets_being_iterated = iter(snapshot.alert_sets.values())
+    artifacts_being_iterated = iter(snapshot.artifacts.values())
+
+    integrate_jobs.apply_result(p, SimpleNamespace(alert_set=_set("x", 0), artifacts={"store:x": "a"}, alerts=None))
+
+    assert [s.id for s in sets_being_iterated] == ["y"]  # no "dictionary changed size during iteration"
+    assert len(list(artifacts_being_iterated)) == 1
+    assert set(snapshot.alert_sets) == {"y"} and set(snapshot.artifacts) == {"store:y"}
+    assert set(p.alert_sets) == {"x", "y"} and set(p.artifacts) == {"store:x", "store:y"}
+
+
 # ---------------------------------------------------------------------------
 # run_integration_job (the worker body): review focus 1 and 5
 # ---------------------------------------------------------------------------

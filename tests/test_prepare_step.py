@@ -97,6 +97,23 @@ def _ctx(app_state, cancel=None, **overrides):
     return prepare_jobs.PrepareContext(**fields)
 
 
+def test_apply_artifacts_replaces_the_shared_dict_instead_of_mutating_it():
+    """The row callback runs on the worker while a render on another thread
+    may iterate the same ``artifacts`` dict (every published snapshot shares
+    it): the record must not change that dict's size."""
+    from deforestation_alerts.engine.runner import apply_artifacts
+
+    p = _project("d", "GLAD-L", "RADD")
+    p.artifacts.update(_arts("GLAD-L"))
+    snapshot = p.model_copy()
+    being_iterated = iter(snapshot.artifacts.values())
+
+    apply_artifacts(p, _arts("RADD"))
+
+    assert len(list(being_iterated)) == 2  # no "dictionary changed size during iteration"
+    assert set(snapshot.artifacts) == set(_arts("GLAD-L")) and len(p.artifacts) == 4
+
+
 def test_run_rows_applies_artifacts_and_stops_on_project_switch(monkeypatch, tmp_path):
     """Review focus 5 and spec §12: nothing lands in the project open now. The
     row that finished after the switch is recorded in its own project's saved
