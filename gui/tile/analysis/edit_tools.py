@@ -75,8 +75,8 @@ app_state : AppState
     Navigation + alerts source of truth (``actual_alert_id``).
 analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` — the user-drawn polygon GeoDataFrame.
-app_tile_model : AppTileModel
-    ``recipe_folder_path`` — the REMOTE recipe folder the before/after composite
+app_tile_model : SetContext
+    ``recipe_folder_path`` — the active set's folder the before/after composite
     is cached in.
 workspace : Workspace
     The session user-file adapter; the composite is staged through it (the

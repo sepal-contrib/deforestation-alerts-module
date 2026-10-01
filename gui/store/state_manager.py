@@ -63,16 +63,6 @@ class AppState:
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
         self.loading = solara.reactive(False)
-        # LEGACY until Task 22: the old shell and tiles still read these, so the
-        # app keeps running on the old flow while the new steps are built.
-        # active_map_view: the right-panel tile owning the shared map's layers
-        # (MapLayers replaces it, spec §4.3); aoi_name: mirror of
-        # aoi_date_model.name kept by a traitlets observer in Page().
-        self.active_map_view = solara.reactive("")
-        self.aoi_name = solara.reactive(None)
-        self.recipe_name = solara.reactive("")
-        self.recipe_folder_path = solara.reactive("")
-        self.error_message = solara.reactive(None)
 
     # ---- project lifecycle ---------------------------------------------------
     @property
@@ -151,19 +141,3 @@ class AppState:
 
     def go_prev(self):
         self.go_to(self.actual_alert_id.value - 1)
-
-
-def aoi_name_from_model(model):
-    """The AOI label for the pipeline header gates, or None when no AOI is set.
-
-    The *geometry* gates the label: ``name`` is a traitlet that outlives a
-    cleared geometry, so a name without a ``feature_collection`` is a stale
-    label rather than a selected AOI.
-
-    Solara-free on purpose (no reactives, no widgets) so the mirror installed by
-    ``Page()._mirror_aoi_name`` can be unit-tested without importing
-    ``gui.solara_app`` (which calls ``init_ee()`` at import time).
-    """
-    fc = getattr(model, "feature_collection", None)
-    name = getattr(model, "name", None) if fc is not None else None
-    return name or None

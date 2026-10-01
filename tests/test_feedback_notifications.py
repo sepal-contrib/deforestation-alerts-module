@@ -17,21 +17,13 @@ error toast (``ERROR_TOAST_TIMEOUT``) is published. pysepal's bus REPLACES earli
 error toasts, so counting ``bus.toasts`` could hide a duplicate — the error count
 is asserted on a ``Notifier.error`` spy instead.
 
-Solara-tile coverage (``aoi_tile`` / ``alerts_filter_tile``): DELIBERATELY not
-render-based. This suite has no headless reacton/Solara render harness (every
-other UI test here is either a pure-function test or a source-contract test in
-``test_app_wiring.py``), and standing one up for two toasts is not warranted.
-Those two tiles are covered by (a) ``test_solara_tiles_use_the_hook_not_the_globals``
-and ``test_task_error_toasts_use_the_exception_not_the_error_flag`` below, which
-lock the API boundary and the one publishing bug that is easy to introduce, and
-(b) the manual live check recorded in the task report.
-
 No GEE, no browser.
 """
 
 import ast
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pysepal.solara.notifications.bus import NotificationBus
@@ -39,10 +31,7 @@ from pysepal.solara.notifications.notifier import Notifier
 from pysepal.solara.notifications.state import TaskStatus, ToastType
 
 from deforestation_alerts.message import cm
-from deforestation_alerts.model.alerts_model import SelectedAlertsModel
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
-from deforestation_alerts.model.app_model import AppTileModel
-from deforestation_alerts.model.aux_model import AuxModel
 from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
@@ -164,217 +153,18 @@ def _widgets(root):
             yield from _widgets(child)
 
 
+def _set_context_fake():
+    """What the Analysis cards read from their ``SetContext`` (the set's folder
+    and the report template), without a project: ``""`` is "no set"."""
+    return SimpleNamespace(recipe_folder_path="", custom_report_template=None)
+
+
 def _button(root, msg):
     """Find the ``sw.Btn`` in ``root`` whose label is ``msg``."""
     for widget in _widgets(root):
         if getattr(widget, "msg", None) == msg:
             return widget
     raise AssertionError(f"no button labelled {msg!r} in the layout")
-
-
-class _AoiDateStub:
-    """Stands in for AoiDateModel so the test never touches Earth Engine."""
-
-    def __init__(self):
-        self.imported = None
-
-    def export_dictionary(self):
-        return {"aoi_method": "ADMIN0", "aoi_admin": ["CIV"]}
-
-    def import_from_dictionary(self, params):
-        self.imported = params
-
-
-# ---------------------------------------------------------------------------
-# recipe_tile — raw ipyvuetify layout + daemon workers under tracked_job
-# ---------------------------------------------------------------------------
-@pytest.fixture()
-def recipe_layout(ws):
-    """Build the real recipe layout against a ``Workspace`` over the fake client.
-
-    The recipe files these workers save and load are USER files, so the assertions
-    below read them back out of the workspace (``ws``), not off the container's
-    disk — that IS the contract Task 11 moved them onto.
-    """
-    import gui.tile.recipe_tile as recipe_tile
-
-    selected = SelectedAlertsModel()
-    selected.min_area = 1.5  # Float(None) default raises on export
-    aoi_date = _AoiDateStub()
-    app_tile_model = AppTileModel()
-    app_state = AppState()
-
-    layout = recipe_tile.build_recipe_layout(
-        AuxModel(),
-        aoi_date,
-        None,  # alert_filter_model — unused by save/load
-        selected,
-        AlertAnalysisModel(),
-        app_tile_model,
-        app_state,
-        ws,
-    )
-    return recipe_tile, layout, app_state, app_tile_model, aoi_date
-
-
-def test_recipe_save_publishes_a_success_toast(recipe_layout, ws, monkeypatch):
-    recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-    folder = ws.ensure_dir("recipe_test")
-    app_state.recipe_folder_path.value = folder
-
-    save_btn = _button(layout, cm.recipe_tile.button_save_recipe)
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    # the toast reports a save that really happened -- in the user's workspace
-    assert ws.exists(folder + "/recipe_parameters.json")
-    # the save is a tracked task now (pill + task log), completed
-    task = feedback.task()
-    assert task.title == str(cm.recipe_tile.card_title_save_recipe)
-    assert task.status == TaskStatus.COMPLETED
-    assert feedback.errors == []
-    assert feedback.toasts() == [("success", cm.recipe_tile.alert_save_recipe_done)]
-    assert save_btn.loading is False and save_btn.disabled is False
-
-
-def test_recipe_save_failure_fails_the_task_and_publishes_one_error_toast(
-    recipe_layout, ws, monkeypatch, data_files
-):
-    recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-    # a folder that does not exist -> _run_save raises FileNotFoundError
-    gone = ws.results_dir("gone")
-    app_state.recipe_folder_path.value = gone
-
-    save_btn = _button(layout, cm.recipe_tile.button_save_recipe)
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    assert not ws.exists(gone)
-    assert data_files(ws) == []  # and nothing was written anyway
-    feedback.assert_one_error_after_fail(
-        startswith=f"{cm.recipe_tile.input_hint_save_recipe_error}: "
-    )
-    # the button is released on the failure path too
-    assert save_btn.loading is False and save_btn.disabled is False
-
-
-def test_recipe_load_tracks_its_phases_and_publishes_success(
-    recipe_layout, ws, monkeypatch
-):
-    recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-
-    params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
-    folder = ws.results_dir("recipe_from_disk")
-    recipe_file = folder + "/recipe_parameters.json"
-    ws.write_json(recipe_file, params)
-    _find_load_input(layout).v_model = recipe_file
-
-    load_btn = _button(layout, cm.recipe_tile.button_load_recipe)
-    load_btn.fire_event("click", None)
-    feedback.join()
-
-    # the load really ran: models imported and the folder published
-    assert aoi_date.imported == params
-    assert app_tile_model.recipe_name == "recipe_from_disk"
-    assert app_state.recipe_folder_path.value == folder
-    # and it was reported as a 2-phase tracked task followed by one success toast
-    task = feedback.task()
-    assert task.title == str(cm.recipe_tile.load_task_title)
-    assert task.total_steps == 2
-    assert task.status == TaskStatus.COMPLETED
-    assert _is_subsequence(
-        [cm.recipe_tile.load_step_parameters, cm.recipe_tile.loader_loading_alert_db],
-        feedback.milestones(),
-    )
-    assert feedback.errors == []
-    assert feedback.toasts() == [("success", cm.recipe_tile.alert_load_recipe_done)]
-    assert load_btn.loading is False and load_btn.disabled is False
-
-
-@pytest.mark.parametrize("shape", ["home_relative", "root_relative"])
-def test_recipe_load_normalizes_a_non_absolute_picked_path(
-    recipe_layout, ws, monkeypatch, shape
-):
-    """picker -> adapter boundary: ``FileInput`` fills ``v_model`` from the path
-    the SERVER echoes, which is not built here and is not trusted. A path that
-    is not absolute must still resolve to the right remote recipe folder rather
-    than failing the load or anchoring the alert store somewhere else."""
-    recipe_tile, layout, app_state, app_tile_model, aoi_date = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-
-    params = {"recipe_name": "recipe_from_disk", "actual_alert_id": 0}
-    folder = ws.results_dir("recipe_from_disk")
-    recipe_file = folder + "/recipe_parameters.json"
-    ws.write_json(recipe_file, params)
-    picked = (
-        ws.home_relative(recipe_file)  # module_results/deforestation_alerts/...
-        if shape == "home_relative"
-        else "recipe_from_disk/recipe_parameters.json"
-    )
-    assert not picked.startswith("/")
-    _find_load_input(layout).v_model = picked
-
-    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    feedback.join()
-
-    assert aoi_date.imported == params
-    # the store is anchored on the ABSOLUTE remote folder, not on the echo
-    assert app_state.recipe_folder_path.value == folder
-    assert app_tile_model.recipe_folder_path == folder
-    assert feedback.toasts() == [("success", cm.recipe_tile.alert_load_recipe_done)]
-
-
-def test_recipe_load_refuses_a_picked_path_outside_the_workspace(
-    recipe_layout, ws, monkeypatch
-):
-    """An echoed path pointing somewhere else entirely must fail visibly instead
-    of silently pointing the alert store at another folder."""
-    recipe_tile, layout, app_state, _model, _aoi = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-    _find_load_input(layout).v_model = "/home/other-user/recipe_parameters.json"
-
-    _button(layout, cm.recipe_tile.button_load_recipe).fire_event("click", None)
-    feedback.join()
-
-    assert app_state.recipe_folder_path.value in (None, "")
-    feedback.assert_one_error_after_fail(
-        startswith=cm.recipe_tile.input_hint_load_recipe_name
-    )
-
-
-def test_recipe_load_failure_fails_the_task_before_the_error_toast(
-    recipe_layout, monkeypatch
-):
-    recipe_tile, layout, _app_state, _model, _aoi = recipe_layout
-    feedback = _record_feedback(monkeypatch, recipe_tile)
-    _find_load_input(layout).v_model = ""  # nothing selected -> FileNotFoundError
-
-    load_btn = _button(layout, cm.recipe_tile.button_load_recipe)
-    load_btn.fire_event("click", None)
-    feedback.join()
-
-    # same text as before the migration: "<hint>: <exception>"
-    feedback.assert_one_error_after_fail(
-        equals=(
-            f"{cm.recipe_tile.input_hint_load_recipe_name}: "
-            f"{cm.recipe_tile.input_hint_load_recipe_name}"
-        )
-    )
-    assert load_btn.loading is False and load_btn.disabled is False
-
-
-def _find_load_input(layout):
-    """The recipe picker: pysepal's REMOTE-capable FileInput (not ``sw.FileInput``,
-    which is a different class that browses the container's disk)."""
-    from pysepal.sepalwidgets.file_input import FileInput
-
-    for widget in _widgets(layout):
-        if isinstance(widget, FileInput):
-            return widget
-    raise AssertionError("no FileInput in the recipe layout")
 
 
 # ---------------------------------------------------------------------------
@@ -476,11 +266,11 @@ def export_card(monkeypatch, ws):
     import gui.tile.analysis.export as export
 
     app_state = AppState()
-    app_tile_model = AppTileModel()
+    app_tile_model = _set_context_fake()
     card = export.build_export(
         widgets=None,  # only touched inside _save_attributes / _download_data
         app_state=app_state,
-        aux_model=AuxModel(),
+        aux_model=_set_context_fake(),
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=app_tile_model,
         workspace=ws,
@@ -596,12 +386,13 @@ def test_export_marks_the_open_project_as_being_written(
     assert busy == [True] and not is_writing("d")
 
 
-def test_export_save_of_another_sets_alerts_fails_the_task_with_one_error_toast(
+def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
     monkeypatch, ws, tmp_path
 ):
     """While the alerts on hand are another set's (Integrate records a new set
     before it publishes that set's alerts), a Save must not write them into
-    the active set's store: the task fails and the one error toast says why."""
+    the active set's store. Nothing went wrong, the Save just has nowhere to
+    go: a FAILED task with the reason and one warning toast, no error toast."""
     from datetime import datetime
 
     import geopandas as gpd
@@ -652,9 +443,11 @@ def test_export_save_of_another_sets_alerts_fails_the_task_with_one_error_toast(
     save_btn.fire_event("click", None)
     feedback.join()
 
-    feedback.assert_one_error_after_fail(
-        equals=cm.analysis_tile.export_labels.save_other_set
-    )
+    expected = str(cm.analysis_tile.export_labels.save_other_set)
+    task = feedback.task()
+    assert task.status == TaskStatus.FAILED and task.error_message == expected
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", expected)]
     assert store.read_bytes() == b"set x's store"
     assert download_btn.disabled is True
     assert save_btn.loading is False and save_btn.disabled is False
@@ -880,7 +673,7 @@ def edit_tools_card(ws):
         widgets=None,  # only touched inside _run_cnn_model / the edit handlers
         app_state=AppState(),
         analyzed_alerts_model=analyzed_alerts_model,
-        app_tile_model=AppTileModel(),
+        app_tile_model=_set_context_fake(),
         workspace=ws,
     )
     return edit_tools, card, analyzed_alerts_model
@@ -1011,7 +804,7 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
     })()
 
     result = edit_tools._run_cnn_model(
-        "repo", "file", "_m1", widgets, app_state, AppTileModel(), ws, task=_Task()
+        "repo", "file", "_m1", widgets, app_state, _set_context_fake(), ws, task=_Task()
     )
 
     assert result == "/tmp/pred.tif"
@@ -1023,17 +816,13 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
 #
 # Source-contract tests, in the style of tests/test_app_wiring.py, but read from
 # the parsed AST rather than raw text: a prose mention of ``use_notifications()``
-# in a module docstring must not count as a call. They cover the two Solara
-# tiles, which this suite cannot render (see the module docstring), and they
-# catch the two mistakes this migration makes easy — reaching for the globals
-# inside a component, and str()-ing the boolean ``task.error`` instead of
-# ``task.exception``.
+# in a module docstring must not count as a call. They catch the mistake this
+# migration makes easy: reaching for the hook from a worker thread, where no
+# hook can run.
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parents[1]
 
-SOLARA_TILES = ["gui/tile/aoi_tile.py", "gui/tile/alerts_filter_tile.py"]
 RAW_LAYOUTS = [
-    "gui/tile/recipe_tile.py",
     "gui/tile/analysis/edit_tools.py",
     "gui/tile/analysis/export.py",
     # Hybrid: a Solara component, but its export card is a module-level raw
@@ -1078,35 +867,6 @@ def _imported_names(rel):
     return names
 
 
-def _str_of_attributes(rel):
-    """Attribute names appearing as ``str(<something>.<attr>)`` in ``rel``."""
-    attrs = set()
-    for node in ast.walk(ast.parse(_src(rel))):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "str"
-            and node.args
-            and isinstance(node.args[0], ast.Attribute)
-        ):
-            attrs.add(node.args[0].attr)
-    return attrs
-
-
-def test_solara_tiles_use_the_hook_not_the_globals():
-    """Components must bind the notifier to the rendering kernel via the hook."""
-    for rel in SOLARA_TILES:
-        called = _called(rel)
-        assert "use_notifications" in called, f"{rel} does not call the hook"
-        assert "notifications.error" in called, f"{rel} publishes no error toast"
-        assert "notifications.success" in called, f"{rel} publishes no success toast"
-        for global_call in ("notify", "track_task"):
-            assert global_call not in called, (
-                f"{rel} is a Solara component: it must not call the "
-                f"{global_call}() global"
-            )
-
-
 def test_raw_layouts_publish_through_the_bridge_not_the_hook():
     """Raw widget layouts publish from worker threads, where no hook can run.
 
@@ -1137,7 +897,6 @@ def test_raw_layouts_publish_through_the_bridge_not_the_hook():
 
 def test_raw_layout_workers_use_tracked_job():
     for rel in (
-        "gui/tile/recipe_tile.py",
         "gui/tile/overview_tile.py",
         "gui/tile/analysis/export.py",
         "gui/tile/analysis/edit_tools.py",
@@ -1147,22 +906,12 @@ def test_raw_layout_workers_use_tracked_job():
         assert "track_task(" not in src, rel
 
 
-def test_task_error_toasts_use_the_exception_not_the_error_flag():
-    """``task.error`` is a bool — str()-ing it would publish "True"."""
-    for rel in SOLARA_TILES:
-        attrs = _str_of_attributes(rel)
-        assert "error" not in attrs, (
-            f"{rel} str()s a task's boolean .error flag instead of .exception"
-        )
-        assert "exception" in attrs, f"{rel} does not report the exception"
-
-
 def test_no_inline_feedback_surfaces_are_left():
     """The notification system is the app's single user-feedback channel.
 
     ``sw.Alert`` / ``solara.Error`` / ``solara.Info`` are all gone from the tiles.
     """
-    for rel in SOLARA_TILES + RAW_LAYOUTS:
+    for rel in RAW_LAYOUTS:
         called = _called(rel)
         for banned in ("sw.Alert", "solara.Error", "solara.Info", "solara.Warning"):
             assert banned not in called, (

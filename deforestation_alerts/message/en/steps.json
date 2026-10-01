@@ -27,6 +27,7 @@
       "col_updated": "Updated",
       "opened": "Opened {name}",
       "open_failed": "Could not open {name}: {error}",
+      "set_load_failed": "Could not load the alerts of the active set: {error}",
       "delete_title": "Delete {name}?",
       "delete_message": "This deletes the project folder and every file in it. Type the project name to confirm.",
       "delete_busy": "A task is still writing into this project. Wait for it to finish, then delete.",

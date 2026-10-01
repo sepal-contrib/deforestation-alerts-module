@@ -1,5 +1,6 @@
 """The active alert set's files: its store, its Overview tiles, the centroid
-fallback and a map hit test (spec §9.2, §9.3). Solara-free.
+fallback and a map hit test (spec §9.2, §9.3); and handing a loaded store to
+the session (``publish_set_alerts``). Solara-free.
 
 The tiles are out of date when ``alert_db.parquet`` is newer than
 ``alerts.pmtiles`` (spec §5.3: a review save rewrites the store). No pmtiles
@@ -33,12 +34,33 @@ def active_store_path(p) -> Optional[Path]:
 
 def load_active_alerts(p, workspace):
     """The active set's alerts, or None when there is no set or its store is gone."""
-    from deforestation_alerts.scripts.recipe_helper import load_gdf_from_parquet
+    from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 
     store = active_store_path(p)
     if store is None or not store.exists():
         return None
     return load_gdf_from_parquet(workspace, str(store))
+
+
+def publish_set_alerts(app_state, name: str, s, gdf) -> bool:
+    """Hand set ``s``'s loaded alerts to Analysis, at the set's saved review
+    position, while ``s`` is still project ``name``'s active set. Returns
+    False, touching nothing, once the project was switched or closed or
+    another set became active.
+
+    ``actual_alert_id`` goes to -1 first, as Integrate's publish does:
+    Analysis re-selects only from -1, and ``view_actual_alert`` follows only
+    ``actual_alert_id``, so the same index in another set would otherwise keep
+    showing the previous set's alert.
+    """
+    live = app_state.project.value
+    if live is None or live.name != name or live.active_set != s.id:
+        return False
+    app_state.actual_alert_id.set(-1)
+    app_state.alerts_gdf.set(gdf)
+    saved = live.alert_sets[s.id].last_alert_index
+    app_state.actual_alert_id.set(min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1)
+    return True
 
 
 def _pmtiles_path(p, s) -> Path:
@@ -67,6 +89,13 @@ def alerts_belong_to(gdf, s) -> bool:
     if gdf is None or "set_id" not in gdf.columns:
         return True
     return bool((gdf["set_id"] == s.id).all())
+
+
+def holds_set(gdf, s) -> bool:
+    """True when ``gdf`` are set ``s``'s alerts: at least one row, and every
+    row carries ``s``'s id. Unlike ``alerts_belong_to``, nothing, no rows or
+    rows without a ``set_id`` hold no set."""
+    return gdf is not None and "set_id" in gdf.columns and len(gdf) > 0 and alerts_belong_to(gdf, s)
 
 
 def ensure_pmtiles(p, s, alerts) -> Optional[Path]:

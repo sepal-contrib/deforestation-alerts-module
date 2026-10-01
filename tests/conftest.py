@@ -61,22 +61,6 @@ def data_files():
     return _data_files
 
 
-@pytest.fixture()
-def sample_wkt_csv(tmp_path):
-    """Write a tiny CSV with a WKT geometry column and return its path.
-
-    Mirrors the shape of the recipe `alert_db.csv` that `load_gdf_from_csv`
-    reads: a geometry column stored as WKT strings plus a plain attribute column.
-    """
-    csv_path = tmp_path / "alert_db.csv"
-    csv_path.write_text(
-        "id,point\n"
-        "0,POINT (1 2)\n"
-        "1,\n"  # empty geometry -> should decode to None
-    )
-    return csv_path
-
-
 @pytest.fixture(scope="session")
 def gee():
     """Initialize Earth Engine once; skip the module if unauthenticated."""

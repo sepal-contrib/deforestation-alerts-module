@@ -67,7 +67,6 @@ def test_custom_digit_cap():
 
 def test_grid_transform_and_signature():
     g = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=7400000, width=100, height=50)
-    assert g.transform6 == [10.0, 0.0, 500000.0, 0.0, -10.0, 7400000.0]
     assert g.signature == "EPSG:32721|10.0|500000.0|7400000.0|100x50"
     assert g.affine.c == 500000 and g.affine.f == 7400000
 

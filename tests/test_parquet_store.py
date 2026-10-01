@@ -10,14 +10,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Polygon
 
-from deforestation_alerts.scripts.recipe_helper import (
-    load_alert_store,
-    load_gdf_from_parquet,
-    save_gdf_to_csv,
-    save_gdf_to_parquet,
-)
-
-_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
+from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
 
 
 def _sample_gdf():
@@ -29,17 +22,6 @@ def _sample_gdf():
     gdf["bounding_box"] = gdf.geometry.envelope
     gdf["point"] = gdf.geometry.centroid
     return gdf
-
-
-def _stage_legacy_csv(ws, remote_path, gdf):
-    """Put a legacy ``alert_db.csv`` in the workspace.
-
-    ``save_gdf_to_csv`` stays a local serializer (its remote staging belongs to
-    the export path, Task 12), so the upload is spelled out here.
-    """
-    local = ws.scratch_file(".csv")
-    save_gdf_to_csv(gdf, local, _GEOM_COLS)
-    return ws.upload_from_scratch(local, remote_path)
 
 
 def test_parquet_handles_empty_alert_polygon_multirow(ws):
@@ -97,26 +79,3 @@ def test_save_load_roundtrip_leaves_no_scratch_residue(ws, tmp_path):
     scratch = tmp_path / "scratch"
     residue = [p for p in scratch.rglob("*") if p.is_file()]
     assert residue == []
-
-
-def test_load_alert_store_prefers_parquet(ws):
-    folder = ws.results_dir("recipe_test")
-    save_gdf_to_parquet(_sample_gdf(), ws, folder + "/alert_db.parquet")
-    _stage_legacy_csv(ws, folder + "/alert_db.csv", _sample_gdf())
-    gdf = load_alert_store(ws, folder)
-    assert gdf["point"].iloc[0].geom_type == "Point"
-
-
-def test_load_alert_store_falls_back_to_csv(ws):
-    folder = ws.results_dir("recipe_test")
-    _stage_legacy_csv(ws, folder + "/alert_db.csv", _sample_gdf())
-    gdf = load_alert_store(ws, folder)
-    assert gdf is not None
-    assert gdf.geometry.iloc[0].geom_type == "Polygon"
-
-
-def test_load_alert_store_returns_none_when_empty(ws):
-    """A recipe folder with no store yet -- and, since ``ensure_dir`` was never
-    called, a folder that does not exist remotely either. Both must answer None,
-    not raise."""
-    assert load_alert_store(ws, ws.results_dir("recipe_test")) is None

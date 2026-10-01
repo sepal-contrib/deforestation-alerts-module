@@ -17,8 +17,6 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import box
 
-from deforestation_alerts.model.app_model import AppTileModel
-from deforestation_alerts.model.aux_model import AuxModel
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 
@@ -73,8 +71,9 @@ def download_ctx(monkeypatch, ws):
     app_state.alerts_gdf.value = _alerts_gdf()
     app_state.actual_alert_id.value = 0
 
-    app_tile_model = AppTileModel()
-    app_tile_model.recipe_folder_path = ws.ensure_dir("recipe_a")
+    # What _download_data reads from the shell's SetContext (passed as both
+    # app_tile_model and aux_model): the set's folder and the report template.
+    set_context = SimpleNamespace(recipe_folder_path=ws.ensure_dir("set"), custom_report_template=None)
 
     widgets = SimpleNamespace(
         selected_img_before_info_list=_BEFORE_INFO,
@@ -84,8 +83,8 @@ def download_ctx(monkeypatch, ws):
         actual_alert_grid=None,
     )
     return SimpleNamespace(
-        widgets=widgets, app_state=app_state, aux_model=AuxModel(),
-        app_tile_model=app_tile_model, ws=ws, downloads=downloads,
+        widgets=widgets, app_state=app_state, aux_model=set_context,
+        app_tile_model=set_context, ws=ws, downloads=downloads,
     )
 
 

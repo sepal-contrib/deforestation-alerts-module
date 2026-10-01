@@ -3,7 +3,7 @@
 import geopandas as gpd
 from shapely.geometry import Polygon
 
-from deforestation_alerts.scripts.alert_filter_helper import convert_to_geopandas
+from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 
 
 def _vectorized_gdf():

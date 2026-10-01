@@ -35,9 +35,9 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, set_id as make_set_id,
 )
-from deforestation_alerts.scripts.alert_filter_helper import convert_to_geopandas
+from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
-from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from deforestation_alerts.scripts.workspace import Workspace
 
 #: Pixels per window (the vectorizer's default block): about 80 MB per Int32

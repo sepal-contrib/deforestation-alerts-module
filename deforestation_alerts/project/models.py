@@ -100,12 +100,6 @@ class GridSpec(BaseModel):
     height: int
 
     @property
-    def transform6(self) -> list[float]:
-        """geedim/Earth Engine crs_transform: [xScale, xShear, xT, yShear, yScale, yT]."""
-        r = float(self.resolution)
-        return [r, 0.0, float(self.xmin), 0.0, -r, float(self.ymax)]
-
-    @property
     def affine(self) -> Affine:
         r = float(self.resolution)
         return Affine(r, 0.0, float(self.xmin), 0.0, -r, float(self.ymax))

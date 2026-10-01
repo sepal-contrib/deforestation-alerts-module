@@ -7,10 +7,7 @@
         "drawer_item": {
             "about": "About",
             "project": "Project",
-            "recipes": "Recipes",
-            "aux": "Optional files",
             "aoi": "AOI/Date",
-            "filter": "Filter",
             "alerts": "Alerts",
             "period": "Period",
             "prepare": "Download & harmonize",

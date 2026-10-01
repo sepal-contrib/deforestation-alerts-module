@@ -15,8 +15,8 @@ from pathlib import PurePosixPath
 
 import geopandas as gpd
 
+from deforestation_alerts.scripts.alert_store import ALERT_GEOM_COLS, save_gdf_to_csv
 from deforestation_alerts.scripts.naming import alert_artifact_name
-from deforestation_alerts.scripts.recipe_helper import save_gdf_to_csv, ALERT_GEOM_COLS
 
 # Map export format -> file extension. CSV is handled specially (WKT columns).
 EXPORT_FORMATS = {"csv": "csv", "gpkg": "gpkg", "geojson": "geojson"}

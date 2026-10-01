@@ -24,7 +24,7 @@ app_state : AppState
     Navigation + alerts source of truth.
 analyzed_alerts_model : AlertAnalysisModel
     Reserved per-alert scratch state (unused by this questionnaire panel).
-app_tile_model : AppTileModel
+app_tile_model : SetContext
     Reserved (output paths) — unused by this questionnaire panel.
 """
 

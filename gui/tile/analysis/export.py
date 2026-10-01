@@ -38,7 +38,9 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
   END of the corresponding worker's tracked block with that returned value (so a
   failing apply is still a FAILED task); only the success toast follows the block. A failure is a FAILED task + one error toast, both published by
-  ``tracked_job``; the worker's ``except`` only logs it. ipywidgets
+  ``tracked_job``; the worker's ``except`` only logs it. A refused Save (no
+  alert selected, or ``SaveRefused``: the alerts or the active set changed) is a
+  FAILED task + one warning toast. ipywidgets
   trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
   (recipe_tile / edit_tools do exactly this).
 * The buttons + toolbars are **built once** (the builder runs once per build) so the
@@ -56,7 +58,8 @@ is no inline ``sw.Alert`` any more.
 
 Source-of-truth adaptation (Task 9): OLD read/wrote
 ``self.analyzed_alerts_model.alerts_gdf``; in the new architecture that GeoDataFrame
-lives in ``app_state.alerts_gdf.value`` (published by the Filter tile), and the alert
+lives in ``app_state.alerts_gdf.value`` (the active set's, published by the shell's
+set loader or by Integrate), and the alert
 index is ``app_state.actual_alert_id.value``. ``save_attributes_to_gdf`` mutates that
 gdf in place via ``.at[id, col] = ...`` (faithful to OLD), then stamps
 ``analyzed_alerts_model.last_save_time``. Everything guards on the gdf being present
@@ -80,8 +83,9 @@ analyzed_alerts_model : AlertAnalysisModel
 app_tile_model : SetContext
     ``recipe_folder_path`` (the active set's folder) for the output paths,
     ``pin`` (the active set, read once) for where a Save writes
-    ``alert_db.parquet``, and ``record_review``, which keeps that set's
-    reviewed count after a store save.
+    ``alert_db.parquet``, ``is_current``, which tells whether that set is
+    still the active one when the Save writes, and ``record_review``, which
+    keeps that set's reviewed count after a store save.
 workspace : Workspace
     The session user-file adapter. Every artifact this card produces — the alert
     store, the gpkg, the composite GeoTIFF, the zip and the Word report — is user
@@ -98,9 +102,9 @@ import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
-from deforestation_alerts.scripts.recipe_helper import save_gdf_to_parquet
 from deforestation_alerts.scripts.report_builder import (
     add_files_to_zip,
     ensure_list,
@@ -149,16 +153,28 @@ def _save_target(app_tile_model):
     return (str(target.folder), target) if target is not None else ("", None)
 
 
-def _refuse_other_sets_alerts(alertas_gdf, target) -> None:
-    """Raise when the alerts on hand are not ``target``'s set's.
+class SaveRefused(Exception):
+    """A Save that must not write: nothing went wrong, it has nowhere to go.
+    The worker reports it as a warning, not as an error."""
+
+
+def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
+    """Raise ``SaveRefused`` unless the Save may still write for ``target``.
 
     ``alerts_gdf`` and the active set are separate reactives: Integrate records
     a new set before it publishes that set's alerts, so for a moment the alerts
     on hand are the previous set's. Saved, they would overwrite the new set's
-    store. The raise fails the Save task with its error toast.
+    store. And the admin lookups block for seconds, during which an Integrate
+    can activate another set, or the project can be switched: the alerts this
+    Save edited then belong to a set that is no longer the open project's
+    active set, so they are not written at all (Review Focus 5).
     """
-    if target is not None and not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
-        raise ValueError(str(cm.analysis_tile.export_labels.save_other_set))
+    if target is None:
+        return
+    if not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
+        raise SaveRefused(str(cm.analysis_tile.export_labels.save_other_set))
+    if not app_tile_model.is_current(target):
+        raise SaveRefused(str(cm.analysis_tile.export_labels.save_set_changed))
 
 
 def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
@@ -169,13 +185,13 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
     ``alert_db.parquet``, and stamps ``last_save_time``. Returns ``True`` on success.
     Guards on the gdf being present + the id in range (smoke-safe). Raises the OLD
     "confirmation==No but a polygon is drawn" guard, surfaced by the save effect,
-    and refuses (raises) alerts of another set than the one it writes for.
+    and ``SaveRefused`` for alerts of another set than the one it writes for.
 
     The store it writes is the active set's AS THE SAVE STARTS: the admin
     lookups below block for seconds, and the live ``SetContext`` (ruling #84)
     follows an Integrate that activates a new set, or a project switch,
-    meanwhile. That set's project is the one the worker's writer mark
-    protects.
+    meanwhile. The write then happens only if that set is still the active
+    one (``_save_alerts_to_gdf``); otherwise the Save is refused.
     """
     folder, target = _save_target(app_tile_model)
     alertas_gdf = app_state.alerts_gdf.value
@@ -187,7 +203,7 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
     if actual_alert_id >= len(alertas_gdf):
         return False
     # Before any row changes or a lookup blocks; the store writer checks again.
-    _refuse_other_sets_alerts(alertas_gdf, target)
+    _refuse_unless_current(alertas_gdf, app_tile_model, target)
 
     confirmation = widgets.confirmation_select.v_model
 
@@ -287,15 +303,16 @@ def _save_alerts_to_gdf(
     set's reviewed count (``record_review``, when the model has one).
 
     ``folder`` and ``target`` are where the Save started (``_save_target``);
-    without ``folder`` both are read now. Raises, writing nothing, when the
-    alerts are not ``target``'s set's.
+    without ``folder`` both are read now. Raises ``SaveRefused``, writing
+    nothing, unless the alerts are ``target``'s set's and that set is still the
+    open project's active set.
     Guard: skip if the folder is empty (smoke / no set yet).
     """
     if folder is None:
         folder, target = _save_target(app_tile_model)
     if not folder:
         return
-    _refuse_other_sets_alerts(alertas_gdf, target)
+    _refuse_unless_current(alertas_gdf, app_tile_model, target)
     save_gdf_to_parquet(
         alertas_gdf,
         workspace,
@@ -550,25 +567,29 @@ def build_export(
                     # set's alert store is written, so deleting the project
                     # refuses mid-write.
                     with writing(_writer_name(app_state)):
-                        saved = _save_attributes(
-                            widgets,
-                            app_state,
-                            analyzed_alerts_model,
-                            app_tile_model,
-                            workspace,
-                        )
+                        try:
+                            saved = _save_attributes(
+                                widgets,
+                                app_state,
+                                analyzed_alerts_model,
+                                app_tile_model,
+                                workspace,
+                            )
+                            refused = None
+                        except SaveRefused as refusal:
+                            saved, refused = False, str(refusal)
                     if not saved:
                         # `_save_attributes` refused: nothing was written and the
                         # download button stays disabled, so completing the task
                         # would record a DONE run for a no-op the user cannot
                         # explain. A WARNING outcome, not an error: fail() BEFORE
                         # the toast, so the run is already recorded as FAILED
-                        # with its reason when the message lands. (The only way
-                        # `_save_attributes` returns False is a missing/invalid
-                        # alert id, which is what the message says.) The log line
-                        # comes last: once the task is FAILED it is not echoed as
-                        # a milestone.
-                        reason = str(cm.analysis_tile.export_labels.save_no_alert)
+                        # with its reason when the message lands. (Returning
+                        # False means a missing/invalid alert id, which is what
+                        # the default message says; SaveRefused carries its
+                        # own.) The log line comes last: once the task is FAILED
+                        # it is not echoed as a milestone.
+                        reason = refused or str(cm.analysis_tile.export_labels.save_no_alert)
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: save refused — %s", reason)

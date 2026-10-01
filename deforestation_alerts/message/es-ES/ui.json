@@ -237,7 +237,8 @@
                 "download_no_recipe": "No hay ninguna receta cargada, así que no hay dónde guardar los archivos de la alerta en tu espacio de trabajo de SEPAL. Crea o carga una receta primero.",
                 "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
                 "save_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que guardar.",
-                "save_other_set": "Estas alertas pertenecen a otro conjunto de alertas distinto del activo, así que no se han guardado en él."
+                "save_other_set": "Estas alertas pertenecen a otro conjunto de alertas distinto del activo, así que no se han guardado en él.",
+                "save_set_changed": "El conjunto de alertas activo cambió durante el guardado, así que esta revisión no se ha guardado."
         }
     }
 }

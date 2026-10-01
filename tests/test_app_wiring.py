@@ -5,13 +5,13 @@ read the source text instead of importing the module — same contract lock,
 credential-free.
 """
 
-import re
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 TILE_FILES = [
-    "gui/tile/recipe_tile.py",
     "gui/tile/analysis/edit_tools.py",
     "gui/tile/analysis/export.py",
     "gui/tile/analysis/imagery.py",
@@ -69,77 +69,6 @@ def test_no_bare_daemon_threads_in_tiles():
         assert "spawn_in_context" in src, f"{rel} lost its spawn_in_context import"
 
 
-GEE_TASK_FILES = [
-    "gui/tile/aoi_tile.py",
-    "gui/tile/alerts_filter_tile.py",
-]
-
-
-def test_gee_tasks_use_kernel_loop():
-    """Decision 3: GEE work runs as async tasks on Solara's kernel loop.
-
-    A ``prefer_threaded=True`` task would run the coroutine on its own loop in a
-    thread, which is the mixed-loop shape the pysepal audit flagged.
-    """
-    for rel in GEE_TASK_FILES:
-        src = _src(rel)
-        assert "prefer_threaded=True" not in src, f"threaded task in {rel}"
-        assert "prefer_threaded=False" in src, f"{rel} has no kernel-loop task"
-
-
-def test_gee_map_work_goes_through_to_thread():
-    """Every ``add_ee_layer`` call site is reached from a task, via to_thread."""
-    for rel in GEE_TASK_FILES:
-        src = _src(rel)
-        assert "asyncio.to_thread(" in src, f"{rel} does no work in a thread"
-
-
-def test_long_running_actions_use_the_task_button():
-    """Search/Analyze are TaskButtons (single start/cancel toggle), not Buttons."""
-    for rel in ("gui/tile/aoi_tile.py", "gui/tile/alerts_filter_tile.py"):
-        src = _src(rel)
-        assert "TaskButtonComponent(" in src, f"{rel} lost its TaskButton"
-        assert "use_task_button(" in src, f"{rel} lost its task-button wiring"
-        assert "solara.Button(" not in src, f"{rel} still has a raw Button"
-
-
-def test_completion_effects_guard_on_cancelled():
-    """A cancelled task must change nothing: the apply effects check .cancelled
-    and are keyed on the full task-state dependency set."""
-    for rel, apply_fn in (
-        ("gui/tile/aoi_tile.py", "_apply_search"),
-        ("gui/tile/alerts_filter_tile.py", "_apply_analyze"),
-    ):
-        src = _src(rel)
-        body = src[src.index(f"def {apply_fn}():") :]
-        body = body[: body.index("solara.use_effect(")]
-        assert ".cancelled" in body, f"{apply_fn} does not guard on cancelled"
-        for flag in (".pending", ".finished", ".error", ".cancelled"):
-            assert f"_task{flag}," in src, f"{rel} effect deps missing {flag}"
-
-
-def test_search_and_analyze_have_a_synchronous_pending_guard():
-    """A render-time ``disabled=`` cannot stop a double click; the handler must."""
-    for rel, start_fn, task in (
-        ("gui/tile/aoi_tile.py", "_start_search", "search_task"),
-        ("gui/tile/alerts_filter_tile.py", "_start_analyze", "analyze_task"),
-    ):
-        src = _src(rel)
-        body = src[src.index(f"def {start_fn}():") :]
-        assert f"if {task}.pending:" in body[:600], f"{rel}: no pending guard"
-
-
-def test_effect_scheduled_tasks_guard_on_a_running_loop():
-    """solara schedules prefer_threaded=False tasks with a bare
-    asyncio.create_task, which raises without a running loop in the calling
-    thread. An effect body must never raise (reacton masks it behind "you are
-    not using a container"), so every task call made from an effect is guarded."""
-    for rel in GEE_TASK_FILES:
-        src = _src(rel)
-        assert "def _loop_is_running()" in src, f"{rel} has no loop guard helper"
-        assert "if _loop_is_running():" in src, f"{rel} never uses the loop guard"
-
-
 def test_geedim_exports_are_serialized_in_one_place():
     """geedim has ONE process-wide asyncio runner, so overlapping exports raise
     "This event loop is already running". The lock therefore belongs at the single
@@ -148,33 +77,9 @@ def test_geedim_exports_are_serialized_in_one_place():
     assert "_DOWNLOAD_LOCK = threading.Lock()" in src
     assert "_DOWNLOAD_LOCK.acquire(timeout=" in src, "must not block forever"
     assert "_DOWNLOAD_LOCK.release()" in src
-    # and no tile may keep a private one that other callers bypass
-    for rel in GEE_TASK_FILES:
-        assert "_DOWNLOAD_LOCK" not in _src(rel), f"{rel} has a private export lock"
-
-
-def test_alert_store_is_written_off_the_loop_after_a_cancellation_recheck():
-    """Two properties at once.
-
-    (1) alert_db.parquet is read back as state on recipe load, so a cancelled run
-    must not leave one behind — the write is preceded by an explicit
-    cancellation re-check (``await asyncio.sleep(0)``, at which a requested
-    cancel raises before anything is written).
-    (2) It is a GeoParquet serialize plus an upload of the whole store, so it
-    must not run on the kernel loop: it goes through ``asyncio.to_thread`` inside
-    the task, never from the completion effect.
-    """
-    src = _src("gui/tile/alerts_filter_tile.py")
-    task_body = src[src.index("async def _analyze("):src.index("def _start_analyze(")]
-    recheck_at = task_body.index("await asyncio.sleep(0)")
-    persist_at = task_body.index("_persist_alerts_gdf,")
-    assert recheck_at < persist_at, "persist must follow the cancellation re-check"
-    call = task_body[task_body.rindex("await ", 0, persist_at):persist_at]
-    assert "asyncio.to_thread(" in call, "persist must run in a thread"
-    apply_body = src[src.index("def _apply_analyze():"):]
-    assert "_persist_alerts_gdf" not in apply_body, (
-        "persist must not run in the completion effect (that is the kernel loop)"
-    )
+    # and no UI module may keep a private one that other callers bypass
+    for path in (ROOT / "gui").rglob("*.py"):
+        assert "_DOWNLOAD_LOCK" not in path.read_text(), f"{path} has a private export lock"
 
 
 def test_notification_provider_mounted_before_tiles():
@@ -233,35 +138,6 @@ def test_render_fixed_tile_needs_the_provider_rendered_first():
             rc.close()
 
 
-def test_gee_widgets_get_the_session_interface():
-    """pysepal 4 raises SepalSessionError when an AoiModel or AssetSelect
-    builds its own GEEInterface under a per-connection Solara server, so each
-    one must receive the Page's session interface."""
-    aux = _src("gui/tile/aux_tile.py")
-    calls = aux.split("sw.inputs.AssetSelect(")[1:]
-    assert len(calls) == 4  # ccdc, mask, reference layer, raster attributes
-    for call in calls:
-        assert "gee_interface=gee_interface" in call[: call.index(")")]
-    custom = _src("gui/widget/custom_source_list.py")
-    custom_calls = custom.split("sw.inputs.AssetSelect(")[1:]
-    assert len(custom_calls) == 1
-    assert "gee_interface=gee_interface" in custom_calls[0][: custom_calls[0].index(")")]
-    assert "CustomSourceList(aux_model, gee_interface)" in aux
-    shell = _src("gui/solara_app.py")
-    assert "AoiDateModel(gee_interface=gee_interface)" in shell
-    assert "build_aux_layout(aux_model, workspace, gee_interface)" in shell
-
-
-def test_raster_attribute_picker_accepts_images_only():
-    """'Load bands' reads image bands, so the Raster attributes AssetSelect must
-    not fall back to pysepal's default ["IMAGE", "TABLE"] (a table can never
-    load bands)."""
-    aux = _src("gui/tile/aux_tile.py")
-    body = aux.split("def _build_attribute_controls(")[1]
-    call = body.split("sw.inputs.AssetSelect(")[1]
-    assert 'types=["IMAGE"]' in call[: call.index(")")]
-
-
 def test_overview_view_has_back_and_review_buttons():
     src = _src("gui/tile/overview_tile.py")
     assert "cm.overview_tile.back_to_workflow" in src
@@ -271,7 +147,7 @@ def test_overview_view_has_back_and_review_buttons():
     assert "rv.Btn(" not in src
 
 
-def test_panel_bridge_drives_views_stage_map_owner_and_title():
+def test_panel_bridge_drives_views_stage_and_title():
     src = _src("gui/solara_app.py")
     body = src[src.index("def _PanelBridge("):]
     body = body[: body.index("\ninit_ee()")]
@@ -279,44 +155,9 @@ def test_panel_bridge_drives_views_stage_map_owner_and_title():
     assert 'header_wrapper.style_ = "" if workflow else "display: none;"' in body
     assert "stage_host.visible = workflow and spec.full_stage" in body
     assert 'map_.add_class("defo-map-hidden")' in body
-    assert "if spec.owns_map" in body
-    assert "rail_item_for_step" in body and "item.owns_map" in body
+    assert "rail_item_for_step" in body
     assert "panel.config = {**workflow_config" in body
     assert "app_state.current_page_view.value = " in body
-
-
-def test_panel_bridge_never_clears_the_shared_map_owner():
-    """Regression guard for e09d545 ("popups no longer clear the active panel
-    tile's map layers").
-
-    Opening a popup/dialog over a right-panel tile must NOT change
-    ``app_state.active_map_view``: the map-bearing tiles (AOI / Filter /
-    Overview) key their draw/clear effect off it, so clearing it wipes the
-    underlying tile's layers and they never come back when the popup closes.
-    The old guard was ``navigation.active_map_view_for_step`` (returned None
-    for popup steps = "leave unchanged"), deleted in the registry split. The
-    behaviour now lives in ``_PanelBridge``'s owner branch, which only ever
-    ASSIGNS a resolved owner and never clears one.
-    """
-    src = _src("gui/solara_app.py")
-    body = src[src.index("def _PanelBridge("):]
-    body = body[: body.index("\ninit_ee()")]
-    writes = [
-        line.strip()
-        for line in body.splitlines()
-        if "active_map_view" in line and not line.strip().startswith("#")
-    ]
-    assert writes == [
-        "if owner is not None and app_state.active_map_view.value != owner:",
-        "app_state.active_map_view.value = owner",
-    ], f"active_map_view must only be assigned a resolved owner: {writes}"
-    for clearing in (
-        'active_map_view.value = ""',
-        "active_map_view.value = None",
-        'active_map_view.set("")',
-        "active_map_view.set(None)",
-    ):
-        assert clearing not in src, f"the shared-map owner must never be cleared: {clearing}"
 
 
 def test_rail_mirror_switches_panel_view_for_panel_items_only():
@@ -327,36 +168,8 @@ def test_rail_mirror_switches_panel_view_for_panel_items_only():
     assert "app_state.panel_view.set(item.key)" in page_body
 
 
-def test_aoi_name_is_mirrored_from_the_aoi_model():
-    """The mirror must observe traits that can actually notify.
-
-    Regression: the first cut observed ``feature_collection``, which is a plain
-    class attribute on AoiModel, not a traitlet -- ``observe`` accepts the name
-    and silently never fires. See
-    ``tests/test_app_state.py::test_only_object_set_and_name_can_notify_the_aoi_mirror``
-    for the behavioural half of this guard.
-    """
-    src = _src("gui/solara_app.py")
-    page_body = src[src.index("def Page():"):]
-    assert 'aoi_date_model.observe(_on_aoi, names=["object_set", "name"])' in page_body
-    assert 'aoi_date_model.unobserve(_on_aoi, names=["object_set", "name"])' in page_body
-    # feature_collection may appear in prose, but never as an observed name.
-    observed = re.findall(r"observe\(_on_aoi, names=\[([^\]]*)\]", page_body)
-    assert observed, "the aoi mirror must register an observer"
-    for names in observed:
-        assert "feature_collection" not in names, (
-            "feature_collection is not a traitlet; observing it never fires"
-        )
-    assert "app_state.aoi_name.set(aoi_name_from_model(aoi_date_model))" in page_body
-    assert "solara.use_effect(_mirror_aoi_name, dependencies=[])" in page_body
-
-
 def test_workflow_tiles_open_with_description_and_info_button():
-    for rel in (
-        "gui/tile/aoi_tile.py",
-        "gui/tile/alerts_filter_tile.py",
-        "gui/tile/analysis/analysis_tile.py",
-    ):
+    for rel in ("gui/tile/analysis/analysis_tile.py",):
         src = _src(rel)
         assert "InfoButton(" in src or "info_button(" in src, rel
         assert ".description" in src, rel
@@ -400,25 +213,143 @@ def test_app_logger_is_raised_to_info_next_to_the_log_bridge():
     assert "logger.level > logging.INFO" in window or "logger.level == logging.NOTSET" in window
 
 
-def test_filter_decodes_custom_names_from_the_search_rasters():
-    """Names must come from the rasters the union is built from (spec
-    constraint 6), never from the live Aux settings."""
-    src = _src("gui/tile/alerts_filter_tile.py")
-    flat = " ".join(src.split())  # whitespace-insensitive
-    assert "custom_alert_name" not in src
-    assert (
-        "custom_names=custom_names_from_rasters( "
-        "alert_filter_model.available_alerts_raster_list )"
-    ) in flat
-    assert "convert_to_geopandas(gdf, custom_names=request.custom_names)" in flat
-    assert '.select("alert").toInt32()' in flat
+# ---------------------------------------------------------------------------
+# The project workflow replaces the recipe-era flow (Task 22).
+# ---------------------------------------------------------------------------
+def _component_body(src: str, name: str) -> str:
+    """The source of the module-level function ``name`` in ``src``."""
+    body = src[src.index(f"def {name}("):]
+    ends = [i for i in (body.find("\n@solara.component"), body.find("\ndef "), body.find("\ninit_ee()")) if i > 0]
+    return body[: min(ends)] if ends else body
 
 
-def test_aoi_search_passes_custom_alerts_snapshot():
-    """AOI's SearchRequest must carry a frozen snapshot of the aux_model custom
-    alert sources at click time, not a live reference."""
-    src = _src("gui/tile/aoi_tile.py")
-    flat = " ".join(src.split())
-    assert (
-        "custom_alerts=tuple(dict(s) for s in aux_model.custom_alerts)"
-    ) in flat
+def test_shell_wires_the_new_tiles():
+    src = (ROOT / "gui" / "solara_app.py").read_text()
+    for name in ("AoiStep", "AlertsStep", "PeriodStep", "PrepareStep", "IntegrateStep",
+                 "ProjectDialog", "OverviewTile", "SetContext", "MapLayers", "install_autosave",
+                 "_ActiveSetLoader"):
+        assert name in src, name
+    for gone in ("AuxModel", "AoiDateModel", "SelectedAlertsModel", "AppTileModel", "AlertFilterModel",
+                 "build_recipe_layout", "build_aux_layout", "AlertsFilterTile", "Workspace(sepal_client)"):
+        assert gone not in src, gone
+
+
+def test_removed_modules_are_gone():
+    for rel in ("gui/tile/recipe_tile.py", "gui/tile/aux_tile.py", "gui/tile/alerts_filter_tile.py",
+                "gui/tile/aoi_tile.py", "gui/widget/custom_source_list.py",
+                "deforestation_alerts/scripts/aoi_helper.py", "deforestation_alerts/scripts/recipe_helper.py",
+                "deforestation_alerts/scripts/alert_filter_helper.py", "deforestation_alerts/scripts/vectorize.py",
+                "deforestation_alerts/model/aux_model.py", "deforestation_alerts/model/aoi_date_model.py",
+                "deforestation_alerts/model/alerts_model.py", "deforestation_alerts/model/app_model.py",
+                "gui/Dockerfile", "gui/supervisord.conf", "docker-compose.yml", ".dockerignore"):
+        assert not (ROOT / rel).exists(), rel
+
+
+def test_no_traitlets_models_in_new_code():
+    for rel in ("deforestation_alerts/project", "deforestation_alerts/engine", "gui/tile/aoi_step.py",
+                "gui/tile/alerts_step.py", "gui/tile/period_step.py", "gui/tile/prepare_step.py",
+                "gui/tile/integrate_step.py", "gui/tile/project_dialog.py", "gui/store/state_manager.py",
+                "gui/store/autosave.py", "gui/widget/source_modal.py", "gui/widget/grid_form.py",
+                "gui/widget/attribute_form.py", "gui/scripts/aoi_io.py", "gui/scripts/catalogue_meta.py",
+                "gui/scripts/inflight.py", "gui/scripts/integrate_jobs.py", "gui/scripts/map_layers.py",
+                "gui/scripts/pmtiles_map.py", "gui/scripts/prepare_jobs.py", "gui/scripts/raster_map.py",
+                "gui/scripts/set_context.py", "gui/scripts/set_store.py", "gui/scripts/tile_proxy.py",
+                "deforestation_alerts/scripts/alert_store.py", "deforestation_alerts/scripts/alert_table.py"):
+        path = ROOT / rel
+        files = path.rglob("*.py") if path.is_dir() else [path]
+        for f in files:
+            text = f.read_text()
+            for banned in ("pysepal.model", "from pysepal import model", "from traitlets", "import traitlets"):
+                assert banned not in text, (f, banned)
+
+
+def test_the_shell_installs_auto_save_and_one_set_context():
+    shell = _src("gui/solara_app.py")
+    shell = shell[shell.index("def _AppShell():"):]
+    assert "solara.use_effect(lambda: install_autosave(app_state), dependencies=[])" in shell
+    assert "set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])" in shell
+    for role in ("aux_model", "selected_alerts_model", "app_tile_model"):
+        assert f"{role}=set_context," in shell, role
+    assert "layers = solara.use_memo(lambda: MapLayers(map_), dependencies=[])" in shell
+    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}' in shell
+    assert "_ActiveSetLoader(app_state=app_state, workspace=workspace, layers=layers, map_=map_)" in shell
+    assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
+
+
+def test_the_active_set_loader_reads_the_store_on_a_worker_and_keeps_published_alerts():
+    """Integrate records a project's first set through ``update_project`` on its
+    worker thread, so the loader re-renders there. A ``prefer_threaded=False``
+    ``use_task`` cannot start from that render (solara schedules it with a bare
+    ``asyncio.create_task``: no running loop in a worker thread), so the loader
+    starts its read with ``spawn_in_context`` from an effect. Rulings: a reload
+    resets ``actual_alert_id`` to -1 before it publishes, keeps alerts Integrate
+    already published for the same project, and reports a failed read."""
+    body = _component_body(_src("gui/solara_app.py"), "_ActiveSetLoader")
+    assert "use_task(" not in body
+    assert "solara.use_effect(_on_install, [signal])" in body
+    assert "layers.clear()" in body and "map_.zoom_bounds(p.aoi.bounds)" in body
+    assert "solara.use_effect(_start_load, [key])" in body
+    assert "spawn_in_context(_load)" in body
+    assert "set_store.load_active_alerts(p, workspace)" in body
+    assert "set_store.holds_set(app_state.alerts_gdf.value, s)" in body
+    # checked before the read and again before the publish
+    load = body.index("def _load():")
+    assert load < body.index("if _kept():") < body.index("load_active_alerts") < body.index("or _kept():")
+    assert "set_store.publish_set_alerts(app_state, p.name, s, gdf)" in body
+    assert "notifications.error(" in body and "logger.exception(" in body
+
+
+def test_the_title_follows_the_project_without_re_rendering_the_shell_on_commits():
+    """Ruling #91: the shell body must not read ``app_state.project.value``,
+    or every commit (each auto-save) re-renders it. Only a new, opened or
+    closed project changes the title, so the shell follows the install
+    signal. (A leaf setting ``app_title`` on the widget does not work:
+    reacton re-applies MapApp's element props on the shell context's next
+    render, seen in the browser walk.)"""
+    src = _src("gui/solara_app.py")
+    shell = _component_body(src, "_AppShell")
+    assert "app_state.project.value" not in shell
+    flat = " ".join(shell.split())
+    assert ("app_title = solara.use_memo( lambda: compute_title(app_state), "
+            "dependencies=[app_state.project_loaded_signal.value] )") in flat
+    assert "app_title=app_title," in shell
+    assert "app_state.project.peek()" in _component_body(src, "compute_title")
+    assert "_TitleBridge" not in src
+
+
+def test_a_detached_tile_may_remount_its_root():
+    """Steps remount their root element on a project switch: AoiStep keys its
+    Column on the install signal, Period and Integrate key their form (the
+    direct-child ruling). ``render_fixed`` has no container, so a new root
+    widget raises "You are not using a container" out of whatever reactive set
+    triggered that render: in the browser walk, opening a project failed half
+    way through ``AppState._install``. The shell therefore renders every tile
+    under a stable root."""
+    import reacton
+    import reacton.ipyvuetify as rv
+    import solara
+
+    signal = solara.reactive(0)
+
+    @solara.component
+    def Tile():
+        with solara.Column().key(f"tile-{signal.value}"):
+            solara.Text(str(signal.value))
+
+    widget, rc = reacton.render_fixed(Tile(), handle_error=False)
+    try:
+        with pytest.raises(ValueError, match="not using a container"):
+            signal.set(1)
+    finally:
+        rc.close()
+
+    widget, rc = reacton.render_fixed(rv.Html(tag="div", children=[Tile()]), handle_error=False)
+    try:
+        first = widget.children[0]
+        signal.set(2)
+        assert widget.children[0] is not first  # remounted, inside the same root
+    finally:
+        rc.close()
+
+    body = _component_body(_src("gui/solara_app.py"), "_render_detached")
+    assert body.count('rv.Html(tag="div", children=[make_element()])') == 2

@@ -254,38 +254,50 @@ def _saved_status(path):
     return pd.read_parquet(path, columns=["status"])["status"].tolist()
 
 
-def test_a_set_activated_mid_save_keeps_its_store(tmp_path, monkeypatch, ws):
+@pytest.mark.parametrize("published", [False, True], ids=["recorded", "recorded-and-published"])
+def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, published):
     """An Integrate that finishes during the lookups makes its new set active
-    (``apply_result``). The review lands in the reviewed set's store; the new
-    set's freshly integrated store is not overwritten."""
+    (``apply_result``), then publishes its alerts. The Save no longer writes
+    for the set it started on (ruling: a warning, not a cross-write): neither
+    the reviewed set's store nor the new set's is written, nor either count."""
+    from deforestation_alerts.message import cm
     from gui.scripts.integrate_jobs import apply_result
+    from gui.tile.analysis.export import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
+    reviewed = _store(tmp_path, "d", "glad-l", b"set x's store")
     fresh = _store(tmp_path, "d", "glad-s2", b"set y, freshly integrated")
 
     def _integrate_finishes():
         result = SimpleNamespace(artifacts={}, alert_set=_alert_set("y", "glad-s2"))
         assert s.update_project("d", lambda p: apply_result(p, result))
+        if published:
+            s.alerts_gdf.set(_review_alerts("y"))
 
-    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_integrate_finishes)) is True
+    with pytest.raises(SaveRefused) as refused:
+        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_integrate_finishes))
 
+    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_set_changed)
     assert s.project.value.active_set == "y"
     assert fresh.read_bytes() == b"set y, freshly integrated"
-    assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
+    assert reviewed.read_bytes() == b"set x's store"
     sets = s.project.value.alert_sets
-    assert sets["x"].n_reviewed == 1 and sets["y"].n_reviewed == 0
+    assert sets["x"].n_reviewed == 0 and sets["y"].n_reviewed == 0
 
 
 @pytest.mark.parametrize("switch", ["close", "open-another"])
-def test_a_project_switch_mid_save_writes_into_the_reviewed_project(tmp_path, monkeypatch, ws, switch):
-    """The writer mark protects the project the Save started in, so that is
-    where the store is written. Set ids repeat across projects (period +
-    sources), so project e's set "x" is neither written nor counted."""
+def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, switch):
+    """The set the Save started on is no longer the open project's active set:
+    nothing is written, in either project. Set ids repeat across projects
+    (period + sources), so project e's set "x" is neither written nor counted."""
+    from gui.tile.analysis.export import SaveRefused
+
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
+    reviewed = _store(tmp_path, "d", "glad-l", b"project d's store")
     other = _store(tmp_path, "e", "glad-l", b"project e's store")
 
     def _switch():
@@ -297,19 +309,38 @@ def test_a_project_switch_mid_save_writes_into_the_reviewed_project(tmp_path, mo
             e.active_set = "x"
             s.new_project_state(e)
 
-    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_switch)) is True
+    with pytest.raises(SaveRefused):
+        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_switch))
 
     assert other.read_bytes() == b"project e's store"
-    assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
+    assert reviewed.read_bytes() == b"project d's store"
     if switch == "open-another":
         assert s.project.value.name == "e" and s.project.value.alert_sets["x"].n_reviewed == 0
 
 
+def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, monkeypatch, ws):
+    """Reopening the project installs a new copy of it, but its active set is
+    still the one the Save started on: the review is written."""
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+
+    def _reopen():
+        s.load_project_state(s.project.value.model_copy(deep=True))
+
+    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_reopen)) is True
+
+    assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
+    assert s.project.value.alert_sets["x"].n_reviewed == 1
+
+
 def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeypatch, ws):
     """Integrate records a new set before it publishes that set's alerts: for
-    that moment the alerts on hand are the previous set's. A Save then fails
-    (the task's error toast) before it looks anything up or changes a row."""
+    that moment the alerts on hand are the previous set's. A Save is then
+    refused (the task's warning toast) before it looks anything up or changes
+    a row."""
     from deforestation_alerts.message import cm
+    from gui.tile.analysis.export import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -317,7 +348,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     store = _store(tmp_path, "d", "glad-l", b"set x's store")
 
     lookups = _AdminLookups()
-    with pytest.raises(ValueError) as refused:
+    with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, ws, monkeypatch, lookups)
 
     assert str(refused.value) == str(cm.analysis_tile.export_labels.save_other_set)
@@ -329,12 +360,30 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
 
 def test_the_store_writer_refuses_another_sets_alerts(tmp_path, monkeypatch, ws):
     """The guard sits right before the write too, for every caller."""
-    from gui.tile.analysis.export import _save_alerts_to_gdf
+    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     store = _store(tmp_path, "d", "glad-l", b"set x's store")
-    with pytest.raises(ValueError):
+    with pytest.raises(SaveRefused):
         _save_alerts_to_gdf(_review_alerts("y"), SetContext(s), ws)
+    assert store.read_bytes() == b"set x's store"
+
+
+def test_the_store_writer_refuses_a_set_that_is_no_longer_active(tmp_path, monkeypatch, ws):
+    """A writer handed the set it pinned earlier checks that set is still the
+    active one before it writes."""
+    from gui.scripts.integrate_jobs import apply_result
+    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    target = ctx.pin()
+    store = _store(tmp_path, "d", "glad-l", b"set x's store")
+    result = SimpleNamespace(artifacts={}, alert_set=_alert_set("y", "glad-s2"))
+    assert s.update_project("d", lambda p: apply_result(p, result))
+
+    with pytest.raises(SaveRefused):
+        _save_alerts_to_gdf(_review_alerts("x"), ctx, ws, folder=str(target.folder), target=target)
     assert store.read_bytes() == b"set x's store"
 
 

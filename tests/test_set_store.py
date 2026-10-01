@@ -100,6 +100,69 @@ def test_alerts_belong_to_their_own_set_only(tmp_path, monkeypatch):
     assert not set_store.alerts_belong_to(mixed, s)
 
 
+def test_a_set_is_held_only_by_its_own_alerts(tmp_path, monkeypatch):
+    """The shell's set loader skips a set the alerts on hand already are
+    (Integrate publishes them itself); unlike ``alerts_belong_to``, nothing,
+    no rows or rows without a ``set_id`` hold no set."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    assert set_store.holds_set(_alerts(), s)
+    assert not set_store.holds_set(None, s)
+    assert not set_store.holds_set(_alerts().iloc[0:0], s)
+    assert not set_store.holds_set(_gdf(), s)
+    assert not set_store.holds_set(_alerts().assign(set_id="other"), s)
+
+
+def _session(p):
+    from gui.store.state_manager import AppState
+
+    state = AppState()
+    state.load_project_state(p)
+    return state
+
+
+def test_publishing_a_set_resets_the_selection_first_then_restores_its_position(tmp_path, monkeypatch):
+    """Analysis's auto-select only runs from -1 and ``view_actual_alert`` only
+    follows ``actual_alert_id``: the reset to -1 before the alerts land makes a
+    set switch at the same index still show the new set's alert."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    p.alert_sets["s"].last_alert_index = 1
+    state = _session(p)
+    state.alerts_gdf.set(_gdf())
+    state.actual_alert_id.set(1)
+    seen = []
+    state.actual_alert_id.subscribe(lambda i: seen.append(("id", i)))
+    state.alerts_gdf.subscribe(lambda g: seen.append(("alerts", len(g))))
+
+    assert set_store.publish_set_alerts(state, "d", s, _alerts()) is True
+
+    assert seen == [("id", -1), ("alerts", 2), ("id", 1)]
+
+
+def test_publishing_clamps_the_saved_position_and_an_empty_set_selects_nothing(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    p.alert_sets["s"].last_alert_index = 9
+    state = _session(p)
+    assert set_store.publish_set_alerts(state, "d", s, _alerts())
+    assert state.actual_alert_id.value == 1
+    assert set_store.publish_set_alerts(state, "d", s, _alerts().iloc[0:0])
+    assert state.actual_alert_id.value == -1 and len(state.alerts_gdf.value) == 0
+    assert set_store.publish_set_alerts(state, "d", s, None)  # the store was deleted or moved
+    assert state.alerts_gdf.value is None and state.actual_alert_id.value == -1
+
+
+def test_a_set_that_is_no_longer_active_is_not_published(tmp_path, monkeypatch):
+    """A load that finishes after its project was switched or closed, or after
+    another set became active, touches nothing."""
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    state = _session(p)
+    assert set_store.publish_set_alerts(state, "e", s, _alerts()) is False
+    other = s.model_copy(update={"id": "t"})
+    assert set_store.publish_set_alerts(state, "d", other, _alerts().assign(set_id="t")) is False
+    state.close_project_state()
+    assert set_store.publish_set_alerts(state, "d", s, _alerts()) is False
+    assert state.alerts_gdf.value is None and state.actual_alert_id.value == -1
+
+
 @pytest.mark.parametrize("tippecanoe", [True, False])
 def test_ensure_pmtiles_refuses_another_sets_alerts(tmp_path, monkeypatch, tippecanoe):
     """Tiles written from another set's alerts would be newer than this set's

@@ -1,8 +1,0 @@
-.git
-.claude
-tests/
-docs/
-*.md
-__pycache__
-**/*.pyc
-.pytest_cache

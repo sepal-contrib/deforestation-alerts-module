@@ -1,9 +1,9 @@
 """What Analysis needs from the active alert set, under the attribute names the
 recipe-era models had (spec §10), so Analysis's internals are unchanged in
 slice 1. The shell passes one ``SetContext`` as ``app_tile_model``
-(``recipe_folder_path``, ``pin``, ``remember_position``, ``record_review``),
-``aux_model`` (``custom_report_template``) and ``selected_alerts_model``
-(``combined_path``).
+(``recipe_folder_path``, ``pin``, ``is_current``, ``remember_position``,
+``record_review``), ``aux_model`` (``custom_report_template``) and
+``selected_alerts_model`` (``combined_path``).
 
 Always reads the live project: the Analysis layout is built once and outlives
 project and set switches. Spec §10 describes a *frozen* context that also
@@ -11,7 +11,8 @@ carries the set's ``digit_map``, grid and store path; slice 1 accepts this live
 one (ruling #84), and fields are added when slice 2's Analysis needs them. A
 write that blocks first (a review Save) pins its set with ``pin`` before it
 starts, so an Integrate that activates a new set, or a project switch,
-meanwhile does not redirect it.
+meanwhile does not redirect it, and writes only if ``is_current`` still holds
+for that set.
 """
 
 from dataclasses import dataclass
@@ -83,6 +84,17 @@ class SetContext:
         if s is None:
             return None
         return SetTarget(project=p.name, alert_set=s, folder=set_store.set_folder(p, s))
+
+    def is_current(self, target: SetTarget) -> bool:
+        """True while ``target`` is still the open project's active set and the
+        alerts on hand are still that set's: a write pinned to it may land."""
+        now = self.pin()
+        return (
+            now is not None
+            and now.project == target.project
+            and now.alert_set.id == target.alert_set.id
+            and set_store.alerts_belong_to(self.app_state.alerts_gdf.value, target.alert_set)
+        )
 
     def _update_set(self, alerts, field: str, value, target: Optional[SetTarget] = None) -> None:
         """Set ``field`` on ``target``'s set (the active set without one; the

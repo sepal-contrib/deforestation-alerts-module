@@ -237,7 +237,8 @@
                 "download_no_recipe": "No recipe is loaded, so there is nowhere in your SEPAL workspace to save the alert files. Create or load a recipe first.",
                 "download_no_alert": "No alert is selected, so there is nothing to download.",
                 "save_no_alert": "No alert is selected, so there is nothing to save.",
-                "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it."
+                "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",
+                "save_set_changed": "The active alert set changed while saving, so this review was not saved."
         }
     }
 }
