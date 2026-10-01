@@ -86,3 +86,10 @@ def test_no_duplicate_top_level_namespaces(locale):
                 f"{locale}: namespace '{key}' defined in both {seen[key]} and {f.name}"
             )
             seen[key] = f.name
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_step_one_is_labelled_aoi(locale):
+    """Dates moved to the Period step (spec §4.2): step 1 is "AOI"."""
+    app = json.load(open(i18n.MESSAGES_DIR / locale / "app.json", encoding="utf-8"))
+    assert app["app"]["drawer_item"]["aoi"] == "AOI"

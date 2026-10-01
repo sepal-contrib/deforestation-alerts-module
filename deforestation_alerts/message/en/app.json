@@ -7,7 +7,7 @@
         "drawer_item": {
             "about": "About",
             "project": "Project",
-            "aoi": "AOI/Date",
+            "aoi": "AOI",
             "alerts": "Alerts",
             "period": "Period",
             "prepare": "Download & harmonize",

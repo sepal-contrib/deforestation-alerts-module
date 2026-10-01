@@ -6,7 +6,7 @@
         "banner": "¡Este es mi primer aplicativo! :)",
         "drawer_item": {
             "about": "Acerca",
-            "aoi": "AOI/Fecha",
+            "aoi": "AOI",
             "overview": "Resumen",
             "analysis": "Análisis"
         }
