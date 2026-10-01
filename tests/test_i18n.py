@@ -5,7 +5,6 @@ The catalog under test is the app's single message tree
 """
 
 import json
-from pathlib import Path
 
 import pytest
 

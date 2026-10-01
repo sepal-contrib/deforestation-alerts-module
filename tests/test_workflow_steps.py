@@ -2,8 +2,6 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
-import pytest
-
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,

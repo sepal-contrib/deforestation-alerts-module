@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import AoiRecord
 from gui.store.project_writers import writing
