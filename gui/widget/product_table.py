@@ -42,10 +42,11 @@ ACTIONS_COL_WIDTH = "112px"
 
 # Vuetify theme tokens, so status chips follow the app accent in light and dark.
 # "cancelled" stays a literal grey: it is deliberately neutral, not a theme tone.
+# Every status here has its ``widgets.product_table.status_*`` label (the
+# scaffold's "trained", a spatial_risk model status, had none and is not used).
 STATUS_COLORS = {
     "running": "info",
     "ready": "success",
-    "trained": "success",
     "completed": "success",
     "failed": "error",
     "cancelled": "grey",
@@ -56,7 +57,6 @@ STATUS_COLORS = {
 STATUS_ICONS = {
     "running": "mdi-loading mdi-spin",
     "ready": "mdi-check-circle",
-    "trained": "mdi-check-circle",
     "completed": "mdi-check-circle",
     "failed": "mdi-alert-circle",
     "cancelled": "mdi-cancel",
