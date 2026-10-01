@@ -38,6 +38,21 @@ def resolve_navigation(view):
     return None
 
 
+def dismiss_dialog(mapapp, nav_model):
+    """Close the open rail dialog, as its own close button does.
+
+    MapApp.vue's ``closeDialog`` closes the dialog and clears the step;
+    from Python, ``current_step = None`` (linked through ``nav_model``)
+    clears the step and ``step_open = False`` closes the dialog. Both are
+    no-ops when no dialog is open. A panel item (Overview) stays current.
+    """
+    item = rail_item_for_step(nav_model.current_step)
+    if item is not None and item.display == "dialog":
+        nav_model.current_step = None
+    if mapapp is not None:
+        mapapp.step_open = False
+
+
 def _open_panel(mapapp):
     """Dismiss a lingering dialog and make sure the right panel is open.
 

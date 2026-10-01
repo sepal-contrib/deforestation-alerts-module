@@ -192,6 +192,13 @@ def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_stage():
     assert 0 < stage < arrow < 6
 
 
+def test_the_project_dialog_closes_itself_through_the_shell():
+    shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
+    assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)' in shell
+    for holder in ("nav_model = solara.use_memo(", "mapapp_ref = solara.use_memo("):
+        assert shell.count(holder) == 1 and shell.index(holder) < shell.index("project_widget = "), holder
+
+
 def test_rail_mirror_switches_panel_view_for_panel_items_only():
     src = _src("gui/solara_app.py")
     page_body = src[src.index("def Page():"):]

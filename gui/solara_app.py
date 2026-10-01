@@ -50,6 +50,7 @@ from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from deforestation_alerts.scripts.workspace import Workspace
 from gui.store.navigation import (
     apply_navigation,
+    dismiss_dialog,
     page_view_for_rail_step,
     resolve_navigation,
 )
@@ -506,9 +507,16 @@ def _AppShell():
     # a concrete widget with solara.render_fixed and hand MapApp that single widget.
     # Memoized so the widget is stable across re-renders, and each step is
     # mounted once per session: steps follow project switches themselves.
+    # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
+    # rendered MapApp widget, resolved once it is mounted (_resolve_mapapp).
+    # Both exist before the tiles so the Project dialog can close itself.
+    nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
+    mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
     about_widget = solara.use_memo(lambda: _render_detached(lambda: AboutTile()), dependencies=[])
     project_widget = solara.use_memo(
-        lambda: _render_detached(lambda: ProjectDialog(app_state=app_state)), dependencies=[])
+        lambda: _render_detached(lambda: ProjectDialog(
+            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model))),
+        dependencies=[])
     overview_widget = solara.use_memo(
         lambda: _render_detached(lambda: OverviewTile(app_state=app_state, map_=map_, workspace=workspace,
                                                       layers=layers)), dependencies=[])
@@ -553,7 +561,6 @@ def _AppShell():
     # app_state.active_step. nav_model.current_step tracks the rail (dialogs +
     # the highlighted Overview item).
     # -----------------------------------------------------------------------
-    nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
     # Throwaway content for the Overview "panel" rail entry: never rendered
     # (display != step/dialog), but a non-empty content list is what makes
     # MapApp set current_step on click.
@@ -711,8 +718,8 @@ def _AppShell():
     # ``app_element`` is valid (``solara.get_widget`` must be called from the
     # component that created the element; calling it from _NavBridge raises
     # KeyError). _NavBridge reads it from this holder to open/close the right panel
-    # + dismiss dialogs (the part the Vue current_step watcher skips).
-    mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
+    # + dismiss dialogs (the part the Vue current_step watcher skips); the
+    # holder itself is created above, with nav_model.
 
     def _resolve_mapapp():
         try:

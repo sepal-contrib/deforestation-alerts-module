@@ -8,6 +8,7 @@ from gui.store.navigation import (
     PAGE_VIEW_TO_WORKFLOW,
     RAIL_STEP_TO_PAGE_VIEW,
     apply_navigation,
+    dismiss_dialog,
     page_view_for_rail_step,
     resolve_navigation,
 )
@@ -101,3 +102,21 @@ def test_apply_without_mapapp_still_moves_state():
     assert state.active_step.value == 4 and nav.current_step is None
     apply_navigation(None, nav, state, resolve_navigation("overview_tile"))
     assert state.panel_view.value == "overview" and nav.current_step == 3
+
+
+def test_dismiss_dialog_closes_an_open_dialog_like_its_close_button():
+    """The Project dialog closes itself after opening a project: MapApp.vue's
+    closeDialog clears the step and closes the dialog, and so does this."""
+    mapapp, nav = _FakeMapApp(), _FakeNav(current_step=2)  # the Project dialog
+    dismiss_dialog(mapapp, nav)
+    assert mapapp.step_open is False and nav.current_step is None
+    assert mapapp.panel_calls == []  # the right panel is left as it was
+
+
+def test_dismiss_dialog_leaves_a_panel_item_current_and_runs_before_the_mount():
+    mapapp, nav = _FakeMapApp(), _FakeNav(current_step=3)  # Overview highlighted
+    dismiss_dialog(mapapp, nav)
+    assert nav.current_step == 3 and mapapp.step_open is False
+    nav = _FakeNav(current_step=2)
+    dismiss_dialog(None, nav)  # MapApp not mounted yet: the step still clears
+    assert nav.current_step is None

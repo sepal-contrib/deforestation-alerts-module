@@ -1,5 +1,9 @@
 """The Project rail dialog (spec §4.1): the open project, New, Open, Duplicate
-and Delete. Auto-save means there is no Save button (D11)."""
+and Delete. Auto-save means there is no Save button (D11).
+
+A new, opened or duplicated project starts the workflow at its AOI and closes
+the dialog (``dismiss``, from the shell).
+"""
 
 import asyncio
 import shutil
@@ -62,7 +66,8 @@ def _NameForm(title, create_label, open_, existing, on_create, hint=None):
 
 
 @solara.component
-def ProjectDialog(app_state):
+def ProjectDialog(app_state, dismiss=lambda: None):
+    """``dismiss`` closes the dialog (the shell's MapApp handle)."""
     notifications = use_notifications()
     p = app_state.project.value
     refresh, set_refresh = solara.use_state(0)
@@ -80,6 +85,12 @@ def ProjectDialog(app_state):
     infos = infos_task.value or []
     names = [i.name for i in infos]
 
+    def _show_workflow():
+        # From any step: the navigation alone closes the dialog only when it
+        # moves the workflow, which it does not when AOI is already showing.
+        app_state.current_page_view.value = "aoi_tile"
+        dismiss()
+
     async def _load(name):
         try:
             loaded = await asyncio.to_thread(io.load_project, name)
@@ -87,7 +98,7 @@ def ProjectDialog(app_state):
             notifications.error(t("steps.project.open_failed", name=name, error=str(exc)))
             return
         app_state.load_project_state(loaded)
-        app_state.current_page_view.value = "aoi_tile"
+        _show_workflow()
         notifications.success(t("steps.project.opened", name=name))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
@@ -102,11 +113,13 @@ def ProjectDialog(app_state):
     def _create(name):
         app_state.new_project_state(create_project(name))
         set_refresh(refresh + 1)
-        app_state.current_page_view.value = "aoi_tile"
+        _show_workflow()
 
     def _duplicate(name):
+        # The copy is where another area gets monitored (spec D10): start at its AOI.
         app_state.new_project_state(duplicate_with_sidecar(p, name))
         set_refresh(refresh + 1)
+        _show_workflow()
 
     async def _delete():
         name = pending_delete
