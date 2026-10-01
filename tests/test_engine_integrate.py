@@ -219,6 +219,34 @@ def test_run_integration_refuses_a_source_not_ready(ready_project):
         integrate.run_integration(job)
 
 
+@pytest.mark.parametrize("change, expected", [
+    ("aoi", "download stale"),            # the AOI changed after the download
+    ("raw-deleted", "download missing"),  # the raw file was removed from disk
+])
+def test_run_integration_refuses_a_source_whose_download_is_not_current(ready_project, change, expected):
+    """The harmonized file still reads current against its raw record, but the
+    row is not ready: combining it would use the previous inputs' alerts. The
+    UI only offers ready rows; scripts and tests call the engine directly."""
+    p, pdir = ready_project
+    if change == "aoi":
+        p.aoi = p.aoi.model_copy(update={"digest": "another-geometry"})
+    else:
+        (pdir / p.artifacts[fp.raw_key(JAN.id, "RADD")].rel_path).unlink()
+    harm = fp.status(p, pdir, fp.harm_key(JAN.id, "RADD"), fp.harmonized_inputs(p, "RADD", JAN))
+    assert harm is fp.Status.CURRENT
+    with pytest.raises(ValueError, match=expected):
+        integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
+    assert not paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]).exists()
+
+
+def test_run_integration_refuses_a_source_the_project_does_not_have(ready_project):
+    p, pdir = ready_project
+    job = integrate.IntegrationJob(project=p, pdir=pdir, period=JAN, sources=["GLAD-S2"],
+                                   params=AlertSetParams(), workspace=Workspace(root=pdir))
+    with pytest.raises(ValueError, match="GLAD-S2 is not a source"):
+        integrate.run_integration(job)
+
+
 @_LONLAT_CENTROID
 # raster_attribute's window reads go through rasterio helpers that still use `*` on Affine
 @pytest.mark.filterwarnings("ignore:Use `@` matmul:PendingDeprecationWarning")

@@ -25,10 +25,11 @@ from shapely.geometry import box, shape
 from shapely.ops import transform as shp_transform
 
 from deforestation_alerts.engine.fingerprint import (
-    Status, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, harmonized_inputs,
-    make_artifact, mask_key, set_inputs, status, store_key,
+    combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, mask_key,
+    set_inputs, store_key,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.raster_io import BLOCK, ensure_free_space, row_windows, write_grid_raster
 from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.project import paths
@@ -187,8 +188,9 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     Writes the combined raster, the footprint and ``alert_db.parquet`` into the
     set's folder and returns the set and its artifacts; the caller records them.
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
-    when a source is not harmonized and current for the period, or an earlier
-    set's footprint is missing.
+    when a source's download or harmonized file is not current for the period
+    (its Download & harmonize row is not ready), or an earlier set's footprint
+    is missing.
 
     The three files are built under staged names and moved onto the set's own
     names only once every step has succeeded. A run that fails, including one
@@ -199,10 +201,16 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     step = on_step or (lambda key: None)
     p, pdir, period = job.project, Path(job.pdir), job.period
     sources = sorted(job.sources, key=str.casefold)
+    # Both stages must be current: a harmonized file whose raw download is out
+    # of date (say, for an AOI changed since) holds the old inputs' alerts.
+    rows = {row.source: row for row in plan_prepare(p, pdir, period)}
     for s in sources:
-        st = status(p, pdir, harm_key(period.id, s), harmonized_inputs(p, s, period))
-        if st is not Status.CURRENT:
-            raise ValueError(f"{s} is not downloaded and harmonized for this period ({st.value})")
+        row = rows.get(s)
+        if row is None:
+            raise ValueError(f"{s} is not a source of this project")
+        if not row.ready:
+            raise ValueError(f"{s} is not downloaded and harmonized for this period "
+                             f"(download {row.raw.value}, harmonized {row.harmonized.value})")
     inputs_fp = set_inputs(p, period, sources, job.params)
     sid = make_set_id(period.id, sources)
     sdir = paths.set_dir(pdir, period.id, sources)
