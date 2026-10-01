@@ -458,10 +458,12 @@ def _state(p, meta=None):
 
 def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step, monkeypatch):
     """Drift note: only rows that download need Earth Engine metadata; a grid
-    change re-harmonizes from the raw file on disk (runner contract).
+    change re-harmonizes from the raw file on disk (runner contract), so the
+    Earth Engine AOI is not even built (a reopened admin AOI not replayed yet,
+    and no sidecar, would fail to).
     """
-    def no_aoi(result, pdir):  # e.g. a reopened admin AOI not replayed yet, and no sidecar
-        raise ValueError(t("steps.aoi.no_geometry"))
+    def no_aoi(result, pdir):
+        pytest.fail("no row downloads: ee_aoi must not be called")
 
     monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
@@ -513,6 +515,29 @@ def test_a_download_without_an_aoi_geometry_is_refused(step, monkeypatch):
         step.table[-1][0]["actions"][0]["on_click"]()
         assert step.jobs == [] and _toasts("error") == [t("steps.aoi.no_geometry")]
         assert step.table[-1][0]["cells"][1]["status"] == "missing"  # the claim was released
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("error", [OSError("aoi.geojson: permission denied"), RuntimeError("")],
+                         ids=["OSError", "empty-message"])
+def test_a_download_whose_ee_aoi_fails_releases_its_rows(step, monkeypatch, error):
+    """Any failure building the Earth Engine AOI (a bad sidecar, an ee object
+    that cannot be wrapped), not only a missing geometry, must give the claimed
+    keys back: otherwise the rows read "running" for the rest of the session."""
+    def bad_aoi(result, pdir):
+        raise error
+
+    monkeypatch.setattr(aoi_io, "ee_aoi", bad_aoi)
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()
+        assert step.jobs == [] and _toasts("error") == [str(error) or error.__class__.__name__]
+        assert step.table[-1][0]["cells"][1]["status"] == "missing"  # the claim was released
+        assert not _button(rc, t("steps.prepare.run_all", n=1)).disabled
     finally:
         rc.close()
 
@@ -701,6 +726,40 @@ def test_grid_form_blocks_a_geographic_crs_and_saves_a_projected_one(step):
         grid = state.project.value.grid
         assert grid == gridmod.build_grid(PARAGUAY, "EPSG:32721", 30.0)
         assert _toasts("success") == [t("steps.prepare.grid_saved", w=grid.width, h=grid.height)]
+    finally:
+        rc.close()
+
+
+def test_grid_form_does_not_overwrite_a_grid_frozen_since_it_rendered(step, monkeypatch):
+    """Spec D10: the grid is frozen once a set exists. A Save clicked on a form
+    rendered before a worker recorded the project's first set (the click and
+    the worker race on ``update_project``; here the worker's record lands
+    first) must leave the grid alone and say so."""
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams
+
+    state = _state(_project("d", "RADD", bounds=PARAGUAY, grid=True))
+    frozen = state.project.value.grid
+
+    def _record_a_set(live):  # Integrate's apply_result, on its worker
+        live.alert_sets["x"] = AlertSet(
+            id="x", period_id=JAN.id, sources=["RADD"], digit_map={1: "RADD"}, params=AlertSetParams(),
+            store_rel_path="s/alert_db.parquet", combined_rel_path="s/c.tif", footprint_rel_path="s/f.tif",
+            fingerprint="f", created_at=datetime.now())
+
+    real_update = state.update_project
+
+    def _worker_wins_the_race(name, fn):
+        assert real_update(name, _record_a_set)
+        return real_update(name, fn)
+
+    box, rc = _render(state)
+    try:
+        _field(rc, t("steps.prepare.grid_resolution")).v_model = "30"
+        monkeypatch.setattr(state, "update_project", _worker_wins_the_race)
+        _button(rc, t("steps.prepare.grid_save")).fire_event("click", None)
+
+        assert state.project.value.grid == frozen
+        assert _toasts("success") == [] and _toasts("warning") == [t("steps.prepare.grid_locked")]
     finally:
         rc.close()
 

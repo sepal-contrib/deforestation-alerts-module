@@ -15,6 +15,7 @@ no-op click on a ready row) never takes Stop away from a Run all still going,
 nor points it at another project's job.
 """
 
+import logging
 import threading
 
 import solara
@@ -31,6 +32,8 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store import workflow_steps
 from gui.widget.grid_form import GridForm
 from gui.widget.product_table import ProductTable
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _DOWNLOADS = (Status.MISSING, Status.STALE)  # the runner downloads these (and anything forced)
 
@@ -107,14 +110,17 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             inflight.release(*keys)
             notifications.info(t("steps.alerts.meta_loading"))
             return
-        try:
-            aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)  # builds ee objects, no request
-        except ValueError as exc:
-            if downloads:
+        aoi = None  # a grid change re-harmonizes from the raw file: no Earth Engine
+        if downloads:
+            try:
+                aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)  # builds ee objects, no request
+            except Exception as exc:  # noqa: BLE001 - ValueError (no geometry), or a bad sidecar/ee object
+                # Any failure here must give the claimed keys back, or the rows
+                # read "running" for the rest of the session.
                 inflight.release(*keys)
-                notifications.error(str(exc))
+                logger.exception("could not build the Earth Engine AOI")
+                notifications.error(str(exc) or exc.__class__.__name__)
                 return
-            aoi = None
         scope = (p.name, period.id)
         cancel = stops.add(scope)
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,

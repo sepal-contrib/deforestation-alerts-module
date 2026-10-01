@@ -66,12 +66,19 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
         if err:
             return
         new = gridmod.build_grid(bounds, epsg, float(res))
+        applied = []
 
         def _apply(live):
+            if live.locked:
+                return  # a set was recorded since this form rendered (spec D10): the grid is frozen
             live.grid = new
+            applied.append(True)
 
         if not app_state.update_project(name, _apply):
             return  # the project was closed or switched meanwhile
+        if not applied:
+            notifications.warning(t("steps.prepare.grid_locked"))
+            return
         notifications.success(t("steps.prepare.grid_saved", w=new.width, h=new.height))
 
     preview = None if err else gridmod.build_grid(bounds, epsg, float(res))
