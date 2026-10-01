@@ -130,10 +130,18 @@ def attribute_alerts(gdf, raster_path, band_stats):
                     columns[col].append(None)
                 continue
             win_transform = src.window_transform(window)
+            out_shape = (int(window.height), int(window.width))
             mask = features.geometry_mask(
-                [shape], out_shape=(int(window.height), int(window.width)),
+                [shape], out_shape=out_shape,
                 transform=win_transform, invert=True,  # True INSIDE the polygon
             )
+            if not mask.any():
+                # An alert smaller than a pixel of a coarser raster can cover
+                # no pixel centre at all: it takes the pixels it touches.
+                mask = features.geometry_mask(
+                    [shape], out_shape=out_shape, transform=win_transform,
+                    invert=True, all_touched=True,
+                )
             for col, idx, reducer in resolved:
                 band = src.read(idx, window=window)
                 vals = band[mask]

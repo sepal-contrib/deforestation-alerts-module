@@ -27,6 +27,11 @@ def _write_raster(path, bands, *, crs="EPSG:4326", res=1.0, lon0=0.0, lat0=10.0,
     return str(path)
 
 
+# rasterio's own Affine products warn on every window read; the tests above
+# already show that warning, so the newer tests do not repeat it.
+_RASTERIO_MATMUL = pytest.mark.filterwarnings("ignore:Use `@` matmul:PendingDeprecationWarning")
+
+
 def test_safe_column():
     assert ra.safe_column("Forest/No Forest") == "forest_no_forest"
     assert ra.safe_column("band 1!!") == "band_1"
@@ -103,6 +108,40 @@ def test_all_nodata_polygon_is_none(tmp_path):
     gdf = _gdf([box(0, 8, 2, 10)])
     out = ra.attribute_alerts(gdf, path, [{"band": "forest", "stat": "mean", "column": "forest"}])
     assert out["forest"].iloc[0] is None
+
+
+@_RASTERIO_MATMUL
+def test_an_alert_smaller_than_a_pixel_takes_the_pixels_it_touches(tmp_path):
+    """An alert that covers no pixel centre (a 30 m alert on a 100 m land
+    cover, say) used to get no value at all: in the live walk, 32 of 49
+    alerts read None from a 110 m GeoTIFF. It now takes the pixels it touches."""
+    path = _write_raster(tmp_path / "r.tif", [[[1, 2], [3, 4]]], descriptions=["v"])
+    inside_one = box(0.1, 9.1, 0.3, 9.3)  # inside the top-left pixel, off its centre
+    straddling = box(0.8, 9.6, 1.2, 9.8)  # across the two top pixels, no centre
+    gdf = _gdf([inside_one, straddling])
+    specs = [{"band": "v", "stat": "mean", "column": "v_mean"},
+             {"band": "v", "stat": "majority", "column": "v_major"}]
+    out = ra.attribute_alerts(gdf, path, specs)
+    assert out["v_mean"].tolist() == [1, 1.5]
+    assert out["v_major"].tolist() == [1, 1]
+
+
+@_RASTERIO_MATMUL
+def test_pixel_centres_still_decide_when_the_alert_covers_any(tmp_path):
+    """The fallback is only for alerts that cover no centre: an alert over the
+    top-left centre that also touches the other three pixels reads only 1."""
+    path = _write_raster(tmp_path / "r.tif", [[[1, 2], [3, 4]]], descriptions=["v"])
+    gdf = _gdf([box(0.2, 8.8, 1.2, 9.8)])
+    out = ra.attribute_alerts(gdf, path, [{"band": "v", "stat": "mean", "column": "v"}])
+    assert out["v"].iloc[0] == 1
+
+
+@_RASTERIO_MATMUL
+def test_a_sub_pixel_alert_over_nodata_is_none(tmp_path):
+    path = _write_raster(tmp_path / "r.tif", [[[255, 2], [3, 4]]], nodata=255, descriptions=["v"])
+    gdf = _gdf([box(0.1, 9.1, 0.3, 9.3)])
+    out = ra.attribute_alerts(gdf, path, [{"band": "v", "stat": "mean", "column": "v"}])
+    assert out["v"].iloc[0] is None
 
 
 def test_no_overlap_polygon_is_none(tmp_path):
