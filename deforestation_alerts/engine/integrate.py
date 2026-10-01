@@ -39,7 +39,7 @@ from deforestation_alerts.engine.fingerprint import (
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.raster_io import (
-    BLOCK, check_header, ensure_free_space, row_windows, write_grid_raster,
+    BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, write_grid_raster,
 )
 from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.project import paths
@@ -229,10 +229,11 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     inputs_fp = set_inputs(p, period, sources, job.params)
     sid = make_set_id(period.id, sources)
     sdir = paths.set_dir(pdir, period.id, sources)
-    # A replaced set's old files stay until the swap, so the staged combined
-    # raster, footprint and store all sit beside them; together they are well
-    # under this bound.
-    ensure_free_space(sdir, 3 * estimate_bytes(p.grid, bands=3))
+    # A run stages the combined raster (3 bands) and the footprint (1 band);
+    # the parquet store is small next to them. A replaced set's old files stay
+    # beside the staged ones until the swap, hence twice their compressed
+    # estimate.
+    ensure_free_space(sdir, 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1)))
 
     step("steps.integrate.step_combine")
     earlier = earlier_sets(p, period)

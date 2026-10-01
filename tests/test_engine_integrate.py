@@ -11,6 +11,7 @@ from pyproj import Transformer
 from shapely.geometry import box
 
 from deforestation_alerts.engine import fingerprint as fp
+from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine import integrate, raster_io
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
@@ -231,6 +232,53 @@ def test_run_integration_end_to_end(ready_project):
     stored = gpd.read_parquet(pdir / s.store_rel_path)
     assert len(stored) == 1
     assert {fp.combined_key(s.id), fp.footprint_key(s.id), fp.store_key(s.id)} <= set(res.artifacts)
+
+
+def _record_space_checks(monkeypatch, *, fail=False):
+    """Record every ``(folder, needed bytes)`` Integrate checks; ``fail`` makes
+    the check raise instead of passing."""
+    seen = []
+
+    def check(folder, needed):
+        seen.append((folder, needed))
+        if fail:
+            raise raster_io.NotEnoughSpaceError(f"needs {needed} bytes")
+
+    monkeypatch.setattr(integrate, "ensure_free_space", check)
+    return seen
+
+
+@_LONLAT_CENTROID
+def test_the_integrate_gate_asks_for_twice_the_compressed_staged_rasters(ready_project, monkeypatch):
+    """User decision 2026-10-01: the staged combined raster (3 bands) and
+    footprint (1 band), at 5 % of their uncompressed size, twice over (the
+    replaced set's files stay beside them until the swap)."""
+    p, pdir = ready_project
+    seen = _record_space_checks(monkeypatch)
+    res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
+    needed = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(GRID, bands=4))
+    assert seen == [(paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]), needed)]
+    assert needed == 2 * math.ceil(GRID.width * GRID.height * 4 * 4 * 0.05)  # 2560 bytes for 40 x 40 px
+    assert res.alert_set.n_alerts == 2
+
+
+def test_a_national_10m_integrate_needs_under_15_gb(ready_project, monkeypatch):
+    """Paraguay at 10 m (88,236 x 93,387 px): the old bound, 36 B/px (three
+    times a 3-band Int32 raster), asked for ~297 GB; the compressed estimate of
+    the 4 staged bands asks for ~13.2 GB. The gate runs before anything is
+    written."""
+    p, pdir = ready_project
+    rows = integrate.plan_prepare(p, pdir, JAN)  # ready on the small grid
+    monkeypatch.setattr(integrate, "plan_prepare", lambda *a: rows)
+    big = p.model_copy(deep=True)
+    big.grid = GRID.model_copy(update={"xmin": 200000, "ymax": 7870000, "width": 88_236, "height": 93_387})
+    seen = _record_space_checks(monkeypatch, fail=True)
+    with pytest.raises(raster_io.NotEnoughSpaceError):
+        integrate.run_integration(_job(big, pdir, JAN, AlertSetParams()))
+    [(_, needed)] = seen
+    assert needed == 2 * raster_io.compressed_estimate(88_236 * 93_387 * 4 * 4)
+    assert 13e9 < needed < 15e9
+    assert not paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]).exists()
 
 
 def test_run_integration_refuses_a_source_not_ready(ready_project):
