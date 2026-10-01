@@ -97,6 +97,20 @@ def test_each_build_stages_under_its_own_part_name(monkeypatch, tmp_path):
     assert sorted(f.name for f in out.parent.iterdir()) == ["alerts.pmtiles"]
 
 
+def test_the_tiles_get_the_umasks_default_mode(monkeypatch, tmp_path):
+    """The staged copy is renamed onto alerts.pmtiles, mode and all: staged
+    with mkstemp it was 0600, unreadable by any other user or process that
+    serves the tiles. It gets what a plainly created file gets."""
+    import stat
+
+    _fake_tippecanoe(monkeypatch)
+    out = tmp_path / "set" / "alerts.pmtiles"
+    pmtiles.alerts_to_pmtiles(_alerts(), out)
+    reference = tmp_path / "set" / "reference"
+    reference.write_bytes(b"")
+    assert stat.S_IMODE(out.stat().st_mode) == stat.S_IMODE(reference.stat().st_mode)
+
+
 def test_a_guard_that_raises_keeps_the_built_tiles_off_disk(monkeypatch, tmp_path):
     """The guard runs right before the staged copy is moved onto the target:
     a caller that built from a store on disk refuses there when that store

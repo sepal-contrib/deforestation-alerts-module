@@ -12,11 +12,11 @@ copy over each other's half-written file.
 
 import json
 import logging
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -92,9 +92,12 @@ def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None
             "-L", json.dumps({"file": str(points), "layer": "points"}),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=f"{out_path.name}.", suffix=".part")
-        os.close(fd)
-        partial = Path(name)
+        # Staged beside the target under a name of its own (two builders of
+        # one set must not share it), created with the umask's default mode:
+        # mkstemp made it 0600, which the rename carried onto alerts.pmtiles.
+        partial = out_path.with_name(f"{out_path.name}.{uuid.uuid4().hex}.part")
+        with open(partial, "xb"):
+            pass
         try:
             shutil.copyfile(built, partial)
             if guard is not None:
