@@ -14,7 +14,7 @@ from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
-from deforestation_alerts.scripts.scene_index import INDEX_VERSION, SOURCE_CODE, row_id
+from deforestation_alerts.scripts.scene_index import INDEX_VERSION, SOURCE_CODE, SOURCE_PLANET, row_id
 
 TTL_HOURS = 24
 TAIL_DAYS = 10
@@ -292,3 +292,43 @@ def auto_collapsed(start: date, end: date, a0: date, a1: date) -> set[tuple[int,
         if a0 <= s and e <= a1:
             out.add((year, month))
     return out
+
+
+# ------------------------------------------------------------- default pick
+
+
+def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], Optional[str]]:
+    """The pair to mark when an alert opens: ``(before_id, after_id)``.
+
+    Nearest first, among the rows the cloud limit does not hide. A side whose
+    every candidate is over the limit is left unselected (spec §3): that is
+    what makes the readout's "raise the limit" guidance reachable. The rows
+    are still drawn, faded, so the reviewer can see that images exist there
+    before deciding.
+
+    Nothing inside ``[a0, a1]`` is ever picked, because an image taken while
+    the alert was accumulating shows partial clearing and would understate
+    the change. In-window rows stay *selectable* -- a long window may leave
+    no other choice -- but the reviewer has to ask for one.
+
+    Both bounds are inclusive: a scene acquired on ``a0`` is the last look
+    before the window opened, and one acquired on ``a1`` the first after it
+    closed.
+
+    A Planet NICFI basemap is a whole month's mosaic, not a scene that
+    witnesses one date, so it is never offered as either side's default.
+    """
+    if sel is None or len(sel) == 0:
+        return (None, None)
+    usable = sel[sel["source"] != SOURCE_PLANET]
+    before_all = usable[usable["date"] <= pd.Timestamp(a0)]
+    after_all = usable[usable["date"] >= pd.Timestamp(a1)]
+
+    def _nearest(part: pd.DataFrame, *, newest: bool) -> Optional[str]:
+        pool = part[~part["hidden"]]
+        if len(pool) == 0:
+            return None
+        row = pool.loc[pool["date"].idxmax() if newest else pool["date"].idxmin()]
+        return str(row["id"])
+
+    return (_nearest(before_all, newest=True), _nearest(after_all, newest=False))

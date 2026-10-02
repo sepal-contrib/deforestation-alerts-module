@@ -325,3 +325,93 @@ def test_the_boundary_months_of_the_window_stay_expanded():
 def test_a_short_alert_window_collapses_nothing():
     got = scene_query.auto_collapsed(date(2026, 3, 3), date(2026, 7, 23), date(2026, 5, 3), date(2026, 5, 20))
     assert got == set()
+
+
+# ----------------------------------------------------------- default_pick
+
+A0, A1 = date(2026, 5, 3), date(2026, 8, 23)
+
+
+def _sel(rows, max_cloud=40.0):
+    tables = _tables([(src, pd.Timestamp(d), cloud, "W", f"k{i}")
+                      for i, (src, d, cloud) in enumerate(rows)])
+    return scene_query.scenes_for(tables, ALERT, date(2026, 3, 1), date(2026, 10, 31), max_cloud=max_cloud)
+
+
+def test_the_pick_is_the_nearest_clear_image_on_each_side():
+    sel = _sel([
+        (S2, "2026-04-02", 5.0),
+        (S2, "2026-04-24", 8.0),   # nearest before
+        (S2, "2026-06-10", 2.0),   # inside the window
+        (S2, "2026-08-27", 3.0),   # nearest after
+        (S2, "2026-09-30", 1.0),
+    ])
+    assert scene_query.default_pick(sel, A0, A1) == (
+        scene_index.row_id(S2, date(2026, 4, 24)),
+        scene_index.row_id(S2, date(2026, 8, 27)),
+    )
+
+
+def test_nothing_inside_the_alert_window_is_ever_picked():
+    sel = _sel([(S2, "2026-06-10", 1.0), (S2, "2026-07-01", 1.0)])
+    assert scene_query.default_pick(sel, A0, A1) == (None, None)
+
+
+def test_a_scene_on_the_window_start_date_is_a_legal_before():
+    sel = _sel([(S2, "2026-04-01", 5.0), (S2, "2026-05-03", 5.0)])
+    assert scene_query.default_pick(sel, A0, A1)[0] == scene_index.row_id(S2, date(2026, 5, 3))
+
+
+def test_a_scene_on_the_window_end_date_is_a_legal_after():
+    sel = _sel([(S2, "2026-08-23", 5.0), (S2, "2026-09-15", 5.0)])
+    assert scene_query.default_pick(sel, A0, A1)[1] == scene_index.row_id(S2, date(2026, 8, 23))
+
+
+def test_a_side_whose_every_candidate_is_over_the_limit_is_left_unselected():
+    # The spec's rule (§3): *before* is the latest scene **with cloud at or
+    # under the limit**. With none, that side stays empty and the readout
+    # points at the slider — auto-picking an 88%-cloud image instead would
+    # make the one message that tells the reviewer to raise the limit
+    # unreachable, and would look like a considered choice.
+    sel = _sel([(S2, "2026-04-24", 88.0), (S2, "2026-04-02", 90.0), (S2, "2026-08-27", 4.0)])
+    before, after = scene_query.default_pick(sel, A0, A1)
+    assert before is None
+    assert after == scene_index.row_id(S2, date(2026, 8, 27))
+
+
+def test_raising_the_limit_makes_that_side_pick_again():
+    rows = [(S2, "2026-04-24", 88.0), (S2, "2026-04-02", 90.0), (S2, "2026-08-27", 4.0)]
+    assert scene_query.default_pick(_sel(rows, max_cloud=89.0), A0, A1)[0] == scene_index.row_id(
+        S2, date(2026, 4, 24)
+    )
+
+
+def test_a_clear_scene_further_out_beats_a_cloudy_nearer_one():
+    sel = _sel([(S2, "2026-04-28", 88.0), (S2, "2026-04-02", 6.0), (S2, "2026-08-27", 4.0)])
+    assert scene_query.default_pick(sel, A0, A1)[0] == scene_index.row_id(S2, date(2026, 4, 2))
+
+
+def test_planet_is_never_auto_picked():
+    # A NICFI basemap is a whole month's mosaic: it cannot witness a date, so
+    # it is a reviewer's deliberate choice, never a default.
+    sel = _sel([(PL, "2026-04-01", float("nan")), (S2, "2026-04-02", 6.0), (S2, "2026-08-27", 4.0)])
+    before, _ = scene_query.default_pick(sel, A0, A1)
+    assert before == scene_index.row_id(S2, date(2026, 4, 2))
+
+
+def test_only_planet_available_picks_nothing():
+    sel = _sel([(PL, "2026-04-01", float("nan")), (PL, "2026-09-01", float("nan"))])
+    assert scene_query.default_pick(sel, A0, A1) == (None, None)
+
+
+def test_an_empty_selection_picks_nothing():
+    assert scene_query.default_pick(_EMPTY_SEL(), A0, A1) == (None, None)
+
+
+def _EMPTY_SEL():
+    return scene_query.scenes_for(scene_index.empty_tables(), ALERT, date(2026, 3, 1), date(2026, 10, 31))
+
+
+def test_one_side_available_still_picks_that_side():
+    sel = _sel([(S2, "2026-04-02", 6.0)])
+    assert scene_query.default_pick(sel, A0, A1) == (scene_index.row_id(S2, date(2026, 4, 2)), None)
