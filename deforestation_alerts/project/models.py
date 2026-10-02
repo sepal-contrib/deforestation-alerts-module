@@ -81,6 +81,11 @@ class CustomSource(BaseModel):
     digit: int
 
 
+def mapped_bands(src: "CustomSource") -> list:
+    """The bands a custom source reads, alert first (none for date-only)."""
+    return [b for b in (src.band_map.alert, src.band_map.date) if b is not None]
+
+
 AlertSource = Annotated[Union[PredefinedSource, CustomSource], Field(discriminator="kind")]
 
 
