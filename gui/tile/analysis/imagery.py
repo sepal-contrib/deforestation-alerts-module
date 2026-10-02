@@ -59,9 +59,9 @@ app_state : AppState
 selected_alerts_model : SetContext
     ``combined_path``: the set's combined raster, whose band 3 is the
     original-alert overlay layer.
-analyzed_alerts_model : AlertAnalysisModel
-    Per-alert imagery dicts (before/after S2/Landsat/Planet); unused directly now
-    that the per-alert handoff goes through ``widgets.imagery_ctx`` (kept for parity).
+analysis : AnalysisState
+    Where a click on a date button stores the chosen image and its info list
+    (``before_image`` / ``after_image``, ``before_info`` / ``after_info``).
 """
 
 import logging
@@ -103,14 +103,14 @@ _COLOR_MAP = {
 # functions (no ``self``); explicit args replace the former instance attributes.
 # ---------------------------------------------------------------------------
 def image_slider_map_callback(
-    selected_item, map_element, model_att, widgets, selected_alerts_model
+    selected_item, map_element, model_att, widgets, analysis, selected_alerts_model
 ):
     """Add the chosen image's True/False-color + original-alert layers to a map.
 
     Ports OLD ``AnalysisTile.image_slider_map_callback``. Reads the per-alert
     grid from ``widgets`` and the set's combined raster (``combined_path``) from
-    ``selected_alerts_model`` (a ``SetContext``). Stores the chosen ee.Image back
-    on ``widgets`` per pane (``model_att`` 0 = before, 1 = after).
+    ``selected_alerts_model`` (a ``SetContext``). Stores the chosen ee.Image in
+    ``analysis`` per pane (``model_att`` 0 = before, 1 = after).
     """
     widgets.imgSelection1.disabled = True
     widgets.imgSelection2.disabled = True
@@ -174,9 +174,9 @@ def image_slider_map_callback(
         img = harmonized_img
 
     if model_att == 0:
-        widgets.selected_img_before = img
+        analysis.before_image.set(img)
     elif model_att == 1:
-        widgets.selected_img_after = img
+        analysis.after_image.set(img)
 
     map_element.addLayer(img, vis1, "True Color", True)
     map_element.addLayer(img, vis2, "False Color", False)
@@ -197,11 +197,11 @@ def image_slider_map_callback(
     widgets.imgSelection2.disabled = False
 
 
-def image_slider_info_callback(selected_item, info_element, model_att, widgets):
+def image_slider_info_callback(selected_item, info_element, model_att, widgets, analysis):
     """Update the selected-image info card + store the per-pane info list.
 
     Ports OLD ``AnalysisTile.image_slider_info_callback`` byte-faithfully; the
-    per-pane info list lands on ``widgets.selected_img_before/after_info_list``.
+    per-pane info list lands in ``analysis.before_info`` / ``after_info``.
     """
     info_element.loading = True
     info1 = selected_item["source"]
@@ -211,9 +211,9 @@ def image_slider_info_callback(selected_item, info_element, model_att, widgets):
     info5 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime("_%d%m%y")
     lista = [info1, info2, info3, info4, info5]
     if model_att == 0:
-        widgets.selected_img_before_info_list = lista
+        analysis.before_info.set(lista)
     elif model_att == 1:
-        widgets.selected_img_after_info_list = lista
+        analysis.after_info.set(lista)
     info_element.loading = False
     info_element.children = [
         v.Html(
@@ -245,14 +245,16 @@ def create_horizontal_slide_group_v3(
     model_att2,
     fire_callback,
     widgets,
+    analysis,
     selected_alerts_model,
 ):
     """Build the date-button slide group inside a selector tab + wire clicks.
 
     Ports OLD ``AnalysisTile.create_horizontal_slide_group_v3`` byte-faithfully.
     ``map_cb`` / ``info_cb`` are the (now module-level) map/info callbacks; they are
-    invoked with the extra ``widgets`` (and ``selected_alerts_model`` for the map
-    callback) explicit args the OLD ``self.``-bound versions carried implicitly.
+    invoked with the extra ``widgets`` + ``analysis`` (and ``selected_alerts_model``
+    for the map callback) explicit args the OLD ``self.``-bound versions carried
+    implicitly.
     The nested-children indexing into ``map_component`` / ``image_slider_component``
     matches the ``AnalysisWidgets`` selector tree exactly.
     """
@@ -347,8 +349,8 @@ def create_horizontal_slide_group_v3(
 
         widget.color = _COLOR_MAP.get("selected")
 
-        map_cb(selected_item, map_element, model_att1, widgets, selected_alerts_model)
-        info_cb(selected_item, info_element, model_att2, widgets)
+        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model)
+        info_cb(selected_item, info_element, model_att2, widgets, analysis)
 
         widget.loading = False
         widget.disabled = False
@@ -370,8 +372,8 @@ def create_horizontal_slide_group_v3(
         selected_item = date_indices[
             slide_group.slide_group.children[default_v_model].value
         ]
-        map_cb(selected_item, map_element, model_att1, widgets, selected_alerts_model)
-        info_cb(selected_item, info_element, model_att2, widgets)
+        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model)
+        info_cb(selected_item, info_element, model_att2, widgets, analysis)
 
 
 def _set_all_loading(widgets):
@@ -390,6 +392,12 @@ def _set_all_loading(widgets):
                 ].set_loading_state(True)
             except Exception:
                 logger.exception("Analysis imagery: failed to set loading state")
+
+
+def _show_tab(selector, index):
+    """Show tab ``index`` of an image-selector card: its Tabs and TabsItems."""
+    selector.children[0].v_model = index
+    selector.children[1].v_model = index
 
 
 def _normalize_source_data(data, source):
@@ -421,6 +429,7 @@ def _rebuild_groups(
     default_before,
     default_after,
     widgets,
+    analysis,
     selected_alerts_model,
 ):
     """Rebuild the before/after slide groups for one source (main-thread only).
@@ -441,6 +450,7 @@ def _rebuild_groups(
             0,
             default_before,
             widgets,
+            analysis,
             selected_alerts_model,
         )
     except Exception:
@@ -457,6 +467,7 @@ def _rebuild_groups(
             1,
             default_after,
             widgets,
+            analysis,
             selected_alerts_model,
         )
     except Exception:
@@ -467,7 +478,7 @@ def build_imagery(
     widgets,
     app_state,
     selected_alerts_model,
-    analyzed_alerts_model,
+    analysis,
 ):
     """Imagery slice: Planet (sync) + S2/Landsat (daemon threads) slide-group drivers.
 
@@ -517,6 +528,7 @@ def build_imagery(
                 show[1],
                 show[1],
                 widgets,
+                analysis,
                 selected_alerts_model,
             )
 
@@ -540,6 +552,7 @@ def build_imagery(
                 False,
                 False,
                 widgets,
+                analysis,
                 selected_alerts_model,
             )
 
@@ -559,12 +572,14 @@ def build_imagery(
         show = ctx.get("show") or [True, False, False]
 
         # OLD auto-switch: when Planet is "Not available", flip the visible tab to
-        # Sentinel-2 (children[0] is the Tabs widget; v_model is the active tab).
+        # Sentinel-2 (children[0] is the Tabs widget, children[1] its TabsItems;
+        # v_model is the active tab). The two are jslink'd, which mirrors only in
+        # a live browser, so a Python-originated switch writes both.
         try:
             if before_planet and before_planet[0].get("value") == "Not available":
-                widgets.imgSelection1.children[0].v_model = 1
+                _show_tab(widgets.imgSelection1, 1)
             if after_planet and after_planet[0].get("value") == "Not available":
-                widgets.imgSelection2.children[0].v_model = 1
+                _show_tab(widgets.imgSelection2, 1)
         except Exception:
             logger.exception("Analysis imagery: failed to auto-switch to S2 tab")
 
@@ -577,6 +592,7 @@ def build_imagery(
             show[0],
             show[0],
             widgets,
+            analysis,
             selected_alerts_model,
         )
 

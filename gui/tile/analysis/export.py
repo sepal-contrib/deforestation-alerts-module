@@ -62,7 +62,7 @@ lives in ``app_state.alerts_gdf.value`` (the active set's, published by the shel
 set loader or by Integrate), and the alert
 index is ``app_state.actual_alert_id.value``. ``save_attributes_to_gdf`` mutates that
 gdf in place via ``.at[id, col] = ...`` (faithful to OLD), then stamps
-``analyzed_alerts_model.last_save_time``. Everything guards on the gdf being present
+``analysis.last_save_time``. Everything guards on the gdf being present
 and the id in range, so it is smoke-safe (nothing runs at mount;
 ``dependencies=None``).
 
@@ -70,16 +70,17 @@ Props
 -----
 widgets : AnalysisWidgets
     Shared heavy widgets + scratch. Read here: ``confirmation_select`` /
-    ``driver_combobox`` (stashed by AlertReviewPanel), ``selected_img_before_info_list``
-    / ``selected_img_after_info_list`` ([0]=source, [1]=milis, [3]=value/name,
-    [4]=date-suffix), ``selected_img_before`` / ``selected_img_after`` (ee.Image),
-    ``actual_alert_grid``, ``actual_bb``.
+    ``driver_combobox`` (stashed by AlertReviewPanel), ``actual_alert_grid``,
+    ``actual_bb``.
 app_state : AppState
     Navigation + alerts source of truth (``alerts_gdf`` / ``actual_alert_id``).
 aux_model : SetContext
     ``custom_report_template`` (the project's) for the report generation.
-analyzed_alerts_model : AlertAnalysisModel
-    ``defo_dl_layer`` (drawn polygon) / ``last_save_time`` (save stamp).
+analysis : AnalysisState
+    ``defo_layer`` (drawn polygon), ``before_info`` / ``after_info``
+    ([0]=source, [1]=milis, [3]=value/name, [4]=date-suffix),
+    ``before_image`` / ``after_image`` (ee.Image) and ``last_save_time``
+    (save stamp).
 app_tile_model : SetContext
     ``recipe_folder_path`` (the active set's folder) for the output paths,
     ``pin`` (the active set, read once) for where a Save writes
@@ -187,7 +188,7 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
         raise SaveRefused(str(cm.analysis_tile.export_labels.save_store_changed))
 
 
-def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
+def _save_attributes(widgets, app_state, analysis, app_tile_model):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
@@ -229,33 +230,27 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
     drivers_list = ensure_list(widgets.driver_combobox.v_model)
     alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
 
-    # before/after image name + info. Guarded (fix round 1): both default to
-    # None (widgets.py:275-276) until an image is actually picked
-    # (imagery.py:214/216), e.g. no Planet login yet and no S2/Landsat chosen
-    # for this alert; unconditionally subscripting raised
+    # before/after image name + info. Guarded (fix round 1): both are None
+    # until an image is actually picked for this alert (``AnalysisState``;
+    # ``reset_alert`` clears them on every alert change), e.g. no Planet login
+    # yet and no S2/Landsat chosen; unconditionally subscripting raised
     # "'NoneType' object is not subscriptable" and lost the whole review, the
     # same way the drawn-polygon case below is guarded on
-    # ``defo_dl_layer is None``.
-    if widgets.selected_img_before_info_list is None:
+    # ``defo_layer is None``.
+    before_info = analysis.before_info.value
+    after_info = analysis.after_info.value
+    if before_info is None:
         alertas_gdf.at[actual_alert_id, "before_img"] = None
         alertas_gdf.at[actual_alert_id, "before_img_info"] = None
     else:
-        alertas_gdf.at[actual_alert_id, "before_img"] = (
-            widgets.selected_img_before_info_list[3]
-        )
-        alertas_gdf.at[actual_alert_id, "before_img_info"] = (
-            widgets.selected_img_before_info_list[1]
-        )
-    if widgets.selected_img_after_info_list is None:
+        alertas_gdf.at[actual_alert_id, "before_img"] = before_info[3]
+        alertas_gdf.at[actual_alert_id, "before_img_info"] = before_info[1]
+    if after_info is None:
         alertas_gdf.at[actual_alert_id, "after_img"] = None
         alertas_gdf.at[actual_alert_id, "after_img_info"] = None
     else:
-        alertas_gdf.at[actual_alert_id, "after_img"] = (
-            widgets.selected_img_after_info_list[3]
-        )
-        alertas_gdf.at[actual_alert_id, "after_img_info"] = (
-            widgets.selected_img_after_info_list[1]
-        )
+        alertas_gdf.at[actual_alert_id, "after_img"] = after_info[3]
+        alertas_gdf.at[actual_alert_id, "after_img_info"] = after_info[1]
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
@@ -288,30 +283,29 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
     alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
+    defo_layer = analysis.defo_layer.value
     if (
         confirmation == cm.analysis_tile.questionarie.confirmation_no
-        and analyzed_alerts_model.defo_dl_layer is not None
+        and defo_layer is not None
     ):
         raise Exception(cm.analysis_tile.questionarie.confirmation_q)
 
     # alert_polygon + area_ha from the drawn defo layer (if any). With nothing
     # drawn, area_ha keeps the alert's own area, which Integrate stored: the
     # store feeds the exports, the map tiles and the report.
-    if analyzed_alerts_model.defo_dl_layer is None:
+    if defo_layer is None:
         alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
     else:
         alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
-            analyzed_alerts_model.defo_dl_layer["geometry"].union_all()
+            defo_layer["geometry"].union_all()
         )
-        alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(
-            analyzed_alerts_model.defo_dl_layer
-        )
+        alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(defo_layer)
 
     # Persist the alert DB (OLD save_alerts_to_gdf) where the save started.
     # Skip if there is no folder.
     _save_alerts_to_gdf(alertas_gdf, app_tile_model, folder=folder, target=target)
 
-    analyzed_alerts_model.last_save_time = datetime.today().timestamp()
+    analysis.last_save_time.set(datetime.today().timestamp())
     return True
 
 
@@ -358,15 +352,12 @@ def _alert_selected(app_state) -> bool:
     return gdf is not None and alert_id is not None and 0 <= alert_id < len(gdf)
 
 
-def _images_picked(widgets) -> bool:
+def _images_picked(widgets, analysis) -> bool:
     """A before and an after image are selected for the alert under review."""
-    return (
-        widgets.selected_img_before_info_list is not None
-        and widgets.selected_img_after_info_list is not None
-    )
+    return analysis.before_info.value is not None and analysis.after_info.value is not None
 
 
-def _download_data(widgets, app_state, aux_model, app_tile_model, *, task=None):
+def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
@@ -403,7 +394,7 @@ def _download_data(widgets, app_state, aux_model, app_tile_model, *, task=None):
     # are None until an image is picked for this alert, which nothing does by
     # itself. Refused here, before any file is written: the TypeError this
     # raised further down used to leave a partial alert_<id>.gpkg behind.
-    if not _images_picked(widgets):
+    if not _images_picked(widgets, analysis):
         return None
 
     # Single-row GeoDataFrame for the selected alert.
@@ -449,10 +440,10 @@ def _download_data(widgets, app_state, aux_model, app_tile_model, *, task=None):
             image_local = stage_alert_image(
                 folder,
                 actual_alert_id,
-                widgets.selected_img_before_info_list,
-                widgets.selected_img_after_info_list,
-                widgets.selected_img_before,
-                widgets.selected_img_after,
+                analysis.before_info.value,
+                analysis.after_info.value,
+                analysis.before_image.value,
+                analysis.after_image.value,
                 widgets.actual_alert_grid,
             )
         if task is not None:
@@ -481,7 +472,7 @@ def build_export(
     widgets,
     app_state,
     aux_model,
-    analyzed_alerts_model,
+    analysis,
     app_tile_model,
 ):
     """Build and return the export card (OLD ``card06``) with the save + download flow.
@@ -598,7 +589,7 @@ def build_export(
                             saved = _save_attributes(
                                 widgets,
                                 app_state,
-                                analyzed_alerts_model,
+                                analysis,
                                 app_tile_model,
                             )
                             refused = None
@@ -659,6 +650,7 @@ def build_export(
                     with writing(writer_name(app_state)):
                         result = _download_data(
                             widgets,
+                            analysis,
                             app_state,
                             aux_model,
                             app_tile_model,

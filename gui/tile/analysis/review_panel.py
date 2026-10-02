@@ -22,8 +22,8 @@ widgets : AnalysisWidgets
     here for AlertExport to read.
 app_state : AppState
     Navigation + alerts source of truth.
-analyzed_alerts_model : AlertAnalysisModel
-    Reserved per-alert scratch state (unused by this questionnaire panel).
+analysis : AnalysisState
+    Reserved per-alert state (unused by this questionnaire panel).
 app_tile_model : SetContext
     Reserved (output paths) — unused by this questionnaire panel.
 """
@@ -37,7 +37,7 @@ from deforestation_alerts.message import cm
 def build_review_panel(
     widgets,
     app_state,
-    analyzed_alerts_model,
+    analysis,
     app_tile_model,
 ):
     """Build and return the review questionnaire card (confirmation + loss-driver).

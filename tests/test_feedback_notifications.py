@@ -31,10 +31,10 @@ from pysepal.solara.notifications.notifier import Notifier
 from pysepal.solara.notifications.state import TaskStatus, ToastType
 
 from deforestation_alerts.message import cm
-from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
+from gui.tile.analysis.state import AnalysisState
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ def export_card(monkeypatch, data_root):
         widgets=None,  # only touched inside _save_attributes / _download_data
         app_state=app_state,
         aux_model=_set_context_fake(),
-        analyzed_alerts_model=AlertAnalysisModel(),
+        analysis=AnalysisState(),
         app_tile_model=app_tile_model,
     )
     return export, card, app_state, app_tile_model
@@ -426,7 +426,7 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
         widgets=None,  # the refusal comes before any widget is read
         app_state=app_state,
         aux_model=ctx,
-        analyzed_alerts_model=AlertAnalysisModel(),
+        analysis=AnalysisState(),
         app_tile_model=ctx,
     )
     feedback = _record_feedback(monkeypatch, export)
@@ -556,15 +556,12 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     app_tile_model = SimpleNamespace(
         recipe_folder_path=str(data_root / "r"), custom_report_template=None
     )
-    widgets = SimpleNamespace(  # as AnalysisWidgets starts: no image picked
-        selected_img_before_info_list=None, selected_img_after_info_list=None,
-        selected_img_before=None, selected_img_after=None, actual_alert_grid=None,
-    )
+    widgets = SimpleNamespace(actual_alert_grid=None)  # no image picked: AnalysisState() starts empty
     card = export.build_export(
         widgets=widgets,
         app_state=app_state,
         aux_model=_set_context_fake(),
-        analyzed_alerts_model=AlertAnalysisModel(),
+        analysis=AnalysisState(),
         app_tile_model=app_tile_model,
     )
     feedback = _record_feedback(monkeypatch, export)
@@ -707,14 +704,14 @@ def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
 def edit_tools_card():
     import gui.tile.analysis.edit_tools as edit_tools
 
-    analyzed_alerts_model = AlertAnalysisModel()
+    analysis = AnalysisState()
     card = edit_tools.build_edit_tools(
         widgets=None,  # only touched inside _run_cnn_model / the edit handlers
         app_state=AppState(),
-        analyzed_alerts_model=analyzed_alerts_model,
+        analysis=analysis,
         app_tile_model=_set_context_fake(),
     )
-    return edit_tools, card, analyzed_alerts_model
+    return edit_tools, card, analysis
 
 
 def _dl_run_button(card, label):
@@ -724,12 +721,11 @@ def _dl_run_button(card, label):
     raise AssertionError(f"no DL run button {label!r} in the card")
 
 
-@pytest.mark.parametrize("label, attr", [("M 1", "model1_prediction_file"),
-                                         ("M 2", "model2_prediction_file")])
+@pytest.mark.parametrize("label, model", [("M 1", 1), ("M 2", 2)])
 def test_edit_tools_model_run_publishes_success(
-    edit_tools_card, monkeypatch, label, attr
+    edit_tools_card, monkeypatch, label, model
 ):
-    edit_tools, card, analyzed_alerts_model = edit_tools_card
+    edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
@@ -738,8 +734,8 @@ def test_edit_tools_model_run_publishes_success(
     run_btn.fire_event("click", None)
     feedback.join()
 
-    # the toast accompanies the real apply step (the prediction is on the model)
-    assert getattr(analyzed_alerts_model, attr) == "/tmp/pred.tif"
+    # the toast accompanies the real apply step (the prediction is recorded)
+    assert analysis.prediction_files.value == {model: "/tmp/pred.tif"}
     task = feedback.task()
     assert task.title == str(cm.analysis_tile.model_labels.dl_task_title)
     assert task.total_steps is None
@@ -750,6 +746,23 @@ def test_edit_tools_model_run_publishes_success(
         ("success", str(cm.analysis_tile.model_labels.dl_done))
     ]
     assert run_btn.loading is False and run_btn.disabled is False
+
+
+def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
+    """Each run records its raster by model number without dropping the
+    other's: ``prediction_files`` is replaced, never mutated in place."""
+    edit_tools, card, analysis = edit_tools_card
+    before = analysis.prediction_files.value
+    paths = {"M 1": "/tmp/pred_m1.tif", "M 2": "/tmp/pred_m2.tif"}
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    for label in ("M 1", "M 2"):
+        feedback = _record_feedback(monkeypatch, edit_tools)
+        monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, _p=paths[label], **k: _p)
+        _dl_run_button(card, label).fire_event("click", None)
+        feedback.join()
+
+    assert analysis.prediction_files.value == {1: "/tmp/pred_m1.tif", 2: "/tmp/pred_m2.tif"}
+    assert before == {}
 
 
 @pytest.mark.parametrize("label", ["M 1", "M 2"])
@@ -772,7 +785,7 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
     card = edit_tools.build_edit_tools(
         widgets=None,
         app_state=app_state,
-        analyzed_alerts_model=AlertAnalysisModel(),
+        analysis=AnalysisState(),
         app_tile_model=_set_context_fake(),
     )
     feedback = _record_feedback(monkeypatch, edit_tools)
@@ -897,16 +910,11 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
 
     app_state = AppState()
     app_state.actual_alert_id.value = 0
-    widgets = type("W", (), {
-        "selected_img_before_info_list": None,
-        "selected_img_after_info_list": None,
-        "selected_img_before": None,
-        "selected_img_after": None,
-        "actual_alert_grid": None,
-    })()
+    widgets = type("W", (), {"actual_alert_grid": None})()
 
     result = edit_tools._run_cnn_model(
-        "repo", "file", "_m1", widgets, app_state, _set_context_fake(), task=_Task()
+        "repo", "file", "_m1", widgets, AnalysisState(), app_state, _set_context_fake(),
+        task=_Task(),
     )
 
     assert result == "/tmp/pred.tif"

@@ -16,6 +16,7 @@ from deforestation_alerts.project.models import AlertSet, AlertSetParams, Projec
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
+from gui.tile.analysis.state import AnalysisState
 
 
 def _state(tmp_path, monkeypatch):
@@ -41,7 +42,7 @@ def _alerts(n):
 
 def _wire(s):
     widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
-    analysis_tile.wire_alert_navigation(widgets, s, SimpleNamespace(defo_dl_layer=None), SetContext(s),
+    analysis_tile.wire_alert_navigation(widgets, s, AnalysisState(), SetContext(s),
                                         SimpleNamespace(v_model=None))
     return widgets
 

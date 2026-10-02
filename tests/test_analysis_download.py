@@ -18,6 +18,7 @@ from shapely.geometry import box
 
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
+from gui.tile.analysis.state import AnalysisState
 
 # Smallest valid JPEG so python-docx's add_picture accepts the stubbed renders.
 _JPEG_1PX = base64.b64decode(
@@ -80,22 +81,21 @@ def download_ctx(monkeypatch, data_root, tmp_path):
     folder.mkdir()
     set_context = SimpleNamespace(recipe_folder_path=str(folder), custom_report_template=None)
 
-    widgets = SimpleNamespace(
-        selected_img_before_info_list=_BEFORE_INFO,
-        selected_img_after_info_list=_AFTER_INFO,
-        selected_img_before=None,
-        selected_img_after=None,
-        actual_alert_grid=None,
-    )
+    widgets = SimpleNamespace(actual_alert_grid=None)
+    # The images picked for the alert (their info lists carry the composite's
+    # name); the ee.Images themselves stay None, the download is stubbed.
+    analysis = AnalysisState()
+    analysis.before_info.set(_BEFORE_INFO)
+    analysis.after_info.set(_AFTER_INFO)
     return SimpleNamespace(
-        widgets=widgets, app_state=app_state, aux_model=set_context,
+        widgets=widgets, analysis=analysis, app_state=app_state, aux_model=set_context,
         app_tile_model=set_context, folder=folder, scratch=scratch, downloads=downloads,
     )
 
 
 def _run(ctx):
     return export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model
+        ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model
     )
 
 
@@ -201,14 +201,14 @@ def test_composite_download_drives_the_task_progress_ring(download_ctx, monkeypa
 
     first = _Task()
     export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
+        ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
         task=first,
     )
     assert first.progress == [0.5, 1.0, None]
 
     cached = _Task()
     export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
+        ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
         task=cached,
     )
     assert cached.progress == [None]

@@ -18,23 +18,23 @@ from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.mosaics_helper import download_both_images
 
 
-def alert_image_name(recipe_folder, alert_id, before_info_list, after_info_list):
+def alert_image_name(recipe_folder, alert_id, before_info, after_info):
     """Build the before/after composite GeoTIFF path for one alert.
 
     Mirrors the OLD god-class: ``<recipe>/alert_<id><before[4]><after[4]>.tif``
-    where ``*_info_list[4]`` is each selected image's date suffix (e.g. ``_010124``).
+    where ``*_info[4]`` is each selected image's date suffix (e.g. ``_010124``).
     """
     return (
         recipe_folder
         + "/alert_"
         + str(alert_id)
-        + before_info_list[4]
-        + after_info_list[4]
+        + before_info[4]
+        + after_info[4]
         + ".tif"
     )
 
 
-def stage_alert_image(set_folder, alert_id, before_info_list, after_info_list,
+def stage_alert_image(set_folder, alert_id, before_info, after_info,
                       image_before, image_after, region):
     """The before/after composite of one alert, in the set folder.
 
@@ -46,14 +46,14 @@ def stage_alert_image(set_folder, alert_id, before_info_list, after_info_list,
     """
     if not set_folder:
         raise ValueError("no alert set is active: there is no folder for the alert's images")
-    dest = Path(alert_image_name(str(set_folder), alert_id, before_info_list, after_info_list))
+    dest = Path(alert_image_name(str(set_folder), alert_id, before_info, after_info))
     if dest.exists():
         return dest
     with local_files.write_into(dest) as part:
         tif = part.with_name(part.stem + ".tif")  # geedim wants a .tif name
         try:
-            download_both_images(image_before, image_after, str(tif), before_info_list[0],
-                                 after_info_list[0], region)
+            download_both_images(image_before, image_after, str(tif), before_info[0],
+                                 after_info[0], region)
             os.replace(tif, part)
         finally:
             tif.unlink(missing_ok=True)

@@ -17,6 +17,7 @@ import pytest
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
+from gui.tile.analysis.state import AnalysisState
 
 SET_DIR = ("periods", "per", "sets", "glad-l")
 
@@ -114,8 +115,8 @@ def _wire_analysis(s, ctx):
 
     widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
     id_field = SimpleNamespace(v_model=None)
-    scratch = SimpleNamespace(defo_dl_layer=None)
-    s.actual_alert_id.subscribe(lambda *_: analysis_tile.view_actual_alert(widgets, s, scratch, ctx, id_field))
+    analysis = AnalysisState()
+    s.actual_alert_id.subscribe(lambda *_: analysis_tile.view_actual_alert(widgets, s, analysis, ctx, id_field))
     s.alerts_gdf.subscribe(lambda *_: analysis_tile.select_start_alert(s, ctx))
     return id_field
 
@@ -242,12 +243,13 @@ def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     widgets = SimpleNamespace(
         confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        selected_img_before_info_list=["Planet NICFI", 1, None, "before", "_b"],
-        selected_img_after_info_list=["Planet NICFI", 2, None, "after", "_a"],
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
+    analysis = AnalysisState()
+    analysis.before_info.set(["Planet NICFI", 1, None, "before", "_b"])
+    analysis.after_info.set(["Planet NICFI", 2, None, "after", "_a"])
     s.actual_alert_id.set(alert_id)
-    return export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=None), ctx)
+    return export._save_attributes(widgets, s, analysis, ctx)
 
 
 def _saved_status(path):
@@ -444,9 +446,9 @@ def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, mon
 
 def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     """Before any Planet/S2/Landsat image is picked for the alert under
-    review, ``selected_img_before_info_list`` / ``_after`` are still ``None``
-    (widgets.py:275-276; only populated by imagery.py:214/216 once an image
-    is chosen). Save must not crash subscripting them (fix-round regression
+    review, ``AnalysisState.before_info`` / ``after_info`` are still ``None``
+    (only set by ``imagery.image_slider_info_callback`` once an image is
+    chosen). Save must not crash subscripting them (fix-round regression
     for the Task 23 review finding) and persists the review with the
     before/after image columns left empty."""
     from deforestation_alerts.message import cm
@@ -459,16 +461,12 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     widgets = SimpleNamespace(
         confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        selected_img_before_info_list=None,
-        selected_img_after_info_list=None,
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     monkeypatch.setattr(export, "ee", _AdminLookups())
     s.actual_alert_id.set(0)
 
-    assert export._save_attributes(
-        widgets, s, SimpleNamespace(defo_dl_layer=None), ctx
-    ) is True
+    assert export._save_attributes(widgets, s, AnalysisState(), ctx) is True
 
     saved = pd.read_parquet(
         _store(tmp_path, "d", "glad-l"),
@@ -569,7 +567,7 @@ def _pick_image(ctx, monkeypatch, add_raster_layer):
     )
     item = {"image_id": "projects/planet-nicfi/assets/basemaps/americas/"
                         "planet_medres_normalized_analytic_2024-01_mosaic", "source": "Planet NICFI"}
-    imagery.image_slider_map_callback(item, map_, 0, widgets, ctx)
+    imagery.image_slider_map_callback(item, map_, 0, widgets, AnalysisState(), ctx)
     return map_, widgets
 
 
@@ -666,13 +664,13 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     widgets = SimpleNamespace(
         confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        selected_img_before_info_list=None,
-        selected_img_after_info_list=None,
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
+    analysis = AnalysisState()
+    analysis.defo_layer.set(drawn)
     s.actual_alert_id.set(0)
-    assert export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=drawn), ctx) is True
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
     assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))

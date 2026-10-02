@@ -36,18 +36,16 @@ Heavy widgets (created once, data-linked):
                              ``create_horizontal_slide_group_v3`` indexes into these
     * ``selected_alert_info`` — the alert-info card body (mutated each alert)
 
-Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts):
+Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts;
+the chosen before/after images and their info lists live in ``AnalysisState``):
     * ``actual_bb``                    — ee.Feature bbox (buffer+bounds) of the alert
     * ``actual_alert_grid``            — ee covering-grid bounds for downloads
-    * ``selected_img_before`` / ``_after``            — the chosen ee.Image per pane
-    * ``selected_img_before_info_list`` / ``_after``  — [source, milis, cloud, value, suffix]
     * ``show_image_collection``        — [planet, s2, landsat] default-load flags
 """
 
 import ipyvuetify as v
 import solara
 from ipywidgets import jslink
-from traitlets import link
 from pysepal import color, sepalwidgets as sw
 from pysepal.mapping import SepalMap
 from pysepal.mapping.aoi_control import AoiControl
@@ -113,7 +111,9 @@ def _build_image_selector():
             for source in ("Planet", "Sentinel-2", "Landsat")
         ],
     )
-    link((tabs, "v_model"), (tab_items, "v_model"))
+    # Browser-side link, like the two maps: a Python-originated switch writes
+    # both (``imagery._show_tab``).
+    jslink((tabs, "v_model"), (tab_items, "v_model"))
     # ``analysis-selector`` marks the selector strip so the stage stylesheet can
     # draw a theme-aware outline around it (see ``style_el`` in analysis_tile.py).
     return v.Card(
@@ -270,10 +270,6 @@ class AnalysisWidgets:
         # ------------------------------------------------------------------
         self.actual_bb = None
         self.actual_alert_grid = None
-        self.selected_img_before = None
-        self.selected_img_after = None
-        self.selected_img_before_info_list = None
-        self.selected_img_after_info_list = None
         self.show_image_collection = [True, False, False]
 
         # ------------------------------------------------------------------

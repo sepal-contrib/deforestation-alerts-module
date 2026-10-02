@@ -40,10 +40,10 @@ Key architectural decisions (FIXED by the migration contract):
   built ``analyzed_alerts_model.alerts_gdf`` from the selected-alerts traits) is
   superseded by that publish and is NOT ported (see TODO(recipe-load) below for
   the deferred re-discovery/merge path).
-* **``analyzed_alerts_model`` (AlertAnalysisModel) remains** as per-alert scratch
-  state for later tasks (imagery dicts, model predictions, ``defo_dl_layer``,
-  ``last_save_time``). The foundation only resets ``defo_dl_layer`` and reads
-  ``before/after_planet_monthly_images`` in ``view_actual_alert``.
+* **``analysis`` (``AnalysisState``, spec §10)** holds the per-session review
+  state as Solara reactives: the chosen images and their info, the drawn defo
+  layer, the CNN predictions, ``last_save_time``. ``view_actual_alert`` resets
+  it on every alert change (``reset_alert``) and reads the Planet image lists.
 * **Heavy widgets are imperative + memoized once.** The two maps / draw controls /
   AOI control / 3-tab selectors live on ``AnalysisWidgets`` and are mutated in
   place by ``view_actual_alert``; the per-alert effect is keyed on the alert id
@@ -131,13 +131,13 @@ def refresh_alert_info(widgets, app_state):
 
 
 def view_actual_alert(
-    widgets, app_state, analyzed_alerts_model, app_tile_model, id_field
+    widgets, app_state, analysis, app_tile_model, id_field
 ):
     """Per-alert orchestration owned by the foundation.
 
     Ports the foundation-relevant parts of the OLD ``view_actual_alert``: select
-    the alert row, refresh the alert-info card + nav id field, reset
-    ``defo_dl_layer``, rebuild the bbox overlay on both maps, center/zoom, compute
+    the alert row, refresh the alert-info card + nav id field, forget the
+    previous alert's review state (``analysis.reset_alert``), rebuild the bbox overlay on both maps, center/zoom, compute
     the ee bbox + covering grid (stored on ``widgets``), register the AOI, set the
     default image-collection flags, and remember the position on the active
     alert set (``SetContext.remember_position``; spec §10 replaces the recipe
@@ -162,8 +162,10 @@ def view_actual_alert(
     # --- sync the nav id field ---
     id_field.v_model = alert_id
 
-    # --- reset per-alert defo layer scratch (Task 9.3 repopulates it) ---
-    analyzed_alerts_model.defo_dl_layer = None
+    # --- forget the previous alert's drawn layer, chosen images and CNN
+    # predictions: none of them may survive an alert change (the images are
+    # chosen again by the imagery panes below) ---
+    analysis.reset_alert()
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)
@@ -202,9 +204,9 @@ def view_actual_alert(
             alerta["status"] in {"Confirmed", "Need revision"}
             and alerta["alert_polygon"] is not None
         ):
-            analyzed_alerts_model.defo_dl_layer = multipolygon_to_geodataframe(
+            analysis.defo_layer.set(multipolygon_to_geodataframe(
                 alerta["alert_polygon"]
-            ).set_crs(epsg="4326", allow_override=True, inplace=True)
+            ).set_crs(epsg="4326", allow_override=True, inplace=True))
 
         # ee bbox (buffer + bounds) + covering grid for downloads
         alerta_bb_geojson_ee = ee.Feature(alerta_bb_geojson).buffer(100, 1).bounds(1)
@@ -219,8 +221,8 @@ def view_actual_alert(
         # default image-collection load order (Planet, then S2 fallback). The
         # planet dicts are populated by the Recipe/Filter tile; guard if absent.
         widgets.show_image_collection = [True, False, False]
-        before_planet = analyzed_alerts_model.before_planet_monthly_images
-        after_planet = analyzed_alerts_model.after_planet_monthly_images
+        before_planet = analysis.before_planet.value
+        after_planet = analysis.after_planet.value
         if before_planet and before_planet[0].get("value") == "Not available":
             widgets.show_image_collection = [False, True, False]
         if after_planet and after_planet[0].get("value") == "Not available":
@@ -261,7 +263,7 @@ def select_start_alert(app_state, app_tile_model):
         app_state.go_to(start)
 
 
-def wire_alert_navigation(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field) -> None:
+def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field) -> None:
     """The subscriptions that drive the per-alert view (``build_analysis_layout``
     registers them once; the layout is built once per session).
 
@@ -279,10 +281,10 @@ def wire_alert_navigation(widgets, app_state, analyzed_alerts_model, app_tile_mo
     """
 
     def _on_alert_change(*_):
-        view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
+        view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
-    view_actual_alert(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
+    view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     def _refresh_info_cb(*_):
         refresh_alert_info(widgets, app_state)
@@ -325,7 +327,7 @@ def build_set_status_banner(app_state) -> v.Html:
 def build_analysis_layout(
     aux_model,
     selected_alerts_model,
-    analyzed_alerts_model,
+    analysis,
     app_tile_model,
     app_state,
     gee_interface,
@@ -346,10 +348,11 @@ def build_analysis_layout(
     selected_alerts_model : SetContext
         ``combined_path``, the set's combined raster: the "Original Alert"
         layer (used by ``build_imagery``).
-    analyzed_alerts_model : AlertAnalysisModel
-        Per-alert scratch state (imagery dicts, predictions, ``defo_dl_layer``,
-        ``last_save_time``). The parent only resets ``defo_dl_layer`` and reads
-        the planet image dicts (in ``view_actual_alert``).
+    analysis : AnalysisState
+        The session's review state (chosen images and their info, drawn defo
+        layer, CNN predictions, ``last_save_time``), handed to every
+        sub-builder. The parent resets it per alert and reads the Planet image
+        lists (in ``view_actual_alert``).
     app_tile_model : SetContext
         ``recipe_folder_path`` (the active set's folder) for the output paths,
         ``alert_set`` + ``remember_position`` for the review position and
@@ -421,7 +424,7 @@ def build_analysis_layout(
         ],
     )
 
-    wire_alert_navigation(widgets, app_state, analyzed_alerts_model, app_tile_model, id_field)
+    wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field)
 
     # TODO(recipe-load): the OLD tile rebuilt/merged alerts_gdf from the
     # selected-alerts traits here (create_gdf_partial/create_gdf_full + the
@@ -460,7 +463,7 @@ def build_analysis_layout(
         widgets=widgets,
         app_state=app_state,
         selected_alerts_model=selected_alerts_model,
-        analyzed_alerts_model=analyzed_alerts_model,
+        analysis=analysis,
     )
 
     # RIGHT/CONTROLS: alert-info + nav + review + edit + export cards. Rendered in
@@ -488,20 +491,20 @@ def build_analysis_layout(
             build_review_panel(
                 widgets=widgets,
                 app_state=app_state,
-                analyzed_alerts_model=analyzed_alerts_model,
+                analysis=analysis,
                 app_tile_model=app_tile_model,
             ),
             build_edit_tools(
                 widgets=widgets,
                 app_state=app_state,
-                analyzed_alerts_model=analyzed_alerts_model,
+                analysis=analysis,
                 app_tile_model=app_tile_model,
             ),
             build_export(
                 widgets=widgets,
                 app_state=app_state,
                 aux_model=aux_model,
-                analyzed_alerts_model=analyzed_alerts_model,
+                analysis=analysis,
                 app_tile_model=app_tile_model,
             ),
         ],

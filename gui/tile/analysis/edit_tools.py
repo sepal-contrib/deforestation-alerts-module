@@ -20,14 +20,14 @@ Ported OLD handlers:
   / ``stop_edition_function`` / ``clear_edition_function`` — toggle the two
   ``CustomDrawControl``s (``draw_before`` / ``draw_after`` on ``widgets``) + the
   DL toolbars + the Alert-BB / Defo-Layer map-layer visibility, and persist the
-  user-drawn polygon to ``analyzed_alerts_model.defo_dl_layer``.
+  user-drawn polygon to ``analysis.defo_layer``.
 * CNN (``toolBarDL1`` / ``toolBarDL2``): ``run_dl_model_1`` / ``run_dl_model_2``
   (download both images + ``cnn_worker.apply_dl_model`` with a FILE-PATH model arg),
   ``verify_model*_output`` + ``enable_dl*`` (show/hide the add/remove/msg buttons),
   ``add_model*_prediction`` / ``remove_model*_prediction`` (mutate
   ``draw_before.data`` from the prediction raster).
-* ``add_defo_layer`` — observes ``analyzed_alerts_model.defo_dl_layer`` and adds a
-  "Defo Layer" GeoData layer to both maps.
+* ``add_defo_layer`` — ``wire_defo_layer`` subscribes to ``analysis.defo_layer``
+  and adds a "Defo Layer" GeoData layer to both maps.
 
 Threading (FIXED by the task contract):
 
@@ -36,8 +36,8 @@ Threading (FIXED by the task contract):
   builds the image name, downloads both images, pulls the HF model (idempotent /
   cached), runs ``apply_dl_model`` -> the prediction ``.tif`` path, and then (still on
   the worker thread, in the success path) runs the OLD ``verify_model*_output`` /
-  ``enable_dl*`` apply step with that path: stores ``predN_path`` /
-  ``analyzed_alerts_model.modelN_prediction_file`` and shows the add/remove buttons.
+  ``enable_dl*`` apply step with that path: stores it in
+  ``analysis.prediction_files`` and shows the add/remove buttons.
   The run button spins (``.loading``/``.disabled``) for the duration, the run is a
   tracked task in the notification pill (``notify_bridge.tracked_job``; the
   composite download drives its progress ring) and the outcome is a toast. Every
@@ -48,12 +48,12 @@ Threading (FIXED by the task contract):
   prediction path.
 * The edit + DL toolbars + buttons are built once so the OLD ``.show()/.hide()/
   .disabled`` imperative calls port unchanged.
-* ``add_defo_layer`` is a real ``analyzed_alerts_model.observe(..., "defo_dl_layer")``
-  registered once — a ``.value``-keyed hook would not fire on a traitlets mutation.
+* ``wire_defo_layer`` is a ``defo_layer.subscribe`` registered once (it
+  replaces the traitlets observer): it fires whenever a new layer is set.
 
 Guards: everything no-ops safely with no alert loaded (smoke time): buttons render
 but the CNN/edit click paths are not exercised, and the defo-layer observer is
-registered but ``defo_dl_layer`` stays ``None``. EE / raster / file failures are
+registered but ``defo_layer`` stays ``None``. EE / raster / file failures are
 caught and published as an error toast (or logged) so a failure never breaks render.
 
 Feedback: the CNN run workers publish through ``notify_bridge.tracked_job`` +
@@ -73,8 +73,10 @@ widgets : AnalysisWidgets
     selected images + grid scratch slots.
 app_state : AppState
     Navigation + alerts source of truth (``actual_alert_id``).
-analyzed_alerts_model : AlertAnalysisModel
-    ``defo_dl_layer`` — the user-drawn polygon GeoDataFrame.
+analysis : AnalysisState
+    ``defo_layer`` (the user-drawn polygon GeoDataFrame), the chosen
+    ``before/after_image`` + ``before/after_info`` the CNN downloads, and
+    ``prediction_files`` (the CNN rasters by model number).
 app_tile_model : SetContext
     ``recipe_folder_path`` — the active set's folder the before/after composite
     and the CNN's prediction raster are written to.
@@ -83,7 +85,6 @@ app_tile_model : SetContext
 import logging
 
 import ipyvuetify as v
-import solara
 from ipyleaflet import GeoData
 from pysepal import color, sepalwidgets as sw
 from pysepal.solara.notifications import notify
@@ -142,6 +143,7 @@ def _run_cnn_model(
     model_file,
     suffix,
     widgets,
+    analysis,
     app_state,
     app_tile_model,
     *,
@@ -158,9 +160,9 @@ def _run_cnn_model(
     ``apply_dl_model`` writes the prediction raster next to the composite (same
     stem + ``_prediction<suffix>.tif``), so the composite and its prediction
     both stay in the set folder, on a first run and on a cache hit alike. The
-    prediction path outlives this call: it is stashed on
-    ``analyzed_alerts_model.model*_prediction_file`` and read again every time
-    the user adds/removes the prediction overlay.
+    prediction path outlives this call: it is stashed in
+    ``analysis.prediction_files`` and read again every time the user
+    adds/removes the prediction overlay.
 
     ``task`` (the worker's ``TaskTracker``, optional) gets the composite
     download's geedim tile ticks as progress, and is handed back to
@@ -176,10 +178,10 @@ def _run_cnn_model(
         image_local = stage_alert_image(
             app_tile_model.recipe_folder_path,
             actual_alert_id,
-            widgets.selected_img_before_info_list,
-            widgets.selected_img_after_info_list,
-            widgets.selected_img_before,
-            widgets.selected_img_after,
+            analysis.before_info.value,
+            analysis.after_info.value,
+            analysis.before_image.value,
+            analysis.after_image.value,
             widgets.actual_alert_grid,
         )
     if task is not None:
@@ -194,10 +196,27 @@ def _run_cnn_model(
     return apply_dl_model(str(image_local), model_path, suffix)
 
 
+def wire_defo_layer(widgets, analysis):
+    """Draw the reviewed polygon on both maps whenever a new one is set (the
+    old ``.observe("defo_dl_layer")``). Returns the unsubscribe."""
+
+    def _on_layer(gdf):
+        if gdf is None:
+            return
+        try:
+            layer = GeoData(geo_dataframe=gdf, name="Defo Layer", style=_DEFO_LAYER_STYLE)
+            widgets.map_before.add_layer(layer)
+            widgets.map_after.add_layer(layer)
+        except Exception:
+            logger.exception("Analysis: add_defo_layer failed")
+
+    return analysis.defo_layer.subscribe(_on_layer)
+
+
 def build_edit_tools(
     widgets,
     app_state,
-    analyzed_alerts_model,
+    analysis,
     app_tile_model,
 ):
     """Build and return the edit-tools + CNN card (OLD ``card04``).
@@ -315,10 +334,6 @@ def build_edit_tools(
 
     ns = _build_widgets()
 
-    # Stored prediction paths (set by the verify apply step, read by add/remove).
-    pred1_path = solara.reactive(None)
-    pred2_path = solara.reactive(None)
-
     # ------------------------------------------------------------------
     # enable_dl1 / enable_dl2 (OLD) — show/hide the add/remove/msg buttons.
     # ------------------------------------------------------------------
@@ -352,14 +367,20 @@ def build_edit_tools(
     # Both run INSIDE the worker's tracked job and simply raise on failure: a
     # verify failure then fails the task and publishes the one dl_404 error toast
     # through tracked_job, exactly like a failed download/inference.
+    def _record_prediction(model, pred_path):
+        # The two runs are separate workers and can finish together: replace
+        # the dict in one locked read-and-set, never mutate it in place, so
+        # neither run drops the other's path.
+        files = analysis.prediction_files
+        with files.lock:
+            files.set({**files.value, model: pred_path})
+
     def _apply_model1(pred_path):
-        pred1_path.value = pred_path
-        analyzed_alerts_model.model1_prediction_file = pred_path
+        _record_prediction(1, pred_path)
         _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
 
     def _apply_model2(pred_path):
-        pred2_path.value = pred_path
-        analyzed_alerts_model.model2_prediction_file = pred_path
+        _record_prediction(2, pred_path)
         _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
 
     # ------------------------------------------------------------------
@@ -415,10 +436,11 @@ def build_edit_tools(
 
             widgets.draw_before.show()
             widgets.draw_after.show()
-            if analyzed_alerts_model.defo_dl_layer is not None:
+            defo_layer = analysis.defo_layer.value
+            if defo_layer is not None:
                 widgets.set_synced_draw_data(
                     convertir_formato3(
-                        analyzed_alerts_model.defo_dl_layer.__geo_interface__["features"],
+                        defo_layer.__geo_interface__["features"],
                         "blue",
                     )
                 )
@@ -439,9 +461,9 @@ def build_edit_tools(
         try:
             geometries = widgets.draw_before.to_json()["features"]
             if len(geometries) > 0:
-                analyzed_alerts_model.defo_dl_layer = geojson_to_geodataframe(
+                analysis.defo_layer.set(geojson_to_geodataframe(
                     widgets.draw_before.to_json()
-                ).set_crs(epsg="4326", allow_override=True, inplace=True)
+                ).set_crs(epsg="4326", allow_override=True, inplace=True))
         except Exception:
             logger.exception("Analysis: save edition failed")
         finally:
@@ -531,7 +553,7 @@ def build_edit_tools(
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                            widgets, app_state, app_tile_model,
+                            widgets, analysis, app_state, app_tile_model,
                             task=task,
                         )
                     _apply_model1(pred_path)
@@ -565,7 +587,7 @@ def build_edit_tools(
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                            widgets, app_state, app_tile_model,
+                            widgets, analysis, app_state, app_tile_model,
                             task=task,
                         )
                     _apply_model2(pred_path)
@@ -589,13 +611,15 @@ def build_edit_tools(
         ns["clear_btn"].on_event("click", _clear_edition)
 
         def _on_dl1_add(*_):
-            _add_model_prediction(pred1_path.value, "lime", ns["dl1_add"], ns["dl1_remove"])
+            _add_model_prediction(analysis.prediction_files.value.get(1), "lime",
+                                  ns["dl1_add"], ns["dl1_remove"])
 
         def _on_dl1_remove(*_):
             _remove_model_prediction("lime", ns["dl1_add"], ns["dl1_remove"])
 
         def _on_dl2_add(*_):
-            _add_model_prediction(pred2_path.value, "purple", ns["dl2_add"], ns["dl2_remove"])
+            _add_model_prediction(analysis.prediction_files.value.get(2), "purple",
+                                  ns["dl2_add"], ns["dl2_remove"])
 
         def _on_dl2_remove(*_):
             _remove_model_prediction("purple", ns["dl2_add"], ns["dl2_remove"])
@@ -609,28 +633,9 @@ def build_edit_tools(
 
     _register_handlers()
 
-    # ------------------------------------------------------------------
-    # add_defo_layer (OLD) — registered as a real traitlets observer once (a
-    # .value-keyed hook would not fire on a traitlets mutation). Adds the
-    # "Defo Layer" GeoData to both maps whenever defo_dl_layer is set.
-    # ------------------------------------------------------------------
-    def _register_defo_observer():
-        def handler(change):
-            try:
-                if analyzed_alerts_model.defo_dl_layer is not None:
-                    geo_json_layer = GeoData(
-                        geo_dataframe=analyzed_alerts_model.defo_dl_layer,
-                        name="Defo Layer",
-                        style=_DEFO_LAYER_STYLE,
-                    )
-                    widgets.map_before.add_layer(geo_json_layer)
-                    widgets.map_after.add_layer(geo_json_layer)
-            except Exception:
-                logger.exception("Analysis: add_defo_layer failed")
-
-        analyzed_alerts_model.observe(handler, "defo_dl_layer")
-
-    _register_defo_observer()
+    # add_defo_layer (OLD): the "Defo Layer" lands on both maps whenever a new
+    # reviewed polygon is set. Subscribed once (the layout is built once).
+    wire_defo_layer(widgets, analysis)
 
     # ------------------------------------------------------------------
     # Layout: OLD card04 = edit title + toolBarEdition + toolBarDL1/2. The OLD

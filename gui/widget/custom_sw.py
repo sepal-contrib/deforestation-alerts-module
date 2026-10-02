@@ -1,5 +1,4 @@
-from pysepal import color, model, sepalwidgets as sw
-from traitlets import Any, HasTraits, Unicode, link, observe
+from pysepal import color, sepalwidgets as sw
 from pysepal.scripts import utils as su
 from pysepal.scripts import decorator
 from functools import wraps

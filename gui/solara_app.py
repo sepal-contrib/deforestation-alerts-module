@@ -45,7 +45,6 @@ from deforestation_alerts.gdal_env import (
 )
 from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
 from deforestation_alerts.message import cm
-from deforestation_alerts.model.analysis_model import AlertAnalysisModel
 from gui.store.navigation import (
     apply_navigation,
     dismiss_dialog,
@@ -66,6 +65,7 @@ from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set, rail_item_fo
 from gui.tile.about_tile import AboutTile
 from gui.tile.alerts_step import AlertsStep
 from gui.tile.analysis import build_analysis_layout
+from gui.tile.analysis.state import AnalysisState
 from gui.tile.aoi_step import AoiStep
 from gui.tile.integrate_step import IntegrateStep
 from gui.tile.overview_tile import OverviewTile
@@ -403,10 +403,10 @@ def _AppShell():
     app_state = solara.use_memo(AppState, dependencies=[])
     solara.use_effect(lambda: install_autosave(app_state), dependencies=[])
 
-    # Analysis keeps its own per-alert scratch model until slice 2 (spec §10)
-    # and reads the active alert set through one SetContext, under the
-    # recipe-era names it still uses.
-    analyzed_alerts_model = solara.use_memo(AlertAnalysisModel, dependencies=[])
+    # Analysis keeps its review state in Solara reactives, one per session
+    # (spec §10), and reads the active alert set through one SetContext, under
+    # the recipe-era names it still uses.
+    analysis = solara.use_memo(AnalysisState, dependencies=[])
     set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])
 
     # The ONE shared map. Memoized so the SAME instance is handed to MapApp AND
@@ -474,7 +474,7 @@ def _AppShell():
         lambda: build_analysis_layout(
             aux_model=set_context,
             selected_alerts_model=set_context,
-            analyzed_alerts_model=analyzed_alerts_model,
+            analysis=analysis,
             app_tile_model=set_context,
             app_state=app_state,
             gee_interface=gee_interface,
