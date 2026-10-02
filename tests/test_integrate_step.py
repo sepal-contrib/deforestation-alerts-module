@@ -666,6 +666,41 @@ def test_a_set_without_reviews_is_replaced_without_asking(step):
         rc.close()
 
 
+def _store(tmp_path, statuses):
+    store = tmp_path / "d" / SET_DIR / "alert_db.parquet"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    gpd.GeoDataFrame({"alert_id": list(range(len(statuses))), "status": statuses,
+                      "area_ha": [1.5 + i for i in range(len(statuses))]},
+                     geometry=[box(i, i, i + 0.01, i + 0.01) for i in range(len(statuses))],
+                     crs="EPSG:4326").to_parquet(store)
+
+
+def test_the_replace_confirmation_lists_the_reviewed_alerts(step, tmp_path):
+    both = make_set_id(JAN.id, ["GLAD-L", "RADD"])
+    _store(tmp_path, ["Confirmed", "Not reviewed", "False Positive", "Need revision"])
+    state = _state(_project("d", "GLAD-L", "RADD", sets=[_set(both, 3, sources=["GLAD-L", "RADD"])]))
+    map_, rc = _render(state)
+    try:
+        _run(rc)
+        texts = _texts(rc)
+        assert t("steps.integrate.replace_message", n=3) in texts
+        assert {"#0 · Reviewed: confirmed · 1.50 ha", "#2 · Reviewed: false positive · 3.50 ha",
+                "#3 · Reviewed: needs revision · 4.50 ha"} <= set(texts)
+        assert not any(s.startswith("#1 ·") for s in texts)  # not reviewed: nothing lost
+    finally:
+        rc.close()
+
+
+def test_reviewed_lines_are_capped_and_survive_a_missing_store(step, tmp_path):
+    p = _project("d", "GLAD-L", sets=[_set("x", 25)])
+    assert integrate_jobs.reviewed_lines(p, "x") == []  # no store on disk: the count alone remains
+    _store(tmp_path, ["Confirmed"] * 25)
+    lines = integrate_jobs.reviewed_lines(p, "x", limit=20)
+    assert len(lines) == 21 and lines[0] == "#0 · Reviewed: confirmed · 1.50 ha"
+    assert lines[-1] == t("steps.integrate.replace_more", n=5)
+    assert integrate_jobs.status_label(None) == t("legend.status.not_reviewed")
+
+
 def _feature(geom):
     return {"type": "Feature", "properties": {"style": {"color": "#2196f3"}}, "geometry": geom.__geo_interface__}
 

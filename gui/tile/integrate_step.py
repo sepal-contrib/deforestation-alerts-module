@@ -45,6 +45,7 @@ from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
     params_from_form,
     reviewed_in,
+    reviewed_lines,
     run_integration_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
@@ -135,7 +136,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
     # _on_panel. A constant v_model is not enough either: the re-render that
     # mounts the form would push it back and close the panel.
     attribute_panel, set_attribute_panel = solara.use_state(None)
-    confirm, set_confirm = solara.use_state(None)  # (params, reviewed alerts) awaiting Replace
+    confirm, set_confirm = solara.use_state(None)  # (params, reviewed count, their lines) awaiting Replace
 
     def _sync_draw():
         visible = showing and area_mode == "drawn"
@@ -186,12 +187,12 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
         live = app_state.project.value
         reviewed = reviewed_in(live, sid) if live is not None and live.name == name else 0
         if reviewed:
-            set_confirm((params, reviewed))
+            set_confirm((params, reviewed, reviewed_lines(live, sid)))
             return
         _launch(params)
 
     def _confirm():
-        params, _ = confirm
+        params, _, _ = confirm
         set_confirm(None)
         _launch(params)
 
@@ -242,4 +243,5 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
         message=t("steps.integrate.replace_message", n=confirm[1] if confirm else 0),
         confirm_label=t("common.replace"),
         confirm_color="warning",
+        details=confirm[2] if confirm else None,
     )

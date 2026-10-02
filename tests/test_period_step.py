@@ -267,6 +267,20 @@ def test_deleting_the_latest_period_removes_its_sets_and_every_file(env):
         rc.close()
 
 
+def test_the_delete_confirmation_lists_the_sets_that_go(env):
+    p = _project(env.pdir)
+    feb = _add_set(p, env.pdir, FEB_ID)
+    state = _state(p)
+    layers, rc = _render(state)
+    try:
+        _action(env.seen, FEB_ID, "delete")["on_click"]()
+        assert env.seen["confirm"]["details"] == [
+            t("steps.period.delete_set_line", sources="GLAD-L", n=5, reviewed=2)]
+        assert feb in state.project.value.alert_sets  # nothing goes before the confirmation
+    finally:
+        rc.close()
+
+
 def test_edit_and_delete_wait_for_the_projects_writers(env):
     state = _state(_project(env.pdir))
     layers, rc = _render(state)

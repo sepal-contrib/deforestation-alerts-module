@@ -262,4 +262,6 @@ def _PeriodList(app_state, layers):
         message=(plural(len(doomed), "steps.period.delete_sets_one", "steps.period.delete_sets_other",
                         reviewed=reviewed) if doomed else t("steps.period.delete_message")),
         confirm_label=t("common.delete"),
+        details=[t("steps.period.delete_set_line", sources=" + ".join(p.alert_sets[s].sources),
+                   n=p.alert_sets[s].n_alerts, reviewed=p.alert_sets[s].n_reviewed) for s in doomed] or None,
     )

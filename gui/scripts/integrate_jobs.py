@@ -30,16 +30,22 @@ import math
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
+
 from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.engine.integrate import run_integration
+from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import AlertSetParams
 from gui.i18n import t
 from gui.scripts import set_store
+from gui.scripts.legend_specs import STATUS_CLASSES
 from gui.scripts.notify_bridge import tracked_job
 from gui.store.project_writers import writing
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
+
+_STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 
 ANALYSIS_VIEW = "analysis_tile"
 
@@ -99,6 +105,34 @@ def reviewed_in(project, set_id: str) -> int:
     """Reviewed alerts a re-run of ``set_id`` would discard (0 for a new set)."""
     s = project.alert_sets.get(set_id)
     return s.n_reviewed if s is not None else 0
+
+
+def status_label(status) -> str:
+    """A review status in the legend's words (spec §9.4: "Reviewed: confirmed")."""
+    return t(_STATUS_KEYS[STATUS_CODES.get(status, 0)])
+
+
+def reviewed_lines(project, set_id: str, limit: int = 20) -> list:
+    """The reviewed alerts a re-run of ``set_id`` would discard (spec §7.4),
+    read from the set's store on disk: one line each, at most ``limit``, then
+    "… and N more". No lines when the set has no readable store: the
+    confirmation's message still gives the count (``reviewed_in``)."""
+    s = project.alert_sets.get(set_id)
+    if s is None:
+        return []
+    store = paths.resolve(paths.project_dir(project.name), s.store_rel_path)
+    try:
+        df = pd.read_parquet(store, columns=["alert_id", "status", "area_ha"])
+    except Exception:  # noqa: BLE001 - a missing or unreadable store only loses the list
+        logger.warning("could not list the reviewed alerts of set %s from %s", set_id, store, exc_info=True)
+        return []
+    reviewed = df[df["status"].notna() & (df["status"] != "Not reviewed")]
+    lines = [t("steps.integrate.replace_line", id=int(row.alert_id), status=status_label(row.status),
+               area=f"{float(row.area_ha):.2f}")
+             for row in reviewed.head(limit).itertuples(index=False)]
+    if len(reviewed) > limit:
+        lines.append(t("steps.integrate.replace_more", n=len(reviewed) - limit))
+    return lines
 
 
 def apply_result(project, result) -> None:
