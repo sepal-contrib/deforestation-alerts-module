@@ -393,3 +393,24 @@ def test_the_integrate_and_grid_texts_follow_the_language():
         assert grid_form.grid_size_text(grid).startswith("12.345 × 6789 píxeles, unos 2,5 GB")  # CLDR: no 6.789
     finally:
         grid_form.gridmod.estimate_bytes = original
+
+
+def test_format_number_groups_the_rounded_value():
+    """Grouping is decided on what is shown (final re-review, Minor 2):
+    999.995 rounds to 1000.00, which groups, and Spanish 9999.6 to 10.000."""
+    from pysepal.i18n import set_locale
+
+    from gui.i18n import format_number
+
+    try:
+        set_locale("en")
+        assert format_number(999.995, 2) == "1,000.00"
+        assert format_number(-999.6) == "-1,000"
+        assert format_number(999.4) == "999"
+        set_locale("es-ES")
+        assert format_number(9999.6) == "10.000"
+        assert format_number(9999.4) == "9999"
+        set_locale("fr")
+        assert format_number(999.995, 2) == "1 000,00"
+    finally:
+        set_locale("en")

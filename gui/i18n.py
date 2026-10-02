@@ -17,6 +17,7 @@ return a message key and its values (``deforestation_alerts.errors``).
 """
 
 import logging
+from decimal import ROUND_HALF_EVEN, Decimal
 from functools import lru_cache
 from pathlib import Path
 
@@ -76,6 +77,11 @@ def format_number(value, digits: int = 0) -> str:
     no-break space). ``digits`` decimals, always shown. Babel comes with
     pysepal, whose plural rules are Babel's."""
     locale = _babel_locale(current_locale() or ENGLISH)
+    # Round first, as Babel does (half-even), so the grouping is decided on
+    # what is shown: 999.995 shows as "1,000.00", not "1000.00".
+    exact = Decimal(str(value))
+    if exact.is_finite():
+        value = exact.quantize(Decimal(1).scaleb(-max(digits, 0)), rounding=ROUND_HALF_EVEN)
     # CLDR's minimum grouping digits, which Babel does not apply: Spanish
     # groups from five digits on ("6789", "12.345").
     grouped = abs(value) >= 10 ** (3 + _MIN_GROUPING.get(locale.language, 1) - 1)
