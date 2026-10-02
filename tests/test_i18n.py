@@ -79,9 +79,9 @@ PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", 
 #: "Source" or "Total", Spanish "Total"). Add a key only when the word is the
 #: same in that language, never to silence the test.
 SAME_IN = {
-    "es-ES": {"steps.layers.region_asia"},
+    "es-ES": {"steps.layers.region_asia", "overview_tile.table_total"},
     "fr": {
-        "common.actions", "steps.alerts.col_source", "steps.alerts.list_title",
+        "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
         "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",

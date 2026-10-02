@@ -119,8 +119,12 @@ def _num(value) -> str:
     return format_number(value, 0 if value.is_integer() else 1)
 
 
-def _value(value, measure: str) -> str:
-    """A measured quantity, in the reader's locale."""
+def format_value(value, measure: str) -> str:
+    """A measured quantity, in the reader's locale.
+
+    Public: the dashboard's KPI numbers, legend chips and numbers table read
+    it too, so a figure and the text beside it can never round differently.
+    """
     if measure == MEASURE_ALERTS:
         return format_number(round(float(value)), 0)
     value = float(value)
@@ -247,7 +251,7 @@ def chart_status(summary, *, measure: str, theme: dict) -> str:
     ax.set_xticks([])
     ax.set_yticks([])
     return to_inline_svg(fig, label=_listing(
-        (label, _value(value, measure)) for _, _, label, value in rows if value > 0))
+        (label, format_value(value, measure)) for _, _, label, value in rows if value > 0))
 
 
 # --- the trend across periods --------------------------------------------
@@ -281,7 +285,7 @@ def chart_trend(series, *, measure: str, theme: dict) -> str:
     top = max(bottoms) or 1.0
     for spot, total in enumerate(bottoms):
         if total > 0:
-            ax.text(spot, total + top * 0.035, _value(total, measure), ha="center", va="bottom",
+            ax.text(spot, total + top * 0.035, format_value(total, measure), ha="center", va="bottom",
                     fontsize=_LABEL, color=theme["ink"], zorder=4)
     ax.set_ylim(0, top * 1.2)
     ax.set_xlim(-0.6, len(series) - 0.4)
@@ -299,7 +303,7 @@ def chart_trend(series, *, measure: str, theme: dict) -> str:
     ax.grid(axis="y", color=theme["grid"], linewidth=0.6, zorder=0)
     ax.set_axisbelow(True)
     return to_inline_svg(fig, label=_listing(
-        (label, _value(total, measure)) for (label, _, _), total in zip(series, bottoms)))
+        (label, format_value(total, measure)) for (label, _, _), total in zip(series, bottoms)))
 
 
 # --- how big the alerts are ----------------------------------------------
@@ -321,14 +325,14 @@ def chart_sizes(summary, *, measure: str, theme: dict) -> str:
     top = max(values) or 1.0
     for spot, value in enumerate(values):
         if value > 0:
-            ax.text(spot, value + top * 0.05, _value(value, measure), ha="center", va="bottom",
+            ax.text(spot, value + top * 0.05, format_value(value, measure), ha="center", va="bottom",
                     fontsize=_TICK, color=theme["ink"])
     ax.set_ylim(0, top * 1.22)
     ax.set_yticks([])
     ax.set_xticks(list(spots))
     ax.set_xticklabels(labels, fontsize=7.0, color=theme["ink2"])
     ax.set_xlabel(t("overview_tile.axis_size"), fontsize=_TICK, color=theme["ink2"], labelpad=3)
-    return to_inline_svg(fig, label=_listing(zip(labels, (_value(v, measure) for v in values))))
+    return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))))
 
 
 # --- when the alerts were detected ---------------------------------------
@@ -368,7 +372,7 @@ def chart_timing(summary, *, measure: str, theme: dict) -> str:
     ax.grid(axis="y", color=theme["grid"], linewidth=0.6, zorder=0)
     ax.set_axisbelow(True)
     return to_inline_svg(fig, label=_listing(
-        (format_date(week[0], "d MMM"), _value(value, measure)) for week, value in zip(weeks, values)))
+        (format_date(week[0], "d MMM"), format_value(value, measure)) for week, value in zip(weeks, values)))
 
 
 # --- rankings: drivers and sources ---------------------------------------
@@ -428,14 +432,14 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left) -> str:
     ax.barh(spots, values, height=0.62, color=theme["accent"], zorder=2)
     span = max(values) or 1.0
     for spot, value in enumerate(values):
-        ax.text(value + span * 0.02, spot, _value(value, measure), ha="left", va="center",
+        ax.text(value + span * 0.02, spot, format_value(value, measure), ha="left", va="center",
                 fontsize=_TICK, color=theme["ink"])
     ax.set_xlim(0, span * 1.22)
     ax.set_ylim(len(merged) - 0.5, -0.5)  # largest on top
     ax.set_xticks([])
     ax.set_yticks(list(spots))
     ax.set_yticklabels(labels, fontsize=_TICK, color=theme["ink2"])
-    return to_inline_svg(fig, label=_listing(zip(labels, (_value(v, measure) for v in values))))
+    return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))))
 
 
 def chart_drivers(summary, *, measure: str, theme: dict, label_of) -> str:

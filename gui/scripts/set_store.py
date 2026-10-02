@@ -52,6 +52,11 @@ def set_folder(p, s) -> Path:
     return _store(p, s).parent
 
 
+def store_path(p, s) -> Path:
+    """Set ``s``'s alert store (its parquet file) in project ``p``'s folder."""
+    return _store(p, s)
+
+
 def active_store_path(p) -> Optional[Path]:
     s = active_set(p)
     return _store(p, s) if s is not None else None
