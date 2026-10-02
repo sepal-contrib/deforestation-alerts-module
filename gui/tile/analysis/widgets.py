@@ -124,7 +124,9 @@ def _build_image_selector():
 def info_button(description: str, header: str, md: str) -> v.Html:
     """Description text + an info icon that opens a Markdown popup (raw-widget
     twin of gui.widget.help.InfoButton for builders that never render via
-    reacton)."""
+    reacton). Like InfoButton it closes with a Close button: Escape does not
+    reach a raw dialog that never takes the focus."""
+    close = v.Btn(text=True, small=True, children=[t("common.close")])
     dialog = v.Dialog(
         v_model=False,
         max_width="640px",
@@ -132,9 +134,11 @@ def info_button(description: str, header: str, md: str) -> v.Html:
             v.Card(children=[
                 v.CardTitle(children=[header]),
                 v.CardText(children=[sw.Markdown(md)]),
+                v.CardActions(style_="justify-content: flex-end;", children=[close]),
             ])
         ],
     )
+    close.on_event("click", lambda *_: setattr(dialog, "v_model", False))
     btn = v.Btn(icon=True, small=True, children=[v.Icon(children=["mdi-information-outline"])])
     btn.on_event("click", lambda *_: setattr(dialog, "v_model", True))
     return v.Html(
