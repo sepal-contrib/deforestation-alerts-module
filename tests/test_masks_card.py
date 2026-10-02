@@ -893,3 +893,37 @@ def test_the_card_renders_nothing_once_the_project_is_closed(monkeypatch):
             rc.close()
 
     asyncio.run(main())
+
+
+@pytest.mark.parametrize("flip", ["switch", "mode"])
+def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
+    """When the switch is refused (the project changed meanwhile) the props
+    are unchanged, so nothing was pushed back and the cell kept the user's
+    flip; the card now remounts the row's cells on what the project holds."""
+    state = _state(_p())
+    monkeypatch.setattr(masks_card, "MaskModal", lambda **kw: None)
+    monkeypatch.setattr(masks_card, "ConfirmDialog", lambda **kw: None)
+    monkeypatch.setattr(masks_card, "switch_mask", lambda *a, **k: False)
+    period = state.project.value.periods[FEB.id]
+    map_ = _Map()
+    rows = [MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")]
+
+    @reacton.component
+    def Page():
+        NotificationProvider()
+        masks_card.MasksCard(app_state=state, map_=map_, gee_interface=None, layers=MapLayers(map_), period=period,
+                             rows=rows, running=frozenset(), errors={}, on_run=lambda n: None,
+                             on_rerun=lambda n: None)
+
+    async def main():
+        box, rc = reacton.render(Page(), handle_error=False)
+        try:
+            widget, held = ((rc.find(v.Switch).widget, True) if flip == "switch"
+                            else (rc.find(v.Select).widget, "keep"))
+            widget.v_model = False if flip == "switch" else "exclude"  # the user's flip, refused
+            again = rc.find(v.Switch).widget if flip == "switch" else rc.find(v.Select).widget
+            assert again.v_model == held
+        finally:
+            rc.close()
+
+    asyncio.run(main())

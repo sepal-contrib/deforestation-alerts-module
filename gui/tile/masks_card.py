@@ -41,7 +41,7 @@ def _status(s, busy):
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,
-                    switch) -> list:
+                    switch, refusals=0) -> list:
     """The ``ProductTable`` rows of the Masks card (spec §7.3); pure.
 
     ``running``: every claimed in-flight key (a mask row is busy whichever
@@ -75,15 +75,18 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
             {"kind": "delete", "on_click": (lambda n=r.name: delete(n))},
         ]
 
+        # Keyed by the refusals: a refused switch leaves the props unchanged, so
+        # only a remount puts the user's flip back to what the project holds.
         def _switch_cell(n=r.name, value=r.on):
             rv.Switch(v_model=value, on_v_model=lambda v: switch(n, on=bool(v)), dense=True, hide_details=True,
-                      class_="ma-0")
+                      class_="ma-0").key(f"mask-on:{n}:{refusals}")
 
         def _mode_cell(n=r.name, value=r.mode, enabled=r.on):
             rv.Select(v_model=value, on_v_model=lambda v: switch(n, mode=v), dense=True, hide_details=True,
                       disabled=not enabled,
                       items=[{"text": t("steps.prepare.mask_mode_keep"), "value": "keep"},
-                             {"text": t("steps.prepare.mask_mode_exclude"), "value": "exclude"}])
+                             {"text": t("steps.prepare.mask_mode_exclude"), "value": "exclude"}],
+                      ).key(f"mask-mode:{n}:{refusals}")
 
         out.append({
             "key": r.name,
@@ -117,6 +120,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     # task reads them then, not as they were when the modal opened.
     claimed = solara.use_ref(frozenset())
     claimed.current = frozenset(running)
+    # Bumped by every refused switch (the remount key of the row's cells).
+    refusals, set_refusals = solara.use_state(0)
     if p is None:
         return  # closed: the card subscribes to the project, so it may render once before its step unmounts it
     pdir = paths.project_dir(p.name)
@@ -129,6 +134,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     def _switch(name, on=None, mode=None):
         if switch_mask(app_state, p.name, period.id, name, on=on, mode=mode):
             notifications.info(t("steps.prepare.masks_switched"))
+        else:
+            set_refusals(lambda n: n + 1)
 
     # The two modal callbacks run in MaskModal's validation task (on the loop,
     # never from an effect); what they raise the modal shows inline, so they
@@ -233,7 +240,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
 
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,
-                                 delete=set_pending_delete, switch=_switch)
+                                 delete=set_pending_delete, switch=_switch, refusals=refusals)
     with rv.Card(outlined=True, class_="pa-3"):
         ProductTable(
             title=t("steps.prepare.masks_title"),
