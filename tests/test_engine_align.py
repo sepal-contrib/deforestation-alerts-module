@@ -230,3 +230,46 @@ def test_a_source_far_outside_the_grids_utm_zone_aligns_to_an_empty_raster(tmp_p
     with rasterio.open(out) as ds:
         assert (ds.count, ds.height, ds.width, ds.dtypes[0]) == (2, GRID.height, GRID.width, "int32")
         assert ds.read().max() == 0
+
+
+def _count_closes(monkeypatch):
+    """Record every ``DataArray.close`` (the opened source's)."""
+    import xarray
+
+    closed, real_close = [], xarray.DataArray.close
+
+    def close(self):
+        closed.append(True)
+        return real_close(self)
+
+    monkeypatch.setattr(xarray.DataArray, "close", close)
+    return closed
+
+
+@pytest.mark.parametrize("band", [0, 3])
+def test_a_band_out_of_range_is_a_keyed_refusal_and_the_file_is_closed(tmp_path, monkeypatch, band):
+    """Review A M2: a bad band used to raise a bare ``IndexError``, and the
+    source stayed open on any error before the warp."""
+    from deforestation_alerts.errors import ProjectRuleError
+
+    _source(tmp_path / "src.tif")  # 2 bands
+    closed = _count_closes(monkeypatch)
+
+    with pytest.raises(ProjectRuleError) as info:
+        align.reproject_to_grid(tmp_path / "src.tif", GRID, tmp_path / "out.tif.part", band=band)
+    assert info.value.key == "errors.band_out_of_range"
+    assert info.value.values == {"band": band, "bands": 2, "file": "src.tif"}
+    assert closed == [True]
+
+
+def test_a_failed_overlap_check_closes_the_file(tmp_path, monkeypatch):
+    _source(tmp_path / "src.tif")
+    closed = _count_closes(monkeypatch)
+
+    def _boom(source, grid):
+        raise RuntimeError("no transform")
+
+    monkeypatch.setattr(align, "_misses_grid", _boom)
+    with pytest.raises(RuntimeError):
+        align.reproject_to_grid(tmp_path / "src.tif", GRID, tmp_path / "out.tif.part")
+    assert closed == [True]

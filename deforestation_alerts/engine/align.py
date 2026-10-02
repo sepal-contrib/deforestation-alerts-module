@@ -49,6 +49,7 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 
 from deforestation_alerts.engine.raster_io import grid_profile, tile_windows
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.gdal_env import worker_threads
 from deforestation_alerts.project.models import GridSpec
 
@@ -133,8 +134,6 @@ def reproject_to_grid(
     if resampling != "nearest":
         raise ValueError(f"only nearest resampling keeps codes and dates exact, not {resampling!r}")
     out_part_path = Path(out_part_path)
-    geobox = _geobox(grid)
-    ny, nx = geobox.shape.yx
     with (
         warnings.catch_warnings(),
         rasterio.Env(GDAL_CACHEMAX=WARP_CACHEMAX_BYTES),
@@ -155,49 +154,57 @@ def reproject_to_grid(
         opened = source = rioxarray.open_rasterio(
             src_path, chunks={"band": 1, "x": SRC_CHUNK, "y": SRC_CHUNK}, cache=False, lock=False
         )
-        nodata = source.rio.nodata
-        if band is not None:
-            source = source.isel(band=[int(band) - 1])  # one chosen band, 1-based
-        if _misses_grid(source, grid):
-            try:
-                _write_empty(out_part_path, grid, source.shape[0])
-            finally:
-                opened.close()
-            return out_part_path
-        if pixel_hook is not None:
-            # Decide each source pixel before any cast (a float32 0.7 must not
-            # become 0, NaN no-data must not become anything): the hook turns a
-            # block into Int32 0/1, whose no-data is 0.
-            hooked = source.data.map_blocks(lambda block: pixel_hook(block, nodata), dtype="int32")
-            source = source.copy(data=hooked).rio.write_nodata(0)
-        elif nodata is not None and nodata != 0:
-            # Asked for a destination no-data of 0, rasterio's warp writes the
-            # *source* no-data value where there is no data: make it 0 first.
-            source = source.where(source != nodata, 0).rio.write_nodata(0)
         try:
-            aligned = odc_xr.xr_reproject(
-                source,
-                geobox,
-                resampling=resampling,
-                dst_nodata=0,
-                dtype="int32",
-                chunks=(min(DST_CHUNK, ny), min(DST_CHUNK, nx)),
-            )
-            # One store per destination row band (see the module docstring):
-            # dask only ever sees one band's graph, so what it holds cannot
-            # grow with the grid's height. The lock serialises the writes;
-            # never lock=None.
-            blocks, write_lock = aligned.data, threading.Lock()
-            with rasterio.open(out_part_path, "w", **grid_profile(grid, count=blocks.shape[0])) as dst:
-                writer = _WindowWriter(dst)
-                for y0 in range(0, ny, DST_CHUNK):
-                    y1 = min(y0 + DST_CHUNK, ny)
-                    dask.array.store(
-                        blocks[:, y0:y1, :],
-                        writer,
-                        regions=(slice(None), slice(y0, y1), slice(None)),
-                        lock=write_lock,
-                    )
+            _align_opened(source, grid, out_part_path, band, pixel_hook, resampling, src_path)
         finally:
-            opened.close()
+            opened.close()  # also on a refusal or a failed overlap check
     return out_part_path
+
+
+def _align_opened(source, grid, out_part_path, band, pixel_hook, resampling, src_path) -> None:
+    """``align_raster``'s body, on the opened ``source`` (its caller closes it)."""
+    geobox = _geobox(grid)
+    ny, nx = geobox.shape.yx
+    nodata = source.rio.nodata
+    if band is not None:
+        count = int(source.sizes["band"])
+        if not 1 <= int(band) <= count:
+            raise ProjectRuleError(f"{src_path} has no band {band} (it has {count})",
+                                   key="errors.band_out_of_range", band=int(band), bands=count,
+                                   file=Path(src_path).name)
+        source = source.isel(band=[int(band) - 1])  # one chosen band, 1-based
+    if _misses_grid(source, grid):
+        _write_empty(out_part_path, grid, source.shape[0])
+        return
+    if pixel_hook is not None:
+        # Decide each source pixel before any cast (a float32 0.7 must not
+        # become 0, NaN no-data must not become anything): the hook turns a
+        # block into Int32 0/1, whose no-data is 0.
+        hooked = source.data.map_blocks(lambda block: pixel_hook(block, nodata), dtype="int32")
+        source = source.copy(data=hooked).rio.write_nodata(0)
+    elif nodata is not None and nodata != 0:
+        # Asked for a destination no-data of 0, rasterio's warp writes the
+        # *source* no-data value where there is no data: make it 0 first.
+        source = source.where(source != nodata, 0).rio.write_nodata(0)
+    aligned = odc_xr.xr_reproject(
+        source,
+        geobox,
+        resampling=resampling,
+        dst_nodata=0,
+        dtype="int32",
+        chunks=(min(DST_CHUNK, ny), min(DST_CHUNK, nx)),
+    )
+    # One store per destination row band (see the module docstring): dask
+    # only ever sees one band's graph, so what it holds cannot grow with the
+    # grid's height. The lock serialises the writes; never lock=None.
+    blocks, write_lock = aligned.data, threading.Lock()
+    with rasterio.open(out_part_path, "w", **grid_profile(grid, count=blocks.shape[0])) as dst:
+        writer = _WindowWriter(dst)
+        for y0 in range(0, ny, DST_CHUNK):
+            y1 = min(y0 + DST_CHUNK, ny)
+            dask.array.store(
+                blocks[:, y0:y1, :],
+                writer,
+                regions=(slice(None), slice(y0, y1), slice(None)),
+                lock=write_lock,
+            )

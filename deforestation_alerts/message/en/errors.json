@@ -14,6 +14,7 @@
     "no_sources": "Choose at least one source, each once.",
     "no_drawing": "The drawn-area mode needs a drawn polygon.",
     "attribute_band_missing": "The attribute raster has no band {band} (it has {bands}).",
+    "band_out_of_range": "{file} has no band {band} (it has {bands}).",
     "attribute_no_crs": "The attribute raster {path} has no coordinate reference system.",
     "no_tippecanoe": "tippecanoe was found neither next to Python nor on the PATH.",
     "project_unreadable": "{path} could not be read: {error}",

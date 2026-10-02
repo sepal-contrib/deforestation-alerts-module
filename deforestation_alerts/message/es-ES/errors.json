@@ -14,6 +14,7 @@
     "no_sources": "Elige al menos una fuente, cada una una sola vez.",
     "no_drawing": "El modo de área dibujada necesita un polígono dibujado.",
     "attribute_band_missing": "El raster de atributos no tiene la banda {band} (tiene {bands}).",
+    "band_out_of_range": "{file} no tiene la banda {band} (tiene {bands}).",
     "attribute_no_crs": "El raster de atributos {path} no tiene sistema de referencia de coordenadas.",
     "no_tippecanoe": "No se encontró tippecanoe ni junto a Python ni en el PATH.",
     "project_unreadable": "No se pudo leer {path}: {error}",

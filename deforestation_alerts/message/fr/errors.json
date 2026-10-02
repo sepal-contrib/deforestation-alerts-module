@@ -14,6 +14,7 @@
     "no_sources": "Choisissez au moins une source, chacune une seule fois.",
     "no_drawing": "Le mode zone dessinée a besoin d'un polygone dessiné.",
     "attribute_band_missing": "Le raster d'attributs n'a pas la bande {band} (il a {bands}).",
+    "band_out_of_range": "{file} n'a pas de bande {band} (il en a {bands}).",
     "attribute_no_crs": "Le raster d'attributs {path} n'a pas de système de référence de coordonnées.",
     "no_tippecanoe": "tippecanoe n'a été trouvé ni à côté de Python ni dans le PATH.",
     "project_unreadable": "{path} n'a pas pu être lu : {error}",
