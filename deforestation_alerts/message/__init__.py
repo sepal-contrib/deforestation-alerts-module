@@ -1,13 +1,1 @@
-"""Creation of the Translator object associated with the application.
-
-Can be accessed via the foolowing code: ``from deforestation_alerts.message import cm``
-"""
-
-from pathlib import Path
-
-from pysepal.translator import Translator
-
-# from gui.widget.custom_sw import CustomTranslator as Translator
-
-# create a translator object
-cm = Translator(Path(__file__).parent)
+"""The message catalogue: deforestation_alerts/message/<locale>/*.json, bound by gui.i18n (pysepal 4's catalog())."""

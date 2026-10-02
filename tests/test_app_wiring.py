@@ -142,8 +142,8 @@ def test_render_fixed_tile_needs_the_provider_rendered_first():
 
 def test_overview_view_has_back_and_review_buttons():
     src = _src("gui/tile/overview_tile.py")
-    assert "cm.overview_tile.back_to_workflow" in src
-    assert "cm.overview_tile.review_button" in src
+    assert 't("overview_tile.back_to_workflow")' in src
+    assert 't("overview_tile.review_button")' in src
     assert 'app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view' in src
     assert 'app_state.current_page_view.value = "analysis_tile"' in src
     assert "rv.Btn(" not in src

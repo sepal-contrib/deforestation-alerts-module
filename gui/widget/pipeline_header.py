@@ -14,7 +14,7 @@ import reacton.ipyvuetify as rv
 import solara
 import solara.lab
 
-from gui.i18n import plural, t
+from gui.i18n import t
 from gui.store.workflow_steps import STEPS, StepStatus, nav_targets, step_states
 from gui.widget.text_style import MUTED
 
@@ -41,8 +41,8 @@ def count_text(spec, p) -> str:
     if isinstance(c, str) and c:
         return c
     n = int(c or 0)
-    if n > 0 and spec.count_key_one:
-        return plural(n, spec.count_key_one, spec.count_key_other)
+    if n > 0 and spec.count_key:
+        return t(spec.count_key, count=n)
     return t("workflow.count_empty")
 
 

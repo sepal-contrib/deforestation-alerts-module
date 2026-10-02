@@ -62,7 +62,6 @@ import ipyvuetify as v
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
-from deforestation_alerts.message import cm
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
@@ -118,21 +117,21 @@ def refresh_alert_info(widgets, app_state):
     alert_source = alerta["alert_sources"]
 
     if alerta["status"] != "Not reviewed":
-        alert_st = cm.analysis_tile.alert_info.status_reviewed
+        alert_st = t("analysis_tile.alert_info.status_reviewed")
     else:
-        alert_st = cm.analysis_tile.alert_info.status_not_reviewed
+        alert_st = t("analysis_tile.alert_info.status_not_reviewed")
 
     widgets.selected_alert_info.children = [
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.alert_source]),
+        v.Html(tag="strong", children=[t("analysis_tile.alert_info.alert_source")]),
         str(alert_source),
         v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
+        v.Html(tag="strong", children=[t("analysis_tile.alert_info.first_date")]),
         fecha1,
         v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.last_date]),
+        v.Html(tag="strong", children=[t("analysis_tile.alert_info.last_date")]),
         fecha2,
         v.Html(tag="br"),
-        v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
+        v.Html(tag="strong", children=[t("analysis_tile.alert_info.status")]),
         alert_st,
     ]
     return fecha1, fecha2
@@ -492,7 +491,7 @@ def build_analysis_layout(
         children=[
             v.CardTitle(
                 class_="pa-0 ma-1",
-                children=[cm.analysis_tile.alert_info.card_title],
+                children=[t("analysis_tile.alert_info.card_title")],
             ),
             widgets.selected_alert_info,
         ],
@@ -501,7 +500,7 @@ def build_analysis_layout(
         tag="div",
         class_="pa-0 ma-0",
         children=[
-            info_button(cm.analysis_tile.description, cm.analysis_tile.info_header, cm.analysis_tile.info_md),
+            info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md")),
             build_set_selector(app_state),
             build_set_status_banner(app_state),
             alert_info_card,

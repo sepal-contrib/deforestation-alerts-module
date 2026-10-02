@@ -1,15 +1,13 @@
 {
-    "app": {
-        "title": "Análisis de Alertas de Pérdida de Cobertura Forestal",
-        "panel_workflow_title": "Flujo de trabajo",
-        "tile_failed": "El panel {tile} no se pudo mostrar ({error}). Recarga la página; los detalles están en el registro del servidor.",
-        "footer": "SEPAL \u00a9 {}",
-        "banner": "¡Este es mi primer aplicativo! :)",
-        "drawer_item": {
-            "about": "Acerca",
-            "aoi": "AOI",
-            "overview": "Resumen",
-            "analysis": "Análisis"
-        }
+  "app": {
+    "title": "Análisis de Alertas de Pérdida de Cobertura Forestal",
+    "panel_workflow_title": "Flujo de trabajo",
+    "tile_failed": "El panel {tile} no se pudo mostrar ({error}). Recarga la página; los detalles están en el registro del servidor.",
+    "drawer_item": {
+      "about": "Acerca",
+      "aoi": "AOI",
+      "overview": "Resumen",
+      "analysis": "Análisis"
     }
+  }
 }

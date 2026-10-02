@@ -50,7 +50,7 @@ from pysepal import color, sepalwidgets as sw
 from pysepal.mapping import SepalMap
 from pysepal.mapping.aoi_control import AoiControl
 
-from deforestation_alerts.message import cm
+from gui.i18n import t
 from gui.widget.custom_sw import CustomDrawControl, CustomSlideGroup
 
 
@@ -95,7 +95,7 @@ def _build_image_selector():
                         children=[
                             v.CardTitle(children=[source]),
                             v.CardText(
-                                children=[cm.analysis_tile.img_selection.no_images_msg]
+                                children=[t("analysis_tile.img_selection.no_images_msg")]
                             ),
                         ],
                         class_="ma-0",
@@ -199,21 +199,21 @@ class AnalysisWidgets:
         # ------------------------------------------------------------------
         map1_title = v.CardTitle(
             class_="pa-1 ma-1",
-            children=[cm.analysis_tile.img_selection.prev_image_title],
+            children=[t("analysis_tile.img_selection.prev_image_title")],
         )
         map2_title = v.CardTitle(
             class_="pa-1 ma-1",
-            children=[cm.analysis_tile.img_selection.post_image_title],
+            children=[t("analysis_tile.img_selection.post_image_title")],
         )
         selected_img_before_info = v.Html(
             tag="div",
             class_="pa-1 ma-2",
-            children=[cm.analysis_tile.img_selection.selected_img_info],
+            children=[t("analysis_tile.img_selection.selected_img_info")],
         )
         selected_img_after_info = v.Html(
             tag="div",
             class_="pa-1 ma-2",
-            children=[cm.analysis_tile.img_selection.selected_img_info],
+            children=[t("analysis_tile.img_selection.selected_img_info")],
         )
         imgInfo1 = v.Card(children=[selected_img_before_info])
         imgInfo2 = v.Card(children=[selected_img_after_info])
@@ -256,11 +256,11 @@ class AnalysisWidgets:
         self.selected_alert_info = v.Html(
             tag="div",
             children=[
-                v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date]),
+                v.Html(tag="strong", children=[t("analysis_tile.alert_info.first_date")]),
                 "",
-                v.Html(tag="strong", children=[cm.analysis_tile.alert_info.last_date]),
+                v.Html(tag="strong", children=[t("analysis_tile.alert_info.last_date")]),
                 "",
-                v.Html(tag="strong", children=[cm.analysis_tile.alert_info.status]),
+                v.Html(tag="strong", children=[t("analysis_tile.alert_info.status")]),
                 "",
             ],
         )

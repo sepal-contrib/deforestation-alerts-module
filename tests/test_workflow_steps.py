@@ -79,8 +79,7 @@ def test_every_label_and_lock_key_exists():
         resolve(s.label_key)
         if s.lock_reason_key:
             resolve(s.lock_reason_key)
-        if s.count_key_one:
-            resolve(s.count_key_one)
-            resolve(s.count_key_other)
+        if s.count_key:
+            assert isinstance(resolve(s.count_key), dict)  # a plural node
     for r in RAIL_ITEMS:
         resolve(r.label_key)

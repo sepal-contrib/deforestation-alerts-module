@@ -72,7 +72,6 @@ import ee
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
-from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.imagery_service import (
     getIndividualLandsat,
     getIndividualS2,
@@ -82,6 +81,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     get_sentinel2_dates,
     harmonizeL8ToS2_scaled,
 )
+from gui.i18n import t
 from gui.scripts import raster_map
 from gui.scripts.solara_threads import spawn_in_context
 
@@ -218,17 +218,17 @@ def image_slider_info_callback(selected_item, info_element, model_att, widgets, 
     info_element.children = [
         v.Html(
             tag="strong",
-            children=[cm.analysis_tile.img_selection.selected_img_info_source],
+            children=[t("analysis_tile.img_selection.selected_img_info_source")],
         ),
         info1,
         v.Html(
             tag="strong",
-            children=[", " + cm.analysis_tile.img_selection.selected_img_info_date],
+            children=[", " + t("analysis_tile.img_selection.selected_img_info_date")],
         ),
         datetime.utcfromtimestamp(info2 / 1000).strftime("%Y-%m-%d"),
         v.Html(
             tag="strong",
-            children=[", " + cm.analysis_tile.img_selection.selected_img_info_cloud],
+            children=[", " + t("analysis_tile.img_selection.selected_img_info_cloud")],
         ),
         info3,
     ]

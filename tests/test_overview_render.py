@@ -27,7 +27,6 @@ from shapely.geometry import box
 from deforestation_alerts.engine.fingerprint import (
     fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
 )
-from deforestation_alerts.message import cm
 from deforestation_alerts.project.models import (
     AlertSet,
     AlertSetParams,
@@ -177,7 +176,7 @@ def _summary(rc):
 
 def _export_cards(rc):
     return [w for w in rc.find(v.Card).widgets
-            if any(isinstance(c, v.CardTitle) and c.children == [cm.overview_tile.export_label]
+            if any(isinstance(c, v.CardTitle) and c.children == [t("overview_tile.export_label")]
                    for c in w.children)]
 
 
@@ -202,9 +201,9 @@ def test_the_summary_counts_follow_the_alerts(ov, tmp_path):
     try:
         counts = _summary(rc)
         assert counts == {
-            str(cm.overview_tile.total): 4, str(cm.overview_tile.reviewed): 3,
-            str(cm.overview_tile.confirmed): 1, str(cm.overview_tile.false_positives): 1,
-            str(cm.overview_tile.revision): 1,
+            t("overview_tile.total"): 4, t("overview_tile.reviewed"): 3,
+            t("overview_tile.confirmed"): 1, t("overview_tile.false_positives"): 1,
+            t("overview_tile.revision"): 1,
         }
         state.alerts_gdf.set(None)
         assert set(_summary(rc).values()) == {0}

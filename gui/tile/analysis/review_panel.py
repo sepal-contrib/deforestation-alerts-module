@@ -31,7 +31,16 @@ app_tile_model : SetContext
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
-from deforestation_alerts.message import cm
+from gui.i18n import t
+
+#: The review statuses a Save stores, with the key of each one's label. The
+#: select shows the labels in the language the widgets were built in; the
+#: store always gets the status (Overview's counts and the PMTiles styles read it).
+REVIEW_CHOICES = (
+    ("Confirmed", "analysis_tile.questionarie.confirmation_yes"),
+    ("False Positive", "analysis_tile.questionarie.confirmation_no"),
+    ("Need revision", "analysis_tile.questionarie.confirmation_revision"),
+)
 
 
 def build_review_panel(
@@ -46,12 +55,8 @@ def build_review_panel(
     (``edit_tools.py``), not this panel.
     """
     confirmation_select = sw.Select(
-        items=[
-            cm.analysis_tile.questionarie.confirmation_yes,
-            cm.analysis_tile.questionarie.confirmation_no,
-            cm.analysis_tile.questionarie.confirmation_revision,
-        ],
-        v_model=cm.analysis_tile.questionarie.confirmation_yes,
+        items=[{"text": t(key), "value": status} for status, key in REVIEW_CHOICES],
+        v_model=REVIEW_CHOICES[0][0],
         small=True,
         multiple=False,
         clearable=True,
@@ -59,18 +64,18 @@ def build_review_panel(
     )
     driver_combobox = sw.Combobox(
         items=[
-            cm.analysis_tile.questionarie.loss_driver1,
-            cm.analysis_tile.questionarie.loss_driver2,
-            cm.analysis_tile.questionarie.loss_driver3,
-            cm.analysis_tile.questionarie.loss_driver4,
-            cm.analysis_tile.questionarie.loss_driver5,
-            cm.analysis_tile.questionarie.loss_driver6,
-            cm.analysis_tile.questionarie.loss_driver7,
-            cm.analysis_tile.questionarie.loss_driver8,
-            cm.analysis_tile.questionarie.loss_driver9,
+            t("analysis_tile.questionarie.loss_driver1"),
+            t("analysis_tile.questionarie.loss_driver2"),
+            t("analysis_tile.questionarie.loss_driver3"),
+            t("analysis_tile.questionarie.loss_driver4"),
+            t("analysis_tile.questionarie.loss_driver5"),
+            t("analysis_tile.questionarie.loss_driver6"),
+            t("analysis_tile.questionarie.loss_driver7"),
+            t("analysis_tile.questionarie.loss_driver8"),
+            t("analysis_tile.questionarie.loss_driver9"),
         ],
-        v_model=[cm.analysis_tile.questionarie.loss_driver9],
-        label=cm.analysis_tile.questionarie.loss_driver_hint,
+        v_model=[t("analysis_tile.questionarie.loss_driver9")],
+        label=t("analysis_tile.questionarie.loss_driver_hint"),
         multiple=True,
         clearable=True,
         chips=True,
@@ -87,12 +92,12 @@ def build_review_panel(
         children=[
             v.CardTitle(
                 class_="pa-0 ma-1",
-                children=[cm.analysis_tile.questionarie.confirmation_q],
+                children=[t("analysis_tile.questionarie.confirmation_q")],
             ),
             confirmation_select,
             v.CardTitle(
                 class_="pa-1 ma-1",
-                children=[cm.analysis_tile.questionarie.loss_driver_label],
+                children=[t("analysis_tile.questionarie.loss_driver_label")],
             ),
             driver_combobox,
         ],

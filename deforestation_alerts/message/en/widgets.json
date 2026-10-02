@@ -12,8 +12,10 @@
     "advanced": "Advanced",
     "new": "New",
     "_test_fmt": "hello {name}",
-    "_test_one": "{n} item",
-    "_test_other": "{n} items"
+    "_test": {
+      "one": "{count} item",
+      "other": "{count} items"
+    }
   },
   "dialog": {
     "confirm_default_title": "Delete?",
@@ -51,19 +53,31 @@
     "lock_prepare": "Create or select a period first.",
     "lock_integrate": "Download and harmonize at least one source first.",
     "lock_analysis": "Run Integrate & vectorize first.",
-    "count_sources_one": "{n} source",
-    "count_sources_other": "{n} sources",
-    "count_layers_one": "{n} layer",
-    "count_layers_other": "{n} layers",
-    "count_periods_one": "{n} period",
-    "count_periods_other": "{n} periods",
-    "count_ready_one": "{n} ready",
-    "count_ready_other": "{n} ready",
-    "count_alerts_one": "{n} alert",
-    "count_alerts_other": "{n} alerts",
+    "count_sources": {
+      "one": "{count} source",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} layer",
+      "other": "{count} layers"
+    },
+    "count_periods": {
+      "one": "{count} period",
+      "other": "{count} periods"
+    },
+    "count_ready": {
+      "one": "{count} ready",
+      "other": "{count} ready"
+    },
+    "count_alerts": {
+      "one": "{count} alert",
+      "other": "{count} alerts"
+    },
     "step_badge": "{n} / {total}",
     "count_empty": "nothing yet",
-    "count_reviewed_one": "{n} reviewed",
-    "count_reviewed_other": "{n} reviewed"
+    "count_reviewed": {
+      "one": "{count} reviewed",
+      "other": "{count} reviewed"
+    }
   }
 }

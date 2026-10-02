@@ -12,8 +12,11 @@
     "advanced": "Avanzado",
     "new": "Nuevo",
     "_test_fmt": "hola {name}",
-    "_test_one": "{n} elemento",
-    "_test_other": "{n} elementos"
+    "_test": {
+      "one": "{count} elemento",
+      "many": "{count} elementos",
+      "other": "{count} elementos"
+    }
   },
   "dialog": {
     "confirm_default_title": "¿Eliminar?",
@@ -51,19 +54,37 @@
     "lock_prepare": "Create or select a period first.",
     "lock_integrate": "Download and harmonize at least one source first.",
     "lock_analysis": "Run Integrate & vectorize first.",
-    "count_sources_one": "{n} source",
-    "count_sources_other": "{n} sources",
-    "count_layers_one": "{n} capa",
-    "count_layers_other": "{n} capas",
-    "count_periods_one": "{n} period",
-    "count_periods_other": "{n} periods",
-    "count_ready_one": "{n} ready",
-    "count_ready_other": "{n} ready",
-    "count_alerts_one": "{n} alerta",
-    "count_alerts_other": "{n} alertas",
+    "count_sources": {
+      "one": "{count} source",
+      "many": "{count} sources",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} capa",
+      "many": "{count} capas",
+      "other": "{count} capas"
+    },
+    "count_periods": {
+      "one": "{count} period",
+      "many": "{count} periods",
+      "other": "{count} periods"
+    },
+    "count_ready": {
+      "one": "{count} ready",
+      "many": "{count} ready",
+      "other": "{count} ready"
+    },
+    "count_alerts": {
+      "one": "{count} alerta",
+      "many": "{count} alertas",
+      "other": "{count} alertas"
+    },
     "step_badge": "{n} / {total}",
     "count_empty": "nada todavía",
-    "count_reviewed_one": "{n} revisada",
-    "count_reviewed_other": "{n} revisadas"
+    "count_reviewed": {
+      "one": "{count} revisada",
+      "many": "{count} revisadas",
+      "other": "{count} revisadas"
+    }
   }
 }

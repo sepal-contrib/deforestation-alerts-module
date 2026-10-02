@@ -30,11 +30,11 @@ from pysepal.solara.notifications.bus import NotificationBus
 from pysepal.solara.notifications.notifier import Notifier
 from pysepal.solara.notifications.state import TaskStatus, ToastType
 
-from deforestation_alerts.message import cm
 from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
+from gui.i18n import t
 
 
 # ---------------------------------------------------------------------------
@@ -216,15 +216,15 @@ def test_overview_export_worker_log_lines_become_task_milestones(
     feedback.join()
 
     task = feedback.task()
-    assert task.title == str(cm.overview_tile.export_task_title)
+    assert task.title == t("overview_tile.export_task_title")
     assert task.status == TaskStatus.COMPLETED
     assert feedback.milestones() == [
-        str(cm.overview_tile.export_step).format(fmt="GPKG"),
+        t("overview_tile.export_step", fmt="GPKG"),
         "Writing 1 alert",
     ]
     assert dl_btn.disabled is False and dl_btn.viz is True
     assert feedback.toasts() == [
-        ("success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
+        ("success", t("overview_tile.export_done", fmt="GPKG"))
     ]
 
 
@@ -279,23 +279,23 @@ def test_export_save_publishes_success_and_enables_the_download(
     feedback = _record_feedback(monkeypatch, export)
     monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
 
-    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
     assert download_btn.disabled is True
 
-    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
     save_btn.fire_event("click", None)
     feedback.join()
 
     # the success toast accompanies the real post-save apply step
     assert download_btn.disabled is False
     task = feedback.task()
-    assert task.title == str(cm.analysis_tile.export_labels.save_task_title)
+    assert task.title == t("analysis_tile.export_labels.save_task_title")
     assert task.total_steps is None
-    assert str(cm.analysis_tile.export_labels.save_step) in feedback.milestones()
+    assert t("analysis_tile.export_labels.save_step") in feedback.milestones()
     assert task.status == TaskStatus.COMPLETED
     assert feedback.errors == []
     assert feedback.toasts() == [
-        ("success", cm.analysis_tile.export_labels.save_done)
+        ("success", t("analysis_tile.export_labels.save_done"))
     ]
     assert save_btn.loading is False and save_btn.disabled is False
 
@@ -328,12 +328,12 @@ def test_export_save_refusal_fails_the_task_and_says_why(
         app_state.alerts_gdf.value = _one_row_gdf()
     app_state.actual_alert_id.value = alert_id
 
-    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
-    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
     save_btn.fire_event("click", None)
     feedback.join()
 
-    expected = str(cm.analysis_tile.export_labels.save_no_alert)
+    expected = t("analysis_tile.export_labels.save_no_alert")
     task = feedback.task()
     assert task.status == TaskStatus.FAILED
     assert task.error_message == expected
@@ -347,8 +347,8 @@ def test_export_save_refusal_fails_the_task_and_says_why(
 @pytest.mark.parametrize(
     "label, body",
     [
-        (cm.analysis_tile.export_labels.save_btn, "_save_attributes"),
-        (cm.analysis_tile.export_labels.download_alert_data_btn, "_download_data"),
+        (t("analysis_tile.export_labels.save_btn"), "_save_attributes"),
+        (t("analysis_tile.export_labels.download_alert_data_btn"), "_download_data"),
     ],
     ids=["save", "download"],
 )
@@ -431,12 +431,12 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
     )
     feedback = _record_feedback(monkeypatch, export)
 
-    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
-    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
     save_btn.fire_event("click", None)
     feedback.join()
 
-    expected = str(cm.analysis_tile.export_labels.save_other_set)
+    expected = t("analysis_tile.export_labels.save_other_set")
     task = feedback.task()
     assert task.status == TaskStatus.FAILED and task.error_message == expected
     assert feedback.errors == []
@@ -457,8 +457,8 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
 
     monkeypatch.setattr(export, "_save_attributes", _boom)
 
-    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
-    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -499,10 +499,10 @@ def _download_toolbar(card):
     [
         # The active alert set's folder is what gives the files somewhere to
         # live in the project; without a set nothing can be written.
-        ("", True, cm.analysis_tile.export_labels.download_no_recipe),
+        ("", True, t("analysis_tile.export_labels.download_no_recipe")),
         # With a set but no selected alert there is nothing to build.
         ("/home/sepal-user/module_results/deforestation_alerts/r",
-         False, cm.analysis_tile.export_labels.download_no_alert),
+         False, t("analysis_tile.export_labels.download_no_alert")),
     ],
     ids=["no-recipe", "no-alert"],
 )
@@ -526,7 +526,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, cm.analysis_tile.export_labels.download_alert_data_btn
+        card, t("analysis_tile.export_labels.download_alert_data_btn")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -569,11 +569,11 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     app_state.actual_alert_id.value = 0
 
     toolbar = _download_toolbar(card)
-    download_btn = _button(card, cm.analysis_tile.export_labels.download_alert_data_btn)
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
     download_btn.fire_event("click", None)
     feedback.join()
 
-    expected = str(cm.analysis_tile.export_labels.download_no_images)
+    expected = t("analysis_tile.export_labels.download_no_images")
     task = feedback.task()
     assert task.status == TaskStatus.FAILED
     assert task.error_message == expected
@@ -599,18 +599,18 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, cm.analysis_tile.export_labels.download_alert_data_btn
+        card, t("analysis_tile.export_labels.download_alert_data_btn")
     )
     download_btn.fire_event("click", None)
     feedback.join()
 
     task = feedback.task()
-    assert task.title == str(cm.analysis_tile.export_labels.download_task_title)
+    assert task.title == t("analysis_tile.export_labels.download_task_title")
     assert task.status == TaskStatus.COMPLETED
-    assert str(cm.analysis_tile.export_labels.download_step) in feedback.milestones()
+    assert t("analysis_tile.export_labels.download_step") in feedback.milestones()
     assert feedback.errors == []
     assert feedback.toasts() == [
-        ("success", str(cm.analysis_tile.export_labels.download_done))
+        ("success", t("analysis_tile.export_labels.download_done"))
     ]
     assert toolbar.viz is True
     assert download_btn.loading is False and download_btn.disabled is False
@@ -629,7 +629,7 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, cm.analysis_tile.export_labels.download_alert_data_btn
+        card, t("analysis_tile.export_labels.download_alert_data_btn")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -663,7 +663,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, cm.analysis_tile.export_labels.download_alert_data_btn
+        card, t("analysis_tile.export_labels.download_alert_data_btn")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -689,7 +689,7 @@ def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
 
     app_state.alerts_gdf.value = _Uncopyable()
 
-    save_btn = _button(card, cm.analysis_tile.export_labels.save_btn)
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -737,13 +737,13 @@ def test_edit_tools_model_run_publishes_success(
     # the toast accompanies the real apply step (the prediction is recorded)
     assert analysis.prediction_files.value == {model: "/tmp/pred.tif"}
     task = feedback.task()
-    assert task.title == str(cm.analysis_tile.model_labels.dl_task_title)
+    assert task.title == t("analysis_tile.model_labels.dl_task_title")
     assert task.total_steps is None
-    assert str(cm.analysis_tile.model_labels.dl_step_run) in feedback.milestones()
+    assert t("analysis_tile.model_labels.dl_step_run") in feedback.milestones()
     assert task.status == TaskStatus.COMPLETED
     assert feedback.errors == []
     assert feedback.toasts() == [
-        ("success", str(cm.analysis_tile.model_labels.dl_done))
+        ("success", t("analysis_tile.model_labels.dl_done"))
     ]
     assert run_btn.loading is False and run_btn.disabled is False
 
@@ -824,7 +824,7 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
     assert run_btn.loading is False and run_btn.disabled is False
     # every run failure maps to the friendly dl_404 text, as before
     feedback.assert_one_error_after_fail(
-        equals=cm.analysis_tile.model_labels.dl_404
+        equals=t("analysis_tile.model_labels.dl_404")
     )
 
 
@@ -874,7 +874,7 @@ def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
 
     assert run_btn.loading is False and run_btn.disabled is False
     feedback.assert_one_error_after_fail(
-        equals=cm.analysis_tile.model_labels.dl_404
+        equals=t("analysis_tile.model_labels.dl_404")
     )
 
 

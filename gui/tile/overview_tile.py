@@ -69,7 +69,6 @@ from pysepal import sepalwidgets as sw
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.fingerprint import Status, earlier_sets, set_status
-from deforestation_alerts.message import cm
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
@@ -133,11 +132,9 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
             notifier = current_notifier()
             try:
                 with tracked_job(
-                    notifier, str(cm.overview_tile.export_task_title)
+                    notifier, t("overview_tile.export_task_title")
                 ) as task:
-                    task.step(
-                        str(cm.overview_tile.export_step).format(fmt=fmt.upper())
-                    )
+                    task.step(t("overview_tile.export_step", fmt=fmt.upper()))
                     with writing(project):
                         path = export_alerts_gdf(
                             gdf, folder, fmt, sources, start, end
@@ -148,9 +145,7 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
             else:
                 dl_btn.set_url(path=url_path)
                 dl_btn.show()
-                notifier.success(
-                    str(cm.overview_tile.export_done).format(fmt=fmt.upper())
-                )
+                notifier.success(t("overview_tile.export_done", fmt=fmt.upper()))
             finally:
                 gen_btn.loading = False
                 gen_btn.disabled = False
@@ -172,12 +167,12 @@ def build_export_card(gdf, folder, sources, start, end, project):
     gen_buttons = []
     dl_buttons = []
     for fmt in ("csv", "gpkg", "geojson"):
-        label = str(getattr(cm.overview_tile, f"export_{fmt}"))
+        label = t(f"overview_tile.export_{fmt}")
         gen_btn = sw.Btn(
             msg=label, small=True, outlined=True, color="primary", class_="pa-1 ma-1"
         )
         dl_btn = sw.DownloadBtn(
-            text=f"{cm.overview_tile.export_download} {label}",
+            text=f"{t('overview_tile.export_download')} {label}",
             small=True,
             class_="pa-1 ma-1",
         ).hide()
@@ -194,21 +189,22 @@ def build_export_card(gdf, folder, sources, start, end, project):
         class_="pa-3 ma-3",
         hover=True,
         children=[
-            v.CardTitle(class_="pa-1", children=[cm.overview_tile.export_label]),
+            v.CardTitle(class_="pa-1", children=[t("overview_tile.export_label")]),
             v.Row(class_="d-flex justify-center", children=gen_buttons),
             v.Row(class_="d-flex justify-center", children=dl_buttons),
         ],
     )
 
 
-# Summary-table row labels (matches old tile order)
-_ALERT_LABELS = [
-    cm.overview_tile.total,
-    cm.overview_tile.reviewed,
-    cm.overview_tile.confirmed,
-    cm.overview_tile.false_positives,
-    cm.overview_tile.revision,
-]
+# Summary-table row label keys (matches old tile order); translated where the
+# rows are built, never at import (that would freeze English).
+_ALERT_LABEL_KEYS = (
+    "overview_tile.total",
+    "overview_tile.reviewed",
+    "overview_tile.confirmed",
+    "overview_tile.false_positives",
+    "overview_tile.revision",
+)
 
 
 def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
@@ -317,7 +313,7 @@ def OverviewTile(app_state, map_, layers):
     # Summary table body, mutated in place by _sync_table: a concrete widget,
     # so the table below is raw ipyvuetify, not a reacton element.
     tbody_ref = solara.use_memo(
-        lambda: v.Html(tag="tbody", children=_make_summary_rows([0, 0, 0, 0, 0], _ALERT_LABELS)), []
+        lambda: v.Html(tag="tbody", children=_make_summary_rows([0, 0, 0, 0, 0], [t(k) for k in _ALERT_LABEL_KEYS])), []
     )
     popup_ref = solara.use_ref(None)
     p = app_state.project.value
@@ -345,7 +341,7 @@ def OverviewTile(app_state, map_, layers):
     def _sync_table():
         counts = (calculate_alert_classes(gdf, "Confirmed", "False Positive", "Need revision")
                   if has_alerts else [0, 0, 0, 0, 0])
-        tbody_ref.children = _make_summary_rows(counts, _ALERT_LABELS)
+        tbody_ref.children = _make_summary_rows(counts, [t(k) for k in _ALERT_LABEL_KEYS])
 
     solara.use_effect(_sync_table, [gdf])
 
@@ -571,7 +567,7 @@ def OverviewTile(app_state, map_, layers):
     # widget instance.
     info_table = solara.use_memo(lambda: v.SimpleTable(dense=False, children=[tbody_ref]), [])
     info_card = rv.Card(class_="pa-3 ma-3", hover=True,
-                        children=[rv.CardTitle(class_="pa-1 ma-1", children=[cm.overview_tile.title]), info_table])
+                        children=[rv.CardTitle(class_="pa-1 ma-1", children=[t("overview_tile.title")]), info_table])
 
     # The export card is built only when its inputs change, so a re-render (a
     # project save, a view switch) keeps the download buttons already revealed.
@@ -596,10 +592,10 @@ def OverviewTile(app_state, map_, layers):
 
     with solara.Column(style="padding: 0;"):
         with solara.Row(style="gap: 8px; align-items: center; padding: 0 12px;"):
-            solara.Button(cm.overview_tile.back_to_workflow, icon_name="mdi-arrow-left", text=True, small=True,
+            solara.Button(t("overview_tile.back_to_workflow"), icon_name="mdi-arrow-left", text=True, small=True,
                           on_click=_back_to_workflow)
             solara.v.Spacer()
-            solara.Button(cm.overview_tile.review_button, color="primary", small=True, disabled=not has_alerts,
+            solara.Button(t("overview_tile.review_button"), color="primary", small=True, disabled=not has_alerts,
                           on_click=_review_alerts)
         if s is not None:
             with solara.Div(style="padding: 0 16px;"):

@@ -90,7 +90,6 @@ from pysepal import color, sepalwidgets as sw
 from pysepal.solara.notifications import notify
 
 from deforestation_alerts import gdal_env
-from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import (
@@ -101,6 +100,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     simplify_and_extract_features,
     verify_raster,
 )
+from gui.i18n import t
 from gui.scripts.notify_bridge import (
     current_notifier,
     tile_progress_reporter,
@@ -254,17 +254,17 @@ def build_edit_tools(
 
         tt_start = sw.Tooltip(
             ns["start_btn"],
-            tooltip=cm.analysis_tile.edition_labels.start_edit_button,
+            tooltip=t("analysis_tile.edition_labels.start_edit_button"),
             top=True, open_delay=100, close_delay=100,
         )
         tt_save = sw.Tooltip(
             ns["save_btn"],
-            tooltip=cm.analysis_tile.edition_labels.save_edit_button,
+            tooltip=t("analysis_tile.edition_labels.save_edit_button"),
             top=True, open_delay=100, close_delay=100,
         )
         tt_stop = sw.Tooltip(
             ns["stop_btn"],
-            tooltip=cm.analysis_tile.edition_labels.stop_edit_button,
+            tooltip=t("analysis_tile.edition_labels.stop_edit_button"),
             top=True, open_delay=100, close_delay=100,
         )
         ns["toolbar_edition"] = v.Toolbar(
@@ -289,13 +289,13 @@ def build_edit_tools(
             color=color.error, disabled=False,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
         ).hide()
-        tt_dl1 = sw.Tooltip(ns["dl1_run"], tooltip=cm.analysis_tile.model_labels.dl_button1,
+        tt_dl1 = sw.Tooltip(ns["dl1_run"], tooltip=t("analysis_tile.model_labels.dl_button1"),
                             top=True, open_delay=100, close_delay=100)
-        tt_dl1_add = sw.Tooltip(ns["dl1_add"], tooltip=cm.analysis_tile.model_labels.dl_button_add,
+        tt_dl1_add = sw.Tooltip(ns["dl1_add"], tooltip=t("analysis_tile.model_labels.dl_button_add"),
                                 top=True, open_delay=100, close_delay=100)
-        tt_dl1_rem = sw.Tooltip(ns["dl1_remove"], tooltip=cm.analysis_tile.model_labels.dl_button_remove,
+        tt_dl1_rem = sw.Tooltip(ns["dl1_remove"], tooltip=t("analysis_tile.model_labels.dl_button_remove"),
                                 top=True, open_delay=100, close_delay=100)
-        tt_dl1_msg = sw.Tooltip(ns["dl1_msg"], tooltip=cm.analysis_tile.model_labels.dl_404,
+        tt_dl1_msg = sw.Tooltip(ns["dl1_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)
         ns["toolbar_dl1"] = sw.Toolbar(
             children=[tt_dl1, tt_dl1_add, tt_dl1_rem, tt_dl1_msg]
@@ -318,13 +318,13 @@ def build_edit_tools(
             color=color.error, disabled=False,
             children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
         ).hide()
-        tt_dl2 = sw.Tooltip(ns["dl2_run"], tooltip=cm.analysis_tile.model_labels.dl_button2,
+        tt_dl2 = sw.Tooltip(ns["dl2_run"], tooltip=t("analysis_tile.model_labels.dl_button2"),
                             top=True, open_delay=100, close_delay=100)
-        tt_dl2_add = sw.Tooltip(ns["dl2_add"], tooltip=cm.analysis_tile.model_labels.dl_button_add,
+        tt_dl2_add = sw.Tooltip(ns["dl2_add"], tooltip=t("analysis_tile.model_labels.dl_button_add"),
                                 top=True, open_delay=100, close_delay=100)
-        tt_dl2_rem = sw.Tooltip(ns["dl2_remove"], tooltip=cm.analysis_tile.model_labels.dl_button_remove,
+        tt_dl2_rem = sw.Tooltip(ns["dl2_remove"], tooltip=t("analysis_tile.model_labels.dl_button_remove"),
                                 top=True, open_delay=100, close_delay=100)
-        tt_dl2_msg = sw.Tooltip(ns["dl2_msg"], tooltip=cm.analysis_tile.model_labels.dl_404,
+        tt_dl2_msg = sw.Tooltip(ns["dl2_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)
         ns["toolbar_dl2"] = sw.Toolbar(
             children=[tt_dl2, tt_dl2_add, tt_dl2_rem, tt_dl2_msg]
@@ -406,7 +406,7 @@ def build_edit_tools(
             remove_btn.disabled = False
         except Exception:
             logger.exception("Analysis: add prediction failed")
-            notify(str(cm.analysis_tile.model_labels.dl_404), type_="error")
+            notify(t("analysis_tile.model_labels.dl_404"), type_="error")
 
     def _remove_model_prediction(color_name, add_btn, remove_btn):
         try:
@@ -526,7 +526,7 @@ def build_edit_tools(
         # Every CNN run failure (composite download, HF model pull, inference,
         # verify) has always reached the user as this one friendly message; the
         # raw exception stays in the log.
-        return str(cm.analysis_tile.model_labels.dl_404)
+        return t("analysis_tile.model_labels.dl_404")
 
     def _on_dl1_run(*_):
         ns["dl1_add"].disabled = True
@@ -546,10 +546,10 @@ def build_edit_tools(
             try:
                 with tracked_job(
                     notifier,
-                    str(cm.analysis_tile.model_labels.dl_task_title),
+                    t("analysis_tile.model_labels.dl_task_title"),
                     error_format=_dl_404,
                 ) as task:
-                    task.step(str(cm.analysis_tile.model_labels.dl_step_run))
+                    task.step(t("analysis_tile.model_labels.dl_step_run"))
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL1_REPO, _MODEL1_FILE, "_m1",
@@ -560,7 +560,7 @@ def build_edit_tools(
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                notifier.success(str(cm.analysis_tile.model_labels.dl_done))
+                notifier.success(t("analysis_tile.model_labels.dl_done"))
             finally:
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
@@ -580,10 +580,10 @@ def build_edit_tools(
             try:
                 with tracked_job(
                     notifier,
-                    str(cm.analysis_tile.model_labels.dl_task_title),
+                    t("analysis_tile.model_labels.dl_task_title"),
                     error_format=_dl_404,
                 ) as task:
-                    task.step(str(cm.analysis_tile.model_labels.dl_step_run))
+                    task.step(t("analysis_tile.model_labels.dl_step_run"))
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL2_REPO, _MODEL2_FILE, "_m2",
@@ -594,7 +594,7 @@ def build_edit_tools(
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                notifier.success(str(cm.analysis_tile.model_labels.dl_done))
+                notifier.success(t("analysis_tile.model_labels.dl_done"))
             finally:
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False
@@ -647,7 +647,7 @@ def build_edit_tools(
         children=[
             v.CardTitle(
                 class_="pa-1 ma-1",
-                children=[cm.analysis_tile.edition_labels.edit_title],
+                children=[t("analysis_tile.edition_labels.edit_title")],
             ),
             ns["toolbar_edition"],
             ns["toolbar_dl1"],

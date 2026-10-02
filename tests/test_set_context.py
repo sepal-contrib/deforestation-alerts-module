@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+from gui.i18n import t
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
@@ -236,12 +237,11 @@ class _AdminLookups:
 
 def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
-    from deforestation_alerts.message import cm
     from gui.tile.analysis import export
 
     monkeypatch.setattr(export, "ee", lookups or _AdminLookups())
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
@@ -262,7 +262,6 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, publi
     (``apply_result``), then publishes its alerts. The Save no longer writes
     for the set it started on (ruling: a warning, not a cross-write): neither
     the reviewed set's store nor the new set's is written, nor either count."""
-    from deforestation_alerts.message import cm
     from gui.scripts.integrate_jobs import apply_result
     from gui.tile.analysis.export import SaveRefused
 
@@ -281,7 +280,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, publi
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, _AdminLookups(during=_integrate_finishes))
 
-    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_set_changed)
+    assert str(refused.value) == t("analysis_tile.export_labels.save_set_changed")
     assert s.project.value.active_set == "y"
     assert fresh.read_bytes() == b"set y, freshly integrated"
     assert reviewed.read_bytes() == b"set x's store"
@@ -356,7 +355,6 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, publ
     lookups) must not write them, plus its review, over the re-run's store:
     the alerts carry the generation of the store they were read from, and
     the store on disk is another one by the time the write would land."""
-    from deforestation_alerts.message import cm
     from gui.tile.analysis.export import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
@@ -372,7 +370,7 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, publ
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, _AdminLookups(during=_rerun_finishes))
 
-    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_store_changed)
+    assert str(refused.value) == t("analysis_tile.export_labels.save_store_changed")
     assert _saved_status(store) == ["Not reviewed"] * 5  # the re-run's store, untouched
     rec = s.project.value.alert_sets["x"]
     assert rec.n_alerts == 5 and rec.n_reviewed == 0
@@ -451,7 +449,6 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     chosen). Save must not crash subscripting them (fix-round regression
     for the Task 23 review finding) and persists the review with the
     before/after image columns left empty."""
-    from deforestation_alerts.message import cm
     from gui.tile.analysis import export
 
     s = _state(tmp_path, monkeypatch)
@@ -459,7 +456,7 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     s.alerts_gdf.set(_review_alerts("x"))
 
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
@@ -482,7 +479,6 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     that moment the alerts on hand are the previous set's. A Save is then
     refused (the task's warning toast) before it looks anything up or changes
     a row."""
-    from deforestation_alerts.message import cm
     from gui.tile.analysis.export import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
@@ -494,7 +490,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, lookups)
 
-    assert str(refused.value) == str(cm.analysis_tile.export_labels.save_other_set)
+    assert str(refused.value) == t("analysis_tile.export_labels.save_other_set")
     assert store.read_bytes() == b"set x's store"
     assert lookups.calls == 0
     assert s.alerts_gdf.value["status"].tolist() == ["Not reviewed", "Not reviewed"]
@@ -661,7 +657,6 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     import geopandas as gpd
     from shapely.geometry import box
 
-    from deforestation_alerts.message import cm
     from gui.tile.analysis import export
 
     s = _state(tmp_path, monkeypatch)
@@ -671,7 +666,7 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     s.alerts_gdf.set(alerts)
     monkeypatch.setattr(export, "ee", _AdminLookups())
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model=cm.analysis_tile.questionarie.confirmation_yes),
+        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )

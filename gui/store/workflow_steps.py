@@ -49,8 +49,7 @@ class StepSpec:
     unlocked: Callable[[Any], bool] = field(default=lambda p: True)  # (project)
     lock_reason_key: Optional[str] = None
     count: Callable[[Any], Union[int, str, None]] = field(default=lambda p: None)  # (project)
-    count_key_one: Optional[str] = None
-    count_key_other: Optional[str] = None
+    count_key: Optional[str] = None  # a plural node: t(count_key, count=n)
     full_stage: bool = False  # Analysis: stage overlay shown, shared map hidden
 
 
@@ -86,28 +85,28 @@ STEPS: List[StepSpec] = [
     StepSpec(key="alerts", page_view="alerts_tile", label_key="app.drawer_item.alerts", icon="mdi-alert-decagram",
              unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_alerts",
              count=lambda p: len(p.sources) if p is not None else 0,
-             count_key_one="workflow.count_sources_one", count_key_other="workflow.count_sources_other"),
+             count_key="workflow.count_sources"),
     StepSpec(key="layers", page_view="layers_tile", label_key="app.drawer_item.layers", icon="mdi-layers-outline",
              unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_layers",
              count=lambda p: len(p.vis_layers) if p is not None else 0,
-             count_key_one="workflow.count_layers_one", count_key_other="workflow.count_layers_other"),
+             count_key="workflow.count_layers"),
     StepSpec(key="period", page_view="period_tile", label_key="app.drawer_item.period", icon="mdi-calendar-range",
              unlocked=lambda p: p is not None and bool(p.sources), lock_reason_key="workflow.lock_period",
              count=lambda p: len(p.periods) if p is not None else 0,
-             count_key_one="workflow.count_periods_one", count_key_other="workflow.count_periods_other"),
+             count_key="workflow.count_periods"),
     StepSpec(key="prepare", page_view="prepare_tile", label_key="app.drawer_item.prepare", icon="mdi-cloud-download",
              unlocked=lambda p: active_period(p) is not None, lock_reason_key="workflow.lock_prepare",
              count=lambda p: len(_ready(p)),
-             count_key_one="workflow.count_ready_one", count_key_other="workflow.count_ready_other"),
+             count_key="workflow.count_ready"),
     StepSpec(key="integrate", page_view="integrate_tile", label_key="app.drawer_item.integrate",
              icon="mdi-vector-union",
              unlocked=lambda p: bool(_ready(p)), lock_reason_key="workflow.lock_integrate",
              count=lambda p: active_set(p).n_alerts if active_set(p) else 0,
-             count_key_one="workflow.count_alerts_one", count_key_other="workflow.count_alerts_other"),
+             count_key="workflow.count_alerts"),
     StepSpec(key="analysis", page_view="analysis_tile", label_key="app.drawer_item.analysis", icon="mdi-image-search",
              unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
              count=lambda p: active_set(p).n_reviewed if active_set(p) else 0,
-             count_key_one="workflow.count_reviewed_one", count_key_other="workflow.count_reviewed_other",
+             count_key="workflow.count_reviewed",
              full_stage=True),
 ]
 

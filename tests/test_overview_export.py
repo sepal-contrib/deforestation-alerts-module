@@ -25,9 +25,9 @@ from pysepal.solara.notifications.state import TaskStatus, ToastType
 from shapely.geometry import Polygon
 
 import gui.tile.overview_tile as overview_tile
-from deforestation_alerts.message import cm
 from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
+from gui.i18n import t
 
 
 def _gdf():
@@ -130,7 +130,7 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     assert task.status == TaskStatus.COMPLETED
     assert errors == []
     assert _non_error_toasts(bus) == [
-        ("success", str(cm.overview_tile.export_done).format(fmt="GPKG"))
+        ("success", t("overview_tile.export_done", fmt="GPKG"))
     ]
 
 

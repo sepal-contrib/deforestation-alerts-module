@@ -44,7 +44,6 @@ from deforestation_alerts.gdal_env import (
     pin_gdal_num_threads,
 )
 from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
-from deforestation_alerts.message import cm
 from gui.store.navigation import (
     apply_navigation,
     dismiss_dialog,
@@ -250,7 +249,7 @@ def compute_title(app_state) -> str:
     Peeks: it subscribes its caller to nothing (see ``_AppShell``'s title).
     """
     p = app_state.project.peek()
-    return f"{cm.app.title} · {p.name}" if p is not None else str(cm.app.title)
+    return f"{t('app.title')} · {p.name}" if p is not None else t("app.title")
 
 
 @solara.component

@@ -11,23 +11,35 @@
       "name_chars": "Use letters, digits, spaces, '-' and '_' only.",
       "name_exists": "A project with this name already exists.",
       "summary": "{aoi} · {sources} · {periods} · {sets}",
-      "count_sources_one": "{n} source",
-      "count_sources_other": "{n} sources",
-      "count_periods_one": "{n} period",
-      "count_periods_other": "{n} periods",
-      "count_sets_one": "{n} alert set",
-      "count_sets_other": "{n} alert sets",
+      "count_sources": {
+        "one": "{count} source",
+        "other": "{count} sources"
+      },
+      "count_periods": {
+        "one": "{count} period",
+        "other": "{count} periods"
+      },
+      "count_sets": {
+        "one": "{count} alert set",
+        "other": "{count} alert sets"
+      },
       "no_aoi": "no AOI yet",
       "search": "Search projects",
       "no_match": "No project name contains \"{query}\".",
       "saved_ago": "Saved {time_ago}",
       "ago_now": "just now",
-      "ago_minutes_one": "{n} minute ago",
-      "ago_minutes_other": "{n} minutes ago",
-      "ago_hours_one": "{n} hour ago",
-      "ago_hours_other": "{n} hours ago",
-      "ago_days_one": "{n} day ago",
-      "ago_days_other": "{n} days ago",
+      "ago_minutes": {
+        "one": "{count} minute ago",
+        "other": "{count} minutes ago"
+      },
+      "ago_hours": {
+        "one": "{count} hour ago",
+        "other": "{count} hours ago"
+      },
+      "ago_days": {
+        "one": "{count} day ago",
+        "other": "{count} days ago"
+      },
       "save_failed": "Saving failed: {error}",
       "list_title": "Projects",
       "list_empty": "No saved projects yet.",
@@ -214,18 +226,26 @@
       "deleted": "Period deleted",
       "state_stale": "out of date",
       "state_missing": "missing",
-      "note_sources_stale_one": "{n} source out of date here: run it again in Download & harmonize.",
-      "note_sources_stale_other": "{n} sources out of date here: run them again in Download & harmonize.",
-      "note_sets_stale_one": "{n} alert set built from inputs that have changed since.",
-      "note_sets_stale_other": "{n} alert sets built from inputs that have changed since.",
-      "note_sets_missing_one": "{n} alert set whose files are missing.",
-      "note_sets_missing_other": "{n} alert sets whose files are missing.",
+      "note_sources_stale": {
+        "one": "{count} source out of date here: run it again in Download & harmonize.",
+        "other": "{count} sources out of date here: run them again in Download & harmonize."
+      },
+      "note_sets_stale": {
+        "one": "{count} alert set built from inputs that have changed since.",
+        "other": "{count} alert sets built from inputs that have changed since."
+      },
+      "note_sets_missing": {
+        "one": "{count} alert set whose files are missing.",
+        "other": "{count} alert sets whose files are missing."
+      },
       "note_frozen": "Its dates are fixed: it has alert sets.",
       "busy": "A job is writing into this project; change or delete the period once it has finished.",
       "delete_title": "Delete the period {period}?",
       "delete_message": "Its downloads and harmonized files are deleted.",
-      "delete_sets_one": "Its alert set ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted.",
-      "delete_sets_other": "Its {n} alert sets ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted.",
+      "delete_sets": {
+        "one": "Its alert set ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted.",
+        "other": "Its {count} alert sets ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted."
+      },
       "delete_set_line": "{sources} · {n} alerts · {reviewed} reviewed",
       "error_bad_date": "Enter both dates.",
       "error_order": "The end date must be after the start date.",

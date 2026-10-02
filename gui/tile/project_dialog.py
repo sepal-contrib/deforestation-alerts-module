@@ -35,7 +35,7 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Project
-from gui.i18n import plural, t
+from gui.i18n import t
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing
 from gui.widget.creation_dialog import CreationDialog
@@ -109,10 +109,10 @@ def relative_time(when: datetime, now: datetime) -> str:
     if seconds < 60:
         return t("steps.project.ago_now")
     if seconds < 3600:
-        return plural(seconds // 60, "steps.project.ago_minutes_one", "steps.project.ago_minutes_other")
+        return t("steps.project.ago_minutes", count=seconds // 60)
     if seconds < 86400:
-        return plural(seconds // 3600, "steps.project.ago_hours_one", "steps.project.ago_hours_other")
-    return plural(seconds // 86400, "steps.project.ago_days_one", "steps.project.ago_days_other")
+        return t("steps.project.ago_hours", count=seconds // 3600)
+    return t("steps.project.ago_days", count=seconds // 86400)
 
 
 def filter_infos(infos: list, query) -> list:
@@ -276,12 +276,9 @@ def ProjectDialog(app_state, dismiss=lambda: None):
             solara.Text(t(
                 "steps.project.summary",
                 aoi=p.aoi.name if p.aoi else t("steps.project.no_aoi"),
-                sources=plural(len(p.sources), "steps.project.count_sources_one",
-                                "steps.project.count_sources_other"),
-                periods=plural(len(p.periods), "steps.project.count_periods_one",
-                                "steps.project.count_periods_other"),
-                sets=plural(len(p.alert_sets), "steps.project.count_sets_one",
-                            "steps.project.count_sets_other"),
+                sources=t("steps.project.count_sources", count=len(p.sources)),
+                periods=t("steps.project.count_periods", count=len(p.periods)),
+                sets=t("steps.project.count_sets", count=len(p.alert_sets)),
             ))
             _SavedAgo(app_state=app_state)
         with solara.Row(style="gap:8px;"):

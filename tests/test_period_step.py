@@ -24,7 +24,7 @@ from deforestation_alerts.project import periods
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, GridSpec, PeriodMask, Project, add_predefined_source,
 )
-from gui.i18n import plural, t
+from gui.i18n import t
 from gui.scripts import map_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import writing
@@ -140,8 +140,8 @@ def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
     texts = [n["text"] for n in jan["notes"]]
     assert texts == [
         t("steps.period.window", start="2025-12-02", end="2026-01-31"),
-        plural(1, "steps.period.note_sources_stale_one", "steps.period.note_sources_stale_other"),
-        plural(1, "steps.period.note_sets_stale_one", "steps.period.note_sets_stale_other"),
+        t("steps.period.note_sources_stale", count=1),
+        t("steps.period.note_sets_stale", count=1),
         t("steps.period.note_frozen"),
     ]
     assert feb["cells"][1]["value"] == "0" and t("steps.period.note_frozen") not in [n["text"] for n in feb["notes"]]
@@ -253,8 +253,7 @@ def test_deleting_the_latest_period_removes_its_sets_and_every_file(env):
         _action(env.seen, FEB_ID, "delete")["on_click"]()
         confirm = env.seen["confirm"]
         assert confirm["open"] is True
-        assert confirm["message"] == plural(1, "steps.period.delete_sets_one", "steps.period.delete_sets_other",
-                                            reviewed=2)
+        assert confirm["message"] == t("steps.period.delete_sets", count=1, reviewed=2)
         confirm["on_confirm"]()
         live = state.project.value
         assert list(live.periods) == [JAN_ID] and list(live.alert_sets) == [jan]

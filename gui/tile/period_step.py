@@ -41,7 +41,7 @@ from deforestation_alerts.engine.fingerprint import Status, period_set_statuses
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths, periods
 from deforestation_alerts.project.models import period_id
-from gui.i18n import plural, t
+from gui.i18n import t
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
@@ -69,14 +69,11 @@ def period_rows(p, pdir, *, select, edit, delete) -> list:
         ws, we = period.search_window(p.look_back_days)
         notes = [{"text": t("steps.period.window", start=ws.isoformat(), end=we.isoformat()), "tone": None}]
         if b["stale_sources"]:
-            notes.append({"text": plural(b["stale_sources"], "steps.period.note_sources_stale_one",
-                                         "steps.period.note_sources_stale_other"), "tone": "warning"})
+            notes.append({"text": t("steps.period.note_sources_stale", count=b["stale_sources"]), "tone": "warning"})
         if b["stale_sets"]:
-            notes.append({"text": plural(b["stale_sets"], "steps.period.note_sets_stale_one",
-                                         "steps.period.note_sets_stale_other"), "tone": "warning"})
+            notes.append({"text": t("steps.period.note_sets_stale", count=b["stale_sets"]), "tone": "warning"})
         if b["missing_sets"]:
-            notes.append({"text": plural(b["missing_sets"], "steps.period.note_sets_missing_one",
-                                         "steps.period.note_sets_missing_other"), "tone": "error"})
+            notes.append({"text": t("steps.period.note_sets_missing", count=b["missing_sets"]), "tone": "error"})
         if b["sets"]:
             notes.append({"text": t("steps.period.note_frozen"), "tone": None})
         if b["stale_sources"] or b["stale_sets"]:
@@ -260,8 +257,8 @@ def _PeriodList(app_state, layers):
         on_cancel=lambda: set_pending_delete(None),
         on_confirm=_delete,
         title=t("steps.period.delete_title", period=period_label(pending)) if pending is not None else None,
-        message=(plural(len(doomed), "steps.period.delete_sets_one", "steps.period.delete_sets_other",
-                        reviewed=reviewed) if doomed else t("steps.period.delete_message")),
+        message=(t("steps.period.delete_sets", count=len(doomed), reviewed=reviewed) if doomed
+                 else t("steps.period.delete_message")),
         confirm_label=t("common.delete"),
         details=[t("steps.period.delete_set_line", sources=" + ".join(p.alert_sets[s].sources),
                    n=p.alert_sets[s].n_alerts, reviewed=p.alert_sets[s].n_reviewed) for s in doomed] or None,

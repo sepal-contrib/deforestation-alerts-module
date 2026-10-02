@@ -1,65 +1,57 @@
-"""Internationalization for the Forest Cover Loss Alerts GUI.
+"""Internationalization for the Forest Cover Loss Alerts GUI (spec §11).
 
-Reuses pysepal's Translator (JSON locale folders with es->en fallback). The
-target language is pysepal 4's per-kernel Solara locale (``current_locale()``),
-which MapApp's LocaleSelect writes, so a language switch re-renders t() strings
-in place. No string may be resolved at import time — always call t()/plural()
-inside a component render.
+The catalogue is ``deforestation_alerts/message/<locale>/*.json``, bound once
+with pysepal 4's ``catalog()``. ``messages.msg(key, **values)`` renders a key
+in the current kernel's locale (``pysepal.i18n.current_locale()``, which
+MapApp's language selector writes); reading the locale during a render
+subscribes the component, so a language switch re-renders it in place.
 
-The catalog is the app's existing ``deforestation_alerts/message`` tree (the
-same one ``deforestation_alerts.message.cm`` reads) — NOT a second parallel
-``gui/messages`` tree — so the generic widgets' keys (``common.*``,
-``widgets.*``, ``dialog.*``, ``workflow.*``) live beside the domain keys and
-the LocaleSelect language switch applies to both.
+``t()`` is a thin alias of ``messages.msg``: a key English lacks renders as
+``⟦key⟧`` (non-strict catalogue, logged once) and a template that cannot be
+filled renders as the key, so a gap degrades visibly instead of crashing a
+tile. Counts use plural nodes: ``t("workflow.count_sources", count=n)``.
+
+No string may be resolved at import time: call ``t()`` inside a render, an
+event handler or the code that builds a widget. Workers never translate; they
+return a message key and its values (``deforestation_alerts.errors``).
 """
 
+import logging
+from functools import lru_cache
 from pathlib import Path
 
-from pysepal.i18n import current_locale
-from pysepal.translator import Translator
+from pysepal.i18n import MessageFormatError, catalog
+from pysepal.i18n.loading import ENGLISH, load_locale
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 MESSAGES_DIR = Path(__file__).resolve().parents[1] / "deforestation_alerts" / "message"
 
-# One Translator per locale code; the catalog is read-only, so sharing across
-# kernels is safe.
-_translators: dict = {}
+messages = catalog(MESSAGES_DIR, strict=False)
 
 
-def get_translator() -> Translator:
-    """Translator for the current kernel's locale (subscribes during a render)."""
-    locale = current_locale()
-    if locale not in _translators:
-        _translators[locale] = Translator(MESSAGES_DIR, target=locale)
-    return _translators[locale]
+def t(key: str, /, **values) -> str:
+    """``messages.msg(key, **values)``; the key itself when a value is missing.
 
-
-def t(key: str, /, **fmt) -> str:
-    """Resolve a dotted key against the active catalog (es->en->key) and
-    str.format(**fmt). A key missing in both languages returns the key string
-    so a gap degrades visibly instead of crashing the GUI.
-
-    ``key`` is positional-only so a catalog value may carry a ``{key}``
-    placeholder passed as a keyword (``key=...``) without colliding with this
-    lookup parameter."""
-    node = get_translator()
+    ``key`` is positional-only so a message may carry a ``{key}`` placeholder."""
     try:
-        for part in key.split("."):
-            node = node[part]
-        text = str(node)
-        return text.format(**fmt) if fmt else text
-    except Exception:
+        return messages.msg(key, **values)
+    except MessageFormatError:
+        logger.warning("message %r could not be rendered with %s", key, sorted(values))
         return key
 
 
-def plural(n: int, one_key: str, other_key: str, /, **fmt) -> str:
-    """Pick the singular vs plural key for a count and interpolate n.
+@lru_cache(maxsize=1)
+def _english_keys() -> frozenset:
+    english = load_locale(MESSAGES_DIR, ENGLISH)
+    return frozenset(english.messages) | english.plural_keys
 
-    The selector args are positional-only so a catalog value may carry an
-    ``{n}``/``{one_key}``/``{other_key}`` placeholder without colliding."""
-    fmt.setdefault("n", n)
-    return t(one_key if n == 1 else other_key, **fmt)
+
+def has_message(key: str) -> bool:
+    """Whether English defines ``key`` (a message or a plural node)."""
+    return key in _english_keys()
 
 
 def app_available_locales() -> list:
-    """Locale codes shipped under deforestation_alerts/message/ (drives the selector)."""
-    return sorted(p.name for p in MESSAGES_DIR.glob("[!._]*") if p.is_dir())
+    """Locale codes the catalogue ships, English first (MapApp's selector)."""
+    return list(messages.available_locales())

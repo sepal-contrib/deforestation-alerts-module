@@ -104,7 +104,6 @@ import geopandas as gpd
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
-from deforestation_alerts.message import cm
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
@@ -126,6 +125,7 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
+from gui.tile.analysis.review_panel import REVIEW_CHOICES
 from gui.widget.report_template import ReportTemplateField
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -212,11 +212,18 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
     if target is None:
         return
     if not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
-        raise SaveRefused(str(cm.analysis_tile.export_labels.save_other_set))
+        raise SaveRefused(t("analysis_tile.export_labels.save_other_set"))
     if not app_tile_model.is_current(target):
-        raise SaveRefused(str(cm.analysis_tile.export_labels.save_set_changed))
+        raise SaveRefused(t("analysis_tile.export_labels.save_set_changed"))
     if set_store.generation_changed(alertas_gdf, _store_of(target)):
-        raise SaveRefused(str(cm.analysis_tile.export_labels.save_store_changed))
+        raise SaveRefused(t("analysis_tile.export_labels.save_store_changed"))
+
+
+def review_status(confirmation) -> str:
+    """The status a Save stores (spec §10): one of the three, never a label."""
+    if confirmation not in {status for status, _ in REVIEW_CHOICES}:
+        raise SaveRefused(t("analysis_tile.questionarie.confirmation_missing"))
+    return confirmation
 
 
 def _save_attributes(widgets, app_state, analysis, app_tile_model):
@@ -246,16 +253,9 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
         return False
     # Before any row changes or a lookup blocks; the store writer checks again.
     _refuse_unless_current(alertas_gdf, app_tile_model, target)
+    status = review_status(widgets.confirmation_select.v_model)
 
-    confirmation = widgets.confirmation_select.v_model
-
-    # status (confirmation -> human label).
-    status_dict = {
-        cm.analysis_tile.questionarie.confirmation_yes: "Confirmed",
-        cm.analysis_tile.questionarie.confirmation_no: "False Positive",
-        cm.analysis_tile.questionarie.confirmation_revision: "Need revision",
-    }
-    alertas_gdf.at[actual_alert_id, "status"] = status_dict[confirmation]
+    alertas_gdf.at[actual_alert_id, "status"] = status
 
     # description (loss-driver combobox).
     drivers_list = ensure_list(widgets.driver_combobox.v_model)
@@ -316,10 +316,10 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
     defo_layer = analysis.defo_layer.value
     if (
-        confirmation == cm.analysis_tile.questionarie.confirmation_no
+        status == "False Positive"
         and defo_layer is not None
     ):
-        raise Exception(cm.analysis_tile.questionarie.confirmation_q)
+        raise Exception(t("analysis_tile.questionarie.confirmation_q"))
 
     # alert_polygon + area_ha from the drawn defo layer (if any). With nothing
     # drawn, area_ha keeps the alert's own area, which Integrate stored: the
@@ -521,13 +521,13 @@ def build_export(
         ns = {}
 
         ns["save_btn"] = sw.Btn(
-            msg=cm.analysis_tile.export_labels.save_btn,
+            msg=t("analysis_tile.export_labels.save_btn"),
             color="primary",
             outlined=True,
             class_="pa-1 ma-1",
         )
         ns["download_alert_data_btn"] = sw.Btn(
-            msg=cm.analysis_tile.export_labels.download_alert_data_btn,
+            msg=t("analysis_tile.export_labels.download_alert_data_btn"),
             color="primary",
             outlined=True,
             disabled=True,
@@ -535,11 +535,11 @@ def build_export(
         )
         ns["files_dwn_btn"] = sw.DownloadBtn(
             class_="pa-1 ma-1",
-            text=cm.analysis_tile.export_labels.files_dwn_btn,
+            text=t("analysis_tile.export_labels.files_dwn_btn"),
         )
         ns["report_dwn_btn"] = sw.DownloadBtn(
             class_="pa-1 ma-1",
-            text=cm.analysis_tile.export_labels.report_dwn_btn,
+            text=t("analysis_tile.export_labels.report_dwn_btn"),
         )
 
         ns["toolbar_save_export"] = sw.Toolbar(
@@ -608,9 +608,9 @@ def build_export(
             notifier = current_notifier()
             try:
                 with tracked_job(
-                    notifier, str(cm.analysis_tile.export_labels.save_task_title)
+                    notifier, t("analysis_tile.export_labels.save_task_title")
                 ) as task:
-                    task.step(str(cm.analysis_tile.export_labels.save_step))
+                    task.step(t("analysis_tile.export_labels.save_step"))
                     # Writer tracking: register the open project while the
                     # set's alert store is written, so deleting the project
                     # refuses mid-write.
@@ -636,7 +636,7 @@ def build_export(
                         # the default message says; SaveRefused carries its
                         # own.) The log line comes last: once the task is FAILED
                         # it is not echoed as a milestone.
-                        reason = refused or str(cm.analysis_tile.export_labels.save_no_alert)
+                        reason = refused or t("analysis_tile.export_labels.save_no_alert")
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: save refused — %s", reason)
@@ -648,7 +648,7 @@ def build_export(
                 pass
             else:
                 if saved:
-                    notifier.success(str(cm.analysis_tile.export_labels.save_done))
+                    notifier.success(t("analysis_tile.export_labels.save_done"))
             finally:
                 ns["save_btn"].loading = False
                 ns["save_btn"].disabled = False
@@ -673,10 +673,10 @@ def build_export(
             try:
                 with tracked_job(
                     notifier,
-                    str(cm.analysis_tile.export_labels.download_task_title),
+                    t("analysis_tile.export_labels.download_task_title"),
                     error_format=_download_error,
                 ) as task:
-                    task.step(str(cm.analysis_tile.export_labels.download_step))
+                    task.step(t("analysis_tile.export_labels.download_step"))
                     # Writer tracking: the report/zip generation writes into the
                     # set's folder — register the open project for the duration.
                     with writing(writer_name(app_state)):
@@ -699,14 +699,12 @@ def build_export(
                         # returned, so `_download_data` keeps its "paths or
                         # nothing" contract.) Log last: a FAILED task takes no
                         # more milestones.
-                        labels = cm.analysis_tile.export_labels
                         if not app_tile_model.recipe_folder_path:
-                            reason = labels.download_no_recipe
+                            reason = t("analysis_tile.export_labels.download_no_recipe")
                         elif not _alert_selected(app_state):
-                            reason = labels.download_no_alert
+                            reason = t("analysis_tile.export_labels.download_no_alert")
                         else:
-                            reason = labels.download_no_images
-                        reason = str(reason)
+                            reason = t("analysis_tile.export_labels.download_no_images")
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: download refused — %s", reason)
@@ -721,7 +719,7 @@ def build_export(
             else:
                 if result is not None:
                     notifier.success(
-                        str(cm.analysis_tile.export_labels.download_done)
+                        t("analysis_tile.export_labels.download_done")
                     )
             finally:
                 ns["download_alert_data_btn"].loading = False
@@ -754,7 +752,7 @@ def build_export(
         children=[
             v.CardTitle(
                 class_="pa-1 ma-1",
-                children=[cm.analysis_tile.export_labels.export_title],
+                children=[t("analysis_tile.export_labels.export_title")],
             ),
             template_field,
             ns["toolbar_save_export"],

@@ -1,3 +1,11 @@
+"""Overview helpers: the alert class counts, and the marker and popup builders.
+
+``calculate_alert_classes`` is a pure service the Overview tile calls. The
+marker/popup builders (``add_colored_layers`` and the ``*marker*`` functions)
+are UI code kept here for the Overview tile; their popup labels come from
+``gui.i18n.t`` and are translated when a popup is built.
+"""
+
 from ipyleaflet import (
     Marker,
     AwesomeIcon,
@@ -19,8 +27,8 @@ from ipyevents import Event
 import ipyleaflet
 import ipyvuetify as v
 from pysepal.mapping.menu_control import MenuControl
-from deforestation_alerts.message import cm
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
+from gui.i18n import t
 
 
 def calculateAlertClasses(gpdf):
@@ -475,9 +483,9 @@ def add_colored_layers(gdf, column_name, color_dict, leaflet_map, on_click_funct
         # Build HTML message components with Vuetify
         message = v.Html(tag="div", children=[])
         message.children = ([
-            v.Html(tag="strong", children=[cm.analysis_tile.alert_info.first_date + " "]),
+            v.Html(tag="strong", children=[t("analysis_tile.alert_info.first_date") + " "]),
             start_date,
-            v.Html(tag="strong", children=[" " + cm.analysis_tile.alert_info.last_date]),
+            v.Html(tag="strong", children=[" " + t("analysis_tile.alert_info.last_date")]),
             end_date,
             v.Html(tag="strong", children=[" ID: "]),
             str(feature_id) if feature_id else "N/A",

@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import geopandas as gpd
 from shapely.geometry import box
 
-from deforestation_alerts.message import cm
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+from gui.i18n import t
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
@@ -61,13 +61,13 @@ def test_the_alert_info_card_follows_a_review_save(tmp_path, monkeypatch):
     gdf = _alerts(3)
     s.alerts_gdf.set(gdf)  # the set arrives: alert 0 is selected and drawn
     assert s.actual_alert_id.value == 0
-    assert _status(widgets) == str(cm.analysis_tile.alert_info.status_not_reviewed)
+    assert _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")
 
     gdf.at[0, "status"] = "Confirmed"  # _save_attributes writes into the row...
     s.alerts_gdf.value = gdf.copy()  # ...and _apply_save rebinds a copy
 
     assert s.actual_alert_id.value == 0
-    assert _status(widgets) == str(cm.analysis_tile.alert_info.status_reviewed)
+    assert _status(widgets) == t("analysis_tile.alert_info.status_reviewed")
     assert widgets.selected_alert_info.children[1] == "GLAD-L"
 
 
@@ -82,7 +82,7 @@ def test_a_rebind_with_no_alert_selected_leaves_the_card_alone(tmp_path, monkeyp
     assert analysis_tile.refresh_alert_info(widgets, s) is None
     assert widgets.selected_alert_info.children == before
     s.alerts_gdf.set(_alerts(1))  # the new set: its first alert is selected and drawn once
-    assert s.actual_alert_id.value == 0 and _status(widgets) == str(cm.analysis_tile.alert_info.status_not_reviewed)
+    assert s.actual_alert_id.value == 0 and _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")
 
 
 def test_another_sets_alerts_leave_the_card_and_the_review_state_alone(tmp_path, monkeypatch):
