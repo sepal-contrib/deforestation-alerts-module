@@ -226,12 +226,8 @@ _ALERT_LABEL_KEYS = (
 
 
 def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
-    """Return ipyvuetify <tr> widgets for the summary table.
-
-    Local copy of the pure UI part of overview_helper.create_table_rows, kept
-    here so the service module's ipyvuetify dependency does not leak into this
-    component through a function call.  The service version is left unchanged.
-    """
+    """Return ipyvuetify <tr> widgets for the summary table: one row per
+    label, with its count."""
     return [
         v.Html(
             tag="tr",
