@@ -34,10 +34,8 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/project/models.py", "ValueError", "is not a custom source"),
     # the Alerts step offers only the predefined sources not yet added
     ("deforestation_alerts/project/models.py", "ValueError", "is already a source"),
-    # the environment (geedim is a dependency) and the export lock's timeout,
-    # which only a wedged Earth Engine export reaches
+    # the environment: geedim is a dependency
     ("deforestation_alerts/scripts/raster_export.py", "ImportError", "Install geedim"),
-    ("deforestation_alerts/scripts/raster_export.py", "TimeoutError", "waiting for another"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),
     ("deforestation_alerts/scripts/raster_export.py", "ValueError", "image must be an ee.Image"),
     ("deforestation_alerts/scripts/custom_sources.py", "ValueError", "custom source slot out of range"),
@@ -69,6 +67,9 @@ def test_error_text():
     assert error_text(RuntimeError()) == "RuntimeError"
     # a message whose value is missing reads as the English detail, not as its key
     assert error_text(UserFileMissing("file not found: /b.tif")) == "file not found: /b.tif"
+    # so does a key the catalogue lacks, not as ⟦key⟧; with no detail, the key itself
+    assert error_text(ProjectRuleError("the detail", key="steps.no_such_key")) == "the detail"
+    assert error_text(ProjectRuleError(key="steps.no_such_key")) == "steps.no_such_key"
 
 
 def test_a_failed_harmonize_shows_its_causes_message():
@@ -76,6 +77,18 @@ def test_a_failed_harmonize_shows_its_causes_message():
     wrapped = HarmonizeFailed(cause, {})
     assert error_text(wrapped) == t("errors.off_grid", path="x.tif")
     assert error_text(HarmonizeFailed(OSError("disk"), {})) == "disk"
+
+
+def test_a_failed_harmonize_over_a_keyed_value_error_shows_its_message():
+    """A cause that is a plain ``ValueError`` whose text is a message key (the
+    engine's older convention) reads as that message, not as the raw key."""
+    try:
+        try:
+            raise ValueError("steps.prepare.mask_edit_used")
+        except ValueError as cause:
+            raise HarmonizeFailed(cause, {}) from cause
+    except HarmonizeFailed as wrapped:
+        assert error_text(wrapped) == t("steps.prepare.mask_edit_used")
 
 
 def test_an_earth_engine_asset_not_found_reads_in_words():
@@ -87,6 +100,9 @@ def test_an_earth_engine_asset_not_found_reads_in_words():
                           "(does not exist or caller does not have access).")
     assert error_text(gone) == t("errors.ee_asset_not_found", asset="users/me/gone")
     assert error_text(ee.EEException("Computation timed out.")) == "Computation timed out."
+    # an access refusal that names no asset keeps Earth Engine's text
+    assert error_text(ee.EEException("Caller does not have access to the asset.")) == \
+        "Caller does not have access to the asset."
 
 
 def _raises(rel):
@@ -128,7 +144,8 @@ def test_every_error_the_engine_raises_with_a_text_names_a_message():
                                  "errors.project_not_a_manifest", "errors.project_newer_schema",
                                  "errors.project_invalid", "errors.no_images", "errors.folder_not_writable",
                                  "errors.source_native_unknown", "errors.attribute_band_missing",
-                                 "errors.attribute_no_crs", "errors.ee_asset_not_found"])
+                                 "errors.attribute_no_crs", "errors.ee_asset_not_found",
+                                 "errors.download_busy"])
 def test_every_error_key_exists(key):
     from gui.i18n import has_message
 

@@ -16,10 +16,12 @@ import asyncio
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import ee
 
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.scripts.gee_progress import notify_download_wait
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.raster_export")
@@ -32,9 +34,17 @@ _DOWNLOAD_LOCK = threading.Lock()
 # can run for many minutes on a slow SEPAL link. 30 minutes is comfortably above
 # that while still turning a wedged export into a visible error rather than a
 # session that hangs forever — the caller (a use_task) surfaces the raised
-# TimeoutError, and cancelling an export does NOT stop its thread, so an
-# unbounded wait could otherwise strand a second user indefinitely.
+# ``DownloadBusy`` (a TimeoutError), and cancelling an export does NOT stop its
+# thread, so an unbounded wait could otherwise strand a second user indefinitely.
 _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
+
+
+class DownloadBusy(KeyedError, TimeoutError):
+    """Another export held the download lock past the timeout: a slow but
+    legitimate national download in another session reaches this too, so the
+    user is told what happened and to run the step again (``minutes``, ``file``)."""
+
+    key = "errors.download_busy"
 
 
 def _transient(exc: BaseException) -> bool:
@@ -147,9 +157,10 @@ def download_ee_image(
     if not _DOWNLOAD_LOCK.acquire(blocking=False):
         notify_download_wait()
         if not _DOWNLOAD_LOCK.acquire(timeout=_DOWNLOAD_LOCK_TIMEOUT_S):
-            raise TimeoutError(
+            raise DownloadBusy(
                 f"Timed out after {_DOWNLOAD_LOCK_TIMEOUT_S}s waiting for another "
-                f"Earth Engine export to finish; {filename} was not downloaded."
+                f"Earth Engine export to finish; {filename} was not downloaded.",
+                minutes=round(_DOWNLOAD_LOCK_TIMEOUT_S / 60), file=Path(filename).name,
             )
     try:
         img = image.gd.prepareForExport(

@@ -24,7 +24,7 @@ from deforestation_alerts.engine.user_raster import UserRasterError, band_list_r
 from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
 from gui.i18n import t
 from gui.scripts import vis_layers
-from gui.scripts.error_text import error_text
+from gui.scripts.error_text import ee_no_access, error_text
 from gui.widget.raster_input import RasterInput, absolute, use_band_list
 from gui.widget.source_modal import _index
 
@@ -53,17 +53,6 @@ def _number_text(value) -> str:
     return str(int(value)) if value.is_integer() else str(value)
 
 
-def _no_access(exc) -> bool:
-    """Earth Engine's answer for a collection the account cannot read ("... not
-    found (does not exist or caller does not have access)"); any other error
-    (a network failure, an expired access token) is not a refusal and is shown
-    as it is."""
-    import ee
-
-    text = str(exc).lower()
-    return isinstance(exc, ee.EEException) and ("not found" in text or "caller does not have access" in text)
-
-
 async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None, rgb=False,
                              bands=(), band=None, colormap="viridis", vmin=None, vmax=None, palette="", month="",
                              show_in_analysis=False, editing=None) -> dict:
@@ -84,7 +73,7 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
         try:
             count = await gee_interface.get_info_async(vis_layers.nicfi_access_request(region))
         except Exception as exc:  # noqa: BLE001 - no access reads as an Earth Engine error
-            if not _no_access(exc):
+            if not ee_no_access(exc):
                 raise
             count = 0
         if not isinstance(count, (int, float)) or count <= 0:

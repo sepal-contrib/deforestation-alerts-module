@@ -446,6 +446,77 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
     assert save_btn.loading is False and save_btn.disabled is False
 
 
+def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_warning(
+    monkeypatch, tmp_path
+):
+    """The OLD guard (a False Positive with a polygon drawn) is a refusal, not
+    a failure: a FAILED task with its reason and one warning toast, no error
+    toast, and the set's store is not written."""
+    from datetime import datetime
+
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    import gui.tile.analysis.export as export
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+    from gui.scripts.set_context import SetContext
+
+    class _AdminLookups:  # stands in for ``export.ee``: the FAO/GAUL lookups
+        def __getattr__(self, name):
+            return lambda *a, **k: self
+
+        def getInfo(self):  # noqa: N802 - Earth Engine's name
+            return "Brasil, "
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    now = datetime.now()
+    rel = "periods/per/sets/glad-l"
+    p = Project(name="d", created_at=now, updated_at=now)
+    p.alert_sets["x"] = AlertSet(
+        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
+        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
+        fingerprint="f", created_at=now,
+    )
+    p.active_set = "x"
+    app_state = AppState()
+    app_state.new_project_state(p)
+    store = tmp_path / "d" / rel / "alert_db.parquet"
+    store.parent.mkdir(parents=True)
+    store.write_bytes(b"set x's store")
+    app_state.alerts_gdf.value = gpd.GeoDataFrame(
+        {"status": ["Not reviewed"], "set_id": ["x"]},
+        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
+    )
+    app_state.actual_alert_id.value = 0
+    analysis = AnalysisState()
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 0.001, 0.001)], crs="EPSG:4326"))
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model="False Positive"),
+        driver_combobox=SimpleNamespace(v_model=[]),
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    ctx = SetContext(app_state)
+    card = export.build_export(widgets=widgets, app_state=app_state, aux_model=ctx,
+                               analysis=analysis, app_tile_model=ctx)
+    feedback = _record_feedback(monkeypatch, export)
+
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    save_btn.fire_event("click", None)
+    feedback.join()
+
+    expected = t("analysis_tile.questionarie.false_positive_drawn")
+    task = feedback.task()
+    assert task.status == TaskStatus.FAILED and task.error_message == expected
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", expected)]
+    assert store.read_bytes() == b"set x's store"
+    assert download_btn.disabled is True
+    assert save_btn.loading is False and save_btn.disabled is False
+
+
 def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):

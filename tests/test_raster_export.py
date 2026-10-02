@@ -245,22 +245,31 @@ def test_wait_notice_fires_only_for_the_download_that_queues(tmp_path):
 
 
 def test_lock_timeout_still_raises(tmp_path, monkeypatch):
-    """A wedged download must still become a visible TimeoutError."""
+    """A download still waiting after the timeout becomes a visible
+    TimeoutError. Another session's national download can legitimately hold
+    the lock that long, so the user reads what happened and what to do."""
     from unittest.mock import MagicMock
 
     import ee
 
+    from deforestation_alerts.errors import KeyedError
     from deforestation_alerts.scripts import raster_export
+    from gui.i18n import t
+    from gui.scripts.error_text import error_text
 
     monkeypatch.setattr(raster_export, "_DOWNLOAD_LOCK_TIMEOUT_S", 0.05)
     assert raster_export._DOWNLOAD_LOCK.acquire(blocking=False)
     try:
-        with pytest.raises(TimeoutError):
+        with pytest.raises(TimeoutError) as waited:
             raster_export.download_ee_image(
                 MagicMock(spec=ee.Image), str(tmp_path / "x.tif")
             )
     finally:
         raster_export._DOWNLOAD_LOCK.release()
+    assert isinstance(waited.value, KeyedError) and waited.value.key == "errors.download_busy"
+    assert waited.value.values == {"minutes": 0, "file": "x.tif"}
+    assert error_text(waited.value) == t("errors.download_busy", minutes=0, file="x.tif")
+    assert "x.tif" in error_text(waited.value)
 
 
 def test_export_options_reach_geedim(tmp_path):

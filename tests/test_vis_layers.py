@@ -332,10 +332,15 @@ def test_nicfi_without_access_is_refused_naming_the_region(requests):
     ("Too many concurrent access requests.", False),
 ])
 def test_only_ee_s_no_access_answer_is_a_refusal(text, refused):
+    """One check, shared with ``error_text``: the modal's refusal and the
+    toast's wording cannot disagree."""
     import ee
 
-    assert vlm._no_access(ee.EEException(text)) is refused
-    assert vlm._no_access(RuntimeError("caller does not have access")) is False  # not an Earth Engine answer
+    from gui.scripts.error_text import ee_no_access
+
+    assert not hasattr(vlm, "_no_access")
+    assert ee_no_access(ee.EEException(text)) is refused
+    assert ee_no_access(RuntimeError("caller does not have access")) is False  # not an Earth Engine answer
 
 
 # ---------------------------------------------------------------- the modal, rendered
