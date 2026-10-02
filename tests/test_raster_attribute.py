@@ -193,3 +193,18 @@ def test_build_attribute_config_empty_when_nothing_included():
     rows = [{"include": False, "band": "a", "stat": "mean", "column": "a"}]
     cfg = ra.build_attribute_config("/x.tif", "local", rows)
     assert cfg["bands"] == []
+
+
+def test_display_column_is_safe_column_before_the_ends_are_trimmed():
+    assert ra.display_column(" Land--cover ") == "_land_cover_"
+    assert ra.safe_column(" Land--cover ") == "land_cover"
+    assert ra.display_column(None) == "" and ra.safe_column(None) == "band"
+
+
+def test_build_attribute_config_keeps_a_bands_projection_only_when_known():
+    rows = [{"include": True, "band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0},
+            {"include": True, "band": "lc", "stat": "majority", "column": "lc", "crs": None, "scale": None}]
+    assert ra.build_attribute_config("x", "gee", rows)["bands"] == [
+        {"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0},
+        {"band": "lc", "stat": "majority", "column": "lc"},
+    ]

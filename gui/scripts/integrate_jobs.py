@@ -21,7 +21,8 @@ must record it, whatever happens next:
   project whose grid is gone. The files the run swapped in stay on disk; the
   user is told to run again, and the previous record, if any, reads STALE.
 - An empty set is still recorded, gets no tiles, and stays on the step with an
-  info toast (review focus 1, spec §12).
+  info toast (review focus 1, spec §12) that lists each source's outcome, the
+  sources left out of the run included (spec §7.4).
 """
 
 import logging
@@ -171,9 +172,41 @@ def _publish_alerts(app_state, name: str, result) -> bool:
         return True
 
 
-def run_integration_job(app_state, notifier, job, *, navigate: bool = True) -> None:
+def outcome_lines(outcomes: dict, left_out: dict) -> list:
+    """What each source gave an empty set (spec §7.4), by source name, then
+    the sources left out of the run (not covered, or no data for the period).
+
+    ``outcomes`` is ``IntegrationResult.outcomes``: a source's alert pixels
+    with and without the masks, ``{}`` when its file was never counted.
+    """
+    lines = []
+    for source in sorted(outcomes, key=str.casefold):
+        st = outcomes[source] or {}
+        kept, before = int(st.get("alert_pixels", 0)), int(st.get("alert_pixels_unmasked", 0))
+        if kept:
+            lines.append(t("steps.integrate.outcome_pixels", source=source, n=f"{kept:,}"))
+        elif before:
+            lines.append(t("steps.integrate.outcome_masked", source=source, n=f"{before:,}"))
+        else:
+            lines.append(t("steps.integrate.outcome_none", source=source))
+    lines += [t("steps.integrate.outcome_left_out", source=s) for s in sorted(left_out or {}, key=str.casefold)]
+    return lines
+
+
+def _empty_message(result, left_out) -> str:
+    lines = outcome_lines(result.outcomes, left_out)
+    if not lines:
+        return t("steps.integrate.done_empty")
+    return t("steps.integrate.done_empty_detail", details="; ".join(lines))
+
+
+def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left_out: Optional[dict] = None) -> None:
     """The worker body: run the engine, build the tiles, record the set, and
-    open Analysis when there is something to review (spec §7.4 step 9)."""
+    open Analysis when there is something to review (spec §7.4 step 9).
+
+    ``left_out``: the period's sources the form showed disabled, by name,
+    with the reason; an empty set's toast names them.
+    """
     name = job.project.name
     with writing(name), tracked_job(notifier, t("steps.integrate.job_title"), total_steps=5) as task:
         result = run_integration(job, on_step=lambda key: task.step(t(key)))
@@ -212,6 +245,6 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True) -> N
             if n:
                 notifier.success(t("steps.integrate.done", n=result.alert_set.n_alerts))
             else:
-                notifier.info(t("steps.integrate.done_empty"))
+                notifier.info(_empty_message(result, left_out))
         if navigate and n:
             app_state.current_page_view.value = ANALYSIS_VIEW

@@ -29,6 +29,12 @@ def safe_column(name):
     return col or "band"
 
 
+def display_column(text) -> str:
+    """What the column field shows while typing: lower case, other characters
+    as ``_`` (``safe_column`` also trims the ends when the config is built)."""
+    return re.sub(r"[^0-9a-zA-Z]+", "_", str(text or "")).lower()
+
+
 def resolve_column_names(specs, reserved=()):
     """Return specs with each `column` made unique vs `reserved` + earlier specs
     (suffix `_2`, `_3`, …). Falls back to the band name when `column` is blank."""
@@ -159,13 +165,16 @@ def build_attribute_config(source, kind, band_rows, reserved=ALERT_RESERVED_COLU
     """Assemble the ``attribute_raster`` config from Aux-tile rows.
 
     `band_rows`: list of ``{"include": bool, "band": str, "stat": str,
-    "column": str}``. Keeps only included rows, sanitizes the output column
+    "column": str}``, an Earth Engine band's also with its ``crs`` and
+    ``scale`` (metres, ``nominalScale``), which are kept for Integrate's
+    free-space estimate. Keeps only included rows, sanitizes the output column
     (defaulting to the band name) and de-duplicates it vs `reserved` + earlier
     included rows. Returns ``{"source", "kind", "bands": [...]}``.
     """
     included = [
         {"band": r["band"], "stat": r["stat"],
-         "column": safe_column(r.get("column") or r["band"])}
+         "column": safe_column(r.get("column") or r["band"]),
+         **{k: r[k] for k in ("crs", "scale") if r.get(k) is not None}}
         for r in band_rows if r.get("include")
     ]
     included = resolve_column_names(included, reserved=reserved)

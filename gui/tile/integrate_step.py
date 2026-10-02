@@ -19,19 +19,28 @@ only while this step is showing with "Drawn polygon" chosen (ruling #77).
 pysepal's ``show()`` and ``hide()`` both clear the drawing, so they run only
 when that visibility changes, and the form's unmount takes its control off
 the map.
+
+The source checklist (spec §7.4) offers every source whose raw and harmonized
+files are current, with what its harmonized file found, and shows a source of
+the period that is not covered or has no data disabled, with the reason; the
+run is told which were left out, for an empty set's toast.
 """
+
+from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
 from pysepal.mapping.draw_control import DrawControl
 from pysepal.solara.notifications import use_notifications
 
+from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.engine.integrate import IntegrationJob, min_cluster_pixels
-from deforestation_alerts.engine.plan import ready_sources
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t
+from gui.scripts.coverage_ui import note_text, result_note
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
     params_from_form,
@@ -50,13 +59,41 @@ def _inflight_key(project: str) -> str:
     return f"integrate:{project}"
 
 
+def integrate_choices(p, pdir, period) -> list:
+    """The checklist: ``{"source", "label", "enabled", "note"}`` for every
+    ready source (enabled, what its harmonized file found as the note) and
+    every source not covered or without data for the period (disabled, the
+    reason as the note). A source merely not built yet is not listed."""
+    out = []
+    for r in plan_prepare(p, pdir, period):
+        if r.ready:
+            note = result_note(r.stats)
+            out.append({"source": r.source, "label": r.source, "enabled": True, "note": note["text"] if note else ""})
+        elif r.coverage in (NOT_COVERED, NO_DATA):
+            out.append({"source": r.source, "label": r.source, "enabled": False,
+                        "note": note_text(r.notes[0]) if r.notes else ""})
+    return out
+
+
+def _short(src) -> str:
+    """A GeoTIFF by its file name; an Earth Engine asset id as is."""
+    return Path(src).name if "/" in str(src) and Path(src).suffix else str(src)
+
+
+def _attribute_title(attribute) -> str:
+    if attribute and attribute.get("bands"):
+        return t("steps.integrate.attributes_named", name=_short(attribute["source"]))
+    return t("steps.integrate.attributes")
+
+
 @solara.component
 def IntegrateStep(app_state, map_, gee_interface):
     # Session-wide, like the step: a run outlives the form it was started from.
     inflight = solara.use_memo(InflightKeys, [])
     p = app_state.project.value
     period = workflow_steps.active_period(p)
-    ready = ready_sources(p, paths.project_dir(p.name), period) if period is not None and p.grid else []
+    choices = integrate_choices(p, paths.project_dir(p.name), period) if period is not None and p.grid else []
+    ready = [c["source"] for c in choices if c["enabled"]]
     if not ready:
         solara.Info(t("workflow.lock_integrate"))
         return
@@ -68,7 +105,7 @@ def IntegrateStep(app_state, map_, gee_interface):
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
         app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight,
-        name=p.name, period=period, ready=ready, resolution=p.grid.resolution,
+        name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
         last=active.params if active is not None else None, showing=showing,
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
@@ -76,9 +113,11 @@ def IntegrateStep(app_state, map_, gee_interface):
 
 
 @solara.component
-def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, ready, resolution, last,
+def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choices, resolution, last,
                    showing, active_label=None, active_status=None):
     notifications = use_notifications()
+    ready = [c["source"] for c in choices if c["enabled"]]
+    left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
     draw = solara.use_memo(lambda: DrawControl(map_), [])
     draw_shown = solara.use_ref(False)
     picked, set_picked = solara.use_state(None)  # None: every ready source
@@ -132,7 +171,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, ready
 
         def _run():
             try:
-                run_integration_job(app_state, notifications, job)
+                run_integration_job(app_state, notifications, job, left_out=left_out)
             finally:
                 inflight.release(key)
 
@@ -165,8 +204,10 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, ready
         solara.Markdown(f"### {t('steps.integrate.title')}")
         solara.Text(t("steps.integrate.description"), classes=["text--secondary"])
         solara.Text(t("steps.integrate.sources"), style="font-weight:600;")
-        for s in ready:
-            rv.Checkbox(label=s, v_model=s in chosen, dense=True, hide_details=True,
+        for c in choices:  # a disabled one shows why it is left out
+            s = c["source"]
+            rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
+                        disabled=not c["enabled"], dense=True, hide_details=True,
                         on_v_model=lambda v, s=s: _toggle_source(s, v))
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
@@ -181,7 +222,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, ready
                      persistent_hint=True)
         with rv.ExpansionPanels(flat=True, v_model=attribute_panel, on_v_model=_on_panel):
             with rv.ExpansionPanel():
-                rv.ExpansionPanelHeader(children=[t("steps.integrate.attributes")])
+                rv.ExpansionPanelHeader(children=[_attribute_title(attribute)])
                 with rv.ExpansionPanelContent():
                     if attribute_opened:
                         AttributeForm(gee_interface=gee_interface, value=attribute, on_value=set_attribute)

@@ -45,7 +45,7 @@ from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import step_index
 from gui.tile import integrate_step
-from gui.widget import attribute_form
+from gui.widget import attribute_form, raster_input
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 FC = {"type": "FeatureCollection", "features": [
@@ -175,7 +175,7 @@ def _art(key, kind="store"):
 def _result(n):
     alerts = gpd.GeoDataFrame({"alert_id": list(range(n))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
     s = _set("x", 0).model_copy(update={"n_alerts": n})
-    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts)
+    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={})
 
 
 def _tiles(monkeypatch, available=True, fail=None):
@@ -206,6 +206,24 @@ def test_zero_alerts_still_records_the_set_and_skips_tiles(monkeypatch, tmp_path
     assert state.current_page_view.value != "analysis_tile"  # nothing to review
     assert notifier.toasts == [("info", t("steps.integrate.done_empty"))]
     assert len(state.alerts_gdf.value) == 0 and state.actual_alert_id.value == -1
+
+
+def test_an_empty_set_lists_each_sources_outcome(monkeypatch, tmp_path):
+    """Spec §7.4: the info toast of an empty set says what each source gave,
+    the left-out sources included."""
+    state = _open("d")
+    result = _result(0)
+    result.outcomes = {"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 7},
+                       "GLAD-L": {"alert_pixels": 3, "alert_pixels_unmasked": 3}}
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: result)
+    _tiles(monkeypatch)
+    notifier = _Notifier()
+    integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"),
+                                       left_out={"GLAD-S2": "GLAD-S2 does not cover this AOI"})
+    details = "; ".join([t("steps.integrate.outcome_pixels", source="GLAD-L", n="3"),
+                         t("steps.integrate.outcome_masked", source="RADD", n="7"),
+                         t("steps.integrate.outcome_left_out", source="GLAD-S2")])
+    assert notifier.toasts == [("info", t("steps.integrate.done_empty_detail", details=details))]
 
 
 def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monkeypatch, tmp_path):
@@ -468,12 +486,19 @@ def _render(state):
 @pytest.fixture
 def step(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], jobs=[], runs=[], attribute=[], draws=[])
-    monkeypatch.setattr(integrate_step, "ready_sources", lambda p, pdir, period: list(ns.ready))
+    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], attribute=[],
+                         draws=[])
+    monkeypatch.setattr(integrate_step, "integrate_choices", lambda p, pdir, period: [
+        {"source": s, "label": s, "enabled": True, "note": ""} for s in ns.ready] + [
+        {"source": s, "label": s, "enabled": False, "note": why} for s, why in ns.left_out.items()])
     # Jobs are queued, not started: the test runs them (``run_jobs``).
     monkeypatch.setattr(integrate_step, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
-    monkeypatch.setattr(integrate_step, "run_integration_job",
-                        lambda app_state, notifier, job, **kw: ns.runs.append(job))
+
+    def _run_job(app_state, notifier, job, **kw):
+        ns.runs.append(job)
+        ns.kwargs.append(kw)
+
+    monkeypatch.setattr(integrate_step, "run_integration_job", _run_job)
 
     @solara.component
     def _RecorderAttributeForm(gee_interface, value, on_value):
@@ -797,6 +822,62 @@ def test_the_attribute_raster_form_mounts_when_opened_and_reaches_the_job(step):
         rc.close()
 
 
+def test_a_left_out_source_is_shown_disabled_with_its_reason_and_reaches_the_toast(step):
+    """Spec §7.4: a source of the period that is not covered or has no data
+    is listed, disabled, with why; the job is told what was left out."""
+    step.ready = ["GLAD-L"]
+    step.left_out = {"GLAD-S2": "GLAD-S2 does not cover this AOI"}
+    map_, rc = _render(_state(_project("d", "GLAD-L", "GLAD-S2")))
+    try:
+        left = _checkbox(rc, "GLAD-S2 · GLAD-S2 does not cover this AOI")
+        assert left.disabled and left.v_model is False
+        assert not _checkbox(rc, "GLAD-L").disabled
+        assert t("steps.integrate.will_create", period=JAN.id, sources="GLAD-L") in _texts(rc)
+        _run(rc)
+        step.run_jobs()
+        assert step.runs[0].sources == ["GLAD-L"]
+        assert step.kwargs == [{"left_out": {"GLAD-S2": "GLAD-S2 does not cover this AOI"}}]
+    finally:
+        rc.close()
+
+
+def test_the_lock_stays_while_only_left_out_sources_exist(step):
+    step.ready = []
+    step.left_out = {"RADD": "RADD starts 2020-01-01 here"}
+    map_, rc = _render(_state(_project("d", "RADD")))
+    try:
+        assert [w.children for w in rc.find(v.Alert).widgets] == [[t("workflow.lock_integrate")]]
+    finally:
+        rc.close()
+
+
+def _panel_header(rc):
+    return rc.find(v.ExpansionPanelHeader).widget.children
+
+
+def test_the_attribute_panel_header_names_the_raster(step):
+    """The collapsed header says which raster the set uses (slice-1 deferral):
+    from the active set before the panel is ever opened, then as edited."""
+    cfg = {"source": "/home/u/rasters/landcover.tif", "kind": "local",
+           "bands": [{"band": "lc", "stat": "majority", "column": "lc"}]}
+    step.ready = ["GLAD-L"]
+    state = _state(_project("d", "GLAD-L", sets=[_set("x", 0, params=AlertSetParams(attribute_config=cfg))]))
+    map_, rc = _render(state)
+    try:
+        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="landcover.tif")]
+        rc.find(v.ExpansionPanels).widget.v_model = 0
+        _, on_value = step.attribute[-1]
+        on_value({"source": "users/me/lc_2020", "kind": "gee",
+                  "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]})
+        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="users/me/lc_2020")]
+        on_value({"source": "users/me/lc_2020", "kind": "gee", "bands": []})  # every band unticked
+        assert _panel_header(rc) == [t("steps.integrate.attributes")]
+        on_value(None)
+        assert _panel_header(rc) == [t("steps.integrate.attributes")]
+    finally:
+        rc.close()
+
+
 def test_another_projects_run_neither_shows_nor_blocks_this_one(step):
     """Review focus 5 at the UI level: the in-flight key belongs to the project
     that started the run."""
@@ -837,8 +918,8 @@ def pickers(monkeypatch):
     def _File(extensions, value, label):
         ns.path = value
 
-    monkeypatch.setattr(attribute_form, "AssetSelectComponent", _Asset)
-    monkeypatch.setattr(attribute_form, "FileInputComponent", _File)
+    monkeypatch.setattr(raster_input, "AssetSelectComponent", _Asset)
+    monkeypatch.setattr(raster_input, "FileInputComponent", _File)
     return ns
 
 
@@ -877,7 +958,7 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "local"
+            rc.find(v.RadioGroup).widget.v_model = "file"
             load = _button(rc, t("steps.integrate.attr_load"))
             load.fire_event("click", None)
             await _settle(lambda: t("steps.integrate.attr_no_source") in _texts(rc))
@@ -915,7 +996,7 @@ def test_attribute_form_shows_a_load_failure_next_to_the_field(pickers, tmp_path
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "local"
+            rc.find(v.RadioGroup).widget.v_model = "file"
             pickers.path.set(str(tmp_path / "missing.tif"))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
             await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
@@ -931,15 +1012,89 @@ def test_attribute_form_restores_a_saved_config(pickers):
            "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=[]), handle_error=False)
     try:
-        assert rc.find(v.RadioGroup).widget.v_model == "local" and pickers.path.value == "/home/u/lc.tif"
+        assert rc.find(v.RadioGroup).widget.v_model == "file" and pickers.path.value == "/home/u/lc.tif"
         assert _checkbox(rc, "lc").v_model is True
         assert [w.v_model for w in rc.find(v.Select).widgets] == ["median"]
     finally:
         rc.close()
 
 
+def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
+    """Spec §7.4: the column field shows the sanitised name; a name the
+    de-duplication changed says what is written instead."""
+    tif = _geotiff(tmp_path / "lc.tif", ["lc", "count"])
+    seen = []
+
+    async def main():
+        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
+        try:
+            rc.find(v.RadioGroup).widget.v_model = "file"
+            pickers.path.set(str(tif))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen)
+            lc, count = rc.find(v.TextField).widgets
+            assert (lc.v_model, lc.persistent_hint) == ("lc", False)
+            # "count" is an alert column already: written as count_2
+            assert count.v_model == "count" and count.persistent_hint
+            assert count.hint == t("steps.integrate.attr_written_as", column="count_2")
+
+            lc.v_model = "Land Cover "
+            lc, _ = rc.find(v.TextField).widgets
+            assert lc.v_model == "land_cover_"  # what is typed stays readable
+            assert seen[-1]["bands"][0]["column"] == "land_cover"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_attribute_form_remove_drops_a_stale_error(pickers, tmp_path):
+    cfg = {"source": "/home/u/lc.tif", "kind": "local",
+           "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
+    seen = []
+
+    async def main():
+        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+        try:
+            pickers.path.set(str(tmp_path / "missing.tif"))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
+            _button(rc, t("steps.integrate.attr_clear")).fire_event("click", None)
+            assert seen == [None] and not any("missing.tif" in s for s in _texts(rc))
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_attribute_form_keeps_a_saved_bands_projection_on_edit(pickers):
+    """Task 15's free-space gate reads each band's crs/scale: an edit of a
+    reopened config must not drop them (it would fall back to 10 m in 4326)."""
+    cfg = {"source": "users/me/lc", "kind": "gee",
+           "bands": [{"band": "b1", "stat": "majority", "column": "b1", "crs": "EPSG:32721", "scale": 30.0}]}
+    seen = []
+    box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+    try:
+        assert rc.find(v.RadioGroup).widget.v_model == "gee"
+        assert pickers.asset.value["asset_id"] == "users/me/lc"
+        rc.find(v.Select).widget.v_model = "mean"
+        assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "b1", "crs": "EPSG:32721",
+                                      "scale": 30.0}]
+    finally:
+        rc.close()
+
+
 def test_attribute_form_reads_an_images_band_names_through_the_session_interface(pickers, gee):
+    """Both requests go through the session's interface: the band names, then
+    each band's projection, whose scale (``nominalScale``, metres) is what
+    Integrate's free-space gate reads."""
     import ee
+
+    from deforestation_alerts.engine.download import estimate_native_bytes
+    from deforestation_alerts.scripts.attribute_source import download_estimate
+
+    projections = {"landcover": {"crs": "EPSG:32721", "scale": 30.0},
+                   "elevation": {"crs": "EPSG:4326", "scale": 92.76624232772798}}
 
     class _Gee:
         def __init__(self):
@@ -947,7 +1102,7 @@ def test_attribute_form_reads_an_images_band_names_through_the_session_interface
 
         async def get_info_async(self, obj):
             self.asked.append(obj)
-            return ["landcover", "elevation"]
+            return ["landcover", "elevation"] if len(self.asked) == 1 else projections
 
     fake, seen = _Gee(), []
 
@@ -961,7 +1116,20 @@ def test_attribute_form_reads_an_images_band_names_through_the_session_interface
             rc.close()
 
     asyncio.run(main())
-    assert len(fake.asked) == 1 and isinstance(fake.asked[0], ee.ComputedObject)
+    assert len(fake.asked) == 2 and all(isinstance(o, ee.ComputedObject) for o in fake.asked)
     assert seen == [{"source": "users/me/landcover", "kind": "gee", "bands": [
-        {"band": "landcover", "stat": "majority", "column": "landcover"},
-        {"band": "elevation", "stat": "majority", "column": "elevation"}]}]
+        {"band": "landcover", "stat": "majority", "column": "landcover", "crs": "EPSG:32721", "scale": 30.0},
+        {"band": "elevation", "stat": "majority", "column": "elevation", "crs": "EPSG:4326",
+         "scale": 92.76624232772798}]}]
+    assert download_estimate(seen[-1], PARAGUAY) == sum(
+        estimate_native_bytes(PARAGUAY, (b["crs"], b["scale"])) // 2 for b in projections.values())
+
+
+def test_the_band_projections_request_reads_metres(gee):
+    """Live: the request the form sends returns each band's nominal scale in
+    metres, also for a band in a geographic CRS."""
+    from deforestation_alerts.engine import user_raster
+
+    got = user_raster.band_projections_request("USGS/SRTMGL1_003", ["elevation"]).getInfo()
+    assert got["elevation"]["crs"] == "EPSG:4326"
+    assert 25 < got["elevation"]["scale"] < 35  # 1 arc-second, in metres
