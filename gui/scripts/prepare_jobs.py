@@ -1,6 +1,10 @@
 """Run Download & harmonize rows on a worker thread (spec §7.3).
 
-One job runs its rows one at a time. Before each row it re-reads the live
+One job runs its rows one at a time: mask rows (``("mask", name)``: download
+and align a project mask) and source rows (``("source", name)``), in the
+order given, so Run all aligns the period's masks before the sources read
+them. A keep mask on in the period that covers none of the AOI warns when its
+alignment finishes. Before each row it re-reads the live
 project and stops when that row would no longer belong to the run it was
 started as: the user stopped it, closed or switched the project, or changed
 the period or the AOI (the Earth Engine AOI is fixed when the run starts, so a
@@ -35,19 +39,21 @@ from typing import Any, Optional
 import solara
 
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, UNCHECKED
-from deforestation_alerts.engine.fingerprint import Status, harm_key
+from deforestation_alerts.engine.fingerprint import Status, harm_key, mask_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import (
     CoverageRefused,
     HarmonizeFailed,
+    MaskJob,
     SourceJob,
     apply_artifacts,
+    run_mask_row,
     run_source_row,
 )
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
 from gui.i18n import t
-from gui.scripts import source_layers
+from gui.scripts import raster_map, source_layers
 from gui.scripts.coverage_ui import note_text, row_notes
 from gui.scripts.notify_bridge import (
     ERROR_TOAST_TIMEOUT,
@@ -74,8 +80,9 @@ class PrepareContext:
     meta: dict  # catalogue metadata by catalogue key; only a GLAD-L row that downloads needs it
     aoi: Any  # ee.FeatureCollection; None only when it is unavailable and no row downloads
     cancel: threading.Event
-    row_errors: Optional[solara.Reactive] = None  # {source: message}; None in tests
+    row_errors: Optional[solara.Reactive] = None  # {source or "@mask:<name>": message}; None in tests
     errors_lock: Any = None  # threading.Lock shared by the step's jobs around ``row_errors``
+    on_warning: Any = None  # called with a warning's text; None: ``notifier.warning`` (tests record it)
 
 
 def _digest(p) -> Optional[str]:
@@ -169,48 +176,104 @@ def _failure_toast(source: str, exc: BaseException, message: str) -> str:
     return t("steps.prepare.row_failed", source=source, error=message)
 
 
-def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
+def _items(rows) -> list:
+    """``("mask", name)`` / ``("source", name)`` items; a bare string is a source."""
+    return [r if isinstance(r, tuple) else ("source", r) for r in rows]
+
+
+def _warn_if_covers_none(ctx: PrepareContext, name: str, arts: dict) -> None:
+    """A keep mask on in the period whose aligned file has no on-pixel would
+    remove every alert: say so when its alignment finishes (spec §7.3)."""
+    art = arts.get(mask_key(name))
+    if art is None or int(art.stats.get("on_pixels", 1)) != 0:
+        return
+    live = ctx.app_state.project.value
+    period = live.periods.get(ctx.period.id) if live is not None else None
+    choice = period.masks.get(name) if period is not None else None
+    if choice is None or not choice.on or choice.mode != "keep":
+        return
+    message = t("steps.prepare.mask_covers_none", mask=name)
+    if ctx.on_warning is not None:
+        ctx.on_warning(message)
+    elif ctx.notifier is not None:
+        ctx.notifier.warning(message)
+
+
+def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> None:
+    """Redraw a row's layer already on the map from its new file (spec §6.2,
+    §9.1; ``refresh`` rebuilds on a new content id): a source's harmonized
+    file (``src:<source>``), a mask's aligned file (``mask:<name>``)."""
+    if kind == "mask":
+        art, key = arts.get(mask_key(name)), f"mask:{name}"
+        if art is None or not ctx.layers.is_on(key):
+            return
+        path = paths.resolve(ctx.pdir, art.rel_path)
+        build = (lambda m=ctx.map_, f=path, k=key, n=name: raster_map.add_raster_layer(
+            m, f, key=k, name=n, band=1, colormap=raster_map.MASK_COLORMAP, vmin=1, vmax=1, nodata=0,
+            opacity=raster_map.MASK_OPACITY))
+        ctx.layers.refresh(key, build, art.content_id)
+        return
+    art, key = arts.get(harm_key(ctx.period.id, name)), f"src:{name}"
+    if art is not None and ctx.layers.is_on(key):
+        path = paths.resolve(ctx.pdir, art.rel_path)
+        ctx.layers.refresh(key, source_layers.harmonized_builder(ctx.map_, path, key, name), art.content_id)
+
+
+def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
+    """Run ``rows`` (``("mask", name)`` / ``("source", name)`` items, a bare
+    string being a source) one at a time, in order: Run all puts the
+    period's masks first (spec §7.3). Each row starts from a deep copy of the
+    live project, so a row sees the masks aligned before it, and a mask
+    switched while a row runs leaves that row recorded with the old choice
+    (it then reads out of date: review focus 4). A mask row's error is keyed
+    ``@mask:<name>`` in ``row_errors``."""
     aoi_digest = _digest(ctx.app_state.project.value)
+    items = _items(rows)
     with writing(ctx.name), tracked_job(ctx.notifier, t("steps.prepare.job_title"),
-                                        total_steps=len(sources)) as task:
-        for source in sources:
+                                        total_steps=len(items)) as task:
+        for kind, name in items:
             if ctx.cancel.is_set():
                 raise asyncio.CancelledError()  # pysepal marks the task CANCELLED
             live = _live(ctx, aoi_digest)
             if live is None:
                 return
-            src = live.sources.get(source)
-            if src is None:
-                continue  # removed from the project meanwhile
-            task.step(t("steps.prepare.job_row", source=source))
-            job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
-                            source=source, aoi=ctx.aoi, force=force,
-                            meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L" else None)
+            if kind == "mask":
+                if name not in live.masks:
+                    continue  # removed from the project meanwhile
+                task.step(t("steps.prepare.job_mask_row", mask=name))
+                job = MaskJob(project=live.model_copy(deep=True), pdir=ctx.pdir, name=name, aoi=ctx.aoi,
+                              force=force)
+                run, error_key = run_mask_row, f"@mask:{name}"
+            else:
+                src = live.sources.get(name)
+                if src is None:
+                    continue  # removed from the project meanwhile
+                task.step(t("steps.prepare.job_row", source=name))
+                job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
+                                source=name, aoi=ctx.aoi, force=force,
+                                meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
+                                else None)
+                run, error_key = run_source_row, name
             try:
-                arts = run_source_row(job, on_tiles=tile_progress_reporter(task))
+                arts = run(job, on_tiles=tile_progress_reporter(task))
             except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)
-                logger.exception("row %s failed", source)
+                logger.exception("row %s failed", error_key)
                 message = _failure_text(exc)
-                _set_error(ctx, source, message)
+                _set_error(ctx, error_key, message)
                 if ctx.notifier is not None:
-                    ctx.notifier.error(_failure_toast(source, exc, message), timeout=ERROR_TOAST_TIMEOUT)
+                    ctx.notifier.error(_failure_toast(name, exc, message), timeout=ERROR_TOAST_TIMEOUT)
                 if isinstance(exc, HarmonizeFailed) and exc.artifacts:
-                    # The download succeeded: record it, so the next run only
-                    # re-harmonizes from the file on disk.
+                    # The download (or the AOI raster) succeeded: record it, so
+                    # the next run only re-harmonizes (re-aligns) from disk.
                     kept = exc.artifacts
                     if not ctx.app_state.update_project(ctx.name, lambda p, a=kept: apply_artifacts(p, a)):
                         _record_in_own_project(ctx, kept)  # the project was left mid-row
                         return
                 continue
-            _set_error(ctx, source, None)
+            _set_error(ctx, error_key, None)
             if not ctx.app_state.update_project(ctx.name, lambda p, a=arts: apply_artifacts(p, a)):
                 _record_in_own_project(ctx, arts)  # the project was left mid-row
                 return
-            harm = arts.get(harm_key(ctx.period.id, source))
-            key = f"src:{source}"
-            if harm is not None and ctx.layers.is_on(key):
-                # spec §6.2/§9.1: a source already on the map is redrawn from
-                # its new harmonized file (``refresh`` rebuilds on a new content id)
-                path = paths.resolve(ctx.pdir, harm.rel_path)
-                ctx.layers.refresh(key, source_layers.harmonized_builder(ctx.map_, path, key, source),
-                                   harm.content_id)
+            if kind == "mask":
+                _warn_if_covers_none(ctx, name, arts)
+            _refresh_layer(ctx, kind, name, arts)

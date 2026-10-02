@@ -451,6 +451,10 @@ def _render(state, layers=None, map_=None):
                           handle_error=False)
 
 
+def _named(items):
+    return [name if kind == "source" else (kind, name) for kind, name in prepare_jobs._items(items)]
+
+
 @pytest.fixture
 def step(monkeypatch, tmp_path):
     """No Earth Engine: the step only reads ``catalogue_meta`` (``_state``
@@ -466,8 +470,9 @@ def step(monkeypatch, tmp_path):
     monkeypatch.setattr(prepare_step, "ProductTable", _RecorderTable)
     # Jobs are queued, not started: the test runs them (``run_jobs``).
     monkeypatch.setattr(prepare_step, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
+    # A job's items as the tests read them: a source by its bare name, a mask as ("mask", name).
     monkeypatch.setattr(prepare_step, "run_rows",
-                        lambda ctx, sources, force=False: ns.started.append((ctx, list(sources), force)))
+                        lambda ctx, items, force=False: ns.started.append((ctx, _named(items), force)))
 
     def plan(*rows):
         monkeypatch.setattr(prepare_step, "plan_prepare", lambda p, pdir, period: list(rows))
@@ -655,7 +660,8 @@ def test_stop_reaches_a_run_all_after_another_row_started(step, monkeypatch):
 
     box, rc = _render(state)
 
-    def run_all_blocked_mid_row(ctx, sources, force=False):
+    def run_all_blocked_mid_row(ctx, items, force=False):
+        sources = _named(items)
         contexts[tuple(sources)] = ctx
         if sources == ["GLAD-L"]:  # Run all, still in its current row
             step.table[-1][1]["actions"][1]["on_click"]()  # Re-download the ready RADD row
@@ -1107,6 +1113,150 @@ def test_a_refusal_toast_names_its_source_once(monkeypatch):
     reason = t("coverage.not_covered_glad_s2", source="GLAD-S2")
     assert notifier.errors == [t("coverage.not_covered_row", reason=reason),
                                t("steps.prepare.row_failed", source="GLAD-L", error=t("coverage.unchecked"))]
+
+
+# ---------------------------------------------------------------------------
+# Mask rows in the step's jobs (Task 25)
+# ---------------------------------------------------------------------------
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+
+
+def _with_mask(*, origin="gee", tmp_path=None, sidecar=True, periods=(JAN,)):
+    """Project ``d`` with GLAD-L and a mask ``forest`` on (keep) in every one
+    of ``periods``, never aligned, the first of them active."""
+    from deforestation_alerts.project.models import NativeGrid, add_mask, set_period_mask
+
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    p.periods = {per.id: per for per in periods}
+    p.active_period = periods[0].id
+    if origin == "gee":
+        add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
+                 native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=periods[0].id)
+    else:
+        tif = tmp_path / "forest.tif"
+        tif.write_bytes(b"")
+        add_mask(p, name="forest", origin="file", ref=str(tif), asset_type="FILE", band=1, native=None,
+                 mode="keep", period_id=periods[0].id)
+    for per in periods[1:]:
+        set_period_mask(p, per.id, "forest", on=True, mode="keep")
+    if sidecar:
+        p.aoi = p.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR})
+    return p
+
+
+def _recording_inflight(monkeypatch):
+    claims = []
+
+    class _Recording(prepare_step.InflightKeys):
+        def claim(self, *keys):
+            claims.append(keys)
+            return super().claim(*keys)
+
+    monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
+    return claims
+
+
+def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step, monkeypatch):
+    """Spec §7.3: Run all is one job, the masks on in the period first; the
+    label counts them; the mask's project-wide key is in this period's Stop
+    scope; an Earth Engine mask that downloads needs the Earth Engine AOI."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    claims = _recording_inflight(monkeypatch)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_with_mask())
+
+    box, rc = _render(state)
+    try:
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
+                           prepare_step._inflight_key("d", JAN.id, "GLAD-L"))]
+        assert not _button(rc, t("steps.prepare.stop")).disabled  # the job's keys are this period's
+        assert _button(rc, t("steps.prepare.run_all", n=2)).disabled
+        step.run_jobs()
+        [(ctx, items, force)] = step.started
+        assert items == [("mask", "forest"), "GLAD-L"] and not force and ctx.aoi == "AOI"
+        assert _button(rc, t("steps.prepare.stop")).disabled
+    finally:
+        rc.close()
+
+
+def test_a_source_run_runs_its_stale_masks_first_and_a_redownload_does_not(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_with_mask(), meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()  # Run
+        step.run_jobs()
+        step.table[-1][0]["actions"][1]["on_click"]()  # Re-download
+        step.run_jobs()
+        assert [(items, force) for _, items, force in step.started] == [
+            ([("mask", "forest"), "GLAD-L"], False), (["GLAD-L"], True)]
+    finally:
+        rc.close()
+
+
+def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, monkeypatch):
+    """The mask key is project-wide: February cannot align the mask January's
+    Run all is aligning. The click is refused with a toast, not dropped
+    silently, and January's job is not in February's Stop scope."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_with_mask(periods=(JAN, FEB)))
+
+    box, rc = _render(state)
+    try:
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)  # January's job, still queued
+        state.update_project("d", lambda q: setattr(q, "active_period", FEB.id))
+        assert _button(rc, t("steps.prepare.stop")).disabled  # February started nothing
+        run_all = _button(rc, t("steps.prepare.run_all", n=2))
+        assert not run_all.disabled
+        run_all.fire_event("click", None)
+        assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
+        assert _button(rc, t("steps.prepare.stop")).disabled  # the refused job left no Stop scope
+
+        step.run_jobs()  # January's job ends and gives the mask back
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        step.run_jobs()
+        assert [(ctx.period.id, items) for ctx, items, _ in step.started] == [
+            (JAN.id, [("mask", "forest"), "GLAD-L"]), (FEB.id, [("mask", "forest"), "GLAD-L"])]
+    finally:
+        rc.close()
+
+
+def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(step, monkeypatch, tmp_path):
+    """A GeoTIFF mask needs the AOI raster like a GeoTIFF source: it claims
+    ``aoi_key`` when it must be built (no Earth Engine AOI), and without the
+    AOI sidecar it waits while the other rows run."""
+    def no_aoi(result, pdir):
+        pytest.fail("no row downloads from Earth Engine")
+
+    monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
+    claims = _recording_inflight(monkeypatch)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_with_mask(origin="file", tmp_path=tmp_path))
+
+    box, rc = _render(state)
+    try:
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        step.run_jobs()
+        assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
+                           prepare_step._inflight_key("d", JAN.id, "GLAD-L"), prepare_step.aoi_key("d"))]
+        assert step.started[-1][1] == [("mask", "forest"), "GLAD-L"] and step.started[-1][0].aoi is None
+    finally:
+        rc.close()
+
+    state = _state(_with_mask(origin="file", tmp_path=tmp_path, sidecar=False))
+    state.sidecar_pending.set(True)
+    box, rc = _render(state)
+    try:
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        step.run_jobs()
+        assert step.started[-1][1] == ["GLAD-L"]
+        assert _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
+    finally:
+        rc.close()
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,11 @@ from gui.scripts import legend_specs
 #: 1 = confirmed (orange), 2 = probable (purple); from the one palette table
 ALERT_COLORMAP = legend_specs.alert_colormap()
 ALERT_EE_VIS = legend_specs.alert_ee_vis()
+#: an aligned mask (1 = on, 0 = no-data): one grey for keep and exclude masks alike
+MASK_COLOR = legend_specs.MASK_COLOR
+MASK_OPACITY = legend_specs.MASK_OPACITY
+MASK_COLORMAP = legend_specs.mask_colormap()
+MASK_EE_VIS = legend_specs.mask_ee_vis()
 
 
 def add_raster_layer(map_, path, *, key: str, name: str, band: int = 1,

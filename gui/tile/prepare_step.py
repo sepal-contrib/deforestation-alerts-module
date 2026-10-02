@@ -1,8 +1,15 @@
 """Download & harmonize step (spec §7.3).
 
-Slice 1 simplifications of §7.3 (ruling #72): the table has one row per source
-(masks join in slice 4); one in-flight key per row covers both of its
-artifacts; Run all is one job that runs its rows one at a time.
+Slice 1 simplifications of §7.3 (ruling #72): the table has one row per source;
+one in-flight key per row covers both of its artifacts; Run all is one job
+that runs its rows one at a time.
+
+Masks (slice 4): Run all first aligns the masks on in the period that need a
+run, then runs the sources (``run_all_items``); a single source Run first runs
+the period's stale masks (``items_for_source``). A mask has one aligned file
+per project, so its in-flight key is project-wide (``mask_inflight_key``): two
+periods never align it at once. A GeoTIFF mask, like a GeoTIFF source, needs
+the AOI raster, so it waits for the AOI sidecar and claims ``aoi_key``.
 
 A row explains its coverage (``build_rows``, spec §7.3): a source that is not
 covered, has no data for the window or has no coverage record reads why under
@@ -21,7 +28,12 @@ still finds its rows claimed until it ends.
 Stop has the same scope: every job started in the open project and period
 gets its own cancel Event, and Stop sets all of them, so a later start (even a
 no-op click on a ready row) never takes Stop away from a Run all still going,
-nor points it at another project's job.
+nor points it at another project's job. ``_StopEvents`` also records each
+job's keys: the keys of the jobs started in this project and period, mask keys
+included, are the step's own (``mine_keys``); a mask another period's job is
+aligning reads running in its row but is not in this period's Stop scope (this
+Stop could not stop it). A click whose keys are already claimed (that mask, or
+the AOI raster another job is building) says so (``claim_busy``).
 """
 
 import asyncio
@@ -34,9 +46,9 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import UNCHECKED
 from deforestation_alerts.engine.fingerprint import (
-    AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, raw_key, status,
+    AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, period_masks, raw_key, status,
 )
-from deforestation_alerts.engine.plan import plan_prepare
+from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.project import paths
 from gui.i18n import t
 from gui.scripts import aoi_io, source_layers
@@ -55,6 +67,32 @@ _DOWNLOADS = (Status.MISSING, Status.STALE)  # the runner downloads these (and a
 
 def _inflight_key(project: str, period_id: str, source: str) -> str:
     return f"prep:{project}:{period_id}:{source}"
+
+
+def mask_inflight_key(project: str, name: str) -> str:
+    """Project-wide, not per period: a mask has one aligned file per project."""
+    return f"prep:{project}:@mask:{name}"
+
+
+def mine_keys(running, stops, project: str, period_id: str) -> set:
+    """The claimed keys of the jobs started in this project and period, masks
+    included: one Run all / Stop scope (spec §7.3). A mask job another period
+    started is not in it: its Stop could not stop it."""
+    return set(running) & stops.keys((project, period_id))
+
+
+def run_all_items(p, pdir, period) -> list:
+    """Run all's rows (spec §7.3): the masks on in the period that need a run,
+    then the runnable sources."""
+    masks = [("mask", m.name) for m in plan_masks(p, pdir, period) if m.needs_run]
+    sources = [("source", r.source) for r in plan_prepare(p, pdir, period) if r.needs_run]
+    return masks + sources
+
+
+def items_for_source(p, pdir, period, source) -> list:
+    """A source row's Run: the period's stale masks first (its harmonize reads
+    them all), then the source."""
+    return [("mask", m.name) for m in plan_masks(p, pdir, period) if m.needs_run] + [("source", source)]
 
 
 def aoi_key(project: str) -> str:
@@ -119,26 +157,32 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
 
 
 class _StopEvents:
-    """The cancel Events of the running jobs, by (project, period id).
+    """The cancel Events of the running jobs, and each job's in-flight keys,
+    by (project, period id).
 
     Clicks add and stop, and workers discard, so every access takes the lock.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._events: dict[tuple, set] = {}
+        self._events: dict[tuple, dict] = {}  # scope -> {Event: frozenset of its keys}
 
-    def add(self, scope: tuple) -> threading.Event:
+    def add(self, scope: tuple, keys=()) -> threading.Event:
         event = threading.Event()
         with self._lock:
-            self._events.setdefault(scope, set()).add(event)
+            self._events.setdefault(scope, {})[event] = frozenset(keys)
         return event
+
+    def keys(self, scope: tuple) -> set:
+        """The in-flight keys of the jobs started in ``scope``."""
+        with self._lock:
+            return set().union(*self._events.get(scope, {}).values())
 
     def discard(self, scope: tuple, event: threading.Event) -> None:
         with self._lock:
             events = self._events.get(scope)
             if events is not None:
-                events.discard(event)
+                events.pop(event, None)
                 if not events:
                     del self._events[scope]
 
@@ -177,56 +221,79 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     def _aoi_raster_current():
         return status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is Status.CURRENT
 
-    def _start(sources, force=False):
-        file_rows = [s for s in sources if is_file_source(p.sources[s])]
-        needs_aoi_raster = bool(file_rows) and not _aoi_raster_current()
+    def _is_file(kind, name):
+        return p.masks[name].origin == "file" if kind == "mask" else is_file_source(p.sources[name])
+
+    def _key(kind, name):
+        return mask_inflight_key(p.name, name) if kind == "mask" else _inflight_key(p.name, period.id, name)
+
+    def _start(items, force=False):
+        """Start one tracked job for ``items`` (``("mask", name)`` /
+        ``("source", name)``, in run order)."""
+        by_mask = {m.name: m for m in plan_masks(p, pdir, period)}
+        file_items = [it for it in items if _is_file(*it)]
+        needs_aoi_raster = bool(file_items) and not _aoi_raster_current()
         if needs_aoi_raster and p.aoi.geometry_file is None:
-            # The GeoTIFF rows wait for the AOI sidecar; the others still run
-            # (spec §12: one row must not stop the others).
+            # The GeoTIFF rows (sources and masks) wait for the AOI sidecar;
+            # the others still run (spec §12: one row must not stop the others).
             notifications.info(t("steps.prepare.aoi_geometry_missing" if app_state.sidecar_pending.value
                                  else "steps.prepare.aoi_geometry_failed"))
-            sources = [s for s in sources if s not in file_rows]
+            items = [it for it in items if it not in file_items]
             needs_aoi_raster = False
-        keys = [_inflight_key(p.name, period.id, s) for s in sources]
+        if not items:
+            return
+        keys = [_key(*it) for it in items]
         if needs_aoi_raster:
             keys.append(aoi_key(p.name))  # one AOI-raster build at a time
-        if not sources or not inflight.claim(*keys):
+        stop_scope = (p.name, period.id)
+        # Recorded before the claim, so the claim's re-render already counts
+        # these keys as this project's and period's (``mine_keys``).
+        cancel = stops.add(stop_scope, keys)
+        if not inflight.claim(*keys):
+            # A key is held by another job: a mask another period's job is
+            # aligning, the AOI raster being built, a row still running.
+            stops.discard(stop_scope, cancel)
+            notifications.info(t("steps.prepare.claim_busy"))
             return
-        # Drift note: only rows that download from Earth Engine need it (the
-        # metadata and the AOI); a grid change re-harmonizes from the raw file
-        # on disk, and a GeoTIFF row is normalized locally from the user's file.
-        downloads = [s for s in sources
-                     if not is_file_source(p.sources[s]) and (force or by_source[s].raw in _DOWNLOADS)]
-        meta = app_state.catalogue_meta.value
-        if any(getattr(p.sources[s], "catalogue_key", None) == "GLAD-L" for s in downloads) and "GLAD-L" not in meta:
+
+        def _give_back():
+            stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
             inflight.release(*keys)
+
+        # Drift note: only rows that download from Earth Engine need it (the
+        # metadata and the AOI); a grid change re-harmonizes (re-aligns) from
+        # the raw file on disk, and a GeoTIFF row is read locally from the
+        # user's file.
+        raw = {it: (by_mask[it[1]].raw if it[0] == "mask" else by_source[it[1]].raw) for it in items}
+        downloads = [it for it in items if not _is_file(*it) and (force or raw[it] in _DOWNLOADS)]
+        meta = app_state.catalogue_meta.value
+        if (any(kind == "source" and getattr(p.sources[name], "catalogue_key", None) == "GLAD-L"
+                for kind, name in downloads) and "GLAD-L" not in meta):
+            _give_back()
             notifications.info(t("steps.alerts.meta_loading"))
             return
-        aoi = None  # local rows (a grid change, GeoTIFF sources) need no Earth Engine
+        aoi = None  # local rows (a grid change, GeoTIFF sources and masks) need no Earth Engine
         if downloads:
             try:
                 aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)  # builds ee objects, no request
             except Exception as exc:  # noqa: BLE001 - ValueError (no geometry), or a bad sidecar/ee object
                 # Any failure here must give the claimed keys back, or the rows
                 # read "running" for the rest of the session.
-                inflight.release(*keys)
+                _give_back()
                 logger.exception("could not build the Earth Engine AOI")
                 notifications.error(str(exc) or exc.__class__.__name__)
                 return
-        stop_scope = (p.name, period.id)
-        cancel = stops.add(stop_scope)
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
                              name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
                              row_errors=row_errors, errors_lock=errors_lock)
 
         def _job():
             try:
-                run_rows(ctx, sources, force=force)
+                run_rows(ctx, items, force=force)
             except asyncio.CancelledError:
                 pass  # Stop: the task reads "cancelled"; not an error
             finally:
-                stops.discard(stop_scope, cancel)
-                inflight.release(*keys)
+                _give_back()
 
         spawn_in_context(_job)
 
@@ -239,11 +306,12 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         layers.toggle(key, source_layers.harmonized_builder(map_, path, key, source),
                       content_id=art.content_id, notifier=notifications)
 
-    mine = {k for k in running if k.startswith(_inflight_key(p.name, period.id, ""))}
-    pending = [r.source for r in rows if r.needs_run]
+    mine = mine_keys(running, stops, p.name, period.id)
+    pending = run_all_items(p, pdir, period) if p.grid is not None else []
 
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=row_errors.value, on=on, building=building,
-                            run=lambda s: _start([s]), rerun=lambda s: _start([s], force=True), toggle=_toggle_map)
+                            run=lambda s: _start(items_for_source(p, pdir, period, s)),
+                            rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map)
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.prepare.title')}")
@@ -265,10 +333,11 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
                               on_click=lambda: stops.stop((p.name, period.id)))
             # Check again after a failed coverage check, or a failed AOI-sidecar
-            # fetch that leaves the GeoTIFF rows waiting (the loader refetches
-            # it on the same retry)
+            # fetch that leaves the GeoTIFF rows (sources, masks on in the
+            # period) waiting (the loader refetches it on the same retry)
             sidecar_failed = (p.aoi.geometry_file is None and not app_state.sidecar_pending.value
-                              and any(is_file_source(p.sources[r.source]) for r in rows)
+                              and (any(is_file_source(p.sources[r.source]) for r in rows)
+                                   or any(p.masks[n].origin == "file" for n, _ in period_masks(p, period)))
                               and not _aoi_raster_current())
             CheckAgainButton(app_state=app_state,
                              show=sidecar_failed or (bool(app_state.coverage_error.value)
