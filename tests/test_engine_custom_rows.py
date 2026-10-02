@@ -317,3 +317,46 @@ def test_missing_glad_l_metadata_is_reported_before_the_free_space_gates(tmp_pat
     with pytest.raises(ValueError, match="metadata"):
         runner.run_source_row(_job(p, tmp_path, "GLAD-L"))
     assert no_ee == []
+
+
+def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmonizes(tmp_path, cover, no_ee):
+    """The AOI raster's record stays current while its file is gone: the
+    GeoTIFF mask row reads not ready (Run all rebuilds the AOI raster and
+    realigns it in the mask phase) and the source row is refused before it
+    rebuilds anything; the same Run all pass then harmonizes the source."""
+    from deforestation_alerts.engine.plan import plan_masks
+    from deforestation_alerts.project.models import add_mask
+
+    p = _project(tmp_path)
+    _file_source(p, tmp_path)
+    cover(p, "tif")
+    mpath = tmp_path / "user" / "forest.tif"
+    with rasterio.open(mpath, "w", driver="GTiff", width=GRID.width, height=GRID.height, count=1, dtype="uint8",
+                       crs=GRID.epsg, transform=GRID.affine) as dst:
+        dst.write(np.ones((GRID.height, GRID.width), "uint8"), 1)
+    add_mask(p, name="forest", origin="file", ref=str(mpath), asset_type="FILE", band=1,
+             native=NativeGrid(crs=GRID.epsg, scale=10.0, transform=tuple(GRID.affine)[:6]), mode="keep",
+             period_id=JAN.id)
+
+    def run_all():
+        for row in plan_masks(p, tmp_path, JAN):
+            if row.needs_run:
+                runner.apply_artifacts(p, runner.run_mask_row(
+                    runner.MaskJob(p.model_copy(deep=True), tmp_path, row.name, "AOI")))
+        for row in plan_prepare(p, tmp_path, JAN):
+            if row.needs_run:
+                runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, row.source)))
+
+    run_all()
+    assert plan_prepare(p, tmp_path, JAN)[0].ready
+    paths.aoi_raster_path(tmp_path).unlink()
+
+    row = plan_masks(p, tmp_path, JAN)[0]
+    assert row.aligned is fp.Status.STALE and row.needs_run
+    with pytest.raises(runner.MaskNotReady):
+        runner.run_source_row(_job(p, tmp_path, "tif", force=True))
+    assert not paths.aoi_raster_path(tmp_path).exists()
+
+    run_all()
+    assert plan_masks(p, tmp_path, JAN)[0].ready and plan_prepare(p, tmp_path, JAN)[0].ready
+    assert no_ee == []

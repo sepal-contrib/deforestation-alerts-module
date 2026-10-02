@@ -33,8 +33,8 @@ from deforestation_alerts.engine.coverage import BLOCKED, record_for, window_cov
 from deforestation_alerts.engine.download import estimate_native_bytes, export_native
 from deforestation_alerts.engine.fingerprint import (
     AOI_KEY, Status, aoi_raster_inputs, harm_key, harmonized_inputs, is_file_source, make_artifact, mask_file_missing,
-    mask_inputs, mask_key, mask_raw_inputs, mask_raw_key, period_masks, raw_alert_inputs, raw_key, status,
-    user_file_missing,
+    mask_aligned_status, mask_inputs, mask_key, mask_raw_inputs, mask_raw_key, period_masks, raw_alert_inputs, raw_key,
+    status, user_file_missing,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.harmonize import harmonize
@@ -47,7 +47,8 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Artifact, Period, Project
 
 __all__ = [
-    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskJob", "MaskNotReady", "SourceJob",
+    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNotReady",
+    "SourceJob",
     "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
 ]
 
@@ -73,6 +74,17 @@ class MaskNotReady(RuntimeError):
     """A mask on in the period is not aligned on the current grid; run it first."""
 
     key = "steps.prepare.mask_not_ready"
+
+
+class MaskFileMissing(FileNotFoundError):
+    """A GeoTIFF mask on in the period is gone from disk (spec §5.3 "file not
+    found"): Run all cannot align it; the user moves it back or edits the mask."""
+
+    key = "steps.prepare.mask_file_missing"
+
+    def __init__(self, name: str, path: str):
+        super().__init__(f"{name}: file not found: {path}")
+        self.values = {"name": name, "path": path}
 
 
 class HarmonizeFailed(RuntimeError):
@@ -116,13 +128,21 @@ def _harmonize_space(p: Project) -> int:
     return 2 * compressed_estimate(estimate_bytes(p.grid))
 
 
-def _masks_ready(p: Project, pdir: Path, period: Period) -> bool:
+def _require_masks_ready(p: Project, pdir: Path, period: Period, source: str) -> None:
     """Every mask on in the period (as ``p.periods`` holds it) is aligned
-    current on the current grid, and its aligned file is on disk: harmonize
-    reads them all, so a mask left on an old grid or deleted from disk fails
-    here, before any download (spec §5.3)."""
-    return all(status(p, pdir, mask_key(name), mask_inputs(p, name)) is Status.CURRENT
-               for name, _ in period_masks(p, period))
+    current on the current grid, its aligned file (and a GeoTIFF mask's AOI
+    raster) on disk: harmonize reads them all, so a mask left on an old grid
+    or deleted from disk fails here, before any download (spec §5.3). A
+    GeoTIFF mask whose user file is gone raises ``MaskFileMissing`` (Run all
+    cannot align it); any other mask not ready raises ``MaskNotReady``."""
+    on = [name for name, _ in period_masks(p, period)]
+    for name in on:
+        missing = mask_file_missing(p.masks[name])
+        if missing:
+            raise MaskFileMissing(name, missing)
+    if any(mask_aligned_status(p, pdir, name) is not Status.CURRENT for name in on):
+        raise MaskNotReady(f"{source}: a mask on in this period is not aligned on the current grid; "
+                           "run the masks first")
 
 
 def _raw_estimate(p: Project, src) -> int:
@@ -190,9 +210,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
         raise ValueError("GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment")
     # Every precondition of the harmonize is checked before a download (spec §7.3).
-    if not _masks_ready(p, pdir, period):
-        raise MaskNotReady(f"{job.source}: a mask on in this period is not aligned on the current grid; "
-                           "run the masks first")
+    _require_masks_ready(p, pdir, period, job.source)
     if file_source:
         aoi_art = ensure_aoi_raster(p, pdir)
         if aoi_art is not None:
@@ -217,7 +235,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
 
     try:
         harm_in = harmonized_inputs(p, job.source, period)
-        if harm_in is None:  # unreachable after the checks above; never harmonize without inputs
+        # Defensive: the mask check above (aligned masks, a GeoTIFF mask's AOI
+        # raster on disk) and the AOI-raster build leave every input recorded.
+        if harm_in is None:
             raise RuntimeError(f"{job.source}: its harmonize inputs are not recorded")
         if rkey in out or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
             ensure_free_space(harm_path.parent, _harmonize_space(p))

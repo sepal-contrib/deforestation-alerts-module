@@ -163,6 +163,18 @@ def mask_current(p: Project, name: str) -> bool:
             and art.fingerprint == fingerprint(expected))
 
 
+def mask_aligned_status(p: Project, pdir, name: str) -> Status:
+    """The aligned mask's ``status`` (fingerprint and file on disk). A GeoTIFF
+    mask also needs its AOI raster on disk and current: an aligned GeoTIFF
+    mask whose AOI raster is gone reads STALE, since rebuilding the AOI raster
+    gives it a new content id and the mask must be aligned again."""
+    aligned = status(p, pdir, mask_key(name), mask_inputs(p, name))
+    if (aligned is Status.CURRENT and p.masks[name].origin == "file"
+            and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT):
+        return Status.STALE
+    return aligned
+
+
 def period_masks(p: Project, period: Period) -> list:
     """The ``(name, mode)`` of the project masks on in ``period``, sorted. The
     period is read from ``p.periods`` (the project holds the per-period
@@ -267,14 +279,18 @@ def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
     disk reads MISSING in its own row and is not a change of input (slice 1's
     ``test_reopened_project_with_deleted_files_offers_a_rerun`` keeps the set
     MISSING, not STALE). A moved user GeoTIFF reads "file not found" in its
-    row, not out of date, so its stamp is not compared here either. Manifest
-    plus ``os.stat`` only: cheap enough for a render (Task 34's badges)."""
+    row, not out of date: a GeoTIFF source's raw comparison is skipped while
+    its file is gone, and so is every harmonized comparison of the period while
+    a GeoTIFF mask on in it is gone (its stamp would otherwise read as an input
+    change). Manifest plus ``os.stat`` only: cheap enough for a render (Task
+    34's badges)."""
     period = p.periods.get(alert_set.period_id)
     if period is None:
         return Status.STALE
     expected = set_inputs(p, period, alert_set.sources, alert_set.params)
     if expected is None or fingerprint(expected) != alert_set.fingerprint:
         return Status.STALE
+    mask_gone = any(mask_file_missing(p.masks[n]) for n, _ in period_masks(p, period))
     for s in alert_set.sources:
         src = p.sources.get(s)
         if src is None:
@@ -282,7 +298,8 @@ def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
         if (user_file_missing(src) is None
                 and status(p, pdir, raw_key(period.id, s), raw_alert_inputs(p, s, period)) is Status.STALE):
             return Status.STALE
-        if status(p, pdir, harm_key(period.id, s), harmonized_inputs(p, s, period)) is Status.STALE:
+        if (not mask_gone
+                and status(p, pdir, harm_key(period.id, s), harmonized_inputs(p, s, period)) is Status.STALE):
             return Status.STALE
     if not (Path(pdir) / alert_set.store_rel_path).exists():
         return Status.MISSING

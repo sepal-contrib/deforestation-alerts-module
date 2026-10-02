@@ -223,3 +223,40 @@ def test_a_deleted_aligned_mask_blocks_harmonize_before_any_download(two_periods
     with pytest.raises(runner.MaskNotReady):
         runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI"))
     assert downloads == []
+
+
+def test_a_moved_geotiff_mask_reads_file_not_found_not_an_input_change(two_periods):
+    """Spec §5.3 "file not found": the period's sets keep their state, the mask
+    row is not offered to Run all, and a source row is refused with the mask's
+    own refusal before any download."""
+    from gui.i18n import t
+
+    p, pdir, downloads = two_periods
+    _run_all(p, pdir, JAN)
+    jan_set = _set(p, pdir, JAN)
+    ref = p.masks["forest"].ref
+    Path(ref).rename(pdir / "elsewhere.tif")
+
+    assert fp.set_status(p, pdir, p.alert_sets[jan_set]) is fp.Status.CURRENT
+    row = plan_masks(p, pdir, FEB)[0]
+    assert row.file_missing == ref and row.aligned is fp.Status.MISSING and not row.needs_run
+    n = len(downloads)
+    with pytest.raises(runner.MaskFileMissing) as err:
+        runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI"))
+    assert len(downloads) == n
+    assert err.value.values == {"name": "forest", "path": ref}
+    assert ref in t(err.value.key, **err.value.values)
+
+    Path(pdir / "elsewhere.tif").rename(ref)  # put back unchanged: the stamp matches again
+    assert plan_masks(p, pdir, JAN)[0].ready and plan_prepare(p, pdir, JAN)[0].ready
+
+
+def test_an_earth_engine_mask_without_its_native_grid_is_a_clear_row_error(two_periods, monkeypatch):
+    p, pdir, _ = two_periods
+    add_mask(p, name="hansen", origin="gee", ref="UMD/x", asset_type="IMAGE", band="treecover2000",
+             native=None, mode="keep", period_id=FEB.id)
+    built = []
+    monkeypatch.setattr(runner, "build_mask_image", lambda mask, aoi: built.append(mask) or "IMAGE")
+    with pytest.raises(ValueError, match="native grid is unknown"):
+        runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, "hansen", "AOI"))
+    assert built == [] and not (pdir / "masks").exists()
