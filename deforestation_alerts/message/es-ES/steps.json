@@ -296,7 +296,7 @@
       "mask_covers_none": "La máscara {mask} no cubre nada de la AOI: como máscara de conservar, se eliminarían todas las alertas.",
       "mask_row_failed": "Máscara {mask}: {error}",
       "mask_native_unknown": "Máscara {name}: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara.",
-      "claim_busy": "Ya se está preparando una fila de esta ejecución (una máscara que está alineando el trabajo de otro período, o una fila todavía en curso); vuelve a ejecutar cuando termine.",
+      "claim_busy": "Ya se está preparando una fila de esta ejecución (una máscara que el trabajo de otro período está alineando, o una fila todavía en curso); vuelve a ejecutar cuando termine.",
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento.",
       "aoi_geometry_failed": "No se pudo obtener la geometría de la AOI, así que las filas de GeoTIFF no se pueden ejecutar; usa Comprobar de nuevo y luego ejecútalas.",
