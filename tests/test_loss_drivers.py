@@ -99,3 +99,19 @@ def test_selection_is_items_and_free_text(locale):
     locale("fr")
     assert loss_drivers.selection("Logging, Roads") == [{"text": "Exploitation forestière", "value": "logging"}, "Roads"]
     assert loss_drivers.selection(None) == []
+
+
+def test_an_unreviewed_alert_shows_the_default_driver_not_the_last_ones(tmp_path, monkeypatch, locale):
+    """Moving from a reviewed alert to an unreviewed one must not carry the
+    first alert's drivers over: a Save there would store them as its own."""
+    from tests.test_analysis_alert_info import _alerts, _state, _wire
+
+    s = _state(tmp_path, monkeypatch)
+    widgets = _wire(s)
+    build_review_panel(widgets, None, None, None)
+    gdf = _alerts(2)
+    gdf["description"] = ["logging, Roads", None]
+    s.alerts_gdf.set(gdf)  # alert 0, reviewed
+    assert loss_drivers.encode(widgets.driver_combobox.v_model) == "logging, Roads"
+    s.actual_alert_id.value = 1
+    assert loss_drivers.encode(widgets.driver_combobox.v_model) == loss_drivers.DEFAULT

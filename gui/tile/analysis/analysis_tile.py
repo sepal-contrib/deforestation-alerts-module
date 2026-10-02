@@ -173,11 +173,12 @@ def view_actual_alert(
     fecha1, fecha2 = refresh_alert_info(widgets, app_state)
 
     # --- a reviewed alert shows its stored loss drivers, in this language
-    # (the codes, read back; a re-save stores them again as codes) ---
-    stored = drivers.selection(alerta.get("description"))
+    # (the codes, read back; a re-save stores them again as codes); an
+    # unreviewed one starts from the default, not the last alert's drivers ---
     combobox = getattr(widgets, "driver_combobox", None)
-    if stored and combobox is not None:
-        combobox.v_model = stored
+    if combobox is not None:
+        combobox.v_model = (drivers.selection(alerta.get("description"))
+                            or drivers.selection(drivers.DEFAULT))
 
     # --- sync the nav id field ---
     id_field.v_model = alert_id
