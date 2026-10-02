@@ -29,6 +29,10 @@ uses the `gee` fixture is marked `ee` (`tests/conftest.py`) and is skipped
 unless `DEFO_ALERTS_EE_TESTS=1` is set or `-m ee` selects it; they need Earth
 Engine credentials (`earthengine authenticate`) and only read from Earth
 Engine. A test that is not marked `ee` and still calls Earth Engine fails.
+A test that imports the app in a child process (the app calls `init_ee()` at
+import) runs it with an empty `HOME` and no `EARTHENGINE_TOKEN`, so the child
+finds no credentials and starts no Earth Engine either (`offline_env` in
+`tests/test_gdal_display_env.py`).
 
 ## Gate walks
 
