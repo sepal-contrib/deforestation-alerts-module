@@ -73,6 +73,7 @@ from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.imagery import build_imagery
 from gui.tile.analysis.navigator import build_navigator
+from gui.tile.analysis import vis_sync
 from gui.i18n import t
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
@@ -379,6 +380,9 @@ def build_analysis_layout(
     """
     # Build the shared heavy widgets once.
     widgets = AnalysisWidgets(gee_interface=gee_interface, theme_state=theme_state)
+    # The visualization layers marked for Analysis, switched off on both maps
+    # (spec §10); the layout is built once per session, so wired once.
+    vis_sync.wire(widgets, app_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
     # .v_model). Owned here, passed to build_navigator + the subscription.
