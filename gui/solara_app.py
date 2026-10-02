@@ -322,7 +322,8 @@ def _ActiveSetLoader(app_state, layers, map_):
                 return
             if loads.current["run"] != run or _kept():
                 return  # a newer load runs, or Integrate published the set meanwhile
-            set_store.publish_set_alerts(app_state, p.name, s, gdf)
+            # Checked again with the publish, atomically: Integrate may publish right now.
+            set_store.publish_set_alerts(app_state, p.name, s, gdf, unless_held=not installed)
 
         spawn_in_context(_load)
 

@@ -159,14 +159,16 @@ def _publish_alerts(app_state, name: str, result) -> bool:
 
     ``actual_alert_id`` goes to -1 first, so Analysis's auto-select picks the
     first alert as a real change even when alert 0 of the replaced set was
-    showing (ruling #76).
+    showing (ruling #76). Under ``AppState``'s lock, as the shell loader's
+    publish of the same set (``set_store.publish_set_alerts``).
     """
-    live = app_state.project.value
-    if live is None or live.name != name or live.active_set != result.alert_set.id:
-        return False  # switched or closed right after the record
-    app_state.actual_alert_id.set(-1)
-    app_state.alerts_gdf.set(result.alerts)
-    return True
+    with app_state._lock:
+        live = app_state.project.value
+        if live is None or live.name != name or live.active_set != result.alert_set.id:
+            return False  # switched or closed right after the record
+        app_state.actual_alert_id.set(-1)
+        app_state.alerts_gdf.set(result.alerts)
+        return True
 
 
 def run_integration_job(app_state, notifier, job, *, navigate: bool = True) -> None:

@@ -72,25 +72,34 @@ def load_active_alerts(p):
     return gdf
 
 
-def publish_set_alerts(app_state, name: str, s, gdf) -> bool:
+def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = False) -> bool:
     """Hand set ``s``'s loaded alerts to Analysis, at the set's saved review
     position, while ``s`` is still project ``name``'s active set. Returns
     False, touching nothing, once the project was switched or closed or
-    another set became active.
+    another set became active, or, with ``unless_held``, when the alerts on
+    hand already are ``s``'s (``holds_set``: Integrate published them).
 
     ``actual_alert_id`` goes to -1 first, as Integrate's publish does:
     Analysis re-selects only from -1, and ``view_actual_alert`` follows only
     ``actual_alert_id``, so the same index in another set would otherwise keep
     showing the previous set's alert.
+
+    The checks and the three sets run under ``AppState``'s lock, as
+    Integrate's publish does: the shell's loader reads the set Integrate just
+    recorded while Integrate publishes it, and unserialised the two would
+    interleave into one's alerts with the other's position.
     """
-    live = app_state.project.value
-    if live is None or live.name != name or live.active_set != s.id:
-        return False
-    app_state.actual_alert_id.set(-1)
-    app_state.alerts_gdf.set(gdf)
-    saved = live.alert_sets[s.id].last_alert_index
-    app_state.actual_alert_id.set(min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1)
-    return True
+    with app_state._lock:
+        live = app_state.project.value
+        if live is None or live.name != name or live.active_set != s.id:
+            return False
+        if unless_held and holds_set(app_state.alerts_gdf.value, s):
+            return False
+        app_state.actual_alert_id.set(-1)
+        app_state.alerts_gdf.set(gdf)
+        saved = live.alert_sets[s.id].last_alert_index
+        app_state.actual_alert_id.set(min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1)
+        return True
 
 
 def _pmtiles_path(p, s) -> Path:

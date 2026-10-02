@@ -338,7 +338,7 @@ def test_the_active_set_loader_reads_the_store_on_a_worker_and_keeps_published_a
     # checked before the read and again before the publish
     load = body.index("def _load():")
     assert load < body.index("if _kept():") < body.index("load_active_alerts") < body.index("or _kept():")
-    assert "set_store.publish_set_alerts(app_state, p.name, s, gdf)" in body
+    assert "set_store.publish_set_alerts(app_state, p.name, s, gdf, unless_held=not installed)" in body
     assert "notifications.error(" in body and "logger.exception(" in body
 
 

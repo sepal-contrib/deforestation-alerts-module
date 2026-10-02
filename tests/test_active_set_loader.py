@@ -194,6 +194,86 @@ def test_integrates_first_set_is_kept_as_published_and_the_render_happens_on_its
     assert loader.state.actual_alert_id.value == 1
 
 
+class _WatchedLock:
+    """``AppState._lock`` that sets ``blocked`` when ``thread[0]`` has to wait for it."""
+
+    def __init__(self, inner, thread, blocked):
+        self._inner, self._thread, self._blocked = inner, thread, blocked
+
+    def __enter__(self):
+        if not self._inner.acquire(blocking=False):
+            if threading.current_thread() is self._thread[0]:
+                self._blocked.set()
+            self._inner.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self._inner.release()
+
+
+@pytest.mark.parametrize("where", ["mid-publish", "after-the-check"])
+def test_integrates_publish_racing_the_loader_leaves_integrates_alerts_and_no_selection(loader, monkeypatch, where):
+    """Integrate records its set (which starts the loader's read) and then
+    publishes the set's alerts; the loader's publish of the same set races
+    that publish. Whichever order they land in, the session ends with
+    Integrate's alerts and ``actual_alert_id`` -1 (Analysis re-selects from
+    there), never the alerts of one and the saved position of the other.
+
+    The bad interleavings are forced, not waited for: Integrate's publish runs
+    on its own thread at the given point of the loader's, and the loader goes
+    on once that publish is done or waits on ``AppState``'s lock.
+    ``mid-publish``: between the loader's alerts and its restore of the saved
+    position. ``after-the-check``: after the loader found the alerts on hand
+    not to be the set's, before it publishes."""
+    state = loader.state
+    state.new_project_state(_project("b", loader.root))
+    loader.settle()
+    save_gdf_to_parquet(_alerts(3), str(Path(loader.root) / "b" / _alert_set().store_rel_path))
+    published = _alerts(3)
+    result = SimpleNamespace(artifacts={}, alert_set=_alert_set(last=2), alerts=published)
+    integrate, settled, errors = [None], threading.Event(), []
+    state._lock = _WatchedLock(state._lock, integrate, settled)
+
+    def _publish():
+        try:
+            assert _publish_alerts(state, "b", result)
+        except BaseException as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+        finally:
+            settled.set()
+
+    def _integrate_now():
+        """Run Integrate's publish; return once it is done or waits on the lock."""
+        if integrate[0] is not None:
+            return
+        integrate[0] = threading.Thread(target=_publish, name="integrate")
+        integrate[0].start()
+        assert settled.wait(timeout=30), "Integrate's publish neither finished nor waited on the lock"
+
+    if where == "mid-publish":
+        state.alerts_gdf.subscribe(lambda gdf: gdf is not None and gdf is not published and _integrate_now())
+    else:
+        read, real_read, real_holds = [], set_store.load_active_alerts, set_store.holds_set
+
+        def _holds(gdf, s):
+            held = real_holds(gdf, s)
+            if read and not held:
+                _integrate_now()
+            return held
+
+        monkeypatch.setattr(set_store, "load_active_alerts", lambda p: read.append(p.name) or real_read(p))
+        monkeypatch.setattr(set_store, "holds_set", _holds)
+
+    assert state.update_project("b", lambda p: apply_result(p, result))  # Integrate records the set
+    loader.settle()
+    assert integrate[0] is not None, "the forced interleaving never happened"
+    integrate[0].join(timeout=30)
+
+    assert errors == []
+    assert state.alerts_gdf.value is published
+    assert state.actual_alert_id.value == -1
+
+
 def test_a_set_whose_store_is_missing_is_reported_and_left_unloaded(loader, monkeypatch):
     """Review focus 4: a project reopened after its set's files were deleted
     or moved. ``load_active_alerts`` returns None, as for no set at all, so
