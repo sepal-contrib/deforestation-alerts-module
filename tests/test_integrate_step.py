@@ -639,8 +639,8 @@ def test_replacing_a_set_with_reviewed_alerts_asks_first(step):
     state = _state(_project("d", "GLAD-L", "RADD", sets=[_set(both, 3, sources=["GLAD-L", "RADD"])]))
     map_, rc = _render(state)
     try:
-        dialog = rc.find(v.Dialog, max_width="380px").widget
         _run(rc)
+        dialog = rc.find(v.Dialog, v_model=True).widget  # the dialog open after Run
         assert step.jobs == [] and dialog.v_model is True
         assert t("steps.integrate.replace_message", n=3) in _texts(rc)
         _button(rc, t("common.cancel")).fire_event("click", None)
@@ -661,7 +661,8 @@ def test_a_set_without_reviews_is_replaced_without_asking(step):
     map_, rc = _render(state)
     try:
         _run(rc)
-        assert len(step.jobs) == 1 and rc.find(v.Dialog, max_width="380px").widget.v_model is False
+        assert len(step.jobs) == 1
+        rc.find(v.Dialog, v_model=True).assert_empty()  # no confirmation asked
     finally:
         rc.close()
 
