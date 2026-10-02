@@ -13,6 +13,7 @@ the ones started from ``spawn_in_context`` daemon threads.
 """
 
 import asyncio
+import errno
 import logging
 import threading
 import time
@@ -47,14 +48,24 @@ class DownloadBusy(KeyedError, TimeoutError):
     key = "errors.download_busy"
 
 
+#: OSErrors about the local disk, which a retry will not change.
+_LOCAL_OS_ERRORS = (FileNotFoundError, FileExistsError, PermissionError, IsADirectoryError, NotADirectoryError)
+_LOCAL_ERRNOS = {errno.ENOSPC, errno.EROFS, errno.EDQUOT}
+
+
 def _transient(exc: BaseException) -> bool:
-    """A network error worth retrying; an HTTP answer below 500 (a 404, a 403)
-    will not change on a retry."""
+    """A network error worth retrying. Not retried: an HTTP answer below 500
+    (a 404, a 403) other than 429 (rate limited), and a local file error (a
+    missing file, no permission, a full disk). Network errors are kept as the
+    OSErrors they are rather than listed: geedim's ``requests`` raises its
+    ``ConnectionError``, a plain OSError, and a DNS blip is ``socket.gaierror``."""
+    if isinstance(exc, _LOCAL_OS_ERRORS) or getattr(exc, "errno", None) in _LOCAL_ERRNOS:
+        return False
     try:
         import aiohttp
     except ImportError:  # pragma: no cover
         return isinstance(exc, (OSError, asyncio.TimeoutError))
-    if isinstance(exc, aiohttp.ClientResponseError) and exc.status < 500:
+    if isinstance(exc, aiohttp.ClientResponseError) and exc.status < 500 and exc.status != 429:
         return False
     return isinstance(exc, (OSError, asyncio.TimeoutError, aiohttp.ClientError))
 

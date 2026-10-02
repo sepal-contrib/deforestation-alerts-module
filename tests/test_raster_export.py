@@ -305,6 +305,36 @@ def test_export_options_reach_geedim(tmp_path):
     assert geo["max_requests"] == 4
 
 
+def _local_disk_full():
+    import errno
+
+    return OSError(errno.ENOSPC, "No space left on device")
+
+
+@pytest.mark.parametrize("make, tries", [
+    (lambda: FileNotFoundError("/x.tif"), 1),
+    (lambda: PermissionError("/x.tif"), 1),
+    (_local_disk_full, 1),
+    (lambda: __import__("socket").gaierror("Temporary failure in name resolution"), 3),
+    (lambda: __import__("requests").exceptions.ConnectionError("reset"), 3),
+    (lambda: TimeoutError("read timed out"), 3),
+], ids=["not-found", "permission", "disk-full", "dns", "requests-connection", "timeout"])
+def test_a_local_file_error_is_not_retried_a_network_one_is(make, tries):
+    """Review A M5: every OSError used to be retried, a missing file or a
+    full disk too; a network error (geedim's requests, aiohttp, DNS) still is."""
+    from deforestation_alerts.scripts import raster_export as rx
+
+    calls = []
+
+    def fail():
+        calls.append(1)
+        raise make()
+
+    with pytest.raises(OSError):
+        rx.with_retries(fail, sleep=lambda s: None)
+    assert len(calls) == tries
+
+
 def test_with_retries_retries_transient_errors_only():
     from deforestation_alerts.scripts import raster_export as rx
 
@@ -331,7 +361,7 @@ def test_with_retries_retries_transient_errors_only():
         rx.with_retries(always, sleep=lambda s: None)
 
 
-@pytest.mark.parametrize("status, tries", [(404, 1), (403, 1), (503, 3)])
+@pytest.mark.parametrize("status, tries", [(404, 1), (403, 1), (503, 3), (429, 3)])
 def test_an_http_answer_below_500_is_not_retried(status, tries):
     from types import SimpleNamespace
 
