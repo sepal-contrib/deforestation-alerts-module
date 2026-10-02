@@ -76,6 +76,7 @@ from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
 from gui.i18n import t
+from gui.scripts import loss_drivers as drivers
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier, tracked_job
@@ -139,8 +140,10 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
                 ) as task:
                     task.step(t("overview_tile.export_step", fmt=fmt.upper()))
                     with writing(project):
+                        # the loss drivers in the export's language (the
+                        # store keeps their codes, see gui.scripts.loss_drivers)
                         path = export_alerts_gdf(
-                            gdf, folder, fmt, sources, start, end
+                            drivers.with_labels(gdf), folder, fmt, sources, start, end
                         )
                     url_path = local_files.home_relative(path)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)

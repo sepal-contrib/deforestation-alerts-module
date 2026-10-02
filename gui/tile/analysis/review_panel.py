@@ -32,6 +32,7 @@ import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
 from gui.i18n import t
+from gui.scripts import loss_drivers as drivers
 
 #: The review statuses a Save stores, with the key of each one's label. The
 #: select shows the labels in the language the widgets were built in; the
@@ -62,19 +63,12 @@ def build_review_panel(
         clearable=True,
         chips=True,
     )
+    # Codes as values (``loss_drivers.DRIVERS``), labels as text: the store gets
+    # the codes, whatever the language the widgets were built in.
     driver_combobox = sw.Combobox(
-        items=[
-            t("analysis_tile.questionarie.loss_driver1"),
-            t("analysis_tile.questionarie.loss_driver2"),
-            t("analysis_tile.questionarie.loss_driver3"),
-            t("analysis_tile.questionarie.loss_driver4"),
-            t("analysis_tile.questionarie.loss_driver5"),
-            t("analysis_tile.questionarie.loss_driver6"),
-            t("analysis_tile.questionarie.loss_driver7"),
-            t("analysis_tile.questionarie.loss_driver8"),
-            t("analysis_tile.questionarie.loss_driver9"),
-        ],
-        v_model=[t("analysis_tile.questionarie.loss_driver9")],
+        items=drivers.items(),
+        v_model=[drivers.DEFAULT],
+        return_object=False,
         label=t("analysis_tile.questionarie.loss_driver_hint"),
         multiple=True,
         clearable=True,

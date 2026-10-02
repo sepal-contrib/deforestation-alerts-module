@@ -716,6 +716,27 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
     assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn_a))
 
 
+def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
+    """Final review B, M2: the store gets the drivers' codes, not the labels
+    of the language the review was made in."""
+    from gui.tile.analysis import export
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model="Confirmed"),
+        driver_combobox=SimpleNamespace(v_model=["logging", "Minería"]),
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    s.actual_alert_id.set(0)
+    assert export._save_attributes(widgets, s, AnalysisState(), ctx) is True
+
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["description"])
+    assert saved.loc[0, "description"] == "logging, mining"
+
+
 def test_record_review_does_not_count_missing_statuses(monkeypatch):
     import pandas as pd
     from gui.scripts.set_context import SetContext

@@ -111,11 +111,10 @@ from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
 from deforestation_alerts.scripts.report_builder import (
     add_files_to_zip,
-    ensure_list,
-    format_list,
     generate_deforestation_report_with_word_template,
 )
 from gui.i18n import t
+from gui.scripts import loss_drivers as drivers
 from gui.scripts import set_store
 from gui.scripts.detached import render_detached
 from gui.scripts.error_text import error_text
@@ -255,9 +254,9 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
 
     alertas_gdf.at[actual_alert_id, "status"] = status
 
-    # description (loss-driver combobox).
-    drivers_list = ensure_list(widgets.driver_combobox.v_model)
-    alertas_gdf.at[actual_alert_id, "description"] = format_list(drivers_list)
+    # description (loss-driver combobox): the drivers' codes, never labels
+    # (``loss_drivers``); an export translates them.
+    alertas_gdf.at[actual_alert_id, "description"] = drivers.encode(widgets.driver_combobox.v_model)
 
     # before/after image name + info. Guarded (fix round 1): both are None
     # until an image is actually picked for this alert (``AnalysisState``;
@@ -440,9 +439,10 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
 
     # Single-row GeoDataFrame for the selected alert.
     selected_element = alertas_gdf.iloc[actual_alert_id]
-    selected_gdf = gpd.GeoDataFrame(
+    # The loss drivers in the language of the download (stored as codes).
+    selected_gdf = drivers.with_labels(gpd.GeoDataFrame(
         [selected_element], columns=alertas_gdf.columns
-    )
+    ))
     active = (
         "alert_polygon"
         if not selected_gdf["alert_polygon"].isnull().all()
