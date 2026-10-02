@@ -3,7 +3,9 @@
 GeoTIFF sources are converted with these functions (``normalize.py``); the
 Earth Engine twins live in ``catalogue`` (``ee_yyyyddd``, ``preset_image``) and
 must give the same codes and dates. Dates become the engine's integer
-``yyyyddd``; invalid dates are 0, which means "no alert".
+``yyyyddd``; invalid dates are 0, which means "no alert". The twins agree
+after windowing only: ``to_yyyyddd`` turns |value| >= 1e7 (float32 no-data)
+into 0 and ``ee_yyyyddd`` does not, but no such value falls in a date window.
 
 The CCDC conversion adds a 0.05-day tolerance (about an hour) inside the
 floor: the literal ``floor(frac(y) * diy)`` put half of all start-of-day

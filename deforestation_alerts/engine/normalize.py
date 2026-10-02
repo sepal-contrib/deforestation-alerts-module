@@ -16,6 +16,7 @@ from typing import Optional
 
 import numpy as np
 import rasterio
+from affine import Affine
 from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 
@@ -67,7 +68,7 @@ def normalize_file(src, aoi_bounds, win_start: date, win_end: date, out_path) ->
             empty = win is None
             if empty:
                 win = Window(0, 0, 1, 1)
-            profile = dict(_PROFILE, crs=ds.crs, transform=ds.window_transform(win),
+            profile = dict(_PROFILE, crs=ds.crs, transform=ds.transform @ Affine.translation(win.col_off, win.row_off),
                            width=int(win.width), height=int(win.height))
             with rasterio.open(part, "w", **profile) as dst:
                 if not empty:

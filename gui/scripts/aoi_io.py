@@ -151,4 +151,6 @@ def sidecar_request(aoi_fc):
 def sidecar_gdf(info: dict):
     import geopandas as gpd
 
+    if not info["features"]:
+        return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
     return gpd.GeoDataFrame.from_features(info["features"], crs="EPSG:4326")

@@ -119,3 +119,8 @@ def test_sidecar_request_keeps_the_geometry_and_drops_the_properties(tiny_aoi):
     gdf = aoi_io.sidecar_gdf(aoi_io.sidecar_request(fc).getInfo())
     assert list(gdf.columns) == ["geometry"] and len(gdf) == 1
     assert tuple(gdf.total_bounds) == pytest.approx(_BOX, abs=1e-3)  # 30 m simplify, about 3e-4 degrees
+
+
+def test_sidecar_gdf_of_an_empty_collection_is_an_empty_frame():
+    gdf = aoi_io.sidecar_gdf({"type": "FeatureCollection", "features": []})
+    assert gdf.crs.to_epsg() == 4326 and len(gdf) == 0
