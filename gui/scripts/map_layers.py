@@ -34,7 +34,8 @@ Legends (spec §9.4): ``show``, ``toggle`` and ``refresh`` take the layer's
 ``legend=`` (a ``LayerLegend``). The legend is recorded only when the build
 succeeded and the layer is still wanted, so a legend never precedes its
 layer; it is removed on ``hide``, on ``clear`` (a project switch or close),
-and when a build fails or is superseded, so it never outlives it either.
+and when a build fails or is superseded (the superseded build removes the
+key's layer, and the legend it carried with it), so it never outlives it.
 ``refresh`` replaces it: with new pixels once the rebuild lands (a build that
 carries no legend drops the old one), with the same pixels at once and
 without a rebuild (a mask's choice, the active period). The newest drawn
@@ -247,6 +248,11 @@ class MapLayers:
                     self._version += 1
                 elif wanted and self._legends.pop(key, None) is not None:
                     self._version += 1  # this build carries no legend: the previous layer's must not stay
+                elif not wanted and self._legends.pop(key, None) is not None:
+                    # Superseded: the key's layer is removed below, so the legend
+                    # it carried goes with it. Builds on a key are serialised, so
+                    # this is never a newer build's legend; the next one records its own.
+                    self._version += 1
             if error is not None or not wanted:
                 # Failed, or superseded by hide/clear/a newer show: this build's
                 # layer must not stay on the map. The key is still ours, so no

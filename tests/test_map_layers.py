@@ -427,3 +427,27 @@ def test_legends_publish_into_the_given_reactives(monkeypatch):
     layers = MapLayers(FakeMap(), legends=legends, selected=selected)
     layers.show("k", lambda: None, legend=_legend("k", "k"))
     assert [e.layer_id for e in legends.value] == ["k"] and selected.value == "k"
+
+
+def test_a_superseded_rebuild_takes_the_old_legend_with_its_layer(monkeypatch):
+    """Spec §9.4: a legend never outlives its layer. A superseded rebuild
+    removes the key's layer from the map, so the legend that layer carried
+    goes too; the newer build publishes its own once it lands."""
+    import gui.scripts.map_layers as ml
+    started = []
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: started.append((target, args)))
+    m = FakeMap()
+    layers = MapLayers(m)
+    layers.show("k", lambda: m.add_layer("c1", key="k"), content_id="c1", legend=_legend("k", "L1"))
+    target, args = started.pop(0)
+    target(*args)
+    assert _ids(layers) == ["k"]
+    layers.refresh("k", lambda: m.add_layer("c2", key="k"), "c2", legend=_legend("k", "L2"))  # B2 starts
+    l3 = _legend("k", "L3")
+    layers.refresh("k", lambda: m.add_layer("c3", key="k"), "c3", legend=l3)  # B3 waits for B2
+    target, args = started.pop(0)
+    target(*args)  # B2 lands, superseded: its layer is removed, and the old legend with it
+    assert m.drawn == set() and layers.legends.value == () and layers.selected.value == ""
+    target, args = started.pop(0)
+    target(*args)  # B3 lands
+    assert m.drawn == {"k"} and layers.legends.value == (l3,) and layers.selected.value == "k"
