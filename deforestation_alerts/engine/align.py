@@ -35,9 +35,11 @@ other resampling would invent values.
 import threading
 import warnings
 from pathlib import Path
+from typing import Callable
 
 import dask
 import dask.array
+import numpy as np
 import rasterio
 import rioxarray
 from odc.geo import xr as odc_xr
@@ -81,13 +83,26 @@ class _WindowWriter:
         self._dst.write(block, indexes=indexes, window=window)
 
 
-def reproject_to_grid(src_path, grid: GridSpec, out_part_path, *, resampling: str = "nearest") -> Path:
+def reproject_to_grid(
+    src_path,
+    grid: GridSpec,
+    out_part_path,
+    *,
+    resampling: str = "nearest",
+    band: int | None = None,
+    pixel_hook: Callable[[np.ndarray, float | None], np.ndarray] | None = None,
+) -> Path:
     """Write ``src_path`` aligned onto ``grid`` as ``out_part_path``.
 
     The output is on the engine raster contract except for overviews: Int32,
     no-data 0 (source no-data and everything outside the source become 0),
     tiled 512 px, DEFLATE with predictor 2. The caller builds the overviews,
     checks the header and renames the ``.part`` (see ``harmonize``).
+
+    Every band is aligned, or one band when ``band`` (1-based) is given.
+    ``pixel_hook(values, nodata)`` runs on each source block before the Int32
+    cast and returns it as Int32 (0 is no-data): a float raster, which odc-geo
+    will not cast to Int32 (``same_kind``), goes through it (``masks``).
     """
     if resampling != "nearest":
         raise ValueError(f"only nearest resampling keeps codes and dates exact, not {resampling!r}")
@@ -115,7 +130,15 @@ def reproject_to_grid(src_path, grid: GridSpec, out_part_path, *, resampling: st
             src_path, chunks={"band": 1, "x": SRC_CHUNK, "y": SRC_CHUNK}, cache=False, lock=False
         )
         nodata = source.rio.nodata
-        if nodata is not None and nodata != 0:
+        if band is not None:
+            source = source.isel(band=[int(band) - 1])  # one chosen band, 1-based
+        if pixel_hook is not None:
+            # Decide each source pixel before any cast (a float32 0.7 must not
+            # become 0, NaN no-data must not become anything): the hook turns a
+            # block into Int32 0/1, whose no-data is 0.
+            hooked = source.data.map_blocks(lambda block: pixel_hook(block, nodata), dtype="int32")
+            source = source.copy(data=hooked).rio.write_nodata(0)
+        elif nodata is not None and nodata != 0:
             # Asked for a destination no-data of 0, rasterio's warp writes the
             # *source* no-data value where there is no data: make it 0 first.
             source = source.where(source != nodata, 0).rio.write_nodata(0)

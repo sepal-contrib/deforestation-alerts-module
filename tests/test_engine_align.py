@@ -200,3 +200,18 @@ def test_only_nearest_resampling_is_accepted(tmp_path, resampling):
     _source(tmp_path / "src.tif")
     with pytest.raises(ValueError, match="nearest"):
         align.reproject_to_grid(tmp_path / "src.tif", GRID, tmp_path / "out.tif", resampling=resampling)
+
+
+def test_one_chosen_band_of_a_multiband_file(tmp_path):
+    """``band=2`` (1-based) aligns only that band: one band out, equal to it."""
+    t = GRID.affine
+    stack = np.stack([np.full((GRID.height, GRID.width), v, "int32") for v in (7, 0, 9)])
+    stack[1, :, : GRID.width // 2] = 2_026_010
+    profile = dict(driver="GTiff", dtype="int32", nodata=0, count=3, width=GRID.width, height=GRID.height,
+                   crs=GRID.epsg, transform=t)
+    with rasterio.open(tmp_path / "three.tif", "w", **profile) as dst:
+        dst.write(stack)
+    out = align.reproject_to_grid(tmp_path / "three.tif", GRID, tmp_path / "out.tif.part", band=2)
+    with rasterio.open(out) as ds:
+        assert ds.count == 1 and ds.dtypes == ("int32",)
+        np.testing.assert_array_equal(ds.read(1), stack[1])

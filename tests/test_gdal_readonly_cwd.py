@@ -178,6 +178,58 @@ def test_the_engine_runs_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly
     assert not list(out.rglob("*.part"))
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+def test_the_geotiff_and_mask_writers_run_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd,
+                                                                                unconfigured_tmpdir):
+    from datetime import date
+
+    import geopandas as gpd
+    import rasterio
+    from affine import Affine
+    from pyproj import Transformer
+    from shapely.geometry import box
+
+    from deforestation_alerts.engine import masks, normalize, raster_io
+    from deforestation_alerts.project.models import BandMap, CustomSource, GridSpec, NativeGrid
+
+    assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
+    grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=600, height=520)
+    out = tmp_path / "project"
+    (out / "user").mkdir(parents=True)
+    t = Affine(10, 0, 500000, 0, -10, 8900000)
+    # a RADD-preset GeoTIFF on the grid's lattice and a float32 mask with NaN no-data
+    with rasterio.open(out / "user" / "radd.tif", "w", driver="GTiff", width=600, height=520, count=2,
+                       dtype="int16", crs=grid.epsg, transform=t) as dst:
+        dst.write(np.full((520, 600), 3, "int16"), 1)
+        dst.write(np.full((520, 600), 26010, "int16"), 2)
+    prob = np.full((520, 600), 0.8, "float32")
+    prob[:, 300:] = np.nan
+    with rasterio.open(out / "user" / "prob.tif", "w", driver="GTiff", width=600, height=520, count=1,
+                       dtype="float32", crs=grid.epsg, transform=t, nodata=float("nan")) as dst:
+        dst.write(prob, 1)
+    w, s, e, n = Transformer.from_crs(grid.epsg, "EPSG:4326", always_xy=True).transform_bounds(
+        500000, 8900000 - 5200, 506000, 8900000)
+    bounds = (w, s, e, n)
+
+    src = CustomSource(name="tif", origin="file", ref=str(out / "user" / "radd.tif"), asset_type="FILE",
+                       format="radd", date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
+                       native=NativeGrid(crs=grid.epsg, scale=10.0, transform=tuple(t)[:6], bounds=bounds), digit=3)
+    raw = normalize.normalize_file(src, bounds, date(2026, 1, 1), date(2026, 1, 31), out / "raw.tif")
+    with rasterio.open(raw) as r:
+        assert r.count == 2 and r.read(1).max() == 1
+
+    sidecar = out / "aoi.geojson"
+    gpd.GeoDataFrame(geometry=[box(*bounds)], crs="EPSG:4326").to_file(sidecar, driver="GeoJSON")
+    aoi = masks.build_aoi_raster(sidecar, grid, out / "masks" / "aoi.tif")
+    raster_io.check_header(aoi, grid)
+
+    stats = masks.align_mask(out / "user" / "prob.tif", grid, out / "masks" / "prob.tif", band=1, aoi_raster=aoi)
+    assert 0 < stats["on_pixels"] < grid.width * grid.height  # NaN is off: the western half only
+
+    assert list(readonly_cwd.iterdir()) == []
+    assert not list(out.rglob("*.part"))
+
+
 def _tippecanoe_available():
     from deforestation_alerts.engine import pmtiles
 
