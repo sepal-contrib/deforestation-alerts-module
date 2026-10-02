@@ -65,7 +65,16 @@
       "meta_failed": "Could not load the catalogue dates: {error}",
       "delete_title": "Remove {name}?",
       "delete_message": "The source is removed from the project. Its downloaded files stay until they are replaced.",
-      "delete_used": "{n} alert set(s) used this source. They keep their alerts; new sets won't include it."
+      "delete_used": "{n} alert set(s) used this source. They keep their alerts; new sets won't include it.",
+      "name_empty": "Give the source a name.",
+      "name_too_long": "Use at most 24 characters.",
+      "name_reserved": "GLAD-L, RADD and GLAD-S2 are the predefined sources' names.",
+      "name_duplicate": "Another source already has this name.",
+      "name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
+      "name_token_taken": "This name would share its file names with another source; choose another.",
+      "name_set_collision": "With this name two different source combinations would share one alert set; choose another.",
+      "edit_used": "An alert set already uses this source: add a new one instead.",
+      "cap_reached": "All 6 custom source slots are in use."
     },
     "period": {
       "title": "Period",
@@ -108,7 +117,12 @@
       "stop": "Stop after this row",
       "job_title": "Download & harmonize",
       "job_row": "Preparing {source}",
-      "row_failed": "{source}: {error}"
+      "row_failed": "{source}: {error}",
+      "mask_name_empty": "Give the mask a name.",
+      "mask_name_too_long": "Use at most 24 characters.",
+      "mask_name_duplicate": "Another mask already has this name.",
+      "mask_name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
+      "mask_name_token_taken": "This name would share its file names with another mask; choose another."
     },
     "integrate": {
       "title": "Integrate & vectorize",

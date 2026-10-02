@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
+from deforestation_alerts.project.models import sources_slug
 from deforestation_alerts.scripts.naming import alert_artifact_name, safe_token
 
 DATA_DIR_ENV = "DEFORESTATION_ALERTS_DATA_DIR"
@@ -46,8 +47,7 @@ def harmonized_path(pdir, period_id, source, win_start: date, win_end: date) -> 
 
 
 def set_dir(pdir, period_id, sources) -> Path:
-    slug = "-".join(safe_token(s) for s in _sorted(sources))
-    return _period(pdir, period_id) / "sets" / slug
+    return _period(pdir, period_id) / "sets" / sources_slug(sources)
 
 
 def combined_path(set_directory, sources, start: date, end: date) -> Path:

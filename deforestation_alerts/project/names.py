@@ -1,0 +1,71 @@
+"""Name rules for custom sources and masks (spec §5.1). Solara-free; errors
+are message keys the UI translates."""
+
+import itertools
+from typing import Optional
+
+from deforestation_alerts.project.models import PREDEFINED_KEYS, Project, sources_slug
+from deforestation_alerts.scripts.naming import safe_token
+
+MAX_NAME = 24
+_PREDEFINED_TOKENS = {safe_token(k) for k in PREDEFINED_KEYS}  # glad-l, radd, glad-s2
+
+
+def _key(name) -> str:
+    return str(name or "").strip().casefold()
+
+
+def slug_collision(project: Project, new_name: str, current: Optional[str] = None) -> bool:
+    """True when two different source combinations (the current sources plus
+    ``new_name``) would share a set slug, or one would take the slug of a
+    recorded set whose sources differ (spec §5.1)."""
+    names = [n for n in project.sources if n != current] + [new_name.strip()]
+    seen: dict = {}
+    for r in range(1, len(names) + 1):
+        for combo in itertools.combinations(names, r):
+            slug, members = sources_slug(combo), frozenset(combo)
+            if seen.setdefault(slug, members) != members:
+                return True
+    for s in project.alert_sets.values():
+        slug = sources_slug(s.sources)
+        if slug in seen and seen[slug] != frozenset(s.sources):
+            return True
+    return False
+
+
+def validate_source_name(name, project: Project, *, current: Optional[str] = None) -> Optional[str]:
+    text = str(name or "").strip()
+    if not text:
+        return "steps.alerts.name_empty"
+    if len(text) > MAX_NAME:
+        return "steps.alerts.name_too_long"
+    if _key(text) in {k.casefold() for k in PREDEFINED_KEYS}:
+        return "steps.alerts.name_reserved"
+    others = [n for n in project.sources if n != current]
+    if _key(text) in {_key(n) for n in others}:
+        return "steps.alerts.name_duplicate"
+    token = safe_token(text)
+    if token == "na":
+        return "steps.alerts.name_token_na"
+    if token in _PREDEFINED_TOKENS or token in {safe_token(n) for n in others}:
+        return "steps.alerts.name_token_taken"
+    if slug_collision(project, text, current):
+        return "steps.alerts.name_set_collision"
+    return None
+
+
+def validate_mask_name(name, project: Project, *, current: Optional[str] = None) -> Optional[str]:
+    text = str(name or "").strip()
+    if not text:
+        return "steps.prepare.mask_name_empty"
+    if len(text) > MAX_NAME:
+        return "steps.prepare.mask_name_too_long"
+    others = [n for n in project.masks if n != current]
+    if _key(text) in {_key(n) for n in others}:
+        return "steps.prepare.mask_name_duplicate"
+    token = safe_token(text)
+    if token == "na":
+        return "steps.prepare.mask_name_token_na"
+    if token in {safe_token(n) for n in others}:
+        return "steps.prepare.mask_name_token_taken"
+    return None

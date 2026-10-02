@@ -101,3 +101,84 @@ def test_locked_once_a_set_exists():
         created_at=datetime(2026, 9, 30),
     )
     assert p.locked is True
+
+
+from deforestation_alerts.project.models import (  # noqa: E402
+    BandMap, NativeGrid, RegionCoverage, SourceCoverage, add_custom_source, sets_using_source,
+    sources_slug, update_custom_source,
+)
+
+
+def _add(p, name, **kw):
+    fields = dict(origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd", date_encoding="yyddd",
+                  band_map=BandMap(alert="Alert", date="Date"),
+                  native=NativeGrid(crs="EPSG:4326", scale=10.0))
+    fields.update(kw)
+    return add_custom_source(p, name=name, **fields)
+
+
+def test_round_trip_custom_source_coverage_and_stats():
+    p = _project()
+    _add(p, "Forest RADD")
+    _add(p, "ccdc tif", origin="file", ref="/home/u/c.tif", asset_type="FILE", format="ccdc",
+         date_encoding="decimal_year", band_map=BandMap(alert=1, date=2),
+         native=NativeGrid(crs="EPSG:32721", scale=30.0, transform=(30.0, 0.0, 500000.0, 0.0, -30.0, 7400000.0),
+                           bounds=(-56.0, -24.0, -55.0, -23.0)))
+    p.coverage["RADD"] = SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=0.5,
+                                        regions=[RegionCoverage(name="sa", fraction=0.5, first=date(2020, 1, 1),
+                                                                last=date(2026, 9, 23))],
+                                        gaps=[(date(2024, 7, 17), date(2024, 12, 31))])
+    p.artifacts["harm:x"] = Artifact(key="harm:x", kind="harmonized", rel_path="h.tif", fingerprint="f",
+                                     inputs={}, content_id="c", created_at=datetime(2026, 9, 30),
+                                     stats={"alert_pixels": 3, "alert_pixels_unmasked": 5,
+                                            "date_min": 2026001, "date_max": 2026010})
+    back = Project.model_validate_json(p.model_dump_json())
+    assert back == p
+    assert back.sources["ccdc tif"].band_map.alert == 1 and back.sources["Forest RADD"].band_map.date == "Date"
+
+
+def test_custom_digits_cap_and_reuse():
+    p = _project()
+    for i in range(6):
+        _add(p, f"s{i}")
+    assert sorted(s.digit for s in p.sources.values()) == [3, 4, 5, 6, 7, 8]
+    # Controller ruling (Task 7): the cap is a message key too, like every
+    # other add_custom_source error, not next_custom_digit's plain string.
+    with pytest.raises(ValueError, match="steps.alerts.cap_reached"):
+        _add(p, "s6")
+    remove_source(p, "s2")
+    assert _add(p, "again").digit == 5
+
+
+def test_add_refuses_a_bad_name():
+    with pytest.raises(ValueError, match="steps.alerts.name_reserved"):
+        _add(_project(), "RADD")
+
+
+def test_edit_is_refused_once_a_set_used_the_source():
+    p = _project()
+    _add(p, "mine")
+    update_custom_source(p, "mine", ref="users/x/b")
+    assert p.sources["mine"].ref == "users/x/b"
+    p.alert_sets = {"x__mine": AlertSet(id="x__mine", period_id="x", sources=["mine"], digit_map={3: "mine"},
+                                        params=AlertSetParams(), store_rel_path="s", combined_rel_path="c",
+                                        footprint_rel_path="f", fingerprint="f", created_at=datetime.now())}
+    assert sets_using_source(p, "mine") == ["x__mine"]
+    with pytest.raises(ValueError, match="steps.alerts.edit_used"):
+        update_custom_source(p, "mine", ref="users/x/c")
+
+
+def test_remove_source_drops_a_custom_coverage_record_only():
+    p = _project()
+    add_predefined_source(p, "RADD")
+    _add(p, "mine")
+    cov = SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=1.0)
+    p.coverage = {"RADD": cov, "mine": cov}
+    remove_source(p, "mine")
+    remove_source(p, "RADD")
+    assert set(p.coverage) == {"RADD"}  # the three predefined entries are always kept (spec §5.1)
+
+
+def test_set_ids_use_the_shared_slug():
+    assert sources_slug(["RADD", "GLAD-L"]) == "glad-l-radd"
+    assert set_id("2026-01-01_2026-01-31", ["RADD", "GLAD-L"]) == "2026-01-01_2026-01-31__glad-l-radd"
