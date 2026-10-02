@@ -783,9 +783,9 @@ def test_the_draw_control_is_on_the_map_only_on_this_step_in_drawn_mode(step):
         assert draw not in map_.controls and draw.calls == []
         state.active_step.set(step_index("integrate"))
         assert draw in map_.controls and draw.calls == ["show"]
-        state.panel_view.set("overview")
+        state.active_step.set(step_index("aoi"))  # another step is showing
         assert draw not in map_.controls
-        state.panel_view.set("workflow")
+        state.active_step.set(step_index("integrate"))
         assert draw in map_.controls
 
         calls = list(draw.calls)

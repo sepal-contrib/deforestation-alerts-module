@@ -22,8 +22,10 @@ def _states(p):
 
 def test_order_and_rail():
     assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "analysis"]
-    assert [(r.key, r.step_id, r.display) for r in RAIL_ITEMS] == [
-        ("about", 1, "dialog"), ("project", 2, "dialog"), ("overview", 3, "panel")]
+    # Every rail item is a dialog: the Overview dashboard is the widest, over
+    # the map and the panel alike (spec §9.5).
+    assert [(r.key, r.step_id, r.display, r.dialog_width) for r in RAIL_ITEMS] == [
+        ("about", 1, "dialog", 1300), ("project", 2, "dialog", 900), ("overview", 3, "dialog", 1300)]
 
 
 def test_gates_follow_the_project(tmp_path, monkeypatch):

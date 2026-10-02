@@ -15,7 +15,7 @@ Two registries:
 Semantics are outputs, not completion: steps are revisitable workspaces. A
 step is LOCKED (upstream requirement missing), EMPTY (unlocked, nothing
 produced yet) or HAS_OUTPUTS. "Current" is view state owned by the shell
-(``app_state.active_step`` / ``app_state.panel_view``), not a status.
+(``app_state.active_step``), not a status.
 
 Solara-free: gate/count callables take the Project (or ``None`` when no
 project is open) — never reactives, so everything here is unit-testable
@@ -60,8 +60,8 @@ class RailItem:
     page_view: str
     label_key: str
     icon: str
-    display: str  # "dialog" (MapApp modal) | "panel" (a right-panel view)
-    dialog_width: Optional[int] = None  # dialogs only
+    display: str  # MapApp's own vocabulary; every rail item is a "dialog"
+    dialog_width: Optional[int] = None
 
 
 def active_period(p):
@@ -113,7 +113,9 @@ STEPS: List[StepSpec] = [
 RAIL_ITEMS: List[RailItem] = [
     RailItem("about", 1, "about_tile", "app.drawer_item.about", "mdi-help-circle", "dialog", 1300),
     RailItem("project", 2, "project_tile", "app.drawer_item.project", "mdi-folder-open", "dialog", 900),
-    RailItem("overview", 3, "overview_tile", "app.drawer_item.overview", "mdi-chart-bar", "panel"),
+    # The Overview dashboard is the widest dialog: two columns of charts
+    # (spec §9.5), the same 1300 px About uses.
+    RailItem("overview", 3, "overview_tile", "app.drawer_item.overview", "mdi-chart-bar", "dialog", 1300),
 ]
 
 

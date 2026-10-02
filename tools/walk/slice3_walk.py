@@ -122,12 +122,12 @@ def a_mixed(page, rec, *, out, folder):
     text = "\n".join(p.text for p in docx.Document(str(report)).paragraphs)
     rec["report"] = report.name
     assert "ccdc tif" in text, f"{report.name} does not name the alert's sources"
-    ph.overview_reviewed(page, rec, out=out, n=1)  # opens Overview, where the export card is
+    # Both open the Overview dialog, where the export card is, and close it again.
+    ph.overview_reviewed(page, rec, out=out, n=1)
     ph.overview_export_csv(page, rec, out=out, folder=folder())
     csv = next(f for f in rec["export_new_files"] if f.endswith(".csv"))
     joined = " | ".join(map(str, pd.read_csv(Path(folder()) / csv)["alert_sources"]))
     assert "radd sa" in joined and "ccdc tif" in joined, joined[:300]
-    page.locator(".right-panel button:has(.mdi-arrow-left):visible").first.click()  # back to the workflow
 
 
 def _attribute_header(page):

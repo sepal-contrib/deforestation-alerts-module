@@ -3,6 +3,8 @@ and the action the _NavBridge applies to the MapApp widget + AppState.
 
 Side-effect-free (no EE, no UI) so it runs offline."""
 
+import pytest
+
 from gui.store.navigation import (
     PAGE_VIEW_TO_RAIL,
     PAGE_VIEW_TO_WORKFLOW,
@@ -65,36 +67,27 @@ class _FakeNav:
         self.current_step = current_step
 
 
-def test_apply_workflow_target_dismisses_dialog_opens_panel_resets_view_sets_step():
+def test_apply_workflow_target_dismisses_dialog_opens_panel_and_sets_step():
     mapapp, nav, state = _FakeMapApp(), _FakeNav(current_step=3), AppState()
-    state.panel_view.set("overview")  # coming from the Overview view
     apply_navigation(mapapp, nav, state, resolve_navigation("analysis_tile"))
     assert mapapp.step_open is False
     assert mapapp.panel_calls == ["open"]
     assert nav.current_step is None  # the Overview rail item un-highlights
-    assert state.panel_view.value == "workflow"
     assert state.active_step.value == 6
 
 
-def test_apply_panel_rail_target_opens_panel_and_switches_view():
+@pytest.mark.parametrize("view,step", [("about_tile", 1), ("project_tile", 2), ("overview_tile", 3)])
+def test_apply_a_rail_target_only_activates_its_dialog_step(view, step):
+    """Every rail item is a dialog -- About, Project and the Overview
+    dashboard: MapApp opens it itself, and the right panel is left as the
+    user left it behind the dialog."""
     mapapp, nav, state = _FakeMapApp(), _FakeNav(), AppState()
     state.active_step.set(1)
-    apply_navigation(mapapp, nav, state, resolve_navigation("overview_tile"))
-    assert mapapp.step_open is False
-    assert mapapp.panel_calls == ["open"]
-    assert nav.current_step == 3
-    assert state.panel_view.value == "overview"
-    assert state.active_step.value == 1  # workflow position remembered
-
-
-def test_apply_dialog_rail_target_only_activates_the_dialog_step():
-    mapapp, nav, state = _FakeMapApp(), _FakeNav(), AppState()
-    state.panel_view.set("overview")
-    apply_navigation(mapapp, nav, state, resolve_navigation("project_tile"))
-    assert nav.current_step == 2
+    apply_navigation(mapapp, nav, state, resolve_navigation(view))
+    assert nav.current_step == step
     assert mapapp.panel_calls == []
     assert mapapp.step_open is True  # MapApp's own watcher opens the dialog
-    assert state.panel_view.value == "overview"  # dialogs never change the view
+    assert state.active_step.value == 1  # the workflow position is remembered
 
 
 def test_apply_without_mapapp_still_moves_state():
@@ -102,7 +95,7 @@ def test_apply_without_mapapp_still_moves_state():
     apply_navigation(None, nav, state, resolve_navigation("integrate_tile"))
     assert state.active_step.value == 5 and nav.current_step is None
     apply_navigation(None, nav, state, resolve_navigation("overview_tile"))
-    assert state.panel_view.value == "overview" and nav.current_step == 3
+    assert nav.current_step == 3 and state.active_step.value == 5
 
 
 def test_dismiss_dialog_closes_an_open_dialog_like_its_close_button():
@@ -114,10 +107,19 @@ def test_dismiss_dialog_closes_an_open_dialog_like_its_close_button():
     assert mapapp.panel_calls == []  # the right panel is left as it was
 
 
-def test_dismiss_dialog_leaves_a_panel_item_current_and_runs_before_the_mount():
-    mapapp, nav = _FakeMapApp(), _FakeNav(current_step=3)  # Overview highlighted
+def test_dismiss_dialog_clears_any_rail_dialog_and_runs_before_the_mount():
+    mapapp, nav = _FakeMapApp(), _FakeNav(current_step=3)  # the Overview dashboard
     dismiss_dialog(mapapp, nav)
-    assert nav.current_step == 3 and mapapp.step_open is False
+    assert nav.current_step is None and mapapp.step_open is False
     nav = _FakeNav(current_step=2)
     dismiss_dialog(None, nav)  # MapApp not mounted yet: the step still clears
     assert nav.current_step is None
+
+
+def test_dismiss_dialog_with_nothing_open_is_a_no_op():
+    """It is called on every workflow navigation, most of which follow no
+    dialog at all: a cleared step must not be written again."""
+    mapapp, nav = _FakeMapApp(), _FakeNav(current_step=None)
+    dismiss_dialog(mapapp, nav)
+    assert nav.current_step is None and mapapp.step_open is False
+    assert mapapp.panel_calls == []

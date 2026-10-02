@@ -66,7 +66,7 @@ from gui.store.state_manager import AppState
 from gui.scripts.detached import render_detached
 from gui.scripts.notify_bridge import install_server_log_handler, install_task_log_handler
 from gui.scripts.reacton_widgets import find_rendered_widget
-from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set, rail_item_for_step
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set
 from gui.tile.about_tile import AboutTile
 from gui.tile.alerts_step import AlertsStep
 from gui.tile.analysis import build_analysis_layout
@@ -158,11 +158,7 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
             return
         # Loop-safety: the target is already showing (e.g. _PanelBridge just
         # mirrored the showing view back into current_page_view).
-        if (
-            action.kind == "workflow"
-            and app_state.panel_view.value == "workflow"
-            and action.target == app_state.active_step.value
-        ):
+        if action.kind == "workflow" and action.target == app_state.active_step.value:
             return
         if action.kind == "rail" and action.target == nav_model.current_step:
             return
@@ -173,67 +169,53 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
 
 @solara.component
 def _PanelBridge(
-    app_state, panel_wrappers, header_wrapper, stage_host, map_, mapapp_ref, workflow_config
+    app_state, panel_wrappers, stage_host, map_, mapapp_ref, workflow_config
 ):
-    """Apply the panel view + workflow position to the widgets: wrapper and
-    header visibility, the Analysis stage overlay + shared-map hiding, the
-    panel title/icon, and the ``current_page_view`` mirror. (Layers on the
-    shared map belong to the session's ``MapLayers`` registry, not to the
-    showing step, spec §4.3.)
+    """Apply the workflow position to the widgets: which step's wrapper shows,
+    the Analysis stage overlay + shared-map hiding, the panel title/icon, and
+    the ``current_page_view`` mirror. (Layers on the shared map belong to the
+    session's ``MapLayers`` registry, not to the showing step, spec §4.3.)
 
     A leaf component (same reason as ``_NavBridge``). Runs whenever
-    ``panel_view``, ``active_step`` or the locale change, whoever set them
-    (header click, rail click, navigation bridge, language selector).
+    ``active_step`` or the locale change, whoever set them (header click, rail
+    click, navigation bridge, language selector). The rail items are all
+    dialogs, so the panel itself only ever shows the Workflow view.
     """
-    view = app_state.panel_view.value
     active = app_state.active_step.value
     # A language switch re-renders Page, and MapApp then copies the translated
-    # Workflow config onto the panel: re-apply so a non-workflow view keeps
-    # its own title and icon.
+    # Workflow config onto the panel: re-apply so the panel keeps its title.
     locale = current_locale()
 
     def _apply():
-        workflow = view == "workflow"
         spec = STEPS[active]
-        showing_key = spec.key if workflow else view
-        header_wrapper.style_ = "" if workflow else "display: none;"
         for key, wrap in panel_wrappers.items():
-            wrap.style_ = "" if key == showing_key else "display: none;"
-        # Full-stage step (Analysis, Workflow view only): show the overlay and
-        # hide the shared map so its leaflet layer-control menu can't bleed
-        # over the panel. Other steps' layers stay mounted and return on leave.
+            wrap.style_ = "" if key == spec.key else "display: none;"
+        # Full-stage step (Analysis): show the overlay and hide the shared map
+        # so its leaflet layer-control menu can't bleed over the panel.
         # Order matters on leave: the shared map is displayed again BEFORE
         # the stage hides. Leaflet measured it as 0x0 while it was hidden, and
         # the stage's hide nudge (a window resize, see StageHost) must find it
         # displayed to re-measure it; the frontend applies these two messages
         # in the order they are sent. The stage also always covers the map
         # while it hides or comes back, so nothing flashes.
-        if workflow and spec.full_stage:
+        if spec.full_stage:
             stage_host.visible = True
             map_.add_class("defo-map-hidden")
         else:
             map_.remove_class("defo-map-hidden")
             stage_host.visible = False
-        # Panel title/icon follow the view (pysepal RightPanel.config is a
-        # synced trait; keep the width so the config observer is a no-op).
+        # Panel title/icon (pysepal RightPanel.config is a synced trait; keep
+        # the width so the config observer is a no-op).
         mapapp = mapapp_ref.get("widget")
         if mapapp is not None and mapapp.right_panel:
-            panel = mapapp.right_panel[0]
-            if workflow:
-                panel.config = {**workflow_config}
-            else:
-                item = rail_item_for_step(next(r.step_id for r in RAIL_ITEMS if r.key == view))
-                panel.config = {**workflow_config, "title": t(item.label_key), "icon": item.icon}
+            mapapp.right_panel[0].config = {**workflow_config}
         # Mirror: keep current_page_view faithful to what is showing so a
         # *repeated* trigger (e.g. searching twice) still changes the value and
         # re-fires _NavBridge, whose guard then no-ops.
-        showing_view = spec.page_view if workflow else next(
-            r.page_view for r in RAIL_ITEMS if r.key == view
-        )
-        if app_state.current_page_view.value != showing_view:
-            app_state.current_page_view.value = showing_view
+        if app_state.current_page_view.value != spec.page_view:
+            app_state.current_page_view.value = spec.page_view
 
-    solara.use_effect(_apply, [view, active, locale])
+    solara.use_effect(_apply, [active, locale])
 
 
 init_ee()
@@ -527,7 +509,7 @@ def legend_props(app_state, translate) -> dict:
     legends = app_state.layer_legends.value
     selected = app_state.selected_legend.value
     current = next((e for e in legends if e.layer_id == selected), None)
-    full_stage = app_state.panel_view.value == "workflow" and STEPS[app_state.active_step.value].full_stage
+    full_stage = STEPS[app_state.active_step.value].full_stage
     return {
         "legend_data": asdict(to_legend_data(current.spec, translate)) if current else {},
         "selector_options": [{"value": e.layer_id, "text": resolve_label(e.label, translate)} for e in legends],
@@ -678,8 +660,10 @@ def _AppShell():
             app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)), t("app.drawer_item.project"))[0],
         dependencies=[])
     overview_widget = solara.use_memo(
-        lambda: render_detached(lambda: OverviewTile(app_state=app_state, map_=map_,
-                                                     layers=layers), t("app.drawer_item.overview"))[0], dependencies=[])
+        lambda: render_detached(lambda: OverviewTile(
+            app_state=app_state, map_=map_, layers=layers,
+            dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)),
+            t("app.drawer_item.overview"))[0], dependencies=[])
     step_widgets = solara.use_memo(
         lambda: {
             "aoi": render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface,
@@ -720,30 +704,22 @@ def _AppShell():
     )
 
     # -----------------------------------------------------------------------
-    # Two-view right panel (spatial_risk parity + the Overview view).
-    #
-    # Workflow view: PipelineHeader + the active workflow step's controls.
-    # Overview view: the active set's summary, exports and tiles on the shared
-    # map, entered from its rail button. Which view shows is
-    # app_state.panel_view; which workflow step is active is
-    # app_state.active_step. nav_model.current_step tracks the rail (dialogs +
-    # the highlighted Overview item).
+    # The right panel (spatial_risk parity): the PipelineHeader above the
+    # active workflow step's controls. Which step is active is
+    # app_state.active_step; nav_model.current_step tracks the rail, whose
+    # three items (About, Project, Overview) are all MapApp dialogs, so the
+    # panel never has to change what it shows.
     # -----------------------------------------------------------------------
-    # Throwaway content for the Overview "panel" rail entry: never rendered
-    # (display != step/dialog), but a non-empty content list is what makes
-    # MapApp set current_step on click.
-    panel_sentinel = solara.use_memo(lambda: v.Html(tag="div"), dependencies=[])
-
-    # Every panel view's controls wrapped in a div we SHOW/HIDE. ALL wrappers
-    # stay mounted in panel_host at all times; on view/step change we toggle
-    # their visibility instead of swapping panel_host.children.
+    # Every step's controls wrapped in a div we SHOW/HIDE. ALL wrappers stay
+    # mounted in panel_host at all times; on a step change we toggle their
+    # visibility instead of swapping panel_host.children.
     # WHY (not a children swap): swapping detaches the previous widget, and a
     # tile's `solara.display`-captured controls live in an `Output` whose view
     # is NOT recreated when the widget is reattached — so step cards vanished
     # after navigating away and back. `display:none` keeps the DOM —
-    # and the widget views — alive. Keyed by step key / rail key; AOI is the
-    # default-visible one (active_step 0, panel_view "workflow").
-    panel_controls = {**step_widgets, "analysis": analysis_controls_widget, "overview": overview_widget}
+    # and the widget views — alive. Keyed by step key; AOI is the
+    # default-visible one (active_step 0).
+    panel_controls = {**step_widgets, "analysis": analysis_controls_widget}
 
     def _wrap(key, visible):
         return v.Html(
@@ -752,31 +728,23 @@ def _AppShell():
             style_="" if visible else "display: none;",
         )
 
-    panel_step_wrappers = solara.use_memo(
+    panel_wrappers = solara.use_memo(
         lambda: {s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS},
         dependencies=[],
     )
-    panel_rail_wrappers = solara.use_memo(
-        lambda: {r.key: _wrap(r.key, False) for r in RAIL_ITEMS if r.display == "panel"},
-        dependencies=[],
-    )
-    panel_wrappers = {**panel_step_wrappers, **panel_rail_wrappers}
     # The pipeline header: rendered detached (MapApp's right_panel_content is a
-    # widget slot, not a reacton child), memoized so it is stable across Page
-    # re-renders, and wrapped so the Overview view can hide it. It re-renders
-    # on its own when the AppState reactives it reads change.
-    header_wrapper = solara.use_memo(
-        lambda: v.Html(
-            tag="div",
-            children=[render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]],
-        ),
+    # widget slot, not a reacton child) and memoized so it is stable across
+    # Page re-renders. It re-renders on its own when the AppState reactives it
+    # reads change.
+    header_widget = solara.use_memo(
+        lambda: render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0],
         dependencies=[],
     )
     panel_host = solara.use_memo(
         lambda: v.Container(
             fluid=True,
             class_="pa-0 ma-0",
-            children=[header_wrapper, *panel_wrappers.values()],
+            children=[header_widget, *panel_wrappers.values()],
         ),
         dependencies=[],
     )
@@ -790,16 +758,12 @@ def _AppShell():
         lambda: StageHost(content=[analysis_stage_widget]), dependencies=[]
     )
 
-    # Rail clicks: a panel item (Overview) switches the right panel to its
-    # view; a dialog item leaves the view alone; every item mirrors its page
-    # view so repeated triggers keep working.
+    # Rail clicks: every item mirrors its page view, so repeated triggers keep
+    # working. The panel is left as the user left it behind the dialog.
     # None (dialog closed, "Map" clicked) changes nothing — see spec D13.
     def _wire_rail_mirror():
         def _on_rail_step(change):
             sid = change["new"]
-            item = rail_item_for_step(sid)
-            if item is not None and item.display == "panel":
-                app_state.panel_view.set(item.key)
             view = page_view_for_rail_step(sid)
             if view is not None and app_state.current_page_view.value != view:
                 app_state.current_page_view.value = view
@@ -832,12 +796,11 @@ def _AppShell():
     }
     right_panel_content = [{"content": [panel_host]}]
 
-    # MapApp drawer entries derive from RAIL_ITEMS (gui/store/workflow_steps.py).
-    # Dialogs get their rendered tile; the Overview panel item gets the
-    # sentinel (its controls live in panel_host) and opens the right panel.
-    # Dialogs carry no right_panel_action — the panel stays as the user left
-    # it behind a dialog, as in spatial_risk.
-    rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}
+    # MapApp drawer entries derive from RAIL_ITEMS (gui/store/workflow_steps.py):
+    # each one is a dialog over its rendered tile. They carry no
+    # right_panel_action — the panel stays as the user left it behind a dialog,
+    # as in spatial_risk.
+    rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget}
     steps_data = [
         {
             "id": r.step_id,
@@ -846,7 +809,6 @@ def _AppShell():
             "display": r.display,
             "content": rail_content[r.key],
             **({"width": r.dialog_width} if r.dialog_width else {}),
-            **({"right_panel_action": "open"} if r.display == "panel" else {}),
         }
         for r in RAIL_ITEMS
     ]
@@ -909,7 +871,6 @@ def _AppShell():
     _PanelBridge(
         app_state=app_state,
         panel_wrappers=panel_wrappers,
-        header_wrapper=header_wrapper,
         stage_host=stage_host,
         map_=map_,
         mapapp_ref=mapapp_ref,

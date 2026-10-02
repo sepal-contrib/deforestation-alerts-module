@@ -61,16 +61,6 @@ def sets_of(period_id) -> list:
     return [s for s in ph.manifest(DATA, PROJECT)["alert_sets"].values() if s["period_id"] == period_id]
 
 
-def overview(page):
-    page.locator('[data-step-id="3"]').first.click()
-    page.wait_for_timeout(5000)
-
-
-def back_to_workflow(page):
-    page.locator(".right-panel button:has(.mdi-arrow-left):visible").first.click()
-    page.wait_for_timeout(1500)
-
-
 def legend_chips(page, value) -> list:
     """Show the legend ``value`` of the dropdown and read its colour chips as (r, g, b)."""
     page.locator(".sepal-legend select:visible").first.select_option(value)
@@ -131,10 +121,10 @@ def b_second_period(page, rec, *, out):
     assert p["periods"][JUNE]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JUNE]["masks"]
     # the switch in August leaves July's set current: no stale banner on it, no
     # out-of-date badge on July's row
-    overview(page)  # June's set is still the active one
-    rec["overview_after_switch"] = w.panel_text(page)[:600]
-    assert SET_STALE not in w.panel_text(page), rec["overview_after_switch"]
-    back_to_workflow(page)
+    ph.open_overview(page)  # June's set is still the active one
+    rec["overview_after_switch"] = w.dialog_text(page)[:600]
+    assert SET_STALE not in rec["overview_after_switch"], rec["overview_after_switch"]
+    w.close_dialog(page)
     w.goto_step(page, "period", 2000)
     rec["june_row_after_switch"] = ph.row_text(page, JUNE_ROW)
     assert "out of date" not in rec["june_row_after_switch"], rec["june_row_after_switch"]
@@ -196,14 +186,18 @@ def d_rules(page, rec, *, out):
 
 
 def e_sets(page, rec, *, out):
-    overview(page)
-    items = [i["text"] for i in ph.menu_items(page, "Alert set", scope=".right-panel")]
+    ph.open_overview(page)
+    items = [i["text"] for i in ph.menu_items(page, "Alert set", scope=".dialog-card")]
     rec["selector"] = items
     assert len(items) == 2 and items[0].startswith(JULY_START) and items[1].startswith(JUNE_START), items
     assert all(re.search(r"· [\d,]+ alerts · \d+ reviewed$", i) for i in items), items
-    ph.choose(page, "Alert set", JULY_START, scope=".right-panel")  # July's set active in Overview
+    ph.choose(page, "Alert set", JULY_START, scope=".dialog-card")  # July's set active
     w.wait_for(lambda: ph.manifest(DATA, PROJECT)["active_set"] == SEEN["july_set"], 30, "July's set active")
     page.wait_for_timeout(3000)
+    w.close_dialog(page)
+    # Both alert layers are switched on in Integrate & vectorize now; they stay
+    # on while the walk moves to Analysis and back (MapLayers ruling #10).
+    ph.show_alerts(page)
     page.locator('.right-panel .v-input--switch:has(label:has-text("Show earlier sets")) '
                  '.v-input--selection-controls__input').first.click()
     w.wait_for(lambda: any(o["text"].startswith("Earlier set") and "GLAD-L" in o["text"]
@@ -250,10 +244,10 @@ def e_sets(page, rec, *, out):
     w.wait_for(lambda: field.input_value() == str(pos), 60, f"the id field at position {pos}")
     rec["id_field"] = field.input_value()
     w.shot(page, out, "go_analysis")
-    overview(page)
-    ph.choose(page, "Alert set", JULY_START, scope=".right-panel")
+    ph.open_overview(page)
+    ph.choose(page, "Alert set", JULY_START, scope=".dialog-card")
     w.wait_for(lambda: ph.manifest(DATA, PROJECT)["active_set"] == SEEN["july_set"], 30, "July's set active")
-    back_to_workflow(page)
+    w.close_dialog(page)
 
 
 def f_replace_list(page, rec, *, out):
@@ -305,11 +299,11 @@ def g_delete_latest(page, rec, *, out):
     (june,) = sets_of(JUNE)
     rec["active"] = (p["active_period"], p["active_set"])
     assert p["active_period"] == JUNE and p["active_set"] == june["id"], rec["active"]
-    overview(page)
-    items = [i["text"] for i in ph.menu_items(page, "Alert set", scope=".right-panel")]
+    ph.open_overview(page)
+    items = [i["text"] for i in ph.menu_items(page, "Alert set", scope=".dialog-card")]
     rec["selector"] = items
     assert len(items) == 1 and items[0].startswith(JUNE_START), items
-    back_to_workflow(page)
+    w.close_dialog(page)
 
 
 def main(argv=None):

@@ -56,9 +56,11 @@ def test_legend_props_follow_the_registry_and_hide_on_analysis():
     assert props["selected"] == "src:RADD" and [o["value"] for o in props["selector_options"]] == ["src:GLAD-L",
                                                                                                     "src:RADD"]
     assert props["visible"]
+    # Analysis is a full-stage step: the legend's z-index would float it over
+    # the stage. The Overview dashboard is a dialog, which covers it anyway.
     state.active_step.set(step_index("analysis"))
     assert not ns["legend_props"](state, lambda key, **kw: key)["visible"]
-    state.panel_view.set("overview")
+    state.active_step.set(step_index("integrate"))
     assert ns["legend_props"](state, lambda key, **kw: key)["visible"]
 
 

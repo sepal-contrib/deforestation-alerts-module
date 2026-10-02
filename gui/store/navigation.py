@@ -2,11 +2,11 @@
 
 Tiles keep writing ``app_state.current_page_view`` (the original Voila app's
 navigation signal). This module maps that string to either a **workflow**
-index (a step in the right panel's Workflow view, driven by
-``app_state.active_step``) or a **rail** step id (a MapApp ``steps_data``
-entry: a dialog, or the Overview panel view). Side-effect-free (no solara
-rendering, no EE, no widgets) so it is unit-testable offline;
-``gui.solara_app._NavBridge`` applies the result.
+index (the right panel's step, driven by ``app_state.active_step``) or a
+**rail** step id (a MapApp ``steps_data`` entry: a dialog -- About, Project
+and the Overview dashboard). Side-effect-free (no solara rendering, no EE, no
+widgets) so it is unit-testable offline; ``gui.solara_app._NavBridge`` applies
+the result.
 
 All maps derive from ``gui.store.workflow_steps`` — never hand-edit ids here.
 """
@@ -44,10 +44,9 @@ def dismiss_dialog(mapapp, nav_model):
     MapApp.vue's ``closeDialog`` closes the dialog and clears the step;
     from Python, ``current_step = None`` (linked through ``nav_model``)
     clears the step and ``step_open = False`` closes the dialog. Both are
-    no-ops when no dialog is open. A panel item (Overview) stays current.
+    no-ops when no dialog is open.
     """
-    item = rail_item_for_step(nav_model.current_step)
-    if item is not None and item.display == "dialog":
+    if rail_item_for_step(nav_model.current_step) is not None:
         nav_model.current_step = None
     if mapapp is not None:
         mapapp.step_open = False
@@ -57,8 +56,8 @@ def _open_panel(mapapp):
     """Dismiss a lingering dialog and make sure the right panel is open.
 
     ``step_open=False`` is MapApp.vue's close watcher; the Vue ``current_step``
-    watcher does not apply ``right_panel_action`` for programmatic changes, so
-    the panel is opened explicitly.
+    watcher does not apply a panel action for programmatic changes, so the
+    panel is opened explicitly.
     """
     if mapapp is not None:
         mapapp.step_open = False
@@ -68,15 +67,14 @@ def _open_panel(mapapp):
 def apply_navigation(mapapp, nav_model, app_state, action):
     """Apply a resolved :class:`NavAction`.
 
-    Workflow target: open the panel, return it to the Workflow view, clear the
-    MapApp step (un-highlights a panel rail item such as Overview) and move the
-    workflow position. Programmatic navigation is deliberately NOT gated: a
-    tile jumps forward only after producing the output that unlocks the
-    target, and the header's gates protect user clicks.
+    Workflow target: open the panel, dismiss an open dialog, clear the MapApp
+    step (which un-highlights its rail item) and move the workflow position.
+    Programmatic navigation is deliberately NOT gated: a tile jumps forward
+    only after producing the output that unlocks the target, and the header's
+    gates protect user clicks.
 
-    Rail target: a panel item (Overview) opens the panel and switches the view;
-    a dialog item only sets the MapApp step and MapApp opens the dialog itself.
-    Dialogs never change ``panel_view``.
+    Rail target: only the MapApp step is set; MapApp opens the dialog itself,
+    and the right panel is left as the user left it behind the dialog.
 
     ``mapapp`` may be ``None`` (widget not mounted yet) — the state still
     moves; only the panel/dialog handling is skipped.
@@ -84,11 +82,6 @@ def apply_navigation(mapapp, nav_model, app_state, action):
     if action.kind == "workflow":
         _open_panel(mapapp)
         nav_model.current_step = None
-        app_state.panel_view.set("workflow")
         app_state.active_step.set(action.target)
         return
-    item = rail_item_for_step(action.target)
-    if item is not None and item.display == "panel":
-        _open_panel(mapapp)
-        app_state.panel_view.set(item.key)
     nav_model.current_step = action.target

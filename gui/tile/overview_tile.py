@@ -1,4 +1,4 @@
-"""Overview of the active alert set (spec §9.2, §9.3), a right-panel view.
+"""Overview of the active alert set (spec §9.2, §9.3), a MapApp dialog.
 
 The set shown is picked with the set selector (``gui.widget.set_selector``,
 shared with Analysis, spec §9.3): a pick changes only the project's
@@ -7,7 +7,7 @@ shared with Analysis, spec §9.3): a pick changes only the project's
 Architecture layer: view. It reads; it draws nothing on the map. The alert
 layers, the earlier sets and the click-to-review popup moved to the shell's
 ``_AlertLayers`` leaf, switched on from Integrate & vectorize, because a layer
-switched on there stays on while the user moves between steps and views, and
+switched on there stays on while the user moves between steps and dialogs, and
 a view that owns a layer must hide it when it closes.
 
 Feedback is hybrid. The component reports map-layer problems through
@@ -45,11 +45,8 @@ from gui.scripts import set_store
 from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
-from gui.store.workflow_steps import STEPS, active_set
+from gui.store.workflow_steps import active_set
 from gui.widget.set_selector import SetSelector
-
-#: ``app_state.panel_view`` while the Overview view is open
-OVERVIEW_VIEW = "overview"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
@@ -195,7 +192,7 @@ def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
 
 
 @solara.component
-def OverviewTile(app_state, map_, layers):
+def OverviewTile(app_state, map_, layers, dismiss=None):
     """Overview of the active alert set (spec §9.3): the status summary and the
     exports, over the set picked with the set selector.
 
@@ -203,14 +200,17 @@ def OverviewTile(app_state, map_, layers):
     ----------
     app_state : AppState
         The session state: the project (its active set), ``alerts_gdf`` (the
-        active set's alerts, loaded by the shell), ``panel_view`` and the
-        navigation reactives.
+        active set's alerts, loaded by the shell) and the navigation reactives.
     map_ : SepalMap
         The single shared map. Unused: this view draws nothing on it (the
         alert layers are the shell's ``_AlertLayers``), and it is passed only
         so the signature matches the other views the shell mounts.
     layers : MapLayers
         The session's map-layer registry. Unused, as ``map_``.
+    dismiss : callable, optional
+        Closes this dialog, as its own close button does
+        (``navigation.dismiss_dialog``). "Review alerts" closes it before it
+        sends the user to Analysis, which shows behind it.
     """
     notifications = use_notifications()
     # Summary table body, mutated in place by _sync_table: a concrete widget,
@@ -262,18 +262,15 @@ def OverviewTile(app_state, map_, layers):
     # Its labels follow a language switch on the same card (``locale`` read above).
     solara.use_effect(_relabel_export, [export_card, locale])
 
-    def _back_to_workflow():
-        # Return the right panel to the Workflow view at the step the user was
-        # on; the navigation bridge also un-highlights the Overview rail item.
-        app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view
-
     def _review_alerts():
+        # Analysis is behind this dialog: close it first, or the user would see
+        # the dashboard over the step they asked for.
+        if dismiss is not None:
+            dismiss()
         app_state.current_page_view.value = "analysis_tile"
 
     with solara.Column(style="padding: 0;"):
         with solara.Row(style="gap: 8px; align-items: center; padding: 0 12px;"):
-            solara.Button(t("overview_tile.back_to_workflow"), icon_name="mdi-arrow-left", text=True, small=True,
-                          on_click=_back_to_workflow)
             solara.v.Spacer()
             solara.Button(t("overview_tile.review_button"), color="primary", small=True, disabled=not has_alerts,
                           on_click=_review_alerts)

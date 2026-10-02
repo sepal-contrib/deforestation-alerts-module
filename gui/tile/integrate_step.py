@@ -102,8 +102,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         solara.Info(t("workflow.lock_integrate"))
         return
     active = workflow_steps.active_set(p)
-    showing = (app_state.panel_view.value == "workflow"
-               and app_state.active_step.value == workflow_steps.step_index("integrate"))
+    showing = app_state.active_step.value == workflow_steps.step_index("integrate")
     # The active set's status (spec §5.3, review focus 4): "stale" or
     # "missing" shows a line that says to run again; a current set shows none.
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None

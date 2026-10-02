@@ -166,11 +166,14 @@ def d_legends(page, rec, *, out):
     assert ph.legend_text(page) == "", ph.legend_text(page)  # hidden while Analysis shows
     w.goto_step(page, "prepare", 2000)
     w.wait_for(lambda: ph.legend_text(page), 15, "the legend back")
-    page.locator('[data-step-id="3"]').first.click()  # Overview
+    # The set's own layer: switched on in Integrate & vectorize (the Overview
+    # dashboard draws nothing), and it keeps its legend across a step change.
+    ph.show_alerts(page)
     w.wait_for(lambda: all(s in ph.legend_text(page) for s in STATUSES), 120, "the set's four status chips")
-    rec["overview_legend"] = ph.legend_text(page)
+    rec["set_legend"] = ph.legend_text(page)
+    w.goto_step(page, "prepare", 2000)
+    assert all(s in ph.legend_text(page) for s in STATUSES), ph.legend_text(page)
     w.shot(page, out, "legends")
-    page.locator(".right-panel button:has(.mdi-arrow-left):visible").first.click()  # back to the workflow
 
 
 def _modal_check(page, label):

@@ -98,7 +98,6 @@ def _state(p, gdf):
     state = AppState()
     state.new_project_state(p)
     state.alerts_gdf.set(gdf)
-    state.panel_view.set(overview_tile.OVERVIEW_VIEW)
     return state
 
 

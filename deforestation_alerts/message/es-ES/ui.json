@@ -1,7 +1,6 @@
 {
   "overview_tile": {
     "title": "Resumen General",
-    "back_to_workflow": "Flujo de trabajo",
     "review_button": "Revisar alertas",
     "total": "Total de Alertas",
     "reviewed": "Alertas Revisadas",

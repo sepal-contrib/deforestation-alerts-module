@@ -29,6 +29,7 @@ def test_steps_data_derives_from_the_rail_registry():
     assert "from gui.store.workflow_steps import RAIL_ITEMS, STEPS" in src
     assert '"id": r.step_id' in src, "steps_data must be built from RAIL_ITEMS"
     assert '"display": r.display' in src
+    assert '**({"width": r.dialog_width} if r.dialog_width else {})' in src
     for literal in ('"id": 1', '"id": 2', "'id': 1"):
         assert literal not in src, f"hardcoded drawer id found: {literal}"
     assert "hides_shared_map" not in src
@@ -39,12 +40,13 @@ def test_workflow_panel_is_wired():
     src = _src("gui/solara_app.py")
     assert "WorkflowHeader(app_state=app_state)" in src
     assert '"content": [panel_host]' in src
-    assert "header_wrapper" in src
+    assert "children=[header_widget, *panel_wrappers.values()]" in src
     assert "right_panel_open=True" in src
     assert "is_pinned=False" in src
     assert 'WORKFLOW_PANEL_CONFIG = {' in src and 't("app.panel_workflow_title")' in src
     assert "StageHost(" in src
-    assert "**panel_step_wrappers, **panel_rail_wrappers" in src
+    # One view: every rail item is a dialog, so the panel holds the steps alone.
+    assert "{s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS}" in src
 
 
 def test_navigation_maps_derive_from_the_registries():
@@ -140,12 +142,15 @@ def test_render_fixed_tile_needs_the_provider_rendered_first():
             rc.close()
 
 
-def test_overview_view_has_back_and_review_buttons():
+def test_the_overview_dialog_reviews_through_a_dismiss():
+    """A dialog has its own close button, so there is no "back to the
+    workflow"; "Review alerts" must close itself first, or the dashboard
+    would stay over the Analysis step the user asked for."""
     src = _src("gui/tile/overview_tile.py")
-    assert 't("overview_tile.back_to_workflow")' in src
     assert 't("overview_tile.review_button")' in src
-    assert 'app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view' in src
-    assert 'app_state.current_page_view.value = "analysis_tile"' in src
+    assert "back_to_workflow" not in src
+    review = src[src.index("def _review_alerts():"):]
+    assert review.index("dismiss()") < review.index('app_state.current_page_view.value = "analysis_tile"')
     assert "rv.Btn(" not in src
 
 
@@ -153,14 +158,14 @@ def test_panel_bridge_drives_views_stage_and_title():
     src = _src("gui/solara_app.py")
     body = src[src.index("def _PanelBridge("):]
     body = body[: body.index("\ninit_ee()")]
-    assert "app_state.panel_view.value" in body and "app_state.active_step.value" in body
-    assert 'header_wrapper.style_ = "" if workflow else "display: none;"' in body
+    assert "app_state.active_step.value" in body
+    assert "panel_view" not in body, "the panel has one view: the rail items are dialogs"
+    assert 'wrap.style_ = "" if key == spec.key else "display: none;"' in body
     # The order of these writes is pinned by tests/test_panel_bridge.py.
     assert "stage_host.visible = True" in body and "stage_host.visible = False" in body
     assert 'map_.add_class("defo-map-hidden")' in body
     assert 'map_.remove_class("defo-map-hidden")' in body
-    assert "rail_item_for_step" in body
-    assert "panel.config = {**workflow_config" in body
+    assert "mapapp.right_panel[0].config = {**workflow_config}" in body
     assert "app_state.current_page_view.value = " in body
 
 
@@ -199,12 +204,17 @@ def test_the_project_dialog_closes_itself_through_the_shell():
         assert shell.count(holder) == 1 and shell.index(holder) < shell.index("project_widget = "), holder
 
 
-def test_rail_mirror_switches_panel_view_for_panel_items_only():
+def test_the_rail_mirror_only_mirrors_the_page_view():
+    """Every rail item is a dialog MapApp opens itself, so a rail click has
+    nothing to apply to the right panel: the observer only keeps
+    ``current_page_view`` faithful, which is what makes a repeated trigger
+    (clicking the same item twice) fire the navigation bridge again."""
     src = _src("gui/solara_app.py")
     page_body = src[src.index("def Page():"):]
     assert 'nav_model.observe(_on_rail_step, "current_step")' in page_body
-    assert 'if item is not None and item.display == "panel":' in page_body
-    assert "app_state.panel_view.set(item.key)" in page_body
+    assert "view = page_view_for_rail_step(sid)" in page_body
+    assert "panel_view" not in page_body
+    assert 'nav_model.unobserve(_on_rail_step, "current_step")' in page_body
 
 
 STEP_FILES = {
@@ -332,7 +342,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
         assert f"{role}=set_context," in shell, role
     assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
     assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
-    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}' in shell
+    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget}' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
     # The alert layers are a leaf of the shell, not of a step: a layer switched

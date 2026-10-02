@@ -202,8 +202,8 @@ def test_the_set_layer_follows_the_show_alerts_switch(ov, tmp_path):
 
 def test_the_layer_stays_on_across_a_step_change(ov, tmp_path):
     """``MapLayers`` ruling #10: the switch is what turns the alerts off, not
-    moving to another step or opening the Overview dialog. The old panel view
-    took them down with it; this leaf is mounted by the shell, so it does not."""
+    moving to another step. The old Overview panel view took them down with it;
+    this leaf is mounted by the shell, so it does not."""
     state = _state(_project(tmp_path), _alerts())
     map_, layers, rc = ov.render(state)
     try:
@@ -211,7 +211,6 @@ def test_the_layer_stays_on_across_a_step_change(ov, tmp_path):
         assert map_.find_layer(KEY, none_ok=True) is not None
 
         state.active_step.set(len(ov.drawn))  # a step change
-        state.panel_view.set("overview")  # the Overview dialog opens
         state.current_page_view.set("analysis_tile")
         assert layers.is_on(KEY) and map_.find_layer(KEY, none_ok=True) is not None
         assert len(ov.ensured) == 1  # and nothing was rebuilt

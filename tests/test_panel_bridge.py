@@ -1,6 +1,10 @@
 """The shell's ``_PanelBridge``, rendered for real: the Analysis stage and the
 shared map trade places in an order the frontend can act on.
 
+The panel itself has one view -- the PipelineHeader over the active step's
+controls -- because the three rail items (About, Project, the Overview
+dashboard) are all MapApp dialogs.
+
 ``gui/solara_app.py`` cannot be imported here (it initialises Earth Engine and
 the tile transport at import), so the component's own source is compiled on its
 own, against the names it uses. The stage, the shared map and the panel
@@ -26,12 +30,10 @@ def _shell_component(name):
     from pysepal.i18n import current_locale
 
     from gui.i18n import t
-    from gui.store.workflow_steps import RAIL_ITEMS, rail_item_for_step
 
     tree = ast.parse((ROOT / "gui" / "solara_app.py").read_text())
     node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
-    ns = {"solara": solara, "STEPS": STEPS, "RAIL_ITEMS": RAIL_ITEMS,
-          "rail_item_for_step": rail_item_for_step, "t": t, "current_locale": current_locale}
+    ns = {"solara": solara, "STEPS": STEPS, "t": t, "current_locale": current_locale}
     exec(compile(ast.Module(body=[node], type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]
 
@@ -72,11 +74,10 @@ def bridge():
     ops = []
     state, stage, map_ = AppState(), _Stage(ops), _Map(ops)
     wrappers = {s.key: SimpleNamespace(style_="") for s in STEPS}
-    wrappers["overview"] = SimpleNamespace(style_="display: none;")
     component = _shell_component("_PanelBridge")
     _, rc = reacton.render(
-        component(app_state=state, panel_wrappers=wrappers, header_wrapper=SimpleNamespace(style_=""),
-                  stage_host=stage, map_=map_, mapapp_ref={}, workflow_config={}),
+        component(app_state=state, panel_wrappers=wrappers, stage_host=stage, map_=map_,
+                  mapapp_ref={}, workflow_config={}),
         handle_error=False,
     )
     yield SimpleNamespace(state=state, stage=stage, map=map_, ops=ops)
@@ -87,7 +88,6 @@ ANALYSIS = step_index("analysis")
 
 
 def _enter_analysis(b):
-    b.state.panel_view.set("workflow")
     b.state.active_step.set(ANALYSIS)
     assert b.stage.visible and "defo-map-hidden" in b.map.classes
     del b.ops[:]
@@ -103,7 +103,7 @@ def test_entering_analysis_shows_the_stage_before_hiding_the_shared_map(bridge):
     "leave",
     [
         pytest.param(lambda s: s.active_step.set(step_index("aoi")), id="to-AOI"),
-        pytest.param(lambda s: s.panel_view.set("overview"), id="to-Overview"),
+        pytest.param(lambda s: s.active_step.set(step_index("integrate")), id="to-Integrate"),
     ],
 )
 def test_leaving_analysis_shows_the_shared_map_before_hiding_the_stage(bridge, leave):
@@ -118,16 +118,13 @@ def test_leaving_analysis_shows_the_shared_map_before_hiding_the_stage(bridge, l
         assert not bridge.stage.visible and "defo-map-hidden" not in bridge.map.classes
 
 
-def test_a_language_switch_on_overview_keeps_the_overview_title():
+def test_a_language_switch_puts_the_workflow_title_back():
     """MapApp copies the (re-translated) Workflow config onto the right panel
-    when the app re-renders for a new language; the bridge must put the
-    showing view's title and icon back afterwards."""
+    when the app re-renders for a new language; the bridge must re-apply it
+    afterwards, and the panel's title no longer follows navigation -- the rail
+    items are dialogs, which leave the panel as the user left it."""
     from pysepal.i18n import set_locale
 
-    from gui.i18n import t
-    from gui.store.workflow_steps import RAIL_ITEMS
-
-    overview = next(r for r in RAIL_ITEMS if r.key == "overview")
     panel = SimpleNamespace(config={})
     state = AppState()
     workflow_config = {"title": "Workflow", "icon": "mdi-tune", "width": 400}
@@ -135,17 +132,18 @@ def test_a_language_switch_on_overview_keeps_the_overview_title():
     set_locale("en")
     _, rc = reacton.render(
         component(app_state=state, panel_wrappers={s.key: SimpleNamespace(style_="") for s in STEPS},
-                  header_wrapper=SimpleNamespace(style_=""), stage_host=_Stage([]), map_=_Map([]),
+                  stage_host=_Stage([]), map_=_Map([]),
                   mapapp_ref={"widget": SimpleNamespace(right_panel=[panel])},
                   workflow_config=workflow_config),
         handle_error=False,
     )
     try:
-        state.panel_view.set("overview")
-        assert panel.config["title"] == t(overview.label_key)
-        panel.config = {**workflow_config}  # MapApp's prop sync on the language re-render
+        assert panel.config == {**workflow_config}
+        state.active_step.set(ANALYSIS)  # navigation leaves the title alone
+        assert panel.config == {**workflow_config}
+        panel.config = {"title": "stale"}  # MapApp's prop sync on the language re-render
         set_locale("fr")
-        assert panel.config == {**workflow_config, "title": t(overview.label_key), "icon": overview.icon}
+        assert panel.config == {**workflow_config}
     finally:
         set_locale("en")
         rc.close()

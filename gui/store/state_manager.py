@@ -68,8 +68,6 @@ class AppState:
         # index into gui.store.workflow_steps.STEPS; owned by the shell, set by
         # the pipeline header and the navigation bridge
         self.active_step = solara.reactive(0)
-        # "workflow" (pipeline header + the active step) or a rail item's key
-        self.panel_view = solara.reactive("workflow")
         # mirror of pysepal ThemeState.dark, kept by an observer in Page(): the
         # header cannot read MapApp's theme from Solara's own dark mode
         self.dark = solara.reactive(False)

@@ -180,6 +180,10 @@ def _switch(page, code):
 def languages(page, rec, *, out):
     english_legend = {v for v in leaves(catalogue("en", "legend")) if len(re.sub(r"[^A-Za-z]", "", v)) >= 4}
     english_title = catalogue("en", "steps")["steps"]["prepare"]["title"]
+    # The active set's layer is switched on in Integrate & vectorize (while the
+    # app is still in English) and stays on for the rest of the walk, so every
+    # language's status legend can be read off the shared map.
+    ph.show_alerts(page)
     for code in ("es-ES", "fr"):
         w.goto_step(page, "prepare", 2000)
         _switch(page, code)
@@ -207,11 +211,11 @@ def languages(page, rec, *, out):
             rec[f"{code}_analysis_follows_switch"] = True
         except AssertionError:
             rec[f"{code}_analysis_follows_switch"] = False
-        page.locator('[data-step-id="3"]').first.click()  # Overview: its set layer and legend
         statuses = list(catalogue(code, "legend")["legend"]["status"].values())
         w.wait_for(lambda: all(v in ph.legend_text(page) for v in statuses), 60,
-                   f"{code}: the Overview set's legend")
-        left = english_left(w.panel_text(page), code)
+                   f"{code}: the alert set's legend")
+        ph.open_overview(page)  # the dashboard: a dialog, read with dialog_text
+        left = english_left(w.dialog_text(page), code)
         assert not left, f"{code}: the Overview still reads {left}"
         legend = ph.legend_text(page)  # LegendComponent's div.sepal-legend (z-index 150; not a v-card)
         rec[f"{code}_legend"] = legend[:300]
@@ -220,7 +224,7 @@ def languages(page, rec, *, out):
         assert not leftover, f"{code}: the legend still reads {leftover}"
         assert all(v in legend for v in statuses), f"{code}: the legend lacks {statuses}"
         w.shot(page, out, f"lang_{code}")
-        page.locator(".right-panel button:has(.mdi-arrow-left):visible").first.click()  # Overview's "back to workflow"
+        assert w.close_dialog(page), f"{code}: the Overview dialog did not close"
         page.locator('[data-step-key="prepare"]:visible').first.wait_for(timeout=30000)
     _switch(page, "en")
     w.goto_step(page, "prepare", 2000)

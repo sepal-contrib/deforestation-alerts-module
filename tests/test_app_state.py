@@ -112,13 +112,6 @@ def test_workflow_position_defaults_to_the_first_step():
     assert s.active_step.value == 2
 
 
-def test_panel_view_defaults_to_workflow():
-    s = AppState()
-    assert s.panel_view.value == "workflow"
-    s.panel_view.set("overview")
-    assert s.panel_view.value == "overview"
-
-
 def test_dark_theme_mirror_defaults_to_light():
     s = AppState()
     assert s.dark.value is False

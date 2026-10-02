@@ -9,7 +9,8 @@ import time
 import traceback
 from pathlib import Path
 
-from tools.walk.walklib import goto_step, log, now_ms, panel_text, shot, toasts_since, wait_for
+from tools.walk.walklib import (close_dialog, dialog_text, dialog_visible, goto_step, log, now_ms,
+                                panel_text, shot, toasts_since, wait_for)
 
 
 def manifest(data_dir, project):
@@ -168,20 +169,42 @@ def download_with_images(page, rec, *, out, folder):
     assert not glob.glob(f"{folder}/*.part"), "a .part file was left in the set folder"
 
 
-def overview_reviewed(page, rec, *, out, n=1):
+def open_overview(page, wait=5000):
+    """Open the Overview dashboard: a MapApp rail dialog, not a right-panel
+    view, so its content is read with ``walklib.dialog_text`` and it is left
+    with ``walklib.close_dialog``."""
     page.locator('[data-step-id="3"]').first.click()
-    page.wait_for_timeout(5000)
-    txt = panel_text(page)
+    wait_for(lambda: dialog_visible(page), 30, "the Overview dialog")
+    page.wait_for_timeout(wait)
+
+
+def show_alerts(page, on=True, label="Show these alerts on the map"):
+    """Flip Integrate & vectorize's alert switch -- what draws the active set
+    on the shared map now that the Overview dashboard draws nothing. The layer
+    stays on while the user moves to another step (MapLayers ruling #10)."""
+    goto_step(page, "integrate", 2000)
+    row = page.locator(f'.right-panel .v-input--switch:has(label:text-is("{label}"))').first
+    wait_for(lambda: row.count(), 30, f'the "{label}" switch')
+    if row.locator("input").first.is_checked() != on:
+        row.locator(".v-input--selection-controls__input").first.click()
+        page.wait_for_timeout(2000)
+
+
+def overview_reviewed(page, rec, *, out, n=1):
+    open_overview(page)
+    txt = dialog_text(page)
     line = re.search(r"(\d[\d,]*) alerts · (\d+) reviewed", txt)
     rec["overview_line"] = line.group(0) if line else None
     shot(page, out, "overview")
     assert line and int(line.group(2)) == n, txt[:800]
+    close_dialog(page)
 
 
 def overview_export_csv(page, rec, *, out, folder):
     before = set(os.listdir(folder))
     t_ms = now_ms(page)
-    page.locator('.right-panel .v-card:has-text("Export alerts") button:has-text("CSV"):visible').first.click()
+    open_overview(page)
+    page.locator('.dialog-card .v-card:has-text("Export alerts") button:has-text("CSV"):visible').first.click()
     wait_for(lambda: (set(os.listdir(folder)) - before) or errors(toasts_since(page, t_ms)), 120,
              "export file or error")
     page.wait_for_timeout(2000)
@@ -189,6 +212,7 @@ def overview_export_csv(page, rec, *, out, folder):
     shot(page, out, "exported")
     assert any(f.endswith(".csv") for f in rec["export_new_files"]), rec["export_new_files"]
     assert not errors(toasts_since(page, t_ms))
+    close_dialog(page)
 
 
 # ------------------------------------------------- forms, tables and the legend (gates of slices 3-6)

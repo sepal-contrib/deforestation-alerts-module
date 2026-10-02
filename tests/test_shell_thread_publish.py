@@ -243,16 +243,17 @@ def shell(data_root, monkeypatch):
             _detached("report_template", lambda: ReportTemplateField(app_state=state))
             tiles["banner"] = build_set_status_banner(state)
             tiles["sets"] = build_set_selector(state)
+            # Only the steps: the Overview dashboard is a MapApp dialog, not a
+            # panel view (it is still built above, so a publish reaches it).
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
-                        for key in ("aoi", "alerts", "layers", "period", "prepare", "integrate", "overview")}
+                        for key in ("aoi", "alerts", "layers", "period", "prepare", "integrate")}
             wrappers["analysis"] = v.Html(tag="div")
             return wrappers
 
         wrappers = solara.use_memo(_build, [])
-        header_wrapper = solara.use_memo(lambda: v.Html(tag="div", children=[tiles["header"]]), [])
         nav_bridge(app_state=state, nav_model=nav_model, mapapp_ref=mapapp_ref)
-        panel_bridge(app_state=state, panel_wrappers=wrappers, header_wrapper=header_wrapper,
-                     stage_host=stage_host, map_=map_, mapapp_ref=mapapp_ref,
+        panel_bridge(app_state=state, panel_wrappers=wrappers, stage_host=stage_host, map_=map_,
+                     mapapp_ref=mapapp_ref,
                      workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
         set_loader(app_state=state, layers=layers, map_=map_)
         map_legend(app_state=state, layers=layers)
@@ -347,7 +348,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         await asyncio.sleep(0.2)
         shell.settle()
         assert state.project.value.active_set == sid and state.project.value.locked
-        assert state.active_step.value == step_index("analysis") and state.panel_view.value == "workflow"
+        assert state.active_step.value == step_index("analysis")
         assert shell.tiles["stage_host"].visible is True
         assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == -1
 
