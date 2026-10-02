@@ -19,6 +19,12 @@ AOI_RECT = [-55.10, -10.10, -55.00, -10.00]  # ~Amazon
 #: licence-gated NICFI basemaps where only the request's shape is at stake.
 MONTHLY_COLLECTION = "MODIS/061/MOD13A3"
 
+#: The surface-reflectance / TOA pairs Task 12's rebuild searches, pinned here
+#: rather than derived from ``LANDSAT_COLLECTIONS`` so the test names the ids
+#: it needs: pan-sharpening wants both members of one satellite's pair.
+LANDSAT_PAIRS = (("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC08/C02/T1_TOA"),
+                 ("LANDSAT/LC09/C02/T1_L2", "LANDSAT/LC09/C02/T1_TOA"))
+
 #: ``LANDSAT_SCENE_ID``, e.g. ``LC80440342013330LGN00``: sensor, satellite,
 #: path, row, year, day of year, ground station, version.
 SCENE_ID = r"L[A-Z]\d{14}[A-Z]{3}\d{2}"
@@ -42,9 +48,12 @@ def test_a_scene_acquired_on_the_last_day_of_the_window_is_included(tiny_aoi, ge
     it returns nothing at all if the off-by-one comes back."""
     import ee
 
-    day = ee.ImageCollection(scene_index.S2_COLLECTION).filterBounds(tiny_aoi).filterDate(
-        START.isoformat(), END.isoformat()
-    ).first().date().format("YYYY-MM-dd").getInfo()
+    # The same cloud prefilter ``scene_request`` applies: a granule it would
+    # drop is no use as the day to ask for.
+    day = (ee.ImageCollection(scene_index.S2_COLLECTION).filterBounds(tiny_aoi)
+           .filterDate(START.isoformat(), END.isoformat())
+           .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", scene_index.MAX_CLOUD))
+           .first().date().format("YYYY-MM-dd").getInfo())
     one = date.fromisoformat(day)
     tables = scene_index.parse_scenes(scene_index.scene_request(tiny_aoi, one, one).getInfo())
     assert len(tables.scenes) > 0
@@ -69,9 +78,12 @@ def test_the_parallel_arrays_come_back_paired(tables):
     assert s2["key"].str.startswith(scene_index.S2_COLLECTION + "/").all()
     assert s2["tile"].str.fullmatch(r"\d{2}[A-Z]{3}").all()
 
+    # Asserted, not skipped: the AOI and the window are pinned constants and
+    # three months over them always hold Landsat 8/9 passes, so an empty
+    # Landsat side means ``_landsat_rows`` regressed -- which would otherwise
+    # skip every Landsat test and leave the suite green.
     ls = tables.scenes[tables.scenes["source"] == scene_index.SOURCE_LANDSAT]
-    if ls.empty:
-        pytest.skip("no Landsat scene over the test AOI in this window")
+    assert not ls.empty, "the pinned AOI and window must contain Landsat scenes"
     assert ls["key"].str.fullmatch(SCENE_ID).all()
     assert ls["tile"].str.fullmatch(r"\d{3}_\d{3}").all()
 
@@ -105,19 +117,24 @@ def test_the_sentinel2_keys_are_loadable_asset_ids(tables, gee):
 
 
 def test_the_landsat_keys_resolve_in_both_the_l2_and_toa_collections(tables, gee):
+    """Why the key is a ``LANDSAT_SCENE_ID`` and not an asset id: the rebuild
+    has to find the *same* scene in one satellite's surface-reflectance **and**
+    TOA collection to pan-sharpen it. Both members of the pair that holds the
+    key are therefore required -- "it resolves somewhere" is not enough."""
     import ee
 
     hit = tables.scenes[tables.scenes["source"] == scene_index.SOURCE_LANDSAT]
     if hit.empty:
         pytest.skip("no Landsat scene over the test AOI in this window")
     key = hit["key"].iloc[0]
-    for cid in ("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC09/C02/T1_L2",
-                "LANDSAT/LC08/C02/T1_TOA", "LANDSAT/LC09/C02/T1_TOA"):
-        sizes = ee.ImageCollection(cid).filter(ee.Filter.eq("LANDSAT_SCENE_ID", key)).size()
-        if sizes.getInfo():
-            break
-    else:
-        pytest.fail(f"{key} is in none of the Landsat collections the rebuild searches")
+    counts = ee.Dictionary({
+        cid: ee.ImageCollection(cid).filter(ee.Filter.eq("LANDSAT_SCENE_ID", key)).size()
+        for pair in LANDSAT_PAIRS for cid in pair
+    }).getInfo()
+    found = [pair for pair in LANDSAT_PAIRS if counts[pair[0]]]
+    assert found, f"{key} is in neither L2 collection the rebuild searches: {counts}"
+    for l2, toa in found:
+        assert counts[toa], f"{key} is in {l2} but not in {toa}, which the pan-sharpen needs"
 
 
 def test_planet_request_returns_one_row_per_month_of_the_window(gee):
