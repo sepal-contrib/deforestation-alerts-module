@@ -8,6 +8,13 @@ single-code regions, polygonizes each region and takes its date range from its
 own pixels. Same-code regions that a block edge cut apart are joined back as
 the connected components of a touch graph, one row per region.
 
+``min_cluster_size`` is then applied a second time, to the stitched regions
+themselves: pass 1 gates whole components only as a cheap pre-filter (a region
+never holds more pixels than its component, so that gate drops nothing a region
+test would keep), but a component that clears the minimum can still split into
+regions far below it — one 9-pixel GLAD-L region beside a 1-pixel RADD one.
+The second test is what the user's minimum alert size actually means.
+
 Polygons are built in pixel coordinates, where every block edge is an exact
 integer row, and moved onto the raster's grid once at the end. In world
 coordinates two blocks can place their shared edge a last bit apart when the
@@ -88,10 +95,11 @@ def _windows(height: int, width: int, block_rows):
 def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 8,
                      alert_band: int = 1, date_band: int = 2,
                      block_rows: int | None = None) -> gpd.GeoDataFrame:
-    """Polygons of the alert clusters of at least ``min_cluster_size`` pixels.
+    """Polygons of the alert regions of at least ``min_cluster_size`` pixels.
 
     One row per connected single-code region, in the raster's CRS, with
-    columns ``COLUMNS``. ``block_rows`` sets how many rows are read at a time
+    columns ``COLUMNS``; every returned row holds at least ``min_cluster_size``
+    pixels. ``block_rows`` sets how many rows are read at a time
     (default: about 2e7 pixels, at least 256 rows); the result does not
     depend on it.
     """
@@ -163,7 +171,11 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
                         "edge": int(rid) in edge,
                     })
 
-    records = _stitch(records, connectivity)
+    # The pass-1 gate kept whole components; a region is a subset of its own
+    # component, so this is where the user's minimum is actually met. Measured
+    # on the pixel count, which is exact: a region's polygon is axis-aligned,
+    # so its area is ``count · resolution²``.
+    records = [r for r in _stitch(records, connectivity) if r["count"] >= int(min_cluster_size)]
     if not records:
         return gpd.GeoDataFrame(columns=COLUMNS, geometry="geometry", crs=crs)
     gdf = gpd.GeoDataFrame(

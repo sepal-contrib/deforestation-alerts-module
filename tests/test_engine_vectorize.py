@@ -52,8 +52,8 @@ def test_diagonal_pixels_are_one_component_with_8_connectivity(tmp_path):
 
 def test_mixed_codes_share_one_component_but_split_into_regions(tmp_path):
     a = _blank()
-    a[5:7, 5:7] = 1    # 4 px GLAD-L
-    a[5:7, 7:9] = 10   # 4 px RADD, touching: one 8 px component
+    a[5:8, 5:8] = 1     # 9 px GLAD-L
+    a[5:8, 8:11] = 10   # 9 px RADD, touching: one 18 px component
     gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
     assert sorted(c[0] for c in gdf["alert_type_unique"]) == [1, 10]
 
@@ -124,3 +124,12 @@ def test_block_edge_stitch_holds_for_a_fractional_pixel_size(tmp_path):
     gdf = vectorize_alerts(path, min_cluster_size=1, block_rows=10)
     assert len(gdf) == 1 and gdf.iloc[0]["count"] == 34
     assert gdf.iloc[0]["area_ha"] == pytest.approx(34 * 4.77**2 / 10_000)
+
+
+def test_region_below_the_minimum_is_dropped_though_its_component_clears_it(tmp_path):
+    a = _blank()
+    a[5:10, 5:10] = 1  # 25 px GLAD-L
+    a[5, 10] = 10      # 1 px RADD touching it: one 26 px component, two regions
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert len(gdf) == 1
+    assert gdf.iloc[0]["count"] == 25 and gdf.iloc[0]["alert_type_unique"] == [1]
