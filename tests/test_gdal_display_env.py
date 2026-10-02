@@ -34,20 +34,37 @@ def test_sidecars_visible_overrides_tile_server_default():
     assert os.environ["GDAL_DISABLE_READDIR_ON_OPEN"] == "FALSE"
 
 
-def test_app_startup_keeps_sidecars_visible():
+# Variables that would let a child process find Earth Engine credentials.
+EE_CREDENTIAL_VARS = ("EARTHENGINE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS")
+
+
+def offline_env(home, **extra):
+    """Environment for a child process that must start no Earth Engine.
+
+    The app calls pysepal's ``init_ee()`` at import. It returns early when
+    neither ``~/.config/earthengine/credentials`` nor ``EARTHENGINE_TOKEN``
+    exists, so an empty HOME without the token keeps the child offline.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in EE_CREDENTIAL_VARS}
+    env.update(HOME=str(home), **extra)
+    return env
+
+
+def test_app_startup_keeps_sidecars_visible(tmp_path):
     """Importing the app (as voila and ``solara run`` do) installs the guard."""
     import subprocess
     import sys
     from pathlib import Path
 
-    env = {**os.environ, "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR"}
+    env = offline_env(tmp_path, GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR")
     out = subprocess.run(
         [
             sys.executable,
             "-W",
             "ignore",
             "-c",
-            "import os, gui.solara_app; "
+            "import os, ee, gui.solara_app; "
+            "print(ee.data.is_initialized()); "
             "print(os.environ['GDAL_DISABLE_READDIR_ON_OPEN'])",
         ],
         cwd=Path(__file__).resolve().parents[1],
@@ -58,7 +75,10 @@ def test_app_startup_keeps_sidecars_visible():
         check=True,
     )
 
-    assert out.stdout.strip().splitlines()[-1] == "FALSE"
+    initialized, readdir = out.stdout.strip().splitlines()[-2:]
+    assert readdir == "FALSE"
+    # The offline tier starts no Earth Engine, in subprocesses too.
+    assert initialized == "False"
 
 
 def test_num_threads_is_half_the_cores(monkeypatch):
