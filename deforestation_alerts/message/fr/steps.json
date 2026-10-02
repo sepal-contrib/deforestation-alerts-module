@@ -98,7 +98,11 @@
       "meta_failed": "Impossible de charger la liste des bandes de GLAD-L : {error}",
       "delete_title": "Retirer {name} ?",
       "delete_message": "Ses téléchargements et fichiers harmonisés sont supprimés.",
-      "delete_used": "Utilisée par {n} jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes.",
+      "delete_used": {
+        "one": "Utilisée par {n} jeu d'alertes ; il conserve ses alertes et apparaîtra obsolète.",
+        "many": "Utilisée par {n} de jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes.",
+        "other": "Utilisée par {n} jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes."
+      },
       "delete_busy": "Une tâche écrit dans ce projet ; retirez la source une fois celle-ci terminée.",
       "edit_busy": "Une tâche écrit dans ce projet ; modifiez la source une fois celle-ci terminée.",
       "name_empty": "Donnez un nom à la source.",
@@ -257,7 +261,7 @@
         "many": "Ses {count} de jeux d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés.",
         "other": "Ses {count} jeux d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés."
       },
-      "delete_set_line": "{sources} · {n} alertes · {reviewed} examinées",
+      "delete_set_line": "{sources} · {alerts} · {reviewed}",
       "error_bad_date": "Saisissez les deux dates.",
       "error_order": "La date de fin doit être postérieure à la date de début.",
       "error_exists": "Une période avec ces dates existe déjà.",
@@ -269,7 +273,7 @@
       "title": "Télécharger et harmoniser",
       "description": "Télécharge chaque masque et source de la période active dans sa propre projection, puis les aligne sur la grille du projet et applique les masques de la période (harmoniser). Rien dont les entrées sont inchangées ne s'exécute deux fois.",
       "info_header": "À propos de Télécharger et harmoniser",
-      "info_md": "Cette étape prépare chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source est téléchargée sur la fenêtre de recherche de la période dans sa propre projection, puis alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Tout exécuter** exécute d'abord les masques, puis chaque source manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
+      "info_md": "Cette étape prépare chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source est téléchargée sur la fenêtre de recherche de la période dans sa propre projection, puis alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Exécuter … en attente** exécute d'abord les masques, puis chaque source manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
       "grid_title": "Grille du projet",
       "grid_epsg": "EPSG",
       "grid_resolution": "Résolution",
@@ -290,7 +294,11 @@
       "col_harmonize": "Harmonisation",
       "col_size": "Taille",
       "empty": "Ajoutez d'abord des sources d'alertes.",
-      "run_all": "Exécuter {n} en attente",
+      "run_all": {
+        "one": "Exécuter {n} en attente",
+        "many": "Exécuter {n} en attente",
+        "other": "Exécuter {n} en attente"
+      },
       "stop": "Arrêter après cette ligne",
       "job_title": "Télécharger et harmoniser",
       "job_row": "Préparation de {source}",
@@ -302,7 +310,7 @@
       "row_failed": "{source} : {error}",
       "aoi_geometry_missing": "La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant.",
       "aoi_geometry_failed": "La géométrie de l'AOI n'a pas pu être récupérée, donc les lignes GeoTIFF ne peuvent pas s'exécuter ; utilisez Vérifier à nouveau, puis relancez-les.",
-      "mask_not_ready": "Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Tout exécuter aligne d'abord les masques.",
+      "mask_not_ready": "Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Exécuter … en attente aligne d'abord les masques.",
       "mask_file_missing": "Masque {name} : fichier introuvable ({path}). Remettez le fichier à cet emplacement pour utiliser le masque.",
       "mask_name_empty": "Donnez un nom au masque.",
       "mask_name_too_long": "Utilisez au plus 24 caractères.",
@@ -311,14 +319,22 @@
       "mask_name_token_taken": "Ce nom partagerait ses noms de fichiers avec un autre masque ; choisissez-en un autre.",
       "mask_edit_used": "Un jeu d'alertes utilise déjà ce masque : ajoutez-en un nouveau à la place.",
       "sidecar_failed": "Impossible de récupérer la géométrie de l'AOI pour les entrées GeoTIFF : {error}",
-      "result_pixels": "prête · {n} pixels d'alerte",
+      "result_pixels": {
+        "one": "prête · {n} pixel d'alerte",
+        "many": "prête · {n} de pixels d'alerte",
+        "other": "prête · {n} pixels d'alerte"
+      },
       "result_none": "prête · 0 alerte trouvée",
-      "result_all_masked": "prête · les {n} pixels d'alerte supprimés par les masques",
+      "result_all_masked": {
+        "one": "prête · le {n} pixel d'alerte a été supprimé par les masques",
+        "many": "prête · les {n} de pixels d'alerte supprimés par les masques",
+        "other": "prête · les {n} pixels d'alerte supprimés par les masques"
+      },
       "file_missing": "manquante : fichier introuvable : {path}",
       "masks_title": "Masques",
       "masks_empty": "Aucun masque pour l'instant.",
       "masks_note": "Un masque, ce sont les pixels où sa bande n'est pas zéro ; le zéro et l'absence de donnée en sont exclus. Conserver supprime les alertes hors du masque ; exclure supprime les alertes à l'intérieur.",
-      "masks_switched": "Les sources de cette période sont obsolètes ; Tout exécuter les réharmonise sans les retélécharger.",
+      "masks_switched": "Les sources de cette période sont obsolètes ; Exécuter … en attente les réharmonise sans les retélécharger.",
       "mask_add": "Ajouter un masque",
       "mask_add_title": "Ajouter un masque",
       "mask_edit_title": "Modifier le masque {name}",
@@ -332,7 +348,11 @@
       "mask_err_changed": "Le projet, son AOI ou sa période ont changé pendant la vérification ; réessayez.",
       "mask_covers_none_line": "ne couvre aucune partie de l'AOI : toutes les alertes seraient supprimées",
       "mask_delete_title": "Supprimer le masque {name} ?",
-      "mask_delete_used": "Utilisé par {n} jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes.",
+      "mask_delete_used": {
+        "one": "Utilisé par {n} jeu d'alertes ; il conserve ses alertes et apparaîtra obsolète.",
+        "many": "Utilisé par {n} de jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes.",
+        "other": "Utilisé par {n} jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes."
+      },
       "mask_delete_message": "Son téléchargement et son fichier aligné sont supprimés, et toutes les périodes cessent de l'utiliser.",
       "mask_delete_busy": "Une tâche écrit dans ce projet ; supprimez le masque une fois celle-ci terminée.",
       "mask_edit_busy": "Une tâche écrit dans ce projet ; modifiez le masque une fois celle-ci terminée.",
@@ -377,7 +397,11 @@
       "set_missing": "Les fichiers du jeu actif ({set}) sont manquants dans le dossier du projet. Relancez Intégrer et vectoriser pour le reconstruire.",
       "run": "Intégrer et vectoriser",
       "replace_title": "Remplacer ce jeu d'alertes ?",
-      "replace_message": "{n} alerte(s) examinée(s) de ce jeu seront écartées.",
+      "replace_message": {
+        "one": "{n} alerte examinée de ce jeu sera écartée.",
+        "many": "{n} d'alertes examinées de ce jeu seront écartées.",
+        "other": "{n} alertes examinées de ce jeu seront écartées."
+      },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… et {n} de plus",
       "job_title": "Intégrer et vectoriser",
@@ -413,7 +437,17 @@
     },
     "sets": {
       "label": "Jeu d'alertes",
-      "item": "{period} · {sources} · {n} alertes · {reviewed} examinées"
+      "item": "{period} · {sources} · {alerts} · {reviewed}",
+      "alerts": {
+        "one": "{n} alerte",
+        "many": "{n} d'alertes",
+        "other": "{n} alertes"
+      },
+      "reviewed": {
+        "one": "{n} examinée",
+        "many": "{n} examinées",
+        "other": "{n} examinées"
+      }
     }
   }
 }

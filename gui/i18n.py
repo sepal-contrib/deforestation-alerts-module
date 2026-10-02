@@ -20,7 +20,9 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
-from pysepal.i18n import MessageFormatError, catalog
+from babel import Locale
+from babel.numbers import format_decimal
+from pysepal.i18n import MessageFormatError, catalog, current_locale
 from pysepal.i18n.loading import ENGLISH, load_locale
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -55,3 +57,26 @@ def has_message(key: str) -> bool:
 def app_available_locales() -> list:
     """Locale codes the catalogue ships, English first (MapApp's selector)."""
     return list(messages.available_locales())
+
+
+@lru_cache(maxsize=16)
+def _babel_locale(code: str) -> Locale:
+    try:
+        return Locale.parse(code, sep="-")
+    except (ValueError, TypeError):
+        return Locale.parse(ENGLISH)
+
+
+def format_number(value, digits: int = 0) -> str:
+    """``value`` with the current locale's separators: ``12,345.50`` in
+    English, ``12.345,50`` in Spanish, ``12 345,50`` in French (a narrow
+    no-break space). ``digits`` decimals, always shown. Babel comes with
+    pysepal, whose plural rules are Babel's."""
+    pattern = "#,##0" + ("." + "0" * digits if digits > 0 else "")
+    return format_decimal(value, format=pattern, locale=_babel_locale(current_locale() or ENGLISH))
+
+
+def tn(key: str, count, /, **values) -> str:
+    """A counted message (a plural node): ``count`` picks the form and
+    ``{n}`` shows it with the locale's separators (``format_number``)."""
+    return t(key, count=count, n=format_number(count), **values)

@@ -98,7 +98,11 @@
       "meta_failed": "No se pudo cargar la lista de bandas de GLAD-L: {error}",
       "delete_title": "¿Quitar {name}?",
       "delete_message": "Se eliminan sus descargas y archivos armonizados.",
-      "delete_used": "Usada por {n} conjuntos de alertas; conservan sus alertas y aparecerán desactualizados.",
+      "delete_used": {
+        "one": "Usada por {n} conjunto de alertas; conserva sus alertas y aparecerá desactualizado.",
+        "many": "Usada por {n} de conjuntos de alertas; conservan sus alertas y aparecerán desactualizados.",
+        "other": "Usada por {n} conjuntos de alertas; conservan sus alertas y aparecerán desactualizados."
+      },
       "delete_busy": "Un trabajo está escribiendo en este proyecto; quita la fuente cuando termine.",
       "edit_busy": "Un trabajo está escribiendo en este proyecto; edita la fuente cuando termine.",
       "name_empty": "Pon un nombre a la fuente.",
@@ -257,7 +261,7 @@
         "many": "Se eliminan sus {count} de conjuntos de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período.",
         "other": "Se eliminan sus {count} conjuntos de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período."
       },
-      "delete_set_line": "{sources} · {n} alertas · {reviewed} revisadas",
+      "delete_set_line": "{sources} · {alerts} · {reviewed}",
       "error_bad_date": "Introduce ambas fechas.",
       "error_order": "La fecha de fin debe ser posterior a la fecha de inicio.",
       "error_exists": "Ya existe un período con estas fechas.",
@@ -269,7 +273,7 @@
       "title": "Descargar y armonizar",
       "description": "Descarga todas las máscaras y fuentes del período activo en su propia proyección, luego las alinea con la cuadrícula del proyecto y aplica las máscaras del período (armonizar). Nada cuyas entradas no hayan cambiado se ejecuta dos veces.",
       "info_header": "Acerca de Descargar y armonizar",
-      "info_md": "Este paso prepara todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente se descarga en la ventana de búsqueda del período en su propia proyección, luego se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Ejecutar todo** ejecuta primero las máscaras, luego cada fuente que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
+      "info_md": "Este paso prepara todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente se descarga en la ventana de búsqueda del período en su propia proyección, luego se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Ejecutar … pendientes** ejecuta primero las máscaras, luego cada fuente que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
       "grid_title": "Cuadrícula del proyecto",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolución",
@@ -290,7 +294,11 @@
       "col_harmonize": "Armonizar",
       "col_size": "Tamaño",
       "empty": "Añade primero fuentes de alertas.",
-      "run_all": "Ejecutar {n} pendientes",
+      "run_all": {
+        "one": "Ejecutar {n} pendiente",
+        "many": "Ejecutar {n} pendientes",
+        "other": "Ejecutar {n} pendientes"
+      },
       "stop": "Detener después de esta fila",
       "job_title": "Descargar y armonizar",
       "job_row": "Preparando {source}",
@@ -302,7 +310,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento.",
       "aoi_geometry_failed": "No se pudo obtener la geometría de la AOI, así que las filas de GeoTIFF no se pueden ejecutar; usa Comprobar de nuevo y luego ejecútalas.",
-      "mask_not_ready": "Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Ejecutar todo alinea primero las máscaras.",
+      "mask_not_ready": "Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Ejecutar … pendientes alinea primero las máscaras.",
       "mask_file_missing": "Máscara {name}: archivo no encontrado ({path}). Vuelve a poner el archivo en esta ruta para usar la máscara.",
       "mask_name_empty": "Pon un nombre a la máscara.",
       "mask_name_too_long": "Usa como máximo 24 caracteres.",
@@ -311,14 +319,22 @@
       "mask_name_token_taken": "Este nombre compartiría nombres de archivo con otra máscara; elige otro.",
       "mask_edit_used": "Un conjunto de alertas ya usa esta máscara: añade una nueva en su lugar.",
       "sidecar_failed": "No se pudo obtener la geometría de la AOI para las entradas GeoTIFF: {error}",
-      "result_pixels": "lista · {n} píxeles de alerta",
+      "result_pixels": {
+        "one": "lista · {n} píxel de alerta",
+        "many": "lista · {n} de píxeles de alerta",
+        "other": "lista · {n} píxeles de alerta"
+      },
       "result_none": "lista · 0 alertas encontradas",
-      "result_all_masked": "lista · los {n} píxeles de alerta eliminados por las máscaras",
+      "result_all_masked": {
+        "one": "lista · el {n} píxel de alerta fue eliminado por las máscaras",
+        "many": "lista · los {n} de píxeles de alerta eliminados por las máscaras",
+        "other": "lista · los {n} píxeles de alerta eliminados por las máscaras"
+      },
       "file_missing": "falta: archivo no encontrado: {path}",
       "masks_title": "Máscaras",
       "masks_empty": "Todavía no hay máscaras.",
       "masks_note": "Una máscara son los píxeles donde su banda no es cero; el cero y el no-data quedan fuera de ella. Conservar elimina las alertas fuera de la máscara; excluir elimina las alertas dentro de ella.",
-      "masks_switched": "Las fuentes de este período están desactualizadas; Ejecutar todo las vuelve a armonizar sin descargarlas.",
+      "masks_switched": "Las fuentes de este período están desactualizadas; Ejecutar … pendientes las vuelve a armonizar sin descargarlas.",
       "mask_add": "Añadir máscara",
       "mask_add_title": "Añadir una máscara",
       "mask_edit_title": "Editar máscara {name}",
@@ -332,7 +348,11 @@
       "mask_err_changed": "El proyecto, su AOI o su período cambiaron durante la comprobación; inténtalo de nuevo.",
       "mask_covers_none_line": "no cubre nada de la AOI: se eliminarían todas las alertas",
       "mask_delete_title": "¿Eliminar la máscara {name}?",
-      "mask_delete_used": "Usada por {n} conjuntos de alertas; conservan sus alertas y aparecerán desactualizados.",
+      "mask_delete_used": {
+        "one": "Usada por {n} conjunto de alertas; conserva sus alertas y aparecerá desactualizado.",
+        "many": "Usada por {n} de conjuntos de alertas; conservan sus alertas y aparecerán desactualizados.",
+        "other": "Usada por {n} conjuntos de alertas; conservan sus alertas y aparecerán desactualizados."
+      },
       "mask_delete_message": "Se eliminan su descarga y su archivo alineado, y todos los períodos dejan de usarla.",
       "mask_delete_busy": "Un trabajo está escribiendo en este proyecto; elimina la máscara cuando termine.",
       "mask_edit_busy": "Un trabajo está escribiendo en este proyecto; edita la máscara cuando termine.",
@@ -377,7 +397,11 @@
       "set_missing": "Faltan los archivos del conjunto activo ({set}) en la carpeta del proyecto. Ejecuta Integrar y vectorizar de nuevo para reconstruirlo.",
       "run": "Integrar y vectorizar",
       "replace_title": "¿Reemplazar este conjunto de alertas?",
-      "replace_message": "Se descartarán {n} alerta(s) revisada(s) de este conjunto.",
+      "replace_message": {
+        "one": "Se descartará {n} alerta revisada de este conjunto.",
+        "many": "Se descartarán {n} de alertas revisadas de este conjunto.",
+        "other": "Se descartarán {n} alertas revisadas de este conjunto."
+      },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
       "job_title": "Integrar y vectorizar",
@@ -413,7 +437,17 @@
     },
     "sets": {
       "label": "Conjunto de alertas",
-      "item": "{period} · {sources} · {n} alertas · {reviewed} revisadas"
+      "item": "{period} · {sources} · {alerts} · {reviewed}",
+      "alerts": {
+        "one": "{n} alerta",
+        "many": "{n} de alertas",
+        "other": "{n} alertas"
+      },
+      "reviewed": {
+        "one": "{n} revisada",
+        "many": "{n} revisadas",
+        "other": "{n} revisadas"
+      }
     }
   }
 }

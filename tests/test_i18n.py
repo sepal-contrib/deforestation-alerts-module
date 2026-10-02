@@ -310,3 +310,48 @@ def test_every_english_key_of_the_legacy_files_is_used(name):
     keys = _flat(json.load(open(i18n.MESSAGES_DIR / "en" / name, encoding="utf-8")))
     unused = sorted(keys - _used_keys())
     assert not unused, f"unused keys in en/{name} (delete them in every locale): {unused}"
+
+
+@pytest.mark.parametrize("locale, whole, part", [
+    ("en", "12,345", "0.50"), ("es-ES", "12.345", "0,50"), ("fr", "12 345", "0,50")])
+def test_numbers_follow_the_language(locale, whole, part):
+    set_locale(locale)
+    assert i18n.format_number(12345) == whole
+    assert i18n.format_number(0.5, 2) == part
+
+
+@pytest.mark.parametrize("locale, many, one", [
+    ("en", "ready · 12,345 alert pixels", "ready · 1 alert pixel"),
+    ("es-ES", "lista · 12.345 píxeles de alerta", "lista · 1 píxel de alerta"),
+    ("fr", "prête · 12 345 pixels d'alerte", "prête · 1 pixel d'alerte")])
+def test_a_rows_pixel_count_is_counted_in_the_language(locale, many, one):
+    from gui.scripts.coverage_ui import result_note
+
+    set_locale(locale)
+    assert result_note({"alert_pixels": 12345, "alert_pixels_unmasked": 20000})["text"] == many
+    assert result_note({"alert_pixels": 1, "alert_pixels_unmasked": 1})["text"] == one
+
+
+def test_counted_labels_agree_with_their_count():
+    from gui.tile.prepare_step import size_text
+
+    assert i18n.tn("steps.prepare.run_all", 1) == "Run 1 pending"
+    assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")
+    assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed alert in this set will be discarded."
+    assert i18n.tn("steps.sets.alerts", 1) == "1 alert"
+    set_locale("es-ES")
+    assert i18n.tn("steps.prepare.run_all", 2) == "Ejecutar 2 pendientes"
+    assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
+    assert size_text(5_400_000) == "5,4 MB"
+
+
+@pytest.mark.parametrize("locale, old, button", [
+    ("en", "Run all", "Run … pending"), ("es-ES", "Ejecutar todo", "Ejecutar … pendientes"),
+    ("fr", "Tout exécuter", "Exécuter … en attente")])
+def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
+    set_locale(locale)
+    for key in ("info_md", "mask_not_ready", "masks_switched"):
+        text = i18n.t(f"steps.prepare.{key}")
+        assert old not in text and button in text, key
+    first, _, last = i18n.tn("steps.prepare.run_all", 3).partition("3")
+    assert button == f"{first}…{last}"

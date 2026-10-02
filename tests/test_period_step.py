@@ -24,7 +24,7 @@ from deforestation_alerts.project import periods
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, GridSpec, PeriodMask, Project, add_predefined_source,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import map_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import writing
@@ -274,7 +274,8 @@ def test_the_delete_confirmation_lists_the_sets_that_go(env):
     try:
         _action(env.seen, FEB_ID, "delete")["on_click"]()
         assert env.seen["confirm"]["details"] == [
-            t("steps.period.delete_set_line", sources="GLAD-L", n=5, reviewed=2)]
+            t("steps.period.delete_set_line", sources="GLAD-L", alerts=tn("steps.sets.alerts", 5),
+              reviewed=tn("steps.sets.reviewed", 2))]
         assert feb in state.project.value.alert_sets  # nothing goes before the confirmation
     finally:
         rc.close()

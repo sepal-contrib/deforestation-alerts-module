@@ -41,7 +41,7 @@ from deforestation_alerts.engine.fingerprint import Status, period_set_statuses
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths, periods
 from deforestation_alerts.project.models import period_id
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
@@ -261,5 +261,6 @@ def _PeriodList(app_state, layers):
                  else t("steps.period.delete_message")),
         confirm_label=t("common.delete"),
         details=[t("steps.period.delete_set_line", sources=" + ".join(p.alert_sets[s].sources),
-                   n=p.alert_sets[s].n_alerts, reviewed=p.alert_sets[s].n_reviewed) for s in doomed] or None,
+                   alerts=tn("steps.sets.alerts", p.alert_sets[s].n_alerts),
+                   reviewed=tn("steps.sets.reviewed", p.alert_sets[s].n_reviewed)) for s in doomed] or None,
     )

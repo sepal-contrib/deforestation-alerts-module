@@ -92,7 +92,10 @@
       "meta_failed": "Could not load GLAD-L's band list: {error}",
       "delete_title": "Remove {name}?",
       "delete_message": "Its downloads and harmonized files are deleted.",
-      "delete_used": "Used by {n} alert sets; they keep their alerts and will show out of date.",
+      "delete_used": {
+        "one": "Used by {n} alert set; it keeps its alerts and will show out of date.",
+        "other": "Used by {n} alert sets; they keep their alerts and will show out of date."
+      },
       "delete_busy": "A job is writing into this project; delete the source once it has finished.",
       "edit_busy": "A job is writing into this project; edit the source once it has finished.",
       "name_empty": "Give the source a name.",
@@ -247,7 +250,7 @@
         "one": "Its alert set ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted.",
         "other": "Its {count} alert sets ({reviewed} reviewed alerts), its downloads and every other file of the period are deleted."
       },
-      "delete_set_line": "{sources} · {n} alerts · {reviewed} reviewed",
+      "delete_set_line": "{sources} · {alerts} · {reviewed}",
       "error_bad_date": "Enter both dates.",
       "error_order": "The end date must be after the start date.",
       "error_exists": "A period with these dates already exists.",
@@ -259,7 +262,7 @@
       "title": "Download & harmonize",
       "description": "Download every mask and source of the active period in its own projection, then align them onto the project grid and apply the period's masks (harmonize). Nothing whose inputs are unchanged runs twice.",
       "info_header": "About Download & harmonize",
-      "info_md": "This step prepares every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source is downloaded over the period's search window in its own projection, then aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Run all** runs the masks first, then every source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
+      "info_md": "This step prepares every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source is downloaded over the period's search window in its own projection, then aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Run … pending** runs the masks first, then every source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
       "grid_title": "Project grid",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolution",
@@ -280,7 +283,10 @@
       "col_harmonize": "Harmonize",
       "col_size": "Size",
       "empty": "Add alert sources first.",
-      "run_all": "Run {n} pending",
+      "run_all": {
+        "one": "Run {n} pending",
+        "other": "Run {n} pending"
+      },
       "stop": "Stop after this row",
       "job_title": "Download & harmonize",
       "job_row": "Preparing {source}",
@@ -292,7 +298,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
       "aoi_geometry_failed": "The AOI's geometry could not be fetched, so the GeoTIFF rows cannot run; use Check again, then run them.",
-      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run all aligns the masks first.",
+      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first.",
       "mask_file_missing": "Mask {name}: file not found ({path}). Put the file back at this path to use the mask.",
       "mask_name_empty": "Give the mask a name.",
       "mask_name_too_long": "Use at most 24 characters.",
@@ -301,14 +307,20 @@
       "mask_name_token_taken": "This name would share its file names with another mask; choose another.",
       "mask_edit_used": "An alert set already uses this mask: add a new one instead.",
       "sidecar_failed": "Could not fetch the AOI's geometry for the GeoTIFF inputs: {error}",
-      "result_pixels": "ready · {n} alert pixels",
+      "result_pixels": {
+        "one": "ready · {n} alert pixel",
+        "other": "ready · {n} alert pixels"
+      },
       "result_none": "ready · 0 alerts found",
-      "result_all_masked": "ready · all {n} alert pixels removed by masks",
+      "result_all_masked": {
+        "one": "ready · the {n} alert pixel was removed by masks",
+        "other": "ready · all {n} alert pixels removed by masks"
+      },
       "file_missing": "missing: file not found: {path}",
       "masks_title": "Masks",
       "masks_empty": "No masks yet.",
       "masks_note": "A mask is the pixels where its band is non-zero; zero and no-data are outside it. Keep removes alerts outside the mask; exclude removes alerts inside it.",
-      "masks_switched": "This period's sources are out of date; Run all harmonizes them again without downloading them.",
+      "masks_switched": "This period's sources are out of date; Run … pending harmonizes them again without downloading them.",
       "mask_add": "Add mask",
       "mask_add_title": "Add a mask",
       "mask_edit_title": "Edit mask {name}",
@@ -322,7 +334,10 @@
       "mask_err_changed": "The project, its AOI or its period changed during the check; try again.",
       "mask_covers_none_line": "covers none of the AOI: every alert would be removed",
       "mask_delete_title": "Delete mask {name}?",
-      "mask_delete_used": "Used by {n} alert sets; they keep their alerts and will show out of date.",
+      "mask_delete_used": {
+        "one": "Used by {n} alert set; it keeps its alerts and will show out of date.",
+        "other": "Used by {n} alert sets; they keep their alerts and will show out of date."
+      },
       "mask_delete_message": "Its download and aligned file are deleted, and every period stops using it.",
       "mask_delete_busy": "A job is writing into this project; delete the mask once it has finished.",
       "mask_edit_busy": "A job is writing into this project; edit the mask once it has finished.",
@@ -367,7 +382,10 @@
       "set_missing": "The active set's files ({set}) are missing from the project folder. Run Integrate & vectorize again to rebuild it.",
       "run": "Integrate & vectorize",
       "replace_title": "Replace this alert set?",
-      "replace_message": "{n} reviewed alert(s) in this set will be discarded.",
+      "replace_message": {
+        "one": "{n} reviewed alert in this set will be discarded.",
+        "other": "{n} reviewed alerts in this set will be discarded."
+      },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… and {n} more",
       "job_title": "Integrate & vectorize",
@@ -403,7 +421,15 @@
     },
     "sets": {
       "label": "Alert set",
-      "item": "{period} · {sources} · {n} alerts · {reviewed} reviewed"
+      "item": "{period} · {sources} · {alerts} · {reviewed}",
+      "alerts": {
+        "one": "{n} alert",
+        "other": "{n} alerts"
+      },
+      "reviewed": {
+        "one": "{n} reviewed",
+        "other": "{n} reviewed"
+      }
     }
   }
 }

@@ -6,7 +6,7 @@ import solara
 from deforestation_alerts.engine.coverage import (
     NO_DATA, NOT_COVERED, UNCHECKED, chip_note, covering_dates, Note,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 
 #: a note's tone -> the chip colour
 TONE_COLORS = {"success": "success", "warning": "warning", "error": "error", "info": "info", None: None}
@@ -52,9 +52,9 @@ def result_note(stats) -> dict | None:
         return None
     kept, before = int(stats["alert_pixels"]), int(stats.get("alert_pixels_unmasked", stats["alert_pixels"]))
     if kept:
-        return {"text": t("steps.prepare.result_pixels", n=f"{kept:,}"), "tone": None}
+        return {"text": tn("steps.prepare.result_pixels", kept), "tone": None}
     if before:
-        return {"text": t("steps.prepare.result_all_masked", n=f"{before:,}"), "tone": "warning"}
+        return {"text": tn("steps.prepare.result_all_masked", before), "tone": "warning"}
     return {"text": t("steps.prepare.result_none"), "tone": "info"}
 
 

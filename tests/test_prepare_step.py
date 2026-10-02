@@ -37,7 +37,7 @@ from deforestation_alerts.project.models import (
     Project,
     add_predefined_source,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import aoi_io, prepare_jobs, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing, writing
@@ -621,7 +621,7 @@ def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step
 
     box, rc = _render(state)
     try:
-        _button(rc, t("steps.prepare.run_all", n=1)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()
         [(ctx, sources, force)] = step.started
         assert sources == ["GLAD-L"] and force is False
@@ -687,7 +687,7 @@ def test_a_download_whose_ee_aoi_fails_releases_its_rows(step, monkeypatch, erro
         step.table[-1][0]["actions"][0]["on_click"]()
         assert step.jobs == [] and _toasts("error") == [str(error) or error.__class__.__name__]
         assert step.table[-1][0]["cells"][1]["status"] == "missing"  # the claim was released
-        assert not _button(rc, t("steps.prepare.run_all", n=1)).disabled
+        assert not _button(rc, tn("steps.prepare.run_all", 1)).disabled
     finally:
         rc.close()
 
@@ -736,11 +736,11 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
         step.table[-1][0]["actions"][0]["on_click"]()
         assert step.jobs == []  # ...so a second click is a no-op
         assert step.table[-1][0]["cells"][1]["status"] == "running"
-        assert _button(rc, t("steps.prepare.run_all", n=1)).disabled
+        assert _button(rc, tn("steps.prepare.run_all", 1)).disabled
 
         state.new_project_state(_project("b", "GLAD-L", bounds=PARAGUAY, grid=True))
         assert step.table[-1][0]["cells"][1]["status"] == "ready"
-        assert not _button(rc, t("steps.prepare.run_all", n=1)).disabled
+        assert not _button(rc, tn("steps.prepare.run_all", 1)).disabled
         step.table[-1][0]["actions"][0]["on_click"]()
         step.run_jobs()
         assert [ctx.name for ctx, _, _ in step.started] == ["b"]
@@ -773,7 +773,7 @@ def test_stop_reaches_a_run_all_after_another_row_started(step, monkeypatch):
 
     monkeypatch.setattr(prepare_step, "run_rows", run_all_blocked_mid_row)
     try:
-        _button(rc, t("steps.prepare.run_all", n=1)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()
         assert set(contexts) == {("GLAD-L",), ("RADD",)}
         assert contexts[("GLAD-L",)].cancel.is_set()  # Run all stops after this row
@@ -1091,7 +1091,7 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
         assert all(a["disabled"] for a in blocked["actions"])
         assert blocked["notes"][0]["text"].startswith(t("coverage.not_covered_row", reason=""))
         assert not any(a["disabled"] for a in radd["actions"][:2])
-        _button(rc, t("steps.prepare.run_all", n=1)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()
         assert [sources for _, sources, _ in step.started] == [["RADD"]]
     finally:
@@ -1214,7 +1214,7 @@ def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_aga
     box, rc = _render(state)
     try:
         assert state.coverage_error.value is None and _check_again_shown(rc)
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         step.run_jobs()
         [(ctx, sources, _)] = step.started
         assert sources == ["GLAD-L"] and ctx.aoi == "AOI"
@@ -1342,11 +1342,11 @@ def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step,
 
     box, rc = _render(state)
     try:
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
                            prepare_step._inflight_key("d", JAN.id, "GLAD-L"))]
         assert not _button(rc, t("steps.prepare.stop")).disabled  # the job's keys are this period's
-        assert _button(rc, t("steps.prepare.run_all", n=2)).disabled
+        assert _button(rc, tn("steps.prepare.run_all", 2)).disabled
         step.run_jobs()
         [(ctx, items, force)] = step.started
         assert items == [("mask", "forest"), "GLAD-L"] and not force and ctx.aoi == "AOI"
@@ -1390,10 +1390,10 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
 
     box, rc = _render(state)
     try:
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)  # January's job, still queued
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)  # January's job, still queued
         state.update_project("d", lambda q: setattr(q, "active_period", FEB.id))
         assert _button(rc, t("steps.prepare.stop")).disabled  # February started nothing
-        run_all = _button(rc, t("steps.prepare.run_all", n=2))
+        run_all = _button(rc, tn("steps.prepare.run_all", 2))
         assert not run_all.disabled
         run_all.fire_event("click", None)
         assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
@@ -1401,7 +1401,7 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
         assert added == [("d", JAN.id)] and _button(rc, t("steps.prepare.stop")).disabled
 
         step.run_jobs()  # January's job ends and gives the mask back
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         step.run_jobs()
         assert [(ctx.period.id, items) for ctx, items, _ in step.started] == [
             (JAN.id, [("mask", "forest"), "GLAD-L"]), (FEB.id, [("mask", "forest"), "GLAD-L"])]
@@ -1423,7 +1423,7 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
 
     box, rc = _render(state)
     try:
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         step.run_jobs()
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
                            prepare_step._inflight_key("d", JAN.id, "GLAD-L"), prepare_step.aoi_key("d"))]
@@ -1435,7 +1435,7 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
     state.sidecar_pending.set(True)
     box, rc = _render(state)
     try:
-        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         step.run_jobs()
         assert step.started[-1][1] == ["GLAD-L"]
         assert _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]

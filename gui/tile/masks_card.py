@@ -20,7 +20,7 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
 from gui.scripts.prepare_jobs import _CELL_STATUS
@@ -254,6 +254,6 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     used = len(sets_using_mask(p, pending_delete)) if pending_delete else 0
     ConfirmDialog(open=pending_delete is not None, on_cancel=lambda: set_pending_delete(None), on_confirm=_delete,
                   title=t("steps.prepare.mask_delete_title", name=pending_delete or ""),
-                  message=t("steps.prepare.mask_delete_used", n=used) if used
+                  message=tn("steps.prepare.mask_delete_used", used) if used
                   else t("steps.prepare.mask_delete_message"),
                   confirm_label=t("common.delete"))

@@ -39,7 +39,7 @@ from deforestation_alerts.engine.integrate import IntegrationJob, min_cluster_pi
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts.coverage_ui import note_text, result_note
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
@@ -241,7 +241,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
         on_cancel=lambda: set_confirm(None),
         on_confirm=_confirm,
         title=t("steps.integrate.replace_title"),
-        message=t("steps.integrate.replace_message", n=confirm[1] if confirm else 0),
+        message=tn("steps.integrate.replace_message", confirm[1] if confirm else 0),
         confirm_label=t("common.replace"),
         confirm_color="warning",
         details=confirm[2] if confirm else None,

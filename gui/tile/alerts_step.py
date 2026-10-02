@@ -11,7 +11,7 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_custom_source, add_predefined_source, remove_source, sets_using_source, update_custom_source,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, note_text
 from gui.scripts.error_text import error_text
@@ -220,6 +220,6 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         on_cancel=lambda: set_pending_delete(None),
         on_confirm=_delete,
         title=t("steps.alerts.delete_title", name=pending_delete or ""),
-        message=t("steps.alerts.delete_used", n=used) if used else t("steps.alerts.delete_message"),
+        message=tn("steps.alerts.delete_used", used) if used else t("steps.alerts.delete_message"),
         confirm_label=t("common.delete"),
     )

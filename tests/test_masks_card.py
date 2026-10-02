@@ -30,7 +30,7 @@ from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, NativeGrid, Period, PeriodMask, Project, add_mask,
     set_period_mask,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
@@ -462,7 +462,7 @@ def test_delete_names_the_sets_and_removes_the_mask_its_files_and_every_periods_
         try:
             layers.show("mask:forest", lambda: map_.add_layer("x", key="mask:forest"))
             _action(seen, "forest", "delete")()
-            assert confirm["open"] is True and confirm["message"] == t("steps.prepare.mask_delete_used", n=1)
+            assert confirm["open"] is True and confirm["message"] == tn("steps.prepare.mask_delete_used", 1)
             confirm["on_confirm"]()
             live = state.project.value
             assert "forest" not in live.masks and live.artifacts == {}

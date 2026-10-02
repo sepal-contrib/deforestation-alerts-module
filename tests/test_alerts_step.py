@@ -37,7 +37,7 @@ from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, BandMap, NativeGrid, Period, Project, RegionCoverage,
     SourceCoverage, add_custom_source, add_predefined_source,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import aoi_io as aoi_io_mod
 from gui.scripts import catalogue_meta
 from gui.scripts import raster_map as raster_map_mod
@@ -816,7 +816,7 @@ def test_delete_confirmation_names_the_sets_that_used_the_source(monkeypatch, tm
     try:
         row = next(r for r in seen["rows"] if r["key"] == "mine")
         next(a for a in row["actions"] if a["kind"] == "delete")["on_click"]()
-        assert confirm["open"] is True and confirm["message"] == t("steps.alerts.delete_used", n=1)
+        assert confirm["open"] is True and confirm["message"] == tn("steps.alerts.delete_used", 1)
         confirm["on_confirm"]()
         live = state.project.value
         assert "mine" not in live.sources and "mine" not in live.coverage  # a custom source's coverage goes too

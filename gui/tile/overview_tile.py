@@ -75,7 +75,7 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
-from gui.i18n import t
+from gui.i18n import format_number, t
 from gui.scripts import loss_drivers as drivers
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
@@ -563,7 +563,7 @@ def OverviewTile(app_state, map_, layers):
         go = v.Btn(small=True, color="primary", children=[t("steps.overview.go")])
         go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
         summary = t("steps.overview.popup", id=alert_id, status=row.get("status", ""),
-                    area=f"{float(row.get('area_ha', 0)):.2f}")
+                    area=format_number(float(row.get('area_ha', 0)), 2))
         lines = [v.Html(tag="div", children=[summary])]
         if target.id != project.active_set:
             lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))

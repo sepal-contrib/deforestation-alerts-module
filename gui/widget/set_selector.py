@@ -18,15 +18,16 @@ import reacton.ipyvuetify as rv
 import solara
 
 from deforestation_alerts.project.periods import sets_newest_first
-from gui.i18n import t
+from gui.i18n import t, tn
 
 
 def set_text(project, alert_set) -> str:
     period = project.periods.get(alert_set.period_id)
     when = (t("steps.period.range", start=period.start.isoformat(), end=period.end.isoformat())
             if period is not None else alert_set.period_id)
-    return t("steps.sets.item", period=when, sources=" + ".join(alert_set.sources), n=alert_set.n_alerts,
-             reviewed=alert_set.n_reviewed)
+    return t("steps.sets.item", period=when, sources=" + ".join(alert_set.sources),
+             alerts=tn("steps.sets.alerts", alert_set.n_alerts),
+             reviewed=tn("steps.sets.reviewed", alert_set.n_reviewed))
 
 
 def set_items(project) -> list:

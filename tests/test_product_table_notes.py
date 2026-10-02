@@ -67,14 +67,14 @@ def test_the_coverage_texts_of_a_table():
 
 
 def test_the_result_line_of_a_harmonized_row():
-    from gui.i18n import t
+    from gui.i18n import t, tn
     from gui.scripts.coverage_ui import result_note
 
     assert result_note(None) is None and result_note({"on_pixels": 3}) is None
     assert result_note({"alert_pixels": 1234, "alert_pixels_unmasked": 2000}) == {
-        "text": t("steps.prepare.result_pixels", n="1,234"), "tone": None}
+        "text": tn("steps.prepare.result_pixels", 1234), "tone": None}
     assert result_note({"alert_pixels": 0, "alert_pixels_unmasked": 2000}) == {
-        "text": t("steps.prepare.result_all_masked", n="2,000"), "tone": "warning"}
+        "text": tn("steps.prepare.result_all_masked", 2000), "tone": "warning"}
     assert result_note({"alert_pixels": 0, "alert_pixels_unmasked": 0}) == {
         "text": "ready · 0 alerts found", "tone": "info"}
 

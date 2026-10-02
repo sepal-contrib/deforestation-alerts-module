@@ -39,7 +39,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import integrate_jobs
 from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
@@ -675,7 +675,7 @@ def test_replacing_a_set_with_reviewed_alerts_asks_first(step):
         _run(rc)
         dialog = rc.find(v.Dialog, v_model=True).widget  # the dialog open after Run
         assert step.jobs == [] and dialog.v_model is True
-        assert t("steps.integrate.replace_message", n=3) in _texts(rc)
+        assert tn("steps.integrate.replace_message", 3) in _texts(rc)
         _button(rc, t("common.cancel")).fire_event("click", None)
         assert step.jobs == [] and dialog.v_model is False
 
@@ -717,7 +717,7 @@ def test_the_replace_confirmation_lists_the_reviewed_alerts(step, tmp_path):
     try:
         _run(rc)
         texts = _texts(rc)
-        assert t("steps.integrate.replace_message", n=3) in texts
+        assert tn("steps.integrate.replace_message", 3) in texts
         assert {"#0 · Reviewed: confirmed · 1.50 ha", "#2 · Reviewed: false positive · 3.50 ha",
                 "#3 · Reviewed: needs revision · 4.50 ha"} <= set(texts)
         assert not any(s.startswith("#1 ·") for s in texts)  # not reviewed: nothing lost

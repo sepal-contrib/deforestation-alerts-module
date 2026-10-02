@@ -50,7 +50,7 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.project import paths
-from gui.i18n import t
+from gui.i18n import format_number, t, tn
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
@@ -109,7 +109,7 @@ def size_text(n: int) -> str:
     """A row's size on disk: "" for nothing yet, MB below 1 GB (never "0.0")."""
     if not n:
         return ""
-    return f"{n / 1e9:.1f} GB" if n >= 1e9 else f"{max(n / 1e6, 0.1):.1f} MB"
+    return f"{format_number(n / 1e9, 1)} GB" if n >= 1e9 else f"{format_number(max(n / 1e6, 0.1), 1)} MB"
 
 
 def _label(p, source):
@@ -359,7 +359,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 rows=table_rows, empty_text=t("steps.prepare.empty"),
             )
             with solara.Row(style="gap:8px;"):
-                solara.Button(t("steps.prepare.run_all", n=len(pending)), color="primary", small=True,
+                solara.Button(tn("steps.prepare.run_all", len(pending)), color="primary", small=True,
                               icon_name="mdi-play", disabled=not pending or bool(mine),
                               on_click=lambda: _start(pending))
                 solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
