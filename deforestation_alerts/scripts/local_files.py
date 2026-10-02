@@ -15,6 +15,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Iterator
+from urllib.parse import quote
 
 from deforestation_alerts import gdal_env
 
@@ -54,9 +55,54 @@ def scratch_dir() -> Iterator[Path]:
         yield Path(d)
 
 
-def home_relative(path) -> str:
-    """``path`` relative to the user's home, for a SEPAL download link.
+#: The URL the served root is reached at. The default is root-relative on
+#: purpose: the browser resolves it against the host it is already on, so the
+#: same build serves sepal.io and test.sepal.io with nothing configured.
+#: pysepal's ``create_download_link`` hardcodes ``https://sepal.io/...``, which
+#: is why the app builds its own URLs.
+DOWNLOAD_BASE_ENV = "DEFORESTATION_ALERTS_DOWNLOAD_BASE"
+#: The directory that base serves. On SEPAL jupyter serves ``$HOME``; a local
+#: jupyter serves whatever ``--ServerApp.root_dir`` was given (run_ui.sh).
+DOWNLOAD_ROOT_ENV = "DEFORESTATION_ALERTS_DOWNLOAD_ROOT"
+DEFAULT_DOWNLOAD_BASE = "/api/sandbox/jupyter/files"
 
-    Raises ``ValueError`` for a path outside the home directory (a data
-    directory outside ``$HOME`` cannot be served by the sandbox)."""
-    return Path(path).resolve().relative_to(Path.home().resolve()).as_posix()
+
+def download_root() -> Path:
+    """The directory the download base serves; ``$HOME`` unless configured."""
+    env = os.environ.get(DOWNLOAD_ROOT_ENV)
+    return (Path(env) if env else Path.home()).expanduser().resolve()
+
+
+def served_relative(path) -> str:
+    """``path`` relative to :func:`download_root`, for a download link.
+
+    Raises ``ValueError`` for a path outside that root: it cannot be served,
+    and a link to it would 404 rather than quietly download the wrong file."""
+    return Path(path).resolve().relative_to(download_root()).as_posix()
+
+
+def home_relative(path) -> str:
+    """``path`` relative to the served root, for a download link.
+
+    Kept as the name the UI already calls; :func:`served_relative` is the same
+    function under a name that no longer promises ``$HOME``."""
+    return served_relative(path)
+
+
+def download_url_for(relative: str) -> str:
+    """The URL of a path already expressed relative to :func:`download_root`.
+
+    Each segment is percent-escaped, so a project named ``Paraguay Norte``
+    gives a link that works."""
+    base = (os.environ.get(DOWNLOAD_BASE_ENV) or DEFAULT_DOWNLOAD_BASE).rstrip("/")
+    return f"{base}/{quote(str(relative).lstrip('/'))}"
+
+
+def download_url(path) -> str:
+    """The URL a download button points at for the absolute ``path``.
+
+    Raises ``ValueError`` as :func:`served_relative` does. Callers that must
+    surface that failure at a particular moment (the Analysis export fails its
+    task rather than showing a dead button) call :func:`served_relative` where
+    they want the error and pass the result to :func:`download_url_for`."""
+    return download_url_for(served_relative(path))

@@ -57,3 +57,43 @@ def test_home_relative(monkeypatch, tmp_path):
     assert local_files.home_relative(f) == "module_results/x.zip"
     with pytest.raises(ValueError):
         local_files.home_relative(Path("/var/tmp/x.zip"))
+
+
+def test_download_url_defaults_to_the_sepal_route_relative_to_the_host(monkeypatch, tmp_path):
+    """No configuration: a root-relative SEPAL route, so the browser's own host
+    answers it -- sepal.io and test.sepal.io alike."""
+    monkeypatch.delenv(local_files.DOWNLOAD_BASE_ENV, raising=False)
+    monkeypatch.delenv(local_files.DOWNLOAD_ROOT_ENV, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    f = tmp_path / "module_results" / "deforestation_alerts" / "p" / "x.gpkg"
+    assert local_files.download_url(f) == (
+        "/api/sandbox/jupyter/files/module_results/deforestation_alerts/p/x.gpkg"
+    )
+
+
+def test_download_url_honours_a_configured_base_and_root(monkeypatch, tmp_path):
+    """A local jupyter serves its own root at /files."""
+    monkeypatch.setenv(local_files.DOWNLOAD_BASE_ENV, "/files")
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
+    assert local_files.download_url(tmp_path / "data" / "x.csv") == "/files/data/x.csv"
+
+
+def test_download_url_keeps_an_absolute_base(monkeypatch, tmp_path):
+    monkeypatch.setenv(local_files.DOWNLOAD_BASE_ENV, "https://test.sepal.io/api/sandbox/jupyter/files/")
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
+    assert local_files.download_url(tmp_path / "x.csv") == (
+        "https://test.sepal.io/api/sandbox/jupyter/files/x.csv"
+    )
+
+
+def test_download_url_escapes_a_project_name_with_a_space(monkeypatch, tmp_path):
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
+    assert local_files.download_url(tmp_path / "Paraguay Norte" / "x.csv") == (
+        "/api/sandbox/jupyter/files/Paraguay%20Norte/x.csv"
+    )
+
+
+def test_download_url_refuses_a_path_outside_the_served_root(monkeypatch, tmp_path):
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
+    with pytest.raises(ValueError):
+        local_files.download_url(Path("/var/tmp/x.zip"))

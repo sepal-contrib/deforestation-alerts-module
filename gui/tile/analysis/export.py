@@ -121,7 +121,7 @@ app_tile_model : SetContext
 Every artifact this card produces — the alert store, the gpkg, the composite
 GeoTIFF, the zip and the Word report — is written straight into the set folder
 through a unique ``.part`` renamed into place (``local_files``); the
-file tiles get ``$HOME``-relative URLs (``local_files.home_relative``).
+file tiles get URLs relative to the served root (``local_files``).
 """
 
 import logging
@@ -1215,11 +1215,11 @@ def build_export(
         """
         if rev != built["rev"]:
             return False
-        # The zip/report live in the set folder, so the tiles link
-        # $HOME-relative paths: ``set_file`` -> ``local_files.home_relative`` ->
-        # ``set_url`` -> ``su.create_download_link`` builds
-        # ``.../jupyter/files/<path relative to $HOME>``. A path outside $HOME
-        # raises here, inside the tracked block: a FAILED task.
+        # The zip/report live in the set folder, so the tiles link paths
+        # relative to the served root: ``set_file`` -> ``local_files.home_relative``
+        # -> ``custom_sw.DownloadBtn.set_url`` prefixes the download base. A path
+        # outside the served root raises here, inside the tracked block: a
+        # FAILED task.
         ns["files_dwn_btn"].set_file(result["zip_path"])
         ns["report_dwn_btn"].set_file(result["report_path"])
         # A Confirmed alert's zip build made its GIF too (spec D9).

@@ -11,6 +11,24 @@ Forest cover loss alerts analysis is a module built using the SEPAL UI framework
 
 # Development
 
+## Download links
+
+Export buttons build their URL from two environment variables, so the same
+build serves any SEPAL and a local run:
+
+| Variable | Default | What it is |
+| --- | --- | --- |
+| `DEFORESTATION_ALERTS_DOWNLOAD_BASE` | `/api/sandbox/jupyter/files` | The URL the served directory is reached at. The default is **root-relative**, so the browser resolves it against the host it is already on — `sepal.io` and `test.sepal.io` both work with nothing set. |
+| `DEFORESTATION_ALERTS_DOWNLOAD_ROOT` | `$HOME` | The directory that URL serves. On SEPAL jupyter serves `$HOME`. |
+
+Only files under `DEFORESTATION_ALERTS_DOWNLOAD_ROOT` can be downloaded; a
+path outside it fails the export task rather than offering a dead link.
+
+`run_ui.sh` sets both for its own jupyter (`/files` and the checkout
+directory). For local downloads to work, keep the project data under that
+root — set `DEFORESTATION_ALERTS_DATA_DIR` in your `.env`, for example
+`DEFORESTATION_ALERTS_DATA_DIR="$PWD/.local_data"`.
+
 ## Tests
 
 The runtime environment comes from `sepal_environment.yml` (micromamba/conda);

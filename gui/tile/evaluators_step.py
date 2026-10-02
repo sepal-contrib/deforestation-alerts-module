@@ -36,7 +36,6 @@ from typing import Optional
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.scripts.utils import create_download_link
 from pysepal.solara.components.inputs import FileInputComponent
 
 from deforestation_alerts.errors import KeyedError
@@ -146,9 +145,10 @@ def build_return_file(p, pdir) -> Path:
 
 
 def link_entry(path) -> dict:
-    """A built file's download link (``create_download_link`` of its path
-    under ``$HOME``). Raises ``ValueError`` outside ``$HOME``."""
-    return {"file": Path(path).name, "url": create_download_link(local_files.home_relative(path))}
+    """A built file's download link (``local_files.download_url``: the
+    download base plus its path under the served root). Raises ``ValueError``
+    outside that root."""
+    return {"file": Path(path).name, "url": local_files.download_url(path)}
 
 
 def mark_packaged(app_state, name: str, set_id: str, split_id: str, digest: str) -> bool:

@@ -62,6 +62,19 @@ fi
 export CPL_TMPDIR="${CPL_TMPDIR:-${TMPDIR:-/tmp}/deforestation_alerts_gdal_$(id -u)}"
 mkdir -p "$CPL_TMPDIR"
 
+# Download links. On SEPAL the gateway serves the user's $HOME under
+# /api/sandbox/jupyter/files, which is the app's default and needs no setting
+# here -- the URL is root-relative, so it follows whichever SEPAL (sepal.io,
+# test.sepal.io) is serving the page. This local jupyter instead serves
+# SCRIPT_DIR at /files, so point both knobs at that. Operator values win.
+#
+# A consequence worth knowing: only files UNDER the served root can be
+# downloaded. Locally that means keeping the project data inside the checkout,
+# e.g. DEFORESTATION_ALERTS_DATA_DIR="$SCRIPT_DIR/.local_data" in your .env;
+# with the default ~/module_results the export buttons will refuse the link.
+export DEFORESTATION_ALERTS_DOWNLOAD_BASE="${DEFORESTATION_ALERTS_DOWNLOAD_BASE:-/files}"
+export DEFORESTATION_ALERTS_DOWNLOAD_ROOT="${DEFORESTATION_ALERTS_DOWNLOAD_ROOT:-$SCRIPT_DIR}"
+
 # Serve voila from inside jupyter-server, as SEPAL does, and route map tiles
 # through jupyter-server-proxy's /proxy/{port} like SEPAL's
 # LOCALTILESERVER_CLIENT_PREFIX. Standalone `voila ui.ipynb` loads no server

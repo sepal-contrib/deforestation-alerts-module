@@ -1,5 +1,4 @@
-from pysepal import color
-from pysepal.scripts import utils as su
+from pysepal import color, sepalwidgets as sw
 from pysepal.frontend.resize_trigger import rt
 import ipyvuetify as v
 from pysepal.sepalwidgets.sepalwidget import SepalWidget
@@ -8,6 +7,49 @@ from pathlib import Path
 from typing import List, Tuple, Union
 from typing import Callable, List
 import time
+
+from deforestation_alerts.scripts import local_files
+
+# ``#`` is pysepal's "nothing to download yet" sentinel: a button built with it
+# starts disabled, and a real path enables it.
+NOTHING = "#"
+
+
+def _apply_url(btn, path) -> None:
+    """Point ``btn`` at ``path``, or disable it when there is nothing to offer.
+
+    Replaces pysepal's ``create_download_link``, which hardcodes ``sepal.io``
+    and so sends a test.sepal.io (or local) user to production. The URL comes
+    from ``local_files``, root-relative by default, so it resolves against
+    whatever host is serving the app.
+
+    ``path`` is relative to the served root — callers relativize it themselves,
+    inside whatever error handling should see a path that cannot be served. An
+    absolute path is relativized here instead, and raises ``ValueError`` when
+    it lies outside the root.
+    """
+    if str(path) == NOTHING:
+        btn.href = NOTHING
+        btn.disabled = True
+        btn.attributes = {"download": None}
+        return
+    relative = local_files.served_relative(path) if Path(path).is_absolute() else str(path)
+    btn.href = local_files.download_url_for(relative)
+    btn.disabled = False
+    btn.attributes = {"download": Path(path).name}
+
+
+class DownloadBtn(sw.DownloadBtn):
+    """``sw.DownloadBtn`` whose URL follows the SEPAL the app runs on.
+
+    Takes the file's absolute path; the base URL and the directory it serves
+    are ``local_files``' two environment variables.
+    """
+
+    def set_url(self, path: Union[str, Path] = NOTHING):
+        _apply_url(self, path)
+        return self
+
 
 class ShareBtn(v.Btn, SepalWidget):
     def __init__(
@@ -22,25 +64,13 @@ class ShareBtn(v.Btn, SepalWidget):
 
         self.set_url(path)
 
-    def set_url(self, path: Union[str, Path] = "#"):
-        """Set the URL of the download btn. and unable it.
-
-        If nothing is provided the btn is disabled.
+    def set_url(self, path: Union[str, Path] = NOTHING):
+        """Point the button at ``path``; disabled when there is nothing yet.
 
         Args:
             path: the absolute path to a downloadable content
         """
-        # set the url
-        url = su.create_download_link(path)
-        self.href = url
-
-        # unable or disable the btn
-        self.disabled = str(path) == "#"
-
-        # set the download attribute
-        name = None if str(path) == "#" else Path(path).name
-        self.attributes = {"download": name}
-
+        _apply_url(self, path)
         return self
 
 

@@ -94,6 +94,15 @@
 
 ### Changed
 
+- **Download links follow the SEPAL the app runs on.** They were built by
+  pysepal's `create_download_link`, which hardcodes `https://sepal.io/...`, so
+  a test.sepal.io user was handed a production link and a local run had no
+  working link at all. The URL now comes from two environment variables —
+  `DEFORESTATION_ALERTS_DOWNLOAD_BASE` (default `/api/sandbox/jupyter/files`,
+  root-relative, so the browser resolves it against whichever host serves the
+  app) and `DEFORESTATION_ALERTS_DOWNLOAD_ROOT` (default `$HOME`). `run_ui.sh`
+  points both at its own jupyter for local runs. Link segments are now
+  percent-escaped, so a project name with a space downloads.
 - The **minimum alert size** now applies to the alerts themselves. It used to
   gate the connected cluster of alert pixels, which Integrate & vectorize then
   split into one alert per source combination — so a cluster that cleared the

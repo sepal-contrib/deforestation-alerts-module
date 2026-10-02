@@ -408,7 +408,8 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
             "report_path": str(tmp_path / "alert_0.docx"),
         },
     )
-    monkeypatch.setattr(export_mod.local_files, "home_relative", str)
+    # Serve tmp_path, so the built files get a real link.
+    monkeypatch.setenv(export_mod.local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
 
     parts = export_mod.build_export(
         widgets=widgets,

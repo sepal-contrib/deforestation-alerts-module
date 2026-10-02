@@ -2,9 +2,10 @@
 makes -- a format badge, its name, what is inside and its size, a download
 icon -- the whole tile a download link.
 
-A ``sw.DownloadBtn`` underneath, so ``set_url`` keeps pysepal's URL logic
-(``su.create_download_link``: the sandbox file route of a ``$HOME``-relative
-path, the ``download`` attribute, disabled on "#"). ``set_file`` is what the
+A ``custom_sw.DownloadBtn`` underneath, so ``set_url`` builds the link from
+``local_files`` (the served-root-relative path under the download base, which
+follows whichever SEPAL serves the app), sets the ``download`` attribute and
+disables the tile on "#". ``set_file`` is what the
 export section calls: the set-folder path of the file, or None to clear.
 ``set_action`` gives a tile with no file a second face, for the GIF tile:
 a plain button (no link) that makes the file when clicked, its detail saying
@@ -15,9 +16,9 @@ from pathlib import Path
 from typing import Optional
 
 import ipyvuetify as v
-from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.scripts import local_files
+from gui.widget import custom_sw
 
 #: The format badge (mockup S1 ``.ic``): primary text on a translucent primary
 #: layer. Both come from the theme's ``primary`` / ``primary--text`` classes,
@@ -48,7 +49,7 @@ def human_size(n: int) -> str:
     return f"{n} B"  # unreachable: the loop returns at "GB"
 
 
-class FileTile(sw.DownloadBtn):
+class FileTile(custom_sw.DownloadBtn):
     """One downloadable file of the build, disabled until ``set_file`` gives
     it one. ``kind`` (``"zip"`` / ``"docx"`` / ``"gif"``) is the badge text and
     what a caller finds the tile by; ``size_text`` is the size shown, ``""``

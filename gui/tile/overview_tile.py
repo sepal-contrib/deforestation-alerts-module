@@ -69,6 +69,7 @@ from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
+from gui.widget import custom_sw
 from gui.widget.set_selector import SetSelector
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
@@ -107,9 +108,10 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
     log line.
 
     The export lands in the set folder, and the download link is relative to
-    ``$HOME``: ``set_url`` -> ``su.create_download_link`` builds
-    ``https://sepal.io/api/sandbox/jupyter/files/<path relative to $HOME>``
-    (``local_files.home_relative``)."""
+    the served root (``local_files.home_relative``): ``custom_sw.DownloadBtn``'s
+    ``set_url`` prefixes the download base, which is root-relative by default
+    (``/api/sandbox/jupyter/files/...``) so the link follows whichever SEPAL —
+    or local jupyter — is serving the app."""
 
     def _on_click(widget, event, data):
         gen_btn.loading = True
@@ -168,7 +170,7 @@ def build_export_card(gdf, folder, sources, start, end, project, questions=()):
         gen_btn = sw.Btn(
             msg="", small=True, outlined=True, color="primary", class_="pa-1 ma-1"
         )
-        dl_btn = sw.DownloadBtn(text="", small=True, class_="pa-1 ma-1").hide()
+        dl_btn = custom_sw.DownloadBtn(text="", small=True, class_="pa-1 ma-1").hide()
         gen_btn.on_event(
             "click",
             _bind_export(

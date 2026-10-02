@@ -230,3 +230,36 @@ def test_a_failed_export_leaves_one_traceback_in_the_server_log(
     assert out.count("Traceback (most recent call last)") == 1
     assert "failed: unsupported driver" in out and "ValueError: unsupported driver" in out
     assert len(errors) == 1 and gen_btn.loading is False
+
+
+def test_the_download_url_carries_no_host_so_it_follows_the_sepal_the_app_runs_on(
+    data_root, feedback
+):
+    """pysepal's ``create_download_link`` hardcodes ``https://sepal.io/...``,
+    which sends a test.sepal.io user to production. The button must get the
+    root-relative route instead, resolved against whatever host serves the app."""
+    _, _, join = feedback
+    folder = data_root / "recipe_a"
+    _, gen_btn, dl_btn = _card(folder)
+
+    gen_btn.fire_event("click", None)
+    join()
+
+    assert dl_btn.href == (
+        "/api/sandbox/jupyter/files/module_results/deforestation_alerts/recipe_a/"
+        "alerts_glad-l_2026-01-01_2026-06-12.gpkg"
+    )
+
+
+def test_the_download_url_follows_a_configured_base(data_root, feedback, monkeypatch):
+    """A local jupyter serves its root at ``/files``."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_BASE", "/files")
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_ROOT", str(data_root))
+    _, _, join = feedback
+    folder = data_root / "recipe_a"
+    _, gen_btn, dl_btn = _card(folder)
+
+    gen_btn.fire_event("click", None)
+    join()
+
+    assert dl_btn.href == "/files/recipe_a/alerts_glad-l_2026-01-01_2026-06-12.gpkg"
