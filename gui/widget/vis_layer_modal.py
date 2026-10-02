@@ -25,8 +25,7 @@ from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, Nicfi
 from gui.i18n import t
 from gui.scripts import vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
-from gui.widget.raster_input import RasterInput, absolute, use_band_list
-from gui.widget.source_modal import _index
+from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 _HEX = re.compile(r"[0-9a-fA-F]{6}|[0-9a-fA-F]{3}")
@@ -98,7 +97,7 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
             return {"error": "steps.layers.err_bands"}
         return {"layer": GeeVisLayer(name=name, asset=ref, bands=chosen, min=span[0], max=span[1], palette=colours,
                                      show_in_analysis=bool(show_in_analysis))}
-    band = _index(band)  # a GeoTIFF band is its 1-based index (a name is left from an asset)
+    band = band_index(band)  # a GeoTIFF band is its 1-based index (a name is left from an asset)
     if band is None or colormap not in vis_layers.COLORMAPS:
         return {"error": "steps.layers.err_incomplete"}
     try:
@@ -166,7 +165,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if value and value != kind:
             set_kind(value)
             set_band(None)
-
 
     raster = kind in ("gee", "file")
     ref = ((asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value) if kind == "file"

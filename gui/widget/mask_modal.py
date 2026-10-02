@@ -25,8 +25,7 @@ from deforestation_alerts.engine.user_raster import (
 from deforestation_alerts.project.names import validate_mask_name
 from gui.i18n import t
 from gui.scripts.error_text import error_text
-from gui.widget.raster_input import RasterInput, absolute, use_band_list
-from gui.widget.source_modal import _index
+from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 
 async def validate_mask(gee_interface, project, *, name, origin, ref, asset_type, band, editing=None) -> dict:
@@ -37,7 +36,7 @@ async def validate_mask(gee_interface, project, *, name, origin, ref, asset_type
     if error:
         return {"error": error}
     if origin == "file":
-        band = _index(band)  # a GeoTIFF band is its 1-based index (a name is left from an asset)
+        band = band_index(band)  # a GeoTIFF band is its 1-based index (a name is left from an asset)
     if not ref or band is None:
         return {"error": "steps.prepare.mask_err_incomplete"}
     if origin == "gee":

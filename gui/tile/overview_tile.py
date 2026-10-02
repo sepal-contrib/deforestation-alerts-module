@@ -267,7 +267,6 @@ def _centroid_style_for(faded: bool):
     return _style
 
 
-
 #: The centroid layer's own style. It must be non-empty and carry no colour:
 #: ipyleaflet's GeoJSON view draws each feature with
 #: ``{...feature.properties.style, ...layer.style}``, so the layer's style wins,

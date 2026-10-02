@@ -17,6 +17,14 @@ from gui.i18n import t
 EXTENSIONS = [".tif", ".tiff"]
 
 
+def band_index(band) -> Optional[int]:
+    """A GeoTIFF band as its 1-based index; None for a band name (left over
+    from an Earth Engine asset picked before the file)."""
+    if isinstance(band, int) or (isinstance(band, str) and band.isdigit()):
+        return int(band)
+    return None
+
+
 def absolute(path) -> Optional[str]:
     """A picked file as an absolute path (spec §11)."""
     return str(Path(path).expanduser().absolute()) if path else None

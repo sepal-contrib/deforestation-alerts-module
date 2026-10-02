@@ -25,7 +25,7 @@ from gui.scripts import aoi_io
 from gui.scripts.coverage_ui import note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
-from gui.widget.raster_input import RasterInput, absolute, use_band_list
+from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 FORMATS = ("radd", "ccdc", "date_only")
 ENCODINGS = ("yymm", "yyddd", "yyyyddd", "decimal_year")
@@ -58,14 +58,6 @@ def _bundle(d: dict):
     return ee.Dictionary(d)
 
 
-def _index(band):
-    """A GeoTIFF band as its 1-based index; None for a band name (left over
-    from an Earth Engine asset picked before the file)."""
-    if isinstance(band, int) or (isinstance(band, str) and band.isdigit()):
-        return int(band)
-    return None
-
-
 async def validate_custom(gee_interface, project, aoi_fc, *, name, origin, ref, asset_type, fmt, encoding,
                           alert_band, date_band, editing=None) -> dict:
     """Check a custom source before it is added or saved (spec §6.2)."""
@@ -82,7 +74,7 @@ async def validate_custom(gee_interface, project, aoi_fc, *, name, origin, ref, 
     band_map = BandMap(alert=None if fmt == "date_only" else alert_band, date=date_band)
     date_encoding = PRESETS[fmt]["encoding"] or encoding
     if origin == "file":  # a GeoTIFF is mapped by its band indexes
-        alert, when = _index(band_map.alert), _index(band_map.date)
+        alert, when = band_index(band_map.alert), band_index(band_map.date)
         if when is None or (band_map.alert is not None and alert is None):
             return {"error": "steps.alerts.err_band_map"}
         band_map = BandMap(alert=alert, date=when)
