@@ -65,12 +65,13 @@ Five conditions the spec implies that no task's happy path exercises, most likel
 | File | Responsibility |
 |---|---|
 | `deforestation_alerts/scripts/scene_index.py` | `SceneManifest` and friends; `scene_request`, `planet_request`; `parse_scenes`, `parse_planet`. Imports `ee`. |
-| `deforestation_alerts/scripts/scene_query.py` | `scenes_for`, `planet_bars_for`, `month_counts`, `month_segments`, `x_for`, `auto_collapsed`, `default_pick`, `needs_refresh`, `refresh_window`, `merge_scenes`. **Never imports `ee`.** |
+| `deforestation_alerts/scripts/scene_query.py` | `overlapping_tiles`, `scenes_for`, `source_counts`, `month_counts`, `month_segments`, `x_for`, `auto_collapsed`, `default_pick`, `needs_refresh`, `refresh_window`. **Never imports `ee`.** |
 | `gui/scripts/scene_cache.py` | parquet and manifest IO, the `scene_index` reactive, `SceneIndexLoader`, the background widener. |
 | `gui/tile/analysis/timeline.py` | `build_timeline`: the strip widget, its subscriptions, and its click and key handlers. |
 | `tests/test_scene_index.py` | offline parser tests. |
 | `tests/test_scene_query.py` | offline rule tests. |
 | `tests/test_scene_index_ee.py` | live-tier request-builder tests. |
+| `tests/test_timeline_ee.py` | live-tier image-rebuild test: the Landsat TOA fallback. |
 | `tests/test_scene_cache.py` | offline IO, staleness and merge tests. |
 
 **Modify**
@@ -103,7 +104,7 @@ Five conditions the spec implies that no task's happy path exercises, most likel
 
 **Interfaces:**
 - Consumes: `paths.project_dir`, already present.
-- Produces: `paths.imagery_dir(pdir)`, `paths.scenes_path(pdir)`, `paths.tiles_path(pdir)`, `paths.scene_manifest_path(pdir)`; `scene_index.SOURCE_S2 = "Sentinel 2"`, `SOURCE_LANDSAT = "Landsat"`, `SOURCE_PLANET = "Planet NICFI"`, `SOURCE_CODE = {SOURCE_S2: "s", SOURCE_LANDSAT: "l", SOURCE_PLANET: "p"}`, `row_id(source, d) -> str`, `Coverage(BaseModel)` with `start: date` / `end: date`, `SceneManifest(BaseModel)` with `version: int = 1`, `aoi_digest: str`, `refreshed: datetime`, `covered: Coverage`, `counts: dict[str, int]`, and `INDEX_VERSION = 1`.
+- Produces: `paths.imagery_dir(pdir)`, `paths.scenes_path(pdir)`, `paths.tiles_path(pdir)`, `paths.scene_manifest_path(pdir)`; `scene_index.SOURCE_S2 = "Sentinel 2"`, `SOURCE_LANDSAT = "Landsat"`, `SOURCE_PLANET = "Planet NICFI"`, `SOURCE_CODE = {SOURCE_S2: "s", SOURCE_LANDSAT: "l", SOURCE_PLANET: "p"}`, `row_id(source, d) -> str`, `Coverage(BaseModel)` with `start: date` / `end: date`, `PlanetState(BaseModel)` with `region: str | None = None` / `access: bool = False`, `SceneManifest(BaseModel)` with `version: int = 1`, `aoi_digest: str`, `refreshed: datetime`, `covered: Coverage`, `counts: dict[str, int]`, `planet: PlanetState`, and `INDEX_VERSION = 1`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -226,6 +227,19 @@ class Coverage(BaseModel):
     end: date
 
 
+class PlanetState(BaseModel):
+    """Whether the NICFI basemaps answered, and for which region.
+
+    NICFI is licence-gated, so no access is an ordinary outcome rather than an
+    error. It is recorded instead of logged because the toolbar has to tell a
+    reviewer *why* the Planet band is empty — a collection they have no access
+    to reads differently from one with no images this month.
+    """
+
+    region: Optional[str] = None
+    access: bool = False
+
+
 class SceneManifest(BaseModel):
     """What is in ``scenes.parquet``, and how old it is."""
 
@@ -234,6 +248,7 @@ class SceneManifest(BaseModel):
     refreshed: datetime
     covered: Coverage
     counts: Dict[str, int] = Field(default_factory=dict)
+    planet: PlanetState = Field(default_factory=PlanetState)
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
@@ -469,7 +484,7 @@ from shapely.geometry import Polygon
 RAW = {
     "scenes": {
         "source": ["Sentinel 2", "Sentinel 2", "Landsat"],
-        "millis": [1775174400000, 1775174400000, 1775347200000],
+        "millis": [1775088000000, 1775088000000, 1775260800000],  # 2 Apr, 2 Apr, 4 Apr 2026 UTC
         "cloud": [12.5, 40.0, 3.25],
         "tile": ["21LYG", "21LYH", "LC08_227068"],
         "key": ["COPERNICUS/S2_HARMONIZED/A", "COPERNICUS/S2_HARMONIZED/B", "LC82270682026100LGN00"],
@@ -542,7 +557,7 @@ def test_parse_scenes_of_an_empty_aoi_window_keeps_the_columns():
 
 
 def test_parse_planet_rows_carry_no_footprint_and_no_cloud():
-    raw = {"key": ["projects/planet-nicfi/assets/basemaps/sr/2026-04"], "millis": [1775088000000]}
+    raw = {"key": ["projects/planet-nicfi/assets/basemaps/sr/2026-04"], "millis": [1775001600000]}  # 1 Apr 2026
     df = scene_index.parse_planet(raw)
     assert list(df.columns) == list(scene_index.SCENE_COLUMNS)
     assert df.iloc[0]["source"] == scene_index.SOURCE_PLANET
@@ -695,7 +710,9 @@ git commit -m "feat(imagery): parse the scene payload into scene and tile tables
 
 First, **no per-scene `getInfo`.** The code being replaced calls `.getInfo()` once per date inside a Python loop — that is the whole reason a new alert takes seconds. Every value this builder needs must be reachable through `aggregate_array` on a server-side `FeatureCollection`, so the one `ee.Dictionary` resolves in one round trip however many scenes it holds.
 
-Second, **the feature's geometry must be the granule's true footprint**, `ee.Feature(img.geometry(), {...})`, not `img.geometry().bounds()`. `distinct("tile")` keeps whichever feature it meets first for each tile and that feature's geometry becomes the footprint in `tiles.parquet`. If it were a bbox, the exact-footprint test in Task 5 would be a second bounding-box test, and the Landsat over-selection it exists to catch — a scene whose bbox covers the alert while its slanted footprint misses it — would survive both filters. A bbox *is* also returned, as the `bbox` property, purely as a cheap prefilter.
+Second, **the feature's geometry must be the granule's true footprint**, `ee.Feature(img.geometry(), {...})`, not `img.geometry().bounds()`. `distinct("tile")` keeps whichever feature it meets first for each tile and that feature's geometry becomes the footprint in `tiles.parquet`. If it were a bbox, the exact-footprint test in Task 5 would be a second bounding-box test, and the Landsat over-selection it exists to catch — a scene whose bbox covers the alert while its slanted footprint misses it — would survive both filters.
+
+Third, **the date window is applied once, to the source collections only.** `filterDate`'s end is exclusive, so an inclusive `end` has to ask for the day after; and the merged `FeatureCollection` must *not* be filtered by date again, because `_row` builds features carrying `millis` rather than `system:time_start` and `FeatureCollection.filterDate` reads only the latter — a second filter there returns an empty collection, which parses into an empty index with no error anywhere. `_window` is the one place either rule is expressed. Note also that `str()` on an Earth Engine object renders its graph, not a date string, so date arguments are built as `ee.Date` objects and passed as objects.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -718,11 +735,26 @@ def tables(tiny_aoi):
     return scene_index.parse_scenes(scene_index.scene_request(tiny_aoi, START, END).getInfo())
 
 
+def test_a_scene_acquired_on_the_last_day_of_the_window_is_included(tiny_aoi, gee):
+    """``filterDate``'s end is exclusive, so an inclusive ``end`` has to ask for
+    the day after. A one-day window is the cheapest way to catch a regression:
+    it returns nothing at all if the off-by-one comes back."""
+    import ee
+
+    day = ee.ImageCollection(scene_index.S2_COLLECTION).filterBounds(tiny_aoi).filterDate(
+        START.isoformat(), END.isoformat()
+    ).first().date().format("YYYY-MM-dd").getInfo()
+    one = date.fromisoformat(day)
+    tables = scene_index.parse_scenes(scene_index.scene_request(tiny_aoi, one, one).getInfo())
+    assert len(tables.scenes) > 0
+    assert (tables.scenes["date"] == pd.Timestamp(one)).all()
+
+
 def test_the_whole_index_arrives_in_one_round_trip(tables):
     assert len(tables.scenes) > 0
     assert set(tables.scenes["source"]) <= {scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT}
     assert tables.scenes["date"].between(pd.Timestamp(START), pd.Timestamp(END)).all()
-    assert tables.scenes["cloud"].between(0, 100).all()
+    assert tables.scenes["cloud"].between(0, 90).all()  # the < 90 prefilter imagery_service applies today
     assert (tables.scenes["key"] != "").all()
 
 
@@ -804,13 +836,25 @@ LANDSAT_COLLECTIONS = ("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC09/C02/T1_L2")
 KEY_PROPERTY = {SOURCE_S2: "system:id", SOURCE_LANDSAT: "LANDSAT_SCENE_ID", SOURCE_PLANET: "system:id"}
 
 
+def _window(start: date, end: date):
+    """``[start, end]`` as the half-open pair ``filterDate`` actually wants.
+
+    ``filterDate``'s end is **exclusive**, so an inclusive window has to ask
+    for the day after. Both ends are ``ee.Date`` objects: ``str()`` on an
+    Earth Engine object renders a *graph*, not a date string, so passing
+    ``str(ee.Date(...).advance(...))`` would hand the filter nonsense.
+    """
+    import ee
+
+    return (ee.Date(start.isoformat()), ee.Date(end.isoformat()).advance(1, "day"))
+
+
 def _row(img, source, cloud_prop, tile):
     """One scene as a feature whose geometry is the granule's true footprint.
 
-    ``bbox`` rides along as a property for the cheap prefilter; the geometry
-    stays the footprint, because ``distinct("tile")`` carries *this* geometry
-    into the tiles table and the exact-overlap test downstream is only worth
-    running if it is not another bounding box.
+    The footprint, not its bounding box: ``distinct("tile")`` carries *this*
+    geometry into the tiles table, and the exact-overlap test downstream is
+    only worth running if it is not a second bounding-box test.
     """
     import ee
 
@@ -830,7 +874,9 @@ def _row(img, source, cloud_prop, tile):
 def _s2_rows(aoi, start, end):
     import ee
 
-    coll = ee.ImageCollection(S2_COLLECTION).filterBounds(aoi).filterDate(str(start), str(end))
+    d0, d1 = _window(start, end)
+    coll = (ee.ImageCollection(S2_COLLECTION).filterBounds(aoi).filterDate(d0, d1)
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 90)))
     return coll.map(lambda img: _row(img, SOURCE_S2, "CLOUDY_PIXEL_PERCENTAGE",
                                     ee.String(ee.Image(img).get("MGRS_TILE"))))
 
@@ -841,7 +887,8 @@ def _landsat_rows(aoi, start, end):
     coll = ee.ImageCollection(LANDSAT_COLLECTIONS[0])
     for cid in LANDSAT_COLLECTIONS[1:]:
         coll = coll.merge(ee.ImageCollection(cid))
-    coll = coll.filterBounds(aoi).filterDate(str(start), str(end))
+    d0, d1 = _window(start, end)
+    coll = coll.filterBounds(aoi).filterDate(d0, d1).filter(ee.Filter.lt("CLOUD_COVER", 90))
 
     # WRS-2 path/row, zero-padded, as the tile key. Scenes of one path/row
     # have the same nominal footprint, so the first one met represents the
@@ -862,16 +909,23 @@ def scene_request(aoi, start: date, end: date):
     The reply is a dictionary of parallel scalar arrays rather than a list of
     records, because ``aggregate_array`` over a server-side collection is what
     lets one ``getInfo()`` resolve the whole index. ``end`` is inclusive: it is
-    the last date a reviewer asked to see.
+    the last date a reviewer asked to see, which ``_window`` turns into the
+    half-open range ``filterDate`` wants.
 
-    No cloud prefilter: the timeline's own slider hides cloudy scenes, and an
-    index that dropped them could not show the reviewer that they exist.
+    The date window is applied **only** to the two source collections. Filtering
+    the merged ``FeatureCollection`` again would return nothing: ``_row`` builds
+    features carrying ``millis``, not ``system:time_start``, and that is the one
+    property ``FeatureCollection.filterDate`` reads.
+
+    The ``CLOUDY_PIXEL_PERCENTAGE`` / ``CLOUD_COVER`` < 90 prefilters are the
+    ones ``imagery_service`` applies today, kept so the candidate set does not
+    change (spec §5.1). The slider's top stop therefore means "everything the
+    index holds", not literally 100%.
     """
     import ee
 
-    rows = _s2_rows(aoi, start, end).merge(_landsat_rows(aoi, start, end))
-    rows = ee.FeatureCollection(rows).filterDate(str(start), str(ee.Date(str(end)).advance(1, "day")))
-    tiles = ee.FeatureCollection(rows).distinct("tile").map(
+    rows = ee.FeatureCollection(_s2_rows(aoi, start, end).merge(_landsat_rows(aoi, start, end)))
+    tiles = rows.distinct("tile").map(
         lambda f: ee.Feature(f).set({
             "coords": ee.Feature(f).geometry().coordinates(),
             "gtype": ee.Feature(f).geometry().type(),
@@ -903,9 +957,8 @@ def planet_request(collection_id: str, start: date, end: date):
     """
     import ee
 
-    coll = ee.ImageCollection(collection_id).filterDate(
-        str(start.replace(day=1)), str(ee.Date(str(end)).advance(1, "day"))
-    )
+    d0, d1 = _window(start.replace(day=1), end)
+    coll = ee.ImageCollection(collection_id).filterDate(d0, d1)
     return ee.Dictionary({
         "key": coll.aggregate_array("system:id"),
         # The basemap's own start date, i.e. the first of its month.
@@ -1511,11 +1564,23 @@ def test_a_scene_on_the_window_end_date_is_a_legal_after():
     assert scene_query.default_pick(sel, A0, A1)[1] == scene_index.row_id(S2, date(2026, 8, 23))
 
 
-def test_a_cloudy_scene_is_only_picked_when_there_is_no_clear_one():
+def test_a_side_whose_every_candidate_is_over_the_limit_is_left_unselected():
+    # The spec's rule (§3): *before* is the latest scene **with cloud at or
+    # under the limit**. With none, that side stays empty and the readout
+    # points at the slider — auto-picking an 88%-cloud image instead would
+    # make the one message that tells the reviewer to raise the limit
+    # unreachable, and would look like a considered choice.
     sel = _sel([(S2, "2026-04-24", 88.0), (S2, "2026-04-02", 90.0), (S2, "2026-08-27", 4.0)])
     before, after = scene_query.default_pick(sel, A0, A1)
-    assert before == scene_index.row_id(S2, date(2026, 4, 24))  # nearest among the cloudy ones
+    assert before is None
     assert after == scene_index.row_id(S2, date(2026, 8, 27))
+
+
+def test_raising_the_limit_makes_that_side_pick_again():
+    rows = [(S2, "2026-04-24", 88.0), (S2, "2026-04-02", 90.0), (S2, "2026-08-27", 4.0)]
+    assert scene_query.default_pick(_sel(rows, max_cloud=89.0), A0, A1)[0] == scene_index.row_id(
+        S2, date(2026, 4, 24)
+    )
 
 
 def test_a_clear_scene_further_out_beats_a_cloudy_nearer_one():
@@ -1565,10 +1630,11 @@ from deforestation_alerts.scripts.scene_index import SOURCE_PLANET  # add to the
 def default_pick(sel, a0: date, a1: date) -> tuple:
     """The pair to mark when an alert opens: ``(before_id, after_id)``.
 
-    Nearest first, and clear before cloudy: the nearest row that the cloud
-    limit does not hide, falling back to the nearest hidden row only when the
-    side has no visible candidate at all — showing a reviewer a cloudy image
-    they can replace beats showing them an empty pane.
+    Nearest first, among the rows the cloud limit does not hide. A side whose
+    every candidate is over the limit is left unselected: that is the spec's
+    rule (§3), and it is what makes the readout's "raise the limit" guidance
+    reachable. The rows are still drawn, faded, so the reviewer can see that
+    images exist before deciding.
 
     Nothing inside ``[a0, a1]`` is ever picked, because an image taken while
     the alert was accumulating shows partial clearing and would understate the
@@ -1588,8 +1654,9 @@ def default_pick(sel, a0: date, a1: date) -> tuple:
     def _nearest(part, newest: bool):
         if len(part) == 0:
             return None
-        clear = part[~part["hidden"]]
-        pool = clear if len(clear) else part
+        pool = part[~part["hidden"]]
+        if len(pool) == 0:
+            return None
         row = pool.loc[pool["date"].idxmax() if newest else pool["date"].idxmin()]
         return str(row["id"])
 
@@ -1599,7 +1666,7 @@ def default_pick(sel, a0: date, a1: date) -> tuple:
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `python -m pytest tests/test_scene_query.py -v`
-Expected: PASS, 49 tests.
+Expected: PASS, 50 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1618,7 +1685,7 @@ git commit -m "feat(imagery): default before/after pick outside the alert window
 
 **Interfaces:**
 - Consumes: `paths.scenes_path/tiles_path/scene_manifest_path`, `scene_index.SceneTables/SceneManifest/Coverage/empty_tables`, `local_files.write_into`.
-- Produces: `scene_cache.read_index(pdir) -> tuple[Optional[SceneTables], Optional[SceneManifest]]`, `write_index(pdir, tables, manifest) -> None`, `merge_tables(old, new) -> SceneTables`, `store_chunk(pdir, new_tables, window, digest, *, now, replace=False) -> tuple[SceneTables, SceneManifest]`.
+- Produces: `scene_cache.read_index(pdir) -> tuple[Optional[SceneTables], Optional[SceneManifest]]`, `write_index(pdir, tables, manifest) -> None`, `merge_tables(old, new) -> SceneTables`, `store_chunk(pdir, new_tables, window, digest, *, now, planet=None, replace=False) -> tuple[SceneTables, SceneManifest]`.
 
 **Review Focus #4 lives here.** The background widener and a reviewer's "one more month" button can both be writing `scenes.parquet`. `store_chunk` therefore takes a per-project-directory lock, re-reads from disk inside it, merges onto *that*, and writes atomically — so the loser of a race adds to the winner's rows instead of overwriting them. A corrupt or truncated file is impossible because `local_files.write_into` writes a `.part` sibling and `os.replace`s it, which is the same guarantee `alert_store.save_gdf_to_parquet` relies on.
 
@@ -1635,7 +1702,7 @@ import pytest
 from shapely.geometry import box
 
 from deforestation_alerts.project import paths
-from deforestation_alerts.scripts import scene_index
+from deforestation_alerts.scripts import local_files, scene_index
 from gui.scripts import scene_cache
 
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
@@ -1658,6 +1725,26 @@ CHUNK = _tables([(S2, pd.Timestamp("2026-05-10"), 10.0, "W", "k1"),
 
 def test_reading_a_project_with_no_index_yields_nothing():
     assert scene_cache.read_index(paths.project_dir("absent")) == (None, None)
+
+
+def test_the_planet_access_state_survives_a_chunk_that_did_not_ask(data_root):
+    """The toolbar disables the Planet toggle from ``manifest.planet.access``.
+    A background widening chunk fetches no NICFI, so it must not overwrite what
+    the first build learned."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(
+        pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW,
+        planet=scene_index.PlanetState(region="americas", access=True),
+    )
+    later = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
+    _, manifest = scene_cache.store_chunk(pdir, later, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW)
+    assert manifest.planet.access is True and manifest.planet.region == "americas"
+
+    # A rebuild for a different AOI starts over: another region, another answer.
+    _, manifest = scene_cache.store_chunk(
+        pdir, later, (date(2026, 6, 1), date(2026, 6, 30)), "d2", now=NOW
+    )
+    assert manifest.planet.access is False and manifest.planet.region is None
 
 
 def test_a_stored_chunk_round_trips_through_disk(data_root):
@@ -1738,9 +1825,37 @@ def test_a_failed_write_leaves_the_previous_index_in_place(data_root, monkeypatc
         scene_cache.store_chunk(pdir, bad, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW)
     monkeypatch.setattr(scene_cache, "_write_manifest", real)
 
-    _, manifest = scene_cache.read_index(pdir)
+    tables, manifest = scene_cache.read_index(pdir)
     assert manifest.covered.end == date(2026, 5, 31)
     assert not list(paths.imagery_dir(pdir).glob("*.part"))
+    # The index is still a consistent generation, not a mix that reads as
+    # scenes whose tiles are missing: every scene row names a known tile.
+    assert set(tables.scenes["tile"]) <= set(tables.tiles["tile"])
+
+
+def test_a_failed_scene_write_still_leaves_every_scene_row_findable(data_root, monkeypatch):
+    """The three files are written tiles-first for this reason: a crash between
+    two replacements must not leave scene rows naming tiles that are not there."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    new_tile = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "E", "k3")], tiles=("E",))
+
+    real = local_files.write_into
+
+    def explode(path, *a, **k):
+        if path == paths.scenes_path(pdir):
+            raise OSError("disk full")
+        return real(path, *a, **k)
+
+    monkeypatch.setattr(scene_cache.local_files, "write_into", explode)
+    with pytest.raises(OSError):
+        scene_cache.store_chunk(pdir, new_tile, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW)
+    monkeypatch.setattr(scene_cache.local_files, "write_into", real)
+
+    tables, manifest = scene_cache.read_index(pdir)
+    assert set(tables.scenes["key"]) == {"k1", "k2"}          # the old scenes
+    assert set(tables.scenes["tile"]) <= set(tables.tiles["tile"])  # still findable
+    assert manifest.covered.end == date(2026, 5, 31)
 
 
 def test_two_threads_storing_chunks_both_land(data_root):
@@ -1768,7 +1883,9 @@ def test_two_threads_storing_chunks_both_land(data_root):
 
     tables, manifest = scene_cache.read_index(pdir)
     assert set(tables.scenes["key"]) == {"k1", "k2", "k4", "k6"}
-    assert manifest.covered == scene_index.Coverage(start=date(2026, 4, 1), end=date(2026, 6, 30))
+    # min of the starts, max of the ends: 1 Apr from the April chunk, 28 Jun
+    # from the June one — the windows above stop on the 28th.
+    assert manifest.covered == scene_index.Coverage(start=date(2026, 4, 1), end=date(2026, 6, 28))
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1805,7 +1922,7 @@ import pandas as pd
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.scene_index import (
-    SCENE_COLUMNS, WGS84, Coverage, SceneManifest, SceneTables, empty_tables,
+    SCENE_COLUMNS, WGS84, Coverage, PlanetState, SceneManifest, SceneTables, empty_tables,
 )
 
 logger = logging.getLogger(__name__)
@@ -1848,16 +1965,29 @@ def _write_manifest(pdir, manifest: SceneManifest) -> None:
 
 
 def write_index(pdir, tables: SceneTables, manifest: SceneManifest) -> None:
-    """All three files, each replaced atomically.
+    """All three files, each replaced atomically — and in an order that makes
+    every intermediate state a consistent one.
 
-    The parquets go first and the manifest last: a crash between them leaves
-    a manifest describing less than the parquets hold, which only costs a
-    refetch, whereas the reverse would claim coverage that is not there.
+    ``write_into`` makes each individual replacement atomic, but three
+    replacements are not one transaction: a crash, or a reader arriving
+    between two of them, sees a mix. The order is what makes every mix
+    readable, and it runs **tiles, scenes, manifest**:
+
+    * tiles first, because a tile footprint nothing references yet is inert,
+      whereas a scene row naming a tile the tiles table does not hold would
+      be silently invisible to ``overlapping_tiles`` — a scene that exists
+      and cannot be found;
+    * the manifest last, because it is the thing that claims coverage, and a
+      manifest describing less than the parquets hold only costs a refetch.
+
+    So the three states a crash can leave are new/old/old, new/new/old and
+    new/new/new, and all three answer correctly. ``read_index`` therefore
+    needs no lock.
     """
-    with local_files.write_into(paths.scenes_path(pdir)) as part:
-        tables.scenes.to_parquet(part, index=False)
     with local_files.write_into(paths.tiles_path(pdir)) as part:
         gpd.GeoDataFrame(tables.tiles, geometry="geometry", crs=WGS84).to_parquet(part, index=False)
+    with local_files.write_into(paths.scenes_path(pdir)) as part:
+        tables.scenes.to_parquet(part, index=False)
     _write_manifest(pdir, manifest)
 
 
@@ -1885,7 +2015,7 @@ def merge_tables(old: SceneTables, new: SceneTables) -> SceneTables:
 
 def store_chunk(
     pdir, new_tables: SceneTables, window: Tuple[date, date], digest: str, *, now: datetime,
-    replace: bool = False,
+    planet: Optional[PlanetState] = None, replace: bool = False,
 ) -> Tuple[SceneTables, SceneManifest]:
     """Merge one fetched window into the index on disk and return the result.
 
@@ -1895,6 +2025,10 @@ def store_chunk(
     a rebuild. An index built for another AOI is discarded the same way
     whether or not ``replace`` was asked for: its tile footprints describe a
     different area.
+
+    ``planet`` is the NICFI access state this fetch observed. ``None`` keeps
+    whatever the manifest already recorded, so a widening chunk that did not
+    ask Planet anything does not erase the answer the first build got.
     """
     with _lock_for(pdir):
         old, old_manifest = read_index(pdir)
@@ -1909,7 +2043,11 @@ def store_chunk(
                 end=max(old_manifest.covered.end, window[1]),
             )
         counts = {str(k): int(v) for k, v in tables.scenes["source"].value_counts().items()}
-        manifest = SceneManifest(aoi_digest=digest, refreshed=now, covered=covered, counts=counts)
+        kept = old_manifest.planet if (old_manifest is not None and not stale_aoi) else None
+        manifest = SceneManifest(
+            aoi_digest=digest, refreshed=now, covered=covered, counts=counts,
+            planet=planet or kept or PlanetState(),
+        )
         write_index(pdir, tables, manifest)
         logger.info("scene index of %s: %d rows, %s..%s", pdir, len(tables.scenes), covered.start, covered.end)
         return (tables, manifest)
@@ -1918,7 +2056,7 @@ def store_chunk(
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `python -m pytest tests/test_scene_cache.py -v`
-Expected: PASS, 8 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1938,7 +2076,7 @@ git commit -m "feat(imagery): atomic scene-index cache with concurrent-safe chun
 
 **Interfaces:**
 - Consumes: `scene_cache.read_index/store_chunk`, `scene_query.needs_refresh/refresh_window`, `scene_index.scene_request/planet_request/parse_scenes/parse_planet`, `gui.scripts.aoi_io.ee_aoi`, `gui.scripts.vis_layers.NICFI_COLLECTIONS/nicfi_region`.
-- Produces: `app_state.scene_index` (`SceneTables | None`), `app_state.scene_manifest` (`SceneManifest | None`), `app_state.scene_index_pending` (bool), `app_state.scene_index_error` (str | None), `app_state.scene_index_retry` (int), `app_state.scene_widening` (bool); `scene_loader.FOREGROUND_MONTHS = 2`, `BACKGROUND_MONTHS = 6`, `shift_months(d, months) -> date`, `wanted_window(project, today, months) -> Optional[tuple[date, date]]`, `SceneIndexLoader(app_state, gee_interface)`.
+- Produces: `app_state.scene_index` (`SceneTables | None`), `app_state.scene_manifest` (`SceneManifest | None`), `app_state.scene_index_pending` (bool), `app_state.scene_index_error` (str | None), `app_state.scene_index_retry` (int), `app_state.scene_widening` (bool), `app_state.scene_window_request` (`tuple[date, date] | None`); `scene_loader.FOREGROUND_MONTHS = 2`, `BACKGROUND_MONTHS = 6`, `shift_months(d, months) -> date`, `wanted_window(project, today, months) -> Optional[tuple[date, date]]`, `widest(*windows) -> Optional[tuple[date, date]]`, `SceneIndexLoader(app_state, gee_interface)`.
 
 **Why this task is opus.** Three traps at once. The loader is a `@solara.component` mounted at app level beside `RemoteFactsLoader`, so `use_task` applies here — but it must publish the index read from disk *before* attempting any fetch, because of Review Focus #2. The background widener must not hold the project lock across an `await`. And `prefer_threaded=False` matters: `gee_interface.get_info_async` is awaited on the render loop, as `RemoteFactsLoader` does, while the parquet work goes through `to_thread_in_context` so its reactive publishes still reach the browser.
 
@@ -1994,8 +2132,15 @@ def _with_period(p, start=date(2026, 5, 3), end=date(2026, 8, 23)):
 
 def test_the_wanted_window_pads_the_active_period_by_whole_months():
     p = _with_period(_p())
-    assert sl.wanted_window(p, date(2026, 10, 2), 2) == (date(2026, 3, 3), date(2026, 10, 23))
-    assert sl.wanted_window(p, date(2026, 10, 2), 6) == (date(2025, 11, 3), date(2027, 2, 23))
+    # The pad is whole months on the start; the end is padded and then clamped
+    # at ``today``, which for this period is what both of these hit.
+    assert sl.wanted_window(p, date(2026, 10, 2), 2) == (date(2026, 3, 3), date(2026, 10, 2))
+    assert sl.wanted_window(p, date(2026, 10, 2), 6) == (date(2025, 11, 3), date(2026, 10, 2))
+
+
+def test_an_unclamped_end_is_the_padded_one():
+    p = _with_period(_p(), start=date(2025, 5, 3), end=date(2025, 8, 23))
+    assert sl.wanted_window(p, date(2026, 10, 2), 2) == (date(2025, 3, 3), date(2025, 10, 23))
 
 
 def test_the_wanted_window_never_runs_past_today():
@@ -2047,7 +2192,7 @@ def test_an_empty_project_fetches_the_index_and_caches_it(data_root, monkeypatch
             assert state.scene_manifest.value.covered.start == date(2026, 3, 3)
             assert state.scene_index_error.value is None
             assert state.scene_index_pending.value is False
-            assert asked == [("SCENES", date(2026, 3, 3), date(2026, 10, 23))]
+            assert asked == [("SCENES", date(2026, 3, 3), date(2026, 10, 2))]
             _, manifest = scene_cache.read_index(paths.project_dir("sl"))
             assert manifest is not None  # it went to disk, so the next session is free
         finally:
@@ -2117,6 +2262,82 @@ def test_a_failed_tail_refresh_keeps_the_stale_index_and_reports_the_failure(dat
     asyncio.run(main())
 
 
+def test_a_widen_request_beyond_the_coverage_is_fetched_in_the_foreground(data_root, monkeypatch):
+    """The ``+1 month`` buttons publish a window. Inside the coverage it costs
+    nothing; outside it the loader has to actually go and get the month, or the
+    reviewer presses the button and watches an empty month appear."""
+    pdir = paths.project_dir("sl")
+    scene_cache.store_chunk(
+        pdir, scene_index.parse_scenes(RAW), (date(2026, 3, 3), date(2026, 10, 2)), "d1",
+        now=datetime.now(timezone.utc),
+    )
+    asked = []
+
+    async def get_info_async(obj):
+        asked.append(obj)
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "_planet_chunk", lambda *a, **k: None)
+    monkeypatch.setattr(sl.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index.value is not None)
+            assert asked == []  # the cache already answers the default view
+            state.scene_window_request.set((date(2026, 1, 3), date(2026, 10, 2)))
+            assert await _settle(lambda: state.scene_manifest.value.covered.start == date(2026, 1, 3))
+            assert len(asked) >= 1
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_earth_engine_aoi_waits_for_the_picker_instead_of_failing(data_root, monkeypatch):
+    """``AppState._install`` clears ``aoi_result``, and the AOI step republishes
+    it a moment later. An asset or admin AOI has no sidecar to fall back on, so
+    a loader that fetched in that gap would raise once and never retry."""
+    calls = []
+
+    async def get_info_async(obj):
+        calls.append(obj)
+        return RAW
+
+    def ee_aoi(result, pdir):
+        if result is None:
+            raise RuntimeError("no AOI geometry available")
+        return "AOI"
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "_planet_chunk", lambda *a, **k: None)
+    monkeypatch.setattr(sl.aoi_io, "ee_aoi", ee_aoi)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    p = _with_period(_p(digest="asset:users/x/aoi"))
+    p.aoi.geometry_file = None
+    state.load_project_state(p)
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            await asyncio.sleep(0.3)
+            assert calls == [] and state.scene_index_error.value is None  # it waited
+            state.aoi_result.set(SimpleNamespace(   # what aoi_io.lazy_digest reads
+                method="ASSET", admin=None,
+                spec=SimpleNamespace(asset_id="users/x/aoi", column=None, value=None)))
+            assert await _settle(lambda: state.scene_index.value is not None)
+            assert state.scene_index_error.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_the_widener_extends_the_coverage_a_month_at_a_time(data_root, monkeypatch):
     windows = []
 
@@ -2141,6 +2362,11 @@ def test_the_widener_extends_the_coverage_a_month_at_a_time(data_root, monkeypat
             assert state.scene_manifest.value.covered.end == date(2026, 10, 2)  # clamped at today
             assert len(windows) > 1  # the foreground window, then the widening chunks
             assert all((e - s).days <= 32 for s, e in windows[1:])
+            # Every chunk touches what was already covered, so the manifest's
+            # min-start/max-end never spans a month nothing fetched.
+            spans = sorted((s, e) for s, e in windows)
+            for (_, prev_end), (next_start, _) in zip(spans, spans[1:]):
+                assert next_start <= prev_end
         finally:
             rc.close()
 
@@ -2197,6 +2423,11 @@ In `gui/store/state_manager.py`, inside `AppState.__init__` after the coverage b
         self.scene_index_error = solara.reactive(None)
         self.scene_index_retry = solara.reactive(0)  # the timeline's "Try again" bumps it
         self.scene_widening = solara.reactive(False)  # the ±6-month background fill is running
+        # The widest window the timeline has been asked to show, published by
+        # the strip's "+1 month" buttons. The loader unions it with the default
+        # ±2 months, so a month outside the cache is fetched rather than drawn
+        # empty. A tuple of two dates, or None for "the default is enough".
+        self.scene_window_request = solara.reactive(None)
 ```
 
 - [ ] **Step 4: Write the loader**
@@ -2227,7 +2458,7 @@ import solara.lab
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import scene_index, scene_query
 from gui.i18n import t
-from gui.scripts import aoi_io, scene_cache, vis_layers
+from gui.scripts import aoi_io, remote_facts, scene_cache, vis_layers
 from gui.scripts.solara_threads import to_thread_in_context
 
 logger = logging.getLogger(__name__)
@@ -2260,14 +2491,25 @@ def wanted_window(project, today: date, months: int) -> Optional[Tuple[date, dat
     return (shift_months(period.start, -months), min(today, shift_months(period.end, months)))
 
 
+def widest(*windows) -> Optional[Tuple[date, date]]:
+    """The smallest window containing every one given, ignoring ``None``s."""
+    live = [w for w in windows if w is not None]
+    if not live:
+        return None
+    return (min(w[0] for w in live), max(w[1] for w in live))
+
+
 def _planet_chunk(gee_interface, project, window):
-    """The NICFI request for ``window``, or ``None`` when the AOI has no region
-    mapping. Separated so tests can switch Planet off in one line."""
+    """``(region, request)`` for ``window``, or ``None`` when the AOI has no
+    region mapping. Separated so tests can switch Planet off in one line."""
     bounds = project.aoi.bounds if project.aoi is not None else None
     if not bounds:
         return None
     region = vis_layers.nicfi_region(bounds)
-    return scene_index.planet_request(vis_layers.NICFI_COLLECTIONS[region], window[0], window[1])
+    if region not in vis_layers.NICFI_COLLECTIONS:
+        return None
+    return (region, scene_index.planet_request(
+        vis_layers.NICFI_COLLECTIONS[region], window[0], window[1]))
 
 
 @solara.component
@@ -2276,39 +2518,63 @@ def SceneIndexLoader(app_state, gee_interface):
     name = p.name if p is not None else None
     digest = p.aoi.digest if p is not None and p.aoi is not None else None
     today = date.today()
-    fg = wanted_window(p, today, FOREGROUND_MONTHS)
-    bg = wanted_window(p, today, BACKGROUND_MONTHS)
+    # The AOI geometry comes from the picker's selection or from the staged
+    # sidecar, and for a moment after a project opens it is available from
+    # neither: ``AppState._install`` clears ``aoi_result`` and the always-mounted
+    # AOI step republishes it. ``remote_facts.aoi_origin`` is the established
+    # answer — None means "wait", and because ``origin`` is a dependency the
+    # task re-runs by itself when the AOI step hands the selection over.
+    origin = remote_facts.aoi_origin(p, app_state.aoi_result.value)
+    requested = app_state.scene_window_request.value
+    fg = widest(wanted_window(p, today, FOREGROUND_MONTHS), requested)
+    bg = widest(wanted_window(p, today, BACKGROUND_MONTHS), requested)
     retry = app_state.scene_index_retry.value
+
+    def _still_current() -> bool:
+        """The project and AOI this fetch was started for are still the open
+        ones. ``use_task`` cancels at the next await, but the publish below
+        follows one, so the guard is what keeps a slow reply from landing on
+        the project that replaced it."""
+        live = app_state.project.value
+        return (live is not None and live.name == name
+                and live.aoi is not None and live.aoi.digest == digest)
 
     async def _fetch(window, mode: str) -> None:
         """One request, merged into the cache, published."""
         pdir = paths.project_dir(name)
-        aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
+        aoi = (aoi_io.ee_aoi(app_state.aoi_result.value, None) if origin == "result"
+               else aoi_io.ee_aoi(None, pdir))
         raw = await gee_interface.get_info_async(scene_index.scene_request(aoi, window[0], window[1]))
         tables = scene_index.parse_scenes(raw)
 
-        planet = _planet_chunk(gee_interface, p, window)
-        if planet is not None:
+        chunk = _planet_chunk(gee_interface, p, window)
+        planet = scene_index.PlanetState(region=chunk[0] if chunk else None, access=False)
+        if chunk is not None:
             try:
-                rows = scene_index.parse_planet(await gee_interface.get_info_async(planet))
+                rows = scene_index.parse_planet(await gee_interface.get_info_async(chunk[1]))
                 tables = scene_index.SceneTables(
                     scenes=pd.concat([tables.scenes, rows], ignore_index=True), tiles=tables.tiles
                 )
+                planet = scene_index.PlanetState(region=chunk[0], access=True)
             except Exception as exc:  # noqa: BLE001
                 # NICFI is licence-gated: no access is the normal case, and it
                 # must not cost the reviewer their Sentinel-2 and Landsat rows.
+                # It is *recorded* rather than only logged, so the toolbar can
+                # disable the Planet toggle and say why (spec §5.4).
                 logger.info("no Planet NICFI rows for %s: %s", name, exc)
 
         merged, manifest = await to_thread_in_context(
-            scene_cache.store_chunk, pdir, tables, window, digest,
+            scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
             now=datetime.now(timezone.utc), replace=(mode == "rebuild"),
         )
+        if not _still_current():
+            return  # another project opened while this was in flight
         app_state.scene_index.set(merged)
         app_state.scene_manifest.set(manifest)
 
     # ---- the index on disk, then the foreground window
     async def _load():
-        if name is None or digest is None or fg is None:
+        if name is None or digest is None or fg is None or origin is None:
             app_state.scene_index.set(None)
             app_state.scene_manifest.set(None)
             return
@@ -2339,12 +2605,14 @@ def SceneIndexLoader(app_state, gee_interface):
         finally:
             app_state.scene_index_pending.set(False)
 
-    load = solara.lab.use_task(_load, dependencies=[name, digest, fg, retry],
+    load = solara.lab.use_task(_load, dependencies=[name, digest, fg, origin, retry],
                                prefer_threaded=False, raise_error=False)
 
     # ---- the ±6-month buffer, one month at a time, once the foreground settled
     async def _widen():
-        if load.pending or name is None or bg is None or app_state.scene_index.value is None:
+        if load.pending or name is None or bg is None or origin is None:
+            return
+        if app_state.scene_index.value is None:
             return
         app_state.scene_widening.set(True)
         try:
@@ -2354,22 +2622,36 @@ def SceneIndexLoader(app_state, gee_interface):
                                              now=datetime.now(timezone.utc)) != "widen":
                     return
                 side = scene_query.refresh_window(manifest, bg, "widen")
-                # One month per request: each one publishes, so the timeline
-                # widens while the reviewer works instead of in one jump.
-                chunk = (side[0], min(side[1], shift_months(side[0], 1)))
                 if side[1] < side[0] + timedelta(days=1):
                     return
+                # One month per request: each one publishes, so the timeline
+                # widens while the reviewer works instead of in one jump.
+                #
+                # The chunk has to **touch the existing coverage**, because
+                # ``store_chunk`` records coverage as min-of-starts to
+                # max-of-ends: a chunk taken from the far end of the missing
+                # range would make the manifest claim every month in between
+                # without fetching any of them. ``refresh_window`` returns the
+                # later side as ``(covered.end, want_end)`` and the earlier one
+                # as ``(want_start, covered.start)``, so the anchored end is
+                # whichever one equals the coverage edge.
+                if side[1] <= manifest.covered.start:
+                    chunk = (max(side[0], shift_months(side[1], -1)), side[1])
+                else:
+                    chunk = (side[0], min(side[1], shift_months(side[0], 1)))
                 await _fetch(chunk, "widen")
         except Exception as exc:  # noqa: BLE001
             logger.info("scene index of %s not widened: %s", name, exc)  # the ±2 months still answer
         finally:
             app_state.scene_widening.set(False)
 
-    solara.lab.use_task(_widen, dependencies=[name, digest, bg, retry, load.pending],
+    solara.lab.use_task(_widen, dependencies=[name, digest, bg, origin, retry, load.pending],
                         prefer_threaded=False, raise_error=False)
 ```
 
-Note on the widen chunking: `refresh_window(..., "widen")` returns the later side first and the earlier side once the later one is covered, so this loop alternates sides as the coverage grows without needing to track which side it is on.
+Note on the widen chunking: `refresh_window(..., "widen")` returns the later side first and the earlier side once the later one is covered, so this loop alternates sides as the coverage grows without needing to track which side it is on. What it *does* need to know is which end of the returned range is anchored to the coverage — hence the `side[1] <= manifest.covered.start` test. `store_chunk` has no record of disjoint intervals, only a single `Coverage`, so a non-contiguous chunk would silently widen that range over months nothing fetched; growing one month at a time *from the coverage edge* is what keeps the single interval honest.
+
+Note on `load.pending` in the widen dependencies: it is a `use_task` *status* flag, not a worker publish. It goes True then False once per `_load`, so `_widen` is re-run once per load rather than looping — and the `needs_refresh(...) != "widen"` guard at the top of each iteration is what ends it. `app_state.scene_manifest`, which `_fetch` does publish, is deliberately **not** a dependency.
 
 - [ ] **Step 5: Mount it in the shell**
 
@@ -2408,8 +2690,8 @@ git commit -m "feat(imagery): load the scene index per project and widen it in t
 - Test: `tests/test_timeline.py`
 
 **Interfaces:**
-- Consumes: `scene_query.scenes_for/month_segments/x_for/auto_collapsed/default_pick/source_counts/month_counts`, `scene_index.SOURCE_*/row_id`, `app_state.scene_index/scene_manifest/scene_index_error/scene_index_pending`.
-- Produces: `timeline.build_timeline(app_state, analysis, widgets) -> ipyvuetify.Card`; `timeline.TRACK_PX = 1120.0`, `LANE_H = 45`, `AXIS_H = 27`, `BAND = {source: (top, height)}`, `SRC_COLOR = {source: css}`; `timeline.view_window(ctx, project, extra) -> Optional[tuple[date, date]]`; `timeline.readout(sel, row_id) -> str`; `timeline.days_apart(before_id, after_id) -> Optional[int]`; `timeline.info_tuple(row) -> list` building the five-element contract.
+- Consumes: `scene_query.scenes_for/month_segments/x_for/auto_collapsed/default_pick/source_counts/month_counts`, `scene_index.SOURCE_*/row_id`, `app_state.scene_index/scene_manifest/scene_index_error/scene_index_pending/scene_index_retry/scene_window_request`, `scene_loader.shift_months`.
+- Produces: `timeline.build_timeline(app_state, analysis, widgets) -> ipyvuetify.Card`; `timeline.TRACK_PX = 1120.0`, `LANE_H = 45`, `AXIS_H = 27`, `BAND = {source: (top, height)}`, `SRC_COLOR = {source: css}`; `timeline.view_window(ctx, project, extra) -> Optional[tuple[date, date]]`; `timeline.readout(sel, row_id) -> str`; `timeline.days_apart(before_id, after_id) -> Optional[int]`; `timeline.info_tuple(row) -> list` building the five-element contract; `timeline.stripe_hit_style(segments, d, source) -> str`, `timeline.stripe_bar_style(row, *, selected) -> str`, `timeline.stripe_cursor(row) -> str` and `timeline.month_bar_style(segments, d) -> str` for the Planet month bar; `timeline._walk(widget)`, the child-tree generator Task 11's tests reuse.
 
 **Why this task is opus.** It is a raw-widget builder under MapApp's `v-if`, so none of it may be a `@solara.component` — a Solara component here renders once and comes back blank when the reviewer closes and reopens the step. It is also dense absolute-positioned geometry over a piecewise axis, with roughly 170 clickable children, where an off-by-one in a percentage puts a stripe on the wrong date.
 
@@ -2434,7 +2716,7 @@ Expected: `events: ['click']`. If `on_event` raises or `_events` stays empty, us
 
 ```python
 # tests/test_timeline.py
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import geopandas as gpd
@@ -2468,7 +2750,7 @@ def _ctx(date_min=date(2026, 5, 3), date_max=date(2026, 8, 23)):
 
 
 def _project():
-    p = Project(name="t", created_at=None, updated_at=None)
+    p = Project(name="t", created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d1",
                       bounds=(0.0, 0.0, 2.0, 2.0), geometry_file="aoi.geojson")
     p.periods = {"x": Period(id="x", start=date(2026, 4, 1), end=date(2026, 9, 30))}
@@ -2560,7 +2842,7 @@ def test_every_locale_has_the_timeline_keys():
     root = Path(msg.__file__).parent
     keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
             "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
-            "legend", "set_before", "set_after", "collapsed_month"}
+            "legend", "set_before", "set_after", "collapsed_month", "no_cloud_filter"}
     for locale in ("en", "es-ES", "fr"):
         data = json.loads((root / locale / "ui.json").read_text())
         assert keys <= set(data["analysis"]["timeline"]), locale
@@ -2607,7 +2889,92 @@ def test_no_images_over_the_alert_says_so_rather_than_drawing_an_empty_track():
     assert timeline.t("analysis.timeline.no_images") in _text(card)
 
 
+def test_a_stale_index_whose_refresh_failed_reports_both_the_age_and_the_failure():
+    """Review Focus #2 in full. The error alone leaves the reviewer unable to
+    tell whether they are looking at yesterday's index or last month's."""
+    state = _fake_state()
+    state.scene_manifest.set(_manifest(hours_ago=30))
+    state.scene_index_error.set("Earth Engine unavailable")
+    text = _text(timeline.build_timeline(state, _fake_analysis(), _fake_widgets()))
+    assert "Earth Engine unavailable" in text
+    assert timeline.t("analysis.timeline.stale").format(
+        when=(datetime.now(timezone.utc) - timedelta(hours=30)).date().isoformat()) in text
+    assert timeline.t("analysis.timeline.retry") in text
+
+
+def test_a_fresh_index_says_nothing_about_its_age():
+    state = _fake_state()
+    state.scene_manifest.set(_manifest(hours_ago=1))
+    assert "Index from" not in _text(timeline.build_timeline(state, _fake_analysis(), _fake_widgets()))
+
+
+def test_the_planet_toggle_is_disabled_and_says_why_without_nicfi_access():
+    """Spec §5.4: a licence-gated collection must not read as an empty one."""
+    state = _fake_state()
+    state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=False)))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    chip = next(w for w in _walk(card)
+                if (getattr(w, "attributes", None) or {}).get("title", "").startswith(
+                    timeline.t("steps.layers.err_nicfi").format(region="americas")[:20]))
+    assert chip.attributes.get("disabled") == "disabled"
+    assert chip._events == [] or "click" not in chip._events  # nothing to click
+
+
+def test_the_planet_toggle_is_live_when_access_was_granted():
+    state = _fake_state()
+    state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=True)))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    chips = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-pressed")]
+    planet = next(w for w in chips if timeline.SRC_LABEL[PL] in _text(w))
+    assert "disabled" not in (planet.attributes or {})
+
+
+def test_a_planet_row_is_a_bar_across_its_whole_month_not_a_stripe():
+    """A NICFI basemap composites a month; a 2.5px stripe would claim an
+    instant it does not have (spec §4.1)."""
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), set(), timeline.TRACK_PX)
+    bar = timeline.month_bar_style(segs, date(2026, 4, 1))
+    width = float(bar.split("width: ")[1].split("%")[0])
+    left = float(bar.split("left: ")[1].split("%")[0])
+    # April is 30 of the 122 days on an all-expanded four-month axis.
+    assert width == pytest.approx(100 * 30 / 122, abs=0.5)
+    assert left == pytest.approx(100 * 31 / 122, abs=0.5)
+    # and the bar sits in the Planet band, not the Sentinel-2 one
+    assert f"top: {timeline.BAND[PL][0]}px" in bar
+
+
+def test_a_planet_bar_in_a_collapsed_month_is_the_block_width():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), {(2026, 4)}, timeline.TRACK_PX)
+    bar = timeline.month_bar_style(segs, date(2026, 4, 1))
+    width = float(bar.split("width: ")[1].split("%")[0])
+    assert width == pytest.approx(100 * scene_query.COLLAPSED_PX / timeline.TRACK_PX, abs=0.5)
+
+
+def test_widening_past_the_coverage_asks_the_loader_for_the_month():
+    """Finding from review: the button widened the *view* only, so a month
+    outside the cache drew empty and no fetch was ever started."""
+    state = _fake_state()
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert state.scene_window_request.value is None
+    btn = next(w for w in _walk(card)
+               if timeline.t("analysis.timeline.one_more_month") in _text(w)
+               and "click" in (getattr(w, "_events", None) or []))
+    btn.fire_event("click", None)
+    assert state.scene_window_request.value is not None
+    assert state.scene_window_request.value[0] < date(2026, 3, 3)
+
+
 # ---- fakes: the builder reads reactives and a context dict, nothing else
+def _manifest(hours_ago=0, planet=None):
+    return scene_index.SceneManifest(
+        aoi_digest="d1",
+        refreshed=datetime.now(timezone.utc) - timedelta(hours=hours_ago),
+        covered=scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 12, 31)),
+        counts={S2: 1, LS: 1},
+        planet=planet or scene_index.PlanetState(),
+    )
+
+
 def _fake_state(index="default"):
     import solara
 
@@ -2625,6 +2992,7 @@ def _fake_state(index="default"):
         scene_index_error=solara.reactive(None),
         scene_index_retry=solara.reactive(0),
         scene_widening=solara.reactive(False),
+        scene_window_request=solara.reactive(None),
     )
 
 
@@ -2648,7 +3016,16 @@ def _text(widget) -> str:
     if isinstance(widget, str):
         return widget
     return " ".join(_text(c) for c in (getattr(widget, "children", None) or ()))
+
+
+def _walk(widget):
+    yield widget
+    for child in (getattr(widget, "children", None) or ()):
+        if not isinstance(child, str):
+            yield from _walk(child)
 ```
+
+`_walk` is defined here and reused by Task 11; if Task 11 is implemented first, keep the single definition.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -2678,11 +3055,14 @@ In `deforestation_alerts/message/en/ui.json`, under `"analysis"`:
       "legend": "Each collection is a stripe in its own band: Sentinel-2 on top, Landsat in the middle, Planet as a bar across its month. A faded half-height stripe is over the cloud limit. The gold band is the alert window, where every image shows partial clearing: selectable, but never picked for you. Click a stripe in the upper lane to set the before image, in the lower lane to set the after image.",
       "set_before": "Set as before image",
       "set_after": "Set as after image",
-      "collapsed_month": "{month}, {count} images, collapsed. Expand this month."
+      "collapsed_month": "{month}, {count} images, collapsed. Expand this month.",
+      "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it."
     }
 ```
 
-and the same keys, translated, in `deforestation_alerts/message/es-ES/ui.json` and `deforestation_alerts/message/fr/ui.json`.
+and the same keys, translated, in `deforestation_alerts/message/es-ES/ui.json` and `deforestation_alerts/message/fr/ui.json`. `tests/test_i18n.py` fails on a key present in one locale and missing in another, so all three go in together.
+
+The Planet toggle's "no access" message is **not** a new key: it reuses the existing `steps.layers.err_nicfi` ("Your Earth Engine account does not have access to Planet NICFI {region}."), which already exists in all three locales and already takes a `{region}`. The spec asks for that string by name.
 
 - [ ] **Step 5: Carry the granule keys on the analysis state**
 
@@ -2803,6 +3183,31 @@ def info_tuple(row) -> list:
     cloud = row["cloud"]
     cloud_str = "N/A" if cloud is None or pd.isna(cloud) else f"{float(cloud):.2f}"
     return [str(row["source"]), millis, cloud_str, f"{row['source']} {d.isoformat()} ", d.strftime("_%d%m%y")]
+
+
+def month_bar_style(segments, d: date) -> str:
+    """A Planet row's hit area: the **whole month** it composites, not an instant.
+
+    A NICFI basemap is a monthly mosaic, so a 2.5px stripe at one instant would
+    claim a precision it does not have (spec §4.1). The bar spans its month's
+    own segment, which on a collapsed month is the 66px block and on an
+    expanded one its proportional share — so it lines up with the axis either
+    way, and it is the only row type whose width carries meaning.
+    """
+    seg = segments.get((d.year, d.month))
+    if seg is None:
+        return "display: none"
+    left = x_for(segments, date(d.year, d.month, 1))
+    right = x_for(segments, _month_end(d), end=True)
+    top, height = BAND[SOURCE_PLANET]
+    return (f"position: absolute; left: {left:.4f}%; width: {max(right - left, 0.1):.4f}%; "
+            f"top: {top}px; height: {height}px; padding: 0; border: 0; background: transparent")
+
+
+def _month_end(d: date) -> date:
+    import calendar
+
+    return date(d.year, d.month, calendar.monthrange(d.year, d.month)[1])
 
 
 def _row_of(sel, rid):
@@ -2981,8 +3386,10 @@ def build_timeline(app_state, analysis, widgets):
             rid = row["id"]
             aria = (f"{SRC_LABEL[row['source']]}, {row['date'].date().isoformat()}, "
                     f"{t('analysis.timeline.set_before' if lane == 'b' else 'analysis.timeline.set_after')}")
+            hit = (month_bar_style(segs, row["date"].date()) if row["source"] == SOURCE_PLANET
+                   else stripe_hit_style(segs, row["date"].date(), row["source"]))
             kids.append(_button(
-                stripe_hit_style(segs, row["date"].date(), row["source"]), aria,
+                hit, aria,
                 None if bool(row["hidden"]) else (lambda w, e, d, lane=lane, rid=rid: _on_pick(lane, rid)),
                 stripe_bar_style(row, selected=selected), stripe_cursor(row)))
         host.children = kids
@@ -3059,19 +3466,40 @@ def build_timeline(app_state, analysis, widgets):
 
     def _render_chips(sel):
         counts = scene_query.source_counts(sel) if sel is not None else {k: (0, 0) for k in SRC_COLOR}
+        planet = getattr(app_state.scene_manifest.value, "planet", None)
         kids = []
         for name in (SOURCE_PLANET, SOURCE_S2, SOURCE_LANDSAT):
             on = name in sources.value
             shown, hidden = counts.get(name, (0, 0))
             label = f"{SRC_LABEL[name]} {shown}" + (f" +{hidden}" if hidden else "")
-            chip = v.Html(tag="button",
-                          attributes={"type": "button", "aria-pressed": "true" if on else "false"},
-                          style_=(f"height: 32px; padding: 0 10px; border-radius: 4px; cursor: pointer; "
+            # NICFI is licence-gated. A toggle that does nothing because the
+            # account has no access must say so rather than read as a
+            # collection with no images this month (spec §5.4), which is why
+            # the loader records ``planet.access`` instead of only logging it.
+            blocked = name == SOURCE_PLANET and planet is not None and not planet.access
+            if name == SOURCE_PLANET:
+                # Planet has no cloud property, so the slider never hides it.
+                title = (t("steps.layers.err_nicfi").format(region=(planet.region if planet else "") or "")
+                         if blocked else t("analysis.timeline.no_cloud_filter"))
+            else:
+                title = ""
+            attrs = {"type": "button", "aria-pressed": "true" if (on and not blocked) else "false"}
+            if title:
+                attrs["title"] = title
+                attrs["aria-label"] = f"{label}. {title}"
+            if blocked:
+                attrs["disabled"] = "disabled"
+                attrs["aria-disabled"] = "true"
+            chip = v.Html(tag="button", attributes=attrs,
+                          style_=(f"height: 32px; padding: 0 10px; border-radius: 4px; "
+                                  f"cursor: {'not-allowed' if blocked else 'pointer'}; "
                                   f"background: #24221f; color: #f0ece6; font-size: 11.5px; "
-                                  f"border: 1px solid {SRC_COLOR[name] if on else '#44403a'}; "
-                                  f"opacity: {'1' if on else '0.5'}"),
+                                  f"border: 1px solid "
+                                  f"{SRC_COLOR[name] if (on and not blocked) else '#44403a'}; "
+                                  f"opacity: {'0.4' if blocked else ('1' if on else '0.5')}"),
                           children=[label])
-            chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
+            if not blocked:
+                chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
             kids.append(chip)
         chips.children = kids
 
@@ -3091,27 +3519,58 @@ def build_timeline(app_state, analysis, widgets):
         readout_row.children = kids
 
     def _render_status():
+        """The index's age and the refresh's outcome, which are two facts.
+
+        Review Focus #2 is both halves at once: a reviewer whose stale index
+        failed to refresh must see *how old what they are looking at is* and
+        *that the refresh failed*. Showing only the error would leave them
+        with no idea whether the timeline is a day or a month behind, so the
+        age line is rendered first and the failure after it, not instead.
+        """
         error = app_state.scene_index_error.value
         manifest = app_state.scene_manifest.value
+        kids = []
+        if manifest is not None:
+            age = (datetime.now(timezone.utc) - manifest.refreshed).total_seconds() / 3600
+            if age > scene_query.TTL_HOURS or error:
+                kids.append(v.Html(tag="span", children=[
+                    t("analysis.timeline.stale").format(when=manifest.refreshed.date().isoformat())]))
         if error:
             # The index already on screen keeps answering: this says the
             # refresh failed, not that there is nothing to look at.
             retry = v.Btn(x_small=True, text=True, children=[t("analysis.timeline.retry")])
             retry.on_event("click", lambda w, e, d: app_state.scene_index_retry.set(
                 app_state.scene_index_retry.value + 1))
-            status.children = [t("analysis.timeline.refresh_failed").format(error=error), retry]
+            kids.append(v.Html(tag="span", style_="color: #d9ab4e; margin-left: 8px", children=[
+                t("analysis.timeline.refresh_failed").format(error=error)]))
+            kids.append(retry)
+        elif app_state.scene_index_pending.value and manifest is None:
+            kids = [v.Html(tag="span", children=[t("analysis.timeline.loading")])]
         elif app_state.scene_index_pending.value:
-            status.children = [t("analysis.timeline.loading")]
-        elif manifest is not None:
-            age = (datetime.now(timezone.utc) - manifest.refreshed).total_seconds() / 3600
-            status.children = ([t("analysis.timeline.stale").format(when=manifest.refreshed.date().isoformat())]
-                               if age > scene_query.TTL_HOURS else [])
-        else:
-            status.children = []
+            kids.append(v.Html(tag="span", style_="margin-left: 8px",
+                               children=[t("analysis.timeline.loading")]))
+        status.children = kids
 
     def _widen(side):
+        """One more month on ``side``, and a request for it if the cache is short.
+
+        Widening the local view is not enough: outside the cached coverage the
+        extra month would simply draw empty. ``scene_window_request`` is what
+        ``SceneIndexLoader`` unions with its own ±2 months, so the month is
+        fetched in the foreground and the strip fills in when it lands
+        (``scene_index`` is one of the reactives ``render`` subscribes to).
+        The request only ever grows, so a reviewer who widens and then moves
+        to another alert keeps the context they asked for.
+        """
         back, fwd = extra.value
         extra.set((back + 1, fwd) if side == "left" else (back, fwd + 1))
+        _, window = _selection()
+        window = window or view_window(widgets.imagery_ctx.value, app_state.project.value, extra.value)
+        if window is not None:
+            was = app_state.scene_window_request.value
+            app_state.scene_window_request.set(
+                window if was is None else (min(was[0], window[0]), max(was[1], window[1]))
+            )
         render()
 
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True,
@@ -3167,7 +3626,9 @@ git commit -m "feat(analysis): shared image timeline with coloured stripes and c
 - Consumes: `scenes_for`'s result, `month_segments`.
 - Produces: `timeline.step(sel, segments, current_id, delta) -> Optional[str]`, `timeline.edge(sel, segments, last=False) -> Optional[str]`.
 
-A reviewer going through a queue of alerts does the same two clicks hundreds of times, and the targets are 11px wide. Arrow keys make that a key press. Tab moves between the two lanes — one tab stop per lane, not one per stripe, which is why every stripe but the selected one carries `tabindex="-1"`. Left and Right move the selection one row at a time; Home and End jump to the ends. A row the cloud limit hides is skipped, exactly as a click on it is ignored. A row inside a collapsed month is skipped too, since it is not drawn — so arrowing never moves the selection somewhere invisible.
+A reviewer going through a queue of alerts does the same two clicks hundreds of times, and the targets are 11px wide. Arrow keys make that a key press. Tab moves between the two lanes — one tab stop per lane, not one per stripe, which is why every stripe carries `tabindex="-1"`. Left and Right move one row at a time; Home and End jump to the ends; **Enter assigns**. A row the cloud limit hides is skipped, exactly as a click on it is ignored. A row inside a collapsed month is skipped too, since it is not drawn — so arrowing never moves the cursor somewhere invisible.
+
+**Arrows move a cursor; Enter is what assigns** (spec §4.8). That separation is not ceremony: `_assign` publishes `before_info`, which is what redraws the map pane, so assigning on every arrow key would fire one Earth Engine tile request per key press — a reviewer walking ten scenes would queue ten map redraws to look at one. The cursor is drawn as a dashed ring on the focused stripe and named by `aria-activedescendant` on the lane, so where it is is visible and announced without anything being fetched. A click still assigns directly, because a click is already a deliberate choice of one row.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3235,12 +3696,55 @@ def test_each_lane_is_one_tab_stop():
     assert len(stops) == 2  # the before lane and the after lane
 
 
-def _walk(widget):
-    yield widget
-    for child in (getattr(widget, "children", None) or ()):
-        if not isinstance(child, str):
-            yield from _walk(child)
+def test_arrowing_moves_the_cursor_without_assigning_anything():
+    """Spec §4.8: arrows move, Enter assigns. If an arrow assigned, walking ten
+    scenes would queue ten map redraws."""
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_fake_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    before = analysis.before_info.value
+    lane.fire_event("keydown.right", None)
+    assert analysis.before_info.value == before            # nothing published
+    assert _cursor_id(lane) is not None                    # but the cursor moved
+    assert _cursor_id(lane) != (before and before[3])
+
+
+def test_enter_assigns_the_row_the_cursor_is_on():
+    """``row_id`` is ``<source letter><YYYYMMDD>`` and ``info_tuple``'s fourth
+    element carries the ISO date, so the two can be checked against each other
+    without the test knowing which scene End landed on."""
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_fake_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    lane.fire_event("keydown.end", None)
+    cursor = _cursor_id(lane)                     # "b-s20260404"
+    lane.fire_event("keydown.enter", None)
+    info = analysis.before_info.value
+    assert info is not None
+    assert cursor.endswith(info[3].strip().rsplit(" ", 1)[-1].replace("-", ""))
+    assert _cursor_id(lane) == cursor             # Enter assigns; it does not move
+
+
+def test_the_focused_stripe_is_named_for_a_screen_reader():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    lane = _lane(card, "0")
+    lane.fire_event("keydown.home", None)
+    named = _cursor_id(lane)
+    ids = {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
+    assert named in ids  # aria-activedescendant points at a stripe that exists
+
+
+def _lane(card, which):
+    lanes = [w for w in _walk(card)
+             if (getattr(w, "attributes", None) or {}).get("role") == "listbox"]
+    return lanes[0] if which == "0" else lanes[1]
+
+
+def _cursor_id(lane):
+    return (lane.attributes or {}).get("aria-activedescendant") or None
 ```
+
+`fire_event` is `ipywidgets`' own synchronous dispatch of a registered handler, so these drive the Python side of the same callbacks a key press reaches. Step 1 of Task 10 is what establishes that the browser side arrives at all; if the `Html` fallback was taken there, these tests take the `v.Btn` host instead and are otherwise unchanged.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -3299,10 +3803,13 @@ In `build_timeline`, give each lane host a tab stop and key handlers. Replace th
     def _lane_host(height_style, lane, label):
         host = v.Html(tag="div", style_=f"position: relative; {height_style}; outline: none",
                       attributes={"tabindex": "0", "role": "listbox", "aria-label": label})
+        # ``aria-activedescendant`` is refreshed by ``_render_lane``: it is how
+        # a screen reader follows the cursor while focus stays on the lane.
         for name, move in (("keydown.left", -1), ("keydown.right", 1)):
             host.on_event(name, lambda w, e, d, lane=lane, move=move: _arrow(lane, move))
         host.on_event("keydown.home", lambda w, e, d, lane=lane: _jump(lane, last=False))
         host.on_event("keydown.end", lambda w, e, d, lane=lane: _jump(lane, last=True))
+        host.on_event("keydown.enter", lambda w, e, d, lane=lane: _commit(lane))
         return host
 
     lane_before = _lane_host(f"height: {LANE_H}px; margin-top: 11px", "b",
@@ -3313,15 +3820,21 @@ In `build_timeline`, give each lane host a tab stop and key handlers. Replace th
 and add the two handlers beside `_on_pick`:
 
 ```python
+    def _cursor(lane):
+        """The keyboard cursor of a lane, which starts at its selection."""
+        focus = (focus_before if lane == "b" else focus_after)
+        if focus.value is None:
+            return (before_id if lane == "b" else after_id).value
+        return focus.value
+
     def _arrow(lane, move):
         sel, window = _selection()
         if sel is None or window is None:
             return
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
-        current = (before_id if lane == "b" else after_id).value
-        target = step(sel, segs, current, move)
-        if target and target != current:
-            _assign(lane, target, sel)
+        target = step(sel, segs, _cursor(lane), move)
+        if target and target != _cursor(lane):
+            (focus_before if lane == "b" else focus_after).set(target)
             render()
 
     def _jump(lane, *, last):
@@ -3331,20 +3844,61 @@ and add the two handlers beside `_on_pick`:
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         target = edge(sel, segs, last=last)
         if target:
-            _assign(lane, target, sel)
+            (focus_before if lane == "b" else focus_after).set(target)
             render()
+
+    def _commit(lane):
+        """Enter: assign the row the cursor is on. This is the only key that
+        publishes ``before_info`` / ``after_info``, and so the only one that
+        costs a map redraw."""
+        sel, _ = _selection()
+        target = _cursor(lane)
+        if sel is None or target is None:
+            return
+        _assign(lane, target, sel)
+        render()
+```
+
+and the two cursors beside the selection reactives at the top of `build_timeline`:
+
+```python
+    #: the keyboard cursor per lane — where the arrows have walked to, which
+    #: is not a selection until Enter. ``None`` means "wherever the selection
+    #: is", and a new alert clears it along with the selection.
+    focus_before = solara.reactive(None)
+    focus_after = solara.reactive(None)
+```
+
+with the clear in the per-alert block of `render`, beside `before_id.set(b)`:
+
+```python
+            focus_before.set(None)
+            focus_after.set(None)
 ```
 
 In `_render_lane`, keep the lane the single tab stop by giving each stripe button an explicit tabindex:
 
 ```python
+            focused = rid == _cursor(lane)
             hit = _button(
-                stripe_hit_style(segs, row["date"].date(), row["source"]), aria,
+                (month_bar_style(segs, row["date"].date()) if row["source"] == SOURCE_PLANET
+                 else stripe_hit_style(segs, row["date"].date(), row["source"]))
+                + ("; outline: 1px dashed #bf8f2daa; outline-offset: 1px" if focused else ""),
+                aria,
                 None if bool(row["hidden"]) else (lambda w, e, d, lane=lane, rid=rid: _on_pick(lane, rid)),
                 stripe_bar_style(row, selected=selected), stripe_cursor(row))
-            hit.attributes = {**hit.attributes, "tabindex": "-1",
+            hit.attributes = {**hit.attributes, "tabindex": "-1", "id": f"{lane}-{rid}",
                               "aria-selected": "true" if selected else "false"}
             kids.append(hit)
+```
+
+and, at the end of `_render_lane`, point the lane at its cursor:
+
+```python
+        host.children = kids
+        cursor = _cursor(lane)
+        host.attributes = {**host.attributes,
+                           "aria-activedescendant": f"{lane}-{cursor}" if cursor else ""}
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -3364,8 +3918,9 @@ git commit -m "feat(analysis): keyboard navigation on the shared image timeline"
 ### Task 12: Integration, image rebuild, and retiring the old selectors
 
 **Files:**
-- Modify: `gui/tile/analysis/widgets.py:294-295`, `gui/tile/analysis/analysis_tile.py:262-280,446,475-515`, `gui/tile/analysis/imagery.py`, `gui/tile/analysis/state.py:36-40`, `gui/widget/custom_sw.py:158-194`, `deforestation_alerts/scripts/imagery_service.py`, `deforestation_alerts/scripts/mosaics_helper.py:46-71`
+- Modify: `gui/tile/analysis/widgets.py:294-295`, `gui/tile/analysis/analysis_tile.py:74,262-280,446,475-500,545-548`, `gui/tile/analysis/imagery.py:516-546`, `gui/tile/analysis/state.py:36-40`, `gui/widget/custom_sw.py:158-194`, `deforestation_alerts/scripts/imagery_service.py`, `deforestation_alerts/scripts/mosaics_helper.py:46-71`
 - Test: `tests/test_analysis_state.py`, `tests/test_set_context.py`, `tests/test_timeline.py`
+- Create: `tests/test_timeline_ee.py`
 
 **Interfaces:**
 - Consumes: `timeline.build_timeline`, `analysis.before_keys/after_keys`.
@@ -3422,6 +3977,31 @@ def test_rebuilding_a_landsat_image_looks_the_scene_ids_up_in_both_collections(m
 ```
 
 ```python
+# tests/test_timeline_ee.py — the live tier, because only Earth Engine knows
+# which scene ids are in T1_TOA
+"""Tier 2: the Landsat rebuild against real Earth Engine. Skips without credentials."""
+
+import pytest
+
+pytestmark = pytest.mark.ee
+
+
+def test_a_landsat_scene_with_no_toa_match_still_builds_an_image(gee):
+    """Spec §9: "Landsat TOA match missing → fall back to the unsharpened SR
+    image". T1_TOA is not a perfect mirror of T1_L2 — a scene can be in one and
+    not the other. Pan-sharpening against an empty mosaic raises inside
+    ``SFIM_pan_sharpen``, which would take down the pane for a scene the
+    reviewer can see on the timeline."""
+    import ee
+    from gui.tile.analysis import imagery
+
+    geom = ee.Geometry.Rectangle([-55.0, -10.0, -54.9, -9.9])
+    img = imagery._landsat_pair(["LC82270682026100LGN00_NOT_A_REAL_ID"], geom)
+    assert img is not None
+    assert img.bandNames().size().getInfo() > 0  # the SR fallback, not a raise
+```
+
+```python
 # tests/test_analysis_state.py — replace the three imagery token tests with these
 def test_the_timeline_does_not_auto_pick_an_image_from_inside_the_alert_window():
     """What the retired selectors enforced by only offering out-of-window
@@ -3467,7 +4047,7 @@ Expected: FAIL — `AttributeError: module 'gui.tile.analysis.imagery' has no at
 
 - [ ] **Step 3: Rebuild the image from the granule keys**
 
-In `gui/tile/analysis/imagery.py`, replace the body of `image_slider_map_callback`'s source branches with a call to a new function, and delete `image_slider_info_callback`, `_normalize_source_data`, `_SOURCE_TO_INDEX`, `_fetch_and_rebuild_s2`, `_fetch_and_rebuild_landsat` and `_on_ctx` along with their imports:
+In `gui/tile/analysis/imagery.py`, replace the body of `image_slider_map_callback`'s source branches with a call to a new function, and delete `image_slider_info_callback`, `_normalize_source_data`, `_SOURCE_TO_INDEX`, `_fetch_and_rebuild_s2`, `_fetch_and_rebuild_landsat`, `_on_ctx` and **`build_imagery` itself** (`imagery.py:516-546`) along with their imports. `build_imagery` is nothing but the `_on_ctx` subscription — with `_on_ctx` gone it has no body, and the `*_info` subscriptions added in this step replace what it was for. Its import at `analysis_tile.py:74` and its call at `analysis_tile.py:493-500` go with it; leaving either behind is an `ImportError` on mount or a second, stale fetch path per alert.
 
 ```python
 # beside the existing imports in gui/tile/analysis/imagery.py
@@ -3488,8 +4068,19 @@ def _landsat_pair(keys, geom):
     where = ee.Filter.inList("LANDSAT_SCENE_ID", list(keys))
     sr_img = sr.filter(where).mosaic().select(
         ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"])
-    toa_img = toa.filter(where).mosaic().select("B8")
-    return harmonizeL8ToS2_scaled(SFIM_pan_sharpen(sr_img, toa_img)).clip(geom)
+    toa_match = toa.filter(where)
+    # T1_TOA is not a perfect mirror of T1_L2: a scene can be in the surface
+    # product and missing from the TOA one. ``SFIM_pan_sharpen`` against an
+    # empty mosaic raises, so fall back to the unsharpened SR image — coarser,
+    # but a drawn pane rather than a dead one (spec §9). The branch is server
+    # side, inside ``ee.Algorithms.If``, because asking which it is from Python
+    # would cost a ``getInfo`` round trip per pick.
+    sharpened = harmonizeL8ToS2_scaled(
+        SFIM_pan_sharpen(sr_img, toa_match.mosaic().select("B8")))
+    plain = harmonizeL8ToS2_scaled(sr_img)
+    return ee.Image(
+        ee.Algorithms.If(toa_match.size().gt(0), sharpened, plain)
+    ).clip(geom)
 
 
 def rebuild_image(source, keys, geom):
@@ -3596,12 +4187,34 @@ def _as_date(julian):
 In `analysis_tile.py`, the two columns lose their selectors and a full-width row gains the strip:
 
 ```python
-        col1 = v.Col(cols=6, class_="pa-1 analysis-mapbox", children=[widgets.map31])
-        col2 = v.Col(cols=6, class_="pa-1 analysis-mapbox", children=[widgets.map32])
-        maps_row = v.Row(no_gutters=True, children=[col1, col2])
-        strip_row = v.Row(no_gutters=True, children=[
-            v.Col(cols=12, class_="pa-1", children=[widgets.timeline]),
-        ])
+    # LEFT/STAGE: the two map columns, now carrying only their map — the
+    # selector that used to sit under each one is replaced by the single strip
+    # below both of them.
+    left_inner_row = v.Html(
+        tag="div",
+        class_="analysis-row",
+        children=[
+            v.Html(tag="div", class_="analysis-col", children=[widgets.map31]),
+            v.Html(tag="div", class_="analysis-col", children=[widgets.map32]),
+        ],
+    )
+    strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
+```
+
+and the stage, at `analysis_tile.py:545-548`, has to list the strip — this is the one line that makes the whole plan visible, and `v.Container` renders exactly the children it is given:
+
+```python
+    stage = v.Container(
+        fluid=True,
+        class_="pa-0 ma-0 analysis-stage",
+        children=[style_el, left_inner_row, strip_row],
+    )
+```
+
+with the strip's own rule beside the `.custom-map-class2` one in `style_el`:
+
+```python
+            ".analysis-strip { width: 100%; padding: 0 4px 4px 4px; }"
 ```
 
 In `widgets.py`, replace lines 294-295:
@@ -3612,10 +4225,10 @@ In `widgets.py`, replace lines 294-295:
         self.timeline = None
 ```
 
-and delete `_build_image_selector`, `imgInfo1`, `imgInfo2` and their helpers. In the tile, before the rows are assembled:
+and delete `_build_image_selector`, `imgInfo1`, `imgInfo2` and their helpers. In the tile, before the rows are assembled — and before `left_inner_row`, since `strip_row` holds the result:
 
 ```python
-        widgets.timeline = build_timeline(app_state, analysis, widgets)
+    widgets.timeline = build_timeline(app_state, analysis, widgets)
 ```
 
 And at line 446, the maps get the reclaimed height:
@@ -3627,7 +4240,7 @@ And at line 446, the maps get the reclaimed height:
 - [ ] **Step 6: Delete what nothing calls any more**
 
 ```bash
-grep -rn "CustomSlideGroup\|getIndividualS2\|getIndividualLandsat\|get_sentinel2_dates\|imgSelection\|before_planet\|after_planet\|image_slider_info_callback" \
+grep -rn "CustomSlideGroup\|getIndividualS2\|getIndividualLandsat\|get_sentinel2_dates\|imgSelection\|before_planet\|after_planet\|image_slider_info_callback\|build_imagery" \
   gui/ deforestation_alerts/ tests/
 ```
 
@@ -3636,12 +4249,15 @@ Every hit must be in a file this task edits or a test it rewrites. Then remove:
 - `deforestation_alerts/scripts/imagery_service.py` — `getIndividualS2` and `getIndividualLandsat`, the N+1 `.getInfo()` loops this whole plan replaces
 - `deforestation_alerts/scripts/mosaics_helper.py:46-71` — `get_sentinel2_dates`, whose after-window opened on `input_date2.replace(day=1)` and so offered an image from *before* the alert closed
 - `gui/tile/analysis/state.py:38-40` — `before_planet` / `after_planet`, read but never written on this branch
+- `gui/tile/analysis/imagery.py:516-546` — `build_imagery`, plus its import at `analysis_tile.py:74` and its call at `analysis_tile.py:493-500`
 - `tests/test_set_context.py` — the `imgSelection` reference and the NICFI `image_id` fixture at line 563
+
+The grep must come back with **zero** hits outside the deletions above. A surviving `build_imagery` reference is the failure mode this step exists for: the import is at the top of a 900-line file, far from the call, so deleting one and not the other is easy and the app only tells you on mount.
 
 - [ ] **Step 7: Run the whole suite**
 
 Run: `python -m pytest -q`
-Expected: PASS, with no `ee`-tier failures. Then the live tier once: `DEFO_ALERTS_EE_TESTS=1 python -m pytest -m ee -q`.
+Expected: PASS, with no `ee`-tier failures. Then the live tier once, which is where the Landsat fallback is checked: `DEFO_ALERTS_EE_TESTS=1 python -m pytest -m ee -q`.
 
 - [ ] **Step 8: Check the strip by hand**
 
@@ -3653,7 +4269,7 @@ Start the app, open Analysis on a set with a multi-month alert window and confir
 4. Close the Analysis step, open another step, come back: the strip is still drawn. A blank strip here means something became a Solara component.
 5. Drag the cloud slider: stripes fade and reappear on release, and the chip counts follow.
 6. Press `+1 month` on each side twice, then `Expand every month`: nothing overlaps and the axis labels still line up.
-7. Tab into a lane and arrow left and right: the selection walks the lane and the map follows.
+7. Tab into a lane and arrow left and right: a dashed ring walks the stripes and **the map does not move**; press Enter and that stripe becomes the selection and its pane redraws. If the map redraws on each arrow, the cursor and the selection have been conflated again and every key press is costing an Earth Engine tile request.
 8. Save the alert and reopen the saved store: `before_img` holds the acquisition date you chose.
 
 - [ ] **Step 9: Commit**

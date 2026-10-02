@@ -193,9 +193,15 @@ bonus.
 
 A 2.5px stripe with an 11px hit area is well below the 44px touch target the rest
 of the app follows. This is a deliberate density trade for a mouse-driven desktop
-tool, and it is compensated, not ignored: left/right arrows step scene to scene
-within the focused lane, Tab moves between lanes, and Enter assigns. Keyboard
-access is in scope, not deferred.
+tool, and it is compensated, not ignored: Tab moves between lanes, left/right
+arrows step scene to scene within the focused lane, Home and End jump to its
+ends, and Enter assigns. Arrows move a *cursor*, not the selection: assigning
+publishes `before_info`, which redraws a map pane, so an arrow that assigned
+would cost one Earth Engine tile request per key press. The cursor is drawn as a
+dashed ring and named by `aria-activedescendant` on the lane, so it is visible
+and announced without anything being fetched. A click still assigns directly,
+being already a deliberate choice of one row. Keyboard access is in scope, not
+deferred.
 
 ## 5. The scene index
 
@@ -213,7 +219,6 @@ ee.Dictionary({
     "cloud":  fc.aggregate_array("cloud"),
     "tile":   fc.aggregate_array("tile"),       # MGRS_TILE, or P{path}R{row}
     "key":    fc.aggregate_array("key"),        # see 5.3
-    "bbox":   fc.aggregate_array("bbox"),       # [minx, miny, maxx, maxy], WGS84
     "tile_keys":   distinct.aggregate_array("tile"),
     "tile_coords": distinct.aggregate_array("coords"),
 })
@@ -221,12 +226,19 @@ ee.Dictionary({
 
 where `distinct = fc.distinct("tile")` and `coords` is `f.geometry().coordinates()`.
 
-`_row` builds each feature with the granule's **true footprint** as its geometry
-and the bounding box only as a property: `ee.Feature(img.geometry(), {...})`.
-That distinction is load-bearing. `distinct("tile")` therefore yields one true
-footprint per tile, which is what makes the exact test in §6 exact; if the
-feature geometry were the bounds, that test would only be a second bbox test and
-the Landsat over-selection it exists to catch would survive it.
+`_row` builds each feature with the granule's **true footprint** as its
+geometry: `ee.Feature(img.geometry(), {...})`. That is load-bearing.
+`distinct("tile")` therefore yields one true footprint per tile, which is what
+makes the exact test in §6 exact; if the feature geometry were the bounds, that
+test would only be a bbox test and the Landsat over-selection it exists to catch
+would survive it.
+
+A scene row carries **no geometry of its own, not even a bounding box**. Every
+granule of a tile has the same footprint — that is what a tile is — so a
+per-scene bbox would repeat one of a few hundred footprints across tens of
+thousands of rows, and the spatial test would then run per scene instead of per
+tile. `tile` is the foreign key into `tiles.parquet`, and §6 tests the footprint
+once per tile.
 
 Collections and the `CLOUDY_PIXEL_PERCENTAGE` / `CLOUD_COVER` < 90 pre-filters
 stay exactly as `imagery_service` has them today, so the candidate set does not
@@ -278,9 +290,19 @@ The chosen image is rebuilt from `key`, whose meaning is per source:
 ### 5.4 Planet
 
 NICFI is a monthly mosaic per region, with no cloud property and continental
-coverage, so it needs no scene rows. One small request aggregates the available
-months for the region resolved by `vis_layers.nicfi_region(aoi.bounds)`; the
-result lands in `index.json` under `planet`. When the collection is inaccessible
+coverage. One small request aggregates the available months for the region
+resolved by `vis_layers.nicfi_region(aoi.bounds)`; the region and the access
+flag land in `index.json` under `planet`.
+
+Each available month still becomes **one scene row**, dated to the first of the
+month, with `cloud` as NaN and `tile` as the empty string. It has to: the
+timeline's lanes, chips, counts and selection all read scene rows, so a Planet
+basemap that was not a row could not be drawn, counted or chosen without a
+second code path beside every one of them. The empty `tile` is what says
+"AOI-wide mosaic, no footprint to test", and §6 reads it as covering every
+alert; the NaN `cloud` is what keeps a basemap from ever being hidden by the
+cloud limit, which has no figure to compare it against. A Planet row is drawn as
+a bar spanning its whole month rather than a stripe, per §4.1. When the collection is inaccessible
 — NICFI requires granted access — `planet.access` is false and the Planet toggle
 renders disabled carrying the existing `steps.layers.err_nicfi` message. This
 replaces today's silent "Not available".
@@ -318,15 +340,23 @@ Analysis entry means the index is usually warm before the analyst arrives.
 `scene_index.scenes_for(index, bbox, start, end, *, max_cloud, sources)`, pure
 pandas and numpy, no Earth Engine:
 
-1. **bbox prefilter** — a vectorised interval overlap against the four bbox
-   columns. Microseconds over a few thousand rows.
-2. **exact footprint test** — the candidates that pass are checked against their
-   tile footprint from `tiles.parquet`. A granule bbox over-selects, most visibly
-   for Landsat, whose footprints are rotated parallelograms; without this step
-   the timeline would offer scenes that render empty over the alert.
+1. **which tiles cover this alert** — `overlapping_tiles(tiles, bbox)`, two
+   steps over `tiles.parquet` only: the GeoPandas spatial index narrows by
+   bounding box, then `intersects` settles it against the **true footprint**. A
+   bbox over-selects, most visibly for Landsat, whose footprints are rotated
+   parallelograms; without the second step the timeline would offer scenes that
+   render empty over the alert. A few hundred rows, once per alert.
+2. **select the scenes of those tiles** — a vectorised `isin` on the `tile`
+   column, plus the date window. Microseconds over tens of thousands of rows.
+   A row whose `tile` is empty is an AOI-wide mosaic (a Planet basemap) and
+   covers every alert.
 3. **group** to one row per `(source, acquisition date)`, with `cloud` as the
-   **mean over the granules overlapping this alert** and `keys` as the tuple of
-   their keys. The mean reproduces today's `aggregate_mean` semantics exactly —
+   **mean over the granules overlapping this alert** and `n` as how many there
+   are. Their `key` values are not carried on the row: the chosen row's granule
+   keys are looked up from the same frame when it is assigned, since only one
+   row per lane is ever rebuilt and materialising a tuple per row would cost
+   every row for the two that are used. The mean reproduces today's
+   `aggregate_mean` semantics exactly —
    `CLOUDY_PIXEL_PERCENTAGE` has always been a whole-granule statistic, and
    `filterBounds` only ever chose *which* granules — so moving the query AOI-wide
    costs no precision.
@@ -426,8 +456,9 @@ dicts, the filters take DataFrames:
 
 - array payload → DataFrame, including an empty payload and a payload whose
   arrays disagree in length (a malformed response must raise, not truncate);
-- bbox prefilter correctness, including a scene whose bbox contains the alert but
-  whose tile footprint does not;
+- tile-overlap correctness, including a tile whose bounding box contains the
+  alert but whose true footprint does not, and a row with an empty `tile`, which
+  must match every alert;
 - per-granule cloud averaging reproduces an `aggregate_mean` worked example;
 - the piecewise month layout: a collapsed month at each end and in the middle,
   all months collapsed, none collapsed, and a view starting mid-month;
