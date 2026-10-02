@@ -1,7 +1,12 @@
 """Shared pytest fixtures for the deforestation-alerts test suite.
 
-Phase 0 tests are pure: no Earth Engine calls, no UI rendering. We deliberately
-do NOT call init_ee() here so the suite runs offline in CI without credentials.
+Two tiers (spec §13). The default run is offline: no Earth Engine call, no
+credentials, no network. The live Earth Engine tier is opt-in: every test that
+uses the ``gee`` fixture (directly or through ``tiny_aoi`` / ``real_cover``)
+is marked ``ee`` here, and an ``ee`` test is skipped unless
+``DEFO_ALERTS_EE_TESTS=1`` is set or the run selects it with ``-m ee``.
+A test that is not marked ``ee`` and still reaches Earth Engine fails (the
+``_no_live_ee`` guard below), so a live call cannot slip into the offline tier.
 
 The app reads and writes plain files on the local sandbox disk (spec D14).
 The ``data_root`` fixture below points the data directory into ``tmp_path``
@@ -19,9 +24,47 @@ from gui.i18n import t as _warm_t  # noqa: E402
 
 _warm_t("common.cancel")
 
+import os
+import re
 from pathlib import Path
 
 import pytest
+
+#: Set to anything but "" or "0" to run the live Earth Engine tier.
+EE_TESTS_ENV = "DEFO_ALERTS_EE_TESTS"
+
+
+def ee_tier_selected(env: dict, markexpr: str) -> bool:
+    """Whether the live EE tier runs: the env var is set, or ``-m`` asks for
+    ``ee`` (``-m ee``, ``-m "ee and not slow"``; not ``-m "not ee"``)."""
+    if env.get(EE_TESTS_ENV, "").strip() not in ("", "0"):
+        return True
+    return re.search(r"(?<!not )\bee\b", markexpr or "") is not None
+
+
+@pytest.hookimpl(tryfirst=True)  # before ``-m`` deselects on the markers
+def pytest_collection_modifyitems(config, items):
+    run_ee = ee_tier_selected(os.environ, config.getoption("markexpr", ""))
+    skip = pytest.mark.skip(reason=f"live Earth Engine test: set {EE_TESTS_ENV}=1 or run with -m ee")
+    for item in items:
+        if "gee" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.ee)
+        if not run_ee and item.get_closest_marker("ee") is not None:
+            item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def _no_live_ee(request, monkeypatch):
+    """Outside the ``ee`` tier, any Earth Engine API call fails the test."""
+    if request.node.get_closest_marker("ee") is not None:
+        return
+    import ee.data
+
+    def _refuse(*args, **kwargs):
+        raise RuntimeError(f"live Earth Engine call in {request.node.nodeid}, which is not marked `ee` "
+                           "(use the `gee` fixture or @pytest.mark.ee)")
+
+    monkeypatch.setattr(ee.data, "_execute_cloud_call", _refuse)
 
 
 @pytest.fixture()

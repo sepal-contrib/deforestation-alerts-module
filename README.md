@@ -8,3 +8,37 @@ Forest cover loss alerts analysis is a module built using the SEPAL UI framework
 # About
 
 
+
+# Development
+
+## Tests
+
+The runtime environment comes from `sepal_environment.yml` (micromamba/conda);
+run the suite from the repository root in that environment:
+
+```bash
+micromamba create -y -n defo-alerts -f sepal_environment.yml   # once
+micromamba activate defo-alerts
+python -m pytest -q                       # the offline tier: no Earth Engine, no network
+DEFO_ALERTS_EE_TESTS=1 python -m pytest -q  # everything, with the live Earth Engine tier
+python -m pytest -q -m ee                 # the live Earth Engine tier only
+```
+
+The live Earth Engine tests (spec §13, Tier 2) are opt-in. Every test that
+uses the `gee` fixture is marked `ee` (`tests/conftest.py`) and is skipped
+unless `DEFO_ALERTS_EE_TESTS=1` is set or `-m ee` selects it; they need Earth
+Engine credentials (`earthengine authenticate`) and only read from Earth
+Engine. A test that is not marked `ee` and still calls Earth Engine fails.
+
+## Gate walks
+
+`tools/walk/` drives the app in a real browser for the per-slice gate walks
+(`python -m tools.walk.slice6_walk --port 8986 --out /tmp/slice6_walk`). It
+needs Playwright, which the runtime environment does not ship:
+
+```bash
+pip install playwright && playwright install chromium
+```
+
+The SEPAL gate itself (the app through SEPAL's proxy and the national-scale
+measurement) is a manual runbook: `docs/sepal-gate.md`.

@@ -46,3 +46,6 @@ skip = 'deforestation_alerts/message/**/*.json'
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra --import-mode=importlib"
+markers = [
+    "ee: live Earth Engine test (credentials + network); skipped unless DEFO_ALERTS_EE_TESTS=1 or -m ee",
+]
