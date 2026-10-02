@@ -77,3 +77,19 @@ def test_the_result_line_of_a_harmonized_row():
         "text": t("steps.prepare.result_all_masked", n="2,000"), "tone": "warning"}
     assert result_note({"alert_pixels": 0, "alert_pixels_unmasked": 0}) == {
         "text": "ready · 0 alerts found", "tone": "info"}
+
+
+def test_a_select_action_is_a_radio():
+    from gui.widget.product_table import action_icon
+
+    assert action_icon("select", True) == "mdi-radiobox-marked"
+    assert action_icon("select", False) == "mdi-radiobox-blank"
+    rows = [{"key": k, "cells": [{"value": k}], "actions": [{"kind": "select", "is_on": k == "a", "on_click": None}]}
+            for k in ("a", "b")]
+    box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}], rows=rows, empty_text="-"))
+    try:
+        radios = [(b.color, b.children[0].children) for b in rc.find(v.Btn).widgets if b.children
+                  and isinstance(b.children[0], v.Icon) and "mdi-radiobox" in b.children[0].children[0]]
+        assert radios == [("primary", ["mdi-radiobox-marked"]), ("grey darken-1", ["mdi-radiobox-blank"])]
+    finally:
+        rc.close()

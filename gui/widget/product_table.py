@@ -85,9 +85,11 @@ _ACTION_ICONS = {
 
 
 def action_icon(kind: str, is_on: bool = False) -> str:
-    """Standard icon for an action kind (map_toggle switches on is_on)."""
+    """Standard icon for an action kind (map_toggle and select switch on is_on)."""
     if kind == "map_toggle":
         return "mdi-map-minus" if is_on else "mdi-map-plus"
+    if kind == "select":
+        return "mdi-radiobox-marked" if is_on else "mdi-radiobox-blank"
     return _ACTION_ICONS[kind]
 
 
@@ -158,7 +160,7 @@ def _render_action(act: dict):
     is_on = act.get("is_on", False)
     if "color" in act:
         color = act["color"]
-    elif kind == "map_toggle":
+    elif kind in ("map_toggle", "select"):
         color = "primary" if is_on else "grey darken-1"
     elif kind in ("download", "open"):
         color = "primary"

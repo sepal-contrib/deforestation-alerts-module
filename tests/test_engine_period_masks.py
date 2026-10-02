@@ -268,3 +268,25 @@ def test_an_earth_engine_mask_without_its_native_grid_is_a_clear_row_error(two_p
     assert built == [] and not (pdir / "masks").exists()
     assert isinstance(err.value, ValueError) and err.value.values == {"name": "hansen"}
     assert t(err.value.key, **err.value.values).startswith("Mask hansen:")
+
+
+def test_a_periods_set_statuses_check_its_masks_once(two_periods, monkeypatch):
+    """Task 34's badges read every set of a period: each gets the status
+    ``set_status`` gives it, with the period's mask checks done once, not once
+    per set and source."""
+    p, pdir, _ = two_periods
+    _run_all(p, pdir, FEB)
+    first = _set(p, pdir, FEB)
+    second = f"{first}-2"
+    p.alert_sets = {**p.alert_sets, second: p.alert_sets[first].model_copy(update={"id": second})}
+    calls = []
+    real = fp.mask_current
+    monkeypatch.setattr(fp, "mask_current", lambda q, name: calls.append(name) or real(q, name))
+    for switch, expected in ((None, fp.Status.CURRENT), ("exclude", fp.Status.STALE)):
+        if switch:
+            set_period_mask(p, FEB.id, "forest", mode=switch)
+        one_by_one = {sid: fp.set_status(p, pdir, p.alert_sets[sid]) for sid in (first, second)}
+        calls.clear()
+        assert fp.period_set_statuses(p, pdir, FEB) == one_by_one == {first: expected, second: expected}
+        assert calls == ["forest"]
+    assert fp.period_set_statuses(p, pdir, JAN) == {}

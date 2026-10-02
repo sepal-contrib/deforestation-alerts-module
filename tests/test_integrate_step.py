@@ -362,11 +362,9 @@ def test_a_late_set_is_not_recorded_for_a_period_its_saved_project_no_longer_has
 
 def _edit(change):
     """What the user saves on another step while the worker runs."""
-    from gui.tile.period_step import apply_period
-
     def period(live):
-        err, _ = apply_period(live, "2026-02-01", "2026-02-28", 30)
-        assert err is None
+        from deforestation_alerts.project import periods
+        assert periods.edit_period(live, live.active_period, "2026-02-01", "2026-02-28")[0] is None
 
     def aoi(live):  # AoiStep's _apply
         live.aoi = live.aoi.model_copy(update={"digest": "moved"})

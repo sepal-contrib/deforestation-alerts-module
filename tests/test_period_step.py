@@ -1,332 +1,330 @@
-"""Pure-function tests for apply_period/default_dates (brief's TDD tests,
-plus the Task 17 pre-flight rulings' required behaviour), plus render-based
-coverage of PeriodStep/_PeriodForm mirroring tests/test_alerts_step.py's
-pattern: presentation is driven through the real ipyvuetify widgets, and
-``AppState``/``Project`` are real, unmocked.
+"""Period step (spec §6.4): the period list, its modal and §5.1's rules, rendered.
+
+``PeriodStep`` renders against a real ``AppState``/``Project`` and a real
+``MapLayers`` (builds run synchronously). Its ProductTable, PeriodModal and
+ConfirmDialog children are recorders, so a test reads the rows and calls the
+callbacks the user would click; ``PeriodModal`` is rendered for real in its own
+tests below.
 """
 
+import threading
+import uuid
 from datetime import date, datetime
+from types import SimpleNamespace
 
 import ipyvuetify as v
+import pytest
 import reacton
 import solara
 from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
-from deforestation_alerts.engine.fingerprint import harm_key, raw_key
+from deforestation_alerts.engine import fingerprint as fp
+from deforestation_alerts.project import periods
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, Artifact, Period, Project, add_predefined_source,
+    AlertSet, AlertSetParams, AoiRecord, Artifact, GridSpec, PeriodMask, Project, add_predefined_source,
 )
-from gui.i18n import t
+from gui.i18n import plural, t
+from gui.scripts import map_layers
+from gui.scripts.map_layers import MapLayers
+from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
-from gui.tile.period_step import PeriodStep, apply_period, default_dates
+from gui.tile import period_step
+from gui.widget import period_modal
+
+JAN_ID, FEB_ID = "2026-01-01_2026-01-31", "2026-02-01_2026-02-28"
+GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
 
 
-def _p(name="d"):
-    return Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
+class _Map:
+    def add_layer(self, layer, key=""):
+        pass
+
+    def remove_layer(self, key, none_ok=False):
+        pass
 
 
-def _p_with_source(name="d"):
-    p = _p(name)
-    add_predefined_source(p, "RADD")
+@pytest.fixture
+def env(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(map_layers, "spawn_in_context",
+                        lambda target, args=(), **kw: target(*args) or threading.current_thread())
+    seen = {}
+    monkeypatch.setattr(period_step, "ProductTable", lambda **kw: seen.__setitem__("table", kw))
+    monkeypatch.setattr(period_step, "PeriodModal", lambda **kw: seen.__setitem__("modal", kw))
+    monkeypatch.setattr(period_step, "ConfirmDialog", lambda **kw: seen.__setitem__("confirm", kw))
+    return SimpleNamespace(seen=seen, pdir=tmp_path / "per")
+
+
+def _file(pdir, rel):
+    path = pdir / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+    return rel
+
+
+def _project(pdir, name="per"):
+    """January and February (February active), each with a GLAD-L download and
+    harmonized file recorded under an old fingerprint (out of date)."""
+    p = Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d", bounds=(0, 0, 1, 1))
+    p.grid = GRID
+    add_predefined_source(p, "GLAD-L")
+    for a, b in (("2026-01-01", "2026-01-31"), ("2026-02-01", "2026-02-28")):
+        assert periods.new_period(p, a, b) is None
+    arts = {}
+    for pid in (JAN_ID, FEB_ID):
+        for key, kind, rel in ((fp.raw_key(pid, "GLAD-L"), "raw_alert", f"periods/{pid}/raw/raw.tif"),
+                               (fp.harm_key(pid, "GLAD-L"), "harmonized", f"periods/{pid}/harmonized/h.tif")):
+            arts[key] = Artifact(key=key, kind=kind, rel_path=_file(pdir, rel), fingerprint="old", inputs={},
+                                 content_id=uuid.uuid4().hex, created_at=datetime.now())
+    p.artifacts = arts
     return p
 
 
-def _project_with_a_period(name="d"):
-    p = _p(name)
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    return p
+def _add_set(p, pdir, pid):
+    sid = f"{pid}__glad-l"
+    folder = f"periods/{pid}/sets/glad-l"
+    _file(pdir, f"{folder}/alert_db.parquet")
+    _file(pdir, f"{folder}/alerts.pmtiles")
+    p.alert_sets = {**p.alert_sets, sid: AlertSet(
+        id=sid, period_id=pid, sources=["GLAD-L"], digit_map={0: "GLAD-L"}, params=AlertSetParams(),
+        store_rel_path=f"{folder}/alert_db.parquet", combined_rel_path=f"{folder}/c.tif",
+        footprint_rel_path=f"{folder}/footprint.tif", n_alerts=5, n_reviewed=2, fingerprint="f",
+        created_at=datetime.now())}
+    return sid
 
 
-# ---------------------------------------------------------------------------
-# apply_period / default_dates (brief Step 1, verbatim)
-# ---------------------------------------------------------------------------
+def _state(p):
+    state = AppState()
+    state.new_project_state(p)
+    return state
 
-def test_apply_creates_and_activates_the_period():
-    p = _p()
-    err, gone = apply_period(p, "2026-01-01", "2026-01-31", 90)
-    assert err is None and gone == []
-    assert p.active_period == "2026-01-01_2026-01-31"
-    assert p.periods[p.active_period].end == date(2026, 1, 31)
-
-
-def test_editing_replaces_a_period_without_sets():
-    p = _p()
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 30)
-    assert err is None and gone == []
-    assert list(p.periods) == ["2026-02-01_2026-02-28"] and p.look_back_days == 30
-
-
-def test_apply_period_replaces_the_shared_containers_instead_of_mutating_them():
-    """Every published snapshot shares the live project's ``periods`` and
-    ``artifacts`` (``AppState`` publishes shallow copies): a render iterating
-    them on another thread must not see them change size under the edit."""
-    p = _p_with_source()
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    jan = p.active_period
-    p.artifacts[raw_key(jan, "RADD")] = Artifact(key=raw_key(jan, "RADD"), kind="raw_alert", rel_path="r.tif",
-                                               fingerprint="f", inputs={}, content_id="c", created_at=datetime.now())
-    snapshot = p.model_copy()
-    periods_being_iterated = iter(snapshot.periods.values())
-    artifacts_being_iterated = iter(snapshot.artifacts.values())
-
-    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 30)
-    assert err is None and gone == ["r.tif"]
-
-    assert [per.id for per in periods_being_iterated] == [jan]  # no "dictionary changed size during iteration"
-    assert len(list(artifacts_being_iterated)) == 1
-    assert list(snapshot.periods) == [jan] and list(snapshot.artifacts) == [raw_key(jan, "RADD")]
-    assert list(p.periods) == ["2026-02-01_2026-02-28"] and p.artifacts == {}
-
-
-def test_validation_errors():
-    p = _p()
-    assert apply_period(p, "nope", "2026-01-31", 90) == ("bad_date", [])
-    assert apply_period(p, "2026-02-01", "2026-01-31", 90) == ("order", [])
-    assert apply_period(p, "2026-01-01", "2026-01-31", -1) == ("bad_look_back", [])
-
-
-def test_a_period_with_sets_is_locked():
-    p = _p()
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    p.alert_sets["s"] = AlertSet(id="s", period_id=p.active_period, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
-                                 footprint_rel_path="f", fingerprint="f", created_at=datetime.now())
-    assert apply_period(p, "2026-02-01", "2026-02-28", 90) == ("locked", [])
-
-
-def test_default_dates():
-    assert default_dates(_p(), date(2026, 9, 30)) == ("2026-09-01", "2026-09-30")
-    p = _p()
-    p.periods["x"] = Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31))
-    p.active_period = "x"
-    assert default_dates(p, date(2026, 9, 30)) == ("2026-01-01", "2026-01-31")
-
-
-# ---------------------------------------------------------------------------
-# apply_period: pre-flight ruling #69 (strict end > start, artifact cleanup)
-# ---------------------------------------------------------------------------
-
-def test_end_equal_to_start_is_an_order_error():
-    """Spec §6.4: 'checks end > start' -- a same-day period is rejected, not
-    silently accepted as a one-day window."""
-    p = _p()
-    assert apply_period(p, "2026-01-01", "2026-01-01", 90) == ("order", [])
-
-
-def test_replacing_a_period_drops_its_raw_and_harmonized_artifact_records():
-    """Ruling #69: once a period is replaced (only possible while it has no
-    sets), its raw/harmonized manifest records become unreachable (no period
-    in p.periods points at that id any more) and must be dropped."""
-    p = _p_with_source("RADD")
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    old_id = p.active_period
-    p.artifacts[raw_key(old_id, "RADD")] = Artifact(
-        key=raw_key(old_id, "RADD"), kind="raw_alert", rel_path="raw.tif", fingerprint="f",
-        inputs={}, content_id="c1", created_at=datetime.now(),
-    )
-    p.artifacts[harm_key(old_id, "RADD")] = Artifact(
-        key=harm_key(old_id, "RADD"), kind="harmonized", rel_path="harm.tif", fingerprint="f",
-        inputs={}, content_id="c2", created_at=datetime.now(),
-    )
-
-    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 90)
-
-    assert err is None
-    assert sorted(gone) == sorted(["raw.tif", "harm.tif"])
-    assert raw_key(old_id, "RADD") not in p.artifacts
-    assert harm_key(old_id, "RADD") not in p.artifacts
-
-
-def test_editing_the_same_dates_keeps_its_own_artifact_records():
-    """Re-saving with the same start/end (e.g. only the look-back changes)
-    must not treat the period as replaced -- its own records must survive."""
-    p = _p_with_source("RADD")
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    pid = p.active_period
-    p.artifacts[raw_key(pid, "RADD")] = Artifact(
-        key=raw_key(pid, "RADD"), kind="raw_alert", rel_path="raw.tif", fingerprint="f",
-        inputs={}, content_id="c1", created_at=datetime.now(),
-    )
-
-    err, gone = apply_period(p, "2026-01-01", "2026-01-31", 30)
-    assert err is None and gone == []
-
-    assert raw_key(pid, "RADD") in p.artifacts
-    assert p.look_back_days == 30
-
-
-def test_apply_period_returns_the_replaced_periods_files_for_save_to_delete(tmp_path):
-    """Task 8: apply_period's second return value is the replaced period's
-    raw/harmonized artifact files; ``_save``'s path (``cleanup.delete_files``)
-    must remove them from disk once the update has been published."""
-    from deforestation_alerts.project import cleanup
-
-    p = _p_with_source("RADD")
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    old_id = p.active_period
-    pdir = tmp_path
-    raw_rel, harm_rel = "raw.tif", "harm.tif"
-    (pdir / raw_rel).write_bytes(b"x")
-    (pdir / harm_rel).write_bytes(b"x")
-    p.artifacts[raw_key(old_id, "RADD")] = Artifact(
-        key=raw_key(old_id, "RADD"), kind="raw_alert", rel_path=raw_rel, fingerprint="f",
-        inputs={}, content_id="c1", created_at=datetime.now(),
-    )
-    p.artifacts[harm_key(old_id, "RADD")] = Artifact(
-        key=harm_key(old_id, "RADD"), kind="harmonized", rel_path=harm_rel, fingerprint="f",
-        inputs={}, content_id="c2", created_at=datetime.now(),
-    )
-
-    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 90)
-    assert err is None
-    assert sorted(gone) == sorted([raw_rel, harm_rel])
-
-    cleanup.delete_files(pdir, gone)
-
-    assert not (pdir / raw_rel).exists()
-    assert not (pdir / harm_rel).exists()
-
-
-# ---------------------------------------------------------------------------
-# PeriodStep / _PeriodForm: render-based coverage
-# ---------------------------------------------------------------------------
 
 @solara.component
-def _Harness(app_state):
-    # PeriodStep's use_notifications() needs a mounted provider rendered
-    # first (pysepal 4 contract, see test_app_wiring.py).
-    NotificationProvider()
-    PeriodStep(app_state=app_state)
+def _Harness(app_state, layers):
+    NotificationProvider()  # use_notifications() needs the provider rendered first
+    period_step.PeriodStep(app_state=app_state, layers=layers)
 
 
-def _render(app_state):
-    return reacton.render(_Harness(app_state=app_state), handle_error=False)
+def _render(state):
+    layers = MapLayers(_Map())
+    _, rc = reacton.render(_Harness(app_state=state, layers=layers), handle_error=False)
+    return layers, rc
 
 
-def _field(rc, label):
-    """Locate a TextField by its label -- robust against the widgets' render
-    order, which does not follow source order (the hinted look-back field
-    renders before the plain start/end pair)."""
-    return next(w for w in rc.find(v.TextField).widgets if w.label == label)
+def _toasts(kind):
+    return [x.message for x in get_current_bus().toasts.value if x.type.value == kind]
 
 
-def test_locked_step_shows_no_sources_yet():
-    state = AppState()
-    state.new_project_state(_p())
-    box, rc = _render(state)
+def _action(seen, pid, kind):
+    row = next(r for r in seen["table"]["rows"] if r["key"] == pid)
+    return next(a for a in row["actions"] if a["kind"] == kind)
+
+
+def _button(rc, label):
+    return next(b for b in rc.find(v.Btn).widgets if label in b.children)
+
+
+# ---------------------------------------------------------------------------
+# Rows
+# ---------------------------------------------------------------------------
+def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
+    p = _project(env.pdir)
+    p.look_back_days = 30
+    _add_set(p, env.pdir, JAN_ID)
+    rows = {r["key"]: r for r in period_step.period_rows(p, env.pdir, select=None, edit=None, delete=None)}
+    assert list(rows) == [FEB_ID, JAN_ID]
+    jan, feb = rows[JAN_ID], rows[FEB_ID]
+    assert [c["value"] for c in jan["cells"]] == ["2026-01-01 → 2026-01-31", "1", t("steps.period.state_stale")]
+    texts = [n["text"] for n in jan["notes"]]
+    assert texts == [
+        t("steps.period.window", start="2025-12-02", end="2026-01-31"),
+        plural(1, "steps.period.note_sources_stale_one", "steps.period.note_sources_stale_other"),
+        plural(1, "steps.period.note_sets_stale_one", "steps.period.note_sets_stale_other"),
+        t("steps.period.note_frozen"),
+    ]
+    assert feb["cells"][1]["value"] == "0" and t("steps.period.note_frozen") not in [n["text"] for n in feb["notes"]]
+    assert [a["kind"] for a in feb["actions"]] == ["select", "edit", "delete"]
+    assert feb["actions"][0]["is_on"] and not jan["actions"][0]["is_on"]
+
+
+def test_a_period_with_nothing_out_of_date_shows_no_badge(env):
+    p = _project(env.pdir)
+    p.artifacts = {}
+    row = period_step.period_rows(p, env.pdir, select=None, edit=None, delete=None)[0]
+    assert row["cells"][2] == {"value": "—", "muted": True} and len(row["notes"]) == 1  # the window only
+
+
+def test_selecting_a_row_sets_the_active_period(env):
+    state = _state(_project(env.pdir))
+    layers, rc = _render(state)
     try:
-        assert rc.find(v.TextField).widgets == []
+        _action(env.seen, JAN_ID, "select")["on_click"]()
+        assert state.project.value.active_period == JAN_ID
+        assert _action(env.seen, JAN_ID, "select")["is_on"]
     finally:
         rc.close()
 
 
-def test_save_applies_the_period_and_notifies_success(monkeypatch, tmp_path):
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    state = AppState()
-    state.new_project_state(_p_with_source())
-
-    box, rc = _render(state)
+# ---------------------------------------------------------------------------
+# New period, edit
+# ---------------------------------------------------------------------------
+def test_a_new_period_copies_the_mask_choices_of_the_latest_period(env):
+    p = _project(env.pdir)
+    p.periods = {**p.periods, FEB_ID: p.periods[FEB_ID].model_copy(
+        update={"masks": {"forest": PeriodMask(on=True, mode="exclude")}})}
+    state = _state(p)
+    layers, rc = _render(state)
     try:
-        _field(rc, t("steps.period.start")).v_model = "2026-01-01"
-        _field(rc, t("steps.period.end")).v_model = "2026-01-31"
-        _field(rc, t("steps.period.look_back")).v_model = "30"
+        assert env.seen["modal"]["open_"].value is False
+        _button(rc, t("steps.period.new")).fire_event("click", None)
+        modal = env.seen["modal"]
+        assert modal["open_"].value is True and modal["editing"] is None
+        assert modal["on_submit"]("2026-03-01", "2026-03-31") is None
+        live = state.project.value
+        assert live.active_period == "2026-03-01_2026-03-31"
+        assert live.periods["2026-03-01_2026-03-31"].masks == {"forest": PeriodMask(on=True, mode="exclude")}
+        assert _toasts("success") == [t("steps.period.created")]
+        before = state.project.value
+        assert modal["on_submit"]("2026-03-01", "2026-03-31") == "steps.period.error_exists"
+        assert state.project.value is before  # a refused change neither publishes nor saves
+    finally:
+        rc.close()
 
-        save_btn = rc.find(v.Btn).widgets[-1]
-        save_btn.fire_event("click", None)
 
-        assert state.project.value.active_period == "2026-01-01_2026-01-31"
+def test_the_dates_of_a_period_with_sets_cannot_change(env):
+    p = _project(env.pdir)
+    _add_set(p, env.pdir, JAN_ID)
+    state = _state(p)
+    layers, rc = _render(state)
+    try:
+        _action(env.seen, JAN_ID, "edit")["on_click"]()
+        assert env.seen["modal"]["open_"].value is False
+        assert _toasts("warning") == [t("steps.period.error_locked")]
+    finally:
+        rc.close()
+
+
+def test_new_dates_give_a_new_id_and_delete_the_old_windows_files_and_layers(env):
+    p = _project(env.pdir)
+    state = _state(p)
+    layers, rc = _render(state)
+    try:
+        layers.show("src:GLAD-L", lambda: None, content_id=p.artifacts[fp.harm_key(FEB_ID, "GLAD-L")].content_id)
+        _action(env.seen, FEB_ID, "edit")["on_click"]()
+        modal = env.seen["modal"]
+        assert modal["editing"] == FEB_ID and modal["open_"].value is True
+        assert modal["on_submit"]("2026-02-01", "2026-02-15") is None
+        live = state.project.value
+        assert live.active_period == "2026-02-01_2026-02-15" and FEB_ID not in live.periods
+        assert not (env.pdir / "periods" / FEB_ID).exists() and (env.pdir / "periods" / JAN_ID).exists()
+        assert not layers.is_on("src:GLAD-L")
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Delete
+# ---------------------------------------------------------------------------
+def test_a_period_with_sets_that_is_not_the_latest_cannot_be_deleted(env):
+    p = _project(env.pdir)
+    _add_set(p, env.pdir, JAN_ID)
+    state = _state(p)
+    layers, rc = _render(state)
+    try:
+        _action(env.seen, JAN_ID, "delete")["on_click"]()
+        assert env.seen["confirm"]["open"] is False
+        assert _toasts("warning") == [t("steps.period.error_not_latest")]
+        assert JAN_ID in state.project.value.periods
+    finally:
+        rc.close()
+
+
+def test_deleting_the_latest_period_removes_its_sets_and_every_file(env):
+    p = _project(env.pdir)
+    jan = _add_set(p, env.pdir, JAN_ID)
+    feb = _add_set(p, env.pdir, FEB_ID)
+    p.active_set = feb
+    state = _state(p)
+    layers, rc = _render(state)
+    try:
+        layers.show(f"overview:set:{feb}", lambda: None, content_id="tiles")
+        _action(env.seen, FEB_ID, "delete")["on_click"]()
+        confirm = env.seen["confirm"]
+        assert confirm["open"] is True
+        assert confirm["message"] == plural(1, "steps.period.delete_sets_one", "steps.period.delete_sets_other",
+                                            reviewed=2)
+        confirm["on_confirm"]()
+        live = state.project.value
+        assert list(live.periods) == [JAN_ID] and list(live.alert_sets) == [jan]
+        assert live.active_period == JAN_ID and live.active_set == jan
+        assert not (env.pdir / "periods" / FEB_ID).exists()  # tiles, store and downloads alike
+        assert len([x for x in (env.pdir / "periods" / JAN_ID).rglob("*") if x.is_file()]) == 4
+        assert not layers.is_on(f"overview:set:{feb}")
+        assert _toasts("success") == [t("steps.period.deleted")]
+    finally:
+        rc.close()
+
+
+def test_edit_and_delete_wait_for_the_projects_writers(env):
+    state = _state(_project(env.pdir))
+    layers, rc = _render(state)
+    try:
+        with writing("per"):
+            _action(env.seen, FEB_ID, "delete")["on_click"]()
+            _action(env.seen, FEB_ID, "edit")["on_click"]()
+        # both refused: the bus folds the two identical warnings into one toast counting 2
+        assert [(x.message, x.count) for x in get_current_bus().toasts.value
+                if x.type.value == "warning"] == [(t("steps.period.busy"), 2)]
+        assert env.seen["confirm"]["open"] is False and env.seen["modal"]["open_"].value is False
+        assert FEB_ID in state.project.value.periods
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Look-back, remounts
+# ---------------------------------------------------------------------------
+def _look_back_field(rc):
+    return next(w for w in rc.find(v.TextField).widgets if w.label == t("steps.period.look_back"))
+
+
+def test_look_back_is_checked_then_applied(env):
+    state = _state(_project(env.pdir))
+    layers, rc = _render(state)
+    try:
+        assert _button(rc, t("steps.period.apply")).disabled  # nothing changed yet
+        before = state.project.value
+        _look_back_field(rc).v_model = "-3"
+        _button(rc, t("steps.period.apply")).fire_event("click", None)
+        assert state.project.value is before
+        assert _toasts("error") == [t("steps.period.error_bad_look_back")]
+        _look_back_field(rc).v_model = "30"
+        _button(rc, t("steps.period.apply")).fire_event("click", None)
         assert state.project.value.look_back_days == 30
-        bus = get_current_bus()
-        successes = [toast for toast in bus.toasts.value if toast.type.value == "success"]
-        assert successes and successes[-1].message == t("steps.period.saved")
     finally:
         rc.close()
 
 
-def test_save_with_invalid_input_does_not_touch_the_project(monkeypatch, tmp_path):
-    """Ruling #69: an invalid edit must not publish (no wasted autosave/
-    re-render) and must not toast success."""
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    state = AppState()
-    state.new_project_state(_p_with_source())
-    before = state.project.value
-
-    box, rc = _render(state)
+def test_switching_projects_remounts_the_list_and_drops_a_typed_look_back(env):
+    state = _state(_project(env.pdir, "a"))
+    layers, rc = _render(state)
     try:
-        _field(rc, t("steps.period.start")).v_model = "2026-02-01"
-        _field(rc, t("steps.period.end")).v_model = "2026-01-31"  # end before start
-
-        save_btn = rc.find(v.Btn).widgets[-1]
-        save_btn.fire_event("click", None)
-
-        assert state.project.value is before  # untouched: no publish on invalid input
-        bus = get_current_bus()
-        errors = [toast for toast in bus.toasts.value if toast.type.value == "error"]
-        assert len(errors) == 1
-        assert errors[0].message == t("steps.period.error_order")
-    finally:
-        rc.close()
-
-
-def test_locked_period_hides_save_and_disables_the_fields():
-    state = AppState()
-    p = _p_with_source()
-    apply_period(p, "2026-01-01", "2026-01-31", 90)
-    pid = p.active_period
-    p.alert_sets["s"] = AlertSet(id="s", period_id=pid, sources=["RADD"], digit_map={1: "RADD"},
-                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
-                                 footprint_rel_path="f", fingerprint="f", created_at=datetime.now())
-    state.new_project_state(p)
-
-    box, rc = _render(state)
-    try:
-        assert rc.find(v.Btn).widgets == []  # Save is hidden while locked
-        assert _field(rc, t("steps.period.start")).disabled
-        assert _field(rc, t("steps.period.end")).disabled
-        assert _field(rc, t("steps.period.look_back")).disabled
-    finally:
-        rc.close()
-
-
-def test_switching_projects_remounts_the_form_and_drops_unsaved_input(monkeypatch, tmp_path):
-    """The Task 17 pre-flight's core finding: PeriodStep is mounted for the
-    whole session (Task 22), so without a keyed remount the form would keep
-    project A's typed-but-unsaved dates after switching to project B, and a
-    later Save could write A's period into B."""
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    state = AppState()
-    a = _p_with_source("a")
-    state.new_project_state(a)
-
-    box, rc = _render(state)
-    try:
-        _field(rc, t("steps.period.start")).v_model = "2020-01-01"
-        _field(rc, t("steps.period.end")).v_model = "2020-01-31"
-
-        b = _p_with_source("b")
+        _look_back_field(rc).v_model = "7"
+        b = _project(env.pdir, "b")
+        b.look_back_days = 45
         state.new_project_state(b)
-
-        d_start, d_end = default_dates(b, date.today())
-        assert _field(rc, t("steps.period.start")).v_model == d_start
-        assert _field(rc, t("steps.period.end")).v_model == d_end
-        assert _field(rc, t("steps.period.look_back")).v_model == str(b.look_back_days)
+        assert _look_back_field(rc).v_model == "45"
     finally:
         rc.close()
 
 
-def test_closing_the_open_project_unmounts_the_form_without_reading_it():
-    """The form reads the project itself: closing the project re-renders it
-    once before the gate unmounts it. Reading the closed project there raised
-    out of ``close_project_state``, which left the project half closed (the
-    install signal never bumped) and a delete of the open project undone."""
-    state = AppState()
-    state.new_project_state(_p_with_source())
-
-    box, rc = _render(state)
+def test_closing_the_open_project_unmounts_the_list_without_reading_it(env):
+    state = _state(_project(env.pdir))
+    layers, rc = _render(state)
     try:
-        assert _field(rc, t("steps.period.look_back"))
+        assert _look_back_field(rc)
         state.close_project_state()
         assert rc.find(v.TextField).widgets == []
         assert state.project_loaded_signal.value == 2 and state.active_step.value == 0
@@ -334,24 +332,56 @@ def test_closing_the_open_project_unmounts_the_form_without_reading_it():
         rc.close()
 
 
-def test_replacing_the_single_period_keeps_its_mask_choices():
-    from deforestation_alerts.project.models import PeriodMask
+def test_without_sources_the_step_is_locked(env):
+    state = _state(Project(name="e", created_at=datetime.now(), updated_at=datetime.now()))
+    layers, rc = _render(state)
+    try:
+        assert rc.find(v.TextField).widgets == [] and "table" not in env.seen
+    finally:
+        rc.close()
 
-    p = _project_with_a_period()  # the file's existing helper; make one if it has none
-    pid = p.active_period
-    p.periods = {pid: p.periods[pid].model_copy(update={"masks": {"forest": PeriodMask(on=True, mode="exclude")}})}
-    err, _ = apply_period(p, "2026-03-01", "2026-03-31", 90)
-    assert err is None and p.periods[p.active_period].masks == {"forest": PeriodMask(on=True, mode="exclude")}
+
+# ---------------------------------------------------------------------------
+# PeriodModal (rendered for real)
+# ---------------------------------------------------------------------------
+@solara.component
+def _ModalHarness(app_state, open_, on_submit, editing=None):
+    period_modal.PeriodModal(open_=open_, app_state=app_state, on_submit=on_submit, editing=editing,
+                             today=date(2026, 9, 30))
 
 
-def test_a_look_back_only_save_keeps_the_same_periods_mask_choices():
-    """Controller ruling M1: current == new_id (dates unchanged, only the
-    look-back edited) must still carry the mask choices forward."""
-    from deforestation_alerts.project.models import PeriodMask
+def _fields(rc):
+    return {w.label: w for w in rc.find(v.TextField).widgets}
 
-    p = _project_with_a_period()
-    pid = p.active_period
-    p.periods = {pid: p.periods[pid].model_copy(update={"masks": {"forest": PeriodMask(on=True, mode="exclude")}})}
-    err, _ = apply_period(p, "2026-01-01", "2026-01-31", 30)
-    assert err is None and p.active_period == pid
-    assert p.periods[pid].masks == {"forest": PeriodMask(on=True, mode="exclude")}
+
+def test_the_modal_is_prefilled_from_the_latest_period_and_checks_the_order(env):
+    state = _state(_project(env.pdir))
+    open_, submitted = solara.reactive(True), []
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_,
+                                         on_submit=lambda a, b: submitted.append((a, b))), handle_error=False)
+    try:
+        fields = _fields(rc)
+        assert fields[t("steps.period.start")].v_model == "2026-03-01"
+        assert fields[t("steps.period.end")].v_model == "2026-09-30"
+        fields[t("steps.period.end")].v_model = "2026-02-15"
+        assert _button(rc, t("steps.period.save")).disabled
+        assert _fields(rc)[t("steps.period.end")].error_messages == [t("steps.period.error_order")]
+        _fields(rc)[t("steps.period.end")].v_model = "2026-03-31"
+        _button(rc, t("steps.period.save")).fire_event("click", None)
+        assert submitted == [("2026-03-01", "2026-03-31")] and open_.value is False
+    finally:
+        rc.close()
+
+
+def test_the_modal_shows_a_refusal_inline_and_stays_open(env):
+    state = _state(_project(env.pdir))
+    open_ = solara.reactive(True)
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, editing=FEB_ID,
+                                         on_submit=lambda a, b: "steps.period.error_exists"), handle_error=False)
+    try:
+        assert _fields(rc)[t("steps.period.start")].v_model == "2026-02-01"  # an edit starts from its dates
+        _button(rc, t("steps.period.save")).fire_event("click", None)
+        assert open_.value is True
+        assert any(w.children == [t("steps.period.error_exists")] for w in rc.find(v.Html).widgets)
+    finally:
+        rc.close()

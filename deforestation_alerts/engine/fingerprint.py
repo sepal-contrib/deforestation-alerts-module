@@ -194,14 +194,35 @@ def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]
     the AOI polygon by the AOI raster (an Earth Engine download is clipped by
     its region already).
     """
-    raw = p.artifacts.get(raw_key(period.id, source))
-    if raw is None:
-        return None
+    return _harmonized(p, source, period, _mask_terms(p, period))
+
+
+def period_harmonized_inputs(p: Project, period: Period, sources=None) -> dict[str, Optional[dict]]:
+    """``harmonized_inputs`` of each of ``sources`` (default: every project
+    source) in ``period``, with the period's mask terms computed once rather
+    than once per source (a render's badges read every period)."""
+    terms = _mask_terms(p, period)
+    names = p.sources if sources is None else [s for s in sources if s in p.sources]
+    return {s: _harmonized(p, s, period, terms) for s in names}
+
+
+_BLOCKED = object()  # a mask on in the period is not aligned current
+
+
+def _mask_terms(p: Project, period: Period):
+    """The harmonized inputs' ``masks`` term of ``period``, or ``_BLOCKED``."""
     masks = []
     for name, mode in period_masks(p, period):
         if not mask_current(p, name):
-            return None  # blocked until the mask is aligned on the current grid (spec §5.3)
+            return _BLOCKED  # blocked until the mask is aligned on the current grid (spec §5.3)
         masks.append([name, mode, p.artifacts[mask_key(name)].content_id])
+    return masks
+
+
+def _harmonized(p: Project, source: str, period: Period, masks) -> Optional[dict]:
+    raw = p.artifacts.get(raw_key(period.id, source))
+    if raw is None or masks is _BLOCKED:
+        return None
     inputs = {"stage": "harmonized", "raw": raw.content_id, "grid": p.grid.signature if p.grid else None,
               "masks": masks}
     if is_file_source(p.sources[source]):
@@ -283,14 +304,34 @@ def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
     its file is gone, and so is every harmonized comparison of the period while
     a GeoTIFF mask on in it is gone (its stamp would otherwise read as an input
     change). Manifest plus ``os.stat`` only: cheap enough for a render (Task
-    34's badges)."""
+    34's badges read ``period_set_statuses``)."""
     period = p.periods.get(alert_set.period_id)
     if period is None:
         return Status.STALE
+    return _set_status(p, pdir, alert_set, period, period_harmonized_inputs(p, period, alert_set.sources),
+                       _mask_file_gone(p, period))
+
+
+def period_set_statuses(p: Project, pdir, period: Period) -> dict[str, Status]:
+    """``set_status`` of every set of ``period``, by set id, with the period's
+    mask checks done once for all its sets and sources (Task 34's badges)."""
+    period = p.periods.get(period.id, period)
+    sets = [s for s in p.alert_sets.values() if s.period_id == period.id]
+    if not sets:
+        return {}
+    harmonized, mask_gone = period_harmonized_inputs(p, period), _mask_file_gone(p, period)
+    return {s.id: _set_status(p, pdir, s, period, harmonized, mask_gone) for s in sets}
+
+
+def _mask_file_gone(p: Project, period: Period) -> bool:
+    return any(mask_file_missing(p.masks[n]) for n, _ in period_masks(p, period))
+
+
+def _set_status(p: Project, pdir, alert_set: AlertSet, period: Period, harmonized: dict,
+                mask_gone: bool) -> Status:
     expected = set_inputs(p, period, alert_set.sources, alert_set.params)
     if expected is None or fingerprint(expected) != alert_set.fingerprint:
         return Status.STALE
-    mask_gone = any(mask_file_missing(p.masks[n]) for n, _ in period_masks(p, period))
     for s in alert_set.sources:
         src = p.sources.get(s)
         if src is None:
@@ -298,8 +339,7 @@ def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
         if (user_file_missing(src) is None
                 and status(p, pdir, raw_key(period.id, s), raw_alert_inputs(p, s, period)) is Status.STALE):
             return Status.STALE
-        if (not mask_gone
-                and status(p, pdir, harm_key(period.id, s), harmonized_inputs(p, s, period)) is Status.STALE):
+        if not mask_gone and status(p, pdir, harm_key(period.id, s), harmonized[s]) is Status.STALE:
             return Status.STALE
     if not (Path(pdir) / alert_set.store_rel_path).exists():
         return Status.MISSING
