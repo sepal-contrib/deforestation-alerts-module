@@ -65,6 +65,7 @@ analysis : AnalysisState
 """
 
 import logging
+from contextlib import nullcontext
 from datetime import datetime
 from operator import itemgetter
 
@@ -102,6 +103,15 @@ _COLOR_MAP = {
 # Imperative helpers — ported verbatim from the OLD god-class as module-level
 # functions (no ``self``); explicit args replace the former instance attributes.
 # ---------------------------------------------------------------------------
+def _gated(map_element, analysis, token):
+    """``map_element``'s layer adds, each run only while ``token`` is current
+    (``LockedMap.gated``); a plain map (tests) adds as before."""
+    gated = getattr(map_element, "gated", None)
+    if gated is None:
+        return nullcontext()
+    return gated(lambda add: analysis.apply_if_current(token, add))
+
+
 def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
     token=None,
@@ -187,21 +197,26 @@ def image_slider_map_callback(
         widgets.imgSelection2.disabled = False
         return
 
-    map_element.addLayer(img, vis1, "True Color", True)
-    map_element.addLayer(img, vis2, "False Color", False)
-    # "Original Alert": the set's combined raster, band 3 (display), through
-    # localtileserver (spec §10). Starting the tile server blocks and can fail;
-    # a failure must not leave the image selectors disabled.
-    combined = getattr(selected_alerts_model, "combined_path", None)
-    if combined is not None and combined.exists():
-        try:
-            raster_map.add_raster_layer(
-                map_element, combined, key="original-alert", name="Original Alert",
-                band=3, opacity=0.5,
-                visible=False,  # off by default, as before; the map's layer control shows it
-            )
-        except Exception:
-            logger.exception("Analysis imagery: failed to add the Original Alert layer")
+    # Each add blocks (getMapId, the tile server) and then lands only while
+    # this alert is still current: an alert change meanwhile has cleared the
+    # maps for the next one (``vis_sync.clear_alert_layers``, after
+    # ``reset_alert``), which must not get this alert's layers.
+    with _gated(map_element, analysis, token):
+        map_element.addLayer(img, vis1, "True Color", True)
+        map_element.addLayer(img, vis2, "False Color", False)
+        # "Original Alert": the set's combined raster, band 3 (display), through
+        # localtileserver (spec §10). Starting the tile server blocks and can fail;
+        # a failure must not leave the image selectors disabled.
+        combined = getattr(selected_alerts_model, "combined_path", None)
+        if combined is not None and combined.exists() and analysis.is_current(token):
+            try:
+                raster_map.add_raster_layer(
+                    map_element, combined, key="original-alert", name="Original Alert",
+                    band=3, opacity=0.5,
+                    visible=False,  # off by default, as before; the map's layer control shows it
+                )
+            except Exception:
+                logger.exception("Analysis imagery: failed to add the Original Alert layer")
     widgets.imgSelection1.disabled = False
     widgets.imgSelection2.disabled = False
 

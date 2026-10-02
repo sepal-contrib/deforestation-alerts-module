@@ -44,6 +44,7 @@ the chosen before/after images and their info lists live in ``AnalysisState``):
 """
 
 import threading
+from contextlib import contextmanager
 
 import ipyvuetify as v
 import solara
@@ -68,11 +69,29 @@ class LockedMap(SepalMap):
     def __init__(self, *args, **kwargs):
         # Before SepalMap's own init: it adds the basemap through add_layer.
         self.layers_lock = threading.RLock()
+        self._gate = threading.local()
         super().__init__(*args, **kwargs)
 
+    @contextmanager
+    def gated(self, gate):
+        """Inside the block, this thread's ``add_layer`` calls run as
+        ``gate(add)``, which may decline to run ``add``. The imagery worker
+        passes ``AnalysisState.apply_if_current``: an ``addLayer`` finishes its
+        blocking getMapId, then adds the layer only while its alert is still
+        the current one (under the lock ``reset_alert`` takes)."""
+        self._gate.fn = gate
+        try:
+            yield self
+        finally:
+            self._gate.fn = None
+
     def add_layer(self, *args, **kwargs):
-        with self.layers_lock:
-            return super().add_layer(*args, **kwargs)
+        def _add():
+            with self.layers_lock:
+                return super(LockedMap, self).add_layer(*args, **kwargs)
+
+        gate = getattr(getattr(self, "_gate", None), "fn", None)
+        return _add() if gate is None else gate(_add)
 
     def remove_layer(self, *args, **kwargs):
         with self.layers_lock:

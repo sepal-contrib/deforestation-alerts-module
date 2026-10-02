@@ -182,3 +182,35 @@ def test_an_image_listed_for_a_previous_alert_is_not_stored():
     imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
     assert s.before_image.value is None and drawn == []
     assert widgets.imgSelection1.disabled is False and widgets.imgSelection2.disabled is False
+
+
+def test_an_image_layer_drawn_after_an_alert_change_is_not_added(monkeypatch):
+    """Final re-review, Minor 3: ``addLayer`` blocks on getMapId after the
+    image is stored. An alert change meanwhile clears the maps for the next
+    alert; the late layer must not land on them (``LockedMap.gated``)."""
+    from ipyleaflet import TileLayer
+
+    from gui.tile.analysis import imagery
+    from gui.tile.analysis.widgets import LockedMap
+
+    s = AnalysisState()
+    token = s.alert_token.value
+    map_ = LockedMap(gee=False)
+    base = len(map_.layers)
+    monkeypatch.setattr(imagery, "ee", SimpleNamespace(Image=lambda _id: SimpleNamespace(clip=lambda g: "img")))
+
+    def _add_ee_layer(img, vis, name, shown):  # getMapId blocks, the user moves on
+        if name == "False Color":
+            s.reset_alert()
+        map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name=name))
+
+    map_.addLayer = _add_ee_layer
+    widgets = _fake_imagery_widgets()
+    widgets.actual_alert_grid = None
+    planet = {"source": "Planet NICFI", "image_id": "projects/x/nicfi", "milis": 1, "cloud_cover": 0}
+    imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
+
+    assert [lyr.name for lyr in map_.layers[base:]] == ["True Color"]
+    assert widgets.imgSelection1.disabled is False and widgets.imgSelection2.disabled is False
+    map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name="later"))
+    assert map_.layers[-1].name == "later"  # outside the callback, adds are not gated
