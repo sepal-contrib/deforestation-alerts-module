@@ -345,7 +345,7 @@ def get_unique_alerts(alert_list, custom_names=None, digit_map=None):
     
     unique_alerts = set()
 
-    if digit_map:
+    if digit_map is not None:
         for value in alert_list:
             try:
                 value = int(float(value))

@@ -12,8 +12,10 @@ the alert-raster export, the attribute-raster materialization
 the ones started from ``spawn_in_context`` daemon threads.
 """
 
+import asyncio
 import logging
 import threading
+import time
 from typing import Any, Optional, Union
 
 import ee
@@ -33,6 +35,37 @@ _DOWNLOAD_LOCK = threading.Lock()
 # TimeoutError, and cancelling an export does NOT stop its thread, so an
 # unbounded wait could otherwise strand a second user indefinitely.
 _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
+
+
+def _transient(exc: BaseException) -> bool:
+    try:
+        import aiohttp
+        client_errors = (aiohttp.ClientError,)
+    except ImportError:  # pragma: no cover
+        client_errors = ()
+    return isinstance(exc, (OSError, asyncio.TimeoutError) + client_errors)
+
+
+def with_retries(fn, *, attempts: int = 3, delay_s: float = 2.0, sleep=time.sleep):
+    """Run ``fn``; retry a transient network error (a DNS blip) with a growing wait."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as exc:
+            if i == attempts - 1 or not _transient(exc):
+                raise
+            logger.warning("transient error, retrying in %.0f s: %s", delay_s * (i + 1), exc)
+            sleep(delay_s * (i + 1))
+
+
+def prefetch_stac(img) -> None:
+    """Fill geedim's STAC cache for ``img`` before the export, where a failure
+    can be retried (geedim fetches it inside ``toGeoTIFF`` otherwise)."""
+    from geedim.stac import STACClient
+
+    ee_id = img.gd.id
+    if ee_id:
+        STACClient().get(ee_id)
 
 
 def export_bounds(region: Any) -> Any:
@@ -125,6 +158,9 @@ def download_ee_image(
             scale_offset=scale_offset,
             **prepare_opts,
         )
+        # geedim's STAC fetch (earthengine-stac.storage.googleapis.com) has no
+        # retry of its own; a DNS blip there failed whole exports (spec §12).
+        with_retries(lambda: prefetch_stac(img))
         nodata = True if nodata_value is None else nodata_value
         img.gd.toGeoTIFF(
             file=filename, overwrite=overwrite, nodata=nodata, **tiff_opts, **kwargs

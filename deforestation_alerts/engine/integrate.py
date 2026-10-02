@@ -33,8 +33,7 @@ from shapely.geometry import box, shape
 from shapely.ops import transform as shp_transform
 
 from deforestation_alerts.engine.fingerprint import (
-    combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, mask_key,
-    set_inputs, store_key,
+    combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, set_inputs, store_key,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
@@ -48,7 +47,7 @@ from deforestation_alerts.project.models import (
 )
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.alert_table import convert_to_geopandas
-from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
+from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config, download_estimate
 
 #: Pixels per window (the vectorizer's default block): about 80 MB per Int32
 #: array, until the one-tile-row floor of ``_windows`` takes over above
@@ -188,11 +187,43 @@ class IntegrationResult:
     alert_set: AlertSet
     artifacts: dict[str, Artifact]  # keyed like project.artifacts
     alerts: gpd.GeoDataFrame  # EPSG:4326, as stored
+    # per chosen source {"alert_pixels", "alert_pixels_unmasked"} from its
+    # harmonized file's stats; {} for a file harmonized before stats existed
+    outcomes: dict[str, dict]
 
 
 def _staged(path: Path) -> Path:
     """The name a set file is built under until the whole run has succeeded."""
     return path.with_name(f"{path.stem}.staged{path.suffix}")
+
+
+def _attribute_region(p: Project):
+    """The export region of an Earth Engine attribute raster: the AOI's bounds."""
+    import ee  # only a GEE attribute raster needs it
+
+    minx, miny, maxx, maxy = p.aoi.bounds
+    return ee.Geometry.Rectangle([minx, miny, maxx, maxy])
+
+
+def _masks_applied(p: Project, period: Period, sources) -> list:
+    """The masks the chosen sources' harmonized files were built with (spec §5.1)."""
+    seen = {}
+    for s in sources:
+        for name, mode, content_id in p.artifacts[harm_key(period.id, s)].inputs.get("masks") or []:
+            seen[name] = {"name": name, "mode": mode, "content_id": content_id}
+    return [seen[n] for n in sorted(seen)]
+
+
+def _outcomes(p: Project, period: Period, sources) -> dict[str, dict]:
+    """Each source's alert pixels in the AOI, with and without the masks, as
+    counted while its harmonized file was written ({} when not counted)."""
+    outcomes = {}
+    for s in sources:
+        st = p.artifacts[harm_key(period.id, s)].stats or {}
+        outcomes[s] = ({"alert_pixels": int(st["alert_pixels"]),
+                        "alert_pixels_unmasked": int(st["alert_pixels_unmasked"])}
+                       if "alert_pixels" in st else {})
+    return outcomes
 
 
 def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], None]] = None) -> IntegrationResult:
@@ -201,9 +232,10 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     Writes the combined raster, the footprint and ``alert_db.parquet`` into the
     set's folder and returns the set and its artifacts; the caller records them.
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
-    when a source's download or harmonized file is not current for the period
-    (its Download & harmonize row is not ready), or an earlier set's footprint
-    is missing.
+    when no source is chosen or one is chosen twice, when the drawn area mode
+    has no drawing, when a source's download or harmonized file is not current
+    for the period (its Download & harmonize row is not ready), or an earlier
+    set's footprint is missing.
 
     The three files are built under staged names and moved onto the set's own
     names only once every step has succeeded. A run that fails, including one
@@ -214,6 +246,10 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     step = on_step or (lambda key: None)
     p, pdir, period = job.project, Path(job.pdir), job.period
     sources = sorted(job.sources, key=str.casefold)
+    if not job.sources or len(set(job.sources)) != len(job.sources):
+        raise ValueError("choose at least one source, each once")
+    if job.params.area_mode == "drawn" and not job.params.area_geojson:
+        raise ValueError("the drawn area mode needs a drawn polygon")
     # Both stages must be current: a harmonized file whose raw download is out
     # of date (say, for an AOI changed since) holds the old inputs' alerts.
     rows = {row.source: row for row in plan_prepare(p, pdir, period)}
@@ -230,8 +266,11 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     # A run stages the combined raster (3 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
-    # estimate.
-    ensure_free_space(sdir, 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1)))
+    # estimate. An Earth Engine attribute raster is downloaded first, twice its
+    # compressed estimate too (spec §7.4 step 0).
+    staged_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1))
+    attr_bytes = 2 * compressed_estimate(download_estimate(job.params.attribute_config, p.aoi.bounds))
+    ensure_free_space(sdir, staged_bytes + attr_bytes)
 
     step("steps.integrate.step_combine")
     earlier = earlier_sets(p, period)
@@ -245,6 +284,10 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     footprint = paths.footprint_path(sdir)
     store = paths.store_path(sdir)
     staged = {final: _staged(final) for final in (combined, footprint, store)}
+    # A run killed outright (SIGKILL) leaves its staged files behind; the set's
+    # folder has one writer (the ``integrate:{project}`` in-flight key).
+    for part in staged.values():
+        part.unlink(missing_ok=True)
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
         for s in sources
@@ -268,12 +311,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         alerts["alert_id"] = range(len(alerts))
         alerts["set_id"] = sid
         if job.params.attribute_config:
-            region = None
-            if job.params.attribute_config.get("kind") == "gee":
-                import ee  # only a GEE attribute raster needs an export region
-
-                minx, miny, maxx, maxy = p.aoi.bounds
-                region = ee.Geometry.Rectangle([minx, miny, maxx, maxy])
+            region = _attribute_region(p) if job.params.attribute_config.get("kind") == "gee" else None
             alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region)
         save_gdf_to_parquet(alerts, str(staged[store]))
 
@@ -286,10 +324,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             sources=sources,
             digit_map=digit_map,
             params=job.params,
-            masks_used=[
-                {"name": n, "mode": m.mode, "content_id": p.artifacts[mask_key(n)].content_id}
-                for n, m in sorted(p.masks.items()) if m.enabled
-            ],
+            masks_used=_masks_applied(p, period, sources),
             footprint_from=[s.id for s in earlier],
             store_rel_path=paths.rel(pdir, store),
             combined_rel_path=paths.rel(pdir, combined),
@@ -318,4 +353,5 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         footprint_key(sid): make_artifact(footprint_key(sid), "footprint", pdir, footprint, inputs_fp),
         store_key(sid): make_artifact(store_key(sid), "store", pdir, store, inputs_fp),
     }
-    return IntegrationResult(alert_set=alert_set, artifacts=artifacts, alerts=alerts)
+    return IntegrationResult(alert_set=alert_set, artifacts=artifacts, alerts=alerts,
+                             outcomes=_outcomes(p, period, sources))

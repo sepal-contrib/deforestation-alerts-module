@@ -65,6 +65,8 @@ class _FakeCollection:
 class _FakeAccessor:
     """Stand-in for the ``image.gd`` geedim accessor."""
 
+    id = None  # no Earth Engine id: ``prefetch_stac`` has nothing to fetch
+
     def __init__(self, image):
         self._image = image
 
@@ -144,12 +146,31 @@ def test_no_region_leaves_export_unbounded(fake_ee):
     assert prepare_kwargs["region"] is None
 
 
+def test_the_stac_entry_is_fetched_before_the_export_and_retried(fake_ee, monkeypatch):
+    """geedim fetches the STAC entry inside ``toGeoTIFF`` with no retry; the
+    helper fetches it first, where a transient error is retried (spec §12)."""
+    tries = []
+
+    def flaky_prefetch(img):
+        tries.append(1)
+        img.calls.append(("prefetch_stac", None))
+        if len(tries) == 1:
+            raise OSError("Temporary failure in name resolution")
+
+    real = export_module.with_retries
+    monkeypatch.setattr(export_module, "prefetch_stac", flaky_prefetch)
+    monkeypatch.setattr(export_module, "with_retries", lambda fn: real(fn, sleep=lambda s: None))
+    names = [name for name, _ in _run(None)]
+    assert names == ["unmask", "prepareForExport", "prefetch_stac", "prefetch_stac", "toGeoTIFF"]
+
+
 def _fake_image():
     """An ``ee.Image`` stand-in whose geedim export blocks on the shared runner."""
     from geedim.utils import AsyncRunner
 
     image = MagicMock(spec=ee.Image)
     prepared = MagicMock()
+    prepared.gd.id = None  # no STAC entry to prefetch
 
     def to_geotiff(**_kw):
         AsyncRunner().run(asyncio.sleep(0.3))
@@ -196,6 +217,7 @@ def test_wait_notice_fires_only_for_the_download_that_queues(tmp_path):
     def make_image(name):
         image = MagicMock(spec=ee.Image)
         prepared = MagicMock()
+        prepared.gd.id = None  # no STAC entry to prefetch
 
         def to_geotiff(**_kw):
             first_in_geedim.set()
@@ -251,6 +273,7 @@ def test_export_options_reach_geedim(tmp_path):
 
     image = MagicMock(spec=ee.Image)
     prepared = MagicMock()
+    prepared.gd.id = None  # no STAC entry to prefetch
     image.gd.prepareForExport.return_value = prepared
     download_ee_image(
         image,
@@ -271,3 +294,29 @@ def test_export_options_reach_geedim(tmp_path):
     assert geo["max_tile_size"] == 8
     assert geo["max_tile_dim"] == 2000
     assert geo["max_requests"] == 4
+
+
+def test_with_retries_retries_transient_errors_only():
+    from deforestation_alerts.scripts import raster_export as rx
+
+    sleeps, calls = [], []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise OSError("Temporary failure in name resolution")
+        return "ok"
+
+    assert rx.with_retries(flaky, sleep=sleeps.append) == "ok" and len(calls) == 3 and sleeps == [2.0, 4.0]
+
+    def broken():
+        raise ValueError("not transient")
+
+    with pytest.raises(ValueError):
+        rx.with_retries(broken, sleep=sleeps.append)
+
+    def always():
+        raise OSError("down")
+
+    with pytest.raises(OSError):
+        rx.with_retries(always, sleep=lambda s: None)

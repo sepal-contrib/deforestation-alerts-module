@@ -533,3 +533,58 @@ def test_a_second_month_catches_a_late_alert_and_repeats_no_first_month_pixel(tm
     assert not (f_dec.astype(bool) & f_jan.astype(bool)).any()  # no December pixel twice
     assert f_jan[21, 3] == 1 and f_jan[21, 21] == 1  # the late alert and January's own
     assert sorted(round(float(d), 3) for d in res.alerts["alert_date_min"]) == [2025.345, 2026.015]
+
+
+@_LONLAT_CENTROID
+def test_outcomes_and_masks_used_come_from_the_harmonized_files(ready_project):
+    p, pdir = ready_project
+    for s, n in (("GLAD-L", 64), ("RADD", 16)):
+        key = fp.harm_key(JAN.id, s)
+        p.artifacts[key] = p.artifacts[key].model_copy(update={
+            "stats": {"alert_pixels": n, "alert_pixels_unmasked": n + 1, "date_min": 2026015, "date_max": 2026015},
+            "inputs": {**p.artifacts[key].inputs, "masks": [["forest", "keep", "c1"]]}})
+    result = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams()))
+    assert result.outcomes == {"GLAD-L": {"alert_pixels": 64, "alert_pixels_unmasked": 65},
+                               "RADD": {"alert_pixels": 16, "alert_pixels_unmasked": 17}}
+    assert result.alert_set.masks_used == [{"name": "forest", "mode": "keep", "content_id": "c1"}]
+
+
+@pytest.mark.parametrize("sources", [[], ["GLAD-L", "GLAD-L"]])
+def test_run_integration_refuses_no_or_duplicate_sources(ready_project, sources):
+    p, pdir = ready_project
+    job = integrate.IntegrationJob(project=p.model_copy(deep=True), pdir=pdir, period=JAN, sources=sources,
+                                   params=AlertSetParams())
+    with pytest.raises(ValueError):
+        integrate.run_integration(job)
+
+
+def test_drawn_mode_needs_a_drawing(ready_project):
+    p, pdir = ready_project
+    with pytest.raises(ValueError, match="drawn"):
+        integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(area_mode="drawn", area_geojson=None)))
+
+
+@_LONLAT_CENTROID
+def test_staged_leftovers_of_a_killed_run_are_swept(ready_project):
+    p, pdir = ready_project
+    sdir = paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"])
+    sdir.mkdir(parents=True)
+    (sdir / "alert_db.staged.parquet").write_bytes(b"old")
+    integrate.run_integration(_job(p, pdir, JAN, AlertSetParams()))
+    assert not list(sdir.glob("*.staged.*"))
+
+
+@_LONLAT_CENTROID
+def test_the_gate_counts_an_earth_engine_attribute_download(ready_project, monkeypatch):
+    p, pdir = ready_project
+    asked = []
+    monkeypatch.setattr(integrate, "ensure_free_space", lambda folder, n: asked.append(n))
+    monkeypatch.setattr(integrate, "attribute_alerts_from_config", lambda gdf, *a, **k: gdf)
+    monkeypatch.setattr(integrate, "_attribute_region", lambda p: "REGION")  # no Earth Engine in this test
+    cfg = {"source": "COPERNICUS/S2_SR/x", "kind": "gee",
+           "bands": [{"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0}]}
+    integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_config=cfg)))
+    from deforestation_alerts.engine.raster_io import compressed_estimate
+    from deforestation_alerts.scripts.attribute_source import download_estimate
+    staged = 2 * compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    assert asked[0] == staged + 2 * compressed_estimate(download_estimate(cfg, p.aoi.bounds))

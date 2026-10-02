@@ -1,7 +1,8 @@
-"""Resolve an attribute-raster config to a local GeoTIFF: a GeoTIFF is read
-where it is; an Earth Engine image is downloaded into a private scratch folder
-for the run. Also enumerates GEE band names for the Aux-tile config UI, and
-ties config -> materialize -> attribute.
+"""Resolve an attribute-raster config to local GeoTIFFs: a GeoTIFF is read
+where it is; an Earth Engine image is downloaded, one included band at a time,
+into a private scratch folder for the run. Also estimates the size of that
+download for Integrate's free-space gate, and ties config -> materialize ->
+attribute.
 """
 
 from pathlib import Path
@@ -15,11 +16,6 @@ from deforestation_alerts.scripts.raster_export import download_ee_image
 from deforestation_alerts.scripts.raster_attribute import attribute_alerts
 
 
-def gee_band_names(asset_id):
-    """Band names of a GEE image asset (drives the Aux config UI)."""
-    return ee.Image(asset_id).bandNames().getInfo()
-
-
 def _set_band_descriptions(tif_path, names):
     """Write band names as GeoTIFF descriptions so downstream name->index
     resolution works identically for downloaded GEE rasters and local files."""
@@ -27,26 +23,47 @@ def _set_band_descriptions(tif_path, names):
         dst.descriptions = tuple(names)
 
 
-def materialize_attribute_raster(config, region, folder):
-    """A local GeoTIFF path for the attribute raster: the user's own file for
-    ``local``; for ``gee`` a download into ``folder`` at the image's native
-    scale with band names stamped as descriptions."""
+def materialize_attribute_bands(config, region, folder):
+    """``[(local GeoTIFF, [band specs])]`` for the attribute raster.
+
+    A GeoTIFF is read where it is, all its included bands from that one file.
+    An Earth Engine image is downloaded one included band at a time, each in
+    its own native projection (no ``crs``/``scale``: geedim uses the selected
+    band's), so an image whose bands mix projections (Sentinel-2, Landsat TOA)
+    works and no band that is not included is fetched (spec §7.4).
+    """
     if config["kind"] == "local":
-        return str(config["source"])
-    asset_id = config["source"]
-    img = ee.Image(asset_id)
-    names = gee_band_names(asset_id)
-    out_tif = str(Path(folder) / f"attribute_{safe_token(asset_id)}.tif")
-    native_scale = img.projection().nominalScale().getInfo()
-    download_ee_image(img, out_tif, region=region, crs="EPSG:4326", scale=native_scale, resampling="near")
-    _set_band_descriptions(out_tif, names)
-    return out_tif
+        return [(str(config["source"]), list(config["bands"]))]
+    out = []
+    for i, spec in enumerate(config["bands"]):
+        band = spec["band"]
+        tif = str(Path(folder) / f"attribute_{i}_{safe_token(band)}.tif")
+        download_ee_image(ee.Image(config["source"]).select([band]), tif, region=region, resampling="near")
+        _set_band_descriptions(tif, [band])
+        out.append((tif, [spec]))
+    return out
 
 
-def attribute_alerts_from_config(gdf, config, region, materialize=materialize_attribute_raster):
-    """No-op without bands; else materialize the raster and attribute (fail loud)."""
+def attribute_alerts_from_config(gdf, config, region, materialize=None):
+    """No-op without bands; else attribute every included band (fail loud)."""
     if not config or not config.get("bands"):
         return gdf
+    materialize = materialize or materialize_attribute_bands
     with local_files.scratch_dir() as folder:
-        tif = materialize(config, region, folder)
-        return attribute_alerts(gdf, tif, config["bands"])
+        for tif, specs in materialize(config, region, folder):
+            gdf = attribute_alerts(gdf, tif, specs)
+    return gdf
+
+
+def download_estimate(config, aoi_bounds) -> int:
+    """Uncompressed bytes an Earth Engine attribute raster downloads (one band
+    per included band, 4 bytes a pixel at the band's own scale)."""
+    from deforestation_alerts.engine.download import estimate_native_bytes
+
+    if not config or config.get("kind") != "gee":
+        return 0
+    total = 0
+    for spec in config.get("bands") or []:
+        native = (spec.get("crs") or "EPSG:4326", float(spec.get("scale") or 10.0))
+        total += estimate_native_bytes(aoi_bounds, native) // 2  # one band, not two
+    return total
