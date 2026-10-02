@@ -225,3 +225,103 @@ def test_month_counts_count_only_the_visible_rows():
     ])
     sel = scene_query.scenes_for(tables, ALERT, date(2026, 5, 1), date(2026, 6, 30), max_cloud=40.0)
     assert scene_query.month_counts(sel) == {(2026, 5): 1, (2026, 6): 1}
+
+
+# ----------------------------------------------------------------- axis
+
+
+def test_months_between_spans_the_end_month_inclusively():
+    assert scene_query.months_between(date(2026, 11, 20), date(2027, 2, 3)) == [
+        (2026, 11), (2026, 12), (2027, 1), (2027, 2)
+    ]
+
+
+def test_months_between_a_single_month():
+    assert scene_query.months_between(date(2026, 5, 3), date(2026, 5, 20)) == [(2026, 5)]
+
+
+def test_the_first_and_last_segments_are_clipped_to_the_view():
+    segs = scene_query.month_segments(date(2026, 3, 10), date(2026, 5, 20), set(), 1000.0)
+    assert segs[(2026, 3)].start == date(2026, 3, 10) and segs[(2026, 3)].days == 22
+    assert segs[(2026, 4)].days == 30
+    assert segs[(2026, 5)].end == date(2026, 5, 20) and segs[(2026, 5)].days == 20
+
+
+def test_expanded_months_share_one_pixels_per_day_and_fill_the_track():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 5, 31), set(), 920.0)
+    ppds = {round(s.ppd, 9) for s in segs.values()}
+    assert len(ppds) == 1
+    assert segs[(2026, 3)].x == pytest.approx(0.0)
+    assert sum(s.w for s in segs.values()) == pytest.approx(920.0)
+    # 31 + 30 + 31 days: March is wider than April, which is the whole point
+    assert segs[(2026, 3)].w > segs[(2026, 4)].w
+
+
+def test_a_collapsed_month_is_a_fixed_block_and_the_rest_reflow():
+    collapsed = {(2026, 4)}
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 5, 31), collapsed, 920.0)
+    assert segs[(2026, 4)].collapsed and segs[(2026, 4)].w == pytest.approx(66.0)
+    assert segs[(2026, 4)].ppd == 0.0
+    assert sum(s.w for s in segs.values()) == pytest.approx(920.0)
+    assert segs[(2026, 5)].x == pytest.approx(segs[(2026, 4)].x + 66.0)
+
+
+def test_every_month_collapsed_leaves_no_division_by_zero():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 5, 31), {(2026, 3), (2026, 4), (2026, 5)}, 920.0)
+    assert [s.w for s in segs.values()] == [66.0, 66.0, 66.0]
+    assert all(s.ppd == 0.0 for s in segs.values())
+
+
+def test_a_track_too_narrow_for_its_collapsed_blocks_does_not_go_negative():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 5, 31), {(2026, 3), (2026, 4)}, 100.0)
+    assert segs[(2026, 5)].ppd == 0.0 and segs[(2026, 5)].w == 0.0
+
+
+def test_x_for_places_a_date_by_its_offset_inside_its_expanded_month():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), 610.0)
+    ppd = segs[(2026, 3)].ppd
+    assert scene_query.x_for(segs, date(2026, 3, 1)) == pytest.approx(0.0)
+    assert scene_query.x_for(segs, date(2026, 3, 11)) == pytest.approx(10 * ppd)
+
+
+def test_x_for_end_marks_the_right_edge_of_a_date_in_an_expanded_month():
+    # The brief's own tests exercise end=True only on a collapsed month;
+    # this closes the gap for the far more common expanded case, where the
+    # right edge must be exactly one day-width to the right of the left edge.
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), 610.0)
+    ppd = segs[(2026, 3)].ppd
+    left = scene_query.x_for(segs, date(2026, 3, 11))
+    right = scene_query.x_for(segs, date(2026, 3, 11), end=True)
+    assert right == pytest.approx(left + ppd)
+    # The last day of the view, end=True, reaches exactly the track's width.
+    assert scene_query.x_for(segs, date(2026, 4, 30), end=True) == pytest.approx(610.0)
+
+
+def test_x_for_collapses_every_date_of_a_collapsed_month_onto_its_block():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), {(2026, 3)}, 610.0)
+    left = scene_query.x_for(segs, date(2026, 3, 4))
+    assert left == pytest.approx(scene_query.x_for(segs, date(2026, 3, 29)))
+    assert scene_query.x_for(segs, date(2026, 3, 29), end=True) == pytest.approx(left + 66.0)
+
+
+def test_x_for_clamps_a_date_outside_the_view():
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), 610.0)
+    assert scene_query.x_for(segs, date(2025, 1, 1)) == pytest.approx(0.0)
+    assert scene_query.x_for(segs, date(2027, 1, 1)) == pytest.approx(610.0)
+
+
+def test_auto_collapse_takes_the_months_wholly_inside_the_alert_window():
+    got = scene_query.auto_collapsed(date(2026, 3, 3), date(2026, 10, 23), date(2026, 5, 3), date(2026, 8, 23))
+    assert got == {(2026, 6), (2026, 7)}
+
+
+def test_the_boundary_months_of_the_window_stay_expanded():
+    # May holds the before candidates and August the after ones: collapsing
+    # them would hide exactly the dates the reviewer has to choose between.
+    got = scene_query.auto_collapsed(date(2026, 3, 3), date(2026, 10, 23), date(2026, 5, 3), date(2026, 8, 23))
+    assert (2026, 5) not in got and (2026, 8) not in got
+
+
+def test_a_short_alert_window_collapses_nothing():
+    got = scene_query.auto_collapsed(date(2026, 3, 3), date(2026, 7, 23), date(2026, 5, 3), date(2026, 5, 20))
+    assert got == set()

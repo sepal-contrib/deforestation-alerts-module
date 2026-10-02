@@ -8,8 +8,9 @@ unmarked test that reaches Earth Engine (``tests/conftest.py``), so keeping
 the rules here is what makes them testable without a live session.
 """
 
+import calendar
 from datetime import date, timedelta
-from typing import Optional
+from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
@@ -171,3 +172,123 @@ def month_counts(sel: pd.DataFrame) -> dict[tuple[int, int], int]:
     for key in zip(shown["date"].dt.year, shown["date"].dt.month):
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+# ----------------------------------------------------------------- month axis
+
+COLLAPSED_PX = 66.0
+
+
+class MonthSegment(NamedTuple):
+    """One month's slice of the track.
+
+    ``days`` is the number of days of this month that the view shows, so the
+    first and last months of a view are short. ``ppd`` is pixels per day,
+    zero for a collapsed month, where every date lands on the block.
+    """
+
+    year: int
+    month: int
+    start: date
+    end: date
+    days: int
+    x: float
+    w: float
+    ppd: float
+    collapsed: bool
+
+
+def months_between(start: date, end: date) -> list[tuple[int, int]]:
+    """Every ``(year, month)`` from ``start``'s month to ``end``'s month, both
+    inclusive."""
+    out: list[tuple[int, int]] = []
+    y, m = start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        out.append((y, m))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def month_segments(
+    start: date,
+    end: date,
+    collapsed: Iterable[tuple[int, int]],
+    track_px: float,
+    *,
+    collapsed_px: float = COLLAPSED_PX,
+) -> dict[tuple[int, int], MonthSegment]:
+    """Lay the months of ``[start, end]`` across ``track_px`` pixels.
+
+    Collapsed months take ``collapsed_px`` each; the expanded ones divide
+    what is left in proportion to the days they show, all at one
+    pixels-per-day, so a date's position still means its date.
+    """
+    collapsed = set(collapsed)
+    keys = months_between(start, end)
+    spans: dict[tuple[int, int], tuple[date, date, int]] = {}
+    for year, month in keys:
+        first = date(year, month, 1)
+        last = date(year, month, calendar.monthrange(year, month)[1])
+        s = max(first, start)
+        e = min(last, end)
+        spans[(year, month)] = (s, e, (e - s).days + 1)
+
+    n_collapsed = sum(1 for key in keys if key in collapsed)
+    expanded_days = sum(spans[key][2] for key in keys if key not in collapsed)
+    # A track too narrow for its collapsed blocks would otherwise give a
+    # negative pixels-per-day and draw the later months off to the left.
+    free_px = max(0.0, track_px - collapsed_px * n_collapsed)
+    ppd = free_px / expanded_days if expanded_days else 0.0
+
+    segments: dict[tuple[int, int], MonthSegment] = {}
+    x = 0.0
+    for key in keys:
+        s, e, days = spans[key]
+        is_collapsed = key in collapsed
+        w = collapsed_px if is_collapsed else days * ppd
+        segments[key] = MonthSegment(
+            key[0], key[1], s, e, days, x, w, 0.0 if is_collapsed else ppd, is_collapsed
+        )
+        x += w
+    return segments
+
+
+def x_for(segments: dict[tuple[int, int], MonthSegment], d: date, *, end: bool = False) -> float:
+    """The pixel offset of ``d`` on the track laid out by ``month_segments``.
+
+    ``end=True`` asks for the right edge of what ``d`` occupies, which is what
+    the alert-window band needs. A date outside the view clamps to the
+    nearest edge rather than raising: a saved selection from an earlier,
+    wider view is a normal thing to meet.
+    """
+    if not segments:
+        return 0.0
+    keys = sorted(segments)
+    first, last = segments[keys[0]], segments[keys[-1]]
+    if d < first.start:
+        return 0.0
+    if d > last.end:
+        return last.x + last.w
+    seg = segments[(d.year, d.month)]
+    if seg.collapsed:
+        return seg.x + (seg.w if end else 0.0)
+    return seg.x + ((d - seg.start).days + (1 if end else 0)) * seg.ppd
+
+
+def auto_collapsed(start: date, end: date, a0: date, a1: date) -> set[tuple[int, int]]:
+    """The months to collapse when an alert first opens: those lying wholly
+    inside the alert window ``[a0, a1]``.
+
+    Inside the window every image shows partial clearing, so none of it is a
+    legal before or after; those months are context, not choices, and
+    collapsing them is what lets a GLAD window of several months fit beside
+    the two margins the reviewer actually picks from. The window's own
+    boundary months stay expanded, because they hold the nearest candidates.
+    """
+    out: set[tuple[int, int]] = set()
+    for year, month in months_between(start, end):
+        s = max(date(year, month, 1), start)
+        e = min(date(year, month, calendar.monthrange(year, month)[1]), end)
+        if a0 <= s and e <= a1:
+            out.add((year, month))
+    return out
