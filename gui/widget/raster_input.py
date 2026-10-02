@@ -29,10 +29,14 @@ def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMA
                        disabled=disabled):
         rv.Radio(label=t("steps.raster_input.origin_gee"), value="gee")
         rv.Radio(label=t("steps.raster_input.origin_file"), value="file")
-    if origin == "gee":
-        AssetSelectComponent(types=list(asset_types), value=asset, gee_interface=gee_interface)
-    else:
-        FileInputComponent(extensions=EXTENSIONS, value=path, label=t("steps.raster_input.file"))
+    # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
+    # events instead. Always the same wrapper, so toggling it never remounts
+    # a picker (which would list the user's assets again).
+    with rv.Html(tag="div", style_="pointer-events:none;opacity:0.6;" if disabled else ""):
+        if origin == "gee":
+            AssetSelectComponent(types=list(asset_types), value=asset, gee_interface=gee_interface)
+        else:
+            FileInputComponent(extensions=EXTENSIONS, value=path, label=t("steps.raster_input.file"))
 
 
 def use_band_list(gee_interface, origin, ref, asset_type):

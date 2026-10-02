@@ -23,6 +23,7 @@ from deforestation_alerts.project.names import validate_source_name
 from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.scripts.coverage_ui import note_text
+from gui.scripts.remote_facts import aoi_origin
 from gui.widget.raster_input import RasterInput, absolute, use_band_list
 
 FORMATS = ("radd", "ccdc", "date_only")
@@ -182,10 +183,25 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
 
     async def _validate():
         live = app_state.project.value
-        aoi = aoi_io.ee_aoi(app_state.aoi_result.value, paths.project_dir(live.name))
+        digest = live.aoi.digest
+        result = app_state.aoi_result.value
+        # the geometry of THIS AOI: right after an AOI change ``aoi_result`` may
+        # still hold the previous one's selection (remote_facts.aoi_origin)
+        where = aoi_origin(live, result)
+        if where is None:
+            return {"error": "steps.alerts.err_aoi_not_ready"}
+        if where == "result":
+            aoi = aoi_io.ee_aoi(result, None)
+        else:  # parsing the sidecar can take a while for a national AOI: off the loop
+            aoi = await asyncio.to_thread(aoi_io.ee_aoi, None, paths.project_dir(live.name))
         out = await validate_custom(gee_interface, live, aoi, name=name, origin=origin, ref=ref,
                                     asset_type=asset_type, fmt=fmt, encoding=encoding, alert_band=alert_band,
                                     date_band=date_band, editing=editing)
+        if not open_.value:
+            return None  # closed during the check (ESC or Cancel): the user cancelled
+        now = app_state.project.value
+        if now is None or now.name != live.name or now.aoi is None or now.aoi.digest != digest:
+            return {"error": "steps.alerts.err_aoi_changed"}  # the share is the previous AOI's
         if "error" not in out:
             # The project changes here, on the loop, never in the completion effect
             # below: an effect runs inside the render lock, and update_project
@@ -215,6 +231,22 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
     solara.use_effect(_on_validated, [validation.pending, validation.finished, validation.error,
                                       validation.cancelled])
 
+    def _cancel_on_unmount():
+        def cleanup():
+            # closing the dialog (ESC, Cancel) unmounts this form, and use_task
+            # does not cancel on unmount: stop a check still running, or it
+            # would add the source the user just cancelled
+            if validation.pending:
+                try:
+                    validation.cancel()
+                except RuntimeError:
+                    pass
+
+        return cleanup
+
+    solara.use_effect(_cancel_on_unmount, [])
+    busy = validation.pending  # fields are frozen while their values are being checked
+
     def _submit():
         if submitted.current:
             return
@@ -234,7 +266,8 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             solara.Text(title)
         with rv.CardText():
             if src0 is None:
-                with rv.BtnToggle(v_model=mode, on_v_model=lambda v: v and set_mode(v), mandatory=True, dense=True):
+                with rv.BtnToggle(v_model=mode, on_v_model=lambda v: v and set_mode(v), mandatory=True, dense=True,
+                                  disabled=busy):
                     rv.Btn(value="predefined", small=True, children=[t("steps.alerts.mode_predefined")])
                     rv.Btn(value="custom", small=True, disabled=cap_reached,
                            children=[t("steps.alerts.mode_custom", n=n_custom)])
@@ -250,9 +283,10 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                     solara.Text(t("steps.alerts.all_added"), classes=["text--secondary"])
             else:
                 rv.TextField(label=t("steps.alerts.name_label"), v_model=name, on_v_model=set_name, dense=True,
-                             outlined=True, disabled=src0 is not None,
+                             outlined=True, disabled=src0 is not None or busy,
                              error_messages=[t(name_error)] if name_error else [])
-                RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path)
+                RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
+                            disabled=busy)
                 if asset_type == "IMAGE_COLLECTION":
                     solara.Text(t("steps.alerts.collection_help"), classes=["text--secondary"])
                 if bands_task.pending:
@@ -260,19 +294,19 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                 elif bands_task.error:
                     solara.Text(t("steps.raster_input.bands_failed", error=str(bands_task.exception)),
                                 classes=["error--text"])
-                with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True):
+                with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True, disabled=busy):
                     for f in FORMATS:
                         rv.Radio(label=f"{t(f'steps.alerts.format_{f}')} — {t(f'steps.alerts.format_help_{f}')}",
                                  value=f)
                 if fmt in ("radd", "ccdc"):
                     rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
-                              on_v_model=set_alert_band, dense=True, outlined=True)
+                              on_v_model=set_alert_band, dense=True, outlined=True, disabled=busy)
                 if fmt is not None:
                     rv.Select(label=t("steps.alerts.band_date"), items=band_items, v_model=date_band,
-                              on_v_model=set_date_band, dense=True, outlined=True)
+                              on_v_model=set_date_band, dense=True, outlined=True, disabled=busy)
                 if fmt == "date_only":
                     rv.Select(label=t("steps.alerts.encoding_label"), v_model=encoding, on_v_model=set_encoding,
-                              dense=True, outlined=True,
+                              dense=True, outlined=True, disabled=busy,
                               items=[{"text": t(f"steps.alerts.encoding_{e}"), "value": e} for e in ENCODINGS])
             if error:  # validation errors stay inline in the modal (spec §11)
                 solara.Text(error, classes=["error--text"])

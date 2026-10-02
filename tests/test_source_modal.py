@@ -199,6 +199,9 @@ def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=
 
 
 def _state(p):
+    """An open project whose AOI geometry is its ``aoi.geojson`` sidecar
+    (remote_facts.aoi_origin: "sidecar"); ``aoi_io.ee_aoi`` is stubbed."""
+    p.aoi = p.aoi.model_copy(update={"geometry_file": "aoi.geojson"})
     state = AppState()
     state.project.value = p
     return state
@@ -402,6 +405,165 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
             th.join()
             assert errors == []
             assert rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0].v_model == "x"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------- fix round 1
+def _hanging(monkeypatch):
+    """A validator that hangs until released, recording its calls and
+    whether it ran to the end."""
+    asked, done, release = [], [], asyncio.Event()
+
+    async def fake_validate(gee_interface, project, aoi_fc, **kw):
+        asked.append(kw)
+        await release.wait()
+        done.append(kw)
+        return {"fields": {"name": kw["name"]}, "coverage": _cov(1.0)}
+
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    monkeypatch.setattr(sm, "validate_custom", fake_validate)
+    monkeypatch.setattr(sm.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    return asked, done, release
+
+
+def _dialog_cancel(rc):
+    """The dialog's own Cancel (the TaskButtonComponent's Cancel has a spinner)."""
+    [btn] = [b for b in rc.find(v.Btn).widgets if t("common.cancel") in b.children
+             and not any(isinstance(c, v.ProgressCircular) for c in b.children)]
+    return btn
+
+
+@pytest.mark.parametrize("close", ["esc", "cancel"])
+def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
+    """use_task does not cancel on unmount: closing the dialog must stop the
+    check, or it adds the source the user cancelled."""
+    asked, done, release = _hanging(monkeypatch)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "late")
+            await asyncio.sleep(0.05)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: len(asked) == 1)
+            # the fields are frozen while their values are checked
+            assert rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0].disabled is True
+            assert rc.find(v.RadioGroup).widgets[0].disabled is True  # the format presets
+            if close == "esc":
+                rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
+            else:
+                _dialog_cancel(rc).fire_event("click", None)
+            assert open_.value is False
+            release.set()
+            await asyncio.sleep(0.1)
+            assert added == [] and saved == [] and done == []  # cancelled at its await
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_check_that_ends_after_the_dialog_closed_adds_nothing(monkeypatch):
+    """The second guard: a check the unmount could not cancel (it got past
+    its last await) does not call back once the dialog is closed."""
+    import solara.tasks
+
+    asked, done, release = _hanging(monkeypatch)
+    monkeypatch.setattr(solara.tasks.TaskAsyncio, "cancel", lambda self: None)  # the unmount cannot stop it
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "late")
+            await asyncio.sleep(0.05)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: len(asked) == 1)
+            rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
+            release.set()
+            assert await _settle(lambda: done)  # the check ran to its end...
+            await asyncio.sleep(0.05)
+            assert added == [] and saved == []  # ...and called nothing back
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_aoi_change_during_the_check_refuses_inline(monkeypatch):
+    asked, done, release = _hanging(monkeypatch)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    def _shown():
+        return [w for w in rc.find(v.Html).widgets if t("steps.alerts.err_aoi_changed") in str(w.children)]
+
+    async def main():
+        nonlocal rc
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "moved")
+            await asyncio.sleep(0.05)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: len(asked) == 1)
+            state.update_project("m", lambda live: setattr(
+                live, "aoi", live.aoi.model_copy(update={"digest": "d2"})))
+            release.set()
+            assert await _settle(lambda: bool(_shown()))
+            assert added == [] and open_.value is True
+        finally:
+            rc.close()
+
+    rc = None
+    asyncio.run(main())
+
+
+def test_the_check_waits_for_this_aois_geometry(monkeypatch):
+    """No sidecar and no selection of this AOI yet (remote_facts.aoi_origin
+    is None): an inline error, and nothing is asked of Earth Engine."""
+    asked, done, release = _hanging(monkeypatch)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    state.project.value.aoi = state.project.value.aoi.model_copy(update={"geometry_file": None})
+
+    def _shown():
+        return [w for w in rc.find(v.Html).widgets if t("steps.alerts.err_aoi_not_ready") in str(w.children)]
+
+    async def main():
+        nonlocal rc
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "early")
+            await asyncio.sleep(0.05)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: bool(_shown()))
+            assert asked == [] and added == [] and open_.value is True
+        finally:
+            rc.close()
+
+    rc = None
+    asyncio.run(main())
+
+
+def test_the_sidecar_is_read_off_the_event_loop(monkeypatch):
+    threads = []
+    asked, done, release = _hanging(monkeypatch)
+    release.set()
+    monkeypatch.setattr(sm.aoi_io, "ee_aoi",
+                        lambda result, pdir: threads.append(threading.current_thread()) or "AOI")
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "side")
+            await asyncio.sleep(0.05)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            assert len(threads) == 1 and threads[0] is not threading.main_thread()
+            assert [a[0] for a in added] == [{"name": "side"}]
         finally:
             rc.close()
 
