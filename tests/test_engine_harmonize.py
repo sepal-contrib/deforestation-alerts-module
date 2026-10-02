@@ -67,3 +67,20 @@ def test_tiles_give_the_same_pixels_as_strips(tmp_path, monkeypatch):
             rasterio.open(tmp_path / "strips.tif") as c:
         assert (a.read() == b.read()).all() and (a.read() == c.read()).all()
     assert s1 == s2 == s3
+
+
+def test_date_stats_count_only_pixels_inside_the_aoi(tmp_path):
+    """Review A M9: the date stats come after the AOI clip. An extreme date
+    only outside the AOI (columns 35:), with no mask to remove it, must not
+    reach ``date_max``."""
+    alert = np.zeros((GRID.height, GRID.width), "int32")
+    alert[0:20, :] = 1
+    dates = np.where(alert > 0, 2026001, 0)
+    dates[0:5, 0:5] = 2026020
+    dates[5:10, 36:38] = 2026300  # outside the AOI only
+    raw = _write(tmp_path / "raw.tif", alert, dates)
+    aoi = np.ones_like(alert)
+    aoi[:, 35:] = 0
+    stats = hz.harmonize(raw, [], tmp_path / "h.tif", GRID, aoi_raster=_write(tmp_path / "aoi.tif", aoi))
+    assert (stats["date_min"], stats["date_max"]) == (2026001, 2026020)
+    assert stats["alert_pixels"] == stats["alert_pixels_unmasked"] == 20 * 35
