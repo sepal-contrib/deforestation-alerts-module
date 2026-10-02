@@ -1,16 +1,12 @@
 {
   "common": {
     "save": "Guardar",
-    "load": "Cargar",
     "cancel": "Cancelar",
     "create": "Crear",
-    "remove": "Quitar",
     "replace": "Reemplazar",
     "delete": "Eliminar",
     "close": "Cerrar",
     "actions": "Acciones",
-    "advanced": "Avanzado",
-    "new": "Nuevo",
     "_test_fmt": "hola {name}",
     "_test": {
       "one": "{count} elemento",

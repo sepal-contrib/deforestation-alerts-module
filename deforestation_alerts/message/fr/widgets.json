@@ -1,16 +1,12 @@
 {
   "common": {
     "save": "Enregistrer",
-    "load": "Charger",
     "cancel": "Annuler",
     "create": "Créer",
-    "remove": "Retirer",
     "replace": "Remplacer",
     "delete": "Supprimer",
     "close": "Fermer",
     "actions": "Actions",
-    "advanced": "Avancé",
-    "new": "Nouveau",
     "_test_fmt": "bonjour {name}",
     "_test": {
       "one": "{count} élément",

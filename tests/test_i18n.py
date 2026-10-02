@@ -355,3 +355,17 @@ def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
         assert old not in text and button in text, key
     first, _, last = i18n.tn("steps.prepare.run_all", 3).partition("3")
     assert button == f"{first}…{last}"
+
+
+def test_every_catalogue_file_keeps_one_layout():
+    """One layout (2-space indent, UTF-8 text) so a scripted edit is a no-op diff."""
+    from pathlib import Path
+
+    for path in sorted(Path(i18n.MESSAGES_DIR).glob("*/*.json")):
+        text = path.read_text(encoding="utf-8")
+        assert text == json.dumps(json.loads(text), indent=2, ensure_ascii=False) + "\n", path.name
+
+
+def test_unused_keys_are_pruned():
+    for key in ("common.advanced", "common.load", "common.new", "common.remove", "steps.project.open"):
+        assert not i18n.has_message(key), key

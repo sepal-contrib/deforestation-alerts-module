@@ -1,16 +1,12 @@
 {
   "common": {
     "save": "Save",
-    "load": "Load",
     "cancel": "Cancel",
     "create": "Create",
-    "remove": "Remove",
     "replace": "Replace",
     "delete": "Delete",
     "close": "Close",
     "actions": "Actions",
-    "advanced": "Advanced",
-    "new": "New",
     "_test_fmt": "hello {name}",
     "_test": {
       "one": "{count} item",
