@@ -32,12 +32,6 @@
       "status_not_covered": "no cubierta",
       "status_unchecked": "sin comprobar"
     },
-    "artifact_name": {
-      "label": "Nombre",
-      "required": "Obligatorio.",
-      "saved_as": "Se guardará como '{key}'.",
-      "exists_warning": "'{key}' ya existe — crearlo lo reemplazará."
-    },
     "creation_dialog": {
       "replace_title": "¿Reemplazar el existente?",
       "replace_message": "'{key}' ya existe y será reemplazado. ¿Continuar?"
