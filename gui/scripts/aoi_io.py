@@ -70,6 +70,18 @@ def gdf_bounds(gdf) -> tuple:
     return tuple(float(v) for v in gdf.to_crs(epsg=4326).total_bounds)
 
 
+def apply_aoi(p, record: AoiRecord) -> list:
+    """Set a new AOI (spec §6.1): the grid goes (it is derived from the AOI
+    bounds) and every artifact record is dropped. Returns the files to delete
+    once the change is published. Coverage records are keyed by AOI digest, so
+    they go stale by themselves."""
+    from deforestation_alerts.project.cleanup import drop_artifacts
+
+    p.aoi = record
+    p.grid = None
+    return drop_artifacts(p, list(p.artifacts))
+
+
 def stage_sidecar(pdir: Path, gdf) -> Path:
     """Write the sidecar to a temporary name in ``pdir``; the caller moves it
     into place (``os.replace``) once the project accepted the AOI."""

@@ -20,7 +20,7 @@ from pysepal.solara.components.aoi import AoiView
 from pysepal.solara.components.aoi.aoi_spec import AoiSpec
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import cleanup, paths
 from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.store.project_writers import writing
@@ -114,6 +114,8 @@ def AoiStep(app_state, map_, gee_interface):
             with writing(name):
                 staged = await asyncio.to_thread(aoi_io.stage_sidecar, pdir, gdf)
 
+        gone = []
+
         def _apply(live):
             if staged is not None:
                 os.replace(staged, pdir / paths.AOI_SIDECAR)
@@ -121,9 +123,7 @@ def AoiStep(app_state, map_, gee_interface):
                 # An Earth Engine AOI has no sidecar. Drop the previous AOI's,
                 # or ee_aoi's fallback would clip downloads to the old geometry.
                 (pdir / paths.AOI_SIDECAR).unlink(missing_ok=True)
-            live.aoi = record
-            live.grid = None  # the grid is derived from the AOI bounds
-            live.artifacts = {}
+            gone.extend(aoi_io.apply_aoi(live, record))
 
         try:
             applied = app_state.update_project(name, _apply)
@@ -132,6 +132,7 @@ def AoiStep(app_state, map_, gee_interface):
                 staged.unlink(missing_ok=True)  # refused: the project keeps its own sidecar
         if not applied:
             return  # switched or closed while the sidecar was written
+        await asyncio.to_thread(cleanup.delete_files, pdir, gone)
         app_state.aoi_result.set(result)
         notifications.success(t("steps.aoi.saved", name=record.name))
 

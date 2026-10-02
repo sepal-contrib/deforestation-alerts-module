@@ -6,11 +6,12 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.fingerprint import harm_key
 from deforestation_alerts.engine.plan import plan_prepare
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import add_predefined_source, remove_source
 from gui.i18n import t
 from gui.scripts import aoi_io, catalogue_meta, raster_map
 from gui.store import workflow_steps
+from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.product_table import ProductTable
 from gui.widget.source_modal import SourceModal
@@ -45,9 +46,19 @@ def AlertsStep(app_state, map_, gee_interface, layers):
 
     def _delete():
         name = pending_delete
-        layers.hide(f"src:{name}")
-        app_state.update_project(p.name, lambda live: remove_source(live, name))
         set_pending_delete(None)
+        if is_writing(p.name):
+            notifications.warning(t("steps.alerts.delete_busy"))
+            return
+        layers.hide(f"src:{name}")
+        gone = []
+
+        def _apply(live):
+            gone.extend(cleanup.drop_artifacts(live, cleanup.source_artifact_keys(live, name)))
+            remove_source(live, name)
+
+        if app_state.update_project(p.name, _apply):
+            cleanup.delete_files(paths.project_dir(p.name), gone)
 
     def _toggle(name):
         key = f"src:{name}"

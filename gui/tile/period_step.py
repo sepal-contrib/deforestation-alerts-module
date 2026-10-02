@@ -12,7 +12,7 @@ import reacton.ipyvuetify as rv
 import solara
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.engine.fingerprint import harm_key, raw_key
+from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import Period, period_id
 from gui.i18n import t
 from gui.store import workflow_steps
@@ -22,47 +22,38 @@ def _has_sets(p, pid) -> bool:
     return any(s.period_id == pid for s in p.alert_sets.values())
 
 
-def _drop_period_artifacts(p, old_period_id: str) -> None:
-    """The replaced period's raw/harmonized manifest records are unreachable
-    once its id is gone from ``p.periods`` (ruling #69 on the Task 17
-    pre-flight): drop them so the manifest doesn't accumulate orphans. The
-    files themselves stay on disk (nothing downstream references them, and a
-    project can only reach this branch while the period has no alert set).
-    The dict is replaced, not mutated: the published snapshots share it."""
-    gone = set()
-    for source in p.sources:
-        gone.update((raw_key(old_period_id, source), harm_key(old_period_id, source)))
-    p.artifacts = {k: a for k, a in p.artifacts.items() if k not in gone}
-
-
-def apply_period(p, start: str, end: str, look_back) -> Optional[str]:
-    """Validate and, only on success, mutate ``p`` in place. Returns an error
-    key (``bad_date``, ``order``, ``bad_look_back``, ``locked``) or None."""
+def apply_period(p, start: str, end: str, look_back) -> tuple[Optional[str], list[str]]:
+    """Validate and, only on success, mutate ``p`` in place. Returns
+    ``(error_key, files_to_delete)``: ``error_key`` is one of ``bad_date``,
+    ``order``, ``bad_look_back``, ``locked``, or None on success;
+    ``files_to_delete`` is the replaced period's raw/harmonized artifact
+    files (empty on error, or when the period is only edited in place)."""
     try:
         a, b = date.fromisoformat(str(start)), date.fromisoformat(str(end))
     except ValueError:
-        return "bad_date"
+        return "bad_date", []
     if b <= a:  # spec §6.4: "checks end > start"
-        return "order"
+        return "order", []
     try:
         lb = int(look_back)
     except (TypeError, ValueError):
-        return "bad_look_back"
+        return "bad_look_back", []
     if lb < 0:
-        return "bad_look_back"
+        return "bad_look_back", []
     new_id = period_id(a, b)
     current = p.active_period
     if current and current != new_id and _has_sets(p, current):
-        return "locked"
+        return "locked", []
+    gone = []
     periods = dict(p.periods)  # replaced, not mutated: the published snapshots share it
     if current and current != new_id:
         periods.pop(current, None)
-        _drop_period_artifacts(p, current)
+        gone = cleanup.drop_artifacts(p, cleanup.period_artifact_keys(p, current))
     periods[new_id] = Period(id=new_id, start=a, end=b)
     p.periods = periods
     p.active_period = new_id
     p.look_back_days = lb
-    return None
+    return None, gone
 
 
 def default_dates(p, today: date) -> tuple:
@@ -110,22 +101,25 @@ def _PeriodForm(app_state):
         # neither mutate the live project nor publish/autosave. `deep=True`
         # matters here -- a shallow copy shares the `periods`/`artifacts`
         # dicts with the live project, so apply_period's in-place pop/assign
-        # would corrupt the live project even while only "checking".
-        trial_error = apply_period(p.model_copy(deep=True), start, end, look_back)
+        # would corrupt the live project even while only "checking". The dry
+        # run's own files-to-delete are ignored: nothing was actually dropped.
+        trial_error, _ = apply_period(p.model_copy(deep=True), start, end, look_back)
         if trial_error:
             notifications.error(t(f"steps.period.error_{trial_error}"))
             return
 
-        errors = []
+        results = []
 
         def _apply(live):
-            errors.append(apply_period(live, start, end, look_back))
+            results.append(apply_period(live, start, end, look_back))
 
         if not app_state.update_project(p.name, _apply):
             return  # the project was closed or switched meanwhile
-        if errors[0]:
-            notifications.error(t(f"steps.period.error_{errors[0]}"))
+        error, gone = results[0]
+        if error:
+            notifications.error(t(f"steps.period.error_{error}"))
         else:
+            cleanup.delete_files(paths.project_dir(p.name), gone)
             notifications.success(t("steps.period.saved"))
 
     period = workflow_steps.active_period(p)

@@ -38,7 +38,8 @@ def _p_with_source(name="d"):
 
 def test_apply_creates_and_activates_the_period():
     p = _p()
-    assert apply_period(p, "2026-01-01", "2026-01-31", 90) is None
+    err, gone = apply_period(p, "2026-01-01", "2026-01-31", 90)
+    assert err is None and gone == []
     assert p.active_period == "2026-01-01_2026-01-31"
     assert p.periods[p.active_period].end == date(2026, 1, 31)
 
@@ -46,7 +47,8 @@ def test_apply_creates_and_activates_the_period():
 def test_editing_replaces_a_period_without_sets():
     p = _p()
     apply_period(p, "2026-01-01", "2026-01-31", 90)
-    assert apply_period(p, "2026-02-01", "2026-02-28", 30) is None
+    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 30)
+    assert err is None and gone == []
     assert list(p.periods) == ["2026-02-01_2026-02-28"] and p.look_back_days == 30
 
 
@@ -63,7 +65,8 @@ def test_apply_period_replaces_the_shared_containers_instead_of_mutating_them():
     periods_being_iterated = iter(snapshot.periods.values())
     artifacts_being_iterated = iter(snapshot.artifacts.values())
 
-    assert apply_period(p, "2026-02-01", "2026-02-28", 30) is None
+    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 30)
+    assert err is None and gone == ["r.tif"]
 
     assert [per.id for per in periods_being_iterated] == [jan]  # no "dictionary changed size during iteration"
     assert len(list(artifacts_being_iterated)) == 1
@@ -73,9 +76,9 @@ def test_apply_period_replaces_the_shared_containers_instead_of_mutating_them():
 
 def test_validation_errors():
     p = _p()
-    assert apply_period(p, "nope", "2026-01-31", 90) == "bad_date"
-    assert apply_period(p, "2026-02-01", "2026-01-31", 90) == "order"
-    assert apply_period(p, "2026-01-01", "2026-01-31", -1) == "bad_look_back"
+    assert apply_period(p, "nope", "2026-01-31", 90) == ("bad_date", [])
+    assert apply_period(p, "2026-02-01", "2026-01-31", 90) == ("order", [])
+    assert apply_period(p, "2026-01-01", "2026-01-31", -1) == ("bad_look_back", [])
 
 
 def test_a_period_with_sets_is_locked():
@@ -84,7 +87,7 @@ def test_a_period_with_sets_is_locked():
     p.alert_sets["s"] = AlertSet(id="s", period_id=p.active_period, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
                                  params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
                                  footprint_rel_path="f", fingerprint="f", created_at=datetime.now())
-    assert apply_period(p, "2026-02-01", "2026-02-28", 90) == "locked"
+    assert apply_period(p, "2026-02-01", "2026-02-28", 90) == ("locked", [])
 
 
 def test_default_dates():
@@ -103,7 +106,7 @@ def test_end_equal_to_start_is_an_order_error():
     """Spec §6.4: 'checks end > start' -- a same-day period is rejected, not
     silently accepted as a one-day window."""
     p = _p()
-    assert apply_period(p, "2026-01-01", "2026-01-01", 90) == "order"
+    assert apply_period(p, "2026-01-01", "2026-01-01", 90) == ("order", [])
 
 
 def test_replacing_a_period_drops_its_raw_and_harmonized_artifact_records():
@@ -122,8 +125,10 @@ def test_replacing_a_period_drops_its_raw_and_harmonized_artifact_records():
         inputs={}, content_id="c2", created_at=datetime.now(),
     )
 
-    assert apply_period(p, "2026-02-01", "2026-02-28", 90) is None
+    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 90)
 
+    assert err is None
+    assert sorted(gone) == sorted(["raw.tif", "harm.tif"])
     assert raw_key(old_id, "RADD") not in p.artifacts
     assert harm_key(old_id, "RADD") not in p.artifacts
 
@@ -139,10 +144,43 @@ def test_editing_the_same_dates_keeps_its_own_artifact_records():
         inputs={}, content_id="c1", created_at=datetime.now(),
     )
 
-    assert apply_period(p, "2026-01-01", "2026-01-31", 30) is None
+    err, gone = apply_period(p, "2026-01-01", "2026-01-31", 30)
+    assert err is None and gone == []
 
     assert raw_key(pid, "RADD") in p.artifacts
     assert p.look_back_days == 30
+
+
+def test_apply_period_returns_the_replaced_periods_files_for_save_to_delete(tmp_path):
+    """Task 8: apply_period's second return value is the replaced period's
+    raw/harmonized artifact files; ``_save``'s path (``cleanup.delete_files``)
+    must remove them from disk once the update has been published."""
+    from deforestation_alerts.project import cleanup
+
+    p = _p_with_source("RADD")
+    apply_period(p, "2026-01-01", "2026-01-31", 90)
+    old_id = p.active_period
+    pdir = tmp_path
+    raw_rel, harm_rel = "raw.tif", "harm.tif"
+    (pdir / raw_rel).write_bytes(b"x")
+    (pdir / harm_rel).write_bytes(b"x")
+    p.artifacts[raw_key(old_id, "RADD")] = Artifact(
+        key=raw_key(old_id, "RADD"), kind="raw_alert", rel_path=raw_rel, fingerprint="f",
+        inputs={}, content_id="c1", created_at=datetime.now(),
+    )
+    p.artifacts[harm_key(old_id, "RADD")] = Artifact(
+        key=harm_key(old_id, "RADD"), kind="harmonized", rel_path=harm_rel, fingerprint="f",
+        inputs={}, content_id="c2", created_at=datetime.now(),
+    )
+
+    err, gone = apply_period(p, "2026-02-01", "2026-02-28", 90)
+    assert err is None
+    assert sorted(gone) == sorted([raw_rel, harm_rel])
+
+    cleanup.delete_files(pdir, gone)
+
+    assert not (pdir / raw_rel).exists()
+    assert not (pdir / harm_rel).exists()
 
 
 # ---------------------------------------------------------------------------

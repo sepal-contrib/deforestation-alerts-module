@@ -347,7 +347,8 @@ def _edit(change):
     from gui.tile.period_step import apply_period
 
     def period(live):
-        assert apply_period(live, "2026-02-01", "2026-02-28", 30) is None
+        err, _ = apply_period(live, "2026-02-01", "2026-02-28", 30)
+        assert err is None
 
     def aoi(live):  # AoiStep's _apply
         live.aoi = live.aoi.model_copy(update={"digest": "moved"})

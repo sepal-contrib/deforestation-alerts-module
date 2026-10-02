@@ -28,7 +28,7 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.engine import catalogue
-from deforestation_alerts.engine.fingerprint import Status, harm_key
+from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
@@ -337,6 +337,86 @@ def test_delete_flow_hides_the_layer_and_removes_the_source(monkeypatch, tmp_pat
         assert layers.on.value == frozenset()
         assert "src:RADD" in map_.removed
         assert confirm_calls[-1]["open"] is False  # pending_delete reset
+    finally:
+        rc.close()
+
+
+def test_delete_removes_the_sources_artifacts_and_their_files(monkeypatch, tmp_path):
+    """Task 8: confirming a source delete drops its raw/harmonized artifact
+    records (through ``cleanup.source_artifact_keys``/``drop_artifacts``) and
+    deletes their files from disk, not only the source definition."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
+                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
+    table_calls, confirm_calls = _stub_children(monkeypatch)
+
+    p = _project_with_source()
+    per = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+    p.periods[per.id] = per
+    p.active_period = per.id
+    pdir = paths.project_dir(p.name)
+    raw_rel, harm_rel = "periods/x/raw/radd.tif", "periods/x/harmonized/radd.tif"
+    (pdir / raw_rel).parent.mkdir(parents=True, exist_ok=True)
+    (pdir / raw_rel).write_bytes(b"x")
+    (pdir / harm_rel).parent.mkdir(parents=True, exist_ok=True)
+    (pdir / harm_rel).write_bytes(b"x")
+    p.artifacts[raw_key(per.id, "RADD")] = Artifact(
+        key=raw_key(per.id, "RADD"), kind="raw_alert", rel_path=raw_rel, fingerprint="f",
+        inputs={}, content_id="c1", created_at=datetime.now(),
+    )
+    p.artifacts[harm_key(per.id, "RADD")] = Artifact(
+        key=harm_key(per.id, "RADD"), kind="harmonized", rel_path=harm_rel, fingerprint="f",
+        inputs={}, content_id="c2", created_at=datetime.now(),
+    )
+
+    state = _app_state(p)
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+
+    box, rc = _render(state, map_, object(), layers)
+    try:
+        delete = table_calls[-1]["rows"][0]["actions"][1]["on_click"]
+        delete()
+        confirm_calls[-1]["on_confirm"]()
+
+        assert state.project.value.sources == {}
+        assert state.project.value.artifacts == {}
+        assert not (pdir / raw_rel).exists()
+        assert not (pdir / harm_rel).exists()
+    finally:
+        rc.close()
+
+
+def test_delete_is_refused_while_a_writer_runs(monkeypatch, tmp_path):
+    """Ruling (c): the ``is_writing`` refusal is deliberately wider than "a
+    Download & harmonize job" -- an Integrate reading the source's harmonized
+    files must not lose them either while deleting it."""
+    from gui.store.project_writers import writing
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
+                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
+    table_calls, confirm_calls = _stub_children(monkeypatch)
+
+    p = _project_with_source()
+    state = _app_state(p)
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+
+    box, rc = _render(state, map_, object(), layers)
+    try:
+        delete = table_calls[-1]["rows"][0]["actions"][1]["on_click"]
+        delete()
+
+        bus = get_current_bus()
+        with writing(p.name):
+            confirm_calls[-1]["on_confirm"]()
+
+        assert state.project.value.sources == {"RADD": state.project.value.sources["RADD"]}
+        warnings = [toast for toast in bus.toasts.value if toast.type.value == "warning"]
+        assert warnings and warnings[-1].message == t("steps.alerts.delete_busy")
     finally:
         rc.close()
 
