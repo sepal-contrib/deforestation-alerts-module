@@ -45,6 +45,10 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/scripts/mosaics_helper.py", "ValueError", "The input GeoJSON has no features"),
     ("deforestation_alerts/scripts/mosaics_helper.py", "ValueError", "must be a MultiPolygon or Polygon"),
     ("deforestation_alerts/scripts/mosaics_helper.py", "ValueError", "must be a list of dictionaries"),
+    # scene_query: the loader's own mode/manifest contract, not reachable from the UI
+    ("deforestation_alerts/scripts/scene_query.py", "ValueError", "needs a manifest"),
+    ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to widen"),
+    ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to fetch for mode"),
 }
 
 
