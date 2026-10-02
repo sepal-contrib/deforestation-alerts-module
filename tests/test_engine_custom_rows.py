@@ -248,3 +248,72 @@ def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_p
     p.coverage = {"tif": SourceCoverage(aoi_digest="g", checked_on=date(2026, 10, 1), fraction=0.0)}
     assert plan_prepare(p, tmp_path, JAN)[0].raw is fp.Status.CURRENT
     assert not integrate_step.unlocked(p)
+
+
+def _ee_source(p, native=NativeGrid(crs="EPSG:4326", scale=10.0)):
+    return add_custom_source(p, name="ee radd", origin="gee", ref="users/x/radd", asset_type="IMAGE", format="radd",
+                             date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=native)
+
+
+@pytest.mark.parametrize("record, state", [
+    (None, "unchecked"),
+    (SourceCoverage(aoi_digest="g", checked_on=date(2026, 10, 1), fraction=0.0), "not_covered"),
+])
+def test_an_uncovered_custom_earth_engine_source_is_refused_before_its_image_is_built(tmp_path, monkeypatch,
+                                                                                       record, state):
+    """An empty match would give Earth Engine's opaque "no bands" error: the
+    coverage guard refuses the row before the image is built or downloaded."""
+    def never(*a, **k):
+        raise AssertionError("the custom image was built or downloaded")
+
+    monkeypatch.setattr(runner.catalogue, "build_custom_image", never)
+    monkeypatch.setattr(runner, "export_native", never)
+    monkeypatch.setattr(runner, "ensure_free_space", never)
+    p = _project(tmp_path)
+    _ee_source(p)
+    if record is not None:
+        p.coverage = {"ee radd": record}
+    with pytest.raises(runner.CoverageRefused) as e:
+        runner.run_source_row(_job(p, tmp_path, "ee radd"))
+    assert e.value.state == state and not list(tmp_path.rglob("*.tif*"))
+
+
+@pytest.mark.parametrize("edit", [
+    {"band_map": BandMap(alert=2, date=1)},
+    {"format": "ccdc", "date_encoding": "decimal_year"},
+], ids=["band_map", "format"])
+def test_editing_a_custom_source_makes_its_raw_row_stale(tmp_path, cover, no_ee, edit):
+    p = _project(tmp_path)
+    src = _file_source(p, tmp_path)
+    cover(p, "tif")
+    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    assert plan_prepare(p, tmp_path, JAN)[0].raw is fp.Status.CURRENT
+    p.sources = {**p.sources, "tif": src.model_copy(update=edit)}
+    row = plan_prepare(p, tmp_path, JAN)[0]
+    assert row.raw is fp.Status.STALE and row.needs_run and not row.ready
+
+
+def test_a_custom_source_without_its_native_grid_is_a_clear_row_error(tmp_path, cover, no_ee, monkeypatch):
+    monkeypatch.setattr(runner, "ensure_free_space", lambda folder, needed: None)
+    p = _project(tmp_path)
+    _ee_source(p, native=None)
+    cover(p, "ee radd")
+    with pytest.raises(ValueError, match="native grid is unknown"):
+        runner.run_source_row(_job(p, tmp_path, "ee radd"))
+    assert no_ee == []
+
+
+def test_missing_glad_l_metadata_is_reported_before_the_free_space_gates(tmp_path, cover, no_ee, monkeypatch):
+    """A NotEnoughSpaceError must not hide the metadata error."""
+    from deforestation_alerts.engine.raster_io import NotEnoughSpaceError
+
+    def full(folder, needed):
+        raise NotEnoughSpaceError("needs 1 GB free")
+
+    monkeypatch.setattr(runner, "ensure_free_space", full)
+    p = _project(tmp_path)
+    add_predefined_source(p, "GLAD-L")
+    cover(p, "GLAD-L")
+    with pytest.raises(ValueError, match="metadata"):
+        runner.run_source_row(_job(p, tmp_path, "GLAD-L"))
+    assert no_ee == []

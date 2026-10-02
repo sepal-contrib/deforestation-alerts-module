@@ -141,11 +141,13 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     harmonize (when the harmonized file is not current) one source for one
     period. Returns the artifacts written, keyed like ``project.artifacts``.
 
-    The row's coverage is read first: a blocked row raises ``CoverageRefused``
-    and a custom GeoTIFF that is gone ``FileNotFoundError``, before anything
-    else. Everything the harmonize step needs (the masks, the free space, a
-    GeoTIFF's AOI raster) is checked or built before a download starts, so a
-    row that cannot finish fails before hours of downloading. Each free-space
+    The row's coverage is read first: a blocked row raises ``CoverageRefused``,
+    a custom source without its native grid ``ValueError``, a custom GeoTIFF
+    that is gone ``FileNotFoundError``, and a GLAD-L download without its
+    catalogue metadata ``ValueError``, before anything else. Everything the
+    harmonize step needs (the masks, the free space, a GeoTIFF's AOI raster)
+    is checked or built before a download starts, so a row that cannot finish
+    fails before hours of downloading. Each free-space
     check asks for twice the file's compressed size estimate
     (``raster_io.compressed_estimate``): the ``.part`` and the old file it
     replaces. If harmonizing still fails after a download or an AOI-raster
@@ -159,6 +161,8 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     state, notes = window_coverage(record_for(p, job.source), job.source, win_start, win_end)
     if state in BLOCKED:
         raise CoverageRefused(job.source, state, notes)
+    if src.kind == "custom" and src.native is None:
+        raise ValueError(f"{job.source}: its native grid is unknown; edit the source")
     missing = user_file_missing(src)
     if missing:
         raise FileNotFoundError(f"file not found: {missing}")
@@ -169,6 +173,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
 
     raw_in = raw_alert_inputs(p, job.source, period)
     downloading = job.force or status(p, pdir, rkey, raw_in) in (Status.MISSING, Status.STALE)
+    # Before the AOI raster and the free-space gates, so a NotEnoughSpaceError cannot hide it.
+    if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
+        raise ValueError("GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment")
     # Every precondition of the harmonize is checked before a download (spec §7.3).
     if not _masks_ready(p):
         raise RuntimeError(f"{job.source}: an enabled mask has not been downloaded yet")
@@ -182,10 +189,6 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
         # A download is always followed by a harmonize: check its room now too.
         ensure_free_space(harm_path.parent, _harmonize_space(p))
         if src.kind == "predefined":
-            if src.catalogue_key == "GLAD-L" and job.meta is None:
-                raise ValueError(
-                    "GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment"
-                )
             image = catalogue.build_image(src.catalogue_key, win_start, win_end, job.aoi, job.meta or {})
             export_native(image, src.catalogue_key, job.aoi, raw_path, on_tiles=on_tiles, on_wait=on_wait)
         elif src.origin == "gee":
