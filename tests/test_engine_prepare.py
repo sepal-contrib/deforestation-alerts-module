@@ -340,7 +340,8 @@ def test_harmonize_keep_and_exclude_masks(tmp_path):
     excl[0:5, :] = 1  # plantations: drop the top 5 rows
     km = _write(tmp_path / "keep.tif", keep, count=1)
     em = _write(tmp_path / "excl.tif", excl, count=1)
-    out = hz.harmonize(raw, [(km, "keep"), (em, "exclude")], tmp_path / "h.tif", GRID)
+    hz.harmonize(raw, [(km, "keep"), (em, "exclude")], tmp_path / "h.tif", GRID)
+    out = tmp_path / "h.tif"
     with rasterio.open(out) as src:
         alert, dates = src.read(1), src.read(2)
     assert alert[7, 3] == 1 and dates[7, 3] == 2026001  # inside keep, outside exclude
@@ -357,8 +358,9 @@ def test_harmonized_file_meets_the_raster_contract(tmp_path):
     with raster_io.write_grid_raster(raw, grid, count=2) as dst:
         dst.write(alert.astype("int32"), 1)
         dst.write(dates.astype("int32"), 2)
-    out = hz.harmonize(raw, [], tmp_path / "h.tif", grid)
-    assert out == tmp_path / "h.tif" and not (tmp_path / "h.tif.part").exists()
+    hz.harmonize(raw, [], tmp_path / "h.tif", grid)
+    out = tmp_path / "h.tif"
+    assert not (tmp_path / "h.tif.part").exists()
     raster_io.check_header(out, grid)
     with rasterio.open(out) as src:
         assert src.dtypes == ("int32", "int32") and src.nodata == 0

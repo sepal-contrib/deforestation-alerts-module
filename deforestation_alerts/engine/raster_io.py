@@ -56,6 +56,17 @@ def row_windows(grid: GridSpec, rows: int = 2048) -> Iterator[Window]:
         yield Window(0, row0, grid.width, min(rows, grid.height - row0))
 
 
+#: Window size of the mask and harmonize passes (spec §7.3): full-width
+#: 2048-row strips held about 3 GB per mask at national 10 m.
+TILE = 2048
+
+
+def tile_windows(grid: GridSpec, size: int = TILE) -> Iterator[Window]:
+    for row0 in range(0, grid.height, size):
+        for col0 in range(0, grid.width, size):
+            yield Window(col0, row0, min(size, grid.width - col0), min(size, grid.height - row0))
+
+
 def _overview_levels(width: int, height: int) -> list[int]:
     levels, f = [], 2
     while max(width, height) / f >= 256:

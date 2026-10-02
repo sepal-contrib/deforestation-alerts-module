@@ -155,7 +155,8 @@ def test_the_engine_runs_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly
 
     # harmonize: align the native raw onto the grid, mask it, nearest overviews
     raw = _native_raw(out / "raw.tif", grid)
-    harm = harmonize(raw, [(out / "mask.tif", "keep")], out / "harmonized.tif", grid)
+    harmonize(raw, [(out / "mask.tif", "keep")], out / "harmonized.tif", grid)
+    harm = out / "harmonized.tif"
     raster_io.check_header(harm, grid)
     with rasterio.open(harm) as src:
         alert, dates = src.read(1), src.read(2)
