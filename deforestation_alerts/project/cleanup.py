@@ -32,6 +32,25 @@ def delete_files(pdir, rel_paths: Iterable[str]) -> None:
         path.with_name(path.name + ".ovr").unlink(missing_ok=True)
 
 
+def delete_orphans(pdir, rel_paths: Iterable[str]) -> None:
+    """Delete files no record names, then the folders under ``pdir`` that
+    held only them (a set folder, a removed period's folder). Only empty
+    folders go: whatever else is in one keeps it."""
+    rel_paths = [rel for rel in rel_paths if rel]
+    if not rel_paths:
+        return
+    delete_files(pdir, rel_paths)
+    pdir = Path(pdir)
+    for rel in rel_paths:
+        folder = (pdir / rel).parent
+        while folder != pdir and pdir in folder.parents:
+            try:
+                folder.rmdir()
+            except OSError:  # not empty (or already gone with a sibling's): stop there
+                break
+            folder = folder.parent
+
+
 def source_artifact_keys(p: Project, name: str) -> list[str]:
     return [k for pid in p.periods for k in (raw_key(pid, name), harm_key(pid, name)) if k in p.artifacts]
 

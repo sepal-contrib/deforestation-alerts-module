@@ -178,6 +178,15 @@ def _result(n):
     return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={})
 
 
+def _swapped_in(pdir, result):
+    """Write the files a run swaps in: its artifacts and the set's tiles."""
+    for a in result.artifacts.values():
+        (pdir / a.rel_path).parent.mkdir(parents=True, exist_ok=True)
+        (pdir / a.rel_path).write_bytes(b"x")
+    (pdir / SET_DIR / "alerts.pmtiles").write_bytes(b"x")
+    return result
+
+
 def _tiles(monkeypatch, available=True, fail=None):
     """Stub the tile build; returns the list of (alerts, out_path) it was asked for."""
     built = []
@@ -391,13 +400,14 @@ def test_a_set_is_not_recorded_when_the_period_aoi_or_grid_changed_during_the_ru
 
     def fake_run(job, on_step=None):
         assert state.update_project("d", _edit(change))
-        return _result(2)
+        return _swapped_in(tmp_path / "d", _result(2))
 
     monkeypatch.setattr(integrate_jobs, "run_integration", fake_run)
     _tiles(monkeypatch)
     notifier = _Notifier()
     integrate_jobs.run_integration_job(state, notifier, job)
 
+    assert not (tmp_path / "d" / SET_DIR).exists()  # review A M1: no orphan set folder
     live = state.project.value
     assert live.alert_sets == {} and live.active_set is None and live.artifacts == {} and not live.locked
     assert state.alerts_gdf.value is None and state.current_page_view.value != "analysis_tile"
@@ -416,12 +426,35 @@ def test_a_late_set_is_not_recorded_in_a_saved_project_whose_aoi_or_grid_changed
     _edit(change)(saved)
     io.save_project(saved, root=tmp_path)
     job = _job(pdir=tmp_path / "d", project=_project("d", "GLAD-L"))
-    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: _result(2))
+    monkeypatch.setattr(integrate_jobs, "run_integration",
+                        lambda job, on_step=None: _swapped_in(tmp_path / "d", _result(2)))
     _tiles(monkeypatch, available=False)
 
     integrate_jobs.run_integration_job(AppState(), None, job)
 
     assert io.load_project("d", root=tmp_path).alert_sets == {}
+    assert not (tmp_path / "d" / SET_DIR).exists()
+
+
+def test_a_refused_rerun_keeps_the_files_its_previous_record_names(monkeypatch, tmp_path):
+    """Only a set no record names is an orphan: a refused re-run's files stay
+    under the set's previous record (it reads out of date)."""
+    p = _project("d", "GLAD-L")
+    result = _result(2)
+    p.alert_sets["x"] = result.alert_set
+    p.artifacts = dict(result.artifacts)
+    state = AppState()
+    state.new_project_state(p)
+    job = _job(pdir=tmp_path / "d", project=p.model_copy(deep=True))
+
+    def fake_run(job, on_step=None):
+        assert state.update_project("d", _edit("grid"))
+        return _swapped_in(tmp_path / "d", result)
+
+    monkeypatch.setattr(integrate_jobs, "run_integration", fake_run)
+    _tiles(monkeypatch, available=False)
+    integrate_jobs.run_integration_job(state, None, job)
+    assert (tmp_path / "d" / SET_DIR / "alert_db.parquet").exists()
 
 
 def test_a_late_set_that_cannot_be_recorded_does_not_fail_the_job(monkeypatch, tmp_path, caplog):

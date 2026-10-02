@@ -65,3 +65,17 @@ def test_an_aoi_change_leaves_no_dropped_file(tmp_path):
 
 def test_missing_files_and_empty_paths_are_ignored(tmp_path):
     cleanup.delete_files(tmp_path, ["nope.tif", ""])
+
+
+def test_delete_orphans_removes_the_folders_that_held_only_them(tmp_path):
+    keep = tmp_path / "periods" / "jan" / "raw" / "other.tif"
+    keep.parent.mkdir(parents=True)
+    keep.write_bytes(b"x")
+    for rel in ("periods/jan/sets/s/alert_db.parquet", "periods/jan/sets/s/alerts.pmtiles", "periods/jan/raw/a.tif"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(b"x")
+    cleanup.delete_orphans(tmp_path, ["periods/jan/sets/s/alert_db.parquet", "periods/jan/sets/s/alerts.pmtiles",
+                                      "periods/jan/raw/a.tif", ""])
+    assert not (tmp_path / "periods/jan/sets").exists() and not (tmp_path / "periods/jan/raw/a.tif").exists()
+    assert keep.exists() and tmp_path.exists()
+    cleanup.delete_orphans(None, [])  # nothing to delete: no folder needed

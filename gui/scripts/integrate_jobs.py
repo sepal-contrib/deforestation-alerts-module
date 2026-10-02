@@ -18,8 +18,10 @@ must record it, whatever happens next:
   while the run was going (a project's first Integrate leaves all three
   editable): a set of a period that is gone would be an orphan that locks the
   project for good, and one built on another AOI or grid would freeze a
-  project whose grid is gone. The files the run swapped in stay on disk; the
-  user is told to run again, and the previous record, if any, reads STALE.
+  project whose grid is gone. The user is told to run again. The files the
+  run swapped in are deleted when no record names the set (its first run),
+  with the set folder if nothing else is in it; otherwise they stay under the
+  set's previous record, which reads STALE.
 - An empty set is still recorded, gets no tiles, and stays on the step with an
   info toast (review focus 1, spec §12) that lists each source's outcome, the
   sources left out of the run included (spec §7.4).
@@ -36,6 +38,7 @@ from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.engine.integrate import run_integration
 from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project import io, paths
+from deforestation_alerts.project.cleanup import delete_orphans
 from deforestation_alerts.project.models import AlertSetParams
 from gui.i18n import t
 from gui.scripts import set_store
@@ -165,6 +168,16 @@ def apply_result(project, result) -> None:
     project.active_set = result.alert_set.id
 
 
+def _orphan_files(job, result, project) -> list:
+    """The files a refused run swapped in, when no record of ``project``
+    names its set: its artifacts and its tiles. None when the set has a
+    previous record (those files are that record's paths)."""
+    if result.alert_set.id in project.alert_sets:
+        return []
+    store = paths.resolve(job.pdir, result.alert_set.store_rel_path)
+    return [a.rel_path for a in result.artifacts.values()] + [paths.rel(job.pdir, paths.pmtiles_path(store.parent))]
+
+
 def _build_tiles(job, result, notifier) -> None:
     """Build the set's Overview tiles next to its store; a failure only warns."""
     if not pmt.tippecanoe_available():
@@ -192,12 +205,14 @@ def _record_in_own_project(job, result) -> None:
     """
     name = job.project.name
     root = Path(job.pdir).parent
+    orphans = []
 
     def _apply(own):
         changed = changed_since(job, own)
         if changed is not None:
             logger.warning("set %s is not recorded in project %s: its %s changed during the run",
                            result.alert_set.id, name, changed)
+            orphans.extend(_orphan_files(job, result, own))
             return False  # a removed period would leave an orphan set; another AOI or grid is not this set's
         apply_result(own, result)
 
@@ -205,6 +220,7 @@ def _record_in_own_project(job, result) -> None:
         io.update_saved_project(name, _apply, root=root)
     except Exception:  # noqa: BLE001 - the set's files are written; only the record is lost
         logger.exception("could not record set %s in project %s", result.alert_set.id, name)
+    delete_orphans(job.pdir, orphans)
 
 
 def _publish_alerts(app_state, name: str, result) -> bool:
@@ -269,12 +285,13 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
         if n:
             task.step(t("steps.integrate.step_tiles"))
             _build_tiles(job, result, notifier)
-        changed = []
+        changed, orphans = [], []
 
         def _record(p):
             why = changed_since(job, p)
             if why is not None:
                 changed.append(why)
+                orphans.extend(_orphan_files(job, result, p))
                 raise _ProjectChanged(why)
             apply_result(p, result)
 
@@ -288,6 +305,7 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
         if changed:
             logger.warning("set %s is not recorded in project %s: its %s changed during the run",
                            result.alert_set.id, name, changed[0])
+            delete_orphans(job.pdir, orphans)  # still under writing(name)
             if notifier is not None:
                 notifier.warning(t("steps.integrate.project_changed"))
             return

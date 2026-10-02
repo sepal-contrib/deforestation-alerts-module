@@ -60,7 +60,7 @@ from deforestation_alerts.engine.runner import (
 )
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
-from deforestation_alerts.project.cleanup import delete_files
+from deforestation_alerts.project.cleanup import delete_orphans
 from gui.i18n import t
 from gui.scripts import source_layers
 from gui.scripts.integrate_jobs import run_scope, scope_changed
@@ -123,18 +123,8 @@ def _unnamed_files(p, arts: dict) -> list:
 def _delete_refused(ctx: PrepareContext, rel_paths: list) -> None:
     """Delete a refused row's files, then the folders that held only them.
     Called under the run's ``writing(ctx.name)``."""
-    if not rel_paths:
-        return
-    pdir = Path(ctx.pdir)
-    delete_files(pdir, rel_paths)
-    for rel in rel_paths:
-        folder = (pdir / rel).parent
-        while folder != pdir and pdir in folder.parents:
-            try:
-                folder.rmdir()  # only an empty folder: a period's folder the user removed
-            except OSError:
-                break
-            folder = folder.parent
+    if rel_paths:
+        delete_orphans(ctx.pdir, rel_paths)
 
 
 def _record(ctx: PrepareContext, scope: tuple, arts: dict) -> bool:
