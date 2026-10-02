@@ -3,9 +3,10 @@
 Two registries:
 
 * ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
-  Period → Download & harmonize → Integrate & vectorize → Analysis). Gates and counts read only the Project. Order, labels, gates,
-  lock reasons and per-step output counts derive from it; ``PipelineHeader``
-  and the shell never hand-maintain step numbers.
+  Period → Download & harmonize → Integrate & vectorize → Analysis). Gates
+  and counts read only the Project. Order, labels, gates, lock reasons and
+  per-step output counts derive from it; ``PipelineHeader`` and the shell
+  never hand-maintain step numbers.
 * ``RAIL_ITEMS`` — the three entries on the left rail: About and Project open
   as MapApp dialogs; Overview (``display="panel"``) opens its own view in the
   right panel — outside the workflow, keeping its summary table, exports and
@@ -98,7 +99,8 @@ STEPS: List[StepSpec] = [
              unlocked=lambda p: active_period(p) is not None, lock_reason_key="workflow.lock_prepare",
              count=lambda p: len(_ready(p)),
              count_key_one="workflow.count_ready_one", count_key_other="workflow.count_ready_other"),
-    StepSpec(key="integrate", page_view="integrate_tile", label_key="app.drawer_item.integrate", icon="mdi-vector-union",
+    StepSpec(key="integrate", page_view="integrate_tile", label_key="app.drawer_item.integrate",
+             icon="mdi-vector-union",
              unlocked=lambda p: bool(_ready(p)), lock_reason_key="workflow.lock_integrate",
              count=lambda p: active_set(p).n_alerts if active_set(p) else 0,
              count_key_one="workflow.count_alerts_one", count_key_other="workflow.count_alerts_other"),

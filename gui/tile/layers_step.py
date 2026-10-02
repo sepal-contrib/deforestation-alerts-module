@@ -27,6 +27,18 @@ def LayersStep(app_state, map_, gee_interface, layers):
     modal_open = solara.use_reactive(False)
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
+    # A NICFI layer on the map without a month of its own draws the active
+    # period's last month: a period switch (or a new end) redraws it and its
+    # legend, the way mask legends follow the active period (§7.3). Keyed on
+    # that month only, so a worker publishing the project never runs it.
+    month = vis_layers.period_month(p, date.today()) if p is not None else None
+
+    def _follow_period():
+        live = app_state.project.value
+        if live is not None:
+            vis_layers.refresh_nicfi_layers(layers, map_, live, today=date.today(), notifier=notifications)
+
+    solara.use_effect(_follow_period, [p.name if p is not None else None, month])
     if p is None or p.aoi is None:
         solara.Info(t("workflow.lock_layers"))
         return
@@ -58,9 +70,11 @@ def LayersStep(app_state, map_, gee_interface, layers):
                 layers.hide(key)
             return
         layer = p.vis_layers[name]
-        month = vis_layers.nicfi_month(layer, p, date.today()) if layer.kind == "nicfi" else None
+        shown_month = vis_layers.nicfi_month(layer, p, date.today()) if layer.kind == "nicfi" else None
+        # NICFI: the month is the content id, so a period switch redraws only a changed month
         layers.show(key, vis_layers.builder(map_, layer, key, project=p, aoi_bounds=p.aoi.bounds),
-                    notifier=notifications, legend=legend_specs.vis_legend(key, layer, month=month))
+                    content_id=shown_month, notifier=notifications,
+                    legend=legend_specs.vis_legend(key, layer, month=shown_month))
 
     def _edit(name):
         set_editing(name)

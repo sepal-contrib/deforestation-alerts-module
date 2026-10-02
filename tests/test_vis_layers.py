@@ -320,6 +320,21 @@ def test_nicfi_without_access_is_refused_naming_the_region(requests):
         _check(gee, _with_aoi(), kind="nicfi", name="planet")
 
 
+@pytest.mark.parametrize("text, refused", [
+    ("ImageCollection asset 'projects/planet-nicfi/assets/basemaps/asia' not found "
+     "(does not exist or caller does not have access).", True),
+    ("Caller does not have access to the asset.", True),
+    ("ImageCollection asset 'projects/planet-nicfi/assets/basemaps/asia' not found.", True),
+    ("Request had invalid authentication credentials: access token expired.", False),
+    ("Too many concurrent access requests.", False),
+])
+def test_only_ee_s_no_access_answer_is_a_refusal(text, refused):
+    import ee
+
+    assert vlm._no_access(ee.EEException(text)) is refused
+    assert vlm._no_access(RuntimeError("caller does not have access")) is False  # not an Earth Engine answer
+
+
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
@@ -383,6 +398,27 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
             assert await _settle(lambda: open_.value is False)
             assert saved == [(FileVisLayer(name="height", path=str(tif), band=2, colormap="terrain", min=0, max=45,
                                            show_in_analysis=True), None)]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_kind_change_clears_the_band(monkeypatch):
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+    p = _with_aoi()
+    p.vis_layers = {"ndvi": GeeVisLayer(name="ndvi", asset="users/x/img", bands=["NDVI"], min=0, max=1)}
+    state, open_, saved = _state(p), solara.reactive(True), []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, saved, editing="ndvi"), handle_error=False)
+        try:
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == "NDVI"
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model is None  # no Earth Engine band name
+            _field(rc, "steps.layers.field_band", v.Select).v_model = 1
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "gee"
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model is None  # no GeoTIFF band index
         finally:
             rc.close()
 
@@ -611,6 +647,44 @@ def test_the_map_toggle_shows_the_layer_with_its_legend_then_hides_it(monkeypatc
         assert _action(seen, "planet", "map_toggle")["is_on"] is True
         _action(seen, "planet", "map_toggle")["on_click"]()
         assert layers.on.value == frozenset() and "vis:planet" in map_.removed and layers.legends.value == ()
+    finally:
+        rc.close()
+
+
+def test_a_period_month_nicfi_layer_follows_the_active_period(monkeypatch):
+    _sync_spawn(monkeypatch)
+    seen, _, _ = _stub_children(monkeypatch)
+    built = []
+
+    def fake_builder(map_, layer, key, *, project, aoi_bounds, shown=True):
+        def build():
+            built.append((key, vl.nicfi_month(layer, project, date.today())))
+            map_.add_layer("x", key=key)
+        return build
+
+    monkeypatch.setattr(layers_step.vis_layers, "builder", fake_builder)
+    p = _layers_project()
+    p.vis_layers["fixed"] = NicfiVisLayer(name="fixed", month="2025-01")
+    state, map_ = _state(p), _FakeMap()
+    layers = MapLayers(map_)
+    box, rc = _render_step(state, map_, layers)
+    try:
+        _action(seen, "planet", "map_toggle")["on_click"]()
+        _action(seen, "fixed", "map_toggle")["on_click"]()
+        assert built == [("vis:planet", "2026-04"), ("vis:fixed", "2025-01")]
+        assert layers.content_of("vis:planet") == "2026-04"
+
+        def _months():
+            return {lg.layer_id: dict(lg.spec.labels[0].args)["month"] for lg in layers.legends.value}
+
+        same = Period(id="s", start=date(2026, 4, 1), end=date(2026, 4, 30))  # same last month: no rebuild
+        state.update_project("v", lambda live: (live.periods.update(s=same), setattr(live, "active_period", "s")))
+        assert len(built) == 2
+        later = Period(id="y", start=date(2026, 5, 1), end=date(2026, 6, 30))
+        state.update_project("v", lambda live: (live.periods.update(y=later), setattr(live, "active_period", "y")))
+        assert built[2:] == [("vis:planet", "2026-06")]  # the layer with its own month is left alone
+        assert layers.content_of("vis:planet") == "2026-06" and layers.on.value == {"vis:planet", "vis:fixed"}
+        assert _months() == {"vis:planet": "2026-06", "vis:fixed": "2025-01"}
     finally:
         rc.close()
 

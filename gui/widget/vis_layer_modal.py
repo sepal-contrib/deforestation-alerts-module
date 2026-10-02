@@ -55,11 +55,12 @@ def _number_text(value) -> str:
 def _no_access(exc) -> bool:
     """Earth Engine's answer for a collection the account cannot read ("... not
     found (does not exist or caller does not have access)"); any other error
-    (a network failure) is not a refusal and is shown as it is."""
+    (a network failure, an expired access token) is not a refusal and is shown
+    as it is."""
     import ee
 
-    text = str(exc)
-    return isinstance(exc, ee.EEException) and ("not found" in text or "access" in text)
+    text = str(exc).lower()
+    return isinstance(exc, ee.EEException) and ("not found" in text or "caller does not have access" in text)
 
 
 async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None, rgb=False,
@@ -169,6 +170,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     error, set_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
 
+    def _set_kind(value):
+        # A band is a name in Earth Engine and an index in a GeoTIFF: one kind's
+        # band is never a choice of the other's.
+        if value and value != kind:
+            set_kind(value)
+            set_band(None)
+
+
     raster = kind in ("gee", "file")
     ref = ((asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value) if kind == "file"
            else None)
@@ -261,14 +270,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         with rv.CardTitle():
             solara.Text(title)
         with rv.CardText():
-            rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=lambda v: v and set_kind(v),
+            rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
                       items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
                       dense=True, outlined=True, disabled=busy)
             rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
                          outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
                          error_messages=[t(name_error)] if name_error else [])
             if raster:
-                RasterInput(gee_interface=gee_interface, origin=kind, on_origin=set_kind, asset=asset, path=path,
+                RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
                             asset_types=("IMAGE",), disabled=busy, show_origin=False)
                 if bands_task.pending:
                     solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])

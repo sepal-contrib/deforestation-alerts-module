@@ -14,7 +14,7 @@ from typing import Optional
 
 from deforestation_alerts.engine.raster_io import ensure_overviews
 from gui.i18n import t
-from gui.scripts import raster_map
+from gui.scripts import legend_specs, raster_map
 from gui.scripts.legend_data import format_number
 
 NICFI_COLLECTIONS = {
@@ -39,14 +39,18 @@ def region_label(region: str) -> str:
     return t(f"steps.layers.region_{region}")
 
 
-def nicfi_month(layer, project, today: date) -> str:
-    """The layer's month, else the active period's end month, else last month."""
-    if layer.month:
-        return layer.month
+def period_month(project, today: date) -> str:
+    """The active period's end month, else last month: the month of a NICFI
+    layer without one of its own."""
     period = project.periods.get(project.active_period) if project.active_period else None
     if period is not None:
         return period.end.strftime("%Y-%m")
     return (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+
+
+def nicfi_month(layer, project, today: date) -> str:
+    """The layer's month, else the active period's end month, else last month."""
+    return layer.month or period_month(project, today)
 
 
 def nicfi_image(region: str, month: str):
@@ -97,6 +101,22 @@ def vis_layers_summary(layer) -> str:
     if layer.kind == "gee":
         return f"{', '.join(layer.bands)} · {span}"
     return f"{t('steps.layers.summary_band', band=layer.band)} · {layer.colormap} · {span}"
+
+
+def refresh_nicfi_layers(layers, map_, project, *, today: date, notifier=None) -> None:
+    """Give every NICFI layer on the map that draws the active period's month
+    (no month of its own) the current one, image and legend. A layer is shown
+    with its month as content id, so ``refresh`` rebuilds only when the month
+    changed."""
+    if project.aoi is None:
+        return
+    month = period_month(project, today)
+    for key in sorted(layers.on.value):
+        layer = project.vis_layers.get(key[4:]) if key.startswith("vis:") else None
+        if layer is None or layer.kind != "nicfi" or layer.month:
+            continue
+        layers.refresh(key, builder(map_, layer, key, project=project, aoi_bounds=project.aoi.bounds), month,
+                       legend=legend_specs.vis_legend(key, layer, month=month), notifier=notifier)
 
 
 def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
