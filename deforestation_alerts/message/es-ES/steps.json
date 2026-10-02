@@ -395,6 +395,7 @@
       "outcome_masked": "{source}: los {n} píxeles de alerta eliminados por máscaras",
       "outcome_none": "{source}: 0 alertas encontradas",
       "outcome_left_out": "{source}: no cubierta",
+      "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "El período, el área de interés o la cuadrícula del proyecto cambiaron mientras la ejecución estaba en curso, así que el conjunto de alertas no se registró. Ejecuta Integrar y vectorizar de nuevo.",
       "error_min_size": "Introduce un tamaño mínimo en hectáreas, 0 o más.",
       "error_max_alerts": "Introduce un número entero, 0 o más.",

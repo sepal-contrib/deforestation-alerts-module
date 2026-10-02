@@ -385,6 +385,7 @@
       "outcome_masked": "{source}: all {n} alert pixels removed by masks",
       "outcome_none": "{source}: 0 alerts found",
       "outcome_left_out": "{source}: not covered",
+      "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded. Run Integrate & vectorize again.",
       "error_min_size": "Enter a minimum size in hectares, 0 or more.",
       "error_max_alerts": "Enter a whole number, 0 or more.",

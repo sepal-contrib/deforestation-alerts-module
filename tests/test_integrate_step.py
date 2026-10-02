@@ -231,7 +231,7 @@ def test_an_empty_set_lists_each_sources_outcome(monkeypatch, tmp_path):
                                        left_out={"GLAD-S2": "GLAD-S2 does not cover this AOI"})
     details = "; ".join([t("steps.integrate.outcome_pixels", source="GLAD-L", n="3"),
                          t("steps.integrate.outcome_masked", source="RADD", n="7"),
-                         t("steps.integrate.outcome_left_out", source="GLAD-S2")])
+                         "GLAD-S2 does not cover this AOI"])
     assert notifier.toasts == [("info", t("steps.integrate.done_empty_detail", details=details))]
 
 

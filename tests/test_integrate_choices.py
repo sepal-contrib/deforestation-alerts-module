@@ -59,8 +59,15 @@ def test_outcome_lines_of_an_empty_set():
         "GLAD-L: 120 alert pixels (all below the minimum size, outside the drawn area or under earlier sets' footprints)",
         "MINE: all 7 alert pixels removed by masks",
         "RADD: 0 alerts found",
-        "GLAD-S2: not covered",
+        "GLAD-S2 does not cover this AOI",
     ]
+
+
+def test_outcome_lines_give_each_left_out_source_its_reason():
+    """Review B M9: a source left out for no data must not read "not covered"."""
+    lines = integrate_jobs.outcome_lines({}, {"RADD": "RADD has data until 2026-01-10",
+                                              "MINE": "Coverage not checked", "OLD": ""})
+    assert lines == ["MINE: Coverage not checked", "OLD: not covered", "RADD has data until 2026-01-10"]
 
 
 def test_display_column_keeps_what_is_typed_readable():

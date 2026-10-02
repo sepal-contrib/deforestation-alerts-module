@@ -395,6 +395,7 @@
       "outcome_masked": "{source} : les {n} pixels d'alerte supprimés par les masques",
       "outcome_none": "{source} : 0 alerte trouvée",
       "outcome_left_out": "{source} : non couverte",
+      "outcome_left_out_reason": "{source} : {reason}",
       "project_changed": "La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. Relancez Intégrer et vectoriser.",
       "error_min_size": "Saisissez une taille minimale en hectares, 0 ou plus.",
       "error_max_alerts": "Saisissez un nombre entier, 0 ou plus.",

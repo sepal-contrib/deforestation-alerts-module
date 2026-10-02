@@ -257,8 +257,19 @@ def outcome_lines(outcomes: dict, left_out: dict) -> list:
             lines.append(t("steps.integrate.outcome_masked", source=source, n=f"{before:,}"))
         else:
             lines.append(t("steps.integrate.outcome_none", source=source))
-    lines += [t("steps.integrate.outcome_left_out", source=s) for s in sorted(left_out or {}, key=str.casefold)]
+    lines += [_left_out_line(s, (left_out or {})[s]) for s in sorted(left_out or {}, key=str.casefold)]
     return lines
+
+
+def _left_out_line(source: str, reason: str) -> str:
+    """Why ``source`` was left out: its coverage note, which mostly names the
+    source already ("RADD has data until ..."), so no data never reads as
+    "not covered"; a reason without one is prefixed by the source."""
+    if not reason:
+        return t("steps.integrate.outcome_left_out", source=source)
+    if source in reason:
+        return reason
+    return t("steps.integrate.outcome_left_out_reason", source=source, reason=reason)
 
 
 def _empty_message(result, left_out) -> str:
