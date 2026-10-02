@@ -14,7 +14,7 @@
     "_test_fmt": "hola {name}",
     "_test": {
       "one": "{count} elemento",
-      "many": "{count} elementos",
+      "many": "{count} de elementos",
       "other": "{count} elementos"
     }
   },
@@ -26,14 +26,14 @@
   "widgets": {
     "product_table": {
       "status_running": "en ejecución",
-      "status_ready": "listo",
-      "status_completed": "completado",
-      "status_failed": "fallido",
-      "status_cancelled": "cancelado",
-      "status_stale": "desactualizado",
+      "status_ready": "lista",
+      "status_completed": "completada",
+      "status_failed": "fallida",
+      "status_cancelled": "cancelada",
+      "status_stale": "desactualizada",
       "status_missing": "falta",
       "status_no_data": "sin datos",
-      "status_not_covered": "no cubierto",
+      "status_not_covered": "no cubierta",
       "status_unchecked": "sin comprobar"
     },
     "artifact_name": {
@@ -56,17 +56,17 @@
     "lock_analysis": "Ejecuta primero Integrar y vectorizar.",
     "count_sources": {
       "one": "{count} fuente",
-      "many": "{count} fuentes",
+      "many": "{count} de fuentes",
       "other": "{count} fuentes"
     },
     "count_layers": {
       "one": "{count} capa",
-      "many": "{count} capas",
+      "many": "{count} de capas",
       "other": "{count} capas"
     },
     "count_periods": {
       "one": "{count} período",
-      "many": "{count} períodos",
+      "many": "{count} de períodos",
       "other": "{count} períodos"
     },
     "count_ready": {
@@ -76,7 +76,7 @@
     },
     "count_alerts": {
       "one": "{count} alerta",
-      "many": "{count} alertas",
+      "many": "{count} de alertas",
       "other": "{count} alertas"
     },
     "step_badge": "{n} / {total}",

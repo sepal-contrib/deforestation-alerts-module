@@ -13,17 +13,17 @@
       "summary": "{aoi} · {sources} · {periods} · {sets}",
       "count_sources": {
         "one": "{count} source",
-        "many": "{count} sources",
+        "many": "{count} de sources",
         "other": "{count} sources"
       },
       "count_periods": {
         "one": "{count} période",
-        "many": "{count} périodes",
+        "many": "{count} de périodes",
         "other": "{count} périodes"
       },
       "count_sets": {
         "one": "{count} jeu d'alertes",
-        "many": "{count} jeux d'alertes",
+        "many": "{count} de jeux d'alertes",
         "other": "{count} jeux d'alertes"
       },
       "no_aoi": "pas encore d'AOI",
@@ -33,17 +33,17 @@
       "ago_now": "à l'instant",
       "ago_minutes": {
         "one": "il y a {count} minute",
-        "many": "il y a {count} minutes",
+        "many": "il y a {count} de minutes",
         "other": "il y a {count} minutes"
       },
       "ago_hours": {
         "one": "il y a {count} heure",
-        "many": "il y a {count} heures",
+        "many": "il y a {count} d'heures",
         "other": "il y a {count} heures"
       },
       "ago_days": {
         "one": "il y a {count} jour",
-        "many": "il y a {count} jours",
+        "many": "il y a {count} de jours",
         "other": "il y a {count} jours"
       },
       "save_failed": "Échec de l'enregistrement : {error}",
@@ -147,7 +147,7 @@
       "title": "Couches facultatives",
       "description": "Des couches qui aident à lire les alertes : une image Earth Engine, un GeoTIFF de votre dossier SEPAL, ou Planet NICFI. Elles peuvent aussi être affichées sur les deux cartes d'Analyse.",
       "info_header": "À propos des couches facultatives",
-      "info_md": "Les couches de visualisation aident à lire la carte ; elles ne modifient jamais les alertes.\n\n- **Image Earth Engine :** une bande dessinée avec une palette, ou trois bandes en composite RGB, entre un minimum et un maximum.\n- **GeoTIFF** dans votre dossier SEPAL : une bande dessinée avec une colormap. L'application écrit un fichier d'aperçus réduits à côté, donc son dossier doit être accessible en écriture.\n- **Planet NICFI :** la mosaïque tropicale mensuelle via Earth Engine, pour le mois choisi ou le dernier mois de la période active. Votre compte Earth Engine a besoin d'un accès à NICFI.\n\nAffichez une couche sur cette carte avec le bouton carte de sa ligne ; sa légende apparaît avec elle. Cochez **Afficher dans Analyse** pour l'ajouter, désactivée, aux deux cartes d'Analyse.",
+      "info_md": "Les couches de visualisation aident à lire la carte ; elles ne modifient jamais les alertes.\n\n- **Image Earth Engine :** une bande affichée avec une palette, ou trois bandes en composite RGB, entre un minimum et un maximum.\n- **GeoTIFF** dans votre dossier SEPAL : une bande affichée avec une rampe de couleurs. L'application écrit un fichier de pyramides à côté, donc son dossier doit être accessible en écriture.\n- **Planet NICFI :** la mosaïque tropicale mensuelle via Earth Engine, pour le mois choisi ou le dernier mois de la période active. Votre compte Earth Engine a besoin d'un accès à NICFI.\n\nAffichez une couche sur cette carte avec le bouton carte de sa ligne ; sa légende apparaît avec elle. Cochez **Afficher dans Analyse** pour l'ajouter, désactivée, aux deux cartes d'Analyse.",
       "list_title": "Couches de visualisation",
       "col_name": "Nom",
       "col_kind": "Type",
@@ -162,7 +162,7 @@
       "name_empty": "Donnez un nom à la couche.",
       "name_too_long": "Au plus 24 caractères.",
       "name_duplicate": "Une couche avec ce nom existe déjà.",
-      "err_folder": "Le dossier {folder} n'est pas accessible en écriture, donc les aperçus réduits de la couche ne peuvent pas être construits.",
+      "err_folder": "Le dossier {folder} n'est pas accessible en écriture, donc les pyramides de la couche ne peuvent pas être construites.",
       "err_missing": "Le fichier {path} n'existe plus.",
       "err_analysis": "La couche {name} n'a pas pu être ajoutée aux cartes d'Analyse : {error}",
       "err_nicfi": "Votre compte Earth Engine n'a pas accès à Planet NICFI {region}.",
@@ -234,17 +234,17 @@
       "state_missing": "manquante",
       "note_sources_stale": {
         "one": "{count} source obsolète ici : relancez-la dans Télécharger et harmoniser.",
-        "many": "{count} sources obsolètes ici : relancez-les dans Télécharger et harmoniser.",
+        "many": "{count} de sources obsolètes ici : relancez-les dans Télécharger et harmoniser.",
         "other": "{count} sources obsolètes ici : relancez-les dans Télécharger et harmoniser."
       },
       "note_sets_stale": {
         "one": "{count} jeu d'alertes généré à partir d'entrées qui ont changé depuis.",
-        "many": "{count} jeux d'alertes générés à partir d'entrées qui ont changé depuis.",
+        "many": "{count} de jeux d'alertes générés à partir d'entrées qui ont changé depuis.",
         "other": "{count} jeux d'alertes générés à partir d'entrées qui ont changé depuis."
       },
       "note_sets_missing": {
         "one": "{count} jeu d'alertes dont les fichiers sont manquants.",
-        "many": "{count} jeux d'alertes dont les fichiers sont manquants.",
+        "many": "{count} de jeux d'alertes dont les fichiers sont manquants.",
         "other": "{count} jeux d'alertes dont les fichiers sont manquants."
       },
       "note_frozen": "Ses dates sont fixées : elle a des jeux d'alertes.",
@@ -253,7 +253,7 @@
       "delete_message": "Ses téléchargements et fichiers harmonisés sont supprimés.",
       "delete_sets": {
         "one": "Son jeu d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés.",
-        "many": "Ses {count} jeux d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés.",
+        "many": "Ses {count} de jeux d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés.",
         "other": "Ses {count} jeux d'alertes ({reviewed} alertes examinées), ses téléchargements et tous les autres fichiers de la période sont supprimés."
       },
       "delete_set_line": "{sources} · {n} alertes · {reviewed} examinées",
@@ -296,7 +296,7 @@
       "mask_covers_none": "Le masque {mask} ne couvre aucune partie de l'AOI : en masque de conservation, toutes les alertes seraient supprimées.",
       "mask_row_failed": "Masque {mask} : {error}",
       "mask_native_unknown": "Masque {name} : sa grille native (projection et échelle) est inconnue ; modifiez le masque.",
-      "claim_busy": "Une ligne de cette exécution est déjà en préparation (un masque qu'aligne le job d'une autre période, ou une ligne encore en cours) ; relancez une fois celle-ci terminée.",
+      "claim_busy": "Une ligne de cette exécution est déjà en préparation (un masque qu'aligne la tâche d'une autre période, ou une ligne encore en cours) ; relancez une fois celle-ci terminée.",
       "row_failed": "{source} : {error}",
       "aoi_geometry_missing": "La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant.",
       "aoi_geometry_failed": "La géométrie de l'AOI n'a pas pu être récupérée, donc les lignes GeoTIFF ne peuvent pas s'exécuter ; utilisez Vérifier à nouveau, puis relancez-les.",
@@ -371,7 +371,7 @@
       "attr_stat_max": "Maximum",
       "attr_stat_median": "Médiane",
       "will_create": "Crée ou remplace le jeu d'alertes {period} · {sources}",
-      "set_stale": "Le jeu actif ({set}) a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses révisions).",
+      "set_stale": "Le jeu actif ({set}) a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",
       "set_missing": "Les fichiers du jeu actif ({set}) sont manquants dans le dossier du projet. Relancez Intégrer et vectoriser pour le reconstruire.",
       "run": "Intégrer et vectoriser",
       "replace_title": "Remplacer ce jeu d'alertes ?",
@@ -402,7 +402,7 @@
       "layer_name": "Alertes (jeu actif)",
       "go": "Examiner",
       "popup": "Alerte {id} · {status} · {area} ha",
-      "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses révisions).",
+      "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",
       "missing": "Les fichiers de ce jeu sont manquants dans le dossier du projet. Relancez Intégrer et vectoriser pour le reconstruire.",
       "tiles_failed": "Les tuiles de carte n'ont pas pu être affichées ({error}) : affichage des points d'alerte sans polygones.",
       "show_earlier": "Afficher les jeux antérieurs",

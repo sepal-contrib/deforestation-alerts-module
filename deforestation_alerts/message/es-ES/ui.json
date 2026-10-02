@@ -20,7 +20,7 @@
   "analysis_tile": {
     "description": "Revisa cada alerta con imágenes de antes y después, confírmala, define la causa de pérdida y guarda.",
     "info_header": "Acerca del análisis",
-    "info_md": "Usa el navegador para moverte entre alertas. Los mapas de antes/después muestran las imágenes más cercanas sin nubes. Dibuja o edita el polígono de la alerta, márcala como confirmada o falsa, y **Guardar** escribe los atributos de vuelta en la base de alertas.",
+    "info_md": "Desplázate entre las alertas del conjunto activo con el navegador; el selector de conjuntos cambia de conjunto. Los mapas de antes y después muestran las imágenes sin nubes más cercanas: elige una de cada una. Dibuja o edita el polígono deforestado, responde **¿Es verdadera la alerta?**, elige las causas de la pérdida y luego **Guardar** escribe la revisión en la base de alertas del conjunto. **Descargar** los datos de la alerta escribe el GeoPackage de la alerta, sus imágenes de antes/después y un informe de Word generado a partir de la plantilla de informe del proyecto, elegida en la tarjeta de exportación.",
     "img_selection": {
       "prev_image_title": "Imagen Anterior",
       "post_image_title": "Imagen Posterior",
@@ -44,7 +44,7 @@
       "confirmation_yes": "Sí",
       "confirmation_no": "No",
       "confirmation_revision": "Necesita revisión adicional",
-      "confirmation_missing": "Responde ¿Es verdadera la alerta? antes de guardar.",
+      "confirmation_missing": "Responde «¿Es verdadera la alerta?» antes de guardar.",
       "false_positive_drawn": "Un falso positivo no puede tener un polígono de deforestación dibujado: elimina el polígono o cambia la respuesta.",
       "loss_driver_label": "Causa de la pérdida",
       "loss_driver_hint": "Analizar causa de la pérdida",

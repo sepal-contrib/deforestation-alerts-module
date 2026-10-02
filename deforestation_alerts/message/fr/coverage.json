@@ -11,7 +11,7 @@
     "no_data_window": "{source} n'a aucune donnée pour cette fenêtre ici",
     "partial_share": "couvre {pct} % de l'AOI ; le reste ne reçoit aucune alerte de cette source",
     "partial_starts": "{source} commence le {first} ici ; les alertes antérieures ne sont pas recherchées",
-    "partial_until": "a des données jusqu'au {last} ; les alertes ultérieures arrivent avec la fenêtre de recherche de la période suivante",
+    "partial_until": "a des données jusqu'au {last} ; les alertes ultérieures arrivent avec la rétrospection de la période suivante",
     "partial_gap": "Aucune collection {source} ne couvre {start} → {end} ; les alertes de cette plage sont manquantes",
     "chip_full": "couvre l'AOI",
     "chip_partial": "couvre {pct} % de l'AOI",

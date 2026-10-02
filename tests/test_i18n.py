@@ -106,7 +106,7 @@ def test_no_english_is_left_in_the_translations(locale):
     target = load_locale(i18n.MESSAGES_DIR, locale)
 
     def english_of(key):
-        base, _, category = key.rpartition(".")
+        base, _, _ = key.rpartition(".")
         if base in english.plural_keys:
             return english.messages.get(key, english.messages[f"{base}.other"])
         return english.messages.get(key)

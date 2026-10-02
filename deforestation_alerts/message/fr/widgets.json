@@ -14,7 +14,7 @@
     "_test_fmt": "bonjour {name}",
     "_test": {
       "one": "{count} élément",
-      "many": "{count} éléments",
+      "many": "{count} d'éléments",
       "other": "{count} éléments"
     }
   },
@@ -26,15 +26,15 @@
   "widgets": {
     "product_table": {
       "status_running": "en cours",
-      "status_ready": "prêt",
-      "status_completed": "terminé",
-      "status_failed": "échoué",
-      "status_cancelled": "annulé",
+      "status_ready": "prête",
+      "status_completed": "terminée",
+      "status_failed": "échouée",
+      "status_cancelled": "annulée",
       "status_stale": "obsolète",
-      "status_missing": "manquant",
+      "status_missing": "manquante",
       "status_no_data": "aucune donnée",
-      "status_not_covered": "non couvert",
-      "status_unchecked": "non vérifié"
+      "status_not_covered": "non couverte",
+      "status_unchecked": "non vérifiée"
     },
     "artifact_name": {
       "label": "Nom",
@@ -56,17 +56,17 @@
     "lock_analysis": "Lancez d'abord Intégrer et vectoriser.",
     "count_sources": {
       "one": "{count} source",
-      "many": "{count} sources",
+      "many": "{count} de sources",
       "other": "{count} sources"
     },
     "count_layers": {
       "one": "{count} couche",
-      "many": "{count} couches",
+      "many": "{count} de couches",
       "other": "{count} couches"
     },
     "count_periods": {
       "one": "{count} période",
-      "many": "{count} périodes",
+      "many": "{count} de périodes",
       "other": "{count} périodes"
     },
     "count_ready": {
@@ -76,15 +76,15 @@
     },
     "count_alerts": {
       "one": "{count} alerte",
-      "many": "{count} alertes",
+      "many": "{count} d'alertes",
       "other": "{count} alertes"
     },
     "step_badge": "{n} / {total}",
     "count_empty": "rien pour l'instant",
     "count_reviewed": {
-      "one": "{count} révisée",
-      "many": "{count} révisées",
-      "other": "{count} révisées"
+      "one": "{count} examinée",
+      "many": "{count} examinées",
+      "other": "{count} examinées"
     }
   }
 }

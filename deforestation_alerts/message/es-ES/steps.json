@@ -13,17 +13,17 @@
       "summary": "{aoi} · {sources} · {periods} · {sets}",
       "count_sources": {
         "one": "{count} fuente",
-        "many": "{count} fuentes",
+        "many": "{count} de fuentes",
         "other": "{count} fuentes"
       },
       "count_periods": {
         "one": "{count} período",
-        "many": "{count} períodos",
+        "many": "{count} de períodos",
         "other": "{count} períodos"
       },
       "count_sets": {
         "one": "{count} conjunto de alertas",
-        "many": "{count} conjuntos de alertas",
+        "many": "{count} de conjuntos de alertas",
         "other": "{count} conjuntos de alertas"
       },
       "no_aoi": "sin AOI todavía",
@@ -33,17 +33,17 @@
       "ago_now": "justo ahora",
       "ago_minutes": {
         "one": "hace {count} minuto",
-        "many": "hace {count} minutos",
+        "many": "hace {count} de minutos",
         "other": "hace {count} minutos"
       },
       "ago_hours": {
         "one": "hace {count} hora",
-        "many": "hace {count} horas",
+        "many": "hace {count} de horas",
         "other": "hace {count} horas"
       },
       "ago_days": {
         "one": "hace {count} día",
-        "many": "hace {count} días",
+        "many": "hace {count} de días",
         "other": "hace {count} días"
       },
       "save_failed": "Error al guardar: {error}",
@@ -147,7 +147,7 @@
       "title": "Capas opcionales",
       "description": "Capas que ayudan a leer las alertas: una imagen de Earth Engine, un GeoTIFF de tu carpeta de SEPAL o Planet NICFI. También se pueden mostrar en los dos mapas de Análisis.",
       "info_header": "Acerca de las capas opcionales",
-      "info_md": "Las capas de visualización ayudan a leer el mapa; nunca cambian las alertas.\n\n- **Imagen de Earth Engine:** una banda dibujada con una paleta, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- **GeoTIFF** en tu carpeta de SEPAL: una banda dibujada con un mapa de color. La aplicación escribe un archivo de reducciones junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
+      "info_md": "Las capas de visualización ayudan a leer el mapa; nunca cambian las alertas.\n\n- **Imagen de Earth Engine:** una banda dibujada con una paleta, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- **GeoTIFF** en tu carpeta de SEPAL: una banda dibujada con un mapa de color. La aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
       "list_title": "Capas de visualización",
       "col_name": "Nombre",
       "col_kind": "Tipo",
@@ -162,7 +162,7 @@
       "name_empty": "Pon un nombre a la capa.",
       "name_too_long": "Como máximo 24 caracteres.",
       "name_duplicate": "Ya existe una capa con este nombre.",
-      "err_folder": "No se puede escribir en la carpeta {folder}, así que no se pueden generar las reducciones de la capa.",
+      "err_folder": "No se puede escribir en la carpeta {folder}, así que no se pueden generar las pirámides de la capa.",
       "err_missing": "El archivo {path} ya no existe.",
       "err_analysis": "No se pudo añadir la capa {name} a los mapas de Análisis: {error}",
       "err_nicfi": "Tu cuenta de Earth Engine no tiene acceso a Planet NICFI {region}.",
@@ -234,17 +234,17 @@
       "state_missing": "falta",
       "note_sources_stale": {
         "one": "{count} fuente desactualizada aquí: ejecútala de nuevo en Descargar y armonizar.",
-        "many": "{count} fuentes desactualizadas aquí: ejecútalas de nuevo en Descargar y armonizar.",
+        "many": "{count} de fuentes desactualizadas aquí: ejecútalas de nuevo en Descargar y armonizar.",
         "other": "{count} fuentes desactualizadas aquí: ejecútalas de nuevo en Descargar y armonizar."
       },
       "note_sets_stale": {
         "one": "{count} conjunto de alertas generado a partir de entradas que han cambiado desde entonces.",
-        "many": "{count} conjuntos de alertas generados a partir de entradas que han cambiado desde entonces.",
+        "many": "{count} de conjuntos de alertas generados a partir de entradas que han cambiado desde entonces.",
         "other": "{count} conjuntos de alertas generados a partir de entradas que han cambiado desde entonces."
       },
       "note_sets_missing": {
         "one": "{count} conjunto de alertas cuyos archivos faltan.",
-        "many": "{count} conjuntos de alertas cuyos archivos faltan.",
+        "many": "{count} de conjuntos de alertas cuyos archivos faltan.",
         "other": "{count} conjuntos de alertas cuyos archivos faltan."
       },
       "note_frozen": "Sus fechas están fijas: tiene conjuntos de alertas.",
@@ -253,7 +253,7 @@
       "delete_message": "Sus descargas y archivos armonizados se eliminan.",
       "delete_sets": {
         "one": "Se elimina su conjunto de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período.",
-        "many": "Se eliminan sus {count} conjuntos de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período.",
+        "many": "Se eliminan sus {count} de conjuntos de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período.",
         "other": "Se eliminan sus {count} conjuntos de alertas ({reviewed} alertas revisadas), sus descargas y todos los demás archivos del período."
       },
       "delete_set_line": "{sources} · {n} alertas · {reviewed} revisadas",
@@ -268,7 +268,7 @@
       "title": "Descargar y armonizar",
       "description": "Descarga todas las máscaras y fuentes del período activo en su propia proyección, luego las alinea con la cuadrícula del proyecto y aplica las máscaras del período (armonizar). Nada cuyas entradas no hayan cambiado se ejecuta dos veces.",
       "info_header": "Acerca de Descargar y armonizar",
-      "info_md": "Este paso prepara todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón del objetivo sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente se descarga en la ventana de búsqueda del período en su propia proyección, luego se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Ejecutar todo** ejecuta primero las máscaras, luego cada fuente que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
+      "info_md": "Este paso prepara todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente se descarga en la ventana de búsqueda del período en su propia proyección, luego se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Ejecutar todo** ejecuta primero las máscaras, luego cada fuente que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
       "grid_title": "Cuadrícula del proyecto",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolución",
@@ -296,7 +296,7 @@
       "mask_covers_none": "La máscara {mask} no cubre nada de la AOI: como máscara de conservar, se eliminarían todas las alertas.",
       "mask_row_failed": "Máscara {mask}: {error}",
       "mask_native_unknown": "Máscara {name}: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara.",
-      "claim_busy": "Ya se está preparando una fila de esta ejecución (una máscara que alinea el trabajo de otro período, o una fila todavía en curso); vuelve a ejecutar cuando termine.",
+      "claim_busy": "Ya se está preparando una fila de esta ejecución (una máscara que está alineando el trabajo de otro período, o una fila todavía en curso); vuelve a ejecutar cuando termine.",
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento.",
       "aoi_geometry_failed": "No se pudo obtener la geometría de la AOI, así que las filas de GeoTIFF no se pueden ejecutar; usa Comprobar de nuevo y luego ejecútalas.",
@@ -383,9 +383,9 @@
       "step_vectorize": "Vectorizando grupos",
       "step_footprint": "Escribiendo la huella",
       "step_store": "Guardando las alertas",
-      "step_tiles": "Generando los mosaicos del mapa",
+      "step_tiles": "Generando las teselas del mapa",
       "no_tippecanoe": "tippecanoe no está instalado: Resumen mostrará los puntos de alerta sin polígonos.",
-      "tiles_failed": "No se pudieron generar los mosaicos del mapa ({error}); Resumen los genera de nuevo al abrirse.",
+      "tiles_failed": "No se pudieron generar las teselas del mapa ({error}); Resumen las genera de nuevo al abrirse.",
       "done": "{n} alertas listas para revisar",
       "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",
@@ -404,7 +404,7 @@
       "popup": "Alerta {id} · {status} · {area} ha",
       "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",
       "missing": "Faltan los archivos de este conjunto en la carpeta del proyecto. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo.",
-      "tiles_failed": "No se pudieron mostrar los mosaicos del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
+      "tiles_failed": "No se pudieron mostrar las teselas del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
       "show_earlier": "Mostrar conjuntos anteriores",
       "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período."
     },

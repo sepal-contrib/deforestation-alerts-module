@@ -21,7 +21,7 @@
     "project_newer_schema": "{path} a le schéma {found} ; cette application lit le schéma {expected}.",
     "project_invalid": "{path} n'est pas un projet valide : {error}",
     "no_images": "Téléchargez d'abord les images avant et après.",
-    "folder_not_writable": "Le dossier {folder} n'est pas accessible en écriture : les aperçus réduits de la couche ne peuvent pas être écrits à côté.",
+    "folder_not_writable": "Le dossier {folder} n'est pas accessible en écriture : les pyramides de la couche ne peuvent pas être écrites à côté.",
     "ee_asset_not_found": "L'asset Earth Engine {asset} n'existe pas, ou votre compte ne peut pas le lire.",
     "download_busy": "Un autre téléchargement Earth Engine était encore en cours après {minutes} minutes, donc {file} n'a pas été téléchargé. Relancez cette étape une fois celui-ci terminé."
   }
