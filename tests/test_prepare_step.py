@@ -1557,7 +1557,7 @@ def test_the_grid_size_hint_reads_mb_below_a_gb():
 
     small = gridmod.build_grid(TINY, "EPSG:32721", 10.0)
     text = grid_size_text(small)
-    assert text == t("steps.prepare.grid_size_mb", w=small.width, h=small.height,
+    assert text == t("steps.prepare.grid_size_mb", w=f"{small.width:,}", h=f"{small.height:,}",
                      mb=f"{gridmod.estimate_bytes(small) / 1e6:.1f}")
     assert " MB " in text and "GB" not in text and "0.0" not in text
     national = gridmod.build_grid((-62.7, -27.6, -54.2, -19.3), "EPSG:32721", 10.0)

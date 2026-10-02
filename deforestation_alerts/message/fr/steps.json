@@ -411,11 +411,23 @@
       "step_tiles": "Construction des tuiles de carte",
       "no_tippecanoe": "tippecanoe n'est pas installé : Aperçu affichera les points d'alerte sans polygones.",
       "tiles_failed": "Les tuiles de carte n'ont pas pu être construites ({error}) ; Aperçu les reconstruit à son ouverture.",
-      "done": "{n} alertes prêtes à être examinées",
+      "done": {
+        "one": "{n} alerte prête à être examinée",
+        "many": "{n} d'alertes prêtes à être examinées",
+        "other": "{n} alertes prêtes à être examinées"
+      },
       "done_empty": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide.",
       "done_empty_detail": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide. {details}",
-      "outcome_pixels": "{source} : {n} pixels d'alerte (tous sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)",
-      "outcome_masked": "{source} : les {n} pixels d'alerte supprimés par les masques",
+      "outcome_pixels": {
+        "one": "{source} : {n} pixel d'alerte (sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)",
+        "many": "{source} : {n} de pixels d'alerte (tous sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)",
+        "other": "{source} : {n} pixels d'alerte (tous sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)"
+      },
+      "outcome_masked": {
+        "one": "{source} : le {n} pixel d'alerte a été supprimé par les masques",
+        "many": "{source} : les {n} de pixels d'alerte supprimés par les masques",
+        "other": "{source} : les {n} pixels d'alerte supprimés par les masques"
+      },
       "outcome_none": "{source} : 0 alerte trouvée",
       "outcome_left_out": "{source} : non couverte",
       "outcome_left_out_reason": "{source} : {reason}",

@@ -23,7 +23,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
-from gui.scripts.prepare_jobs import _CELL_STATUS
+from gui.scripts.prepare_jobs import CELL_STATUS
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.mask_modal import MaskModal
@@ -37,7 +37,7 @@ def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None)
 
 
 def _status(s, busy):
-    return {"type": "status", "status": "running" if busy else _CELL_STATUS[s]}
+    return {"type": "status", "status": "running" if busy else CELL_STATUS[s]}
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,

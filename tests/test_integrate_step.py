@@ -229,8 +229,8 @@ def test_an_empty_set_lists_each_sources_outcome(monkeypatch, tmp_path):
     notifier = _Notifier()
     integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"),
                                        left_out={"GLAD-S2": "GLAD-S2 does not cover this AOI"})
-    details = "; ".join([t("steps.integrate.outcome_pixels", source="GLAD-L", n="3"),
-                         t("steps.integrate.outcome_masked", source="RADD", n="7"),
+    details = "; ".join([tn("steps.integrate.outcome_pixels", 3, source="GLAD-L"),
+                         tn("steps.integrate.outcome_masked", 7, source="RADD"),
                          "GLAD-S2 does not cover this AOI"])
     assert notifier.toasts == [("info", t("steps.integrate.done_empty_detail", details=details))]
 
@@ -269,7 +269,7 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     # ruling #76: a fresh selection even though alert 0 was already showing
     assert picked == [-1, 0]
     assert state.current_page_view.value == "analysis_tile"
-    assert notifier.toasts == [("success", t("steps.integrate.done", n=2))]
+    assert notifier.toasts == [("success", tn("steps.integrate.done", 2))]
     assert busy == [True] and not is_writing("d")
 
 
@@ -305,7 +305,7 @@ def test_a_tile_failure_warns_and_still_records_the_set(monkeypatch, tmp_path):
     integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))  # does not raise
     assert state.project.value.active_set == "x" and state.alerts_gdf.value is result.alerts
     assert notifier.toasts == [("warning", t("steps.integrate.tiles_failed", error="tippecanoe crashed")),
-                               ("success", t("steps.integrate.done", n=2))]
+                               ("success", tn("steps.integrate.done", 2))]
     assert state.current_page_view.value == "analysis_tile"
 
 

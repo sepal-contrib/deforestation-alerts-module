@@ -75,7 +75,7 @@ from gui.store.project_writers import writing
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
-_CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
+CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
 _BLOCKED_STATUS = {NOT_COVERED: "not_covered", NO_DATA: "no_data", UNCHECKED: "unchecked"}
 
 
@@ -212,7 +212,7 @@ def row_cells(row: PrepareRow, running: bool, label=None) -> list:
             return {"type": "status", "status": "running"}
         if row.blocked and row.file_missing is None:
             return {"type": "status", "status": _BLOCKED_STATUS[row.coverage]}
-        return {"type": "status", "status": _CELL_STATUS[s]}
+        return {"type": "status", "status": CELL_STATUS[s]}
 
     return [{"value": label or row.source}, cell(row.raw), cell(row.harmonized)]
 

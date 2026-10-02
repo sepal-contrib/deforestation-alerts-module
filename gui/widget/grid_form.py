@@ -10,7 +10,7 @@ import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine import grid as gridmod
-from gui.i18n import t
+from gui.i18n import format_number, t
 from gui.store.project_writers import is_writing
 
 LARGE_BYTES = 2e9  # spec §7.1: warn (not block) above 2 GB per source
@@ -25,9 +25,10 @@ def grid_size_text(grid) -> str:
     """The grid's pixels and its uncompressed per-source size (spec §7.1):
     in GB from 1 GB up, in MB below it (a small AOI read "about 0.0 GB")."""
     size = gridmod.estimate_bytes(grid)
+    w, h = format_number(grid.width), format_number(grid.height)
     if size >= 1e9:
-        return t("steps.prepare.grid_size", w=grid.width, h=grid.height, gb=f"{size / 1e9:.1f}")
-    return t("steps.prepare.grid_size_mb", w=grid.width, h=grid.height, mb=f"{max(size / 1e6, 0.1):.1f}")
+        return t("steps.prepare.grid_size", w=w, h=h, gb=format_number(size / 1e9, 1))
+    return t("steps.prepare.grid_size_mb", w=w, h=h, mb=format_number(max(size / 1e6, 0.1), 1))
 
 
 def _metres(value) -> str:

@@ -395,11 +395,20 @@
       "step_tiles": "Building map tiles",
       "no_tippecanoe": "tippecanoe is not installed: Overview will show alert points without polygons.",
       "tiles_failed": "The map tiles could not be built ({error}); Overview builds them again when it opens.",
-      "done": "{n} alerts ready for review",
+      "done": {
+        "one": "{n} alert ready for review",
+        "other": "{n} alerts ready for review"
+      },
       "done_empty": "No new alerts in this period: the alert set is empty.",
       "done_empty_detail": "No new alerts in this period: the alert set is empty. {details}",
-      "outcome_pixels": "{source}: {n} alert pixels (all below the minimum size, outside the drawn area or under earlier sets' footprints)",
-      "outcome_masked": "{source}: all {n} alert pixels removed by masks",
+      "outcome_pixels": {
+        "one": "{source}: {n} alert pixel (below the minimum size, outside the drawn area or under earlier sets' footprints)",
+        "other": "{source}: {n} alert pixels (all below the minimum size, outside the drawn area or under earlier sets' footprints)"
+      },
+      "outcome_masked": {
+        "one": "{source}: the {n} alert pixel was removed by masks",
+        "other": "{source}: all {n} alert pixels removed by masks"
+      },
       "outcome_none": "{source}: 0 alerts found",
       "outcome_left_out": "{source}: not covered",
       "outcome_left_out_reason": "{source}: {reason}",

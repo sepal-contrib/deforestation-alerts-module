@@ -67,13 +67,20 @@ def _babel_locale(code: str) -> Locale:
         return Locale.parse(ENGLISH)
 
 
+_MIN_GROUPING = {"es": 2}
+
+
 def format_number(value, digits: int = 0) -> str:
     """``value`` with the current locale's separators: ``12,345.50`` in
     English, ``12.345,50`` in Spanish, ``12 345,50`` in French (a narrow
     no-break space). ``digits`` decimals, always shown. Babel comes with
     pysepal, whose plural rules are Babel's."""
-    pattern = "#,##0" + ("." + "0" * digits if digits > 0 else "")
-    return format_decimal(value, format=pattern, locale=_babel_locale(current_locale() or ENGLISH))
+    locale = _babel_locale(current_locale() or ENGLISH)
+    # CLDR's minimum grouping digits, which Babel does not apply: Spanish
+    # groups from five digits on ("6789", "12.345").
+    grouped = abs(value) >= 10 ** (3 + _MIN_GROUPING.get(locale.language, 1) - 1)
+    pattern = ("#,##0" if grouped else "0") + ("." + "0" * digits if digits > 0 else "")
+    return format_decimal(value, format=pattern, locale=locale)
 
 
 def tn(key: str, count, /, **values) -> str:

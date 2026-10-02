@@ -411,11 +411,23 @@
       "step_tiles": "Generando las teselas del mapa",
       "no_tippecanoe": "tippecanoe no está instalado: Resumen mostrará los puntos de alerta sin polígonos.",
       "tiles_failed": "No se pudieron generar las teselas del mapa ({error}); Resumen las genera de nuevo al abrirse.",
-      "done": "{n} alertas listas para revisar",
+      "done": {
+        "one": "{n} alerta lista para revisar",
+        "many": "{n} de alertas listas para revisar",
+        "other": "{n} alertas listas para revisar"
+      },
       "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",
-      "outcome_pixels": "{source}: {n} píxeles de alerta (todos por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)",
-      "outcome_masked": "{source}: los {n} píxeles de alerta eliminados por máscaras",
+      "outcome_pixels": {
+        "one": "{source}: {n} píxel de alerta (por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)",
+        "many": "{source}: {n} de píxeles de alerta (todos por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)",
+        "other": "{source}: {n} píxeles de alerta (todos por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)"
+      },
+      "outcome_masked": {
+        "one": "{source}: el {n} píxel de alerta fue eliminado por máscaras",
+        "many": "{source}: los {n} de píxeles de alerta eliminados por máscaras",
+        "other": "{source}: los {n} píxeles de alerta eliminados por máscaras"
+      },
       "outcome_none": "{source}: 0 alertas encontradas",
       "outcome_left_out": "{source}: no cubierta",
       "outcome_left_out_reason": "{source}: {reason}",

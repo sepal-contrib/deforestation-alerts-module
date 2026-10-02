@@ -369,3 +369,27 @@ def test_every_catalogue_file_keeps_one_layout():
 def test_unused_keys_are_pruned():
     for key in ("common.advanced", "common.load", "common.new", "common.remove", "steps.project.open"):
         assert not i18n.has_message(key), key
+
+
+def test_the_integrate_and_grid_texts_follow_the_language():
+    """The F1-file sites: Integrate's outcome lines and toast, the replace
+    dialog's area, and the grid size hint count and separate in the language."""
+    from types import SimpleNamespace
+
+    from gui.scripts import integrate_jobs
+    from gui.widget import grid_form
+
+    assert integrate_jobs.outcome_lines({"GLAD-L": {"alert_pixels": 1, "alert_pixels_unmasked": 1}}, {}) == [
+        "GLAD-L: 1 alert pixel (below the minimum size, outside the drawn area or under earlier sets' footprints)"]
+    assert i18n.tn("steps.integrate.done", 1) == "1 alert ready for review"
+    set_locale("es-ES")
+    assert integrate_jobs.outcome_lines({"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 12345}}, {}) == [
+        "RADD: los 12.345 píxeles de alerta eliminados por máscaras"]
+    assert i18n.tn("steps.integrate.done", 2) == "2 alertas listas para revisar"
+    grid = SimpleNamespace(width=12345, height=6789)
+    original = grid_form.gridmod.estimate_bytes
+    grid_form.gridmod.estimate_bytes = lambda g: 2_500_000_000
+    try:
+        assert grid_form.grid_size_text(grid).startswith("12.345 × 6789 píxeles, unos 2,5 GB")  # CLDR: no 6.789
+    finally:
+        grid_form.gridmod.estimate_bytes = original

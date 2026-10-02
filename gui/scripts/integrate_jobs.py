@@ -40,7 +40,7 @@ from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.cleanup import delete_orphans
 from deforestation_alerts.project.models import AlertSetParams
-from gui.i18n import t
+from gui.i18n import format_number, t, tn
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import STATUS_CLASSES
@@ -149,10 +149,10 @@ def reviewed_lines(project, set_id: str, limit: int = 20) -> list:
         return []
     reviewed = df[df["status"].notna() & (df["status"] != "Not reviewed")]
     lines = [t("steps.integrate.replace_line", id=int(row.alert_id), status=status_label(row.status),
-               area=f"{float(row.area_ha):.2f}")
+               area=format_number(float(row.area_ha), 2))
              for row in reviewed.head(limit).itertuples(index=False)]
     if len(reviewed) > limit:
-        lines.append(t("steps.integrate.replace_more", n=len(reviewed) - limit))
+        lines.append(t("steps.integrate.replace_more", n=format_number(len(reviewed) - limit)))
     return lines
 
 
@@ -252,9 +252,9 @@ def outcome_lines(outcomes: dict, left_out: dict) -> list:
         st = outcomes[source] or {}
         kept, before = int(st.get("alert_pixels", 0)), int(st.get("alert_pixels_unmasked", 0))
         if kept:
-            lines.append(t("steps.integrate.outcome_pixels", source=source, n=f"{kept:,}"))
+            lines.append(tn("steps.integrate.outcome_pixels", kept, source=source))
         elif before:
-            lines.append(t("steps.integrate.outcome_masked", source=source, n=f"{before:,}"))
+            lines.append(tn("steps.integrate.outcome_masked", before, source=source))
         else:
             lines.append(t("steps.integrate.outcome_none", source=source))
     lines += [_left_out_line(s, (left_out or {})[s]) for s in sorted(left_out or {}, key=str.casefold)]
@@ -324,7 +324,7 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
             return
         if notifier is not None:
             if n:
-                notifier.success(t("steps.integrate.done", n=result.alert_set.n_alerts))
+                notifier.success(tn("steps.integrate.done", result.alert_set.n_alerts))
             else:
                 notifier.info(_empty_message(result, left_out))
         if navigate and n:
