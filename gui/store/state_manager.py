@@ -30,7 +30,6 @@ component reading the project re-renders, taking reacton's render lock. Hence:
   methods or wait on another thread.
 """
 
-import contextlib
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -53,7 +52,6 @@ class AppState:
         # predefined-source catalogue metadata (coverage end, GLAD-L bands),
         # fetched once per session by gui.scripts.catalogue_meta; not saved
         self.catalogue_meta = solara.reactive({})
-        self._restoring_depth = solara.reactive(0)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the
         # auto-save hook skips that publish (it would just rewrite the file).
@@ -71,7 +69,6 @@ class AppState:
         # alert review
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
-        self.loading = solara.reactive(False)
         # legends: published by MapLayers exactly while each layer is on the
         # map (spec §9.4)
         self.layer_legends = solara.reactive(())
@@ -101,23 +98,10 @@ class AppState:
             self.project.set(live.model_copy())
             return True
 
-    @property
-    def restoring(self) -> bool:
-        return self._restoring_depth.value > 0
-
-    def restoring_project(self):
-        @contextlib.contextmanager
-        def _window():
-            self._restoring_depth.value += 1
-            try:
-                yield
-            finally:
-                self._restoring_depth.value -= 1
-
-        return _window()
-
     def _install(self, p: Optional[Project], *, loading: bool) -> None:
-        with self.restoring_project(), self._lock:
+        # The auto-save skips this publish through ``_loading``; tiles tell a
+        # replayed AOI from a new one by its digest, not by a flag.
+        with self._lock:
             self.aoi_result.set(None)
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)

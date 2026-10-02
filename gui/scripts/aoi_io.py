@@ -66,6 +66,24 @@ def build_record(result, gdf, bounds) -> AoiRecord:
     )
 
 
+def gdf_bounds(gdf) -> tuple:
+    return tuple(float(v) for v in gdf.to_crs(epsg=4326).total_bounds)
+
+
+def stage_sidecar(pdir: Path, gdf) -> Path:
+    """Write the sidecar to a temporary name in ``pdir``; the caller moves it
+    into place (``os.replace``) once the project accepted the AOI."""
+    pdir = Path(pdir)
+    pdir.mkdir(parents=True, exist_ok=True)
+    tmp = pdir / f".{paths.AOI_SIDECAR}.{uuid.uuid4().hex}.tmp"
+    try:
+        gdf.to_crs(epsg=4326).to_file(tmp, driver="GeoJSON")
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return tmp
+
+
 def write_sidecar(pdir: Path, gdf) -> None:
     pdir = Path(pdir)
     pdir.mkdir(parents=True, exist_ok=True)

@@ -592,16 +592,25 @@ def test_original_alert_is_the_sets_combined_raster_band_3(tmp_path, monkeypatch
     assert map_.ee_layers == ["True Color", "False Color"]
     [(on_map, path, kw)] = calls
     assert on_map is map_ and path == combined
-    assert kw == {"key": "original-alert", "name": "Original Alert", "band": 3, "opacity": 0.5}
+    assert kw == {"key": "original-alert", "name": "Original Alert", "band": 3, "opacity": 0.5, "visible": False}
     assert not widgets.imgSelection1.disabled and not widgets.imgSelection2.disabled
 
 
 def test_the_original_alert_layer_starts_hidden(tmp_path, monkeypatch, gee):
+    """Hidden from its creation: a layer added visible and hidden afterwards
+    flashed on the map (its tiles were requested in between)."""
     ctx = SetContext(_state(tmp_path, monkeypatch))
     _combined(tmp_path)
-    layer = SimpleNamespace(visible=True)
-    _pick_image(ctx, monkeypatch, lambda *a, **k: layer)
-    assert layer.visible is False
+    layers = []
+
+    def _add(map_, path, *, visible=True, **kw):
+        layer = SimpleNamespace(visible=visible, shown=[visible])
+        layers.append(layer)
+        return layer
+
+    _pick_image(ctx, monkeypatch, _add)
+    [layer] = layers
+    assert layer.shown == [False] and layer.visible is False
 
 
 def test_no_original_alert_without_the_combined_raster(tmp_path, monkeypatch, gee):
@@ -677,3 +686,30 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
     assert saved.loc[0, "alert_polygon"] is not None
     assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
+
+
+def test_record_review_does_not_count_missing_statuses(monkeypatch):
+    import pandas as pd
+    from gui.scripts.set_context import SetContext
+
+    seen = []
+    ctx = SetContext(SimpleNamespace())
+    monkeypatch.setattr(ctx, "_update_set", lambda gdf, field, value, target=None: seen.append((field, value)))
+    gdf = pd.DataFrame({"status": ["Confirmed", None, "Not reviewed", float("nan")]})
+    ctx.record_review(gdf)
+    assert seen == [("n_reviewed", 1)]
+
+
+def test_add_raster_layer_creates_the_layer_with_its_visibility(monkeypatch):
+    import localtileserver
+
+    from gui.scripts import raster_map
+
+    made = []
+    monkeypatch.setattr(localtileserver, "TileClient", lambda path: path)
+    monkeypatch.setattr(localtileserver, "get_leaflet_tile_layer",
+                        lambda client, **kw: made.append(kw) or SimpleNamespace(**kw))
+    map_ = SimpleNamespace(remove_layer=lambda key, none_ok: None, add_layer=lambda layer, key: None)
+    raster_map.add_raster_layer(map_, "c.tif", key="k", name="n", visible=False)
+    raster_map.add_raster_layer(map_, "c.tif", key="k", name="n")
+    assert [kw["visible"] for kw in made] == [False, True]

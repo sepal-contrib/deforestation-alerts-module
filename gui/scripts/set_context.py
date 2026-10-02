@@ -127,4 +127,6 @@ class SetContext:
         when the Save started; without it, the active set."""
         if gdf is None or "status" not in gdf:
             return
-        self._update_set(gdf, "n_reviewed", int((gdf["status"] != "Not reviewed").sum()), target)
+        status = gdf["status"]
+        n = int((status.notna() & (status != "Not reviewed")).sum())
+        self._update_set(gdf, "n_reviewed", n, target)

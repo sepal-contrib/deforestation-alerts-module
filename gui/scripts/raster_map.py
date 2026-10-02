@@ -13,13 +13,14 @@ ALERT_EE_VIS = legend_specs.alert_ee_vis()
 
 
 def add_raster_layer(map_, path, *, key: str, name: str, band: int = 1,
-                     colormap=ALERT_COLORMAP, vmin=1, vmax=2, nodata=0, opacity: float = 1.0):
+                     colormap=ALERT_COLORMAP, vmin=1, vmax=2, nodata=0, opacity: float = 1.0,
+                     visible: bool = True):
     from localtileserver import TileClient, get_leaflet_tile_layer
 
     client = TileClient(str(path))
     layer = get_leaflet_tile_layer(
         client, indexes=[band], colormap=colormap, vmin=vmin, vmax=vmax, nodata=nodata,
-        name=name, opacity=opacity, max_zoom=20, max_native_zoom=20,
+        name=name, opacity=opacity, visible=visible, max_zoom=20, max_native_zoom=20,
     )
     map_.remove_layer(key, none_ok=True)
     map_.add_layer(layer, key=key)

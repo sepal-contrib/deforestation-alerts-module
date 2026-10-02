@@ -186,11 +186,11 @@ def image_slider_map_callback(
     combined = getattr(selected_alerts_model, "combined_path", None)
     if combined is not None and combined.exists():
         try:
-            layer = raster_map.add_raster_layer(
+            raster_map.add_raster_layer(
                 map_element, combined, key="original-alert", name="Original Alert",
                 band=3, opacity=0.5,
+                visible=False,  # off by default, as before; the map's layer control shows it
             )
-            layer.visible = False  # off by default, as before; the map's layer control shows it
         except Exception:
             logger.exception("Analysis imagery: failed to add the Original Alert layer")
     widgets.imgSelection1.disabled = False

@@ -83,3 +83,24 @@ def test_a_rebind_with_no_alert_selected_leaves_the_card_alone(tmp_path, monkeyp
     assert widgets.selected_alert_info.children == before
     s.alerts_gdf.set(_alerts(1))  # the new set: its first alert is selected and drawn once
     assert s.actual_alert_id.value == 0 and _status(widgets) == str(cm.analysis_tile.alert_info.status_not_reviewed)
+
+
+def test_another_sets_alerts_leave_the_card_and_the_review_state_alone(tmp_path, monkeypatch):
+    """Integrate records a new set before it publishes that set's alerts: until
+    then ``alerts_gdf`` still holds the old set's rows, which Analysis must not
+    show as the new set's (Overview already checks ``alerts_belong_to``)."""
+    s = _state(tmp_path, monkeypatch)
+    old = _alerts(2)
+    old["set_id"] = "old"
+    s.alerts_gdf.value = old
+    s.actual_alert_id.value = 0
+    widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=["kept"]))
+    assert analysis_tile.refresh_alert_info(widgets, s) is None
+    assert widgets.selected_alert_info.children == ["kept"]
+
+    analysis = AnalysisState()
+    analysis.defo_layer.set("drawn")
+    id_field = SimpleNamespace(v_model=None)
+    analysis_tile.view_actual_alert(widgets, s, analysis, SetContext(s), id_field)
+    assert widgets.selected_alert_info.children == ["kept"]
+    assert id_field.v_model is None and analysis.defo_layer.value == "drawn"

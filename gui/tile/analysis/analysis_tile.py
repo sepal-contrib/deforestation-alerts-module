@@ -74,6 +74,7 @@ from gui.tile.analysis.export import build_export
 from gui.tile.analysis.imagery import build_imagery
 from gui.tile.analysis.navigator import build_navigator
 from gui.i18n import t
+from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
 
@@ -94,13 +95,18 @@ def refresh_alert_info(widgets, app_state):
     """Fill the Alert info card (source, dates, status) for the selected alert.
 
     Returns the alert's ``(first date, last date)`` as shown, or None with no
-    alert selected (the card is left as it is). Run on every alert change and
-    again when the alerts are rebound with the same alert still selected: a
-    review Save writes the status into the row and then rebinds
-    ``alerts_gdf`` to a copy (``export._apply_save``), and the card kept
-    reading "Not reviewed" until the next alert change.
+    alert selected or with alerts of another set than the active one (the
+    card is left as it is): Integrate records a new set before it publishes
+    that set's alerts, and Overview skips them the same way. Run on every
+    alert change and again when the alerts are rebound with the same alert
+    still selected: a review Save writes the status into the row and then
+    rebinds ``alerts_gdf`` to a copy (``export._apply_save``), and the card
+    kept reading "Not reviewed" until the next alert change.
     """
     gdf = app_state.alerts_gdf.value
+    s = active_set(app_state.project.value)
+    if s is not None and not set_store.alerts_belong_to(gdf, s):
+        return None  # another set's alerts, until the new set's are published
     alert_id = app_state.actual_alert_id.value
     if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):
         return None
@@ -143,12 +149,16 @@ def view_actual_alert(
     alert set (``SetContext.remember_position``; spec §10 replaces the recipe
     json's ``actual_alert_id``).
 
-    Guards: returns early when no alerts are loaded or the id is out of range — so
+    Guards: returns early when no alerts are loaded, when they are another
+    set's than the active one (``refresh_alert_info``), or the id is out of range — so
     it is safe at smoke time (no EE/imagery work runs) and idempotent under the
     render_fixed double-mount. The heavy imagery loading + slide-group rebuilds are
     deferred to Task 9.2 (AlertImagery).
     """
     gdf = app_state.alerts_gdf.value
+    s = active_set(app_state.project.value)
+    if s is not None and not set_store.alerts_belong_to(gdf, s):
+        return None  # another set's alerts, until the new set's are published
     alert_id = app_state.actual_alert_id.value
 
     if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):

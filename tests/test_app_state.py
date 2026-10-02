@@ -53,18 +53,6 @@ def test_project_dir(tmp_path, monkeypatch):
     assert s.project_dir == tmp_path / "demo"
 
 
-def test_installing_a_project_runs_inside_the_restoring_window():
-    """Effects that react to the project swap (the AOI step's attach) must be
-    able to tell a restore from a user edit while the new project lands."""
-    s = AppState()
-    seen = []
-    s.project.subscribe(lambda p: seen.append(s.restoring))
-    s.new_project_state(_p("a"))
-    s.load_project_state(_p("b"))
-    s.close_project_state()
-    assert seen == [True, True, True] and s.restoring is False
-
-
 def test_closing_the_project_returns_the_workflow_to_the_aoi_step():
     """Without a project every step but AOI is locked: closing (or deleting)
     the open project must not leave the workflow parked on one."""
@@ -98,7 +86,6 @@ def test_defaults():
     assert s.current_page_view.value == "about_tile"
     assert s.actual_alert_id.value == -1
     assert s.alerts_gdf.value is None
-    assert s.loading.value is False
 
 
 def test_reactives_are_independent_per_instance():
