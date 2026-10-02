@@ -7,12 +7,20 @@ them. A keep mask on in the period that covers none of the AOI warns when its
 alignment finishes. Before each row it re-reads the live
 project and stops when that row would no longer belong to the run it was
 started as: the user stopped it, closed or switched the project, or changed
-the period or the AOI (the Earth Engine AOI is fixed when the run starts, so a
-later row would record fingerprints of inputs it did not use). Each row works
-on a deep copy, and its artifacts are applied only while the project is still
-the open one (``AppState.update_project``), so a late row never writes into
-another project (review focus 5). Its files stay in its own project folder,
-which is marked as being written for the whole run so it can't be deleted.
+the period, the AOI or the grid (the Earth Engine AOI is fixed when the run
+starts, so a later row would record fingerprints of inputs it did not use).
+Each row works on a deep copy, and its artifacts are applied only while the
+project is still the open one (``AppState.update_project``), so a late row
+never writes into another project (review focus 5). Its files stay in its own
+project folder, which is marked as being written for the whole run so it
+can't be deleted.
+
+The row that was running when the period, the AOI or the grid changed is not
+recorded either (the same rule as Integrate's, ``integrate_jobs.scope_changed``):
+its new files that no record names are deleted, so an AOI change leaves no
+old-AOI file behind, and the run stops. The AOI step and the grid form refuse
+those edits while a job writes into the project; this is the backstop for an
+edit made just before the job's mark was set.
 
 A row that finishes after its project was closed or switched has already
 written (or replaced, or superseded) files in that project's folder, so its
@@ -52,8 +60,10 @@ from deforestation_alerts.engine.runner import (
 )
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
+from deforestation_alerts.project.cleanup import delete_files
 from gui.i18n import t
 from gui.scripts import source_layers
+from gui.scripts.integrate_jobs import run_scope, scope_changed
 from gui.scripts.coverage_ui import note_text, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
@@ -86,18 +96,73 @@ class PrepareContext:
     on_warning: Any = None  # called with a warning's text; None: ``notifier.warning`` (tests record it)
 
 
-def _digest(p) -> Optional[str]:
-    return p.aoi.digest if p is not None and p.aoi is not None else None
-
-
-def _live(ctx: PrepareContext, aoi_digest: Optional[str]):
+def _live(ctx: PrepareContext, scope: tuple):
     """The live project while the run still belongs to it, else None."""
     live = ctx.app_state.project.value
     if live is None or live.name != ctx.name:
         return None
-    if ctx.period.id not in live.periods or _digest(live) != aoi_digest:
+    if scope_changed(live, ctx.period.id, scope) is not None:
         return None
     return live
+
+
+class _ScopeChanged(Exception):
+    """Raised inside the ``update_project`` callback: nothing is recorded or
+    published (``update_project`` publishes only when the callback returns)."""
+
+
+def _unnamed_files(p, arts: dict) -> list:
+    """The rel_paths of ``arts`` that no record of ``p`` names: a refused
+    row's files nothing will ever point at. A file a record still names (a
+    rel_path shared with an earlier run of the row) stays: that record already
+    reads out of date, its fingerprint naming the old AOI, grid or period."""
+    named = {a.rel_path for a in p.artifacts.values()}
+    return sorted({a.rel_path for a in arts.values() if a.rel_path and a.rel_path not in named})
+
+
+def _delete_refused(ctx: PrepareContext, rel_paths: list) -> None:
+    """Delete a refused row's files, then the folders that held only them.
+    Called under the run's ``writing(ctx.name)``."""
+    if not rel_paths:
+        return
+    pdir = Path(ctx.pdir)
+    delete_files(pdir, rel_paths)
+    for rel in rel_paths:
+        folder = (pdir / rel).parent
+        while folder != pdir and pdir in folder.parents:
+            try:
+                folder.rmdir()  # only an empty folder: a period's folder the user removed
+            except OSError:
+                break
+            folder = folder.parent
+
+
+def _record(ctx: PrepareContext, scope: tuple, arts: dict) -> bool:
+    """Record a row's artifacts; False when the run must stop: its project
+    was left (recorded in its own manifest instead) or its period, AOI or grid
+    changed during the row (nothing recorded, its files deleted)."""
+    refused = []
+
+    def _apply(p):
+        why = scope_changed(p, ctx.period.id, scope)
+        if why is not None:
+            refused.append((why, _unnamed_files(p, arts)))
+            raise _ScopeChanged(why)
+        apply_artifacts(p, arts)
+
+    try:
+        recorded = ctx.app_state.update_project(ctx.name, _apply)
+    except _ScopeChanged:
+        recorded = True  # the project is still open: nothing else to record into
+    if not recorded:
+        _record_in_own_project(ctx, scope, arts)  # the project was left mid-row
+        return False
+    if refused:
+        why, files = refused[0]
+        logger.warning("a row of project %s is not recorded: its %s changed during the run", ctx.name, why)
+        _delete_refused(ctx, files)
+        return False
+    return True
 
 
 def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None:
@@ -117,7 +182,7 @@ def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None
         ctx.row_errors.set(errors)
 
 
-def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
+def _record_in_own_project(ctx: PrepareContext, scope: tuple, arts: dict) -> None:
     """Record a late row's artifacts in its own project's saved manifest,
     under the project's manifest lock (``io.update_saved_project``).
 
@@ -126,21 +191,27 @@ def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
     wrote its files in that project's folder: without the record, a forced
     refresh would keep the old content_id over new bytes (spec §5.3), and a
     superseded file the manifest still points at would read as missing
-    (spec §5.2). A failure is logged and never fails the run.
+    (spec §5.2). Refused, like the open-project record, when the saved
+    project's period, AOI or grid is no longer the run's: the row's files no
+    saved record names are then deleted. A failure is logged and never fails
+    the run.
     """
     if not arts:
         return
     root = Path(ctx.pdir).parent
+    refused = []
 
     def _apply(own):
-        if ctx.period.id not in own.periods:
-            return False  # the period was removed there: no orphan records
+        if scope_changed(own, ctx.period.id, scope) is not None:
+            refused.extend(_unnamed_files(own, arts))
+            return False  # a removed period would get orphan records; another AOI or grid is not this row's
         apply_artifacts(own, arts)
 
     try:
         io.update_saved_project(ctx.name, _apply, root=root)
     except Exception:  # noqa: BLE001 - the row's files are written; only the record is lost
         logger.exception("could not record a late row in project %s", ctx.name)
+    _delete_refused(ctx, refused)
 
 
 def row_cells(row: PrepareRow, running: bool, label=None) -> list:
@@ -240,14 +311,14 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     switched while a row runs leaves that row recorded with the old choice
     (it then reads out of date: review focus 4). A mask row's error is keyed
     ``@mask:<name>`` in ``row_errors``."""
-    aoi_digest = _digest(ctx.app_state.project.value)
+    scope = run_scope(ctx.app_state.project.value)
     items = _items(rows)
     with writing(ctx.name), tracked_job(ctx.notifier, t("steps.prepare.job_title"),
                                         total_steps=len(items)) as task:
         for kind, name in items:
             if ctx.cancel.is_set():
                 raise asyncio.CancelledError()  # pysepal marks the task CANCELLED
-            live = _live(ctx, aoi_digest)
+            live = _live(ctx, scope)
             if live is None:
                 return
             if kind == "mask":
@@ -279,14 +350,11 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
                 if isinstance(exc, HarmonizeFailed) and exc.artifacts:
                     # The download (or the AOI raster) succeeded: record it, so
                     # the next run only re-harmonizes (re-aligns) from disk.
-                    kept = exc.artifacts
-                    if not ctx.app_state.update_project(ctx.name, lambda p, a=kept: apply_artifacts(p, a)):
-                        _record_in_own_project(ctx, kept)  # the project was left mid-row
+                    if not _record(ctx, scope, exc.artifacts):
                         return
                 continue
             _set_error(ctx, error_key, None)
-            if not ctx.app_state.update_project(ctx.name, lambda p, a=arts: apply_artifacts(p, a)):
-                _record_in_own_project(ctx, arts)  # the project was left mid-row
+            if not _record(ctx, scope, arts):
                 return
             if kind == "mask":
                 _warn_if_covers_none(ctx, name, arts)

@@ -85,16 +85,33 @@ def _signature(grid) -> Optional[str]:
     return grid.signature if grid is not None else None
 
 
+def run_scope(project) -> tuple:
+    """What a job's results depend on besides its period: ``(AOI digest,
+    grid signature)``, read when the job starts."""
+    if project is None:
+        return None, None
+    return _digest(project.aoi), _signature(project.grid)
+
+
+def scope_changed(project, period_id: str, scope: tuple) -> Optional[str]:
+    """What ``project`` no longer shares with a job started on ``period_id``
+    and ``scope`` (``run_scope``): ``"period"``, ``"aoi"`` or ``"grid"``, else
+    None (the job's results may be recorded). Both job layers use it
+    (Integrate and Download & harmonize)."""
+    if period_id not in project.periods:
+        return "period"
+    digest, signature = run_scope(project)
+    if digest != scope[0]:
+        return "aoi"
+    if signature != scope[1]:
+        return "grid"
+    return None
+
+
 def changed_since(job, project) -> Optional[str]:
     """What ``project`` no longer shares with the project ``job`` ran on:
     ``"period"``, ``"aoi"`` or ``"grid"``, else None (the set may be recorded)."""
-    if job.period.id not in project.periods:
-        return "period"
-    if _digest(project.aoi) != _digest(job.project.aoi):
-        return "aoi"
-    if _signature(project.grid) != _signature(job.project.grid):
-        return "grid"
-    return None
+    return scope_changed(project, job.period.id, run_scope(job.project))
 
 
 class _ProjectChanged(Exception):

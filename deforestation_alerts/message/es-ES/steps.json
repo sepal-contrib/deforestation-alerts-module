@@ -72,7 +72,8 @@
       "saved": "AOI guardada: {name}",
       "failed": "No se pudo guardar la AOI: {error}",
       "locked": "Este proyecto ya tiene conjuntos de alertas, así que su AOI está bloqueada. Duplica el proyecto (diálogo de proyecto) para monitorear otra área.",
-      "no_geometry": "La AOI no tiene geometría utilizable; selecciónala de nuevo en el paso AOI."
+      "no_geometry": "La AOI no tiene geometría utilizable; selecciónala de nuevo en el paso AOI.",
+      "busy": "Un trabajo está escribiendo en este proyecto; cambia la AOI cuando termine."
     },
     "alerts": {
       "title": "Fuentes de alertas",
@@ -278,6 +279,7 @@
       "grid_save": "Guardar cuadrícula",
       "grid_saved": "Cuadrícula guardada ({w} × {h} píxeles)",
       "grid_locked": "La cuadrícula está bloqueada porque el proyecto tiene conjuntos de alertas.",
+      "grid_busy": "Un trabajo está escribiendo en este proyecto; guarda la cuadrícula cuando termine.",
       "grid_need_epsg": "Introduce un código EPSG.",
       "grid_bad_epsg": "Código EPSG desconocido.",
       "grid_geographic": "Usa un CRS proyectado en metros (el botón ⌖ elige la zona UTM de la AOI).",

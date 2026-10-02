@@ -1,4 +1,9 @@
-"""The project grid card (spec §7.1): EPSG with auto-UTM, resolution, size."""
+"""The project grid card (spec §7.1): EPSG with auto-UTM, resolution, size.
+
+A Save is refused once the project has a set (D10), and while a job writes
+into the project (a Download & harmonize or Integrate run reads the grid:
+spec §5.1, as the other steps refuse their edits).
+"""
 
 import reacton.ipyvuetify as rv
 import solara
@@ -6,6 +11,7 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine import grid as gridmod
 from gui.i18n import t
+from gui.store.project_writers import is_writing
 
 LARGE_BYTES = 2e9  # spec §7.1: warn (not block) above 2 GB per source
 
@@ -75,18 +81,20 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
         if err:
             return
         new = gridmod.build_grid(bounds, epsg, float(res))
-        applied = []
+        refused = []
 
         def _apply(live):
             if live.locked:
-                return  # a set was recorded since this form rendered (spec D10): the grid is frozen
-            live.grid = new
-            applied.append(True)
+                refused.append("steps.prepare.grid_locked")  # a set was recorded since this form rendered (D10)
+            elif is_writing(name):
+                refused.append("steps.prepare.grid_busy")  # a job reads the grid; its own record re-checks it
+            else:
+                live.grid = new
 
         if not app_state.update_project(name, _apply):
             return  # the project was closed or switched meanwhile
-        if not applied:
-            notifications.warning(t("steps.prepare.grid_locked"))
+        if refused:
+            notifications.warning(t(refused[0]))
             return
         notifications.success(t("steps.prepare.grid_saved", w=new.width, h=new.height))
 

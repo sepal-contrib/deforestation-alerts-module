@@ -40,7 +40,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t
 from gui.scripts import aoi_io, prepare_jobs, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
-from gui.store.project_writers import is_writing
+from gui.store.project_writers import is_writing, writing
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
 from gui.widget.grid_form import grid_error_key
@@ -235,30 +235,110 @@ def test_a_late_row_that_cannot_be_recorded_does_not_fail_the_job(monkeypatch, t
     assert not (tmp_path / "d").exists()
 
 
-@pytest.mark.parametrize("change", ["aoi", "period"])
-def test_run_rows_stops_when_the_aoi_or_the_period_changes(monkeypatch, change):
-    """The EE AOI and the period are fixed when the run starts: a row started
-    after either changed would record fingerprints of inputs it did not use.
-    """
-    s = AppState()
-    s.new_project_state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY))
-    ran = []
+def _write(pdir, arts):
+    for a in arts.values():
+        path = pdir / a.rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    return arts
 
+
+def _change_scope(change):
     def _change(live):
         if change == "aoi":
             live.aoi = live.aoi.model_copy(update={"digest": "another-geometry"})
+            live.grid = None
+            live.artifacts = {}  # aoi_io.apply_aoi drops every record
+        elif change == "grid":
+            live.grid = gridmod.build_grid(PARAGUAY, gridmod.auto_utm_epsg(PARAGUAY), 10.0)
         else:
             live.periods = {}
             live.active_period = None
+    return _change
+
+
+@pytest.mark.parametrize("change", ["aoi", "grid", "period"])
+def test_run_rows_stops_when_the_aoi_the_grid_or_the_period_changes(monkeypatch, tmp_path, change):
+    """The EE AOI, the grid and the period are fixed when the run starts: a
+    row started after one changed would record fingerprints of inputs it did
+    not use, and the row that was running is not recorded either: its files
+    are deleted, so an AOI change leaves no old-AOI file (review A I1).
+    """
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
+    ran, written = [], {}
 
     def fake_run(job, on_tiles=None, on_wait=None):
         ran.append(job.source)
-        s.update_project("d", _change)
-        return _arts(job.source)
+        s.update_project("d", _change_scope(change))
+        written[job.source] = _write(tmp_path, _arts(job.source))
+        return written[job.source]
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    prepare_jobs.run_rows(_ctx(s), ["GLAD-L", "RADD"])
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path), ["GLAD-L", "RADD"])
     assert ran == ["GLAD-L"]
+    live = s.project.value
+    assert raw_key(JAN.id, "GLAD-L") not in live.artifacts and harm_key(JAN.id, "GLAD-L") not in live.artifacts
+    assert not any((tmp_path / a.rel_path).exists() for a in written["GLAD-L"].values())
+
+
+def test_a_refused_row_keeps_a_file_a_live_record_still_names(monkeypatch, tmp_path):
+    """Only the row's files no live record names are deleted."""
+    s = AppState()
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    kept = _write(tmp_path, _arts("GLAD-L"))
+    p.artifacts = dict(kept)
+    s.new_project_state(p)
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        s.update_project("d", _change_scope("grid"))
+        return {k: a.model_copy(update={"content_id": "new"}) for k, a in kept.items()}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path), ["GLAD-L"])
+    assert s.project.value.artifacts == kept  # the new records are refused
+    assert all((tmp_path / a.rel_path).exists() for a in kept.values())
+
+
+def test_a_harmonize_failure_after_an_aoi_change_records_nothing(monkeypatch, tmp_path):
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
+    rkey = raw_key(JAN.id, "GLAD-L")
+    kept = _write(tmp_path, {rkey: _art(rkey, "raw_alert")})
+    ran = []
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        ran.append(job.source)
+        s.update_project("d", _change_scope("aoi"))
+        raise HarmonizeFailed(OSError("disk I/O error"), kept)
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path), ["GLAD-L", "RADD"])
+    assert ran == ["GLAD-L"] and s.project.value.artifacts == {}
+    assert not (tmp_path / kept[rkey].rel_path).exists()
+
+
+@pytest.mark.parametrize("change", ["aoi", "grid"])
+def test_a_late_row_is_not_recorded_when_its_saved_project_changed_aoi_or_grid(monkeypatch, tmp_path, change):
+    """The own-manifest path refuses what the open-project path refuses, and
+    deletes the row's files no saved record names."""
+    s = AppState()
+    d = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    s.new_project_state(d)
+    changed = d.model_copy(deep=True)
+    _change_scope(change)(changed)
+    io.save_project(changed, root=tmp_path)
+    written = {}
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        s.close_project_state()
+        written[job.source] = _write(tmp_path / "d", _arts(job.source))
+        return written[job.source]
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d"), ["GLAD-L"])
+    assert io.load_project("d", root=tmp_path).artifacts == {}
+    assert not any((tmp_path / "d" / a.rel_path).exists() for a in written["GLAD-L"].values())
 
 
 def test_a_failed_row_does_not_stop_the_next(monkeypatch):
@@ -905,6 +985,35 @@ def test_grid_form_does_not_overwrite_a_grid_frozen_since_it_rendered(step, monk
 
         assert state.project.value.grid == frozen
         assert _toasts("success") == [] and _toasts("warning") == [t("steps.prepare.grid_locked")]
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("when", ["before", "during"])
+def test_grid_form_refuses_a_save_while_a_job_writes_into_the_project(step, monkeypatch, when):
+    """Review A I1: a Download & harmonize (or Integrate) job reads the grid;
+    a Save under it is refused with a reason, also when the job set its mark
+    after the click (checked under the state lock)."""
+    state = _state(_project("d", "RADD", bounds=PARAGUAY, grid=True))
+    before = state.project.value.grid
+    real_update = state.update_project
+
+    def _job_started(name, fn):
+        with writing(name):
+            return real_update(name, fn)
+
+    box, rc = _render(state)
+    try:
+        _field(rc, t("steps.prepare.grid_resolution")).v_model = "30"
+        save = _button(rc, t("steps.prepare.grid_save"))
+        if when == "before":
+            with writing("d"):
+                save.fire_event("click", None)
+        else:
+            monkeypatch.setattr(state, "update_project", _job_started)
+            save.fire_event("click", None)
+        assert state.project.value.grid == before
+        assert _toasts("success") == [] and _toasts("warning") == [t("steps.prepare.grid_busy")]
     finally:
         rc.close()
 

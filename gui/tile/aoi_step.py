@@ -2,7 +2,15 @@
 
 Picking an AOI with no project open creates one named <aoi>_<yyyymmdd>.
 Once the project has an alert set, the AOI is locked (D10): the view is shown
-read-only with a hint to duplicate the project instead.
+read-only with a hint to duplicate the project instead. Before that, a change
+is refused while a job writes into the project (a Download & harmonize or
+Integrate run reads the AOI's files and would write old-AOI files after the
+change), as the other steps refuse their edits (spec §5.1).
+
+A change drops every artifact record and deletes their files: the layers
+drawn from them (``src:`` harmonized files and previews, ``mask:`` aligned
+masks, all cut to the old AOI) leave the map first, as a period's do
+(``period_step.hide_dropped_layers``).
 
 ``app_state.aoi_result`` is what downloads and previews clip to, so it only
 holds a pick the open project took: the saved AOI replayed on load, or a new
@@ -24,9 +32,13 @@ from deforestation_alerts.project import cleanup, paths
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts import aoi_io
-from gui.store.project_writers import writing
+from gui.store.project_writers import is_writing, writing
 from gui.tile.project_dialog import create_project, names_on_disk
 from gui.widget.help import StepIntro
+
+
+class _Busy(Exception):
+    """Raised inside ``update_project``'s callback: the AOI is not changed."""
 
 
 def _open_name(app_state):
@@ -34,8 +46,22 @@ def _open_name(app_state):
     return p.name if p is not None else None
 
 
+AOI_LAYER_PREFIXES = ("src:", "mask:")  # every one is cut to the AOI
+
+
+def hide_aoi_layers(layers, content_ids) -> None:
+    """Take off the map every layer an AOI change leaves wrong, before its
+    files are deleted: the ``src:`` and ``mask:`` layers (harmonized files,
+    Earth Engine previews and aligned masks, all cut to the old AOI) and any
+    other layer drawn from a dropped file."""
+    for key in sorted(layers.on.value):
+        content = layers.content_of(key)
+        if key.startswith(AOI_LAYER_PREFIXES) or (content is not None and content in content_ids):
+            layers.hide(key)
+
+
 @solara.component
-def AoiStep(app_state, map_, gee_interface):
+def AoiStep(app_state, map_, gee_interface, layers):
     notifications = use_notifications()
     p = app_state.project.value
     signal = app_state.project_loaded_signal.value
@@ -72,7 +98,8 @@ def AoiStep(app_state, map_, gee_interface):
             record = aoi_io.build_record(result, None, aoi_io.bounds_from_geojson(geom))
         else:
             # the digest hashes every geometry: off the event loop
-            record = await asyncio.to_thread(aoi_io.build_record, result, gdf, aoi_io.gdf_bounds(gdf))
+            # (the bounds' reprojection too: a national AOI takes a while)
+            record = await asyncio.to_thread(lambda: aoi_io.build_record(result, gdf, aoi_io.gdf_bounds(gdf)))
         if _open_name(app_state) != owner:
             return
         current = app_state.project.value
@@ -108,6 +135,9 @@ def AoiStep(app_state, map_, gee_interface):
             notifications.warning(t("steps.aoi.locked"))
             return
         name = current.name
+        if is_writing(name):  # spec §5.1: checked again under the state lock below
+            notifications.warning(t("steps.aoi.busy"))
+            return
         pdir = paths.project_dir(name)
         staged = None
         if gdf is not None:
@@ -116,24 +146,36 @@ def AoiStep(app_state, map_, gee_interface):
             with writing(name):
                 staged = await asyncio.to_thread(aoi_io.stage_sidecar, pdir, gdf)
 
-        gone = []
+        gone, dropped, refused = [], set(), []
 
         def _apply(live):
+            if is_writing(name):
+                # A job set its mark since the check above: it reads this
+                # AOI's files. Raised so nothing is published.
+                refused.append(True)
+                raise _Busy()
             if staged is not None:
                 os.replace(staged, pdir / paths.AOI_SIDECAR)
             else:
                 # An Earth Engine AOI has no sidecar. Drop the previous AOI's,
                 # or ee_aoi's fallback would clip downloads to the old geometry.
                 (pdir / paths.AOI_SIDECAR).unlink(missing_ok=True)
+            dropped.update(a.content_id for a in live.artifacts.values())
             gone.extend(aoi_io.apply_aoi(live, record))
 
         try:
             applied = app_state.update_project(name, _apply)
+        except _Busy:
+            applied = False
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)  # refused: the project keeps its own sidecar
+        if refused:
+            notifications.warning(t("steps.aoi.busy"))
+            return
         if not applied:
             return  # switched or closed while the sidecar was written
+        hide_aoi_layers(layers, dropped)  # before the files go (the Task 38 order)
         await asyncio.to_thread(cleanup.delete_files, pdir, gone)
         app_state.aoi_result.set(result)
         notifications.success(t("steps.aoi.saved", name=record.name))

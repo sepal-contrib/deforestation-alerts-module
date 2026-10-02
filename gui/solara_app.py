@@ -514,7 +514,8 @@ def _AppShell():
                                                      layers=layers), t("app.drawer_item.overview"))[0], dependencies=[])
     step_widgets = solara.use_memo(
         lambda: {
-            "aoi": render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface),
+            "aoi": render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface,
+                                                   layers=layers),
                                    t("app.drawer_item.aoi"))[0],
             "alerts": render_detached(lambda: AlertsStep(app_state=app_state, map_=map_,
                                                          gee_interface=gee_interface, layers=layers),

@@ -66,7 +66,8 @@
       "saved": "AOI saved: {name}",
       "failed": "Could not save the AOI: {error}",
       "locked": "This project already has alert sets, so its AOI is locked. Duplicate the project (Project dialog) to monitor another area.",
-      "no_geometry": "The AOI has no usable geometry; select it again in the AOI step."
+      "no_geometry": "The AOI has no usable geometry; select it again in the AOI step.",
+      "busy": "A job is writing into this project; change the AOI once it has finished."
     },
     "alerts": {
       "title": "Alert sources",
@@ -268,6 +269,7 @@
       "grid_save": "Save grid",
       "grid_saved": "Grid saved ({w} × {h} pixels)",
       "grid_locked": "The grid is locked because the project has alert sets.",
+      "grid_busy": "A job is writing into this project; save the grid once it has finished.",
       "grid_need_epsg": "Enter an EPSG code.",
       "grid_bad_epsg": "Unknown EPSG code.",
       "grid_geographic": "Use a projected CRS in metres (the ⌖ button picks the UTM zone of the AOI).",

@@ -72,7 +72,8 @@
       "saved": "AOI enregistrée : {name}",
       "failed": "Impossible d'enregistrer l'AOI : {error}",
       "locked": "Ce projet a déjà des jeux d'alertes, donc son AOI est verrouillée. Dupliquez le projet (boîte de dialogue Projet) pour surveiller une autre zone.",
-      "no_geometry": "L'AOI n'a pas de géométrie utilisable ; sélectionnez-la à nouveau dans l'étape AOI."
+      "no_geometry": "L'AOI n'a pas de géométrie utilisable ; sélectionnez-la à nouveau dans l'étape AOI.",
+      "busy": "Une tâche écrit dans ce projet ; modifiez l'AOI une fois celle-ci terminée."
     },
     "alerts": {
       "title": "Sources d'alertes",
@@ -278,6 +279,7 @@
       "grid_save": "Enregistrer la grille",
       "grid_saved": "Grille enregistrée ({w} × {h} pixels)",
       "grid_locked": "La grille est verrouillée car le projet a des jeux d'alertes.",
+      "grid_busy": "Une tâche écrit dans ce projet ; enregistrez la grille une fois celle-ci terminée.",
       "grid_need_epsg": "Saisissez un code EPSG.",
       "grid_bad_epsg": "Code EPSG inconnu.",
       "grid_geographic": "Utilisez un CRS projeté en mètres (le bouton ⌖ choisit la zone UTM de l'AOI).",
