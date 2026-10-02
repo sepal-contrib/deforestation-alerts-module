@@ -13,6 +13,7 @@ from tensorflow.keras import backend as K
 from MightyMosaic import MightyMosaic
 
 from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.scripts import local_files
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -39,32 +40,23 @@ class RepeatElements(layers.Layer):
 
 
 def save_prediction_prob(original_img, prediction, output_path):
-    """
-    Save prediction as geotiff .
+    """Save ``prediction`` as a 1-band float32 GeoTIFF on ``original_img``'s grid.
+
+    Written to a ``.part`` beside ``output_path`` and moved into place
+    (``local_files.write_into``): a reader never sees half a raster, and a
+    failed write leaves the previous prediction as it was.
 
     Parameters:
-    - original_img (list of str): Input raster file path.
-    - prediction (object)
-    - output_path (str): Output raster file path.
+    - original_img (str): the input raster's path; its grid is copied.
+    - prediction (array): the probabilities, the input's height x width.
+    - output_path (str): the output raster's path.
     """
-    # If the output file already exists, remove it.
-    if os.path.exists(output_path):
-        os.remove(output_path)
-
-    # Open the input rasters
-    src1 = rasterio.open(original_img)
-
-    # Read metadata of the first raster
-    out_meta = src1.meta.copy()
-
-    # Update metadata to reflect the new number of bands
-    out_meta.update(count=1)
-    out_meta.update({"dtype": "float32"})
-
-    # Write the stacked raster to the output file
-    with rasterio.open(output_path, "w", **out_meta) as dest:
-        dest.write(prediction, indexes=1)
-
+    with rasterio.open(original_img) as src1:
+        out_meta = src1.meta.copy()
+    out_meta.update(count=1, dtype="float32", driver="GTiff")
+    with local_files.write_into(output_path) as part:
+        with rasterio.open(part, "w", **out_meta) as dest:
+            dest.write(prediction, indexes=1)
     return output_path
 
 

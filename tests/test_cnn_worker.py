@@ -43,3 +43,19 @@ def test_save_prediction_prob_writes_float32_geotiff(tmp_path):
         assert o.transform == s.transform
         assert o.dtypes[0] == "float32"
         assert np.allclose(o.read(1), pred)
+
+
+def test_a_failed_save_leaves_the_previous_prediction_and_no_part(tmp_path):
+    """Review A M6: the prediction is written to a ``.part`` and moved into
+    place; it used to delete the old file, then write in place."""
+    import pytest
+
+    src = _write_src(tmp_path)
+    out = tmp_path / "pred.tif"
+    first = np.full((8, 8), 0.5, "float32")
+    save_prediction_prob(src, first, str(out))
+    with pytest.raises(Exception):
+        save_prediction_prob(src, None, str(out))  # no array: the write fails
+    with rasterio.open(out) as o:
+        assert np.allclose(o.read(1), first)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["pred.tif", "src.tif"]
