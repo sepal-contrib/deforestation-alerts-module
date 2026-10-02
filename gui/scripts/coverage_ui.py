@@ -1,4 +1,7 @@
-"""Coverage notes, chips and harmonize results as translated table content."""
+"""Coverage notes, chips and harmonize results as translated table content,
+and the Check again button of the Alerts and Download & harmonize steps."""
+
+import solara
 
 from deforestation_alerts.engine.coverage import (
     NO_DATA, NOT_COVERED, UNCHECKED, chip_note, covering_dates, Note,
@@ -53,3 +56,15 @@ def result_note(stats) -> dict | None:
     if before:
         return {"text": t("steps.prepare.result_all_masked", n=f"{before:,}"), "tone": "warning"}
     return {"text": t("steps.prepare.result_none"), "tone": "info"}
+
+
+@solara.component
+def CheckAgainButton(app_state, show: bool):
+    """Check again (spec §6.2 "Failure"): restarts the coverage check and the
+    AOI-sidecar fetch (``coverage_retry``); disabled while either runs. A
+    leaf: the pending flags re-render only the button."""
+    if not show:
+        return
+    pending = app_state.coverage_pending.value or app_state.sidecar_pending.value
+    solara.Button(t("coverage.check_again"), small=True, outlined=True, icon_name="mdi-refresh", disabled=pending,
+                  on_click=lambda: app_state.coverage_retry.set(app_state.coverage_retry.value + 1))

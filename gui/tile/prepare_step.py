@@ -40,7 +40,7 @@ from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from gui.i18n import t
 from gui.scripts import aoi_io, source_layers
-from gui.scripts.coverage_ui import result_note, row_notes
+from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
 from gui.scripts.solara_threads import spawn_in_context
@@ -110,8 +110,9 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
                 {"kind": "redownload", "disabled": busy or r.blocked, "on_click": (lambda s=r.source: rerun(s))},
                 # ``ready`` keeps files built before a failed check (Integrate
                 # uses them), but a blocked row is not shown (ruling T19 C)
+                # (a layer already on can always be switched off)
                 {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
-                 "disabled": not r.ready or r.blocked, "on_click": (lambda s=r.source: toggle(s))},
+                 "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
             ],
         })
     return out
@@ -173,13 +174,21 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     rows = plan_prepare(p, pdir, period) if p.grid is not None else []
     by_source = {r.source: r for r in rows}
 
+    def _aoi_raster_current():
+        return status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is Status.CURRENT
+
     def _start(sources, force=False):
-        keys = [_inflight_key(p.name, period.id, s) for s in sources]
         file_rows = [s for s in sources if is_file_source(p.sources[s])]
-        if file_rows and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT:
-            if p.aoi.geometry_file is None:
-                notifications.info(t("steps.prepare.aoi_geometry_missing"))
-                return
+        needs_aoi_raster = bool(file_rows) and not _aoi_raster_current()
+        if needs_aoi_raster and p.aoi.geometry_file is None:
+            # The GeoTIFF rows wait for the AOI sidecar; the others still run
+            # (spec §12: one row must not stop the others).
+            notifications.info(t("steps.prepare.aoi_geometry_missing" if app_state.sidecar_pending.value
+                                 else "steps.prepare.aoi_geometry_failed"))
+            sources = [s for s in sources if s not in file_rows]
+            needs_aoi_raster = False
+        keys = [_inflight_key(p.name, period.id, s) for s in sources]
+        if needs_aoi_raster:
             keys.append(aoi_key(p.name))  # one AOI-raster build at a time
         if not sources or not inflight.claim(*keys):
             return
@@ -255,7 +264,12 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                               on_click=lambda: _start(pending))
                 solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
                               on_click=lambda: stops.stop((p.name, period.id)))
-            if app_state.coverage_error.value and any(r.coverage == UNCHECKED for r in rows):
-                solara.Button(t("coverage.check_again"), small=True, outlined=True, icon_name="mdi-refresh",
-                              disabled=app_state.coverage_pending.value,
-                              on_click=lambda: app_state.coverage_retry.set(app_state.coverage_retry.value + 1))
+            # Check again after a failed coverage check, or a failed AOI-sidecar
+            # fetch that leaves the GeoTIFF rows waiting (the loader refetches
+            # it on the same retry)
+            sidecar_failed = (p.aoi.geometry_file is None and not app_state.sidecar_pending.value
+                              and any(is_file_source(p.sources[r.source]) for r in rows)
+                              and not _aoi_raster_current())
+            CheckAgainButton(app_state=app_state,
+                             show=sidecar_failed or (bool(app_state.coverage_error.value)
+                                                     and any(r.coverage == UNCHECKED for r in rows)))

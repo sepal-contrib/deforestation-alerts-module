@@ -106,3 +106,15 @@ def test_stop_cancels_the_task(monkeypatch):
                                       pdir="/tmp/x", period=JAN, meta={}, aoi=None, cancel=cancel)
     with pytest.raises(asyncio.CancelledError):
         prepare_jobs.run_rows(ctx, ["GLAD-L"])
+
+
+def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
+    """Ruling T19 C: a row whose files are current but whose coverage was not
+    checked keeps them for Integrate (``ready``) and still cannot be shown;
+    a layer already on can always be switched off."""
+    row = PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT, "unchecked", (Note("coverage.unchecked", tone="error"),))
+    assert row.ready
+    [toggle] = [a for a in _build([row])["GLAD-L"]["actions"] if a["kind"] == "map_toggle"]
+    assert toggle["disabled"] and not toggle["is_on"]
+    [toggle] = [a for a in _build([row], on={"src:GLAD-L"})["GLAD-L"]["actions"] if a["kind"] == "map_toggle"]
+    assert toggle["is_on"] and not toggle["disabled"]

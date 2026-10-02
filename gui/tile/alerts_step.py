@@ -13,6 +13,7 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import add_predefined_source, remove_source
 from gui.i18n import t
 from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
+from gui.scripts.coverage_ui import CheckAgainButton
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -130,10 +131,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             rows=rows, empty_text=t("steps.alerts.empty"),
         )
         # spec §6.2 "Failure": the sources left without a record can be checked again
-        if app_state.coverage_error.value and any(record_for(p, n) is None for n in p.sources):
-            solara.Button(t("coverage.check_again"), small=True, outlined=True, icon_name="mdi-refresh",
-                          disabled=app_state.coverage_pending.value,
-                          on_click=lambda: app_state.coverage_retry.set(app_state.coverage_retry.value + 1))
+        CheckAgainButton(app_state=app_state, show=bool(app_state.coverage_error.value)
+                         and any(record_for(p, n) is None for n in p.sources))
         solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True,
                       on_click=lambda: modal_open.set(True))
 

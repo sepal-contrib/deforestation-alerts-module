@@ -947,6 +947,11 @@ def test_check_again_follows_a_failed_coverage_check(step):
         assert state.coverage_retry.value == 1
         state.coverage_pending.set(True)
         assert _button(rc, t("coverage.check_again")).disabled
+        state.coverage_pending.set(False)
+        state.sidecar_pending.set(True)  # the retry also refetches the AOI sidecar
+        assert _button(rc, t("coverage.check_again")).disabled
+        state.sidecar_pending.set(False)
+        assert not _button(rc, t("coverage.check_again")).disabled
     finally:
         rc.close()
 
@@ -998,15 +1003,46 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypat
         rc.close()
 
 
+def _check_again_shown(rc):
+    return bool([w for w in rc.find(v.Btn).widgets if t("coverage.check_again") in w.children])
+
+
 def test_a_geotiff_row_waits_for_the_aoi_geometry(step, tmp_path):
     step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
     state = _state(_with_tif(tmp_path, sidecar=False))
+    state.sidecar_pending.set(True)  # the loader is fetching it
 
     box, rc = _render(state)
     try:
         step.table[-1][0]["actions"][0]["on_click"]()
         assert step.jobs == [] and _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
         assert step.table[-1][0]["cells"][1]["status"] == "missing"  # nothing was claimed
+        assert not _check_again_shown(rc)  # nothing failed
+    finally:
+        rc.close()
+
+
+def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_again(step, monkeypatch, tmp_path):
+    """Spec §12: the Earth Engine rows of a Run all still run; the GeoTIFF
+    rows are refused with a message that says the fetch failed, and Check
+    again (which refetches the sidecar) is offered though coverage succeeded."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("tif", Status.MISSING, Status.MISSING))
+    state = _state(_with_tif(tmp_path, sidecar=False), meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        assert state.coverage_error.value is None and _check_again_shown(rc)
+        _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)
+        step.run_jobs()
+        [(ctx, sources, _)] = step.started
+        assert sources == ["GLAD-L"] and ctx.aoi == "AOI"
+        assert _toasts("info") == [t("steps.prepare.aoi_geometry_failed")]
+
+        _button(rc, t("coverage.check_again")).fire_event("click", None)
+        assert state.coverage_retry.value == 1
+        state.sidecar_pending.set(True)  # the retry fetches it again
+        assert not _check_again_shown(rc)
     finally:
         rc.close()
 
@@ -1041,6 +1077,36 @@ def test_a_refusal_and_a_keyed_engine_error_read_translated(monkeypatch):
     assert errors.value == {"GLAD-L": t("coverage.unchecked"),
                             "RADD": t("steps.prepare.aoi_geometry_missing"),
                             "GLAD-S2": t("steps.prepare.file_missing", path="/m.tif")}
+
+
+def test_a_refusal_toast_names_its_source_once(monkeypatch):
+    """A refusal toasts its row's text ("Not covered: GLAD-S2 does not cover
+    ..."), not "GLAD-S2: GLAD-S2 ..."; "Coverage not checked", which names no
+    source, keeps the source prefix."""
+    from deforestation_alerts.engine.runner import CoverageRefused
+
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L", "GLAD-S2"))
+    not_covered = (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        if job.source == "GLAD-S2":
+            raise CoverageRefused("GLAD-S2", "not_covered", not_covered)
+        raise CoverageRefused("GLAD-L", "unchecked", (Note("coverage.unchecked", tone="error"),))
+
+    class _Notifier(NoopNotifier):
+        def __init__(self):
+            self.errors = []
+
+        def error(self, message, *, timeout=None):
+            self.errors.append(message)
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    notifier = _Notifier()
+    prepare_jobs.run_rows(_ctx(s, notifier=notifier), ["GLAD-S2", "GLAD-L"])
+    reason = t("coverage.not_covered_glad_s2", source="GLAD-S2")
+    assert notifier.errors == [t("coverage.not_covered_row", reason=reason),
+                               t("steps.prepare.row_failed", source="GLAD-L", error=t("coverage.unchecked"))]
 
 
 # ---------------------------------------------------------------------------

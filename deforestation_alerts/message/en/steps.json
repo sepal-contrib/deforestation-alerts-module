@@ -172,6 +172,7 @@
       "job_row": "Preparing {source}",
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
+      "aoi_geometry_failed": "The AOI's geometry could not be fetched, so the GeoTIFF rows cannot run; use Check again, then run them.",
       "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run all aligns the masks first.",
       "mask_file_missing": "Mask {name}: file not found ({path}). Put the file back at this path to use the mask.",
       "mask_name_empty": "Give the mask a name.",

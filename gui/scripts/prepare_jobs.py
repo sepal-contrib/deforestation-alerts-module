@@ -48,7 +48,7 @@ from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
 from gui.i18n import t
 from gui.scripts import source_layers
-from gui.scripts.coverage_ui import note_text
+from gui.scripts.coverage_ui import note_text, row_notes
 from gui.scripts.notify_bridge import (
     ERROR_TOAST_TIMEOUT,
     tile_progress_reporter,
@@ -161,6 +161,14 @@ def _failure_text(exc: BaseException) -> str:
     return str(exc) or exc.__class__.__name__
 
 
+def _failure_toast(source: str, exc: BaseException, message: str) -> str:
+    """A refusal reads like its row ("Not covered: GLAD-S2 does not cover
+    ..."), which already names the source; the rest get the source first."""
+    if isinstance(exc, CoverageRefused) and exc.state != UNCHECKED and exc.notes:
+        return row_notes(exc.state, exc.notes)[0]["text"]
+    return t("steps.prepare.row_failed", source=source, error=message)
+
+
 def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
     aoi_digest = _digest(ctx.app_state.project.value)
     with writing(ctx.name), tracked_job(ctx.notifier, t("steps.prepare.job_title"),
@@ -185,8 +193,7 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 message = _failure_text(exc)
                 _set_error(ctx, source, message)
                 if ctx.notifier is not None:
-                    ctx.notifier.error(t("steps.prepare.row_failed", source=source, error=message),
-                                       timeout=ERROR_TOAST_TIMEOUT)
+                    ctx.notifier.error(_failure_toast(source, exc, message), timeout=ERROR_TOAST_TIMEOUT)
                 if isinstance(exc, HarmonizeFailed) and exc.artifacts:
                     # The download succeeded: record it, so the next run only
                     # re-harmonizes from the file on disk.
