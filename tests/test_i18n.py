@@ -133,6 +133,7 @@ def _dynamic_keys():
         # engine.grid.validate_projection's error keys
         "steps.prepare.grid_": ["need_epsg", "bad_epsg", "geographic", "bad_resolution"],
         "widgets.product_table.status_": list(STATUS_ICONS),
+        "legend.mask.": ["keep", "exclude", "off"],
     }
 
 

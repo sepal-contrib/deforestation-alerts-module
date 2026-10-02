@@ -10,17 +10,14 @@ archive); ``client.create_leaflet_layer`` pulls in extras this path does not nee
 
 import logging
 
+from gui.scripts import legend_specs
+
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 #: status_code -> colour (0 not reviewed, 1 confirmed, 2 false positive, 3 need revision)
-STATUS_COLORS = {0: "#9e9e9e", 1: "#d32f2f", 2: "#388e3c", 3: "#f9a825"}
-
-
-def _lighten(hex_color: str, amount: float = 0.6) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    mix = lambda c: int(c + (255 - c) * amount)  # noqa: E731
-    return f"#{mix(r):02x}{mix(g):02x}{mix(b):02x}"
+#: from the one palette table (gui/scripts/legend_specs.py)
+STATUS_COLORS = legend_specs.status_colors()
+_lighten = legend_specs.lighten
 
 
 def build_alert_style(url: str, faded: bool = False) -> dict:

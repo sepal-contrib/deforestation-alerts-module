@@ -72,6 +72,10 @@ class AppState:
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
         self.loading = solara.reactive(False)
+        # legends: published by MapLayers exactly while each layer is on the
+        # map (spec §9.4)
+        self.layer_legends = solara.reactive(())
+        self.selected_legend = solara.reactive("")
 
     # ---- project lifecycle ---------------------------------------------------
     @property

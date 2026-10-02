@@ -57,6 +57,18 @@ class MaskLayer(BaseModel):
     enabled: bool = True
 
 
+class PeriodMask(BaseModel):
+    """A period's choice for one mask: on/off and keep/exclude.
+
+    Forward reference ahead of Task 22, which gives this class its full home
+    (``Period.masks``) and owning helpers; reproduced here verbatim from that
+    task's brief so the two definitions merge as a no-op.
+    """
+
+    on: bool = True
+    mode: Literal["keep", "exclude"] = "keep"
+
+
 class GeeVisLayer(BaseModel):
     kind: Literal["gee"] = "gee"
     name: str

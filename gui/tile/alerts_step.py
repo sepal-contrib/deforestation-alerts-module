@@ -78,8 +78,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
 
             def build():
                 img = catalogue.build_image(src.catalogue_key, win[0], win[1], aoi, key_meta)
-                map_.add_ee_layer(img.select("alert"), {"min": 1, "max": 2, "palette": ["#ff9800", "#7b1fa2"]},
-                                  name=name, key=key)
+                map_.add_ee_layer(img.select("alert"), raster_map.ALERT_EE_VIS, name=name, key=key)
 
         # show, not toggle: a click behind a superseded build must be queued,
         # not dropped (controller drift notes).

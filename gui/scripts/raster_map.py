@@ -5,10 +5,11 @@ is built here. Colormaps must be matplotlib Colormap objects: localtileserver
 rejects dicts. Blocking (starts a TileClient): call from a worker thread.
 """
 
-from matplotlib.colors import ListedColormap
+from gui.scripts import legend_specs
 
-#: 1 = confirmed (orange), 2 = probable (purple)
-ALERT_COLORMAP = ListedColormap(["#ff9800", "#7b1fa2"], name="alerts")
+#: 1 = confirmed (orange), 2 = probable (purple); from the one palette table
+ALERT_COLORMAP = legend_specs.alert_colormap()
+ALERT_EE_VIS = legend_specs.alert_ee_vis()
 
 
 def add_raster_layer(map_, path, *, key: str, name: str, band: int = 1,
