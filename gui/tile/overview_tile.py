@@ -66,6 +66,7 @@ import reacton.ipyvuetify as rv
 import solara
 from ipyleaflet import GeoJSON, Popup
 from pysepal import sepalwidgets as sw
+from pysepal.i18n import current_locale
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.fingerprint import Status, earlier_sets, set_status
@@ -338,12 +339,16 @@ def OverviewTile(app_state, map_, layers):
 
     solara.use_effect(_retry_when_free, [busy])
 
+    # Read in the body so a language switch re-renders the tile, and keyed
+    # below so the raw rows are rebuilt in the new language.
+    locale = current_locale()
+
     def _sync_table():
         counts = (calculate_alert_classes(gdf, "Confirmed", "False Positive", "Need revision")
                   if has_alerts else [0, 0, 0, 0, 0])
         tbody_ref.children = _make_summary_rows(counts, [t(k) for k in _ALERT_LABEL_KEYS])
 
-    solara.use_effect(_sync_table, [gdf])
+    solara.use_effect(_sync_table, [gdf, locale])
 
     def _sync_layer():
         if not active or s is None or not has_alerts:

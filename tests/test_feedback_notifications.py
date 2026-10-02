@@ -345,15 +345,15 @@ def test_export_save_refusal_fails_the_task_and_says_why(
 
 
 @pytest.mark.parametrize(
-    "label, body",
+    "label_key, body",
     [
-        (t("analysis_tile.export_labels.save_btn"), "_save_attributes"),
-        (t("analysis_tile.export_labels.download_alert_data_btn"), "_download_data"),
+        ("analysis_tile.export_labels.save_btn", "_save_attributes"),
+        ("analysis_tile.export_labels.download_alert_data_btn", "_download_data"),
     ],
     ids=["save", "download"],
 )
 def test_export_marks_the_open_project_as_being_written(
-    export_card, monkeypatch, label, body
+    export_card, monkeypatch, label_key, body
 ):
     """Ruling #21: Save and Download write into the active set's folder, so
     the Project dialog's delete guard must see the open project's name while
@@ -374,7 +374,7 @@ def test_export_marks_the_open_project_as_being_written(
 
     monkeypatch.setattr(export, body, _write)
 
-    _button(card, label).fire_event("click", None)
+    _button(card, t(label_key)).fire_event("click", None)
     feedback.join()
 
     assert busy == [True] and not is_writing("d")
@@ -495,19 +495,19 @@ def _download_toolbar(card):
 
 
 @pytest.mark.parametrize(
-    "recipe_folder, with_alerts, expected",
+    "recipe_folder, with_alerts, expected_key",
     [
         # The active alert set's folder is what gives the files somewhere to
         # live in the project; without a set nothing can be written.
-        ("", True, t("analysis_tile.export_labels.download_no_recipe")),
+        ("", True, "analysis_tile.export_labels.download_no_recipe"),
         # With a set but no selected alert there is nothing to build.
         ("/home/sepal-user/module_results/deforestation_alerts/r",
-         False, t("analysis_tile.export_labels.download_no_alert")),
+         False, "analysis_tile.export_labels.download_no_alert"),
     ],
     ids=["no-recipe", "no-alert"],
 )
 def test_export_download_refusal_fails_the_task_and_says_why(
-    export_card, monkeypatch, recipe_folder, with_alerts, expected
+    export_card, monkeypatch, recipe_folder, with_alerts, expected_key
 ):
     """A download that writes nothing must not report success.
 
@@ -518,6 +518,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
     """
     export, card, app_state, app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)
+    expected = t(expected_key)  # in the test's locale, not the collection's
 
     app_tile_model.recipe_folder_path = recipe_folder
     if with_alerts:
@@ -533,9 +534,9 @@ def test_export_download_refusal_fails_the_task_and_says_why(
 
     task = feedback.task()
     assert task.status == TaskStatus.FAILED
-    assert task.error_message == str(expected)
+    assert task.error_message == expected
     assert feedback.errors == []
-    assert feedback.toasts() == [("warning", str(expected))]
+    assert feedback.toasts() == [("warning", expected)]
     # nothing was revealed, and the button is released
     assert toolbar.viz is False
     assert download_btn.loading is False and download_btn.disabled is False

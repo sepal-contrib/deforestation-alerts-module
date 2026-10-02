@@ -371,8 +371,10 @@ def test_the_title_follows_the_project_without_re_rendering_the_shell_on_commits
     shell = _component_body(src, "_AppShell")
     assert "app_state.project.value" not in shell
     flat = " ".join(shell.split())
-    assert ("app_title = solara.use_memo( lambda: compute_title(app_state), "
-            "dependencies=[app_state.project_loaded_signal.value] )") in flat
+    assert "app_title = use_app_title(app_state)" in flat
+    hook = " ".join(_component_body(src, "use_app_title").split())
+    assert ("solara.use_memo( lambda: compute_title(app_state), "
+            "dependencies=[app_state.project_loaded_signal.value, locale] )") in hook
     assert "app_title=app_title," in shell
     assert "app_state.project.peek()" in _component_body(src, "compute_title")
     assert "_TitleBridge" not in src
@@ -436,3 +438,49 @@ def test_nothing_imports_the_workspace_module():
                     offenders.append(str(py.relative_to(root)))
     assert offenders == []
     assert not (root / "deforestation_alerts" / "scripts" / "workspace.py").exists()
+
+
+def test_the_title_follows_a_language_switch():
+    """``use_app_title`` is compiled from gui/solara_app.py (which cannot be
+    imported here) and rendered: a ``set_locale`` re-renders the title in the
+    new language without a project install."""
+    from types import SimpleNamespace
+
+    import reacton
+    import solara
+    from pysepal.i18n import current_locale, set_locale
+
+    from gui.i18n import t
+
+    tree = ast.parse(_src("gui/solara_app.py"))
+    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("compute_title", "use_app_title")]
+    ns = {"solara": solara, "t": t, "current_locale": current_locale}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), "gui/solara_app.py", "exec"), ns)
+
+    app_state = SimpleNamespace(project=solara.reactive(SimpleNamespace(name="demo")),
+                                project_loaded_signal=solara.reactive(0))
+
+    @solara.component
+    def Shell():
+        solara.Text(ns["use_app_title"](app_state))
+
+    def strings(widget):
+        out = []
+        for child in getattr(widget, "children", None) or []:
+            out.extend([child] if isinstance(child, str) else strings(child))
+        return out
+
+    def shown():
+        [text] = strings(rc.container)
+        return text
+
+    set_locale("en")
+    _, rc = reacton.render(Shell(), handle_error=False)
+    try:
+        english = shown()
+        assert english == f"{t('app.title')} · demo"
+        set_locale("fr")
+        assert shown() == f"{t('app.title')} · demo" != english
+    finally:
+        set_locale("en")
+        rc.close()

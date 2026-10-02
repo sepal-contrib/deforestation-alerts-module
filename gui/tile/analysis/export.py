@@ -220,8 +220,10 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
 
 
 def review_status(confirmation) -> str:
-    """The status a Save stores (spec §10): one of the three, never a label."""
-    if confirmation not in {status for status, _ in REVIEW_CHOICES}:
+    """The status a Save stores (spec §10): one of the three, never a label.
+
+    Anything else is refused, an unhashable value (a list) included."""
+    if not isinstance(confirmation, str) or confirmation not in {status for status, _ in REVIEW_CHOICES}:
         raise SaveRefused(t("analysis_tile.questionarie.confirmation_missing"))
     return confirmation
 

@@ -24,6 +24,7 @@ import ipyvuetify as v
 import solara
 from traitlets import HasTraits, Int
 
+from pysepal.i18n import current_locale
 from pysepal.scripts.utils import init_ee
 from pysepal.mapping import SepalMap
 from pysepal.sepalwidgets.vue_app import MapApp
@@ -250,6 +251,16 @@ def compute_title(app_state) -> str:
     """
     p = app_state.project.peek()
     return f"{t('app.title')} · {p.name}" if p is not None else t("app.title")
+
+
+def use_app_title(app_state) -> str:
+    """The title, recomputed only when a project is installed (opened, created
+    or closed) or the language changes: never on a commit (ruling #91).
+    Reading the locale here subscribes the shell, so a switch re-renders it."""
+    locale = current_locale()
+    return solara.use_memo(
+        lambda: compute_title(app_state), dependencies=[app_state.project_loaded_signal.value, locale]
+    )
 
 
 @solara.component
@@ -671,13 +682,12 @@ def _AppShell():
     ]
 
     # The title names the open project. Only a new, opened or closed project
-    # changes it, so the shell follows the install signal, never the project:
+    # (or a language switch) changes it, so the shell follows the install
+    # signal and the locale, never the project:
     # reading the project would re-render the whole shell on every commit
     # (ruling #91). A leaf cannot set the title on the widget instead: reacton
     # re-applies MapApp's element props whenever this context renders again.
-    app_title = solara.use_memo(
-        lambda: compute_title(app_state), dependencies=[app_state.project_loaded_signal.value]
-    )
+    app_title = use_app_title(app_state)
     # The floating legend, a leaf mounted before MapApp (spec §9.4).
     MapLegend(app_state=app_state, layers=layers)
     app_element = MapApp.element(

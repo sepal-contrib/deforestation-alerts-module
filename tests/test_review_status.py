@@ -34,6 +34,6 @@ def test_the_select_holds_statuses_and_shows_labels(locale):
 def test_review_status():
     for status in STATUSES:
         assert export_mod.review_status(status) == status
-    for bad in (None, "", "Yes", t("analysis_tile.questionarie.confirmation_yes")):
+    for bad in (None, "", "Yes", t("analysis_tile.questionarie.confirmation_yes"), ["Confirmed"], {"value": "Confirmed"}):
         with pytest.raises(export_mod.SaveRefused):
             export_mod.review_status(bad)

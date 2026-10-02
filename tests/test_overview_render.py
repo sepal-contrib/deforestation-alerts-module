@@ -19,6 +19,7 @@ import ipyvuetify as v
 import pytest
 import reacton
 import solara
+from pysepal.i18n import set_locale
 from pysepal.mapping import SepalMap
 from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
@@ -208,6 +209,27 @@ def test_the_summary_counts_follow_the_alerts(ov, tmp_path):
         state.alerts_gdf.set(None)
         assert set(_summary(rc).values()) == {0}
     finally:
+        rc.close()
+
+
+def test_the_summary_rows_follow_a_language_switch(ov, tmp_path):
+    """The rows are raw widgets rebuilt by an effect: a ``set_locale`` rebuilds
+    them in the new language, counts unchanged, without new alerts."""
+    state = _state(_project(tmp_path), _alerts())
+    set_locale("en")
+    map_, layers, rc = ov.render(state)
+    try:
+        english = _summary(rc)
+        set_locale("fr")
+        french = _summary(rc)
+        assert french == {
+            t("overview_tile.total"): 4, t("overview_tile.reviewed"): 3,
+            t("overview_tile.confirmed"): 1, t("overview_tile.false_positives"): 1,
+            t("overview_tile.revision"): 1,
+        }
+        assert set(french).isdisjoint(english)
+    finally:
+        set_locale("en")
         rc.close()
 
 
