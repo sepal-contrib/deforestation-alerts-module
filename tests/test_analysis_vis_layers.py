@@ -205,3 +205,38 @@ def test_quick_successive_edits_never_build_at_once(monkeypatch):
         th.join(5)
     unsubscribe()
     assert peaks and max(peaks) == 1  # one build at a time
+
+
+def test_the_previous_alerts_layers_are_gone_before_the_maps_move_to_the_next_alert(monkeypatch):
+    """Slice-5 walk: deleting the active period switched the set, Analysis
+    moved its maps to the new set's alert while the old set's "Original
+    Alert" raster layer was still on them, and the tile server answered its
+    tile requests with 500s (the raster was being deleted). The previous
+    alert's layers leave the maps before the view moves."""
+    import pandas as pd
+    from ipyleaflet import TileLayer
+    from pysepal.mapping import SepalMap
+    from shapely.geometry import Point, box
+
+    from gui.tile.analysis import analysis_tile
+    from gui.tile.analysis.state import AnalysisState
+
+    monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
+    stub = SimpleNamespace(hide=lambda: None)
+    at_move = []
+    widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
+                              selected_alert_info=SimpleNamespace(children=[]), draw_before=stub, draw_after=stub)
+    widgets.set_synced_view = lambda *a: at_move.append(
+        [lyr.name for m in (widgets.map_before, widgets.map_after) for lyr in m.layers if not lyr.base])
+    for map_ in (widgets.map_before, widgets.map_after):
+        map_.add_layer(TileLayer(url="http://localhost/{z}/{x}/{y}.png", name="Original Alert", visible=False),
+                       key="original-alert")
+    state = AppState()
+    state.load_project_state(_p())
+    state.alerts_gdf.set(pd.DataFrame({
+        "alert_date_min": [2026.001], "alert_date_max": [2026.010], "alert_sources": ["GLAD-L"],
+        "status": ["Not reviewed"], "alert_polygon": [None],
+        "bounding_box": [box(0, 0, 0.01, 0.01)], "point": [Point(0, 0)]}))
+    state.actual_alert_id.set(0)
+    analysis_tile.view_actual_alert(widgets, state, AnalysisState(), SimpleNamespace(), SimpleNamespace(v_model=None))
+    assert len(at_move) == 1 and "Original Alert" not in at_move[0], at_move

@@ -198,13 +198,17 @@ def view_actual_alert(
         widgets.draw_before.hide()
         widgets.draw_after.hide()
 
+        # clear the previous alert's layers (the visualization layers stay:
+        # vis_sync keeps them, spec §10) BEFORE the view moves: a layer left
+        # on would fetch tiles at the new view, from the previous set's
+        # raster, which a period delete is removing (500s from the tile server)
+        vis_sync.clear_alert_layers(widgets.map_before)
+        vis_sync.clear_alert_layers(widgets.map_after)
+
         # center/zoom (the two maps are jslink'd; write both explicitly)
         widgets.set_synced_view((alerta.point.y, alerta.point.x), 16)
 
-        # clear + rebuild the bbox overlay on both maps (the visualization
-        # layers stay: vis_sync keeps them, spec §10)
-        vis_sync.clear_alert_layers(widgets.map_before)
-        vis_sync.clear_alert_layers(widgets.map_after)
+        # rebuild the bbox overlay on both maps
         geojson_layer = GeoJSON(
             data=alerta_bb_geojson, style=_ALERT_BB_STYLE, name="Alert BB"
         )
