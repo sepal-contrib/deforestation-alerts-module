@@ -484,3 +484,52 @@ def test_a_failed_first_run_leaves_no_files(ready_project, monkeypatch):
     sdir = paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"])
     assert not sdir.exists() or list(sdir.iterdir()) == []
     assert _leftovers(pdir) == []
+
+
+def _prepare_dated(p, pdir, period, name, alert, dates):
+    """One source's raw and harmonized files with per-pixel dates, recorded."""
+    ws, we = period.search_window(p.look_back_days)
+    raw = _write(paths.raw_path(pdir, period.id, name, ws, we), alert, dates)
+    p.artifacts[fp.raw_key(period.id, name)] = fp.make_artifact(
+        fp.raw_key(period.id, name), "raw_alert", pdir, raw, fp.raw_alert_inputs(p, name, period))
+    harm = _write(paths.harmonized_path(pdir, period.id, name, ws, we), alert, dates)
+    p.artifacts[fp.harm_key(period.id, name)] = fp.make_artifact(
+        fp.harm_key(period.id, name), "harmonized", pdir, harm, fp.harmonized_inputs(p, name, period))
+
+
+@_LONLAT_CENTROID
+def test_a_second_month_catches_a_late_alert_and_repeats_no_first_month_pixel(tmp_path):
+    """Spec §14 slice 5, D9. December's set is built from December's download.
+    January's window (31 days of look-back) still holds December's alert, plus
+    a December alert published after December's run, plus January's own. The
+    January set has the late alert and January's, and never a December pixel."""
+    p = Project(name="two", created_at=datetime.now(), updated_at=datetime.now())
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
+    p.grid = GRID
+    p.look_back_days = 31
+    add_predefined_source(p, "GLAD-L")
+    p.periods = {DEC.id: DEC, JAN.id: JAN}
+    seen, late, own = _blank(), _blank(), _blank()
+    seen[2:10, 2:10] = 1   # in December's download
+    late[20:24, 2:6] = 1   # dated in December, published after December's run
+    own[20:24, 20:24] = 1  # dated in January
+    dec_day, jan_day = 2025345, 2026015
+    params = AlertSetParams(min_size_ha=0.01)
+
+    _prepare_dated(p, tmp_path, DEC, "GLAD-L", seen, np.where(seen > 0, dec_day, 0))
+    dec = _record(p, integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=DEC, sources=["GLAD-L"], params=params)))
+
+    january = seen + late + own
+    _prepare_dated(p, tmp_path, JAN, "GLAD-L", january, np.where(own > 0, jan_day, np.where(january > 0, dec_day, 0)))
+    res = integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=JAN, sources=["GLAD-L"], params=params))
+    jan = res.alert_set
+
+    assert dec.n_alerts == 1 and jan.n_alerts == 2 and jan.footprint_from == [dec.id]
+    with rasterio.open(tmp_path / dec.footprint_rel_path) as a, rasterio.open(tmp_path / jan.footprint_rel_path) as b:
+        f_dec, f_jan = a.read(1), b.read(1)
+    assert int(f_dec.sum()) == 64 and int(f_jan.sum()) == 32
+    assert not (f_dec.astype(bool) & f_jan.astype(bool)).any()  # no December pixel twice
+    assert f_jan[21, 3] == 1 and f_jan[21, 21] == 1  # the late alert and January's own
+    assert sorted(round(float(d), 3) for d in res.alerts["alert_date_min"]) == [2025.345, 2026.015]

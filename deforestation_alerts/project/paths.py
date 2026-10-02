@@ -40,8 +40,12 @@ def mask_raw_path(pdir: Path, mask_name: str) -> Path:
     return Path(pdir) / "masks" / "raw" / f"mask_{safe_token(mask_name)}.tif"
 
 
-def _period(pdir: Path, period_id: str) -> Path:
+def period_dir(pdir, period_id: str) -> Path:
+    """``<pdir>/periods/<period_id>``: every raw, harmonized and set file of the period lives under it."""
     return Path(pdir) / "periods" / period_id
+
+
+_period = period_dir
 
 
 def raw_path(pdir, period_id, source, win_start: date, win_end: date) -> Path:

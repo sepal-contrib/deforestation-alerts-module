@@ -108,7 +108,9 @@
       "error_bad_date": "Enter both dates.",
       "error_order": "The end date must be after the start date.",
       "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
-      "error_locked": "This period already has an alert set; its dates can't change."
+      "error_locked": "This period already has an alert set; its dates can't change.",
+      "error_exists": "A period with these dates already exists.",
+      "error_not_latest": "This period has alert sets and a later period exists: deleting it would change the footprint the later sets were built from. Delete the later periods first."
     },
     "prepare": {
       "title": "Download & harmonize",

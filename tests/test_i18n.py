@@ -120,6 +120,7 @@ def _dynamic_keys():
     """Every key the code builds with an f-string, by its literal head, with
     every value its one placeholder takes."""
     from deforestation_alerts.engine.fingerprint import Status
+    from deforestation_alerts.project import periods
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
@@ -128,8 +129,8 @@ def _dynamic_keys():
         "steps.integrate.set_": [Status.STALE.value, Status.MISSING.value],
         "steps.integrate.sorting_": SORTINGS,
         "steps.integrate.attr_stat_": _STATS,
-        # period_step.apply_period's error keys
-        "steps.period.error_": ["bad_date", "order", "bad_look_back", "locked"],
+        # deforestation_alerts.project.periods' error keys
+        "steps.period.error_": list(periods.ERRORS),
         # engine.grid.validate_projection's error keys
         "steps.prepare.grid_": ["need_epsg", "bad_epsg", "geographic", "bad_resolution"],
         "widgets.product_table.status_": list(STATUS_ICONS),

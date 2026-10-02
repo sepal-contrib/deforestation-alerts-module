@@ -5,10 +5,14 @@ replaced, never mutated) and delete the returned files once the update has
 returned True, outside the state lock.
 """
 
+import shutil
 from pathlib import Path
 from typing import Iterable
 
-from deforestation_alerts.engine.fingerprint import harm_key, mask_key, mask_raw_key, raw_key
+from deforestation_alerts.engine.fingerprint import (
+    combined_key, footprint_key, harm_key, mask_key, mask_raw_key, raw_key, store_key,
+)
+from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Project
 
 
@@ -39,3 +43,17 @@ def period_artifact_keys(p: Project, period_id: str) -> list[str]:
 
 def mask_artifact_keys(p: Project, name: str) -> list[str]:
     return [k for k in (mask_raw_key(name), mask_key(name)) if k in p.artifacts]
+
+
+def set_artifact_keys(p: Project, set_ids) -> list[str]:
+    """The recorded files of these sets: combined raster, footprint and store."""
+    return [k for sid in sorted(set(set_ids)) for k in (combined_key(sid), footprint_key(sid), store_key(sid))
+            if k in p.artifacts]
+
+
+def delete_period_dir(pdir, period_id: str) -> None:
+    """Remove the period's folder with everything in it: downloads, harmonized
+    files and set folders, including the tiles, exports, reports and CNN
+    composites Analysis wrote there, which no artifact records (spec §5.2).
+    Never raises for a missing folder."""
+    shutil.rmtree(paths.period_dir(pdir, period_id), ignore_errors=True)
