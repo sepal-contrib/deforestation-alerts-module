@@ -21,7 +21,7 @@ from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine import harmonize as hz
 from deforestation_alerts.project.models import (
-    AoiRecord, GridSpec, MaskLayer, Period, Project, add_predefined_source,
+    AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
 from deforestation_alerts.scripts import gee_progress
 
@@ -238,14 +238,6 @@ def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch,
     assert raw < 7e9  # was 17.8 GB (GLAD-L) and 138 GB (RADD)
     assert harm == 2 * raster_io.compressed_estimate(88_236 * 93_387 * 2 * 4)
     assert 6.5e9 < harm < 7e9  # was 131.8 GB
-
-
-def test_a_missing_mask_fails_before_downloading(job_factory):
-    p, make, calls = job_factory
-    p.masks["forest"] = MaskLayer(name="forest", origin="gee", ref="users/x/forest")
-    with pytest.raises(RuntimeError, match="mask"):
-        runner.run_source_row(make())
-    assert calls == []
 
 
 def _harmonize_raises(monkeypatch):

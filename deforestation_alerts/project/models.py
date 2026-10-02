@@ -90,20 +90,20 @@ AlertSource = Annotated[Union[PredefinedSource, CustomSource], Field(discriminat
 
 
 class MaskLayer(BaseModel):
+    """A project mask raster (spec §5.1): defined once, downloaded once; its
+    on/off and keep/exclude live on each Period."""
+
     name: str
     origin: Literal["gee", "file"]
-    ref: str
-    mode: Literal["keep", "exclude"] = "keep"
-    enabled: bool = True
+    ref: str  # asset id, or absolute path
+    asset_type: Literal["IMAGE", "IMAGE_COLLECTION", "FILE"] = "IMAGE"
+    band: BandRef = 1  # Earth Engine band name, or a GeoTIFF's 1-based band index
+    native: Optional[NativeGrid] = None
 
 
 class PeriodMask(BaseModel):
-    """A period's choice for one mask: on/off and keep/exclude.
-
-    Forward reference ahead of Task 22, which gives this class its full home
-    (``Period.masks``) and owning helpers; reproduced here verbatim from that
-    task's brief so the two definitions merge as a no-op.
-    """
+    """A period's choice for one project mask: on/off and keep/exclude. A
+    project mask absent from a period's ``masks`` dict is off in that period."""
 
     on: bool = True
     mode: Literal["keep", "exclude"] = "keep"
@@ -169,6 +169,7 @@ class Period(BaseModel):
     id: str
     start: date
     end: date
+    masks: dict[str, PeriodMask] = {}  # a project mask absent here is off in this period
 
     def search_window(self, look_back_days: int) -> tuple[date, date]:
         return self.start - timedelta(days=int(look_back_days)), self.end
@@ -341,3 +342,62 @@ def remove_source(p: Project, name: str) -> None:
     p.sources = {k: s for k, s in p.sources.items() if k != name}
     if src is not None and src.kind == "custom" and name in p.coverage:
         p.coverage = {k: c for k, c in p.coverage.items() if k != name}
+
+
+def sets_using_mask(p: Project, name: str) -> list[str]:
+    return sorted(s.id for s in p.alert_sets.values() if any(m.get("name") == name for m in s.masks_used))
+
+
+def set_period_mask(p: Project, period_id: str, name: str, *, on: Optional[bool] = None,
+                    mode: Optional[str] = None) -> None:
+    """Change one period's choice for ``name`` (spec §7.3): replaces the
+    period's ``masks`` dict, the Period and ``p.periods``. Starts no job."""
+    period = p.periods[period_id]
+    current = period.masks.get(name, PeriodMask(on=False))
+    new = current.model_copy(update={k: v for k, v in (("on", on), ("mode", mode)) if v is not None})
+    p.periods = {**p.periods, period_id: period.model_copy(update={"masks": {**period.masks, name: new}})}
+
+
+def add_mask(p: Project, *, name: str, origin: str, ref: str, asset_type: str, band, native, mode: str,
+             period_id: str) -> MaskLayer:
+    """Validate the name (spec §5.1), define the mask and turn it on with
+    ``mode`` in ``period_id`` only -- every other period leaves it off."""
+    from deforestation_alerts.project.names import validate_mask_name
+
+    error = validate_mask_name(name, p)
+    if error:
+        raise ValueError(error)
+    mask = MaskLayer(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, band=band, native=native)
+    p.masks = {**p.masks, mask.name: mask}
+    set_period_mask(p, period_id, mask.name, on=True, mode=mode)
+    return mask
+
+
+def update_mask(p: Project, name: str, **changes) -> MaskLayer:
+    """Edit a mask's definition. Refused once a set used it: "add a new one
+    instead" (spec §5.1)."""
+    if sets_using_mask(p, name):
+        raise ValueError("steps.prepare.mask_edit_used")
+    changes.pop("name", None)
+    new = p.masks[name].model_copy(update=changes)
+    p.masks = {**p.masks, name: new}
+    return new
+
+
+def remove_mask(p: Project, name: str) -> None:
+    """Drop the definition and its choice in every period (the harmonized files
+    of the periods that had it on go out of date). Artifacts and files go
+    through ``project.cleanup``."""
+    p.masks = {k: m for k, m in p.masks.items() if k != name}
+    p.periods = {pid: (per.model_copy(update={"masks": {k: v for k, v in per.masks.items() if k != name}})
+                       if name in per.masks else per)
+                 for pid, per in p.periods.items()}
+
+
+def latest_period_masks(p: Project) -> dict[str, PeriodMask]:
+    """A new period's choices: a copy of those of the period with the latest
+    start; ``{}`` without periods."""
+    if not p.periods:
+        return {}
+    latest = max(p.periods.values(), key=lambda per: (per.start, per.end))
+    return {k: v.model_copy() for k, v in latest.masks.items()}

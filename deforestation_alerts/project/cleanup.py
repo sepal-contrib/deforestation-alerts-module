@@ -8,7 +8,7 @@ returned True, outside the state lock.
 from pathlib import Path
 from typing import Iterable
 
-from deforestation_alerts.engine.fingerprint import harm_key, raw_key
+from deforestation_alerts.engine.fingerprint import harm_key, mask_key, mask_raw_key, raw_key
 from deforestation_alerts.project.models import Project
 
 
@@ -35,3 +35,7 @@ def source_artifact_keys(p: Project, name: str) -> list[str]:
 def period_artifact_keys(p: Project, period_id: str) -> list[str]:
     prefixes = (f"raw:{period_id}:", f"harm:{period_id}:")
     return [k for k in p.artifacts if k.startswith(prefixes)]
+
+
+def mask_artifact_keys(p: Project, name: str) -> list[str]:
+    return [k for k in (mask_raw_key(name), mask_key(name)) if k in p.artifacts]

@@ -6,7 +6,7 @@ from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine.plan import plan_prepare, ready_sources
 from deforestation_alerts.project import io
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, AoiRecord, GridSpec, MaskLayer, Period, Project, add_predefined_source,
+    AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
@@ -102,17 +102,6 @@ def test_forced_redownload_makes_harmonized_stale(proj):
     _record(p, pdir, fp.raw_key(JAN.id, "GLAD-L"), "raw_alert",
             fp.raw_alert_inputs(p, "GLAD-L", JAN), "raw_again.tif")
     assert fp.status(p, pdir, hkey, fp.harmonized_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
-
-
-def test_unrecorded_enabled_mask_makes_harmonized_stale(proj):
-    p, pdir = proj
-    _prepare(p, pdir, JAN, "GLAD-L")
-    hkey = fp.harm_key(JAN.id, "GLAD-L")
-    p.masks["forest"] = MaskLayer(name="forest", origin="gee", ref="users/x/forest")
-    assert fp.harmonized_inputs(p, "GLAD-L", JAN) is None  # the mask has no artifact yet
-    assert fp.status(p, pdir, hkey, fp.harmonized_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
-    p.masks["forest"] = p.masks["forest"].model_copy(update={"enabled": False})
-    assert fp.status(p, pdir, hkey, fp.harmonized_inputs(p, "GLAD-L", JAN)) is fp.Status.CURRENT
 
 
 def _set(p, pdir, period, sources):

@@ -32,6 +32,12 @@ def _p_with_source(name="d"):
     return p
 
 
+def _project_with_a_period(name="d"):
+    p = _p(name)
+    apply_period(p, "2026-01-01", "2026-01-31", 90)
+    return p
+
+
 # ---------------------------------------------------------------------------
 # apply_period / default_dates (brief Step 1, verbatim)
 # ---------------------------------------------------------------------------
@@ -326,3 +332,26 @@ def test_closing_the_open_project_unmounts_the_form_without_reading_it():
         assert state.project_loaded_signal.value == 2 and state.active_step.value == 0
     finally:
         rc.close()
+
+
+def test_replacing_the_single_period_keeps_its_mask_choices():
+    from deforestation_alerts.project.models import PeriodMask
+
+    p = _project_with_a_period()  # the file's existing helper; make one if it has none
+    pid = p.active_period
+    p.periods = {pid: p.periods[pid].model_copy(update={"masks": {"forest": PeriodMask(on=True, mode="exclude")}})}
+    err, _ = apply_period(p, "2026-03-01", "2026-03-31", 90)
+    assert err is None and p.periods[p.active_period].masks == {"forest": PeriodMask(on=True, mode="exclude")}
+
+
+def test_a_look_back_only_save_keeps_the_same_periods_mask_choices():
+    """Controller ruling M1: current == new_id (dates unchanged, only the
+    look-back edited) must still carry the mask choices forward."""
+    from deforestation_alerts.project.models import PeriodMask
+
+    p = _project_with_a_period()
+    pid = p.active_period
+    p.periods = {pid: p.periods[pid].model_copy(update={"masks": {"forest": PeriodMask(on=True, mode="exclude")}})}
+    err, _ = apply_period(p, "2026-01-01", "2026-01-31", 30)
+    assert err is None and p.active_period == pid
+    assert p.periods[pid].masks == {"forest": PeriodMask(on=True, mode="exclude")}

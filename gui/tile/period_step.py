@@ -13,7 +13,7 @@ import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import cleanup, paths
-from deforestation_alerts.project.models import Period, period_id
+from deforestation_alerts.project.models import Period, latest_period_masks, period_id
 from gui.i18n import t
 from gui.store import workflow_steps
 
@@ -46,10 +46,14 @@ def apply_period(p, start: str, end: str, look_back) -> tuple[Optional[str], lis
         return "locked", []
     gone = []
     periods = dict(p.periods)  # replaced, not mutated: the published snapshots share it
+    # A replaced period keeps its mask choices (including a look-back-only
+    # Save, where current == new_id); a first period starts from the latest
+    # period's choices (empty without periods).
+    masks = dict(p.periods[current].masks) if current else latest_period_masks(p)
     if current and current != new_id:
         periods.pop(current, None)
         gone = cleanup.drop_artifacts(p, cleanup.period_artifact_keys(p, current))
-    periods[new_id] = Period(id=new_id, start=a, end=b)
+    periods[new_id] = Period(id=new_id, start=a, end=b, masks=masks)
     p.periods = periods
     p.active_period = new_id
     p.look_back_days = lb

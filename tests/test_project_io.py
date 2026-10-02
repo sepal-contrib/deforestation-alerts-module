@@ -131,3 +131,18 @@ def test_paths_encode_source_and_dates(tmp_path):
         "filtered_alerts_glad-l-radd_2026-02-01_2026-02-28.tif"
     assert paths.rel(tmp_path, raw) == "periods/2026-02-01_2026-02-28/raw/raw_glad-l_2025-11-03_2026-02-28.tif"
     assert paths.resolve(tmp_path, paths.rel(tmp_path, raw)) == raw
+
+
+def test_a_duplicate_has_the_masks_but_no_periods_so_every_mask_is_off():
+    from datetime import date, datetime
+
+    from deforestation_alerts.project import io
+    from deforestation_alerts.project.models import NativeGrid, Period, Project, add_mask
+
+    p = Project(name="o", created_at=datetime.now(), updated_at=datetime.now())
+    per = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+    p.periods = {per.id: per}
+    add_mask(p, name="forest", origin="gee", ref="a", asset_type="IMAGE", band="b1",
+             native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=per.id)
+    q = io.duplicate_project(p, "copy")
+    assert set(q.masks) == {"forest"} and q.periods == {}

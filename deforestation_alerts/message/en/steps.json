@@ -141,7 +141,8 @@
       "mask_name_too_long": "Use at most 24 characters.",
       "mask_name_duplicate": "Another mask already has this name.",
       "mask_name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
-      "mask_name_token_taken": "This name would share its file names with another mask; choose another."
+      "mask_name_token_taken": "This name would share its file names with another mask; choose another.",
+      "mask_edit_used": "An alert set already uses this mask: add a new one instead."
     },
     "integrate": {
       "title": "Integrate & vectorize",

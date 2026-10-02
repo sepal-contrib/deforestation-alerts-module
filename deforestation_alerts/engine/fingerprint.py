@@ -47,6 +47,10 @@ def mask_key(name: str) -> str:
     return f"mask:{name}"
 
 
+def mask_raw_key(name: str) -> str:
+    return f"mask_raw:{name}"
+
+
 def combined_key(set_id: str) -> str:
     return f"combined:{set_id}"
 
@@ -116,7 +120,7 @@ def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
 
 
 def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]:
-    """None while the raw artifact or an enabled mask's artifact is not recorded,
+    """None while the raw artifact or an "on" mask's artifact is not recorded,
     or, for a GeoTIFF source, while the AOI raster of this AOI and grid is not.
 
     Harmonizing aligns the raw file onto the grid, so the grid is an input here.
@@ -127,11 +131,13 @@ def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]
     if raw is None:
         return None
     masks = []
-    for name in sorted(n for n, m in p.masks.items() if m.enabled):
+    for name, choice in sorted(period.masks.items()):
+        if not (choice.on and name in p.masks):
+            continue
         art = p.artifacts.get(mask_key(name))
         if art is None:
             return None
-        masks.append([name, p.masks[name].mode, art.content_id])
+        masks.append([name, choice.mode, art.content_id])
     inputs = {"stage": "harmonized", "raw": raw.content_id, "grid": p.grid.signature if p.grid else None,
               "masks": masks}
     if is_file_source(p.sources[source]):

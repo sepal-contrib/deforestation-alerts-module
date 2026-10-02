@@ -107,9 +107,10 @@ def _harmonize_space(p: Project) -> int:
     return 2 * compressed_estimate(estimate_bytes(p.grid))
 
 
-def _masks_ready(p: Project) -> bool:
-    """Every enabled mask has a recorded download (harmonize needs them all)."""
-    return all(mask_key(name) in p.artifacts for name, m in p.masks.items() if m.enabled)
+def _masks_ready(p: Project, period: Period) -> bool:
+    """Every mask this period turns on has a recorded download (harmonize needs them all)."""
+    return all(mask_key(name) in p.artifacts for name, choice in period.masks.items()
+               if choice.on and name in p.masks)
 
 
 def _raw_estimate(p: Project, src) -> int:
@@ -177,7 +178,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
         raise ValueError("GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment")
     # Every precondition of the harmonize is checked before a download (spec §7.3).
-    if not _masks_ready(p):
+    if not _masks_ready(p, period):
         raise RuntimeError(f"{job.source}: an enabled mask has not been downloaded yet")
     if file_source:
         aoi_art = ensure_aoi_raster(p, pdir)
@@ -208,9 +209,8 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
         if rkey in out or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
             ensure_free_space(harm_path.parent, _harmonize_space(p))
             masks = [
-                (paths.resolve(pdir, p.artifacts[mask_key(name)].rel_path), m.mode)
-                for name, m in sorted(p.masks.items())
-                if m.enabled
+                (paths.resolve(pdir, p.artifacts[mask_key(n)].rel_path), mode)
+                for n, mode, _ in harm_in["masks"]
             ]
             # only a GeoTIFF is clipped here; its AOI raster was (re)built above
             aoi_raster = paths.resolve(pdir, p.artifacts[AOI_KEY].rel_path) if file_source else None
