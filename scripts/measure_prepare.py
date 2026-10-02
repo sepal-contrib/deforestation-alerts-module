@@ -13,9 +13,8 @@ the project disk, where the app itself writes its rasters (spec §11). ``/var/tm
 is SEPAL's small local disk, kept for tippecanoe, so ``--out`` may not point into
 it: at national 10 m the free-space gates, which ask for twice the compressed
 size estimate (``raster_io.compressed_estimate``), want ~7 GB per Download &
-harmonize row and ~13 GB for Integrate. The alert store is staged in
-``<out>/scratch``, which is removed at the end. Delete ``<out>`` when the
-numbers are copied.
+harmonize row and ~13 GB for Integrate. Delete ``<out>`` when the numbers
+are copied.
 
 Prints, per source: wall time, raw + harmonized file size, the harmonize-phase
 peak RSS (a VmRSS sampler around the actual reproject-and-mask call) and the
@@ -23,7 +22,6 @@ process's whole-run peak RSS. Prints the same whole-run peak for integration.
 """
 
 import argparse
-import contextlib
 import resource
 import sys
 import threading
@@ -44,7 +42,6 @@ from deforestation_alerts.project import paths  # noqa: E402
 from deforestation_alerts.project.models import (  # noqa: E402
     AlertSetParams, AoiRecord, Period, Project, add_predefined_source, period_id,
 )
-from deforestation_alerts.scripts.workspace import Workspace  # noqa: E402
 
 
 #: SEPAL's small local disk (gdal_env.local_scratch_dir): never for a national raster.
@@ -110,17 +107,9 @@ def _watch_harmonize():
 
 
 def integrate_into(out: Path, p: Project, per: Period, sources: list):
-    """Run Integrate in ``out``, its Workspace scratch (the staged alert store)
-    in ``out/scratch``, removed afterwards whether the run succeeds or not."""
-    ws_parent = out / "scratch"
-    ws = Workspace(root=out, scratch_parent=ws_parent)
-    try:
-        return run_integration(IntegrationJob(project=p, pdir=out, period=per, sources=sources,
-                                              params=AlertSetParams(), workspace=ws))
-    finally:
-        ws.cleanup_scratch()
-        with contextlib.suppress(OSError):
-            ws_parent.rmdir()  # empty once the scratch is cleaned up
+    """Run Integrate in ``out``: the set's files are written straight into it."""
+    return run_integration(IntegrationJob(project=p, pdir=out, period=per, sources=sources,
+                                          params=AlertSetParams()))
 
 
 def main():

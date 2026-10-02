@@ -63,13 +63,10 @@ class ShareBtn(v.Btn, SepalWidget):
 # (``gui/tile/recipe_tile.py``), and nothing has constructed it since. Every line
 # of it assumed a container-local recipe folder (``module_dir / name``,
 # ``.exists()``, ``.iterdir()``, a local ``zipfile.ZipFile``, and a ``set_url``
-# with a container-absolute path) — i.e. it could not work at all now that the
-# recipe folder lives in the user's SEPAL workspace. If recipe-export-as-zip is
-# wanted again, rebuild it against ``Workspace``: ``exists``/``list`` for the
-# guard, ``download_to_scratch`` each member into one ``scratch_dir()``, zip
-# there, ``upload_from_scratch``, then ``set_url(workspace.home_relative(...))``
-# — the same shape as ``gui/tile/analysis/export.py::_download_data``
-# (inventory row a36).
+# with a container-absolute path). If exporting a folder as a zip is wanted
+# again, build the zip in a ``local_files.scratch_dir()``, ``local_files.copy_into``
+# the set folder, then ``set_url(local_files.home_relative(...))`` — the same
+# shape as ``gui/tile/analysis/export.py::_download_data`` (inventory row a36).
 
 
 class CustomDrawControl(GeomanDrawControl):

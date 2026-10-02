@@ -162,7 +162,7 @@ def test_without_a_saved_position_the_first_alert_is_selected():
 # ---------------------------------------------------------------------------
 # Review saves land in the set's folder and keep its reviewed count
 # ---------------------------------------------------------------------------
-def test_a_review_save_writes_the_sets_store_and_its_reviewed_count(tmp_path, monkeypatch, ws):
+def test_a_review_save_writes_the_sets_store_and_its_reviewed_count(tmp_path, monkeypatch):
     import geopandas as gpd
     from shapely.geometry import box
 
@@ -173,7 +173,7 @@ def test_a_review_save_writes_the_sets_store_and_its_reviewed_count(tmp_path, mo
     gdf = gpd.GeoDataFrame({"status": ["Confirmed", "Not reviewed", "Need revision"]},
                            geometry=[box(0, 0, 1, 1)] * 3, crs="EPSG:4326")
 
-    _save_alerts_to_gdf(gdf, ctx, ws)
+    _save_alerts_to_gdf(gdf, ctx)
 
     assert (tmp_path / "d" / "periods" / "per" / "sets" / "glad-l" / "alert_db.parquet").exists()
     assert s.project.value.alert_sets["x"].n_reviewed == 2
@@ -233,7 +233,7 @@ class _AdminLookups:
         return "Brasil, "
 
 
-def _save(s, ctx, ws, monkeypatch, lookups=None, alert_id=0):
+def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
     from deforestation_alerts.message import cm
     from gui.tile.analysis import export
@@ -247,7 +247,7 @@ def _save(s, ctx, ws, monkeypatch, lookups=None, alert_id=0):
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     s.actual_alert_id.set(alert_id)
-    return export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=None), ctx, ws)
+    return export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=None), ctx)
 
 
 def _saved_status(path):
@@ -255,7 +255,7 @@ def _saved_status(path):
 
 
 @pytest.mark.parametrize("published", [False, True], ids=["recorded", "recorded-and-published"])
-def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, published):
+def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, published):
     """An Integrate that finishes during the lookups makes its new set active
     (``apply_result``), then publishes its alerts. The Save no longer writes
     for the set it started on (ruling: a warning, not a cross-write): neither
@@ -277,7 +277,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, p
             s.alerts_gdf.set(_review_alerts("y"))
 
     with pytest.raises(SaveRefused) as refused:
-        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_integrate_finishes))
+        _save(s, ctx, monkeypatch, _AdminLookups(during=_integrate_finishes))
 
     assert str(refused.value) == str(cm.analysis_tile.export_labels.save_set_changed)
     assert s.project.value.active_set == "y"
@@ -288,7 +288,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, p
 
 
 @pytest.mark.parametrize("switch", ["close", "open-another"])
-def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, switch):
+def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, switch):
     """The set the Save started on is no longer the open project's active set:
     nothing is written, in either project. Set ids repeat across projects
     (period + sources), so project e's set "x" is neither written nor counted."""
@@ -310,7 +310,7 @@ def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, 
             s.new_project_state(e)
 
     with pytest.raises(SaveRefused):
-        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_switch))
+        _save(s, ctx, monkeypatch, _AdminLookups(during=_switch))
 
     assert other.read_bytes() == b"project e's store"
     assert reviewed.read_bytes() == b"project d's store"
@@ -318,27 +318,27 @@ def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, 
         assert s.project.value.name == "e" and s.project.value.alert_sets["x"].n_reviewed == 0
 
 
-def _loaded(s, ws, alerts):
+def _loaded(s, alerts):
     """``alerts`` as the shell's loader publishes them: written to the active
     set's store, read back from it, and stamped with that store's generation."""
     from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
     from gui.scripts import set_store
 
     store = set_store.active_store_path(s.project.value)
-    save_gdf_to_parquet(alerts, ws, str(store))
-    gdf = set_store.load_active_alerts(s.project.value, ws)
+    save_gdf_to_parquet(alerts, str(store))
+    gdf = set_store.load_active_alerts(s.project.value)
     s.alerts_gdf.set(gdf)
     return gdf, store
 
 
-def _rerun(s, ws, store, alerts):
+def _rerun(s, store, alerts):
     """What a re-run of the same set does: swap its store in (run_integration),
     record the new set (apply_result) and publish its alerts."""
     from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
     from gui.scripts.integrate_jobs import _publish_alerts, apply_result
     from gui.scripts import set_store
 
-    save_gdf_to_parquet(alerts, ws, str(store))
+    save_gdf_to_parquet(alerts, str(store))
     set_store.stamp_generation(alerts, store)
     new_set = _alert_set("x", "glad-l").model_copy(update={"n_alerts": len(alerts), "n_reviewed": 0})
     result = SimpleNamespace(artifacts={}, alert_set=new_set, alerts=alerts)
@@ -347,7 +347,7 @@ def _rerun(s, ws, store, alerts):
 
 
 @pytest.mark.parametrize("published", [False, True], ids=["recorded", "recorded-and-published"])
-def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, published):
+def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, published):
     """A re-run of the same period and sources keeps the set id, so the id
     checks pass while the run swaps a new store in under the alerts on hand.
     The Save that started on the old alerts (and blocked on the admin
@@ -359,27 +359,27 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, ws, 
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
-    _, store = _loaded(s, ws, _review_alerts("x", n=2))
+    _, store = _loaded(s, _review_alerts("x", n=2))
     new = _review_alerts("x", n=5)
 
     def _rerun_finishes():
-        _, publish = _rerun(s, ws, store, new)
+        _, publish = _rerun(s, store, new)
         if published:
             assert publish()
 
     with pytest.raises(SaveRefused) as refused:
-        _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_rerun_finishes))
+        _save(s, ctx, monkeypatch, _AdminLookups(during=_rerun_finishes))
 
     assert str(refused.value) == str(cm.analysis_tile.export_labels.save_store_changed)
     assert _saved_status(store) == ["Not reviewed"] * 5  # the re-run's store, untouched
     rec = s.project.value.alert_sets["x"]
     assert rec.n_alerts == 5 and rec.n_reviewed == 0
     if published:
-        assert s.alerts_gdf.value is new and _save(s, ctx, ws, monkeypatch) is True  # the new alerts save fine
+        assert s.alerts_gdf.value is new and _save(s, ctx, monkeypatch) is True  # the new alerts save fine
         assert _saved_status(store)[0] == "Confirmed"
 
 
-def test_a_store_swapped_in_during_the_serialization_is_not_overwritten(tmp_path, monkeypatch, ws):
+def test_a_store_swapped_in_during_the_serialization_is_not_overwritten(tmp_path, monkeypatch):
     """The generation is checked again right before the serialized file is
     moved onto the store, so a swap landing after the first check (during
     the parquet write, seconds for a large set) is caught too."""
@@ -389,25 +389,25 @@ def test_a_store_swapped_in_during_the_serialization_is_not_overwritten(tmp_path
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
-    old, store = _loaded(s, ws, _review_alerts("x", n=2))
+    old, store = _loaded(s, _review_alerts("x", n=2))
     old.loc[0, "status"] = "Confirmed"
     new = _review_alerts("x", n=5)
     real = gpd.GeoDataFrame.to_parquet
 
     def _swap_during_serialization(self, path, *args, **kwargs):
         monkeypatch.setattr(gpd.GeoDataFrame, "to_parquet", real)  # once
-        _rerun(s, ws, store, new)
+        _rerun(s, store, new)
         return real(self, path, *args, **kwargs)
 
     monkeypatch.setattr(gpd.GeoDataFrame, "to_parquet", _swap_during_serialization)
     with pytest.raises(SaveRefused):
-        _save_alerts_to_gdf(old, ctx, ws)
+        _save_alerts_to_gdf(old, ctx)
 
     assert _saved_status(store) == ["Not reviewed"] * 5
     assert s.project.value.alert_sets["x"].n_reviewed == 0
 
 
-def test_consecutive_saves_of_the_same_alerts_all_land(tmp_path, monkeypatch, ws):
+def test_consecutive_saves_of_the_same_alerts_all_land(tmp_path, monkeypatch):
     """Each Save rewrites the store: the alerts are re-stamped with the store
     they just wrote, so the next Save of them is not refused. The stamp
     survives the copy the save effect rebinds ``alerts_gdf`` to."""
@@ -415,18 +415,18 @@ def test_consecutive_saves_of_the_same_alerts_all_land(tmp_path, monkeypatch, ws
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
-    gdf, store = _loaded(s, ws, _review_alerts("x", n=2))
+    gdf, store = _loaded(s, _review_alerts("x", n=2))
 
-    assert _save(s, ctx, ws, monkeypatch) is True
+    assert _save(s, ctx, monkeypatch) is True
     assert gdf.attrs[set_store.STORE_GENERATION] == set_store.store_generation(store)
     s.alerts_gdf.set(gdf.copy())  # export._apply_save
-    assert _save(s, ctx, ws, monkeypatch, alert_id=1) is True
+    assert _save(s, ctx, monkeypatch, alert_id=1) is True
 
     assert _saved_status(store) == ["Confirmed", "Confirmed"]
     assert s.project.value.alert_sets["x"].n_reviewed == 2
 
 
-def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, monkeypatch, ws):
+def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, monkeypatch):
     """Reopening the project installs a new copy of it, but its active set is
     still the one the Save started on: the review is written."""
     s = _state(tmp_path, monkeypatch)
@@ -436,13 +436,13 @@ def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, mon
     def _reopen():
         s.load_project_state(s.project.value.model_copy(deep=True))
 
-    assert _save(s, ctx, ws, monkeypatch, _AdminLookups(during=_reopen)) is True
+    assert _save(s, ctx, monkeypatch, _AdminLookups(during=_reopen)) is True
 
     assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
     assert s.project.value.alert_sets["x"].n_reviewed == 1
 
 
-def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch, ws):
+def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     """Before any Planet/S2/Landsat image is picked for the alert under
     review, ``selected_img_before_info_list`` / ``_after`` are still ``None``
     (widgets.py:275-276; only populated by imagery.py:214/216 once an image
@@ -467,7 +467,7 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch, ws)
     s.actual_alert_id.set(0)
 
     assert export._save_attributes(
-        widgets, s, SimpleNamespace(defo_dl_layer=None), ctx, ws
+        widgets, s, SimpleNamespace(defo_dl_layer=None), ctx
     ) is True
 
     saved = pd.read_parquet(
@@ -479,7 +479,7 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch, ws)
     assert s.project.value.alert_sets["x"].n_reviewed == 1
 
 
-def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeypatch, ws):
+def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeypatch):
     """Integrate records a new set before it publishes that set's alerts: for
     that moment the alerts on hand are the previous set's. A Save is then
     refused (the task's warning toast) before it looks anything up or changes
@@ -494,7 +494,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
 
     lookups = _AdminLookups()
     with pytest.raises(SaveRefused) as refused:
-        _save(s, ctx, ws, monkeypatch, lookups)
+        _save(s, ctx, monkeypatch, lookups)
 
     assert str(refused.value) == str(cm.analysis_tile.export_labels.save_other_set)
     assert store.read_bytes() == b"set x's store"
@@ -503,18 +503,18 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     assert s.project.value.alert_sets["x"].n_reviewed == 0
 
 
-def test_the_store_writer_refuses_another_sets_alerts(tmp_path, monkeypatch, ws):
+def test_the_store_writer_refuses_another_sets_alerts(tmp_path, monkeypatch):
     """The guard sits right before the write too, for every caller."""
     from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     store = _store(tmp_path, "d", "glad-l", b"set x's store")
     with pytest.raises(SaveRefused):
-        _save_alerts_to_gdf(_review_alerts("y"), SetContext(s), ws)
+        _save_alerts_to_gdf(_review_alerts("y"), SetContext(s))
     assert store.read_bytes() == b"set x's store"
 
 
-def test_the_store_writer_refuses_a_set_that_is_no_longer_active(tmp_path, monkeypatch, ws):
+def test_the_store_writer_refuses_a_set_that_is_no_longer_active(tmp_path, monkeypatch):
     """A writer handed the set it pinned earlier checks that set is still the
     active one before it writes."""
     from gui.scripts.integrate_jobs import apply_result
@@ -528,7 +528,7 @@ def test_the_store_writer_refuses_a_set_that_is_no_longer_active(tmp_path, monke
     assert s.update_project("d", lambda p: apply_result(p, result))
 
     with pytest.raises(SaveRefused):
-        _save_alerts_to_gdf(_review_alerts("x"), ctx, ws, folder=str(target.folder), target=target)
+        _save_alerts_to_gdf(_review_alerts("x"), ctx, folder=str(target.folder), target=target)
     assert store.read_bytes() == b"set x's store"
 
 
@@ -629,7 +629,7 @@ def test_a_failed_original_alert_layer_leaves_the_selectors_usable(tmp_path, mon
     assert not widgets.imgSelection1.disabled and not widgets.imgSelection2.disabled
 
 
-def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monkeypatch, ws):
+def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monkeypatch):
     """Integrate stores each alert's area (its pixels on the grid). Confirming
     the alert without drawing a polygon must not wipe it to 0: alert_db.parquet
     feeds the exports, the map tiles and the report (live walk F2: alert 0,
@@ -640,7 +640,7 @@ def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monke
     alerts["area_ha"] = [3.87, 1.25]
     s.alerts_gdf.set(alerts)
 
-    assert _save(s, ctx, ws, monkeypatch) is True
+    assert _save(s, ctx, monkeypatch) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["status", "area_ha", "alert_polygon"])
     assert saved.loc[0, "status"] == "Confirmed"
@@ -649,7 +649,7 @@ def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monke
     assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(3.87)
 
 
-def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch, ws):
+def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     """The drawn-polygon branch is unchanged: the drawing replaces the area."""
     import geopandas as gpd
     from shapely.geometry import box
@@ -672,7 +672,7 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch, ws):
     )
     drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
     s.actual_alert_id.set(0)
-    assert export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=drawn), ctx, ws) is True
+    assert export._save_attributes(widgets, s, SimpleNamespace(defo_dl_layer=drawn), ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
     assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))

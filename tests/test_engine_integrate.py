@@ -17,7 +17,6 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
     AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
-from deforestation_alerts.scripts.workspace import Workspace
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
@@ -206,8 +205,7 @@ def ready_project(tmp_path):
 
 def _job(p, pdir, period, params):
     return integrate.IntegrationJob(project=p.model_copy(deep=True), pdir=pdir, period=period,
-                                    sources=["RADD", "GLAD-L"], params=params,
-                                    workspace=Workspace(root=pdir, scratch_parent=pdir / "scratch"))
+                                    sources=["RADD", "GLAD-L"], params=params)
 
 
 @_LONLAT_CENTROID
@@ -215,8 +213,7 @@ def test_run_integration_end_to_end(ready_project):
     p, pdir = ready_project
     params = AlertSetParams(min_size_ha=0.1, sorting=1, max_alerts=1)  # keep only the bigger alert
     job = integrate.IntegrationJob(project=p.model_copy(deep=True), pdir=pdir, period=JAN,
-                                   sources=["RADD", "GLAD-L"], params=params,
-                                   workspace=Workspace(root=pdir, scratch_parent=pdir / "scratch"))
+                                   sources=["RADD", "GLAD-L"], params=params)
     res = integrate.run_integration(job)
     s = res.alert_set
     assert s.sources == ["GLAD-L", "RADD"] and s.digit_map == {0: "GLAD-L", 1: "RADD"}
@@ -285,7 +282,7 @@ def test_run_integration_refuses_a_source_not_ready(ready_project):
     p, pdir = ready_project
     del p.artifacts[fp.harm_key(JAN.id, "RADD")]
     job = integrate.IntegrationJob(project=p, pdir=pdir, period=JAN, sources=["RADD"],
-                                   params=AlertSetParams(), workspace=Workspace(root=pdir))
+                                   params=AlertSetParams())
     with pytest.raises(ValueError, match="RADD"):
         integrate.run_integration(job)
 
@@ -313,7 +310,7 @@ def test_run_integration_refuses_a_source_whose_download_is_not_current(ready_pr
 def test_run_integration_refuses_a_source_the_project_does_not_have(ready_project):
     p, pdir = ready_project
     job = integrate.IntegrationJob(project=p, pdir=pdir, period=JAN, sources=["GLAD-S2"],
-                                   params=AlertSetParams(), workspace=Workspace(root=pdir))
+                                   params=AlertSetParams())
     with pytest.raises(ValueError, match="GLAD-S2 is not a source"):
         integrate.run_integration(job)
 

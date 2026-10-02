@@ -2,8 +2,8 @@
 actually call it.
 
 It used to run as a side effect of importing ``deforestation_alerts.parameter``,
-the package that also held the container-local ``module_dir`` the Workspace
-adapter replaced. That package is gone, so the call moved to the app's single
+the package that also held the container-local ``module_dir`` (since
+deleted). That package is gone, so the call moved to the app's single
 entry point and this test pins it there — losing the wiring would silently
 reintroduce the read-only-CWD crash ``gdal_env`` exists to prevent.
 """

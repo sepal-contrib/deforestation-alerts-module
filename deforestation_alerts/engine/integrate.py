@@ -49,7 +49,6 @@ from deforestation_alerts.project.models import (
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config
-from deforestation_alerts.scripts.workspace import Workspace
 
 #: Pixels per window (the vectorizer's default block): about 80 MB per Int32
 #: array, until the one-tile-row floor of ``_windows`` takes over above
@@ -182,7 +181,6 @@ class IntegrationJob:
     period: Period
     sources: list[str]
     params: AlertSetParams
-    workspace: Workspace
 
 
 @dataclass(frozen=True)
@@ -276,8 +274,8 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
 
                 minx, miny, maxx, maxy = p.aoi.bounds
                 region = ee.Geometry.Rectangle([minx, miny, maxx, maxy])
-            alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region, job.workspace)
-        save_gdf_to_parquet(alerts, job.workspace, str(staged[store]))
+            alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region)
+        save_gdf_to_parquet(alerts, str(staged[store]))
 
         step("steps.integrate.step_footprint")
         rasterize_footprint(vgdf, p.grid, staged[footprint])

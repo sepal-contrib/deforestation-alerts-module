@@ -523,9 +523,9 @@ def simplify_and_extract_features(
 def add_files_to_zip(zip_filename, file1, file2):
     """Zip two LOCAL files, stored under their basenames.
 
-    ``arcname`` matters since the members are staged scratch copies: without it
-    zipfile stores the full staging path, so the user unpacking the archive would
-    get a ``tmp/workspace_.../`` tree instead of the two files they asked for.
+    ``arcname`` matters since the members live in a scratch folder or the set
+    folder: without it zipfile stores the full path, so the user unpacking the
+    archive would get a directory tree instead of the two files they asked for.
     """
     import os
     import zipfile

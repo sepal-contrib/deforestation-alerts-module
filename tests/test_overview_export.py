@@ -14,6 +14,8 @@ run publishes. Error toasts are counted on a ``Notifier.error`` spy because the
 bus replaces earlier error toasts.
 """
 
+from pathlib import Path
+
 import geopandas as gpd
 import pytest
 from pysepal import sepalwidgets as sw
@@ -79,19 +81,19 @@ def _non_error_toasts(bus):
     ]
 
 
-def _card(ws, folder, fmt_index=1):
+def _card(folder, fmt_index=1):
     """The real export card plus the (generate, download) pair for one format."""
     card = overview_tile.build_export_card(
-        _gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
+        _gdf(), str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
     )
     gen_row, dl_row = card.children[1], card.children[2]
     return card, gen_row.children[fmt_index], dl_row.children[fmt_index]
 
 
-def test_the_generate_button_is_clickable_and_the_download_btn_starts_hidden(ws):
+def test_the_generate_button_is_clickable_and_the_download_btn_starts_hidden(data_root):
     """The bug: an ``sw.DownloadBtn`` built with the default ``path="#"`` is
     disabled by its own constructor, so nothing bound to its click ever runs."""
-    card, gen_btn, dl_btn = _card(ws, ws.results_dir("recipe_a"))
+    card, gen_btn, dl_btn = _card(data_root / "recipe_a")
 
     assert isinstance(gen_btn, sw.Btn) and not isinstance(gen_btn, sw.DownloadBtn)
     # (``v.Btn.disabled`` is None until set; what matters is that it is falsy —
@@ -102,21 +104,21 @@ def test_the_generate_button_is_clickable_and_the_download_btn_starts_hidden(ws)
 
 
 def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
-    ws, feedback
+    data_root, feedback
 ):
-    """The export lands in the user's workspace and the DownloadBtn becomes
+    """The export lands in the set folder and the DownloadBtn becomes
     enabled + visible with a URL ``su.create_download_link`` can turn into a
-    working SEPAL link. A container-absolute path would 404 silently, so the
-    home-relative shape is the point of the assertion."""
+    working SEPAL link: relative to ``$HOME``."""
     bus, errors, join = feedback
-    folder = ws.results_dir("recipe_a")
-    card, gen_btn, dl_btn = _card(ws, folder)
+    folder = data_root / "recipe_a"
+    card, gen_btn, dl_btn = _card(folder)
 
     gen_btn.fire_event("click", None)
     join()
 
     expected = f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.gpkg"
-    assert ws.exists(expected)
+    assert Path(expected).exists()
+    assert not list(folder.glob("*.part"))
     assert dl_btn.disabled is False and dl_btn.viz is True
     assert dl_btn.href.endswith(
         "module_results/deforestation_alerts/recipe_a/"
@@ -132,7 +134,7 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     ]
 
 
-def test_the_export_marks_its_project_as_being_written(ws, feedback, monkeypatch):
+def test_the_export_marks_its_project_as_being_written(data_root, feedback, monkeypatch):
     """Spec §12: the export writes into the set's folder, so the Project
     dialog's delete guard must see the project's name while it runs; without
     the mark a delete mid-export removed the folder and the export re-created
@@ -140,11 +142,11 @@ def test_the_export_marks_its_project_as_being_written(ws, feedback, monkeypatch
     from gui.store.project_writers import is_writing
 
     bus, errors, join = feedback
-    folder = ws.results_dir("recipe_a")
-    card, gen_btn, dl_btn = _card(ws, folder)
+    folder = data_root / "recipe_a"
+    card, gen_btn, dl_btn = _card(folder)
     busy = []
 
-    def _export(gdf, workspace, folder_, fmt, sources, start, end):
+    def _export(gdf, folder_, fmt, sources, start, end):
         busy.append(is_writing("d"))
         return f"{folder_}/alerts.{fmt}"
 
@@ -158,12 +160,12 @@ def test_the_export_marks_its_project_as_being_written(ws, feedback, monkeypatch
 
 
 def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
-    ws, feedback, monkeypatch, data_files
+    data_root, feedback, monkeypatch, data_files
 ):
     """An export that blows up used to be swallowed into the log: the user saw a
     dead button and no explanation."""
     bus, errors, join = feedback
-    card, gen_btn, dl_btn = _card(ws, ws.results_dir("recipe_a"), fmt_index=0)
+    card, gen_btn, dl_btn = _card(data_root / "recipe_a", fmt_index=0)
 
     def _boom(*_a, **_kw):
         raise ValueError("unsupported driver")
@@ -174,7 +176,7 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
     join()
 
     assert dl_btn.disabled is True and dl_btn.viz is False
-    assert data_files(ws) == []
+    assert data_files(data_root) == []
     (task,) = bus.tasks.value
     assert task.status == TaskStatus.FAILED
     assert task.error_message == "unsupported driver"
@@ -187,13 +189,13 @@ def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
 
 
 def test_a_failed_export_leaves_one_traceback_in_the_server_log(
-    ws, feedback, monkeypatch, server_log
+    data_root, feedback, monkeypatch, server_log
 ):
     """``tracked_job`` logs every failure it reports, with the traceback; the
     export worker logged the same failure again, so the server log showed
     two tracebacks for one failed export."""
     bus, errors, join = feedback
-    card, gen_btn, dl_btn = _card(ws, ws.results_dir("recipe_a"), fmt_index=0)
+    card, gen_btn, dl_btn = _card(data_root / "recipe_a", fmt_index=0)
 
     def _boom(*_a, **_kw):
         raise ValueError("unsupported driver")

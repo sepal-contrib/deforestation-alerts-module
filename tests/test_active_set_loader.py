@@ -84,21 +84,20 @@ def _alert_set(last=0):
                     fingerprint="f", created_at=datetime.now())
 
 
-def _project(name, ws, n=None, last=0, x0=0.0):
+def _project(name, root, n=None, last=0, x0=0.0):
     """A project; with ``n``, its active set and that set's store of ``n`` alerts."""
     p = Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name=name, method="DRAW", digest=name, bounds=(x0, 0.0, x0 + 1, 1.0))
     if n is not None:
         p.alert_sets[SET] = _alert_set(last)
         p.active_set = SET
-        store = Path(ws.root) / name / p.alert_sets[SET].store_rel_path
-        save_gdf_to_parquet(_alerts(n, x0), ws, str(store))
+        store = Path(root) / name / p.alert_sets[SET].store_rel_path
+        save_gdf_to_parquet(_alerts(n, x0), str(store))
     return p
 
 
 @pytest.fixture
-def loader(ws, monkeypatch):
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(ws.root))
+def loader(data_root):
     threads = []
     component = _shell_component("_ActiveSetLoader", threads)
     state, layers, map_ = AppState(), _Layers(), _Map()
@@ -106,7 +105,7 @@ def loader(ws, monkeypatch):
     @solara.component
     def Harness():
         NotificationProvider()
-        component(app_state=state, workspace=ws, layers=layers, map_=map_)
+        component(app_state=state, layers=layers, map_=map_)
 
     _, rc = reacton.render(Harness(), handle_error=False)
 
@@ -119,12 +118,12 @@ def loader(ws, monkeypatch):
                 th.join(timeout=0.1)
         raise AssertionError("a set load never finished")
 
-    yield SimpleNamespace(state=state, layers=layers, map_=map_, settle=settle, ws=ws)
+    yield SimpleNamespace(state=state, layers=layers, map_=map_, settle=settle, root=data_root)
     rc.close()
 
 
 def test_an_installed_project_loads_its_set_at_the_saved_position_and_resets_the_map(loader):
-    loader.state.load_project_state(_project("a", loader.ws, n=3, last=2, x0=10.0))
+    loader.state.load_project_state(_project("a", loader.root, n=3, last=2, x0=10.0))
     loader.settle()
 
     assert len(loader.state.alerts_gdf.value) == 3
@@ -138,11 +137,11 @@ def test_an_install_reads_the_store_once(loader, monkeypatch):
     the render in between must not start a second read of the same store."""
     reads = []
     real = set_store.load_active_alerts
-    monkeypatch.setattr(set_store, "load_active_alerts", lambda p, ws: reads.append(p.name) or real(p, ws))
+    monkeypatch.setattr(set_store, "load_active_alerts", lambda p: reads.append(p.name) or real(p))
 
-    loader.state.load_project_state(_project("a", loader.ws, n=3))
+    loader.state.load_project_state(_project("a", loader.root, n=3))
     loader.settle()
-    loader.state.load_project_state(_project("b", loader.ws, n=5))
+    loader.state.load_project_state(_project("b", loader.root, n=5))
     loader.settle()
     loader.state.load_project_state(loader.state.project.value.model_copy())  # the same project, reopened
     loader.settle()
@@ -154,9 +153,9 @@ def test_an_install_reads_the_store_once(loader, monkeypatch):
 def test_another_project_with_the_same_set_id_is_read_from_its_own_store(loader):
     """Set ids repeat across projects (period + sources): the alerts on hand
     must never stand in for the newly installed project's set."""
-    loader.state.load_project_state(_project("a", loader.ws, n=3))
+    loader.state.load_project_state(_project("a", loader.root, n=3))
     loader.settle()
-    loader.state.load_project_state(_project("b", loader.ws, n=5, last=4))
+    loader.state.load_project_state(_project("b", loader.root, n=5, last=4))
     loader.settle()
 
     assert len(loader.state.alerts_gdf.value) == 5
@@ -169,10 +168,10 @@ def test_integrates_first_set_is_kept_as_published_and_the_render_happens_on_its
     re-renders on that thread (no event loop there), and leaves the published
     alerts and the position Analysis took alone (ruling: skip a set already
     on hand)."""
-    loader.state.new_project_state(_project("b", loader.ws))
+    loader.state.new_project_state(_project("b", loader.root))
     loader.settle()
-    store_path = Path(loader.ws.root) / "b" / _alert_set().store_rel_path
-    save_gdf_to_parquet(_alerts(3), loader.ws, str(store_path))
+    store_path = Path(loader.root) / "b" / _alert_set().store_rel_path
+    save_gdf_to_parquet(_alerts(3), str(store_path))
     published = _alerts(3)
     result = SimpleNamespace(artifacts={}, alert_set=_alert_set(), alerts=published)
     errors = []
@@ -203,8 +202,8 @@ def test_a_set_whose_store_is_missing_is_reported_and_left_unloaded(loader, monk
 
     warnings = []
     monkeypatch.setattr(Notifier, "warning", lambda self, message, **kw: warnings.append(message))
-    p = _project("a", loader.ws, n=3)
-    store = Path(loader.ws.root) / "a" / p.alert_sets[SET].store_rel_path
+    p = _project("a", loader.root, n=3)
+    store = Path(loader.root) / "a" / p.alert_sets[SET].store_rel_path
     store.unlink()
 
     loader.state.load_project_state(p)
@@ -213,7 +212,7 @@ def test_a_set_whose_store_is_missing_is_reported_and_left_unloaded(loader, monk
     assert loader.state.alerts_gdf.value is None and loader.state.actual_alert_id.value == -1
     assert warnings == [t_("steps.project.set_missing", path=str(store))]
 
-    loader.state.load_project_state(_project("b", loader.ws, n=2))  # a project whose store is there
+    loader.state.load_project_state(_project("b", loader.root, n=2))  # a project whose store is there
     loader.settle()
     assert len(loader.state.alerts_gdf.value) == 2 and len(warnings) == 1
 
@@ -223,9 +222,9 @@ def test_a_set_whose_store_cannot_be_read_is_reported(loader, monkeypatch):
     from pysepal.solara.notifications.notifier import Notifier
 
     monkeypatch.setattr(Notifier, "error", lambda self, message, **kw: toasts.append(message))
-    monkeypatch.setattr(set_store, "load_active_alerts", lambda p, ws: (_ for _ in ()).throw(OSError("disk gone")))
+    monkeypatch.setattr(set_store, "load_active_alerts", lambda p: (_ for _ in ()).throw(OSError("disk gone")))
 
-    loader.state.load_project_state(_project("a", loader.ws, n=3))
+    loader.state.load_project_state(_project("a", loader.root, n=3))
     loader.settle()
 
     assert loader.state.alerts_gdf.value is None

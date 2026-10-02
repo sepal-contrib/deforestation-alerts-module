@@ -453,14 +453,14 @@ def _project(name="d", *sources, sets=()):
 
 
 @solara.component
-def _Harness(app_state, map_, workspace):
+def _Harness(app_state, map_):
     NotificationProvider()  # the step's use_notifications() needs it rendered first
-    integrate_step.IntegrateStep(app_state=app_state, map_=map_, gee_interface=object(), workspace=workspace)
+    integrate_step.IntegrateStep(app_state=app_state, map_=map_, gee_interface=object())
 
 
-def _render(state, workspace="WS"):
+def _render(state):
     map_ = ipyleaflet.Map()
-    box_, rc = reacton.render(_Harness(app_state=state, map_=map_, workspace=workspace), handle_error=False)
+    box_, rc = reacton.render(_Harness(app_state=state, map_=map_), handle_error=False)
     return map_, rc
 
 
@@ -580,7 +580,7 @@ def test_run_starts_one_job_for_the_ticked_sources(step, tmp_path):
         [job] = step.runs
         assert job.sources == ["GLAD-L"] and job.period == JAN and job.pdir == tmp_path / "d"
         assert job.params == AlertSetParams(min_size_ha=1.0, sorting=3, max_alerts=25)
-        assert job.workspace == "WS"
+        assert not hasattr(job, "workspace")
         assert job.project == state.project.value and job.project is not state.project.value  # a deep copy
         assert not _button(rc, t("steps.integrate.run")).disabled  # released
     finally:

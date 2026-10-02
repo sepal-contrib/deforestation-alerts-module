@@ -1,11 +1,10 @@
 """``build_export``'s download worker writes four artifacts — gpkg, before/after
-GeoTIFF, zip and Word report — and all four are USER data.
+GeoTIFF, zip and Word report — and all four are USER data, written straight
+into the set folder.
 
-Since Phase 6 the recipe folder is a remote SEPAL path, so the whole flow is
-build-in-scratch + upload. These tests drive the real ``_download_data`` with
-only the two genuinely external steps stubbed (the geedim image download and the
-cartopy figure render) and then read every artifact back out of the fake client's
-in-memory workspace.
+These tests drive the real ``_download_data`` with only the two genuinely
+external steps stubbed (the geedim image download and the cartopy figure
+render) and then read every artifact back out of the set folder.
 """
 
 import base64
@@ -48,10 +47,14 @@ def _alerts_gdf():
 
 
 @pytest.fixture()
-def download_ctx(monkeypatch, ws):
+def download_ctx(monkeypatch, data_root, tmp_path):
     """Everything ``_download_data`` reads, plus the two external steps stubbed."""
+    from deforestation_alerts import gdal_env
     from deforestation_alerts.scripts import report_builder
     from gui.tile.analysis import paths
+
+    scratch = tmp_path / "scratch"
+    monkeypatch.setattr(gdal_env, "scratch_dir", lambda: scratch)
 
     downloads = []
 
@@ -73,7 +76,9 @@ def download_ctx(monkeypatch, ws):
 
     # What _download_data reads from the shell's SetContext (passed as both
     # app_tile_model and aux_model): the set's folder and the report template.
-    set_context = SimpleNamespace(recipe_folder_path=ws.ensure_dir("set"), custom_report_template=None)
+    folder = data_root / "set"
+    folder.mkdir()
+    set_context = SimpleNamespace(recipe_folder_path=str(folder), custom_report_template=None)
 
     widgets = SimpleNamespace(
         selected_img_before_info_list=_BEFORE_INFO,
@@ -84,19 +89,19 @@ def download_ctx(monkeypatch, ws):
     )
     return SimpleNamespace(
         widgets=widgets, app_state=app_state, aux_model=set_context,
-        app_tile_model=set_context, ws=ws, downloads=downloads,
+        app_tile_model=set_context, folder=folder, scratch=scratch, downloads=downloads,
     )
 
 
 def _run(ctx):
     return export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model, ctx.ws
+        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model
     )
 
 
-def test_download_publishes_every_artifact_to_the_workspace(download_ctx, tmp_path):
+def test_download_writes_every_artifact_into_the_set_folder(download_ctx, data_files):
     ctx = download_ctx
-    folder = ctx.app_tile_model.recipe_folder_path
+    folder = ctx.folder
 
     result = _run(ctx)
 
@@ -104,22 +109,25 @@ def test_download_publishes_every_artifact_to_the_workspace(download_ctx, tmp_pa
         "zip_path": f"{folder}/alert_0.zip",
         "report_path": f"{folder}/alert_0.docx",
     }
-    for name in ("alert_0.gpkg", _TIF_NAME, "alert_0.zip", "alert_0.docx"):
-        assert ctx.ws.exists(f"{folder}/{name}"), name
-    # The zip carries the two members under their plain names, not the container
-    # staging path they were built in.
-    local_zip = tmp_path / "alert_0.zip"
-    local_zip.write_bytes(ctx.ws.read_bytes(f"{folder}/alert_0.zip"))
-    assert sorted(zipfile.ZipFile(local_zip).namelist()) == sorted(
+    # The four artifacts, and nothing else (no .part, no GDAL sidecar).
+    assert data_files(folder) == sorted(
+        folder / name for name in ("alert_0.gpkg", _TIF_NAME, "alert_0.zip", "alert_0.docx")
+    )
+    # The composite was downloaded once, through a .part of the set folder.
+    [downloaded] = ctx.downloads
+    assert Path(downloaded).parent == folder and Path(downloaded).name.startswith(_TIF_NAME + ".")
+    # The zip carries the two members under their plain names, not the
+    # scratch path they were built in.
+    assert sorted(zipfile.ZipFile(folder / "alert_0.zip").namelist()) == sorted(
         [_TIF_NAME, "alert_0.gpkg"]
     )
-    # Nothing staged survives the call.
-    assert [p for p in (tmp_path / "scratch").rglob("*") if p.is_file()] == []
+    assert (folder / "alert_0.docx").read_bytes()[:2] == b"PK"
+    # The scratch folder the gpkg, zip and report were built in is gone.
+    assert list(ctx.scratch.iterdir()) == []
 
 
-def test_download_reuses_the_cached_geotiff(download_ctx):
-    """A second download must not re-export the composite from GEE: the cache
-    probe is a remote ``exists``, not a container ``Path.exists``."""
+def test_download_reuses_the_composite_in_the_set_folder(download_ctx):
+    """A second download must not re-export the composite from GEE."""
     ctx = download_ctx
 
     _run(ctx)
@@ -129,19 +137,34 @@ def test_download_reuses_the_cached_geotiff(download_ctx):
     assert len(ctx.downloads) == 1
 
 
-def test_download_uses_the_users_custom_report_template(download_ctx):
-    """A custom template is a file in the USER's workspace (the Aux tile's remote
-    FileInput), so it must be staged down — not opened as a container path."""
+def test_a_failed_composite_download_leaves_no_composite_or_part_file(download_ctx, monkeypatch):
+    from gui.tile.analysis import paths
+
     ctx = download_ctx
-    template = ctx.ws.results_dir("my_template.docx")
-    ctx.ws.write_bytes(
-        template, Path(export_mod._DEFAULT_REPORT_TEMPLATE).read_bytes()
-    )
-    ctx.aux_model.custom_report_template = template
+
+    def _failing(image1, image2, image_name, *args):
+        Path(image_name).write_bytes(b"half")
+        raise RuntimeError("geedim failed")
+
+    monkeypatch.setattr(paths, "download_both_images", _failing)
+    with pytest.raises(RuntimeError):
+        _run(ctx)
+    assert not (ctx.folder / _TIF_NAME).exists()
+    assert not list(ctx.folder.glob("*.part")) and not list(ctx.folder.glob("*.tif*"))
+    assert list(ctx.scratch.iterdir()) == []
+
+
+def test_download_uses_the_users_custom_report_template(download_ctx, data_root):
+    """A custom template is the user's own file, read where it is."""
+    ctx = download_ctx
+    template = data_root / "my_template.docx"
+    template.write_bytes(Path(export_mod._DEFAULT_REPORT_TEMPLATE).read_bytes())
+    ctx.aux_model.custom_report_template = str(template)
 
     result = _run(ctx)
 
-    assert ctx.ws.read_bytes(result["report_path"])[:2] == b"PK"
+    assert Path(result["report_path"]).read_bytes()[:2] == b"PK"
+    assert template.exists()
 
 
 def test_download_is_a_noop_without_a_recipe(download_ctx):
@@ -178,14 +201,14 @@ def test_composite_download_drives_the_task_progress_ring(download_ctx, monkeypa
 
     first = _Task()
     export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model, ctx.ws,
+        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
         task=first,
     )
     assert first.progress == [0.5, 1.0, None]
 
     cached = _Task()
     export_mod._download_data(
-        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model, ctx.ws,
+        ctx.widgets, ctx.app_state, ctx.aux_model, ctx.app_tile_model,
         task=cached,
     )
     assert cached.progress == [None]

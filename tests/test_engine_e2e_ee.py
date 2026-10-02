@@ -12,7 +12,6 @@ from deforestation_alerts.engine.runner import SourceJob, apply_artifacts, run_s
 from deforestation_alerts.project.models import (
     AlertSetParams, AoiRecord, Period, Project, add_predefined_source,
 )
-from deforestation_alerts.scripts.workspace import Workspace
 
 BOUNDS = (-55.10, -10.10, -55.00, -10.00)
 # A single month (ruling #95: the brief's Jan-Mar window did not match this
@@ -52,9 +51,8 @@ def test_glad_l_and_radd_month_end_to_end(gee, tiny_aoi, tmp_path):
         with rasterio.open(tmp_path / a.rel_path) as src:
             assert src.dtypes == ("int32", "int32") and src.nodata == 0
             assert (src.width, src.height) == (p.grid.width, p.grid.height)
-    workspace = Workspace(root=tmp_path, scratch_parent=tmp_path / "scratch")
     res = run_integration(IntegrationJob(project=p, pdir=tmp_path, period=PERIOD, sources=["GLAD-L", "RADD"],
-                                         params=AlertSetParams(min_size_ha=0.0), workspace=workspace))
+                                         params=AlertSetParams(min_size_ha=0.0)))
     assert (tmp_path / res.alert_set.store_rel_path).exists()
     if len(res.alerts):
         assert set(res.alerts["alert_sources"]) <= {"GLAD-L", "RADD", "GLAD-L and RADD", "RADD and GLAD-L"}

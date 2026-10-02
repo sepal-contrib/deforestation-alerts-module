@@ -77,10 +77,7 @@ analyzed_alerts_model : AlertAnalysisModel
     ``defo_dl_layer`` — the user-drawn polygon GeoDataFrame.
 app_tile_model : SetContext
     ``recipe_folder_path`` — the active set's folder the before/after composite
-    is cached in.
-workspace : Workspace
-    The session user-file adapter; the composite is staged through it (the
-    prediction raster itself stays container-local scratch).
+    and the CNN's prediction raster are written to.
 """
 
 import logging
@@ -147,29 +144,23 @@ def _run_cnn_model(
     widgets,
     app_state,
     app_tile_model,
-    workspace,
     *,
     task=None,
 ):
     """Body of the OLD ``run_dl_model_*`` (worker side), without widget mutation.
 
-    Stages the before/after composite for the current alert (the shared cache in
-    the user's recipe folder — see ``paths.stage_alert_image``), pulls the HF
-    model (cached), runs ``apply_dl_model``, and returns the prediction ``.tif``
-    path. Runs on the daemon worker thread; the widget mutation (verify/enable,
-    add/remove) happens separately, never inside this function.
+    Gets the before/after composite for the current alert (downloaded once
+    into the active set's folder — see ``paths.stage_alert_image``), pulls the
+    HF model (cached), runs ``apply_dl_model``, and returns the prediction
+    ``.tif`` path. Runs on the daemon worker thread; the widget mutation
+    (verify/enable, add/remove) happens separately, never inside this function.
 
-    Neither staged file can be discarded here: ``apply_dl_model`` writes the
-    prediction raster INTO the composite's own scratch directory (same stem +
-    ``_prediction<suffix>.tif``), so releasing the composite would delete the
-    prediction — and the prediction path outlives this call, stashed on
-    ``analyzed_alerts_model.model*_prediction_file`` and read again every time the
-    user adds/removes the prediction overlay. Both are container-local scratch
-    (inventory c11/c12); they are released when the kernel goes away, by the
-    ``cleanup_kernel_scratch()`` sweep the ``on_kernel_start`` teardown in
-    ``gui/solara_app.py`` runs (``gui.scripts.scratch_registry``). Repeated CNN
-    runs in ONE session therefore still accumulate one composite + one prediction
-    each — bounded by the session, not by the container's lifetime.
+    ``apply_dl_model`` writes the prediction raster next to the composite (same
+    stem + ``_prediction<suffix>.tif``), so the composite and its prediction
+    both stay in the set folder, on a first run and on a cache hit alike. The
+    prediction path outlives this call: it is stashed on
+    ``analyzed_alerts_model.model*_prediction_file`` and read again every time
+    the user adds/removes the prediction overlay.
 
     ``task`` (the worker's ``TaskTracker``, optional) gets the composite
     download's geedim tile ticks as progress, and is handed back to
@@ -182,8 +173,7 @@ def _run_cnn_model(
 
     on_tiles = tile_progress_reporter(task) if task is not None else None
     with geedim_tile_progress(on_tiles):
-        image_local, _ = stage_alert_image(
-            workspace,
+        image_local = stage_alert_image(
             app_tile_model.recipe_folder_path,
             actual_alert_id,
             widgets.selected_img_before_info_list,
@@ -209,13 +199,11 @@ def build_edit_tools(
     app_state,
     analyzed_alerts_model,
     app_tile_model,
-    workspace,
 ):
     """Build and return the edit-tools + CNN card (OLD ``card04``).
 
-    ``workspace`` is the session user-file adapter: the before/after composite
-    the CNN runs on is cached in the user's recipe folder, so it is staged
-    through the adapter rather than opened from the container's disk.
+    The before/after composite the CNN runs on is a file of the active set's
+    folder (see ``paths.stage_alert_image``).
     """
 
     # ------------------------------------------------------------------
@@ -543,7 +531,7 @@ def build_edit_tools(
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                            widgets, app_state, app_tile_model, workspace,
+                            widgets, app_state, app_tile_model,
                             task=task,
                         )
                     _apply_model1(pred_path)
@@ -577,7 +565,7 @@ def build_edit_tools(
                     with writing(project):
                         pred_path = _run_cnn_model(
                             _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                            widgets, app_state, app_tile_model, workspace,
+                            widgets, app_state, app_tile_model,
                             task=task,
                         )
                     _apply_model2(pred_path)

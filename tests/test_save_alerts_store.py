@@ -1,9 +1,6 @@
-"""The Analysis review save persists ``alert_db.parquet`` to the user's SEPAL
-workspace through ``Workspace``, and skips when there is no set folder.
-
-``recipe_folder_path`` holds a path built with ``Workspace.results_dir(...)``,
-so the writer is handed the workspace alongside it. (Integrate writes a new
-set's store itself: ``tests/test_engine_integrate.py``.)
+"""The Analysis review save writes ``alert_db.parquet`` into the set folder,
+and skips when there is no set folder. (Integrate writes a new set's store
+itself: ``tests/test_engine_integrate.py``.)
 """
 
 import types
@@ -24,20 +21,21 @@ def _gdf():
     return gdf
 
 
-def test_save_writes_parquet(ws):
-    folder = ws.results_dir("recipe_test")
-    model = types.SimpleNamespace(recipe_folder_path=folder)
+def test_save_writes_parquet(data_root):
+    folder = data_root / "recipe_test"
+    model = types.SimpleNamespace(recipe_folder_path=str(folder))
 
-    _save_alerts_to_gdf(_gdf(), model, ws)
+    _save_alerts_to_gdf(_gdf(), model)
 
-    parquet = folder + "/alert_db.parquet"
-    assert ws.exists(parquet)
-    back = load_gdf_from_parquet(ws, parquet)
+    parquet = folder / "alert_db.parquet"
+    assert parquet.exists()
+    assert not list(folder.glob("*.part"))
+    back = load_gdf_from_parquet(parquet)
     assert back["status"].iloc[0] == "Confirmed"
 
 
-def test_save_skips_without_recipe_folder(ws, data_files):
+def test_save_skips_without_recipe_folder(data_root, data_files):
     model = types.SimpleNamespace(recipe_folder_path="")
-    _save_alerts_to_gdf(_gdf(), model, ws)  # must not raise
-    # nothing was written anywhere in the user's workspace
-    assert data_files(ws) == []
+    _save_alerts_to_gdf(_gdf(), model)  # must not raise
+    # nothing was written anywhere in the data directory
+    assert data_files(data_root) == []

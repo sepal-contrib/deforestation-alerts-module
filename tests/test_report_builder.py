@@ -109,8 +109,8 @@ def test_ensure_list():
 
 
 # ---------------------------------------------------------------------------
-# The report is USER DATA: it must land in the user's SEPAL workspace, and the
-# intermediates it needs must not touch a container path nobody creates.
+# The report is USER DATA: it must land on its output path (the set folder),
+# and the intermediates it needs live in a private scratch folder.
 # ---------------------------------------------------------------------------
 
 
@@ -154,33 +154,42 @@ def stub_plots(monkeypatch, tmp_path):
     return seen
 
 
-def test_report_is_saved_into_the_user_workspace(ws, tmp_path, stub_plots):
+@pytest.fixture()
+def scratch_root(monkeypatch, tmp_path):
+    """The process scratch root, pointed into ``tmp_path``."""
+    from deforestation_alerts import gdal_env
+
+    root = tmp_path / "scratch"
+    monkeypatch.setattr(gdal_env, "scratch_dir", lambda: root)
+    return root
+
+
+def test_report_is_saved_onto_its_output_path(data_root, tmp_path, scratch_root, stub_plots):
     from deforestation_alerts.scripts.report_builder import (
         generate_deforestation_report_with_word_template,
     )
     from gui.tile.analysis.export import _DEFAULT_REPORT_TEMPLATE
 
-    remote = ws.results_dir("recipe_a", "alert_0.docx")
+    out = str(data_root / "recipe_a" / "alert_0.docx")
 
     written = generate_deforestation_report_with_word_template(
         image_path=str(tmp_path / "unused.tif"),
         geodataframe_path=_alert_gpkg(tmp_path),
         template_path=_DEFAULT_REPORT_TEMPLATE,
-        output_path=remote,
-        workspace=ws,
+        output_path=out,
     )
 
-    assert written == remote
-    # A real .docx (a zip container) landed in the user's workspace.
-    assert ws.read_bytes(remote)[:2] == b"PK"
-    # ...and nothing was left behind in the container's scratch.
-    assert [p for p in (tmp_path / "scratch").rglob("*") if p.is_file()] == []
+    assert written == out
+    # A real .docx (a zip container) landed in the set folder, with no .part...
+    assert Path(out).read_bytes()[:2] == b"PK"
+    assert [p.name for p in (data_root / "recipe_a").iterdir()] == ["alert_0.docx"]
+    # ...and its scratch folder is gone.
+    assert list(scratch_root.iterdir()) == []
 
 
-def test_report_intermediates_go_to_a_private_scratch_dir(ws, tmp_path, stub_plots):
+def test_report_intermediates_go_to_a_private_scratch_dir(data_root, tmp_path, scratch_root, stub_plots):
     """The six JPEGs used to share one ``<module_dir>/temp``, so two concurrent
-    reports overwrote each other's ``output_image1.jpg`` — and after the recipe
-    folder went remote, nothing created that directory at all."""
+    reports overwrote each other's ``output_image1.jpg``."""
     from deforestation_alerts.scripts.report_builder import (
         generate_deforestation_report_with_word_template,
     )
@@ -192,8 +201,7 @@ def test_report_intermediates_go_to_a_private_scratch_dir(ws, tmp_path, stub_plo
             image_path=str(tmp_path / "unused.tif"),
             geodataframe_path=gpkg,
             template_path=_DEFAULT_REPORT_TEMPLATE,
-            output_path=ws.results_dir("recipe_a", name),
-            workspace=ws,
+            output_path=str(data_root / "recipe_a" / name),
         )
 
     assert len(stub_plots) == 12
@@ -203,4 +211,4 @@ def test_report_intermediates_go_to_a_private_scratch_dir(ws, tmp_path, stub_plo
     # 12 renders, 12 distinct paths: the two runs never shared a directory.
     assert len(set(stub_plots)) == 12
     for path in stub_plots:
-        assert path.is_relative_to(tmp_path / "scratch")
+        assert path.is_relative_to(scratch_root)

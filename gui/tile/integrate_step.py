@@ -51,7 +51,7 @@ def _inflight_key(project: str) -> str:
 
 
 @solara.component
-def IntegrateStep(app_state, map_, gee_interface, workspace):
+def IntegrateStep(app_state, map_, gee_interface):
     # Session-wide, like the step: a run outlives the form it was started from.
     inflight = solara.use_memo(InflightKeys, [])
     p = app_state.project.value
@@ -67,7 +67,7 @@ def IntegrateStep(app_state, map_, gee_interface, workspace):
     # "missing" shows a line that says to run again; a current set shows none.
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
-        app_state=app_state, map_=map_, gee_interface=gee_interface, workspace=workspace, inflight=inflight,
+        app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight,
         name=p.name, period=period, ready=ready, resolution=p.grid.resolution,
         last=active.params if active is not None else None, showing=showing,
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
@@ -76,7 +76,7 @@ def IntegrateStep(app_state, map_, gee_interface, workspace):
 
 
 @solara.component
-def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, period, ready, resolution, last,
+def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, ready, resolution, last,
                    showing, active_label=None, active_status=None):
     notifications = use_notifications()
     draw = solara.use_memo(lambda: DrawControl(map_), [])
@@ -128,7 +128,7 @@ def _IntegrateForm(app_state, map_, gee_interface, workspace, inflight, name, pe
         if not inflight.claim(key):
             return
         job = IntegrationJob(project=live.model_copy(deep=True), pdir=paths.project_dir(name), period=period,
-                             sources=list(chosen), params=params, workspace=workspace)
+                             sources=list(chosen), params=params)
 
         def _run():
             try:

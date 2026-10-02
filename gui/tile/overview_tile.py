@@ -55,6 +55,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.message import cm
 from deforestation_alerts.project import paths
+from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
 from gui.i18n import t
@@ -75,7 +76,7 @@ OVERVIEW_VIEW = "overview"
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
 
-def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end, project):
+def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project):
     """Return the click handler that generates the ``fmt`` export and reveals its
     download button. ``project`` is the name of the project the set folder
     belongs to, captured when the card was built: the export marks it as
@@ -89,24 +90,23 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
     and is revealed — enabled, with its URL — only once a file actually exists.
     Same pattern as ``analysis/export.py``'s save -> downloads toolbar.
 
-    Threading + feedback: writing a GPKG/GeoJSON and uploading it is blocking IO,
+    Threading + feedback: writing a GPKG/GeoJSON is blocking IO,
     so the work runs on a daemon thread via ``spawn_in_context`` (which carries
     the kernel context ``current_notifier`` resolves the bus from), under
     ``tracked_job``. A failure is a FAILED task + one error toast, not a silent
     log line.
 
-    The export lands in the user's SEPAL workspace, so the button gets the
-    HOME-RELATIVE remote path: ``set_url`` -> ``su.create_download_link`` builds
-    ``https://sepal.io/api/sandbox/jupyter/files/<path relative to Path.home()>``,
-    and in the container ``Path.home()`` is the *container's* home, so handing it
-    an absolute path yields a dead link (inventory a18)."""
+    The export lands in the set folder, and the download link is relative to
+    ``$HOME``: ``set_url`` -> ``su.create_download_link`` builds
+    ``https://sepal.io/api/sandbox/jupyter/files/<path relative to $HOME>``
+    (``local_files.home_relative``)."""
 
     def _on_click(widget, event, data):
         gen_btn.loading = True
         gen_btn.disabled = True
 
         def _worker():
-            # One opaque phase (write + upload), so no ``total_steps``. On a
+            # One opaque phase (the write), so no ``total_steps``. On a
             # failure tracked_job fails the task and publishes the one error
             # toast (the raw exception text), then re-raises into the except.
             notifier = current_notifier()
@@ -119,9 +119,9 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
                     )
                     with writing(project):
                         path = export_alerts_gdf(
-                            gdf, workspace, folder, fmt, sources, start, end
+                            gdf, folder, fmt, sources, start, end
                         )
-                    url_path = workspace.home_relative(path)
+                    url_path = local_files.home_relative(path)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
@@ -139,7 +139,7 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, e
     return _on_click
 
 
-def build_export_card(gdf, workspace, folder, sources, start, end, project):
+def build_export_card(gdf, folder, sources, start, end, project):
     """Build the export card: one generate button per format + its hidden
     DownloadBtn, revealed when that format has been written. ``project`` is
     the name of the project ``folder`` belongs to (see ``_bind_export``).
@@ -163,7 +163,7 @@ def build_export_card(gdf, workspace, folder, sources, start, end, project):
         gen_btn.on_event(
             "click",
             _bind_export(
-                gen_btn, dl_btn, fmt, gdf, workspace, folder, sources, start, end, project
+                gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
             ),
         )
         gen_buttons.append(gen_btn)
@@ -256,7 +256,7 @@ def _error_text(exc: BaseException) -> str:
 
 
 @solara.component
-def OverviewTile(app_state, map_, workspace, layers):
+def OverviewTile(app_state, map_, layers):
     """Overview of the active alert set (spec §9.3): the status summary, exports,
     the set's PMTiles on the shared map while this view is open, and a click on
     the map opens the nearest alert in Analysis.
@@ -269,9 +269,6 @@ def OverviewTile(app_state, map_, workspace, layers):
         navigation reactives.
     map_ : SepalMap
         The single shared map.
-    workspace : Workspace
-        The session user-file adapter the exports are written through, into the
-        set's own folder.
     layers : MapLayers
         The session's map-layer registry; the set's layer is its
         ``"overview:set"`` key.
@@ -340,7 +337,7 @@ def OverviewTile(app_state, map_, workspace, layers):
                 return
             deferred.current = False
             try:
-                pm = set_store.ensure_pmtiles(project, alert_set, workspace, on_wait=_defer)
+                pm = set_store.ensure_pmtiles(project, alert_set, on_wait=_defer)
                 warning = None if pm is not None else t("steps.integrate.no_tippecanoe")
             except set_store.StoreBusy as exc:
                 # Stale tiles while the project is being written (an Integrate
@@ -429,7 +426,7 @@ def OverviewTile(app_state, map_, workspace, layers):
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
     export_card = solara.use_memo(
-        lambda: build_export_card(gdf, workspace, folder, list(sources), start, end, p.name)
+        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name)
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end],
     )

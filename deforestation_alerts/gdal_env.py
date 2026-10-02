@@ -61,12 +61,11 @@ def _fallback_candidates() -> list:
         out.append(system_tmp / f"deforestation_alerts_gdal_{os.getuid()}")
 
     # Last resort: a ``module_results``-shaped directory under the PROCESS home.
-    # NOTE (inventory c3): this is the app's SCRATCH root, not the user's
-    # workspace. In the container it resolves to a container path, which is
-    # exactly right here and exactly wrong for user data -- that goes through
-    # ``scripts/workspace.Workspace`` and the SepalClient. This is the last copy
-    # of the arithmetic the deleted ``parameter.directory`` module used, and it
-    # survived that deletion on purpose; do not re-couple the two.
+    # NOTE (inventory c3): this is only GDAL's scratch, not user data. User
+    # data lives in the project folder (``deforestation_alerts.project.paths``)
+    # and is written there directly. This is the last copy of the arithmetic
+    # the deleted ``parameter.directory`` module used, and it survived that
+    # deletion on purpose; do not re-couple the two.
     # ``DEFORESTATION_ALERTS_DATA_DIR`` came back in Task 3 (see
     # ``deforestation_alerts.project.paths.data_dir()``), but it names the
     # user's *data* folder, not GDAL's scratch directory -- redirecting

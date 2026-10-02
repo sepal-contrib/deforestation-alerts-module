@@ -86,15 +86,16 @@ app_tile_model : SetContext
     ``alert_db.parquet``, ``is_current``, which tells whether that set is
     still the active one when the Save writes, and ``record_review``, which
     keeps that set's reviewed count after a store save.
-workspace : Workspace
-    The session user-file adapter. Every artifact this card produces — the alert
-    store, the gpkg, the composite GeoTIFF, the zip and the Word report — is user
-    data and goes through it; the DownloadBtns get ``home_relative`` URLs.
+
+Every artifact this card produces — the alert store, the gpkg, the composite
+GeoTIFF, the zip and the Word report — is written straight into the set folder
+through a unique ``.part`` renamed into place (``local_files``); the
+DownloadBtns get ``$HOME``-relative URLs (``local_files.home_relative``).
 """
 
 import logging
 from datetime import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import ee
 import geopandas as gpd
@@ -102,6 +103,7 @@ import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.message import cm
+from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
@@ -185,7 +187,7 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
         raise SaveRefused(str(cm.analysis_tile.export_labels.save_store_changed))
 
 
-def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, workspace):
+def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
@@ -307,23 +309,18 @@ def _save_attributes(widgets, app_state, analyzed_alerts_model, app_tile_model, 
 
     # Persist the alert DB (OLD save_alerts_to_gdf) where the save started.
     # Skip if there is no folder.
-    _save_alerts_to_gdf(
-        alertas_gdf, app_tile_model, workspace, folder=folder, target=target
-    )
+    _save_alerts_to_gdf(alertas_gdf, app_tile_model, folder=folder, target=target)
 
     analyzed_alerts_model.last_save_time = datetime.today().timestamp()
     return True
 
 
-def _save_alerts_to_gdf(
-    alertas_gdf, app_tile_model, workspace, *, folder=None, target=None
-):
+def _save_alerts_to_gdf(alertas_gdf, app_tile_model, *, folder=None, target=None):
     """Persist the alerts gdf to the canonical GeoParquet store.
 
     Writes ``<folder>/alert_db.parquet`` (all geometry columns preserved)
-    into the user's SEPAL workspace through ``workspace``; the folder is a
-    REMOTE path, so the join is posix, not ``os.path``. Then records the
-    set's reviewed count (``record_review``, when the model has one).
+    through a unique ``.part`` renamed into place. Then records the set's
+    reviewed count (``record_review``, when the model has one).
 
     ``folder`` and ``target`` are where the Save started (``_save_target``);
     without ``folder`` both are read now. Raises ``SaveRefused``, writing
@@ -340,10 +337,9 @@ def _save_alerts_to_gdf(
     if not folder:
         return
     _refuse_unless_current(alertas_gdf, app_tile_model, target)
-    store = str(PurePosixPath(folder) / "alert_db.parquet")
+    store = str(Path(folder) / "alert_db.parquet")
     save_gdf_to_parquet(
         alertas_gdf,
-        workspace,
         store,
         guard=lambda: _refuse_unless_current(alertas_gdf, app_tile_model, target),
     )
@@ -370,22 +366,19 @@ def _images_picked(widgets) -> bool:
     )
 
 
-def _download_data(
-    widgets, app_state, aux_model, app_tile_model, workspace, *, task=None
-):
+def _download_data(widgets, app_state, aux_model, app_tile_model, *, task=None):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
-    and the Word report. Returns ``{"zip_path", "report_path"}`` — REMOTE
-    workspace paths for the download effect to wire onto the two DownloadBtns.
-    Guards on the gdf/id.
+    and the Word report, all in the set folder. Returns ``{"zip_path",
+    "report_path"}`` — the set-folder paths for the download effect to wire onto
+    the two DownloadBtns. Guards on the gdf/id.
 
-    ``recipe_folder_path`` is a remote path, but GeoPandas, geedim, ``zipfile``
-    and python-docx all only speak local files, so all four artifacts are built
-    in one private ``workspace.scratch_dir()`` and uploaded (inventory rows
-    a20-a25 + c14/c16). The cached-GeoTIFF probe is a remote ``exists``, and a
-    cache hit is staged back down so the zip and the report can read it.
-    Everything staged is released in the ``finally``.
+    The gpkg and the zip are built in a private scratch folder (GDAL may leave
+    sidecars, zipfile writes a named file) and copied into the set folder; the
+    composite is downloaded into the set folder once (``stage_alert_image``)
+    and read where it is; the report is rendered from the scratch gpkg onto
+    its set-folder path. The scratch folder is deleted when the block ends.
 
     ``task`` (the worker's ``TaskTracker``, optional) gets the composite
     download's geedim tile ticks as progress, and is handed back to
@@ -399,11 +392,11 @@ def _download_data(
     if actual_alert_id >= len(alertas_gdf):
         return None
 
-    # Every artifact below is written into the recipe folder; without one there
-    # is nowhere in the user's workspace to put them (smoke / pre-recipe runs).
+    # Every artifact below is written into the set folder; without one there
+    # is nowhere to put them (smoke / no active set).
     if not app_tile_model.recipe_folder_path:
         return None
-    recipe_folder = PurePosixPath(app_tile_model.recipe_folder_path)
+    folder = Path(app_tile_model.recipe_folder_path)
 
     # The composite needs a before and an after image (their info lists carry
     # the date suffix and the image id, see paths.alert_image_name), and both
@@ -438,27 +431,23 @@ def _download_data(
         ]
     )
 
-    # One staging area for the artifacts built here; `download_to_scratch` makes
-    # its own private dir per file, so those are tracked separately. Releasing
-    # `gpkg_local` releases the whole `stage` directory it lives in.
-    stage = workspace.scratch_dir()
-    gpkg_remote = recipe_folder / f"alert_{actual_alert_id}.gpkg"
-    gpkg_local = stage / gpkg_remote.name
-    staged = [gpkg_local]
-    try:
+    gpkg_dest = folder / f"alert_{actual_alert_id}.gpkg"
+    zip_dest = folder / f"alert_{actual_alert_id}.zip"
+    report_dest = folder / f"alert_{actual_alert_id}.docx"
+    with local_files.scratch_dir() as stage:
+        gpkg_local = stage / gpkg_dest.name
         selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
             str(gpkg_local), driver="GPKG"
         )
-        workspace.upload_from_scratch(gpkg_local, str(gpkg_remote))
+        local_files.copy_into(gpkg_local, gpkg_dest)
 
-        # Before/after image GeoTIFF (downloaded only if not already in the recipe
-        # folder). Built via the shared helper so it resolves to the same cached
-        # file the CNN run (edit_tools) wrote.
+        # Before/after image GeoTIFF (downloaded only if not already in the set
+        # folder). Built via the shared helper so it resolves to the same file
+        # the CNN run (edit_tools) wrote.
         on_tiles = tile_progress_reporter(task) if task is not None else None
         with geedim_tile_progress(on_tiles):
-            image_local, _ = stage_alert_image(
-                workspace,
-                str(recipe_folder),
+            image_local = stage_alert_image(
+                folder,
                 actual_alert_id,
                 widgets.selected_img_before_info_list,
                 widgets.selected_img_after_info_list,
@@ -466,38 +455,26 @@ def _download_data(
                 widgets.selected_img_after,
                 widgets.actual_alert_grid,
             )
-        staged.append(image_local)
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
 
         # Zip the image + gpkg.
-        zip_remote = recipe_folder / f"alert_{actual_alert_id}.zip"
-        zip_local = stage / zip_remote.name
+        zip_local = stage / zip_dest.name
         add_files_to_zip(str(zip_local), str(image_local), str(gpkg_local))
-        workspace.upload_from_scratch(zip_local, str(zip_remote))
+        local_files.copy_into(zip_local, zip_dest)
 
-        # Word report. The DEFAULT template is a packaged asset (inventory b1) and
-        # stays container-local; a CUSTOM one is a user file and is staged down.
-        report_remote = recipe_folder / f"alert_{actual_alert_id}.docx"
-        if aux_model.custom_report_template:
-            report_template = workspace.download_to_scratch(
-                aux_model.custom_report_template
-            )
-            staged.append(report_template)
-        else:
-            report_template = _DEFAULT_REPORT_TEMPLATE
+        # Word report: the project's custom template (a file of the user's,
+        # read where it is) or the packaged default.
+        template = (
+            Path(aux_model.custom_report_template)
+            if aux_model.custom_report_template
+            else _DEFAULT_REPORT_TEMPLATE
+        )
         generate_deforestation_report_with_word_template(
-            str(image_local),
-            str(gpkg_local),
-            str(report_template),
-            str(report_remote),
-            workspace,
+            str(image_local), str(gpkg_local), str(template), str(report_dest)
         )
 
-        return {"zip_path": str(zip_remote), "report_path": str(report_remote)}
-    finally:
-        for path in staged:
-            workspace.discard_scratch(path)
+    return {"zip_path": str(zip_dest), "report_path": str(report_dest)}
 
 
 def build_export(
@@ -506,13 +483,11 @@ def build_export(
     aux_model,
     analyzed_alerts_model,
     app_tile_model,
-    workspace,
 ):
     """Build and return the export card (OLD ``card06``) with the save + download flow.
 
-    ``workspace`` is the session ``Workspace`` built in ``Page()`` and threaded
-    down like ``gee_interface``: the alert store it writes is a user file and
-    must land in the user's SEPAL workspace, not the container's disk.
+    The alert store, the zip and the report it writes land in the active set's
+    folder.
     """
 
     # ------------------------------------------------------------------
@@ -584,14 +559,12 @@ def build_export(
     # fails the task). The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
     def _apply_download(result):
-        # The zip/report live in the user's SEPAL workspace, so the buttons get
-        # HOME-RELATIVE paths: ``set_url`` -> ``su.create_download_link`` builds
-        # ``.../jupyter/files/<Path(path).relative_to(Path.home())>``, and in the
-        # container ``Path.home()`` is the CONTAINER's home, so an absolute
-        # workspace path degrades to a dead link (inventory a23).
-        ns["files_dwn_btn"].set_url(path=workspace.home_relative(result["zip_path"]))
+        # The zip/report live in the set folder, so the buttons get
+        # $HOME-relative paths: ``set_url`` -> ``su.create_download_link`` builds
+        # ``.../jupyter/files/<path relative to $HOME>``.
+        ns["files_dwn_btn"].set_url(path=local_files.home_relative(result["zip_path"]))
         ns["report_dwn_btn"].set_url(
-            path=workspace.home_relative(result["report_path"])
+            path=local_files.home_relative(result["report_path"])
         )
         ns["toolbar_downloads"].show()
 
@@ -627,7 +600,6 @@ def build_export(
                                 app_state,
                                 analyzed_alerts_model,
                                 app_tile_model,
-                                workspace,
                             )
                             refused = None
                         except SaveRefused as refusal:
@@ -690,7 +662,6 @@ def build_export(
                             app_state,
                             aux_model,
                             app_tile_model,
-                            workspace,
                             task=task,
                         )
                     if result is None:
@@ -716,9 +687,9 @@ def build_export(
                         notifier.warning(reason)
                         logger.warning("Analysis: download refused — %s", reason)
                     else:
-                        # Inside the tracked block: ``workspace.home_relative``
-                        # raises InvalidPathError for a path outside the SEPAL
-                        # home, and that must be a FAILED task + one error toast,
+                        # Inside the tracked block: ``local_files.home_relative``
+                        # raises ValueError for a path outside $HOME, and that
+                        # must be a FAILED task + one error toast,
                         # not a green pill with download buttons that never show.
                         _apply_download(result)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)

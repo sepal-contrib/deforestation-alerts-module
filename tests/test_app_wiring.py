@@ -269,7 +269,8 @@ def test_shell_wires_the_new_tiles():
                  "_ActiveSetLoader"):
         assert name in src, name
     for gone in ("AuxModel", "AoiDateModel", "SelectedAlertsModel", "AppTileModel", "AlertFilterModel",
-                 "build_recipe_layout", "build_aux_layout", "AlertsFilterTile", "Workspace(sepal_client)"):
+                 "build_recipe_layout", "build_aux_layout", "AlertsFilterTile", "Workspace(",
+                 "scratch_registry", "register_scratch_owner", "cleanup_kernel_scratch"):
         assert gone not in src, gone
 
 
@@ -280,7 +281,8 @@ def test_removed_modules_are_gone():
                 "deforestation_alerts/scripts/alert_filter_helper.py", "deforestation_alerts/scripts/vectorize.py",
                 "deforestation_alerts/model/aux_model.py", "deforestation_alerts/model/aoi_date_model.py",
                 "deforestation_alerts/model/alerts_model.py", "deforestation_alerts/model/app_model.py",
-                "gui/Dockerfile", "gui/supervisord.conf", "docker-compose.yml", ".dockerignore"):
+                "gui/Dockerfile", "gui/supervisord.conf", "docker-compose.yml", ".dockerignore",
+                "deforestation_alerts/scripts/workspace.py", "gui/scripts/scratch_registry.py"):
         assert not (ROOT / rel).exists(), rel
 
 
@@ -311,7 +313,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
         assert f"{role}=set_context," in shell, role
     assert "layers = solara.use_memo(lambda: MapLayers(map_), dependencies=[])" in shell
     assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}' in shell
-    assert "_ActiveSetLoader(app_state=app_state, workspace=workspace, layers=layers, map_=map_)" in shell
+    assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
 
 
@@ -329,7 +331,7 @@ def test_the_active_set_loader_reads_the_store_on_a_worker_and_keeps_published_a
     assert "layers.clear()" in body and "map_.zoom_bounds(p.aoi.bounds)" in body
     assert "solara.use_effect(_start_load, [key])" in body
     assert "spawn_in_context(_load)" in body
-    assert "set_store.load_active_alerts(p, workspace)" in body
+    assert "set_store.load_active_alerts(p)" in body
     assert "set_store.holds_set(app_state.alerts_gdf.value, s)" in body
     # checked before the read and again before the publish
     load = body.index("def _load():")
@@ -394,3 +396,23 @@ def test_a_detached_tile_may_remount_its_root():
     src = _src("gui/solara_app.py")
     assert "render_fixed" not in _component_body(src, "_AppShell")
     assert src.count("render_detached(lambda: ") == 9  # About, Project, Overview, five steps, the header
+
+
+def test_nothing_imports_the_workspace_module():
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for base in ("gui", "deforestation_alerts", "scripts", "tools", "tests"):
+        for py in (root / base).rglob("*.py"):
+            for node in ast.walk(ast.parse(py.read_text(encoding="utf-8"))):
+                names = []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
+                elif isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                if any(n.endswith("scripts.workspace") or n.endswith("scratch_registry") for n in names):
+                    offenders.append(str(py.relative_to(root)))
+    assert offenders == []
+    assert not (root / "deforestation_alerts" / "scripts" / "workspace.py").exists()

@@ -1,13 +1,14 @@
-"""The on-demand exports land in the user's SEPAL workspace (results root).
-
-Every assertion reads the produced bytes back out through ``ws``, so a
-regression that wrote somewhere else in the workspace would fail here.
+"""The on-demand exports land in the folder they are given (the set folder),
+built in a private scratch folder and copied into place.
 """
+
+from pathlib import Path
 
 import pandas as pd
 import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
+from deforestation_alerts import gdal_env
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf, EXPORT_FORMATS
 
 
@@ -38,60 +39,57 @@ def _real_shape_gdf():
     return gdf
 
 
-def _read_back(ws, remote_path, tmp_path, suffix):
-    """Stage a remote export back down so GeoPandas can open it."""
-    local = tmp_path / f"readback{suffix}"
-    local.write_bytes(ws.read_bytes(remote_path))
-    return local
-
-
 @pytest.mark.parametrize("fmt", ["csv", "gpkg", "geojson"])
-def test_export_handles_unset_alert_polygon_multirow(ws, fmt):
+def test_export_handles_unset_alert_polygon_multirow(data_root, fmt):
     # Regression: NaN alert_polygon must not crash any export format.
-    folder = ws.results_dir("recipe_a")
-    path = export_alerts_gdf(_real_shape_gdf(), ws, folder, fmt,
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_real_shape_gdf(), folder, fmt,
                              ["GLAD-L"], "2026-01-01", "2026-06-12")
-    assert ws.exists(path)
+    assert Path(path).exists()
 
 
-def test_export_gpkg_drops_secondary_geometries(ws, tmp_path):
-    folder = ws.results_dir("recipe_a")
-    path = export_alerts_gdf(_gdf(), ws, folder, "gpkg",
+def test_export_gpkg_drops_secondary_geometries(data_root):
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_gdf(), folder, "gpkg",
                              ["GLAD-L", "RADD"], "2026-01-01", "2026-06-12")
     assert path == f"{folder}/alerts_glad-l-radd_2026-01-01_2026-06-12.gpkg"
-    back = gpd.read_file(_read_back(ws, path, tmp_path, ".gpkg"))
+    back = gpd.read_file(path)
     assert "point" not in back.columns and "bounding_box" not in back.columns
     assert back.geometry.iloc[0].geom_type == "Polygon"
 
 
-def test_export_geojson(ws):
-    folder = ws.results_dir("recipe_a")
-    path = export_alerts_gdf(_gdf(), ws, folder, "geojson",
+def test_export_geojson(data_root):
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_gdf(), folder, "geojson",
                              ["GLAD-L"], "2026-01-01", "2026-06-12")
     assert path == f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.geojson"
-    assert ws.exists(path)
+    assert Path(path).exists()
 
 
-def test_export_csv_keeps_columns_as_wkt(ws):
-    folder = ws.results_dir("recipe_a")
-    path = export_alerts_gdf(_gdf(), ws, folder, "csv",
+def test_export_csv_keeps_columns_as_wkt(data_root):
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_gdf(), folder, "csv",
                              ["GLAD-L"], "2026-01-01", "2026-06-12")
     assert path.endswith(".csv")
-    assert "POINT" in ws.read_text(path)  # point column preserved as WKT
+    assert "POINT" in Path(path).read_text()  # point column preserved as WKT
 
 
-def test_export_rejects_unknown_format(ws, data_files):
+def test_export_rejects_unknown_format(data_root, data_files):
     with pytest.raises(ValueError):
-        export_alerts_gdf(_gdf(), ws, ws.results_dir("recipe_a"), "shp", [], "", "")
-    assert data_files(ws) == []
+        export_alerts_gdf(_gdf(), data_root / "recipe_a", "shp", [], "", "")
+    assert data_files(data_root) == []
 
 
-def test_export_leaves_no_scratch_residue(ws, tmp_path):
-    """The staged local copy is released once it has been uploaded."""
-    export_alerts_gdf(_gdf(), ws, ws.results_dir("recipe_a"), "gpkg",
-                      ["GLAD-L"], "2026-01-01", "2026-06-12")
+def test_export_leaves_only_the_export(data_root, data_files, tmp_path, monkeypatch):
+    """Only the export lands in the folder (no ``.part``, no GDAL sidecar),
+    and its scratch folder is deleted."""
     scratch = tmp_path / "scratch"
-    assert [p for p in scratch.rglob("*") if p.is_file()] == []
+    monkeypatch.setattr(gdal_env, "scratch_dir", lambda: scratch)
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_gdf(), folder, "gpkg",
+                             ["GLAD-L"], "2026-01-01", "2026-06-12")
+    assert data_files(data_root) == [Path(path)]
+    assert [p for p in scratch.rglob("*")] == []
 
 
 def test_export_formats_constant():

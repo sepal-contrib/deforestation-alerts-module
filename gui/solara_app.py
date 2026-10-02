@@ -46,7 +46,6 @@ from deforestation_alerts.gdal_env import (
 from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
 from deforestation_alerts.message import cm
 from deforestation_alerts.model.analysis_model import AlertAnalysisModel
-from deforestation_alerts.scripts.workspace import Workspace
 from gui.store.navigation import (
     apply_navigation,
     dismiss_dialog,
@@ -56,7 +55,6 @@ from gui.store.navigation import (
 from gui.i18n import app_available_locales, t
 from gui.scripts import set_store
 from gui.scripts.map_layers import MapLayers
-from gui.scripts.scratch_registry import cleanup_kernel_scratch, register_scratch_owner
 from gui.scripts.set_context import SetContext
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
@@ -98,8 +96,8 @@ install_server_log_handler()
 
 # Point GDAL's temp-file allocator at a directory proven writable, ONCE per
 # process. This used to ride along on the import of the (now deleted)
-# ``deforestation_alerts.parameter`` package, whose only other job was the
-# container-local ``module_dir`` the Workspace adapter replaced. It lives here
+# ``deforestation_alerts.parameter`` package, whose only other job was a
+# container-local ``module_dir`` that no longer exists. It lives here
 # because this module is the app's single entry point (``solara run
 # gui/solara_app.py`` and ``ui.ipynb`` both import it), and it is import-time,
 # not render-time: it is a local mkdir + write probe, never a network call.
@@ -240,28 +238,8 @@ if os.getenv("PYSEPAL_DEV_AUTH", "").strip().lower() in {"1", "true", "yes", "on
 
 @solara.lab.on_kernel_start
 def on_kernel_start():
-    """Per-kernel session bootstrap + the teardown that sweeps its scratch.
-
-    ``setup_sessions()`` returns pysepal's own cleanup; we wrap it so the
-    container-local scratch this kernel's ``Workspace`` staged (analyze rasters,
-    staged alert stores, the CNN composite + prediction) is deleted when the
-    kernel dies. Without it those files outlive the session and the container's
-    tmp grows for every run. The sweep is kernel-scoped — see
-    ``gui.scripts.scratch_registry`` — so it can never touch another live
-    kernel's scratch, and it runs FIRST so a failure in pysepal's cleanup cannot
-    skip it (it swallows its own errors either way).
-    """
-    session_cleanup = setup_sessions()
-
-    def _cleanup():
-        try:
-            cleanup_kernel_scratch()
-        except Exception:  # pragma: no cover — cleanup_kernel_scratch never raises
-            logger.exception("Kernel teardown: scratch sweep failed")
-        if callable(session_cleanup):
-            session_cleanup()
-
-    return _cleanup
+    """Per-kernel session bootstrap (pysepal's sessions; its cleanup is returned)."""
+    return setup_sessions()
 
 
 def compute_title(app_state) -> str:
@@ -274,7 +252,7 @@ def compute_title(app_state) -> str:
 
 
 @solara.component
-def _ActiveSetLoader(app_state, workspace, layers, map_):
+def _ActiveSetLoader(app_state, layers, map_):
     """Load the active alert set into ``alerts_gdf`` and reset the map when a
     project is installed. A leaf component so only it re-renders on these changes.
 
@@ -335,7 +313,7 @@ def _ActiveSetLoader(app_state, workspace, layers, map_):
                 # told where the store was and what rebuilds it.
                 notifications.warning(t("steps.project.set_missing", path=str(store)))
             try:
-                gdf = set_store.load_active_alerts(p, workspace)
+                gdf = set_store.load_active_alerts(p)
             except Exception as exc:  # noqa: BLE001 - reported, the set stays unloaded
                 logger.exception("could not load the alerts of set %s", s.id)
                 if loads.current["run"] == run:
@@ -418,21 +396,6 @@ def _AppShell():
     gee_interface = get_current_gee_interface()
     theme_state = get_current_theme_state()
 
-    # The ONE boundary every user file Analysis writes goes through (the local
-    # sandbox disk, spec D14), threaded into the tiles exactly like
-    # ``gee_interface``. Construction is PURE: no mkdir or other I/O on the
-    # render path; every Workspace write creates its own parents.
-    # Registered with the kernel-scoped scratch registry as it is built, so the
-    # on_kernel_start cleanup above can delete everything it staged locally when
-    # this kernel goes away (registration is a dict insert — no I/O on the render
-    # path).
-    def _make_workspace():
-        ws = Workspace()
-        register_scratch_owner(ws)
-        return ws
-
-    workspace = solara.use_memo(_make_workspace, dependencies=[])
-
     # Session state (the Project, navigation, alert review) — memoized so it
     # is not re-created on every re-render (which would discard every reactive
     # value mid-session). The auto-save hook saves the project after every
@@ -484,7 +447,7 @@ def _AppShell():
             app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)), t("app.drawer_item.project"))[0],
         dependencies=[])
     overview_widget = solara.use_memo(
-        lambda: render_detached(lambda: OverviewTile(app_state=app_state, map_=map_, workspace=workspace,
+        lambda: render_detached(lambda: OverviewTile(app_state=app_state, map_=map_,
                                                      layers=layers), t("app.drawer_item.overview"))[0], dependencies=[])
     step_widgets = solara.use_memo(
         lambda: {
@@ -498,7 +461,7 @@ def _AppShell():
                                                            gee_interface=gee_interface, layers=layers),
                                        t("app.drawer_item.prepare"))[0],
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
-                                                               gee_interface=gee_interface, workspace=workspace),
+                                                               gee_interface=gee_interface),
                                          t("app.drawer_item.integrate"))[0],
         },
         dependencies=[],
@@ -515,7 +478,6 @@ def _AppShell():
             app_tile_model=set_context,
             app_state=app_state,
             gee_interface=gee_interface,
-            workspace=workspace,
             theme_state=theme_state,
         ),
         dependencies=[],
@@ -716,4 +678,4 @@ def _AppShell():
         mapapp_ref=mapapp_ref,
         workflow_config=WORKFLOW_PANEL_CONFIG,
     )
-    _ActiveSetLoader(app_state=app_state, workspace=workspace, layers=layers, map_=map_)
+    _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)

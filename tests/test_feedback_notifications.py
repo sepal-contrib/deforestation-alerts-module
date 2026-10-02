@@ -127,11 +127,6 @@ def _record_feedback(monkeypatch, module):
     return feedback
 
 
-def _is_subsequence(expected, actual):
-    it = iter(actual)
-    return all(any(item == got for got in it) for item in expected)
-
-
 def _widgets(root):
     """Depth-first walk of an ipyvuetify widget tree.
 
@@ -195,16 +190,16 @@ def app_logger_at_info():
 
 
 def test_overview_export_worker_log_lines_become_task_milestones(
-    ws, monkeypatch, app_logger_at_info
+    data_root, monkeypatch, app_logger_at_info
 ):
     """The point of running the body under ``tracked_job``: an app log line the
     export emits on the worker thread shows up as a milestone of ITS task."""
     import gui.tile.overview_tile as overview_tile
 
     feedback = _record_feedback(monkeypatch, overview_tile)
-    folder = ws.ensure_dir("recipe_a")
+    folder = str(data_root / "recipe_a")
 
-    def _export(gdf, workspace, folder_, fmt, sources, start, end):
+    def _export(gdf, folder_, fmt, sources, start, end):
         logging.getLogger("SEPALUI.deforestation_alerts.alert_export").info(
             "Writing 1 alert"
         )
@@ -212,7 +207,7 @@ def test_overview_export_worker_log_lines_become_task_milestones(
 
     monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
     card = overview_tile.build_export_card(
-        _overview_gdf(), ws, folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
+        _overview_gdf(), folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
     )
     gen_btn = card.children[1].children[1]
     dl_btn = card.children[2].children[1]
@@ -234,7 +229,7 @@ def test_overview_export_worker_log_lines_become_task_milestones(
 
 
 def test_overview_export_failure_fails_the_task_with_one_error_toast(
-    ws, monkeypatch
+    data_root, monkeypatch
 ):
     import gui.tile.overview_tile as overview_tile
 
@@ -245,7 +240,7 @@ def test_overview_export_failure_fails_the_task_with_one_error_toast(
 
     monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
     card = overview_tile.build_export_card(
-        _overview_gdf(), ws, ws.results_dir("recipe_a"), ["GLAD-L"], "a", "b", "d"
+        _overview_gdf(), str(data_root / "recipe_a"), ["GLAD-L"], "a", "b", "d"
     )
     gen_btn = card.children[1].children[0]
     dl_btn = card.children[2].children[0]
@@ -262,7 +257,7 @@ def test_overview_export_failure_fails_the_task_with_one_error_toast(
 # analysis/export — raw layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def export_card(monkeypatch, ws):
+def export_card(monkeypatch, data_root):
     import gui.tile.analysis.export as export
 
     app_state = AppState()
@@ -273,7 +268,6 @@ def export_card(monkeypatch, ws):
         aux_model=_set_context_fake(),
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=app_tile_model,
-        workspace=ws,
     )
     return export, card, app_state, app_tile_model
 
@@ -387,7 +381,7 @@ def test_export_marks_the_open_project_as_being_written(
 
 
 def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
-    monkeypatch, ws, tmp_path
+    monkeypatch, tmp_path
 ):
     """While the alerts on hand are another set's (Integrate records a new set
     before it publishes that set's alerts), a Save must not write them into
@@ -434,7 +428,6 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
         aux_model=ctx,
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=ctx,
-        workspace=ws,
     )
     feedback = _record_feedback(monkeypatch, export)
 
@@ -549,7 +542,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
 
 
 def test_export_download_without_images_is_refused_before_any_file_is_written(
-    monkeypatch, ws, data_files
+    monkeypatch, data_root, data_files
 ):
     """The composite needs a before and an after image, and nothing picks them
     by itself (no Planet login, Sentinel-2 needs a manual pick). It used to be
@@ -561,7 +554,7 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
 
     app_state = AppState()
     app_tile_model = SimpleNamespace(
-        recipe_folder_path=ws.ensure_dir("r"), custom_report_template=None
+        recipe_folder_path=str(data_root / "r"), custom_report_template=None
     )
     widgets = SimpleNamespace(  # as AnalysisWidgets starts: no image picked
         selected_img_before_info_list=None, selected_img_after_info_list=None,
@@ -573,7 +566,6 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
         aux_model=_set_context_fake(),
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=app_tile_model,
-        workspace=ws,
     )
     feedback = _record_feedback(monkeypatch, export)
     app_state.alerts_gdf.value = _one_row_gdf()
@@ -590,15 +582,15 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     assert task.error_message == expected
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", expected)]
-    assert data_files(ws) == []  # no alert_0.gpkg left behind
+    assert data_files(data_root) == []  # no alert_0.gpkg left behind
     assert toolbar.viz is False
     assert download_btn.loading is False and download_btn.disabled is False
 
 
-def test_export_download_success_reveals_the_files(export_card, monkeypatch, ws):
+def test_export_download_success_reveals_the_files(export_card, monkeypatch, data_root):
     export, card, _app_state, _app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)
-    folder = ws.results_dir("r")
+    folder = data_root / "r"
     monkeypatch.setattr(
         export,
         "_download_data",
@@ -651,11 +643,11 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
 
 
 def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
-    export_card, monkeypatch, ws
+    export_card, monkeypatch
 ):
     """The post-download apply step runs inside the tracked job: a download path
-    ``workspace.home_relative`` rejects (outside the SEPAL home / ``..``) must be a
-    FAILED task + one error toast, not a green pill with buttons that never show."""
+    ``local_files.home_relative`` rejects (outside ``$HOME``) must be a FAILED
+    task + one error toast, not a green pill with buttons that never show."""
     export, card, _app_state, _app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)
     monkeypatch.setattr(
@@ -670,7 +662,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     def _reject(path):
         raise ValueError(f"not under the SEPAL home: {path}")
 
-    monkeypatch.setattr(ws, "home_relative", _reject)
+    monkeypatch.setattr(export.local_files, "home_relative", _reject)
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
@@ -712,7 +704,7 @@ def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
 # analysis/edit_tools — CNN run workers under tracked_job (dl_404 mapping)
 # ---------------------------------------------------------------------------
 @pytest.fixture()
-def edit_tools_card(ws):
+def edit_tools_card():
     import gui.tile.analysis.edit_tools as edit_tools
 
     analyzed_alerts_model = AlertAnalysisModel()
@@ -721,7 +713,6 @@ def edit_tools_card(ws):
         app_state=AppState(),
         analyzed_alerts_model=analyzed_alerts_model,
         app_tile_model=_set_context_fake(),
-        workspace=ws,
     )
     return edit_tools, card, analyzed_alerts_model
 
@@ -763,7 +754,7 @@ def test_edit_tools_model_run_publishes_success(
 
 @pytest.mark.parametrize("label", ["M 1", "M 2"])
 def test_edit_tools_model_run_marks_the_open_project_as_being_written(
-    monkeypatch, ws, label
+    monkeypatch, label
 ):
     """Spec §12: the CNN composite lands in the set's folder, so the Project
     dialog's delete guard must see the open project's name for the whole run
@@ -783,7 +774,6 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
         app_state=app_state,
         analyzed_alerts_model=AlertAnalysisModel(),
         app_tile_model=_set_context_fake(),
-        workspace=ws,
     )
     feedback = _record_feedback(monkeypatch, edit_tools)
     busy = []
@@ -875,7 +865,7 @@ def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
     )
 
 
-def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
+def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
     """The before/after composite download reports geedim tile ticks as task
     progress, then hands the ring back to indeterminate for the inference."""
     import huggingface_hub
@@ -888,7 +878,7 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
         callback(1, 4)
         callback(2, 4)
         callback(4, 4)
-        return "/tmp/composite.tif", None
+        return "/tmp/composite.tif"
 
     order = []
     monkeypatch.setattr(edit_tools, "stage_alert_image", _fake_stage)
@@ -916,7 +906,7 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch, ws):
     })()
 
     result = edit_tools._run_cnn_model(
-        "repo", "file", "_m1", widgets, app_state, _set_context_fake(), ws, task=_Task()
+        "repo", "file", "_m1", widgets, app_state, _set_context_fake(), task=_Task()
     )
 
     assert result == "/tmp/pred.tif"

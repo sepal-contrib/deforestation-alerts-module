@@ -1,10 +1,9 @@
 """The alerts store: an alert set's ``alert_db.parquet``, and the CSV export.
 
-The parquet readers and writers take the ``Workspace`` adapter and stage
-through ``Workspace.scratch_file`` / ``download_to_scratch`` /
-``upload_from_scratch``, because pyarrow and GeoPandas only open local files.
-``save_gdf_to_csv`` stays a pure local serializer on purpose: its caller (the
-export path in ``alert_export.py``) owns the staging.
+The parquet store is written through ``local_files.write_into`` (a unique
+``.part`` renamed into place). ``save_gdf_to_csv`` stays a pure local
+serializer on purpose: its caller (the export path in ``alert_export.py``)
+decides where the file goes.
 """
 
 import geopandas as gpd
@@ -18,9 +17,8 @@ ALERT_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
 def save_gdf_to_csv(gdf, path, geometry_cols):
     """Write a gdf to a LOCAL CSV, encoding each named geometry column as WKT.
 
-    Local-only, because pandas writes local files. Its one caller is the export
-    path (``alert_export.py``), which owns staging the result into the user's
-    workspace.
+    Its one caller is the export path (``alert_export.py``), which writes it
+    in a private scratch folder and copies it into the set folder.
     """
     out = pd.DataFrame(gdf).copy()
     for col in geometry_cols:
@@ -36,35 +34,22 @@ def save_gdf_to_csv(gdf, path, geometry_cols):
     return path
 
 
-def save_gdf_to_parquet(gdf, workspace, remote_path, *, guard=None):
-    """Write the alerts gdf to GeoParquet in the user's SEPAL workspace.
+def save_gdf_to_parquet(gdf, path, *, guard=None):
+    """Write the alerts gdf to GeoParquet at ``path`` (all geometry columns kept).
 
-    GeoParquet supports multiple geometry columns; coerce the known secondary
-    geometry columns (`bounding_box`, `point`, `alert_polygon`) to GeoSeries so
-    they are written as geometry (not opaque objects). The active geometry stays
-    `geometry`.
-
-    Args:
-        gdf: the alerts GeoDataFrame.
-        workspace (Workspace): the session's user-file adapter.
-        remote_path (str): REMOTE path of the store, e.g.
-            ``workspace.results_dir(recipe, "alert_db.parquet")``.
-        guard: optional callable run once the file is serialized, right
-            before it is moved onto ``remote_path``. A review Save checks
-            there that the store it is about to replace is still the one its
-            alerts came from; if the guard raises, nothing is written and the
-            exception propagates.
-
-    Returns:
-        str: the remote path written.
+    The known secondary geometry columns (``bounding_box``, ``point``,
+    ``alert_polygon``) are coerced to GeoSeries so they are written as
+    geometry; the active geometry stays ``geometry``. ``guard``, when given,
+    runs once the file is serialized and right before it replaces ``path``:
+    a review Save checks there that the store it is about to replace is still
+    the one its alerts came from; if it raises, nothing is written. Returns
+    ``str(path)``.
     """
+    from deforestation_alerts.scripts import local_files
+
     out = gpd.GeoDataFrame(gdf).copy()
     for col in ALERT_GEOM_COLS:
         if col in out.columns and not isinstance(out[col], gpd.GeoSeries):
-            # An unset geometry column (e.g. `alert_polygon` before the user draws
-            # one) reindexes to NaN floats on a multi-row frame; map those to None
-            # so GeoSeries accepts them as missing geometry instead of raising on
-            # the float dtype.
             vals = [
                 g if g is not None and not (isinstance(g, float) and pd.isna(g)) else None
                 for g in out[col].tolist()
@@ -72,32 +57,16 @@ def save_gdf_to_parquet(gdf, workspace, remote_path, *, guard=None):
             out[col] = gpd.GeoSeries(vals, index=out.index, crs="EPSG:4326")
     if "geometry" in out.columns:
         out = out.set_geometry("geometry")
-    # pyarrow writes a local file; stage it, then ship it to the user's
-    # workspace and hand back the REMOTE path that is the store. The staged copy
-    # is dropped immediately: this runs once per alert save, so keeping it would
-    # pile up a full copy of the store in container tmp per save.
-    local = workspace.scratch_file(".parquet")
-    try:
-        out.to_parquet(local)
+    with local_files.write_into(path) as part:
+        out.to_parquet(part)
         if guard is not None:
             guard()
-        return workspace.upload_from_scratch(local, remote_path)
-    finally:
-        workspace.discard_scratch(local)
+    return str(path)
 
 
-def load_gdf_from_parquet(workspace, remote_path):
-    """Read a GeoParquet alerts store out of the user's SEPAL workspace.
-
-    GeoPandas/pyarrow only open local files, so the store is staged first, then
-    the staged copy is discarded (the gdf is fully in memory by then);
-    `geometry` is made the active geometry on the way back.
-    """
-    local = workspace.download_to_scratch(remote_path)
-    try:
-        gdf = gpd.read_parquet(local)
-    finally:
-        workspace.discard_scratch(local)
+def load_gdf_from_parquet(path):
+    """Read a GeoParquet alerts store; ``geometry`` is the active geometry."""
+    gdf = gpd.read_parquet(path)
     if "geometry" in gdf.columns:
         gdf = gdf.set_geometry("geometry")
     return gdf

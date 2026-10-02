@@ -3,11 +3,10 @@
 Phase 0 tests are pure: no Earth Engine calls, no UI rendering. We deliberately
 do NOT call init_ee() here so the suite runs offline in CI without credentials.
 
-``Workspace`` (``deforestation_alerts/scripts/workspace.py``) now reads and
-writes plain files on the local sandbox disk (spec D14) -- there is no more
-remote client to fake. The ``ws`` fixture below roots one in ``tmp_path`` (with
-``HOME`` pinned there too, so ``home_relative`` -- which resolves against the
-real ``Path.home()`` -- stays inside it).
+The app reads and writes plain files on the local sandbox disk (spec D14).
+The ``data_root`` fixture below points the data directory into ``tmp_path``
+(with ``HOME`` pinned there too, so ``local_files.home_relative`` -- which
+resolves against ``Path.home()`` -- stays inside it).
 """
 
 # Reacton's first ``t()`` call *during* a first render corrupts its internal
@@ -26,36 +25,26 @@ import pytest
 
 
 @pytest.fixture()
-def ws(monkeypatch, tmp_path):
-    """A local-disk ``Workspace`` rooted in ``tmp_path`` (user files under
-    ``module_results/deforestation_alerts/``).
+def data_root(monkeypatch, tmp_path):
+    """The data directory of a test: ``<tmp>/module_results/deforestation_alerts``.
 
-    ``HOME`` is pinned to ``tmp_path`` too: production ``home_relative``
-    resolves against the real ``Path.home()``, so without this every call to
-    it (recipe load, the overview/export "download" links) would raise for a
-    root that sits outside the real user's home.
+    ``HOME`` is pinned to ``tmp_path`` (download links are relative to it) and
+    ``DEFORESTATION_ALERTS_DATA_DIR`` points at the directory, so
+    ``paths.project_dir(name)`` lands inside it.
     """
-    from deforestation_alerts.scripts.workspace import Workspace
-
     monkeypatch.setenv("HOME", str(tmp_path))
-    return Workspace(
-        root=tmp_path / "module_results" / "deforestation_alerts",
-        scratch_parent=tmp_path / "scratch",
-    )
+    root = tmp_path / "module_results" / "deforestation_alerts"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
+    return root
 
 
 @pytest.fixture()
 def data_files():
-    """Callable: every user file a ``Workspace`` holds (scratch excluded).
+    """Callable: every file under a data directory. ``assert data_files(root) == []``."""
 
-    Usage: ``assert data_files(ws) == []``. A fixture rather than a module
-    import -- an installed ``tests`` package in site-packages shadows this
-    directory, so ``from tests.conftest import ...`` resolves to the wrong
-    module; fixtures are the only sharing channel.
-    """
-
-    def _data_files(workspace):
-        root = Path(workspace.root)
+    def _data_files(root):
+        root = Path(root)
         return sorted(p for p in root.rglob("*") if p.is_file()) if root.exists() else []
 
     return _data_files

@@ -56,7 +56,7 @@ def active_store_path(p) -> Optional[Path]:
     return _store(p, s) if s is not None else None
 
 
-def load_active_alerts(p, workspace):
+def load_active_alerts(p):
     """The active set's alerts, stamped with their store's generation, or None
     when there is no set or its store is gone."""
     from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
@@ -67,7 +67,7 @@ def load_active_alerts(p, workspace):
     # The generation is read before the store: a store replaced during the
     # read then reads as changed, and a Save of what was read is refused.
     generation = store_generation(store)
-    gdf = load_gdf_from_parquet(workspace, str(store))
+    gdf = load_gdf_from_parquet(store)
     gdf.attrs[STORE_GENERATION] = generation
     return gdf
 
@@ -159,7 +159,7 @@ def holds_set(gdf, s) -> bool:
     return gdf is not None and "set_id" in gdf.columns and len(gdf) > 0 and alerts_belong_to(gdf, s)
 
 
-def ensure_pmtiles(p, s, workspace, on_wait: Optional[Callable[[], None]] = None) -> Optional[Path]:
+def ensure_pmtiles(p, s, on_wait: Optional[Callable[[], None]] = None) -> Optional[Path]:
     """The set's tiles, rebuilt first from the store on disk when they are
     stale; None without tippecanoe. Blocking (tippecanoe): call from a worker
     thread.
@@ -191,7 +191,7 @@ def ensure_pmtiles(p, s, workspace, on_wait: Optional[Callable[[], None]] = None
     with writing(p.name):
         store = _store(p, s)
         generation = store_generation(store)
-        alerts = load_gdf_from_parquet(workspace, str(store))
+        alerts = load_gdf_from_parquet(store)
 
         def _still_the_store_read():
             if store_generation(store) != generation:

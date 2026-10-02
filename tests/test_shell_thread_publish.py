@@ -159,10 +159,9 @@ def _alert_set(p, sources):
 
 
 @pytest.fixture
-def shell(ws, monkeypatch):
+def shell(data_root, monkeypatch):
     """The shell's always-mounted tiles and leaves on a real ``AppState`` with
     the auto-save hook, as ``_AppShell`` builds them."""
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(ws.root))
     gee = SimpleNamespace()  # never asked anything: no metadata is missing, no AOI is processed
     monkeypatch.setattr(aoi_view, "get_current_gee_interface", lambda: gee)
     monkeypatch.setattr(aoi_view.su, "init_ee", lambda *a, **k: None)
@@ -202,13 +201,12 @@ def shell(ws, monkeypatch):
             _detached("about", lambda: AboutTile())
             _detached("project", lambda: ProjectDialog(
                 app_state=state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)))
-            _detached("overview", lambda: OverviewTile(app_state=state, map_=map_, workspace=ws, layers=layers))
+            _detached("overview", lambda: OverviewTile(app_state=state, map_=map_, layers=layers))
             _detached("aoi", lambda: AoiStep(app_state=state, map_=map_, gee_interface=gee))
             _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("period", lambda: PeriodStep(app_state=state))
             _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
-            _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee,
-                                                         workspace=ws))
+            _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee))
             _detached("header", lambda: WorkflowHeader(app_state=state))
             tiles["banner"] = build_set_status_banner(state)
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
@@ -222,7 +220,7 @@ def shell(ws, monkeypatch):
         panel_bridge(app_state=state, panel_wrappers=wrappers, header_wrapper=header_wrapper,
                      stage_host=stage_host, map_=map_, mapapp_ref=mapapp_ref,
                      workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
-        set_loader(app_state=state, workspace=ws, layers=layers, map_=map_)
+        set_loader(app_state=state, layers=layers, map_=map_)
         tiles["stage_host"] = stage_host
 
     holder = {}
@@ -239,7 +237,7 @@ def shell(ws, monkeypatch):
                 th.join(timeout=0.05)
         raise AssertionError("a set load never finished")
 
-    yield SimpleNamespace(state=state, tiles=tiles, reports=reports, mount=mount, settle=settle, ws=ws,
+    yield SimpleNamespace(state=state, tiles=tiles, reports=reports, mount=mount, settle=settle, data_root=data_root,
                           nav_model=nav_model)
     for rc in contexts:
         rc.close()
@@ -276,9 +274,9 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog):
     state = shell.state
     p = _project()
     io.save_project(p)
-    store = Path(shell.ws.root) / NAME / _alert_set(p, ["GLAD-L", "RADD"]).store_rel_path
+    store = shell.data_root / NAME / _alert_set(p, ["GLAD-L", "RADD"]).store_rel_path
     sid = _alert_set(p, ["GLAD-L", "RADD"]).id
-    save_gdf_to_parquet(_alerts(3, sid), shell.ws, str(store))
+    save_gdf_to_parquet(_alerts(3, sid), str(store))
     errors = []
 
     async def main():

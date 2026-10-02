@@ -2,7 +2,7 @@
 
 The national run itself needs Earth Engine and hours; these tests only pin
 that its rasters go to the project disk, never SEPAL's small /var/tmp, and that
-it leaves no Workspace scratch behind.
+it leaves no scratch behind.
 """
 
 import importlib.util
@@ -44,24 +44,18 @@ def test_an_output_on_the_small_local_disk_is_refused_before_earth_engine(mp, mo
     assert "/var/tmp" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("fails", [False, True], ids=["ok", "failed"])
-def test_integrate_stages_its_scratch_under_the_output_and_removes_it(mp, tmp_path, monkeypatch, fails):
+def test_integrate_builds_a_job_without_a_workspace_and_leaves_no_scratch(mp, tmp_path, monkeypatch):
     out = tmp_path / "out"
-    staged = []
+    jobs = []
 
     def fake_run(job, on_step=None):
-        f = job.workspace.scratch_file(".parquet")
-        f.write_bytes(b"store")
-        staged.append(f)
-        if fails:
-            raise RuntimeError("vectorize failed")
+        jobs.append(job)
         return "result"
 
     monkeypatch.setattr(mp, "run_integration", fake_run)
-    if fails:
-        with pytest.raises(RuntimeError):
-            mp.integrate_into(out, None, None, ["GLAD-L"])
-    else:
-        assert mp.integrate_into(out, None, None, ["GLAD-L"]) == "result"
-    assert out / "scratch" in staged[0].parents
+    assert mp.integrate_into(out, None, None, ["GLAD-L"]) == "result"
+    (job,) = jobs
+    assert isinstance(job, mp.IntegrationJob)
+    assert not hasattr(job, "workspace")
+    assert job.pdir == out and job.sources == ["GLAD-L"]
     assert not (out / "scratch").exists()

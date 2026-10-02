@@ -329,7 +329,6 @@ def build_analysis_layout(
     app_tile_model,
     app_state,
     gee_interface,
-    workspace,
     theme_state=None,
 ):
     """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
@@ -360,9 +359,6 @@ def build_analysis_layout(
         Source of truth for the alerts table + navigation.
     gee_interface : GEEInterface
         Session GEE interface, forwarded to both maps.
-    workspace : Workspace
-        Session user-file adapter (built in ``Page()``); the alert store and
-        the per-alert files are read/written through it.
     theme_state : ThemeState, optional
         Shared app theme state, forwarded to both maps so they track the app's
         light/dark theme exactly as the shared main map does.
@@ -500,7 +496,6 @@ def build_analysis_layout(
                 app_state=app_state,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
-                workspace=workspace,
             ),
             build_export(
                 widgets=widgets,
@@ -508,7 +503,6 @@ def build_analysis_layout(
                 aux_model=aux_model,
                 analyzed_alerts_model=analyzed_alerts_model,
                 app_tile_model=app_tile_model,
-                workspace=workspace,
             ),
         ],
     )

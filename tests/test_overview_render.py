@@ -100,9 +100,9 @@ def _state(p, gdf, view="overview"):
 
 
 @solara.component
-def _Harness(app_state, map_, workspace, layers):
+def _Harness(app_state, map_, layers):
     NotificationProvider()  # the tile's use_notifications() needs it rendered first
-    overview_tile.OverviewTile(app_state=app_state, map_=map_, workspace=workspace, layers=layers)
+    overview_tile.OverviewTile(app_state=app_state, map_=map_, layers=layers)
 
 
 @pytest.fixture
@@ -113,8 +113,8 @@ def ov(monkeypatch, tmp_path):
     # MapLayers' builds are queued, not started: the test runs them.
     monkeypatch.setattr(map_layers, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append((target, args)))
 
-    def ensure(p, s, workspace, on_wait=None):
-        ns.ensured.append((p.name, s.id, workspace))
+    def ensure(p, s, on_wait=None):
+        ns.ensured.append((p.name, s.id))
         if ns.during_ensure is not None:
             ns.during_ensure()
         if ns.ensure_error is not None:
@@ -137,10 +137,10 @@ def ov(monkeypatch, tmp_path):
             target, args = ns.jobs.pop(0)
             target(*args)
 
-    def render(state, workspace="WS"):
+    def render(state):
         map_ = SepalMap(gee=False)
         layers = MapLayers(map_)
-        _, rc = reacton.render(_Harness(app_state=state, map_=map_, workspace=workspace, layers=layers),
+        _, rc = reacton.render(_Harness(app_state=state, map_=map_, layers=layers),
                                handle_error=False)
         ns.bus = get_current_bus()
         return map_, layers, rc
@@ -233,7 +233,7 @@ def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(o
     state = _state(_project(tmp_path), alerts)
     map_, layers, rc = ov.render(state)
     try:
-        assert calls == [(alerts, "WS", str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d")]
+        assert calls == [(alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d")]
         state.panel_view.set("workflow")  # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1
@@ -280,8 +280,7 @@ def test_the_set_layer_is_drawn_only_while_the_overview_is_open(ov, tmp_path):
         state.panel_view.set("overview")
         assert layers.is_on(KEY)
         ov.run_jobs()
-        [(name, sid, workspace)] = ov.ensured
-        assert (name, sid) == ("d", make_set_id(JAN.id, ["GLAD-L"])) and workspace == "WS"
+        assert ov.ensured == [("d", make_set_id(JAN.id, ["GLAD-L"]))]
         assert ov.drawn == [(ov.pm, KEY, t("steps.overview.layer_name"))]
         assert map_.find_layer(KEY, none_ok=True) is not None
 
@@ -368,7 +367,7 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
     map_, layers, rc = ov.render(state)
     try:
         ov.run_jobs()
-        [(_, sid, _ws)] = ov.ensured
+        [(_, sid)] = ov.ensured
         assert sid == a
 
         b = None
@@ -389,7 +388,7 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
         state.alerts_gdf.set(b_alerts)  # _publish_alerts
         assert layers.is_on(KEY)
         ov.run_jobs()
-        [(_, sid, _ws)] = ov.ensured[1:]
+        [(_, sid)] = ov.ensured[1:]
         assert sid == b
         assert map_.find_layer(KEY, none_ok=True) is not None and len(_export_cards(rc)) == 1
     finally:
@@ -439,7 +438,7 @@ def test_a_store_rewritten_under_the_build_is_retiled_once_the_build_is_done(ov,
 
     calls = []
 
-    def ensure(p, s, workspace, on_wait=None):
+    def ensure(p, s, on_wait=None):
         calls.append(s.id)
         if len(calls) == 1:
             with writing(p.name):  # the build's own mark, as set_store.ensure_pmtiles takes it
