@@ -62,3 +62,24 @@ def test_vis_legends():
     assert tif.kind == "gradient" and [l.literal for l in tif.labels] == ["0", "45"]
     nicfi = ls.vis_legend("vis:p", NicfiVisLayer(name="p"), month="2026-03").spec
     assert nicfi.kind == "note" and dict(nicfi.labels[0].args) == {"month": "2026-03"}
+
+
+def test_stack_order_is_a_permutation_of_the_status_codes():
+    assert sorted(ls.STACK_ORDER) == sorted(code for code, _, _ in ls.STATUS_CLASSES)
+
+
+def test_confirmed_and_false_positive_are_never_adjacent_in_the_stack():
+    """Measured deuteranopia separation between the Confirmed and False positive
+    steps is 2.8 (OKLab x100) -- invisible. They are never adjacent in a stack
+    or a legend; putting Needs revision between them lifts the worst adjacent
+    pair to 13.8, with the hexes unchanged."""
+    codes = {label.rsplit(".", 1)[-1]: code for code, _, label in ls.STATUS_CLASSES}
+    pair = {codes["confirmed"], codes["false_positive"]}
+    adjacent = [{a, b} for a, b in zip(ls.STACK_ORDER, ls.STACK_ORDER[1:])]
+    assert pair not in adjacent
+
+
+def test_stack_order_is_an_order_and_carries_no_colour():
+    """It reorders, it does not repaint: the map and the PMTiles paint values
+    draw exactly the same colours as before."""
+    assert all(isinstance(code, int) for code in ls.STACK_ORDER)

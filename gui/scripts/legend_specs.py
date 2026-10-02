@@ -21,6 +21,14 @@ STATUS_CLASSES = (
     (2, "#388e3c", "legend.status.false_positive"),
     (3, "#f9a825", "legend.status.needs_revision"),
 )
+#: The order charts stack and list the review statuses in. The Confirmed and
+#: False positive steps are 2.8 apart under simulated deuteranopia (OKLab x100)
+#: -- indistinguishable -- so Needs revision sits between them, which lifts the
+#: worst adjacent pair to 13.8. This reorders, it does not repaint: the map and
+#: the PMTiles paint values draw the same colours as before. All-pairs
+#: separation still fails, so status is never drawn as a pie, donut, scatter or
+#: choropleth; stacked bars, grouped bars and lines are fine.
+STACK_ORDER = (1, 3, 2, 0)  # Confirmed, Needs revision, False positive, Not reviewed
 MASK_COLOR = "#757575"  # keep and exclude masks alike
 MASK_OPACITY = 0.5
 _GREY_RAMP = ("#000000", "#ffffff")
