@@ -176,6 +176,16 @@ def _failure_toast(source: str, exc: BaseException, message: str) -> str:
     return t("steps.prepare.row_failed", source=source, error=message)
 
 
+def _mask_failure_toast(name: str, exc: BaseException, message: str) -> str:
+    """A mask row's failure says it is a mask ("Mask forest: ..."), unless its
+    keyed refusal already names the mask (``MaskFileMissing``,
+    ``MaskNativeUnknown``)."""
+    cause = exc.__cause__ if isinstance(exc, HarmonizeFailed) and exc.__cause__ is not None else exc
+    if (getattr(cause, "values", None) or {}).get("name") == name:
+        return message
+    return t("steps.prepare.mask_row_failed", mask=name, error=message)
+
+
 def _items(rows) -> list:
     """``("mask", name)`` / ``("source", name)`` items; a bare string is a source."""
     return [r if isinstance(r, tuple) else ("source", r) for r in rows]
@@ -261,7 +271,8 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
                 message = _failure_text(exc)
                 _set_error(ctx, error_key, message)
                 if ctx.notifier is not None:
-                    ctx.notifier.error(_failure_toast(name, exc, message), timeout=ERROR_TOAST_TIMEOUT)
+                    toast = (_mask_failure_toast if kind == "mask" else _failure_toast)(name, exc, message)
+                    ctx.notifier.error(toast, timeout=ERROR_TOAST_TIMEOUT)
                 if isinstance(exc, HarmonizeFailed) and exc.artifacts:
                     # The download (or the AOI raster) succeeded: record it, so
                     # the next run only re-harmonizes (re-aligns) from disk.

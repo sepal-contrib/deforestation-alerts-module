@@ -246,15 +246,17 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         if needs_aoi_raster:
             keys.append(aoi_key(p.name))  # one AOI-raster build at a time
         stop_scope = (p.name, period.id)
-        # Recorded before the claim, so the claim's re-render already counts
-        # these keys as this project's and period's (``mine_keys``).
-        cancel = stops.add(stop_scope, keys)
-        if not inflight.claim(*keys):
+        job = {}
+        # The job joins this period's Stop scope only once its claim succeeds,
+        # and before the claim is published: the claim's re-render already
+        # counts these keys as this project's and period's (``mine_keys``),
+        # and a refused claim never lists another job's keys as ours.
+        if not inflight.claim(*keys, on_claim=lambda: job.update(cancel=stops.add(stop_scope, keys))):
             # A key is held by another job: a mask another period's job is
             # aligning, the AOI raster being built, a row still running.
-            stops.discard(stop_scope, cancel)
             notifications.info(t("steps.prepare.claim_busy"))
             return
+        cancel = job["cancel"]
 
         def _give_back():
             stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone

@@ -47,7 +47,8 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Artifact, Period, Project
 
 __all__ = [
-    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNotReady",
+    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNativeUnknown",
+    "MaskNotReady",
     "SourceJob",
     "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
 ]
@@ -85,6 +86,17 @@ class MaskFileMissing(FileNotFoundError):
     def __init__(self, name: str, path: str):
         super().__init__(f"{name}: file not found: {path}")
         self.values = {"name": name, "path": path}
+
+
+class MaskNativeUnknown(ValueError):
+    """An Earth Engine mask without its persisted native grid (crs, scale):
+    it cannot be downloaded natively; the user edits the mask."""
+
+    key = "steps.prepare.mask_native_unknown"
+
+    def __init__(self, name: str):
+        super().__init__(f"{name}: its native grid is unknown; edit the mask")
+        self.values = {"name": name}
 
 
 class HarmonizeFailed(RuntimeError):
@@ -277,7 +289,10 @@ def run_mask_row(job: MaskJob, *, on_tiles=None, on_wait=None) -> dict[str, Arti
     raster, rebuilt first when the AOI or the grid changed. The alignment's
     free space is checked before a download (spec §7.3); each check asks for
     twice the compressed estimate. If the alignment fails after a download or
-    an AOI-raster build, ``HarmonizeFailed`` carries the new artifacts.
+    an AOI-raster build, ``HarmonizeFailed`` carries the new artifacts. A
+    GeoTIFF mask gone from disk raises ``MaskFileMissing`` and an Earth Engine
+    mask without its native grid ``MaskNativeUnknown`` (both keyed, so the row
+    reads them translated), before anything else.
     """
     p, pdir, name = job.project, Path(job.pdir), job.name
     if p.aoi is None or p.grid is None:
@@ -285,9 +300,9 @@ def run_mask_row(job: MaskJob, *, on_tiles=None, on_wait=None) -> dict[str, Arti
     m = p.masks[name]
     missing = mask_file_missing(m)
     if missing:
-        raise FileNotFoundError(f"file not found: {missing}")
+        raise MaskFileMissing(name, missing)
     if m.origin == "gee" and m.native is None:
-        raise ValueError(f"{name}: its native grid is unknown; edit the mask")
+        raise MaskNativeUnknown(name)
     mpath = paths.mask_path(pdir, name)
     align_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=1))
     out: dict[str, Artifact] = {}

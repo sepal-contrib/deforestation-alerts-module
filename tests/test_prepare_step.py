@@ -986,9 +986,9 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypat
     claims = []
 
     class _Recording(prepare_step.InflightKeys):
-        def claim(self, *keys):
+        def claim(self, *keys, **kw):
             claims.append(keys)
-            return super().claim(*keys)
+            return super().claim(*keys, **kw)
 
     monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
     monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
@@ -1148,9 +1148,9 @@ def _recording_inflight(monkeypatch):
     claims = []
 
     class _Recording(prepare_step.InflightKeys):
-        def claim(self, *keys):
+        def claim(self, *keys, **kw):
             claims.append(keys)
-            return super().claim(*keys)
+            return super().claim(*keys, **kw)
 
     monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
     return claims
@@ -1201,6 +1201,14 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
     """The mask key is project-wide: February cannot align the mask January's
     Run all is aligning. The click is refused with a toast, not dropped
     silently, and January's job is not in February's Stop scope."""
+    added = []
+
+    class _Recording(prepare_step._StopEvents):
+        def add(self, scope, keys=()):
+            added.append(scope)
+            return super().add(scope, keys)
+
+    monkeypatch.setattr(prepare_step, "_StopEvents", _Recording)
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_with_mask(periods=(JAN, FEB)))
@@ -1214,7 +1222,8 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
         assert not run_all.disabled
         run_all.fire_event("click", None)
         assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
-        assert _button(rc, t("steps.prepare.stop")).disabled  # the refused job left no Stop scope
+        # the refused job never entered February's Stop scope, not even for a moment
+        assert added == [("d", JAN.id)] and _button(rc, t("steps.prepare.stop")).disabled
 
         step.run_jobs()  # January's job ends and gives the mask back
         _button(rc, t("steps.prepare.run_all", n=2)).fire_event("click", None)

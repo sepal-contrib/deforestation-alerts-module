@@ -246,17 +246,25 @@ def test_a_moved_geotiff_mask_reads_file_not_found_not_an_input_change(two_perio
     assert len(downloads) == n
     assert err.value.values == {"name": "forest", "path": ref}
     assert ref in t(err.value.key, **err.value.values)
+    # the mask's own row (a race: the file went after the click) reads the same keyed refusal
+    with pytest.raises(runner.MaskFileMissing) as err:
+        runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, "forest", "AOI"))
+    assert err.value.values == {"name": "forest", "path": ref}
 
     Path(pdir / "elsewhere.tif").rename(ref)  # put back unchanged: the stamp matches again
     assert plan_masks(p, pdir, JAN)[0].ready and plan_prepare(p, pdir, JAN)[0].ready
 
 
 def test_an_earth_engine_mask_without_its_native_grid_is_a_clear_row_error(two_periods, monkeypatch):
+    from gui.i18n import t
+
     p, pdir, _ = two_periods
     add_mask(p, name="hansen", origin="gee", ref="UMD/x", asset_type="IMAGE", band="treecover2000",
              native=None, mode="keep", period_id=FEB.id)
     built = []
     monkeypatch.setattr(runner, "build_mask_image", lambda mask, aoi: built.append(mask) or "IMAGE")
-    with pytest.raises(ValueError, match="native grid is unknown"):
+    with pytest.raises(runner.MaskNativeUnknown, match="native grid is unknown") as err:
         runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, "hansen", "AOI"))
     assert built == [] and not (pdir / "masks").exists()
+    assert isinstance(err.value, ValueError) and err.value.values == {"name": "hansen"}
+    assert t(err.value.key, **err.value.values).startswith("Mask hansen:")

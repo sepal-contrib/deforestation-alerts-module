@@ -137,25 +137,79 @@ def test_an_exclude_mask_covering_none_does_not_warn(tmp_path, cover, monkeypatc
     assert order == [("mask", "forest")] and warnings == []
 
 
+class _Notifier:
+    def __init__(self):
+        self.errors = []
+
+    def error(self, message, *, timeout=None):
+        self.errors.append(message)
+
+    def track(self, title, total_steps=None):
+        from pysepal.solara.notifications import NoopNotifier
+
+        return NoopNotifier().track(title, total_steps=total_steps)
+
+
 def test_a_failed_mask_row_is_keyed_by_mask_and_reads_translated(tmp_path, cover, monkeypatch):
     """A mask row's error is ``@mask:<name>`` in the row errors (the masks
-    card reads it), the message translated from the engine's key; the next
-    row still runs (spec §12) and reads its own keyed refusal."""
-    state = AppState()
-    state.load_project_state(_project(tmp_path, cover))
+    card reads it), the message translated from the engine's key (the real
+    runner: a GeoTIFF mask gone from disk, an Earth Engine mask without its
+    native grid); the next row still runs (spec §12) and reads its own keyed
+    refusal. The refusals already name the mask, so the toast does not
+    repeat it."""
+    from deforestation_alerts.project.models import add_mask
 
-    def mask_row(job, **kw):
-        raise FileNotFoundError("file not found: /gone.tif")
+    state = AppState()
+    p = _project(tmp_path, cover)
+    p.masks = {**p.masks, "forest": p.masks["forest"].model_copy(update={"native": None})}
+    gone = str(tmp_path / "gone.tif")
+    add_mask(p, name="water", origin="file", ref=gone, asset_type="FILE", band=1, native=None, mode="exclude",
+             period_id=FEB.id)
+    state.load_project_state(p)
 
     def source_row(job, **kw):
         raise MaskNotReady("raw engine text")
 
-    monkeypatch.setattr(prepare_jobs, "run_mask_row", mask_row)
     monkeypatch.setattr(prepare_jobs, "run_source_row", source_row)
-    errors = solara.reactive({})
-    prepare_jobs.run_rows(_ctx(state, tmp_path, [], row_errors=errors), [("mask", "forest"), ("source", "GLAD-L")])
-    assert errors.value == {"@mask:forest": "file not found: /gone.tif",
+    errors, notifier = solara.reactive({}), _Notifier()
+    prepare_jobs.run_rows(_ctx(state, tmp_path, [], row_errors=errors, notifier=notifier),
+                          [("mask", "forest"), ("mask", "water"), ("source", "GLAD-L")])
+    native = t("steps.prepare.mask_native_unknown", name="forest")
+    missing = t("steps.prepare.mask_file_missing", name="water", path=gone)
+    assert errors.value == {"@mask:forest": native, "@mask:water": missing,
                             "GLAD-L": t("steps.prepare.mask_not_ready")}
+    assert notifier.errors == [native, missing, t("steps.prepare.row_failed", source="GLAD-L",
+                                                  error=t("steps.prepare.mask_not_ready"))]
+
+
+def test_a_mask_row_failure_toast_says_it_is_a_mask(tmp_path, cover, monkeypatch):
+    """"Mask forest: ...", not "forest: ..." (a custom source could be called
+    "forest" too); the row error under the mask's own row is the message."""
+    state = AppState()
+    state.load_project_state(_project(tmp_path, cover))
+
+    def mask_row(job, **kw):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(prepare_jobs, "run_mask_row", mask_row)
+    errors, notifier = solara.reactive({}), _Notifier()
+    prepare_jobs.run_rows(_ctx(state, tmp_path, [], row_errors=errors, notifier=notifier), [("mask", "forest")])
+    assert errors.value == {"@mask:forest": "disk on fire"}
+    assert notifier.errors == [t("steps.prepare.mask_row_failed", mask="forest", error="disk on fire")]
+    assert notifier.errors == ["Mask forest: disk on fire"]
+
+
+def test_a_claim_records_its_stop_scope_before_it_is_published_and_a_refused_one_never():
+    """``InflightKeys.claim(on_claim=)``: the step registers a job's Stop
+    scope inside a successful claim, before the claimed keys are published,
+    so no render ever lists another job's keys as this period's."""
+    from gui.scripts.inflight import InflightKeys
+
+    inflight, seen = InflightKeys(), []
+    assert inflight.claim("a", "b", on_claim=lambda: seen.append(set(inflight.value)))
+    assert seen == [set()] and inflight.value == {"a", "b"}
+    assert not inflight.claim("b", "c", on_claim=lambda: seen.append("refused"))
+    assert seen == [set()] and inflight.value == {"a", "b"}
 
 
 def test_a_mask_removed_meanwhile_is_skipped(tmp_path, cover, monkeypatch):

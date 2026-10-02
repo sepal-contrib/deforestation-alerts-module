@@ -44,16 +44,23 @@ class InflightKeys:
         """Return True if ``key`` is currently claimed."""
         return key in self._keys.value
 
-    def claim(self, *keys) -> bool:
+    def claim(self, *keys, on_claim=None) -> bool:
         """Atomically take ownership of every key, or of none of them.
 
         Returns False (and changes nothing) when any key is already owned.
+        ``on_claim`` (no arguments) runs only when the claim succeeds, after
+        it is decided and before it is published: what a render derives from
+        the claimed keys (a job's Stop scope) is in place by the claim's own
+        re-render, and nothing is recorded for a refused claim. It must not
+        take a lock a render holds while it reads this set.
         """
         wanted = frozenset(keys)
         with self._lock:
             current = self._keys.value
             if current & wanted:
                 return False
+            if on_claim is not None:
+                on_claim()
             self._keys.set(current | wanted)
             return True
 

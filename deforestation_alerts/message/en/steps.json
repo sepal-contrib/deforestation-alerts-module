@@ -174,6 +174,8 @@
       "job_row": "Preparing {source}",
       "job_mask_row": "Preparing mask {mask}",
       "mask_covers_none": "Mask {mask} covers none of the AOI: as a keep mask, every alert would be removed.",
+      "mask_row_failed": "Mask {mask}: {error}",
+      "mask_native_unknown": "Mask {name}: its native grid (projection and scale) is unknown; edit the mask.",
       "claim_busy": "A row of this run is already being prepared (a mask another period's job is aligning, or a row still running); run again once it has finished.",
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
