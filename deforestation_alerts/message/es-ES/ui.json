@@ -15,7 +15,18 @@
     "export_download": "Descargar",
     "export_task_title": "Exportando alertas",
     "export_step": "Generando la exportación {fmt}…",
-    "export_done": "Exportación {fmt} lista."
+    "export_done": "Exportación {fmt} lista.",
+    "chart_no_data": "Aún no hay datos",
+    "axis_area": "Área detectada (ha)",
+    "axis_alerts": "Alertas",
+    "axis_size": "Tamaño de la alerta (ha)",
+    "period_starts": "Inicio del período",
+    "driver_other": "Otros",
+    "source_unknown": "Sin registrar",
+    "size_under": "<{size}",
+    "size_over": "{size}+",
+    "size_range": "{lo}–{hi}",
+    "driver_unknown": "Causa sin registrar"
   },
   "analysis_tile": {
     "description": "Revisa cada alerta con imágenes de antes y después, confírmala, define la causa de pérdida y guarda.",

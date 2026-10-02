@@ -22,6 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from babel import Locale
+from babel.dates import format_date as _babel_date
 from babel.numbers import format_decimal
 from pysepal.i18n import MessageFormatError, catalog, current_locale
 from pysepal.i18n.loading import ENGLISH, load_locale
@@ -93,3 +94,13 @@ def tn(key: str, count, /, **values) -> str:
     """A counted message (a plural node): ``count`` picks the form and
     ``{n}`` shows it with the locale's separators (``format_number``)."""
     return t(key, count=count, n=format_number(count), **values)
+
+
+def format_date(value, fmt: str = "medium") -> str:
+    """A date in the current locale: ``format_date(d)`` reads "2 Feb 2026",
+    "2 feb 2026", "2 févr. 2026"; ``fmt`` may also be a CLDR pattern such as
+    ``"d MMM"`` for an axis tick. ``None`` renders as the empty string."""
+    if value is None:
+        return ""
+    locale = _babel_locale(current_locale() or ENGLISH)
+    return _babel_date(value, format=fmt, locale=locale)

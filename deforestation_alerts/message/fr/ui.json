@@ -15,7 +15,18 @@
     "export_download": "Télécharger",
     "export_task_title": "Exportation des alertes",
     "export_step": "Génération de l'export {fmt}…",
-    "export_done": "Export {fmt} prêt."
+    "export_done": "Export {fmt} prêt.",
+    "chart_no_data": "Pas encore de données",
+    "axis_area": "Surface détectée (ha)",
+    "axis_alerts": "Alertes",
+    "axis_size": "Taille de l'alerte (ha)",
+    "period_starts": "Début de la période",
+    "driver_other": "Autres",
+    "source_unknown": "Non renseigné",
+    "size_under": "<{size}",
+    "size_over": "{size}+",
+    "size_range": "{lo}–{hi}",
+    "driver_unknown": "Cause non renseignée"
   },
   "analysis_tile": {
     "description": "Passez en revue chaque alerte avec les images avant et après, confirmez-la, définissez la cause de la perte, puis enregistrez.",

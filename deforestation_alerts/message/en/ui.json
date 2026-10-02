@@ -15,7 +15,18 @@
     "export_download": "Download",
     "export_task_title": "Exporting alerts",
     "export_step": "Writing the {fmt} export…",
-    "export_done": "{fmt} export ready."
+    "export_done": "{fmt} export ready.",
+    "chart_no_data": "No data yet",
+    "axis_area": "Detected area (ha)",
+    "axis_alerts": "Alerts",
+    "axis_size": "Alert size (ha)",
+    "period_starts": "Period starts",
+    "driver_other": "Other",
+    "source_unknown": "Not recorded",
+    "size_under": "<{size}",
+    "size_over": "{size}+",
+    "size_range": "{lo}–{hi}",
+    "driver_unknown": "Cause not recorded"
   },
   "analysis_tile": {
     "description": "Review each alert with before and after imagery, confirm it, set the loss driver, then save.",
