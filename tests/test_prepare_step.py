@@ -853,6 +853,27 @@ def test_row_errors_are_cleared_when_the_project_changes(step, monkeypatch):
         rc.close()
 
 
+def test_a_row_error_recorded_after_a_period_switch_stays_with_its_period(step, monkeypatch):
+    """A job's error that lands after the user moved to another period (past
+    the job's own active-period check) is not shown on that period's row."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
+    p = _project("a", "GLAD-L", bounds=PARAGUAY, grid=True)
+    p.periods = {**p.periods, FEB.id: FEB}
+    state = _state(p, meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()
+        step.run_jobs()
+        [(ctx, _, _)] = step.started
+        state.update_project("a", lambda live: setattr(live, "active_period", FEB.id))
+        ctx.row_errors.set({"GLAD-L": "quota exceeded"})  # January's job, late
+        assert step.table[-1][0]["error"] is None
+    finally:
+        rc.close()
+
+
 def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, monkeypatch):
     import gui.scripts.map_layers as ml
 

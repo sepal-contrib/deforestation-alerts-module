@@ -197,6 +197,23 @@ class _StopEvents:
             event.set()
 
 
+class _ScopedErrors:
+    """One job's view of the step's row errors (``{scope: {row: message}}``):
+    it reads and writes only its own scope's errors (the project and period
+    it ran for), so an error recorded after the user moved on never lands on
+    the same row of the period now showing."""
+
+    def __init__(self, store, scope):
+        self._store, self._scope = store, scope
+
+    @property
+    def value(self) -> dict:
+        return self._store.value.get(self._scope, {})
+
+    def set(self, errors: dict) -> None:
+        self._store.set({**self._store.value, self._scope: errors})
+
+
 @solara.component
 def PrepareStep(app_state, map_, gee_interface, layers):
     notifications = use_notifications()
@@ -208,11 +225,14 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     on = layers.on.value
     building = layers.inflight.value
     stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
-    row_errors = solara.use_reactive({})
+    row_errors = solara.use_reactive({})  # {scope: {row: message}}, written through _ScopedErrors
     errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors under it
-    # A row's error belongs to the project and period it ran for.
+    # A row's error belongs to the project and period it ran for: a job writes
+    # under its own scope, the table reads the showing scope's, and a change
+    # of scope forgets them all.
     scope = (app_state.project_loaded_signal.value, p.name if p else None, p.active_period if p else None)
     solara.use_effect(lambda: row_errors.set({}), [scope])
+    errors = row_errors.value.get(scope, {})
 
     period = workflow_steps.active_period(p)
     # Spec §7.3, §9.4: a mask switch (on, off, its mode) and a change of the
@@ -304,7 +324,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 return
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
                              name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
-                             row_errors=row_errors, errors_lock=errors_lock)
+                             row_errors=_ScopedErrors(row_errors, scope), errors_lock=errors_lock)
 
         def _job():
             try:
@@ -336,7 +356,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     mine = mine_keys(running, stops, p.name, period.id)
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
 
-    table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=row_errors.value, on=on, building=building,
+    table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)),
                             rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map)
 
@@ -348,7 +368,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             # between the grid card and the sources table (spec §7.3); a mask row
             # reads running whichever period's job claimed it, so it gets every key
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
-                      rows=plan_masks(p, pdir, period), running=running, errors=row_errors.value,
+                      rows=plan_masks(p, pdir, period), running=running, errors=errors,
                       on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True))
             ProductTable(
                 title=t("steps.prepare.list_title"),
