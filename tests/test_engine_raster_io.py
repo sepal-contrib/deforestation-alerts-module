@@ -139,3 +139,27 @@ def test_ensure_overviews_rebuilds_when_stale(tmp_path):
     os.utime(tif, (built_at + 10, built_at + 10))
     assert raster_io.ensure_overviews(tif) is True  # rebuilt, not skipped
     assert sidecar.stat().st_mtime != built_at
+
+
+def test_concurrent_ensure_overviews_build_the_sidecar_once(tmp_path, monkeypatch):
+    """The shared map's and the Analysis maps' builds of one GeoTIFF layer may
+    ask for its overviews at once: one builds, the other finds them."""
+    import threading
+    import time
+
+    tif = tmp_path / "user.tif"
+    _write_plain_geotiff(tif)
+    levels = raster_io._overview_levels
+
+    def slow_levels(*args):  # widens the check-then-build window
+        time.sleep(0.2)
+        return levels(*args)
+
+    monkeypatch.setattr(raster_io, "_overview_levels", slow_levels)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(raster_io.ensure_overviews(tif))) for _ in range(2)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join(10)
+    assert sorted(results) == [False, True]

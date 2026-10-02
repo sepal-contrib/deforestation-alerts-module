@@ -202,9 +202,10 @@ def view_actual_alert(
         # center/zoom (the two maps are jslink'd; write both explicitly)
         widgets.set_synced_view((alerta.point.y, alerta.point.x), 16)
 
-        # clear + rebuild the bbox overlay on both maps
-        widgets.map_before.remove_all()
-        widgets.map_after.remove_all()
+        # clear + rebuild the bbox overlay on both maps (the visualization
+        # layers stay: vis_sync keeps them, spec §10)
+        vis_sync.clear_alert_layers(widgets.map_before)
+        vis_sync.clear_alert_layers(widgets.map_after)
         geojson_layer = GeoJSON(
             data=alerta_bb_geojson, style=_ALERT_BB_STYLE, name="Alert BB"
         )
@@ -381,7 +382,8 @@ def build_analysis_layout(
     # Build the shared heavy widgets once.
     widgets = AnalysisWidgets(gee_interface=gee_interface, theme_state=theme_state)
     # The visualization layers marked for Analysis, switched off on both maps
-    # (spec §10); the layout is built once per session, so wired once.
+    # (spec §10); the layout is built once per session, so wired once and the
+    # subscription lives as long as the kernel (its unsubscribe is not kept).
     vis_sync.wire(widgets, app_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set

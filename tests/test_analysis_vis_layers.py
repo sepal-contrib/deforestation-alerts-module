@@ -60,24 +60,94 @@ def test_the_sync_adds_switched_off_layers_to_both_maps_and_removes_them(monkeyp
     assert built == []  # unsubscribed
 
 
-def test_a_failing_build_does_not_stop_the_other_layers(monkeypatch, caplog):
-    built = []
+def _toasts(monkeypatch):
+    """A real bus for the run thread, and a spy on its error toasts (the bus
+    keeps only the latest error toast)."""
+    from pysepal.solara.notifications.bus import NotificationBus
+    from pysepal.solara.notifications.notifier import Notifier
+
+    bus, errors = NotificationBus(), []
+    real_error = Notifier.error
+
+    def spy(self, message, **kw):
+        errors.append(message)
+        real_error(self, message, **kw)
+
+    monkeypatch.setattr(Notifier, "error", spy)
+    monkeypatch.setattr(vis_sync, "current_notifier", lambda: Notifier(bus))
+    return bus, errors
+
+
+def test_a_failing_build_does_not_stop_the_other_layers_and_is_toasted_once(monkeypatch, caplog):
+    built, removed, tried = [], [], []
+    bus, errors = _toasts(monkeypatch)
 
     def builder(map_, layer, key, **kw):
         def build():
+            tried.append((map_.name, key))
             if layer.name == "bad":
-                raise FileNotFoundError("missing")
+                raise FileNotFoundError("The file /nope.tif no longer exists.")
             built.append((map_.name, key))
         return build
 
     monkeypatch.setattr(vis_sync, "builder", builder)
     state = AppState()
-    state.load_project_state(_p(FileVisLayer(name="bad", path="/nope.tif", show_in_analysis=True),
-                                GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
-    unsubscribe = vis_sync.wire(_maps([]), state, spawn=lambda target, args=(): target(*args))
-    unsubscribe()
+    bad = FileVisLayer(name="bad", path="/nope.tif", show_in_analysis=True)
+    state.load_project_state(_p(bad, GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
+    unsubscribe = vis_sync.wire(_maps(removed), state, spawn=lambda target, args=(): target(*args))
     assert sorted(built) == [("after", "vis:s2"), ("before", "vis:s2")]
-    assert "missing" in caplog.text
+    assert "no longer exists" in caplog.text
+    assert tried.count(("before", "vis:bad")) + tried.count(("after", "vis:bad")) == 1  # one map tried
+    assert {("before", "vis:bad"), ("after", "vis:bad")} <= set(removed)  # nothing half-built stays
+    assert errors == ["The layer bad could not be added to the Analysis maps: The file /nope.tif no longer exists."]
+    assert sum(t.count for t in bus.toasts.value if t.message == errors[0]) == 1
+
+    for step in range(3):  # every alert step saves the project: no retry, no second toast
+        state.update_project("a", lambda p, step=step: setattr(p, "updated_at", datetime.now()))
+    assert len(errors) == 1 and len(tried) == 3
+
+    state.load_project_state(state.project.value.model_copy())  # opened again: one more try
+    assert len(errors) == 2 and len(tried) == 4
+    unsubscribe()
+
+
+def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
+    """The per-alert view clears the maps on every alert change; the vis
+    layers must stay on both (real SepalMaps: ``find_layer`` by key)."""
+    import pandas as pd
+    from ipyleaflet import TileLayer
+    from pysepal.mapping import SepalMap
+    from shapely.geometry import Point, box
+
+    from gui.tile.analysis import analysis_tile
+    from gui.tile.analysis.state import AnalysisState
+
+    def builder(map_, layer, key, **kw):
+        return lambda: map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name=layer.name,
+                                                visible=kw["shown"]), key=key)
+
+    monkeypatch.setattr(vis_sync, "builder", builder)
+    monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
+    stub = SimpleNamespace(hide=lambda: None)
+    widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
+                              selected_alert_info=SimpleNamespace(children=[]), draw_before=stub, draw_after=stub,
+                              set_synced_view=lambda *a: None)
+    state = AppState()
+    state.load_project_state(_p(GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
+    unsubscribe = vis_sync.wire(widgets, state, spawn=lambda target, args=(): target(*args))
+    state.alerts_gdf.set(pd.DataFrame({
+        "alert_date_min": [2026.001] * 2, "alert_date_max": [2026.010] * 2, "alert_sources": ["GLAD-L"] * 2,
+        "status": ["Not reviewed"] * 2, "alert_polygon": [None] * 2,
+        "bounding_box": [box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01)], "point": [Point(0, 0), Point(1, 1)]}))
+    for alert in (0, 1):
+        state.actual_alert_id.set(alert)
+        analysis_tile.view_actual_alert(widgets, state, AnalysisState(), SimpleNamespace(),
+                                        SimpleNamespace(v_model=None))
+    unsubscribe()
+    for map_ in (widgets.map_before, widgets.map_after):
+        vis = map_.find_layer("vis:s2", none_ok=True)
+        assert vis is not None and vis.visible is False
+        assert [lyr.name for lyr in map_.layers if not lyr.base].count("Alert BB") == 1  # the old alert's went
 
 
 def test_a_removal_that_runs_after_a_later_re_add_leaves_the_layer(monkeypatch):

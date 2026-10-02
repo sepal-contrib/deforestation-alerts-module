@@ -140,6 +140,7 @@
       "name_duplicate": "A layer with this name already exists.",
       "err_folder": "The folder {folder} is not writable, so the layer's overviews cannot be built.",
       "err_missing": "The file {path} no longer exists.",
+      "err_analysis": "The layer {name} could not be added to the Analysis maps: {error}",
       "err_nicfi": "Your Earth Engine account has no access to Planet NICFI {region}.",
       "err_wrong_type": "Pick an Earth Engine image.",
       "err_incomplete": "Pick a raster and its band or bands.",

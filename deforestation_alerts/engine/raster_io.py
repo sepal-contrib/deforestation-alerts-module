@@ -11,6 +11,7 @@ a multiple of the raster's *compressed* size estimate (``compressed_estimate``).
 import contextlib
 import math
 import shutil
+import threading
 from pathlib import Path
 from typing import Iterator
 
@@ -20,6 +21,12 @@ from rasterio.enums import Resampling
 from rasterio.windows import Window
 
 from deforestation_alerts.project.models import GridSpec
+
+# One lock per user GeoTIFF, process-wide: its ``.ovr`` sidecar is one file
+# that the shared map's and the Analysis maps' layer builds (and every kernel
+# of the server process) may want to build at once.
+_OVERVIEW_LOCKS: dict = {}
+_OVERVIEW_LOCKS_GUARD = threading.Lock()
 
 BLOCK = 512
 
@@ -165,11 +172,22 @@ def ensure_overviews(path, resampling: str = "nearest") -> bool:
     of emitting a "neither UseExceptions() nor DontUseExceptions() called"
     FutureWarning on every ``gdal.Open`` (ruling #43).
     """
-    from osgeo import gdal
-
     path = str(path)
     if not Path(path).exists():  # not GDAL's raw RuntimeError (slice-1 Task 5 minor)
         raise FileNotFoundError(f"file not found: {path}")
+    with _overview_lock(path):  # check-and-build: one writer of the sidecar at a time
+        return _ensure_overviews(path, resampling)
+
+
+def _overview_lock(path: str) -> threading.Lock:
+    key = str(Path(path).resolve())
+    with _OVERVIEW_LOCKS_GUARD:
+        return _OVERVIEW_LOCKS.setdefault(key, threading.Lock())
+
+
+def _ensure_overviews(path: str, resampling: str) -> bool:
+    from osgeo import gdal
+
     sidecar = Path(path + ".ovr")
     if sidecar.exists() and sidecar.stat().st_mtime < Path(path).stat().st_mtime:
         sidecar.unlink()
