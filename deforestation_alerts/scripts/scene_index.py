@@ -165,3 +165,154 @@ def empty_tables() -> SceneTables:
         scenes=_scene_frame(dict(EMPTY_SCENE_ARRAYS)),
         tiles=_tile_frame({"tile": [], "coords": [], "gtype": []}),
     )
+
+
+# ------------------------------------------------------------ the one request
+S2_COLLECTION = "COPERNICUS/S2_HARMONIZED"
+LANDSAT_COLLECTIONS = ("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC09/C02/T1_L2")
+
+#: The property every row's ``key`` comes from, per source. Sentinel-2 and
+#: Planet keys are asset ids, so the chosen image is rebuilt with
+#: ``ee.Image(key)``. A Landsat key is its ``LANDSAT_SCENE_ID``, because the
+#: rebuild has to find the *same* scene in both the surface-reflectance and
+#: the TOA collection to pan-sharpen it, and those are two different assets.
+KEY_PROPERTY = {SOURCE_S2: "system:id", SOURCE_LANDSAT: "LANDSAT_SCENE_ID", SOURCE_PLANET: "system:id"}
+
+#: The cloud prefilters ``imagery_service`` applies today, kept so the
+#: candidate set does not change (spec §5.1).
+MAX_CLOUD = 90
+
+
+def _window(start: date, end: date):
+    """``[start, end]`` as the half-open pair ``filterDate`` actually wants.
+
+    ``filterDate``'s end is **exclusive**, so an inclusive window has to ask
+    for the day after. Both ends are ``ee.Date`` objects: ``str()`` on an
+    Earth Engine object renders a *graph*, not a date string, so passing
+    ``str(ee.Date(...).advance(...))`` would hand the filter nonsense.
+    """
+    import ee
+
+    return (ee.Date(start.isoformat()), ee.Date(end.isoformat()).advance(1, "day"))
+
+
+def _row(img, source: str, cloud_prop: str, tile):
+    """One scene as a feature whose geometry is the granule's true footprint.
+
+    The footprint, not its bounding box: ``distinct("tile")`` carries *this*
+    geometry into the tiles table, and the exact-overlap test downstream is
+    only worth running if it is not a second bounding-box test.
+    """
+    import ee
+
+    img = ee.Image(img)
+    return ee.Feature(
+        img.geometry(),
+        {
+            "source": source,
+            "millis": img.date().millis(),
+            "cloud": ee.Number(img.get(cloud_prop)),
+            "tile": tile,
+            "key": img.get(KEY_PROPERTY[source]),
+        },
+    )
+
+
+def _s2_rows(aoi, start: date, end: date):
+    """Every Sentinel-2 granule over ``aoi``, keyed by its MGRS tile."""
+    import ee
+
+    d0, d1 = _window(start, end)
+    coll = (ee.ImageCollection(S2_COLLECTION).filterBounds(aoi).filterDate(d0, d1)
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", MAX_CLOUD)))
+    return coll.map(lambda img: _row(img, SOURCE_S2, "CLOUDY_PIXEL_PERCENTAGE",
+                                     ee.String(ee.Image(img).get("MGRS_TILE"))))
+
+
+def _landsat_rows(aoi, start: date, end: date):
+    """Every Landsat 8/9 scene over ``aoi``, keyed by its WRS-2 path and row."""
+    import ee
+
+    coll = ee.ImageCollection(LANDSAT_COLLECTIONS[0])
+    for cid in LANDSAT_COLLECTIONS[1:]:
+        coll = coll.merge(ee.ImageCollection(cid))
+    d0, d1 = _window(start, end)
+    coll = coll.filterBounds(aoi).filterDate(d0, d1).filter(ee.Filter.lt("CLOUD_COVER", MAX_CLOUD))
+
+    # WRS-2 path/row, zero-padded, as the tile key. Scenes of one path/row
+    # have the same nominal footprint, so the first one met represents the
+    # rest; real footprints drift by a few hundred metres between passes, so
+    # the overlap test is approximate for an alert sitting on a scene edge.
+    def row(img):
+        img = ee.Image(img)
+        tile = (ee.Number(img.get("WRS_PATH")).format("%03d")
+                .cat("_").cat(ee.Number(img.get("WRS_ROW")).format("%03d")))
+        return _row(img, SOURCE_LANDSAT, "CLOUD_COVER", tile)
+
+    return coll.map(row)
+
+
+def scene_request(aoi, start: date, end: date):
+    """Every Sentinel-2 granule and Landsat scene over ``aoi`` in one request.
+
+    The reply is a dictionary of parallel scalar arrays rather than a list of
+    records, because ``aggregate_array`` over a server-side collection is what
+    lets one ``getInfo()`` resolve the whole index. ``end`` is inclusive: it is
+    the last date a reviewer asked to see, which ``_window`` turns into the
+    half-open range ``filterDate`` wants.
+
+    The date window is applied **only** to the two source collections. Filtering
+    the merged ``FeatureCollection`` again would return nothing: ``_row`` builds
+    features carrying ``millis``, not ``system:time_start``, and that is the one
+    property ``FeatureCollection.filterDate`` reads.
+
+    The ``CLOUDY_PIXEL_PERCENTAGE`` / ``CLOUD_COVER`` < ``MAX_CLOUD`` prefilters
+    are the ones ``imagery_service`` applies today, kept so the candidate set
+    does not change (spec §5.1). The slider's top stop therefore means
+    "everything the index holds", not literally 100%.
+    """
+    import ee
+
+    rows = ee.FeatureCollection(_s2_rows(aoi, start, end).merge(_landsat_rows(aoi, start, end)))
+    tiles = rows.distinct("tile").map(
+        lambda f: ee.Feature(f).set({
+            "coords": ee.Feature(f).geometry().coordinates(),
+            "gtype": ee.Feature(f).geometry().type(),
+        })
+    )
+    # Each array aggregates the *same* collection, so the nth element of every
+    # one of them belongs to the nth feature; ``_checked`` in the parser is the
+    # guard if a graph change ever breaks that.
+    return ee.Dictionary({
+        "scenes": ee.Dictionary({
+            "source": rows.aggregate_array("source"),
+            "millis": rows.aggregate_array("millis"),
+            "cloud": rows.aggregate_array("cloud"),
+            "tile": rows.aggregate_array("tile"),
+            "key": rows.aggregate_array("key"),
+        }),
+        "tiles": ee.Dictionary({
+            "tile": tiles.aggregate_array("tile"),
+            "coords": tiles.aggregate_array("coords"),
+            "gtype": tiles.aggregate_array("gtype"),
+        }),
+    })
+
+
+def planet_request(collection_id: str, start: date, end: date):
+    """The NICFI monthly basemaps overlapping ``[start, end]``.
+
+    ``collection_id`` is passed in rather than looked up: the region mapping
+    lives in ``gui.scripts.vis_layers.NICFI_COLLECTIONS`` and this module must
+    not import from ``gui``. A basemap is already an AOI-wide mosaic, so there
+    is nothing to filter by bounds and no footprint to record.
+    """
+    import ee
+
+    d0, d1 = _window(start.replace(day=1), end)
+    coll = ee.ImageCollection(collection_id).filterDate(d0, d1)
+    return ee.Dictionary({
+        "key": coll.aggregate_array(KEY_PROPERTY[SOURCE_PLANET]),
+        # The basemap's own start date, i.e. the first of its month.
+        "millis": coll.aggregate_array("system:time_start"),
+    })
