@@ -393,10 +393,19 @@ def test_a_clear_scene_further_out_beats_a_cloudy_nearer_one():
 
 def test_planet_is_never_auto_picked():
     # A NICFI basemap is a whole month's mosaic: it cannot witness a date, so
-    # it is a reviewer's deliberate choice, never a default.
-    sel = _sel([(PL, "2026-04-01", float("nan")), (S2, "2026-04-02", 6.0), (S2, "2026-08-27", 4.0)])
-    before, _ = scene_query.default_pick(sel, A0, A1)
+    # it is a reviewer's deliberate choice, never a default. Each Planet row
+    # here is placed *nearer* its boundary than the S2 row on the same side,
+    # so if the Planet exclusion were ever dropped, the nearer Planet row
+    # would win and this test would fail -- the property is load-bearing.
+    sel = _sel([
+        (PL, "2026-04-30", float("nan")),  # nearer a0 than the S2 row below
+        (S2, "2026-04-02", 6.0),
+        (PL, "2026-08-24", float("nan")),  # nearer a1 than the S2 row below
+        (S2, "2026-08-27", 4.0),
+    ])
+    before, after = scene_query.default_pick(sel, A0, A1)
     assert before == scene_index.row_id(S2, date(2026, 4, 2))
+    assert after == scene_index.row_id(S2, date(2026, 8, 27))
 
 
 def test_only_planet_available_picks_nothing():
@@ -415,3 +424,27 @@ def _EMPTY_SEL():
 def test_one_side_available_still_picks_that_side():
     sel = _sel([(S2, "2026-04-02", 6.0)])
     assert scene_query.default_pick(sel, A0, A1) == (scene_index.row_id(S2, date(2026, 4, 2)), None)
+
+
+def test_a_single_day_window_can_return_the_same_scene_as_both_sides():
+    # When alert_date_min == alert_date_max, a scene dated exactly on that
+    # day satisfies both "<= a0" and ">= a1", so it is legally the nearest
+    # before *and* the nearest after: default_pick returns the same row id
+    # twice. This pins today's behavior for that degenerate but reachable
+    # input, rather than leaving it unexamined.
+    d = date(2026, 6, 15)
+    sel = _sel([(S2, "2026-06-15", 5.0)])
+    want = scene_index.row_id(S2, d)
+    assert scene_query.default_pick(sel, d, d) == (want, want)
+
+
+def test_a_single_day_window_with_scenes_only_on_either_side():
+    # Same degenerate window, but with no scene landing exactly on the day:
+    # the two sides fall back to their ordinary nearest-before/nearest-after
+    # candidates, which are distinct here.
+    d = date(2026, 6, 15)
+    sel = _sel([(S2, "2026-06-10", 5.0), (S2, "2026-06-20", 5.0)])
+    assert scene_query.default_pick(sel, d, d) == (
+        scene_index.row_id(S2, date(2026, 6, 10)),
+        scene_index.row_id(S2, date(2026, 6, 20)),
+    )
