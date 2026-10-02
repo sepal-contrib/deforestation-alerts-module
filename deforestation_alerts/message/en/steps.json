@@ -74,7 +74,15 @@
       "name_token_taken": "This name would share its file names with another source; choose another.",
       "name_set_collision": "With this name two different source combinations would share one alert set; choose another.",
       "edit_used": "An alert set already uses this source: add a new one instead.",
-      "cap_reached": "All 6 custom source slots are in use."
+      "cap_reached": "All 6 custom source slots are in use.",
+      "err_unreadable": "The file cannot be read as a GeoTIFF.",
+      "err_no_crs": "The file has no coordinate reference system.",
+      "err_no_images": "No image of the collection has every mapped band.",
+      "err_missing_band": "A mapped band is missing.",
+      "err_not_numeric": "A mapped band is not numeric.",
+      "err_date_format": "This CCDC asset stores its dates as Julian days or Unix time (property dateFormat 0 or 2); only fractional years (dateFormat 1) are supported.",
+      "err_not_covered": "This source does not cover the AOI.",
+      "err_wrong_type": "Pick an Earth Engine image or image collection."
     },
     "period": {
       "title": "Period",
