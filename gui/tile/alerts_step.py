@@ -131,7 +131,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True,
                       on_click=lambda: modal_open.set(True))
 
-    SourceModal(open_=modal_open, project=app_state.project, on_add=_add)
+    SourceModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_add_predefined=_add,
+                on_add_custom=lambda fields, cov: None, on_save_custom=lambda name, changes, cov: None)
     used = _sets_using(p, pending_delete) if pending_delete else 0
     ConfirmDialog(
         open=pending_delete is not None,

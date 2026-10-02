@@ -124,6 +124,7 @@ def _dynamic_keys():
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
+    from gui.widget.source_modal import ENCODINGS, FORMATS
 
     return {
         "steps.integrate.set_": [Status.STALE.value, Status.MISSING.value],
@@ -135,6 +136,10 @@ def _dynamic_keys():
         "steps.prepare.grid_": ["need_epsg", "bad_epsg", "geographic", "bad_resolution"],
         "widgets.product_table.status_": list(STATUS_ICONS),
         "legend.mask.": ["keep", "exclude", "off"],
+        # gui.widget.source_modal's format presets and date encodings
+        "steps.alerts.format_": list(FORMATS),
+        "steps.alerts.format_help_": list(FORMATS),
+        "steps.alerts.encoding_": list(ENCODINGS),
     }
 
 

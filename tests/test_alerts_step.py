@@ -17,6 +17,7 @@ under test — ``_toggle``, ``_delete``, real ``MapLayers``, a real
 / ``tests/test_feedback_notifications.py``.
 """
 
+import asyncio
 import threading
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -155,7 +156,8 @@ def _stub_children(monkeypatch):
         confirm_calls.append({"open": open, "on_cancel": on_cancel, "on_confirm": on_confirm})
 
     @solara.component
-    def _RecorderModal(open_, project, on_add):
+    def _RecorderModal(open_, app_state, gee_interface, on_add_predefined, on_add_custom, on_save_custom,
+                       editing=None):
         pass
 
     monkeypatch.setattr(alerts_step, "ProductTable", _RecorderTable)
@@ -411,37 +413,50 @@ def test_delete_is_refused_while_a_writer_runs(monkeypatch, tmp_path):
 
 # ---------------------------------------------------------------------------
 # SourceModal: the ESC handler and the double-submit guard (ruling #65).
+# The custom branch is covered in tests/test_source_modal.py.
 # ---------------------------------------------------------------------------
+def _modal(open_, added):
+    state = AppState()
+    state.project.value = _p()
+    return SourceModal(open_=open_, app_state=state, gee_interface=object(), on_add_predefined=added.append,
+                       on_add_custom=lambda fields, cov: added.append(fields),
+                       on_save_custom=lambda name, changes, cov: added.append(changes))
+
+
 def test_esc_closes_the_dialog_without_adding():
-    project = solara.reactive(_p())
     open_ = solara.reactive(True)
     added = []
 
-    box, rc = reacton.render(
-        SourceModal(open_=open_, project=project, on_add=added.append), handle_error=False,
-    )
-    try:
-        dialog = rc.find(v.Dialog).widgets[0]
-        dialog.fire_event("keydown.esc", None)
-        assert open_.value is False
-        assert added == []
-    finally:
-        rc.close()
+    async def main():  # the form's band-list task runs on this loop
+        box, rc = reacton.render(_modal(open_, added), handle_error=False)
+        try:
+            dialog = rc.find(v.Dialog).widgets[0]
+            dialog.fire_event("keydown.esc", None)
+            assert open_.value is False
+            assert added == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
 
 
 def test_a_fast_double_click_add_only_adds_the_source_once():
-    project = solara.reactive(_p())
     open_ = solara.reactive(True)
     added = []
 
-    box, rc = reacton.render(
-        SourceModal(open_=open_, project=project, on_add=added.append), handle_error=False,
-    )
-    try:
-        add_btn = rc.find(v.Btn).widgets[-1]  # CardActions: Cancel, then Add
-        add_btn.fire_event("click", None)
-        add_btn.fire_event("click", None)
-        assert added == ["GLAD-L"]
-        assert open_.value is False
-    finally:
-        rc.close()
+    async def main():
+        box, rc = reacton.render(_modal(open_, added), handle_error=False)
+        try:
+            # the TaskButtonComponent's button, by its label
+            [add_btn] = [b for b in rc.find(v.Btn).widgets if t("steps.alerts.add") in b.children]
+            add_btn.fire_event("click", None)
+            try:
+                add_btn.fire_event("click", None)
+            except ValueError:
+                pass  # the form unmounted with the dialog: the second click reaches no handler
+            assert added == ["GLAD-L"]
+            assert open_.value is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())

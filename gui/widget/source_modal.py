@@ -1,65 +1,292 @@
-"""Add Source modal (spec §6.2). Slice 1 offers the predefined catalogue only;
-slice 3 adds the custom branch (Earth Engine asset or GeoTIFF, RADD or CCDC)."""
+"""Add Source modal (spec §6.2): a predefined source, offered with its
+coverage of the AOI, or a custom source from an Earth Engine image or
+collection or a GeoTIFF, read through one of three format presets."""
+
+import asyncio
+from datetime import date
 
 import reacton.ipyvuetify as rv
 import solara
+from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
 
 from deforestation_alerts.engine import catalogue
+from deforestation_alerts.engine.coverage import (
+    NOT_COVERED_KEYS, chip_note, coverage_request, parse_coverage, record_for,
+)
+from deforestation_alerts.engine.user_raster import (
+    UserRasterError, check_discovery, check_file, discovery_request, file_native, native_from_discovery,
+    read_header, suggest_band_map, suggest_format,
+)
+from deforestation_alerts.project import paths
+from deforestation_alerts.project.models import PRESETS, BandMap, CustomSource, mapped_bands
+from deforestation_alerts.project.names import validate_source_name
 from gui.i18n import t
+from gui.scripts import aoi_io
+from gui.scripts.coverage_ui import note_text
+from gui.widget.raster_input import RasterInput, absolute, use_band_list
+
+FORMATS = ("radd", "ccdc", "date_only")
+ENCODINGS = ("yymm", "yyddd", "yyyyddd", "decimal_year")
+MAX_CUSTOM = 6
 
 
 def available_predefined(project) -> list:
     return [k for k in catalogue.KEYS if project is None or k not in project.sources]
 
 
+def predefined_items(project, pending: bool) -> list:
+    """The predefined options with their coverage (spec §6.2 "Predefined")."""
+    items = []
+    for key in available_predefined(project):
+        label = t(catalogue.LABEL_KEYS[key])
+        cov = record_for(project, key)
+        if cov is None:
+            status = t("coverage.chip_checking") if pending else t("coverage.chip_unchecked")
+            items.append({"text": f"{label} — {status}", "value": key, "disabled": False})
+        elif cov.fraction <= 0:
+            items.append({"text": t(NOT_COVERED_KEYS[key]), "value": key, "disabled": True})
+        else:
+            items.append({"text": f"{label} — {note_text(chip_note(cov))}", "value": key, "disabled": False})
+    return items
+
+
+def _bundle(d: dict):
+    import ee
+
+    return ee.Dictionary(d)
+
+
+def _index(band):
+    """A GeoTIFF band as its 1-based index; None for a band name (left over
+    from an Earth Engine asset picked before the file)."""
+    if isinstance(band, int) or (isinstance(band, str) and band.isdigit()):
+        return int(band)
+    return None
+
+
+async def validate_custom(gee_interface, project, aoi_fc, *, name, origin, ref, asset_type, fmt, encoding,
+                          alert_band, date_band, editing=None) -> dict:
+    """Check a custom source before it is added or saved (spec §6.2)."""
+    name = (name or "").strip()
+    error = validate_source_name(name, project, current=editing)
+    if error:
+        return {"error": error}
+    if not ref:
+        return {"error": "steps.alerts.err_no_ref"}
+    if origin == "gee" and asset_type not in ("IMAGE", "IMAGE_COLLECTION"):
+        return {"error": "steps.alerts.err_wrong_type"}  # before the probe: CustomSource refuses any other
+    if fmt not in FORMATS or date_band is None or (fmt != "date_only" and alert_band is None):
+        return {"error": "steps.alerts.err_band_map"}
+    band_map = BandMap(alert=None if fmt == "date_only" else alert_band, date=date_band)
+    date_encoding = PRESETS[fmt]["encoding"] or encoding
+    if origin == "file":  # a GeoTIFF is mapped by its band indexes
+        alert, when = _index(band_map.alert), _index(band_map.date)
+        if when is None or (band_map.alert is not None and alert is None):
+            return {"error": "steps.alerts.err_band_map"}
+        band_map = BandMap(alert=alert, date=when)
+    probe = CustomSource(name=name, origin=origin, ref=ref, asset_type=asset_type, format=fmt,
+                         date_encoding=date_encoding, band_map=band_map, native=None, digit=3)
+    # alert first, then date (date only for date-only): discovery_request reads
+    # the native grid from the first band
+    bands = mapped_bands(probe)
+    if origin == "gee":
+        info = await gee_interface.get_info_async(_bundle({
+            "discovery": discovery_request(ref, asset_type, [str(b) for b in bands]),
+            "coverage": coverage_request(aoi_fc, (), [probe]),
+        }))
+        error = check_discovery(info["discovery"], fmt, [str(b) for b in bands])
+        if error:
+            return {"error": error}
+        native = native_from_discovery(info["discovery"])
+        raw = info["coverage"]
+    else:
+        try:
+            header = await asyncio.to_thread(read_header, ref)
+        except UserRasterError as exc:
+            return {"error": exc.key}
+        error = check_file(header, bands)
+        if error:
+            return {"error": error}
+        # check_file refused a file without a CRS, so the WGS84 bounds the
+        # coverage request and the runner read are always there
+        native = file_native(header)
+        probe = probe.model_copy(update={"native": native})
+        raw = await gee_interface.get_info_async(coverage_request(aoi_fc, (), [probe]))
+    cov = parse_coverage(raw, aoi_digest=project.aoi.digest, today=date.today())[name]
+    if cov.fraction <= 0:
+        return {"error": "steps.alerts.err_not_covered"}
+    fields = dict(name=name, origin=origin, ref=ref, asset_type=asset_type, format=fmt,
+                  date_encoding=date_encoding, band_map=band_map, native=native)
+    return {"fields": fields, "coverage": cov}
+
+
 @solara.component
-def SourceModal(open_, project, on_add):
-    # ``project`` is the reactive (ruling #16), not its value: reading
-    # ``.value`` here, not at the call site, keeps this component subscribed
-    # to every source-list change instead of freezing on the props it was
-    # first rendered with.
-    choices = available_predefined(project.value)
-    key, set_key = solara.use_state(choices[0] if choices else None)
-    if key not in choices:
-        key = choices[0] if choices else None
+def SourceModal(open_, app_state, gee_interface, on_add_predefined, on_add_custom, on_save_custom, editing=None):
+    dialog = rv.Dialog(v_model=open_.value, on_v_model=open_.set, max_width="560px", eager=True, persistent=True)
+    # persistent blocks ESC too; restore it as a plain cancel. A hook: unconditional.
+    rv.use_event(dialog, "keydown.esc", lambda *_: open_.set(False))
+    with dialog:
+        if open_.value:  # mounted per opening: a clean form, and no asset listing while closed
+            _SourceForm(open_=open_, app_state=app_state, gee_interface=gee_interface, editing=editing,
+                        on_add_predefined=on_add_predefined, on_add_custom=on_add_custom,
+                        on_save_custom=on_save_custom)
 
-    # One Add per opening (ruling #65): without this, a fast double-click
-    # fires ``on_add`` twice with the same key, and the second call raises
-    # "already a source" before the dialog has closed.
-    submitted = solara.use_ref(False)
 
-    def _rearm():
-        if open_.value:
+@solara.component
+def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_add_custom, on_save_custom):
+    p = app_state.project.value
+    src0 = p.sources.get(editing) if p is not None and editing else None
+    n_custom = sum(1 for s in p.sources.values() if s.kind == "custom") if p is not None else 0
+    cap_reached = src0 is None and n_custom >= MAX_CUSTOM
+    pending_cov = app_state.coverage_pending.value
+    mode, set_mode = solara.use_state("custom" if src0 is not None else "predefined")
+    items = predefined_items(p, pending_cov)
+    selectable = [i["value"] for i in items if not i["disabled"]]
+    key, set_key = solara.use_state(selectable[0] if selectable else None)
+    if key not in selectable:
+        key = selectable[0] if selectable else None
+    name, set_name = solara.use_state(src0.name if src0 else "")
+    origin, set_origin = solara.use_state(src0.origin if src0 else "gee")
+    asset = solara.use_reactive({"asset_id": src0.ref, "type": src0.asset_type, "column": "ALL", "value": None}
+                                if src0 is not None and src0.origin == "gee" else None)
+    path = solara.use_reactive(src0.ref if src0 is not None and src0.origin == "file" else "")
+    fmt, set_fmt = solara.use_state(src0.format if src0 else None)
+    encoding, set_encoding = solara.use_state(src0.date_encoding if src0 and src0.format == "date_only" else "yymm")
+    alert_band, set_alert_band = solara.use_state(src0.band_map.alert if src0 else None)
+    date_band, set_date_band = solara.use_state(src0.band_map.date if src0 else None)
+    error, set_error = solara.use_state(None)
+    submitted = solara.use_ref(False)  # one Add per opening, held through the validation
+
+    ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute(path.value)
+    asset_type = (asset.value or {}).get("type") if origin == "gee" else "FILE"
+    bands_task = use_band_list(gee_interface, origin, ref, asset_type)
+    names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
+    band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
+                  else [{"text": n, "value": n} for n in names])
+
+    def _suggest():
+        if not names or (src0 is not None and ref == src0.ref):
+            return  # an edit keeps its own mapping until the raster changes
+        suggested = suggest_format(names)
+        set_fmt(suggested)
+        bm = suggest_band_map(suggested, names) if suggested else None
+        if header is not None and bm is not None:  # GeoTIFF: band indexes, not names
+            index = {b.name: b.index for b in header.bands}
+            bm = BandMap(alert=index.get(bm.alert), date=index[bm.date]) if bm.date in index else None
+        set_alert_band(bm.alert if bm else None)
+        set_date_band(bm.date if bm else None)
+
+    # ``header`` too: an asset and a file with the same band names map by name
+    # and by index respectively
+    solara.use_effect(_suggest, [names, header])
+
+    async def _validate():
+        live = app_state.project.value
+        aoi = aoi_io.ee_aoi(app_state.aoi_result.value, paths.project_dir(live.name))
+        out = await validate_custom(gee_interface, live, aoi, name=name, origin=origin, ref=ref,
+                                    asset_type=asset_type, fmt=fmt, encoding=encoding, alert_band=alert_band,
+                                    date_band=date_band, editing=editing)
+        if "error" not in out:
+            # The project changes here, on the loop, never in the completion effect
+            # below: an effect runs inside the render lock, and update_project
+            # takes AppState._lock (state_manager's lock order; Global Constraints).
+            if src0 is not None:
+                on_save_custom(editing, out["fields"], out["coverage"])
+            else:
+                on_add_custom(out["fields"], out["coverage"])
+        return out
+
+    validation = solara.lab.use_task(_validate, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _on_validated():
+        if validation.cancelled:
+            submitted.current = False  # the user stopped the check: the form can be sent again
+        elif validation.error:
+            set_error(str(validation.exception) or validation.exception.__class__.__name__)
             submitted.current = False
+        elif validation.finished and validation.value is not None:
+            out = validation.value
+            if "error" in out:
+                set_error(t(out["error"]))
+                submitted.current = False
+                return
+            open_.set(False)  # the task added or saved the source
 
-    solara.use_effect(_rearm, [open_.value])
+    solara.use_effect(_on_validated, [validation.pending, validation.finished, validation.error,
+                                      validation.cancelled])
 
-    def _add():
+    def _submit():
         if submitted.current:
             return
         submitted.current = True
-        if key is not None:
-            on_add(key)
-        open_.set(False)
+        set_error(None)
+        if mode == "predefined":
+            if key is not None:
+                on_add_predefined(key)
+            open_.set(False)
+            return
+        validation()
 
-    dialog = rv.Dialog(v_model=open_.value, on_v_model=open_.set, max_width="480px", eager=True, persistent=True)
-    # ``persistent`` blocks ESC too; restore it as a plain cancel (ruling #65).
-    # rv.use_event is a hook -- call it unconditionally.
-    rv.use_event(dialog, "keydown.esc", lambda *_: open_.set(False))
-    with dialog:
-        with rv.Card():
-            with rv.CardTitle():
-                solara.Text(t("steps.alerts.add_title"))
-            with rv.CardText():
-                if choices:
-                    rv.Select(
-                        label=t("steps.alerts.predefined_label"),
-                        items=[{"text": t(catalogue.LABEL_KEYS[k]), "value": k} for k in choices],
-                        v_model=key, on_v_model=set_key, dense=True, outlined=True,
-                    )
+    name_error = validate_source_name(name, p, current=editing) if name else None
+    title = t("steps.alerts.edit_title", name=editing) if src0 is not None else t("steps.alerts.add_title")
+    with rv.Card():
+        with rv.CardTitle():
+            solara.Text(title)
+        with rv.CardText():
+            if src0 is None:
+                with rv.BtnToggle(v_model=mode, on_v_model=lambda v: v and set_mode(v), mandatory=True, dense=True):
+                    rv.Btn(value="predefined", small=True, children=[t("steps.alerts.mode_predefined")])
+                    rv.Btn(value="custom", small=True, disabled=cap_reached,
+                           children=[t("steps.alerts.mode_custom", n=n_custom)])
+                if cap_reached:
+                    solara.Text(t("steps.alerts.cap_reached"), classes=["text--secondary"])
+            if mode == "predefined":
+                if items:
+                    rv.Select(label=t("steps.alerts.predefined_label"), items=items, v_model=key,
+                              on_v_model=set_key, dense=True, outlined=True)
+                    if key == "RADD":
+                        solara.Text(t("coverage.radd_note"), classes=["text--secondary"])
                 else:
                     solara.Text(t("steps.alerts.all_added"), classes=["text--secondary"])
-            with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
-                solara.Button(t("common.cancel"), text=True, small=True, on_click=lambda: open_.set(False))
-                solara.Button(t("steps.alerts.add"), color="primary", small=True, icon_name="mdi-plus",
-                              disabled=key is None, on_click=_add)
+            else:
+                rv.TextField(label=t("steps.alerts.name_label"), v_model=name, on_v_model=set_name, dense=True,
+                             outlined=True, disabled=src0 is not None,
+                             error_messages=[t(name_error)] if name_error else [])
+                RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path)
+                if asset_type == "IMAGE_COLLECTION":
+                    solara.Text(t("steps.alerts.collection_help"), classes=["text--secondary"])
+                if bands_task.pending:
+                    solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+                elif bands_task.error:
+                    solara.Text(t("steps.raster_input.bands_failed", error=str(bands_task.exception)),
+                                classes=["error--text"])
+                with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True):
+                    for f in FORMATS:
+                        rv.Radio(label=f"{t(f'steps.alerts.format_{f}')} — {t(f'steps.alerts.format_help_{f}')}",
+                                 value=f)
+                if fmt in ("radd", "ccdc"):
+                    rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
+                              on_v_model=set_alert_band, dense=True, outlined=True)
+                if fmt is not None:
+                    rv.Select(label=t("steps.alerts.band_date"), items=band_items, v_model=date_band,
+                              on_v_model=set_date_band, dense=True, outlined=True)
+                if fmt == "date_only":
+                    rv.Select(label=t("steps.alerts.encoding_label"), v_model=encoding, on_v_model=set_encoding,
+                              dense=True, outlined=True,
+                              items=[{"text": t(f"steps.alerts.encoding_{e}"), "value": e} for e in ENCODINGS])
+            if error:  # validation errors stay inline in the modal (spec §11)
+                solara.Text(error, classes=["error--text"])
+        with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
+            solara.Button(t("common.cancel"), text=True, small=True, on_click=lambda: open_.set(False))
+            waiting = mode == "predefined" and key is not None and pending_cov and record_for(p, key) is None
+            # spec §11: an async button is a TaskButtonComponent (while the check
+            # runs it reads Cancel and stops it); the predefined branch of
+            # _submit adds at once and never starts the task
+            TaskButtonComponent(
+                label=t("coverage.chip_checking") if waiting else
+                (t("steps.alerts.save") if src0 is not None else t("steps.alerts.add")),
+                cancel_label=t("common.cancel"), small=True, icon="mdi-plus",
+                external_busy=waiting or (mode == "predefined" and key is None)
+                or (mode == "custom" and bool(name_error)),
+                **use_task_button(validation, on_start=_submit),
+            )

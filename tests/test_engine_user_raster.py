@@ -55,6 +55,28 @@ def test_an_unreadable_file_raises_a_message_key(tmp_path):
     assert e.value.key == "steps.alerts.err_unreadable"
 
 
+def test_a_complex_band_is_listed_as_not_numeric(tmp_path):
+    """GDAL's complex_int16 is no NumPy dtype: the header still reads, and
+    check_file refuses the band with its message key."""
+    path = tmp_path / "cx.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=4, height=4, count=1, dtype="complex_int16",
+                       crs="EPSG:4326", transform=Affine(0.0002, 0, -55.1, 0, -0.0002, -10.0)):
+        pass  # NumPy has no complex_int16 to write
+    h = ur.read_header(path)
+    assert [b.numeric for b in h.bands] == [False]
+    assert ur.check_file(h, [1]) == "steps.alerts.err_not_numeric"
+
+
+def test_a_crs_without_a_path_to_wgs84_raises_a_message_key(tmp_path):
+    from rasterio.crs import CRS
+
+    local = CRS.from_wkt('LOCAL_CS["arbitrary",UNIT["metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]')
+    path = _tif(tmp_path / "local.tif", crs=local, transform=Affine(1, 0, 10, 0, -1, 10))
+    with pytest.raises(ur.UserRasterError) as e:
+        ur.read_header(path)
+    assert e.value.key == "steps.alerts.err_unreadable"
+
+
 def _info(crs="EPSG:4326", crss=("EPSG:4326",), scale=20.0, scales=(20.0,), count=12, date_format=None,
           types=None, transform=(0.00017966, 0, -56.0, 0, -0.00017966, -23.0)):
     return {"count": count, "crs": crs, "scale": scale, "transform": list(transform), "crss": list(crss),

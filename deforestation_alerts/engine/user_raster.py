@@ -13,7 +13,6 @@ from typing import Optional
 import numpy as np
 import rasterio
 from rasterio.crs import CRS
-from rasterio.errors import RasterioIOError
 from rasterio.warp import transform_bounds
 
 from deforestation_alerts.engine.download import METRES_PER_DEGREE
@@ -53,8 +52,12 @@ def _crs_text(crs) -> Optional[str]:
 
 
 def _numeric(dtype) -> bool:
-    """Integer or real; a complex band holds no alert or date."""
-    dt = np.dtype(dtype)
+    """Integer or real; a complex band holds no alert or date (GDAL's
+    ``complex_int16`` is not even a NumPy type)."""
+    try:
+        dt = np.dtype(dtype)
+    except TypeError:
+        return False
     return bool(np.issubdtype(dt, np.integer) or np.issubdtype(dt, np.floating))
 
 
@@ -70,7 +73,9 @@ def read_header(path) -> FileHeader:
                       if src.crs is not None else None)
             return FileHeader(crs=_crs_text(src.crs), transform=tuple(src.transform)[:6], width=src.width,
                               height=src.height, bounds_wgs84=bounds, bands=bands, nodata=src.nodata)
-    except RasterioIOError as exc:
+    except Exception as exc:  # noqa: BLE001 - an unreadable header is the user's file, not a bug
+        # not only RasterioIOError: a CRS with no path to WGS84 (an engineering
+        # CRS) fails in transform_bounds with GDAL's own error class
         raise UserRasterError("steps.alerts.err_unreadable", str(exc)) from exc
 
 
