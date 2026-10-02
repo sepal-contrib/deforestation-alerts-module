@@ -84,20 +84,27 @@ def test_the_component_follows_the_project_and_a_pick_selects():
         rc.close()
 
 
-def test_the_raw_selector_follows_publishes_from_any_thread_and_never_picks_back():
+def test_the_raw_selector_follows_publishes_from_any_thread_and_never_picks_back(monkeypatch):
     p, jan, feb_a, feb_b = _project()
     state = AppState()
+    picks = []
+    real_select_set = set_selector.select_set
+    monkeypatch.setattr(set_selector, "select_set",
+                        lambda app_state, name, set_id: picks.append(set_id) or real_select_set(app_state, name,
+                                                                                                set_id))
     select = set_selector.build_set_selector(state)
     assert select.style_ == "display: none;"  # no project yet
     state.new_project_state(p)
     assert select.style_ == "" and select.v_model == jan.id
     assert [i["value"] for i in select.items] == [feb_b.id, feb_a.id, jan.id]
+    assert picks == []  # showing the project is not a pick
     select.v_model = feb_b.id  # the browser's pick
-    assert state.project.value.active_set == feb_b.id
+    assert state.project.value.active_set == feb_b.id and picks == [feb_b.id]
     worker = threading.Thread(target=lambda: state.update_project(
         "sets", lambda q: setattr(q, "active_set", jan.id)))
     worker.start()
     worker.join()
     assert select.v_model == jan.id and state.project.value.active_set == jan.id
+    assert picks == [feb_b.id]  # the worker's publish was shown, never picked back
     state.close_project_state()
     assert select.style_ == "display: none;" and select.v_model is None
