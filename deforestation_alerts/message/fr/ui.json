@@ -32,7 +32,7 @@
     },
     "alert_info": {
       "card_title": "Info d'Alerte",
-      "alert_source": "Source: ",
+      "alert_source": "Source : ",
       "first_date": "Première Date : ",
       "last_date": "Dernière Date : ",
       "status": "Statut : ",
@@ -44,6 +44,8 @@
       "confirmation_yes": "Oui",
       "confirmation_no": "Non",
       "confirmation_revision": "Nécessite une révision supplémentaire",
+      "confirmation_missing": "Répondez à « Est-ce une véritable alerte ? » avant d'enregistrer.",
+      "false_positive_drawn": "Un faux positif ne peut pas avoir de polygone de déforestation dessiné : supprimez le polygone ou changez la réponse.",
       "loss_driver_label": "Facteur de perte",
       "loss_driver_hint": "Analyser la cause de la déforestation",
       "loss_driver1": "Expansion agricole",
@@ -84,13 +86,18 @@
       "download_task_title": "Préparation du téléchargement de l'alerte",
       "download_step": "Génération des fichiers et du rapport…",
       "download_done": "Téléchargement de l'alerte prêt.",
-      "download_no_recipe": "Aucun jeu d'alertes n'est actif : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans le projet. Lancez d'abord Integrate & vectorize.",
+      "download_no_recipe": "Aucun jeu d'alertes n'est actif : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans le projet. Lancez d'abord Intégrer et vectoriser.",
       "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger.",
       "download_no_images": "Aucune image avant et après n'est sélectionnée pour cette alerte : ses fichiers ne peuvent donc pas être générés. Choisissez d'abord une image avant et une image après.",
       "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer.",
       "save_other_set": "Ces alertes appartiennent à un autre jeu d'alertes que le jeu actif : elles n'y ont donc pas été enregistrées.",
       "save_set_changed": "Le jeu d'alertes actif a changé pendant l'enregistrement : cette révision n'a donc pas été enregistrée.",
-      "save_store_changed": "Ce jeu d'alertes a été reconstruit pendant votre revue : les alertes à l'écran ne sont plus à jour et cette révision n'a donc pas été enregistrée. Reprenez la revue sur les alertes reconstruites."
+      "save_store_changed": "Ce jeu d'alertes a été reconstruit pendant votre revue : les alertes à l'écran ne sont plus à jour et cette révision n'a donc pas été enregistrée. Reprenez la revue sur les alertes reconstruites.",
+      "report_template_label": "Modèle de rapport (.docx)",
+      "report_template_hint": "Chaque rapport de ce projet est généré à partir de ce fichier Word. Laissez le champ vide pour utiliser le modèle par défaut de l'application.",
+      "report_template_no_project": "Ouvrez un projet pour choisir son modèle de rapport.",
+      "report_template_bad": "{path} n'est pas un fichier Word (.docx) de votre dossier SEPAL ; le modèle de rapport n'a pas été changé.",
+      "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau dans la carte d'export, ou videz le champ pour utiliser le modèle par défaut."
     }
   }
 }

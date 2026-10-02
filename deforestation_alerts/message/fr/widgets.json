@@ -30,9 +30,9 @@
       "status_completed": "terminé",
       "status_failed": "échoué",
       "status_cancelled": "annulé",
-      "status_stale": "out of date",
-      "status_missing": "missing",
-      "status_no_data": "no data",
+      "status_stale": "obsolète",
+      "status_missing": "manquant",
+      "status_no_data": "aucune donnée",
       "status_not_covered": "non couvert",
       "status_unchecked": "non vérifié"
     },
@@ -48,12 +48,12 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Select an area of interest first.",
+    "lock_alerts": "Sélectionnez d'abord une zone d'intérêt.",
     "lock_layers": "Sélectionnez d'abord une zone d'intérêt.",
-    "lock_period": "Add at least one alert source first.",
-    "lock_prepare": "Create or select a period first.",
-    "lock_integrate": "Download and harmonize at least one source first.",
-    "lock_analysis": "Run Integrate & vectorize first.",
+    "lock_period": "Ajoutez d'abord au moins une source d'alertes.",
+    "lock_prepare": "Créez ou sélectionnez d'abord une période.",
+    "lock_integrate": "Téléchargez et harmonisez d'abord au moins une source.",
+    "lock_analysis": "Lancez d'abord Intégrer et vectoriser.",
     "count_sources": {
       "one": "{count} source",
       "many": "{count} sources",
@@ -65,14 +65,14 @@
       "other": "{count} couches"
     },
     "count_periods": {
-      "one": "{count} period",
-      "many": "{count} periods",
-      "other": "{count} periods"
+      "one": "{count} période",
+      "many": "{count} périodes",
+      "other": "{count} périodes"
     },
     "count_ready": {
-      "one": "{count} ready",
-      "many": "{count} ready",
-      "other": "{count} ready"
+      "one": "{count} prête",
+      "many": "{count} prêtes",
+      "other": "{count} prêtes"
     },
     "count_alerts": {
       "one": "{count} alerte",

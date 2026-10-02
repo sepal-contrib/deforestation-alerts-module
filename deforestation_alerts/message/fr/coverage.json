@@ -1,0 +1,30 @@
+{
+  "coverage": {
+    "unchecked": "Couverture non vérifiée",
+    "not_covered": "{source} ne couvre pas cette AOI",
+    "not_covered_glad_l": "GLAD-L ne couvre pas cette AOI : sa zone est la terre de ses quatre tuiles régionales (Asie, Afrique, Amérique centrale et du Sud) entre environ 35°S et 35°N",
+    "not_covered_radd": "RADD ne couvre pas cette AOI : sa zone est celle des tropiques humides d'Afrique, d'Asie du Sud-Est et d'Amérique centrale et du Sud",
+    "not_covered_glad_s2": "GLAD-S2 ne couvre pas cette AOI : sa zone est 90°O–30°O, 20°S–20°N",
+    "no_data_starts": "{source} commence le {first} ici",
+    "no_data_until": "{source} a des données jusqu'au {last}",
+    "no_data_gap": "Aucune collection {source} ne couvre {start} → {end}",
+    "no_data_window": "{source} n'a aucune donnée pour cette fenêtre ici",
+    "partial_share": "couvre {pct} % de l'AOI ; le reste ne reçoit aucune alerte de cette source",
+    "partial_starts": "{source} commence le {first} ici ; les alertes antérieures ne sont pas recherchées",
+    "partial_until": "a des données jusqu'au {last} ; les alertes ultérieures arrivent avec la fenêtre de recherche de la période suivante",
+    "partial_gap": "Aucune collection {source} ne couvre {start} → {end} ; les alertes de cette plage sont manquantes",
+    "chip_full": "couvre l'AOI",
+    "chip_partial": "couvre {pct} % de l'AOI",
+    "chip_none": "ne couvre pas l'AOI",
+    "chip_unchecked": "couverture non vérifiée",
+    "chip_checking": "vérification de la couverture…",
+    "radd_note": "RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.",
+    "dates": "{first} → {last}",
+    "dates_region": "{region} : {first} → {last}",
+    "check_failed": "Impossible de vérifier la couverture des sources : {error}",
+    "check_again": "Vérifier à nouveau",
+    "not_covered_row": "Non couverte : {reason}",
+    "no_data_row": "Aucune donnée pour cette période : {reason}",
+    "unchecked_row": "Couverture non vérifiée"
+  }
+}

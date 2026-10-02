@@ -64,12 +64,64 @@ def test_has_message():
     assert not i18n.has_message("common._test.zero") and not i18n.has_message("nope")
 
 
-def test_english_binds_and_every_other_problem_is_only_a_missing_translation():
-    """``catalog()`` validated English when ``gui.i18n`` was imported. Until
-    Task 44 completes es-ES and fr, the only problems allowed are untranslated
-    keys: no placeholder mismatch, no extra key, no plural shape mismatch."""
-    problems = i18n.messages.check()
-    assert {p.code for p in problems} <= {"missing_key"}, [p for p in problems if p.code != "missing_key"]
+def test_the_catalogue_is_complete_in_every_locale():
+    """Spec §13 from slice 6: no missing, extra, misshapen or mistemplated message."""
+    assert i18n.messages.check() == ()
+
+
+#: Names kept as they are in every language (product, format and unit names).
+PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", "SEPAL", "GeoTIFF", "GeoPackage",
+                "EPSG", "UTM", "CCDC", "Sentinel-1", "Sentinel-2", "Landsat", "Hansen", "PMTiles", "tippecanoe",
+                "Python", "PATH", "Word", ".docx", "CSV", "GPKG", "GeoJSON", "yyddd", "yymm", "yyyyddd", "Int32",
+                "uint8", "AOI", "GB", "MB", "ha", "px", "m")
+#: Translations rightly identical to English (a cognate such as French
+#: "Source" or "Total", Spanish "Total"). Add a key only when the word is the
+#: same in that language, never to silence the test.
+SAME_IN = {
+    "es-ES": {"steps.layers.region_asia"},
+    "fr": {
+        "common.actions", "steps.alerts.col_source", "steps.alerts.list_title",
+        "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
+        "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
+        "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",
+        "steps.project.count_sources.other", "workflow.count_sources.one", "workflow.count_sources.many",
+        "workflow.count_sources.other",
+    },
+}
+
+
+def _letters(text: str) -> str:
+    """What is left to translate once placeholders and names are taken out."""
+    text = re.sub(r"\{[A-Za-z_]+\}", "", text)
+    for name in sorted(PROPER_NAMES, key=len, reverse=True):
+        text = text.replace(name, "")
+    return re.sub(r"[^A-Za-z]", "", text)
+
+
+@pytest.mark.parametrize("locale", ["es-ES", "fr"])
+def test_no_english_is_left_in_the_translations(locale):
+    from pysepal.i18n.loading import load_locale
+
+    english = load_locale(i18n.MESSAGES_DIR, "en")
+    target = load_locale(i18n.MESSAGES_DIR, locale)
+
+    def english_of(key):
+        base, _, category = key.rpartition(".")
+        if base in english.plural_keys:
+            return english.messages.get(key, english.messages[f"{base}.other"])
+        return english.messages.get(key)
+
+    copies = sorted(k for k, text in target.messages.items()
+                    if text == english_of(k) and len(_letters(text)) >= 3 and k not in SAME_IN[locale])
+    assert not copies, f"{locale} still reads English for: {copies}"
+
+
+@pytest.mark.parametrize("locale", ["es-ES", "fr"])
+def test_the_step_labels_are_translated(locale):
+    keys = ["alerts", "layers", "period", "prepare", "integrate", "analysis", "project", "overview"]
+    english = {k: i18n.t(f"app.drawer_item.{k}") for k in keys}
+    set_locale(locale)
+    assert all(i18n.t(f"app.drawer_item.{k}") != english[k] for k in keys)
 
 
 def test_the_scaffold_namespaces_are_complete_in_every_locale():
