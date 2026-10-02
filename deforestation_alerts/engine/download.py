@@ -4,7 +4,7 @@ User decision 2026-09-30: sources are downloaded natively and aligned onto the
 project grid locally when harmonizing, following spatial_risk
 (``gee_var.to_local``): ``download_ee_image(crs=<native crs>, scale=<native
 scale>, region=aoi)``. ``download_ee_image`` clips to the AOI, exports over its
-bounds (``_export_bounds``) and holds the process-wide geedim lock.
+bounds (``export_bounds``) and holds the process-wide geedim lock.
 
 Earth Engine snaps an EPSG:4326 export at a given scale outward to whole
 multiples of the pixel size, which is the native lattice of all three

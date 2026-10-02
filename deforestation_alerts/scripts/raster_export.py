@@ -35,7 +35,7 @@ _DOWNLOAD_LOCK = threading.Lock()
 _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
 
 
-def _export_bounds(region: Any) -> Any:
+def export_bounds(region: Any) -> Any:
     """The export region for geedim: the *bounds* of ``region``, never its geometry.
 
     Putting the computed ``.geometry()`` of a table asset in a download request
@@ -76,7 +76,7 @@ def download_ee_image(
     `max_tile_dim` (px); `num_threads` maps to geedim's `max_requests`.
 
     The export region handed to geedim is always the *bounds* of `region` — the
-    footprint itself is applied by the clip (see `_export_bounds`).
+    footprint itself is applied by the clip (see `export_bounds`).
 
     Set `unmask_value` to treat zeros as data (the alert raster uses 0 = no-alert,
     so pass e.g. 255 to distinguish masked-out from genuine zero). `nodata_value`
@@ -91,7 +91,7 @@ def download_ee_image(
         raise ValueError("image must be an ee.Image.")
 
     # Clip with the region object as given (Geometry, Feature or
-    # FeatureCollection) -- never ``region.geometry()``, see ``_export_bounds``.
+    # FeatureCollection) -- never ``region.geometry()``, see ``export_bounds``.
     if unmask_value is not None:
         if region is not None:
             image = image.clip(region)
@@ -118,7 +118,7 @@ def download_ee_image(
     try:
         img = image.gd.prepareForExport(
             crs=crs,
-            region=_export_bounds(region),
+            region=export_bounds(region),
             scale=scale,
             resampling=resampling,
             dtype=dtype,

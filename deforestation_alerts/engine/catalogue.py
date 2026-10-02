@@ -1,4 +1,4 @@
-"""GLAD-L, RADD and GLAD-S2 as Earth Engine images on the engine contract.
+"""GLAD-L, RADD, GLAD-S2 and custom Earth Engine sources as images on the engine contract.
 
 Contract (spec D16, §7.2): bands ``alert`` (1 confirmed, 2 probable) and
 ``date`` (integer yyyyddd), Int32, masked where there is no alert and outside
@@ -13,7 +13,8 @@ from datetime import date, timedelta
 
 import ee
 
-from deforestation_alerts.scripts.raster_export import _export_bounds
+from deforestation_alerts.project.models import PRESETS, mapped_bands
+from deforestation_alerts.scripts.raster_export import export_bounds
 
 KEYS = ("GLAD-L", "RADD", "GLAD-S2")
 LABEL_KEYS = {
@@ -146,13 +147,15 @@ def _finish(alert: ee.Image, dates: ee.Image, in_window: ee.Image, aoi) -> ee.Im
 
 
 def _glad_l(win_start, win_end, aoi, meta):
-    bounds = _export_bounds(aoi)
+    bounds = export_bounds(aoi)
     images = []
     for source, a, b in _glad_l_periods(meta, win_start, win_end):
         conf, doy_band = f"conf{a.year % 100}", f"alertDate{a.year % 100}"
         col = (
             ee.ImageCollection(source)
             .filterBounds(bounds)
+            # newest image of the year mosaicked on top (not the natural order)
+            .sort("system:time_start")
             # UpdResult's images do not all carry every year's bands
             .filter(ee.Filter.listContains("system:band_names", conf))
             .select([conf, doy_band])
@@ -188,7 +191,7 @@ def _radd_latest(col: ee.ImageCollection) -> ee.ImageCollection:
 def _radd(win_start, win_end, aoi, meta):
     col = _radd_latest(
         ee.ImageCollection(RADD_COLLECTION)
-        .filterBounds(_export_bounds(aoi))
+        .filterBounds(export_bounds(aoi))
         .filterMetadata("layer", "contains", "alert")
     ).mosaic()
     d = col.select("Date")  # yyddd
@@ -225,3 +228,83 @@ def build_image(key: str, win_start: date, win_end: date, aoi, meta: dict) -> ee
     except KeyError:
         raise ValueError(f"unknown source {key!r}") from None
     return builder(win_start, win_end, aoi, meta)
+
+
+# --- custom Earth Engine sources: the three format presets (spec §7.2) -------
+
+_MONTH_STARTS = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
+
+
+def encoding_for(src) -> str:
+    return PRESETS[src.format]["encoding"] or src.date_encoding
+
+
+def _ee_leap(year):
+    return year.mod(4).eq(0).And(year.mod(100).neq(0).Or(year.mod(400).eq(0)))
+
+
+def ee_yyyyddd(band: ee.Image, encoding: str) -> ee.Image:
+    """``presets.to_yyyyddd`` on Earth Engine: one band in, ``yyyyddd`` out, masked where invalid."""
+    v = band.toDouble()
+    if encoding == "decimal_year":
+        year = v.floor()
+        diy = ee.Image(365).add(_ee_leap(year))
+        doy = v.subtract(year).multiply(diy).add(0.05).floor().min(diy.subtract(1)).add(1)
+        valid = v.gt(0)
+    else:
+        iv = v.floor()
+        if encoding == "yyddd":
+            year, doy = iv.divide(1000).floor().add(2000), iv.mod(1000)
+            valid = iv.gt(0).And(doy.gte(1)).And(doy.lte(ee.Image(365).add(_ee_leap(year))))
+        elif encoding == "yyyyddd":
+            year, doy = iv.divide(1000).floor(), iv.mod(1000)
+            valid = year.gte(1).And(doy.gte(1)).And(doy.lte(ee.Image(365).add(_ee_leap(year))))
+        elif encoding == "yymm":
+            year, month = iv.divide(100).floor().add(2000), iv.mod(100).toInt()
+            valid = iv.gt(0).And(month.gte(1)).And(month.lte(12))
+            doy = month.remap(list(range(1, 13)), _MONTH_STARTS, 1).add(month.gt(2).And(_ee_leap(year)))
+        else:
+            raise ValueError(f"unknown date encoding {encoding!r}")
+    return year.multiply(1000).add(doy).updateMask(valid).rename("date")
+
+
+def _ee_codes(alert: ee.Image, fmt: str) -> ee.Image:
+    if fmt == "radd":
+        return alert.remap([2, 3], [2, 1], 0)
+    if fmt == "ccdc":
+        return alert.gte(3).add(alert.gte(1).And(alert.lt(3)).multiply(2))
+    raise ValueError(f"the {fmt!r} preset has no alert band")
+
+
+def preset_image(img: ee.Image, src, win_start: date, win_end: date, aoi) -> ee.Image:
+    """A custom source's mapped bands -> the contract (spec §7.2), windowed by date per pixel."""
+    dates = ee_yyyyddd(img.select(str(src.band_map.date)), encoding_for(src))
+    codes = dates.gt(0) if src.format == "date_only" else _ee_codes(img.select(str(src.band_map.alert)), src.format)
+    in_window = dates.gte(yyyyddd(win_start)).And(dates.lte(yyyyddd(win_end)))
+    return _finish(codes, dates, in_window, aoi)
+
+
+def custom_image(src, aoi) -> ee.Image:
+    """The mapped bands of a custom Earth Engine source, over ``aoi``.
+
+    An image is used as is. A collection is filtered to the AOI bounds and to
+    the images that carry every mapped band (RADD's own collection mixes
+    forest-baseline images without them), sorted by ``system:time_start``
+    when every image has it (newest on top), and mosaicked. Never
+    ``filterDate``: SEPAL exports carry no timestamps; the window is applied
+    per pixel on the date band.
+    """
+    bands = [str(b) for b in mapped_bands(src)]
+    if src.asset_type == "IMAGE":
+        return ee.Image(src.ref).select(bands)
+    col = ee.ImageCollection(src.ref).filterBounds(export_bounds(aoi))
+    for b in bands:
+        col = col.filter(ee.Filter.listContains("system:band_names", b))
+    col = col.select(bands)
+    timed = col.filter(ee.Filter.notNull(["system:time_start"]))
+    ordered = ee.ImageCollection(ee.Algorithms.If(timed.size().eq(col.size()), col.sort("system:time_start"), col))
+    return ordered.mosaic()
+
+
+def build_custom_image(src, win_start: date, win_end: date, aoi) -> ee.Image:
+    return preset_image(custom_image(src, aoi), src, win_start, win_end, aoi)
