@@ -56,6 +56,7 @@ from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
 from gui.scripts.solara_threads import spawn_in_context
+from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
 from gui.tile.masks_card import MasksCard
 from gui.widget.grid_form import GridForm
@@ -212,6 +213,19 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     solara.use_effect(lambda: row_errors.set({}), [scope])
 
     period = workflow_steps.active_period(p)
+    # Spec §7.3, §9.4: a mask switch (on, off, its mode) and a change of the
+    # active period give every mask layer on the map the active period's
+    # choice, without a rebuild. Keyed on the period and its choices only, so
+    # a worker recording artifacts never runs it. An effect may call the
+    # registry: MapLayers publishes outside its lock.
+    choices = tuple(sorted((n, c.on, c.mode) for n, c in period.masks.items())) if period is not None else ()
+
+    def _refresh_mask_legends():
+        live = app_state.project.value
+        if live is not None:
+            refresh_mask_legends(layers, live)
+
+    solara.use_effect(_refresh_mask_legends, [p.active_period if p is not None else None, choices])
     if p is None or period is None or p.aoi is None:
         solara.Info(t("workflow.lock_prepare"))
         return
@@ -301,13 +315,21 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         spawn_in_context(_job)
 
     def _toggle_map(source):
+        # The Alerts step's pattern, not ``toggle``: a click behind a
+        # superseded build of the key is queued, not dropped (slice-1
+        # deferral), and a click on a layer still building is a no-op.
+        key = f"src:{source}"
+        if layers.is_on(key):
+            if key not in layers.inflight.value:
+                layers.hide(key)
+            return
         art = p.artifacts.get(harm_key(period.id, source))
         if art is None:
             return
-        key = f"src:{source}"
         path = paths.resolve(pdir, art.rel_path)
-        layers.toggle(key, source_layers.harmonized_builder(map_, path, key, source),
-                      content_id=art.content_id, notifier=notifications)
+        build = source_layers.harmonized_builder(map_, path, key, source_layers.harmonized_name(source, period))
+        layers.show(key, build, content_id=art.content_id, notifier=notifications,
+                    legend=source_layers.harmonized_legend(key, source, period))
 
     mine = mine_keys(running, stops, p.name, period.id)
     pending = run_all_items(p, pdir, period) if p.grid is not None else []

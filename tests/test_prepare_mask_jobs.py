@@ -22,7 +22,7 @@ from deforestation_alerts.project.models import (
     AoiRecord, GridSpec, NativeGrid, Period, Project, add_mask, add_predefined_source, set_period_mask,
 )
 from gui.i18n import t
-from gui.scripts import prepare_jobs, raster_map
+from gui.scripts import prepare_jobs, raster_map, source_layers
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
 
@@ -231,8 +231,8 @@ def test_a_shown_mask_is_redrawn_from_its_new_aligned_file(tmp_path, cover, monk
     state.load_project_state(_project(tmp_path, cover))
     refreshed, drawn = [], []
 
-    def refresh(key, build, content_id):
-        refreshed.append((key, content_id))
+    def refresh(key, build, content_id, legend=None):
+        refreshed.append((key, content_id, legend))
         build()
 
     monkeypatch.setattr(prepare_jobs, "run_mask_row", _aligning(tmp_path, [], on_pixels=4))
@@ -241,11 +241,43 @@ def test_a_shown_mask_is_redrawn_from_its_new_aligned_file(tmp_path, cover, monk
     layers = SimpleNamespace(is_on=lambda k: k == "mask:forest", refresh=refresh)
     prepare_jobs.run_rows(_ctx(state, tmp_path, [], layers=layers, map_="MAP"), [("mask", "forest")])
     aligned = state.project.value.artifacts[fp.mask_key("forest")]
-    assert refreshed == [("mask:forest", aligned.content_id)]
+    assert refreshed == [("mask:forest", aligned.content_id, source_layers.mask_layer_legend(state.project.value,
+                                                                                              "forest"))]
     [(map_, path, kw)] = drawn
     assert map_ == "MAP" and path == paths.resolve(tmp_path, aligned.rel_path)
-    assert kw["key"] == "mask:forest" and kw["colormap"] is raster_map.MASK_COLORMAP
+    assert kw["key"] == "mask:forest" and kw["name"] == "Mask forest" and kw["colormap"] is raster_map.MASK_COLORMAP
     assert (kw["vmin"], kw["vmax"], kw["nodata"], kw["opacity"]) == (1, 1, 0, raster_map.MASK_OPACITY)
+
+
+def test_a_rerun_of_a_shown_mask_keeps_its_legend(tmp_path, cover, monkeypatch):
+    """Spec §9.4: ``refresh`` replaces the layer and its legend, so the
+    redraw of a mask on the map passes the mask's legend (the active period's
+    choice), and the new file's layer lands with it."""
+    import gui.scripts.map_layers as ml
+    from gui.scripts.map_layers import MapLayers
+
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: target(*args))
+    state = AppState()
+    state.load_project_state(_project(tmp_path, cover))
+    drawn = []
+    monkeypatch.setattr(raster_map, "add_raster_layer", lambda map_, path, **kw: drawn.append(path))
+    monkeypatch.setattr(prepare_jobs, "run_mask_row", _aligning(tmp_path, [], on_pixels=4))
+
+    class _Map:
+        def remove_layer(self, key, none_ok=False):
+            pass
+
+    layers = MapLayers(_Map())
+    p = state.project.value
+    layers.show("mask:forest", lambda: None, content_id="old", legend=source_layers.mask_layer_legend(p, "forest"))
+    set_period_mask(p, FEB.id, "forest", mode="exclude")  # the layer's legend now lags the choice
+    prepare_jobs.run_rows(_ctx(state, tmp_path, [], layers=layers, map_="MAP"), [("mask", "forest")])
+    aligned = state.project.value.artifacts[fp.mask_key("forest")]
+    assert drawn == [paths.resolve(tmp_path, aligned.rel_path)]
+    assert layers.content_of("mask:forest") == aligned.content_id
+    (legend,) = layers.legends.value
+    assert legend.layer_id == "mask:forest" and legend.label.key == "legend.name.mask"
+    assert legend.spec.labels[0].key == "legend.mask.exclude"
 
 
 def test_the_mask_palette_comes_from_the_palette_table():

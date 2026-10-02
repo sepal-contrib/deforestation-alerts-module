@@ -59,7 +59,7 @@ from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
 from gui.i18n import t
-from gui.scripts import set_store
+from gui.scripts import set_store, source_layers
 from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
 from gui.scripts.solara_threads import spawn_in_context
@@ -363,7 +363,9 @@ def OverviewTile(app_state, map_, layers):
                 notifications.warning(warning)
             _add_centroid_layer(map_, alerts, name)
 
-        layers.show(SET_LAYER_KEY, build, content_id=f"{alert_set.id}:{len(alerts)}", notifier=notifications)
+        # spec §9.4: the tiles and the centroids draw the same status colours
+        layers.show(SET_LAYER_KEY, build, content_id=f"{alert_set.id}:{len(alerts)}", notifier=notifications,
+                    legend=source_layers.set_legend(SET_LAYER_KEY, alert_set))
 
     solara.use_effect(_sync_layer, [active, s.id if s else None, gdf, retries])
 

@@ -37,8 +37,8 @@ layer; it is removed on ``hide``, on ``clear`` (a project switch or close),
 and when a build fails or is superseded (the superseded build removes the
 key's layer, and the legend it carried with it), so it never outlives it.
 ``refresh`` replaces it: with new pixels once the rebuild lands (a build that
-carries no legend drops the old one), with the same pixels at once and
-without a rebuild (a mask's choice, the active period). The newest drawn
+carries no legend drops the old one), with the same pixels (or no builder)
+at once and without a rebuild (a mask's choice, the active period). The newest drawn
 layer's legend is selected; ``select`` picks another; when the selected layer
 leaves, the last remaining one is selected (``next_selection``). ``legends``
 and ``selected`` are published together with ``on`` and ``inflight``, outside
@@ -129,13 +129,21 @@ class MapLayers:
         else:
             self.show(key, build, content_id, notifier, legend)
 
+    def content_of(self, key):
+        """The content id of the key's latest request, or None (off, or shown
+        without one: an Earth Engine preview)."""
+        with self._lock:
+            return self._content.get(key)
+
     def refresh(self, key, build, content_id, legend=None, notifier=None) -> None:
         # One lock section for the check and the request: a hide in between
-        # must not be undone by this refresh.
+        # must not be undone by this refresh. ``build=None`` is always
+        # legend-only (preflight M7): a content id read before this call may
+        # be stale by now, and a None builder must never be started.
         with self._lock:
             if key not in self._keys:
                 return
-            if self._content.get(key) == content_id:
+            if build is None or self._content.get(key) == content_id:
                 if legend is None:
                     return
                 # Same pixels, new legend (a mask's choice, the active period):

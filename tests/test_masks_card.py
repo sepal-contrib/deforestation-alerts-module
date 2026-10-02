@@ -511,16 +511,20 @@ def test_show_on_map_draws_an_unaligned_earth_engine_mask_as_earth_engine_tiles(
     monkeypatch.setattr(masks_card, "build_mask_image", lambda mask, aoi: _Img((mask.name, aoi)))
     state = _state(_p())
     map_ = _Map()
+    layers = MapLayers(map_)
 
     async def main():
-        rc, seen, modal, _ = _card(monkeypatch, state, map_=map_,
+        rc, seen, modal, _ = _card(monkeypatch, state, map_=map_, layers=layers,
                                    rows=[MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")])
         try:
             _action(seen, "forest", "map_toggle")()
             [(img, vis, name, key, opacity)] = map_.ee
             assert img.what == ("selfMask", ("forest", "AOI"))
-            assert (vis, name, key, opacity) == (raster_map.MASK_EE_VIS, "forest", "mask:forest",
+            assert (vis, name, key, opacity) == (raster_map.MASK_EE_VIS, "Mask forest", "mask:forest",
                                                  raster_map.MASK_OPACITY)
+            (legend,) = layers.legends.value  # spec §9.4: the active period's choice
+            assert legend.layer_id == "mask:forest" and legend.spec.labels[0].key == "legend.mask.keep"
+            assert layers.content_of("mask:forest") is None  # Earth Engine tiles: no file yet
             _action(seen, "forest", "map_toggle")()  # off again
             assert "mask:forest" not in map_.layers
         finally:
@@ -539,16 +543,27 @@ def test_show_on_map_draws_the_aligned_file_in_the_mask_grey(monkeypatch, tmp_pa
                         lambda map_, path, **kw: drawn.append((str(path), kw)) or map_.add_layer("r", key=kw["key"]))
     p = _p()
     p.artifacts = {mask_key("forest"): _art("mask", "masks/mask_forest.tif")}
+    set_period_mask(p, FEB.id, "forest", mode="exclude")
     state = _state(p)
+    map_ = _Map()
+    layers = MapLayers(map_)
 
     async def main():
-        rc, seen, modal, _ = _card(monkeypatch, state)
+        rc, seen, modal, _ = _card(monkeypatch, state, map_=map_, layers=layers)
         try:
             _action(seen, "forest", "map_toggle")()
             [(path, kw)] = drawn
             assert path == str(paths.project_dir("mc") / "masks/mask_forest.tif")
             assert kw["colormap"] == raster_map.MASK_COLORMAP and kw["opacity"] == raster_map.MASK_OPACITY
-            assert kw["key"] == "mask:forest" and kw["nodata"] == 0
+            assert kw["key"] == "mask:forest" and kw["nodata"] == 0 and kw["name"] == "Mask forest"
+            (legend,) = layers.legends.value  # spec §9.4: the active period's choice
+            assert legend.label.key == "legend.name.mask" and legend.spec.labels[0].key == "legend.mask.exclude"
+            # the aligned file's content id is recorded: a re-run's refresh redraws
+            # a new file, and only a new one (spec §9.1)
+            assert layers.content_of("mask:forest") == "c"
+            layers.refresh("mask:forest", lambda: drawn.append("same"), "c")
+            layers.refresh("mask:forest", lambda: drawn.append("new"), "c2")
+            assert drawn[1:] == ["new"]
         finally:
             rc.close()
 

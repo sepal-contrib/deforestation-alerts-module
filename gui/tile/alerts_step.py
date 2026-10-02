@@ -143,33 +143,39 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         src = p.sources[name]
         row = rows_by_source.get(name)
         if row is not None and row.ready:
-            path = paths.resolve(pdir, p.artifacts[harm_key(period.id, name)].rel_path)
-            build = source_layers.harmonized_builder(map_, path, key, name)
-        elif is_file_source(src):
+            # spec §4.3: the harmonized raster under the preview's key, named by its period
+            harm = p.artifacts[harm_key(period.id, name)]
+            path = paths.resolve(pdir, harm.rel_path)
+            layers.show(key, source_layers.harmonized_builder(map_, path, key,
+                                                              source_layers.harmonized_name(name, period)),
+                        content_id=harm.content_id, notifier=notifications,
+                        legend=source_layers.harmonized_legend(key, name, period))
+            return
+        if is_file_source(src):
             notifications.info(t("steps.alerts.file_preview_after_harmonize"))
             return
-        else:
-            glad_l = meta.get("GLAD-L")
-            if src.kind == "predefined" and src.catalogue_key == "GLAD-L" and glad_l is None:
-                notifications.info(t("steps.alerts.meta_loading"))
-                return
-            a, b = catalogue_meta.preview_window(p, name)
-            try:
-                aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
-            except ValueError as exc:
-                notifications.error(str(exc))
-                return
+        glad_l = meta.get("GLAD-L")
+        if src.kind == "predefined" and src.catalogue_key == "GLAD-L" and glad_l is None:
+            notifications.info(t("steps.alerts.meta_loading"))
+            return
+        a, b = catalogue_meta.preview_window(p, name)
+        try:
+            aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
+        except ValueError as exc:
+            notifications.error(str(exc))
+            return
 
-            def build():
-                if src.kind == "predefined":
-                    img = catalogue.build_image(src.catalogue_key, a, b, aoi, glad_l or {})
-                else:
-                    img = catalogue.build_custom_image(src, a, b, aoi)
-                map_.add_ee_layer(img.select("alert"), raster_map.ALERT_EE_VIS, name=name, key=key)
+        def build():
+            if src.kind == "predefined":
+                img = catalogue.build_image(src.catalogue_key, a, b, aoi, glad_l or {})
+            else:
+                img = catalogue.build_custom_image(src, a, b, aoi)
+            map_.add_ee_layer(img.select("alert"), raster_map.ALERT_EE_VIS, name=source_layers.preview_name(name),
+                              key=key)
 
         # show, not toggle: a click behind a superseded build must be queued,
         # not dropped (controller drift notes).
-        layers.show(key, build, notifier=notifications)
+        layers.show(key, build, notifier=notifications, legend=source_layers.preview_legend(key, name, a, b))
 
     rows = []
     for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):

@@ -262,12 +262,15 @@ def test_toggle_on_ready_source_draws_the_harmonized_raster_then_toggles_off(mon
 
         toggle()  # off -> on: the ready gate takes the harmonized-raster branch
         expected_path = str(paths.resolve(paths.project_dir(p.name), "periods/x/harmonized/radd.tif"))
-        assert built == [(expected_path, "src:RADD", "RADD")]
-        assert layers.on.value == {"src:RADD"}
+        name = "RADD · 2026-01-01 → 2026-01-31"  # spec §4.3: the harmonized layer's name
+        assert built == [(expected_path, "src:RADD", name)]
+        assert layers.on.value == {"src:RADD"} and layers.content_of("src:RADD") == "c1"
+        (legend,) = layers.legends.value
+        assert legend.label.key == "legend.name.harmonized" and legend.spec.title.key == "legend.title.harmonized"
 
         toggle()  # on -> off: is_on branch hides, never calls the builder again
-        assert layers.on.value == frozenset()
-        assert built == [(expected_path, "src:RADD", "RADD")]
+        assert layers.on.value == frozenset() and layers.legends.value == ()
+        assert built == [(expected_path, "src:RADD", name)]
         assert "src:RADD" in map_.removed
     finally:
         rc.close()
@@ -340,7 +343,32 @@ def test_toggle_is_a_no_op_while_the_build_is_still_in_flight(monkeypatch, tmp_p
             assert not thread.is_alive(), "a map-layer worker hung"
 
         assert layers.is_on("src:RADD")
-        assert map_.ee_calls == [("RADD", "src:RADD")]
+        assert map_.ee_calls == [("RADD · preview", "src:RADD")]
+    finally:
+        rc.close()
+
+
+def test_a_preview_without_a_period_is_named_and_carries_its_legend(monkeypatch, tmp_path):
+    """Spec §4.3, §9.4: with no period, a covered RADD row previews its Earth
+    Engine alerts as "RADD · preview" with the preview legend."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "aoi")
+    monkeypatch.setattr(catalogue, "build_image",
+                        lambda key, a, b, aoi, meta: SimpleNamespace(select=lambda band: f"img.{band}"))
+    table_calls, _ = _stub_children(monkeypatch)
+    p = _project_with_source("RADD")
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+    box, rc = _render(_app_state(p), map_, object(), layers)
+    try:
+        table_calls[-1]["rows"][0]["actions"][0]["on_click"]()
+        assert map_.ee_calls == [("RADD · preview", "src:RADD")]
+        (legend,) = layers.legends.value
+        assert legend.layer_id == "src:RADD" and legend.label.key == "legend.name.preview"
+        a, b = catalogue_meta.preview_window(p, "RADD")
+        assert legend.spec.title.key == "legend.title.preview"
+        assert dict(legend.spec.title.args) == {"source": "RADD", "start": str(a), "end": str(b)}
     finally:
         rc.close()
 
@@ -586,7 +614,7 @@ def test_a_custom_earth_engine_source_previews_its_alert_band_over_the_covered_s
         row = next(r for r in table_calls[-1]["rows"] if r["key"] == "mine")
         row["actions"][0]["on_click"]()
         assert built == [("mine", date(2021, 3, 1), date(2025, 6, 30), "aoi")]
-        assert map_.ee_calls == [("mine", "src:mine")]
+        assert map_.ee_calls == [("mine · preview", "src:mine")]
     finally:
         rc.close()
 

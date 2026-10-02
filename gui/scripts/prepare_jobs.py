@@ -53,7 +53,7 @@ from deforestation_alerts.engine.runner import (
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
 from gui.i18n import t
-from gui.scripts import raster_map, source_layers
+from gui.scripts import source_layers
 from gui.scripts.coverage_ui import note_text, row_notes
 from gui.scripts.notify_bridge import (
     ERROR_TOAST_TIMEOUT,
@@ -212,21 +212,24 @@ def _warn_if_covers_none(ctx: PrepareContext, name: str, arts: dict) -> None:
 def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> None:
     """Redraw a row's layer already on the map from its new file (spec §6.2,
     §9.1; ``refresh`` rebuilds on a new content id): a source's harmonized
-    file (``src:<source>``), a mask's aligned file (``mask:<name>``)."""
+    file (``src:<source>``), a mask's aligned file (``mask:<name>``).
+    ``refresh`` replaces the layer's legend too, so each passes its own
+    (spec §9.4): a mask's names the live project's active-period choice."""
     if kind == "mask":
         art, key = arts.get(mask_key(name)), f"mask:{name}"
         if art is None or not ctx.layers.is_on(key):
             return
         path = paths.resolve(ctx.pdir, art.rel_path)
-        build = (lambda m=ctx.map_, f=path, k=key, n=name: raster_map.add_raster_layer(
-            m, f, key=k, name=n, band=1, colormap=raster_map.MASK_COLORMAP, vmin=1, vmax=1, nodata=0,
-            opacity=raster_map.MASK_OPACITY))
-        ctx.layers.refresh(key, build, art.content_id)
+        live = ctx.app_state.project.value
+        ctx.layers.refresh(key, source_layers.mask_builder(ctx.map_, path, key, source_layers.mask_name(name)),
+                           art.content_id, legend=source_layers.mask_layer_legend(live, name))
         return
     art, key = arts.get(harm_key(ctx.period.id, name)), f"src:{name}"
     if art is not None and ctx.layers.is_on(key):
         path = paths.resolve(ctx.pdir, art.rel_path)
-        ctx.layers.refresh(key, source_layers.harmonized_builder(ctx.map_, path, key, name), art.content_id)
+        build = source_layers.harmonized_builder(ctx.map_, path, key, source_layers.harmonized_name(name, ctx.period))
+        ctx.layers.refresh(key, build, art.content_id,
+                           legend=source_layers.harmonized_legend(key, name, ctx.period))
 
 
 def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:

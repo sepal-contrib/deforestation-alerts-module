@@ -298,6 +298,31 @@ def test_the_set_layer_is_drawn_only_while_the_overview_is_open(ov, tmp_path):
         rc.close()
 
 
+def test_the_set_layer_carries_the_sets_legend(ov, tmp_path, monkeypatch):
+    """Spec §9.4: the active set in Overview is shown with its legend (the
+    review-status colours, the PMTiles and the centroid fallback alike),
+    titled by the set's period and sources."""
+    shown = []
+    real_show = MapLayers.show
+
+    def show(self, key, build, content_id=None, notifier=None, legend=None):
+        shown.append((key, legend))
+        real_show(self, key, build, content_id=content_id, notifier=notifier, legend=legend)
+
+    monkeypatch.setattr(MapLayers, "show", show)
+    state = _state(_project(tmp_path), _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()
+        [(key, legend)] = [(k, lg) for k, lg in shown if k == KEY]
+        assert legend.layer_id == KEY and legend.spec.title.key == "legend.title.set"
+        assert dict(legend.spec.title.args) == {"period": JAN.id, "sources": "GLAD-L"}
+        assert legend.spec.colors == tuple(STATUS_COLORS[code] for code in sorted(STATUS_COLORS))
+        assert layers.legends.value == (legend,)
+    finally:
+        rc.close()
+
+
 def test_a_build_that_finds_the_overview_closed_does_nothing(ov, tmp_path):
     """Ruling #57: leaving Overview before its build runs skips tippecanoe."""
     state = _state(_project(tmp_path), _alerts())

@@ -20,7 +20,7 @@ from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
 from gui.i18n import t
-from gui.scripts import aoi_io, raster_map
+from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.prepare_jobs import _CELL_STATUS
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -208,13 +208,11 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         row = next((r for r in rows if r.name == name), None)
         if mask is None or row is None:
             return
+        layer_name, content_id = source_layers.mask_name(name), None
         if row.ready and art is not None:
-            path = paths.resolve(pdir, art.rel_path)
-
-            def build():
-                raster_map.add_raster_layer(map_, path, key=key, name=name, band=1,
-                                            colormap=raster_map.MASK_COLORMAP, vmin=1, vmax=1, nodata=0,
-                                            opacity=raster_map.MASK_OPACITY)
+            # its content id: a re-run's refresh redraws the new file (spec §9.1)
+            build = source_layers.mask_builder(map_, paths.resolve(pdir, art.rel_path), key, layer_name)
+            content_id = art.content_id
         elif mask.origin == "gee":  # before alignment: Earth Engine tiles of its non-zero pixels
             try:
                 aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
@@ -223,12 +221,13 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
                 return
 
             def build():
-                map_.add_ee_layer(build_mask_image(mask, aoi).selfMask(), raster_map.MASK_EE_VIS, name=name,
+                map_.add_ee_layer(build_mask_image(mask, aoi).selfMask(), raster_map.MASK_EE_VIS, name=layer_name,
                                   key=key, opacity=raster_map.MASK_OPACITY)
         else:
             return  # a GeoTIFF mask is shown once aligned (its toggle is disabled until then)
         # show, not toggle: a click behind a superseded build is queued, not dropped
-        layers.show(key, build, notifier=notifications)
+        layers.show(key, build, content_id=content_id, notifier=notifications,
+                    legend=source_layers.mask_layer_legend(p, name))
 
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,

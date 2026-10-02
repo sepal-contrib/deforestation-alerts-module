@@ -37,7 +37,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from gui.i18n import t
-from gui.scripts import aoi_io, prepare_jobs, raster_map
+from gui.scripts import aoi_io, prepare_jobs, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
@@ -408,8 +408,8 @@ def test_run_rows_marks_the_folder_busy_and_redraws_a_shown_source(monkeypatch, 
         busy.append(is_writing("d"))
         return arts[job.source]
 
-    def refresh(key, build, content_id):
-        refreshed.append((key, content_id))
+    def refresh(key, build, content_id, legend=None):
+        refreshed.append((key, content_id, legend))
         build()
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
@@ -420,8 +420,9 @@ def test_run_rows_marks_the_folder_busy_and_redraws_a_shown_source(monkeypatch, 
 
     assert busy == [True, True] and not is_writing("d")
     harm = arts["RADD"][harm_key(JAN.id, "RADD")]
-    assert refreshed == [("src:RADD", harm.content_id)]  # GLAD-L is not on the map
-    assert drawn == [("MAP", paths.resolve(tmp_path, harm.rel_path), "src:RADD", "RADD")]
+    # GLAD-L is not on the map; RADD's layer keeps its name and legend (spec §4.3, §9.4)
+    assert refreshed == [("src:RADD", harm.content_id, source_layers.harmonized_legend("src:RADD", "RADD", JAN))]
+    assert drawn == [("MAP", paths.resolve(tmp_path, harm.rel_path), "src:RADD", "RADD · 2026-01-01 → 2026-01-31")]
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +770,8 @@ def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, 
         assert toggle["kind"] == "map_toggle" and not toggle["disabled"] and not toggle["loading"]
         toggle["on_click"]()
         harm = p.artifacts[harm_key(JAN.id, "GLAD-L")]
-        assert drawn == [(paths.resolve(paths.project_dir("d"), harm.rel_path), "src:GLAD-L", "GLAD-L")]
+        assert drawn == [(paths.resolve(paths.project_dir("d"), harm.rel_path), "src:GLAD-L",
+                          "GLAD-L · 2026-01-01 → 2026-01-31")]
         assert step.table[-1][0]["actions"][2]["is_on"]
     finally:
         rc.close()
@@ -779,6 +781,49 @@ def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, 
     box, rc = _render(state, layers=busy)
     try:
         assert step.table[-1][0]["actions"][2]["loading"]
+    finally:
+        rc.close()
+
+
+def test_the_map_toggle_queues_a_click_behind_a_superseded_build_and_carries_its_legend(step, monkeypatch):
+    """Slice-1 deferral closed: the row's map toggle uses the Alerts step's
+    show/hide pattern, so a click while a superseded build of the key still
+    runs is queued, not dropped; a click on a layer still building is a
+    no-op; the layer lands named and with its legend (spec §4.3, §9.4)."""
+    import gui.scripts.map_layers as ml
+
+    jobs = []
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: jobs.append((target, args)))
+    drawn = []
+    monkeypatch.setattr(raster_map, "add_raster_layer",
+                        lambda map_, path, *, key, name: (drawn.append(name), map_.add_layer(name, key=key)))
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    p.artifacts.update(_arts("GLAD-L"))
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+
+    box, rc = _render(_state(p), layers=layers, map_=map_)
+    try:
+        def click():
+            step.table[-1][0]["actions"][2]["on_click"]()
+
+        click()  # starts a build
+        click()  # on and still building: a no-op, not a hide
+        assert layers.is_on("src:GLAD-L") and len(jobs) == 1
+        layers.hide("src:GLAD-L")  # switched off elsewhere: that build is now superseded
+        click()  # queued behind it, not dropped
+        assert layers.is_on("src:GLAD-L")
+        while jobs:
+            target, args = jobs.pop(0)
+            target(*args)
+        name = "GLAD-L · 2026-01-01 → 2026-01-31"
+        assert drawn == [name, name] and map_.layers == {"src:GLAD-L": name}
+        assert layers.content_of("src:GLAD-L") == p.artifacts[harm_key(JAN.id, "GLAD-L")].content_id
+        (legend,) = layers.legends.value
+        assert legend == source_layers.harmonized_legend("src:GLAD-L", "GLAD-L", JAN)
+        click()  # on and built: hides
+        assert not layers.is_on("src:GLAD-L") and layers.legends.value == () and map_.layers == {}
     finally:
         rc.close()
 
@@ -1310,6 +1355,40 @@ def test_the_masks_card_sits_between_the_grid_and_the_sources_and_runs_its_masks
     box, rc = _render(_state(p))
     try:
         assert order == []  # no grid: neither the card nor the table
+    finally:
+        rc.close()
+
+
+def test_mask_legends_follow_a_switch_and_the_active_period_without_a_rebuild(step, monkeypatch):
+    """Spec §7.3, §9.4: switching a mask's mode and changing the active
+    period give the mask's layer on the map the active period's choice; its
+    layer is not rebuilt."""
+    import gui.scripts.map_layers as ml
+    from deforestation_alerts.project.models import set_period_mask
+
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: target(*args))
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    p = _with_mask()
+    p.periods = {**p.periods, FEB.id: FEB}  # the mask is off in February
+    state = _state(p)
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+    built = []
+    layers.show("mask:forest", lambda: built.append(1), content_id="c",
+                legend=source_layers.mask_layer_legend(p, "forest"))
+
+    def label():
+        (entry,) = layers.legends.value
+        return entry.spec.labels[0].key
+
+    box, rc = _render(state, layers=layers, map_=map_)
+    try:
+        assert label() == "legend.mask.keep"
+        state.update_project("d", lambda live: set_period_mask(live, JAN.id, "forest", mode="exclude"))
+        assert label() == "legend.mask.exclude"
+        state.update_project("d", lambda live: setattr(live, "active_period", FEB.id))
+        assert label() == "legend.mask.off"
+        assert built == [1] and layers.content_of("mask:forest") == "c"
     finally:
         rc.close()
 
