@@ -44,6 +44,7 @@ import ipyvuetify as v
 import pytest
 import reacton
 import solara
+from pysepal.i18n import current_locale
 from pysepal.mapping import SepalMap
 from pysepal.solara.components.aoi import aoi_view
 from pysepal.solara.components.legend import LegendComponent
@@ -127,7 +128,7 @@ def _shell_component(name, threads, also=()):
         "logger": logging.getLogger("SEPALUI.deforestation_alerts"),
         "resolve_navigation": resolve_navigation, "apply_navigation": apply_navigation,
         "STEPS": STEPS, "RAIL_ITEMS": RAIL_ITEMS, "rail_item_for_step": rail_item_for_step,
-        "LegendComponent": LegendComponent,
+        "LegendComponent": LegendComponent, "current_locale": current_locale,
     }
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]
