@@ -97,6 +97,7 @@ DownloadBtns get ``$HOME``-relative URLs (``local_files.home_relative``).
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import ee
 import geopandas as gpd
@@ -114,7 +115,9 @@ from deforestation_alerts.scripts.report_builder import (
     format_list,
     generate_deforestation_report_with_word_template,
 )
+from gui.i18n import t
 from gui.scripts import set_store
+from gui.scripts.detached import render_detached
 from gui.scripts.notify_bridge import (
     current_notifier,
     tile_progress_reporter,
@@ -123,6 +126,7 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
+from gui.widget.report_template import ReportTemplateField
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -132,6 +136,33 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 _DEFAULT_REPORT_TEMPLATE = str(
     Path(__file__).resolve().parents[3] / "data" / "report_template.docx"
 )
+
+
+class ReportTemplateMissing(RuntimeError):
+    """The project's report template is gone from disk: the download writes nothing."""
+
+    key = "analysis_tile.export_labels.report_template_missing"
+
+    def __init__(self, path: str):
+        super().__init__(f"report template not found: {path}")
+        self.values = {"path": path}
+
+
+def report_template_path(template: Optional[str]) -> Path:
+    """The ``.docx`` a report is built from: the project's, or the app's default."""
+    if not template:
+        return Path(_DEFAULT_REPORT_TEMPLATE)
+    path = Path(template)
+    if not path.is_file():
+        raise ReportTemplateMissing(template)
+    return path
+
+
+def _download_error(exc: BaseException) -> str:
+    """The download's failure toast: a keyed refusal in the user's language."""
+    if isinstance(exc, ReportTemplateMissing):
+        return t(exc.key, **exc.values)
+    return str(exc) or exc.__class__.__name__
 
 
 def _save_target(app_tile_model):
@@ -397,6 +428,10 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     if not _images_picked(widgets, analysis):
         return None
 
+    # Before any file is written: a template gone from disk is a refusal, not
+    # a half-written set of downloads.
+    template = report_template_path(aux_model.custom_report_template)
+
     # Single-row GeoDataFrame for the selected alert.
     selected_element = alertas_gdf.iloc[actual_alert_id]
     selected_gdf = gpd.GeoDataFrame(
@@ -454,13 +489,8 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
         add_files_to_zip(str(zip_local), str(image_local), str(gpkg_local))
         local_files.copy_into(zip_local, zip_dest)
 
-        # Word report: the project's custom template (a file of the user's,
-        # read where it is) or the packaged default.
-        template = (
-            Path(aux_model.custom_report_template)
-            if aux_model.custom_report_template
-            else _DEFAULT_REPORT_TEMPLATE
-        )
+        # Word report: the project's template (a file of the user's, read
+        # where it is) or the packaged default, resolved above.
         generate_deforestation_report_with_word_template(
             str(image_local), str(gpkg_local), str(template), str(report_dest)
         )
@@ -642,7 +672,9 @@ def build_export(
             notifier = current_notifier()
             try:
                 with tracked_job(
-                    notifier, str(cm.analysis_tile.export_labels.download_task_title)
+                    notifier,
+                    str(cm.analysis_tile.export_labels.download_task_title),
+                    error_format=_download_error,
                 ) as task:
                     task.step(str(cm.analysis_tile.export_labels.download_step))
                     # Writer tracking: the report/zip generation writes into the
@@ -707,8 +739,13 @@ def build_export(
 
     _register_handlers()
 
+    # The project's report template (spec §10), a Solara field in the raw card.
+    template_field = render_detached(lambda: ReportTemplateField(app_state=app_state),
+                                     "report template", notify=False)[0]
+
     # ------------------------------------------------------------------
-    # Layout: OLD card06 = export title + toolBarSaveExport + toolBarDownloads
+    # Layout: OLD card06 = export title + (new) report template field +
+    # toolBarSaveExport + toolBarDownloads
     # (hidden). The OLD inline error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
     card = v.Card(
@@ -719,6 +756,7 @@ def build_export(
                 class_="pa-1 ma-1",
                 children=[cm.analysis_tile.export_labels.export_title],
             ),
+            template_field,
             ns["toolbar_save_export"],
             ns["toolbar_downloads"],
         ],

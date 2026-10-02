@@ -212,3 +212,29 @@ def test_composite_download_drives_the_task_progress_ring(download_ctx, monkeypa
         task=cached,
     )
     assert cached.progress == [None]
+
+
+def test_a_report_template_gone_from_disk_refuses_before_any_file_is_written(download_ctx):
+    ctx = download_ctx
+    folder = Path(ctx.app_tile_model.recipe_folder_path)
+    ctx.aux_model.custom_report_template = str(folder.parent / "gone.docx")
+    before = sorted(p.name for p in folder.iterdir())
+    with pytest.raises(export_mod.ReportTemplateMissing):
+        _run(ctx)
+    assert sorted(p.name for p in folder.iterdir()) == before
+
+
+def test_the_report_is_built_from_the_projects_template(download_ctx):
+    """A marker paragraph in the user's template reaches the report."""
+    import docx
+
+    ctx = download_ctx
+    folder = Path(ctx.app_tile_model.recipe_folder_path)
+    template = folder.parent / "mine.docx"
+    doc = docx.Document(export_mod._DEFAULT_REPORT_TEMPLATE)
+    doc.add_paragraph("MARKER-6f1c")
+    doc.save(template)
+    ctx.aux_model.custom_report_template = str(template)
+    result = _run(ctx)
+    text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
+    assert "MARKER-6f1c" in text

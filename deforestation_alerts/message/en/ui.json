@@ -240,7 +240,12 @@
                 "save_no_alert": "No alert is selected, so there is nothing to save.",
                 "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",
                 "save_set_changed": "The active alert set changed while saving, so this review was not saved.",
-                "save_store_changed": "This alert set was rebuilt while you were reviewing it, so the alerts on screen are out of date and this review was not saved. Review the rebuilt alerts instead."
+                "save_store_changed": "This alert set was rebuilt while you were reviewing it, so the alerts on screen are out of date and this review was not saved. Review the rebuilt alerts instead.",
+                "report_template_label": "Report template (.docx)",
+                "report_template_hint": "Every report of this project is built from this Word file. Leave it empty to use the app's default template.",
+                "report_template_no_project": "Open a project to choose its report template.",
+                "report_template_bad": "{path} is not a Word file (.docx) in your SEPAL folder; the report template was not changed.",
+                "report_template_missing": "The report template {path} is gone. Pick it again in the export card, or clear the field to use the default template."
         }
     }
 }

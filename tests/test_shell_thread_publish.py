@@ -83,6 +83,7 @@ from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
+from gui.widget.report_template import ReportTemplateField
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
@@ -208,6 +209,7 @@ def shell(data_root, monkeypatch):
             _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee))
             _detached("header", lambda: WorkflowHeader(app_state=state))
+            _detached("report_template", lambda: ReportTemplateField(app_state=state))
             tiles["banner"] = build_set_status_banner(state)
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
                         for key in ("aoi", "alerts", "period", "prepare", "integrate", "overview")}
@@ -285,7 +287,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog):
         await asyncio.sleep(0.2)
         shell.settle()
         before = _roots(shell)
-        assert len(before) == 9 and shell.reports == []
+        assert len(before) == 10 and shell.reports == []
 
         # Download & harmonize: a row's artifacts, applied by run_rows on its worker
         for source in ("GLAD-L", "RADD"):
