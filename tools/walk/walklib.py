@@ -26,14 +26,16 @@ ENV_BIN = Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin"
 TOAST_SPY = """
 (() => {
   window.__toasts = [];
-  const seen = new Set();
+  // keyed by the toast element, not its text: the same message toasted again
+  // (a second mask switch) is a new toast and must be recorded again
+  const seen = new WeakMap();
   setInterval(() => {
     for (const a of document.querySelectorAll('.toast-alert')) {
       const m = a.querySelector('.toast-message');
       if (!m) continue;
       const kind = [...a.classList].find(c => c.startsWith('toast-') && c !== 'toast-alert') || '';
       const key = kind + '|' + m.innerText;
-      if (!seen.has(key)) { seen.add(key); window.__toasts.push({t: Date.now(), kind, msg: m.innerText}); }
+      if (seen.get(a) !== key) { seen.set(a, key); window.__toasts.push({t: Date.now(), kind, msg: m.innerText}); }
     }
   }, 200);
 })();

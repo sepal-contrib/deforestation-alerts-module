@@ -104,3 +104,27 @@ def ensure_yymm_asset(bbox, months=(2603, 2604), name="defo_walk_yymm") -> str:
     if task.status()["state"] != "COMPLETED":
         raise RuntimeError(f"the export of {asset} failed: {task.status()}")
     return asset
+
+
+def probability_tif(path, bbox, *, everywhere=False) -> Path:
+    """A float32 mask band ``probability``, NaN no-data: 0.9 on the western half
+    and 0.0 on the eastern half with a NaN strip along the north (no-data, so
+    off); ``everywhere``: 0.9 on every pixel."""
+    profile, (h, w) = _profile(bbox, 1, "float32")
+    band = np.full((h, w), 0.9, "float32")
+    if not everywhere:
+        band[:, w // 2:] = 0.0
+        band[:3, :] = np.nan
+    with rasterio.open(path, "w", nodata=float("nan"), **profile) as dst:
+        dst.write(band, 1)
+        dst.descriptions = ("probability",)
+    return Path(path)
+
+
+def far_mask_tif(path) -> Path:
+    """A uint8 keep mask ``far`` over a box in the Congo basin, nowhere near the walks' AOIs."""
+    profile, (h, w) = _profile((20.0, 0.0, 20.05, 0.05), 1, "uint8")
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(np.ones((h, w), "uint8"), 1)
+        dst.descriptions = ("far",)
+    return Path(path)
