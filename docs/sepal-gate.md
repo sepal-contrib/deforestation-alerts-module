@@ -22,6 +22,9 @@ Every command below runs in that environment, from `~/defo-alerts-gate`. The
 app and the measurement write under `DATA_DIR`, which is
 `$DEFORESTATION_ALERTS_DATA_DIR` if set, else `~/module_results/deforestation_alerts`.
 
+The browser walks in `tools/walk/` (run locally, not part of this gate) need
+Playwright in the environment: `pip install playwright && playwright install chromium`.
+
 ## 1. The app through `/api/sandbox/jupyter/proxy/<port>`
 
 1. Start the app with `./run_ui.sh --port <port>` (it renders `ui.ipynb` with
@@ -39,7 +42,9 @@ app and the measurement write under `DATA_DIR`, which is
 5. Overview: the set's PMTiles requests (`.../alerts.pmtiles`) answer **206**
    and the polygons draw; the legend lists the four review statuses.
 6. Switch the language to Español and to Français: every step reads translated,
-   then back to English.
+   then back to English. Known limitation: the Analysis layout (its panel,
+   review, edit tools and export card) is built once and keeps the language it
+   was built in until the app is reloaded; it is not a fail.
 
 Pass: every request above answers as written, no error toast, no traceback in
 the Voila log. Tiles whose URL starts with `blob:` mean the jupyter-loopback

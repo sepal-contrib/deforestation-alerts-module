@@ -169,9 +169,12 @@ def english_left(text, code) -> list:
 
 
 def _switch(page, code):
+    """Pick ``code`` in the language selector and wait until the pipeline
+    header reads that language (the prepare segment's tooltip is its label)."""
     page.locator("button:has(.mdi-translate)").first.click()
     page.locator(f'.v-dialog--active .v-list-item:has-text("({code})")').first.click()
-    page.wait_for_timeout(3000)
+    label = catalogue(code, "app")["app"]["drawer_item"]["prepare"]
+    page.locator(f'[data-step-key="prepare"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
 
 
 def languages(page, rec, *, out):
@@ -182,6 +185,8 @@ def languages(page, rec, *, out):
         _switch(page, code)
         title = catalogue(code, "steps")["steps"]["prepare"]["title"]
         description = catalogue(code, "steps")["steps"]["prepare"]["description"]
+        w.wait_for(lambda: title in w.panel_text(page) and english_title not in w.panel_text(page)
+                   and description[:60] in w.panel_text(page), 60, f"{code}: the prepare panel translated")
         body = page.evaluate("() => document.body.innerText")
         assert "⟦" not in body, f"{code}: a missing key renders"
         assert title in w.panel_text(page) and english_title not in w.panel_text(page), f"{code}: step not translated"
@@ -191,8 +196,21 @@ def languages(page, rec, *, out):
             w.goto_step(page, key, 1500)
             left = english_left(w.panel_text(page), code)
             assert not left, f"{code}: the {key} step still reads {left}"
+        # Analysis was built in English earlier in the walk. Its build-once
+        # layout does not follow a live switch (a known limitation, final
+        # review B: accepted for this merge, in docs/sepal-gate.md), so the
+        # walk records whether it does instead of failing on it.
+        ui = catalogue(code, "ui")["analysis_tile"]
+        w.goto_step(page, "analysis", 1500)
+        try:
+            w.wait_for(lambda: ui["description"][:60] in w.panel_text(page), 15, f"{code}: Analysis translated")
+            rec[f"{code}_analysis_follows_switch"] = True
+        except AssertionError:
+            rec[f"{code}_analysis_follows_switch"] = False
         page.locator('[data-step-id="3"]').first.click()  # Overview: its set layer and legend
-        page.wait_for_timeout(6000)
+        statuses = list(catalogue(code, "legend")["legend"]["status"].values())
+        w.wait_for(lambda: all(v in ph.legend_text(page) for v in statuses), 60,
+                   f"{code}: the Overview set's legend")
         left = english_left(w.panel_text(page), code)
         assert not left, f"{code}: the Overview still reads {left}"
         legend = ph.legend_text(page)  # LegendComponent's div.sepal-legend (z-index 150; not a v-card)
@@ -200,14 +218,13 @@ def languages(page, rec, *, out):
         assert legend, f"{code}: no floating legend found"
         leftover = sorted(v for v in english_legend if v in legend and v not in leaves(catalogue(code, "legend")))
         assert not leftover, f"{code}: the legend still reads {leftover}"
-        statuses = list(catalogue(code, "legend")["legend"]["status"].values())
         assert all(v in legend for v in statuses), f"{code}: the legend lacks {statuses}"
         w.shot(page, out, f"lang_{code}")
         page.locator(".right-panel button:has(.mdi-arrow-left):visible").first.click()  # Overview's "back to workflow"
-        page.wait_for_timeout(1500)
+        page.locator('[data-step-key="prepare"]:visible').first.wait_for(timeout=30000)
     _switch(page, "en")
     w.goto_step(page, "prepare", 2000)
-    assert english_title in w.panel_text(page), "the app did not switch back to English"
+    w.wait_for(lambda: english_title in w.panel_text(page), 60, "the app back in English")
     rec["back_to_en"] = True
 
 
@@ -215,8 +232,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8986)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice6_walk"))
+    ap.add_argument("--data", type=Path, default=Path.home() / "module_results" / "deforestation_alerts_walk_slice6",
+                    help="the walk's data dir (DEFORESTATION_ALERTS_DATA_DIR); keep it under $HOME")
     args = ap.parse_args(argv)
-    data = Path.home() / "module_results" / "deforestation_alerts_walk_slice6"
+    data = args.data
     seed(PROJECT, BOX, sources=("GLAD-L", "RADD"), period=("2025-06-01", "2026-08-31"), look_back=0, root=data)
     for name in OTHERS:
         seed(name, BOX, root=data)

@@ -21,7 +21,9 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-ENV_BIN = Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin"
+# The app environment's bin folder (run_ui.sh's jupyter and voila):
+# $DEFO_ALERTS_ENV_BIN, else the micromamba env the runbook creates.
+ENV_BIN = Path(os.environ.get("DEFO_ALERTS_ENV_BIN") or Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin")
 
 TOAST_SPY = """
 (() => {
@@ -149,15 +151,25 @@ def dialog_text(page):
         return c ? c.innerText : ''; }""")
 
 
+def _closed(page, timeout=5.0) -> bool:
+    """Wait up to ``timeout`` s for the rail dialog to close; whether it did."""
+    t0 = time.time()
+    while dialog_visible(page):
+        if time.time() - t0 > timeout:
+            return False
+        time.sleep(0.1)
+    return True
+
+
 def close_dialog(page):
     if dialog_visible(page):
         btn = page.locator(".dialog-card .v-card__title button:visible").first
         if btn.count():
             btn.click(timeout=5000)
-            page.wait_for_timeout(700)
+            _closed(page)
     if dialog_visible(page):
         page.keyboard.press("Escape")
-        page.wait_for_timeout(700)
+        _closed(page)
     return not dialog_visible(page)
 
 
