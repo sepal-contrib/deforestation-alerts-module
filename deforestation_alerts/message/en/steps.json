@@ -144,7 +144,12 @@
       "mask_name_duplicate": "Another mask already has this name.",
       "mask_name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
       "mask_name_token_taken": "This name would share its file names with another mask; choose another.",
-      "mask_edit_used": "An alert set already uses this mask: add a new one instead."
+      "mask_edit_used": "An alert set already uses this mask: add a new one instead.",
+      "sidecar_failed": "Could not fetch the AOI's geometry for the GeoTIFF inputs: {error}",
+      "result_pixels": "ready · {n} alert pixels",
+      "result_none": "ready · 0 alerts found",
+      "result_all_masked": "ready · all {n} alert pixels removed by masks",
+      "file_missing": "missing: file not found: {path}"
     },
     "integrate": {
       "title": "Integrate & vectorize",

@@ -33,7 +33,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from gui.i18n import t
-from gui.scripts import aoi_io, catalogue_meta, prepare_jobs, raster_map
+from gui.scripts import aoi_io, prepare_jobs, raster_map
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
@@ -427,10 +427,10 @@ def _render(state, layers=None, map_=None):
 
 @pytest.fixture
 def step(monkeypatch, tmp_path):
-    """No Earth Engine: the catalogue hook returns the cache as is."""
+    """No Earth Engine: the step only reads ``catalogue_meta`` (``_state``
+    pre-fills GLAD-L's entry where a test needs it; RemoteFactsLoader fetches it
+    in the app)."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                        lambda app_state, gee_interface: app_state.catalogue_meta.value)
     ns = SimpleNamespace(table=[], jobs=[], started=[])
 
     @solara.component

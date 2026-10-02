@@ -1,5 +1,7 @@
 """Alerts step (spec §6.2): the project's alert sources, previewed on the map."""
 
+from datetime import date
+
 import solara
 from pysepal.solara.notifications import use_notifications
 
@@ -28,7 +30,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
     on = layers.on.value  # subscribe: the map-toggle icons follow the registry
     modal_open = solara.use_reactive(False)
     pending_delete, set_pending_delete = solara.use_state(None)
-    meta = catalogue_meta.use_catalogue_meta(app_state, gee_interface)
+    meta = app_state.catalogue_meta.value  # fetched by RemoteFactsLoader
 
     if p is None or p.aoi is None:
         solara.Info(t("workflow.lock_alerts"))
@@ -76,7 +78,11 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             path = paths.resolve(pdir, harm.rel_path)
             build = lambda: raster_map.add_raster_layer(map_, path, key=key, name=name)  # noqa: E731
         else:
-            key_meta = meta.get(src.catalogue_key)
+            # only GLAD-L's builder reads metadata (its band list); RADD's and
+            # GLAD-S2's read none, and the ``end`` only bounds the no-period
+            # preview window until Task 18 takes it from the coverage
+            key_meta = (meta.get("GLAD-L") if src.catalogue_key == "GLAD-L"
+                        else {"end": date.today().isoformat()})
             if key_meta is None:
                 notifications.info(t("steps.alerts.meta_loading"))
                 return

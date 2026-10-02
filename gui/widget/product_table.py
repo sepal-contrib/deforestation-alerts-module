@@ -35,8 +35,12 @@ HEADER_CELL = (
     "display:block;min-width:0;overflow:hidden;"
     "text-overflow:ellipsis;white-space:nowrap;"
 )
-# Full-width line under a failed row (grid rows have no subtitle slot).
+# Full-width line under a row (grid rows have no subtitle slot): its notes.
 ERROR_LINE = "grid-column:1/-1;padding:0 8px 5px;font-size:0.75rem;"
+
+#: Vuetify text classes of an under-row note's tone (None: muted)
+NOTE_CLASSES = {"info": "info--text", "warning": "warning--text", "error": "error--text",
+                "success": "success--text", None: "text--secondary"}
 
 ACTIONS_COL_WIDTH = "112px"
 
@@ -53,6 +57,8 @@ STATUS_COLORS = {
     "stale": "warning",
     "missing": "grey",
     "no_data": "grey",
+    "not_covered": "grey",
+    "unchecked": "grey",
 }
 STATUS_ICONS = {
     "running": "mdi-loading mdi-spin",
@@ -63,6 +69,8 @@ STATUS_ICONS = {
     "stale": "mdi-alert",
     "missing": "mdi-circle-outline",
     "no_data": "mdi-minus-circle-outline",
+    "not_covered": "mdi-map-marker-off-outline",
+    "unchecked": "mdi-help-circle-outline",
 }
 
 _ACTION_ICONS = {
@@ -186,8 +194,11 @@ def ProductTable(
         columns: content columns ``[{"label", "width"?}]``; an Actions column
             is appended automatically when ``show_actions``.
         rows: ``[{"key", "cells": [CellSpec], "actions": [ActionSpec],
-            "error": str|None}]``. See module docstring / spec for CellSpec
-            and ActionSpec shapes.
+            "notes": [{"text": str, "tone": "info"|"warning"|"error"|
+            "success"|None}], "error": str|None}]``. Each note is a line
+            under the row in its tone's colour (None: muted); ``error`` is
+            one more error-tone note after them. See module docstring /
+            spec for CellSpec and ActionSpec shapes.
         empty_text: grey placeholder when there are no rows.
         collapsible: show the collapse chevron (expanded by default).
         show_actions: False = read-only mode (Summary popup).
@@ -255,10 +266,9 @@ def ProductTable(
                             with rv.Html(tag="div", style_=CELL_RIGHT):
                                 for act in row.get("actions", []):
                                     _render_action(act)
+                        notes = list(row.get("notes") or [])
                         if row.get("error"):
-                            rv.Html(
-                                tag="span",
-                                class_="error--text",
-                                style_=ERROR_LINE,
-                                children=[str(row["error"])],
-                            )
+                            notes.append({"text": str(row["error"]), "tone": "error"})
+                        for note in notes:
+                            rv.Html(tag="span", class_=NOTE_CLASSES.get(note.get("tone"), "text--secondary"),
+                                    style_=ERROR_LINE, children=[str(note["text"])])

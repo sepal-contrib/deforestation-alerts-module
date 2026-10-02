@@ -49,9 +49,16 @@ class AppState:
         self.save_error = solara.reactive(None)
         # pysepal AoiResult of the current selection (holds ee objects; not saved)
         self.aoi_result = solara.reactive(None)
-        # predefined-source catalogue metadata (coverage end, GLAD-L bands),
-        # fetched once per session by gui.scripts.catalogue_meta; not saved
+        # GLAD-L's band list (its builder needs it), fetched once per session
+        # by gui.scripts.remote_facts.RemoteFactsLoader; not saved
         self.catalogue_meta = solara.reactive({})
+        # Earth Engine facts fetched by gui.scripts.remote_facts.RemoteFactsLoader
+        # (not saved; the coverage itself is saved in the project)
+        self.coverage_pending = solara.reactive(False)
+        self.coverage_error = solara.reactive(None)
+        self.coverage_retry = solara.reactive(0)  # "Check again" bumps it
+        self.coverage_refreshed = solara.reactive(frozenset())  # {(aoi_digest, key)} refreshed this session
+        self.sidecar_pending = solara.reactive(False)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the
         # auto-save hook skips that publish (it would just rewrite the file).

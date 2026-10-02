@@ -106,7 +106,7 @@ def _project_with_source(name="RADD"):
 def _app_state(p):
     state = AppState()
     state.project.value = p
-    state.catalogue_meta.value = {k: {"end": "2026-09-20"} for k in catalogue.KEYS}
+    state.catalogue_meta.value = {"GLAD-L": {"bands": ["conf25", "conf26"], "end": "2026-09-20"}}
     return state
 
 
@@ -183,8 +183,6 @@ def _render(app_state, map_, gee_interface, layers):
 def test_toggle_on_reports_the_ee_aoi_error_and_stays_off(monkeypatch, tmp_path):
     """Not-ready path (no active period) + the ee_aoi ValueError catch."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     table_calls, _ = _stub_children(monkeypatch)
 
     p = _project_with_source()
@@ -214,8 +212,6 @@ def test_toggle_on_ready_source_draws_the_harmonized_raster_then_toggles_off(mon
     the is_on branch hides (not rebuilds) on the next click."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     _sync_spawn(monkeypatch)
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     table_calls, _ = _stub_children(monkeypatch)
 
     built = []
@@ -265,8 +261,6 @@ def test_toggle_is_a_no_op_while_the_build_is_still_in_flight(monkeypatch, tmp_p
     building must not hide it or start a second build."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     threads = _track_threads(monkeypatch)
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "dummy-aoi")
     table_calls, _ = _stub_children(monkeypatch)
 
@@ -312,8 +306,6 @@ def test_toggle_is_a_no_op_while_the_build_is_still_in_flight(monkeypatch, tmp_p
 def test_delete_flow_hides_the_layer_and_removes_the_source(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     _sync_spawn(monkeypatch)
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     table_calls, confirm_calls = _stub_children(monkeypatch)
 
     p = _project_with_source()
@@ -347,8 +339,6 @@ def test_delete_removes_the_sources_artifacts_and_their_files(monkeypatch, tmp_p
     deletes their files from disk, not only the source definition."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     _sync_spawn(monkeypatch)
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     table_calls, confirm_calls = _stub_children(monkeypatch)
 
     p = _project_with_source()
@@ -396,8 +386,6 @@ def test_delete_is_refused_while_a_writer_runs(monkeypatch, tmp_path):
 
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     _sync_spawn(monkeypatch)
-    monkeypatch.setattr(catalogue_meta, "use_catalogue_meta",
-                         lambda app_state, gee_interface: app_state.catalogue_meta.value)
     table_calls, confirm_calls = _stub_children(monkeypatch)
 
     p = _project_with_source()

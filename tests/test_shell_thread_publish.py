@@ -10,22 +10,23 @@ dependencies change on the save, an ``asyncio.create_task``) raises out of
 the publish, as the Project dialog's list did after ``ab1d1e6``. Here every
 tile the shell mounts is rendered for real (``AboutTile``, ``ProjectDialog``,
 ``OverviewTile``, the five step tiles with pysepal's own ``AoiView``, the
-workflow header, the Analysis set-status banner) together with the four
+workflow header, the Analysis set-status banner) together with the five
 leaves ``_AppShell`` renders in its own context (``_NavBridge``,
 ``_PanelBridge``, ``_ActiveSetLoader``, ``MapLegend``, compiled from
-gui/solara_app.py as tests/test_active_set_loader.py does), and a worker
-thread drives both entry points, ``AppState.update_project`` and
-``AppState.commit``, through the changes each worker makes: artifacts
-recorded row by row, a set recorded and its alerts published, the navigation
-to Analysis, a Save under the project's writer mark, a layer build landing
-its legend on its own thread. Nothing may raise into the worker and no tile
-may fail its render (``render_detached`` reports those; the report is
-recorded here).
+gui/solara_app.py as tests/test_active_set_loader.py does, and
+``RemoteFactsLoader``), and a worker thread drives both entry points,
+``AppState.update_project`` and ``AppState.commit``, through the changes
+each worker makes: artifacts recorded row by row, a set recorded and its
+alerts published, the navigation to Analysis, a Save under the project's
+writer mark, a layer build landing its legend on its own thread. Nothing may
+raise into the worker and no tile may fail its render (``render_detached``
+reports those; the report is recorded here).
 
-Earth Engine is not touched: the catalogue metadata is pre-filled (so the
-shared metadata task has nothing to fetch), ``AoiView``'s ``init_ee`` is a
-no-op and the maps carry a stand-in interface. ``view_actual_alert`` (raw
-widgets, Earth Engine for its bounding box) is not wired.
+Earth Engine is not touched: GLAD-L's metadata and the AOI's coverage are
+pre-filled (so the loader's tasks have nothing to fetch), ``AoiView``'s
+``init_ee`` is a no-op and the maps carry a stand-in interface.
+``view_actual_alert`` (raw widgets, Earth Engine for its bounding box) is not
+wired.
 """
 
 import ast
@@ -50,7 +51,6 @@ from pysepal.solara.notifications import NotificationProvider, use_notifications
 from shapely.geometry import box
 from traitlets import HasTraits, Int
 
-from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.fingerprint import harm_key, raw_key
 from deforestation_alerts.engine.runner import apply_artifacts
@@ -62,6 +62,8 @@ from deforestation_alerts.project.models import (
     Artifact,
     Period,
     Project,
+    RegionCoverage,
+    SourceCoverage,
     add_predefined_source,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
@@ -71,6 +73,7 @@ from gui.scripts import detached, legend_specs, map_layers, set_store
 from gui.scripts.detached import render_detached
 from gui.scripts.integrate_jobs import _publish_alerts, apply_result
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
 from gui.store.navigation import apply_navigation, dismiss_dialog, resolve_navigation
@@ -152,6 +155,10 @@ def _project():
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
     p.grid = gridmod.build_grid(PARAGUAY, gridmod.auto_utm_epsg(PARAGUAY), 30.0)
+    p.coverage = {k: SourceCoverage(aoi_digest="d1", checked_on=date.today(), fraction=1.0,
+                                    regions=[RegionCoverage(name=k, fraction=1.0, first=date(2000, 1, 1),
+                                                            last=date(2100, 1, 1))])
+                  for k in ("GLAD-L", "RADD", "GLAD-S2")}
     return p
 
 
@@ -175,7 +182,8 @@ def shell(data_root, monkeypatch):
     monkeypatch.setattr(detached, "_report", lambda name, text, notify: reports.append((name, text)))
 
     state = AppState()
-    state.catalogue_meta.value = {k: {"end": "2026-09-20"} for k in catalogue.KEYS}
+    state.catalogue_meta.value = {"GLAD-L": {"bands": ["conf25", "conf26"], "end": "2026-09-20"}}
+    state.coverage_refreshed.value = frozenset({("d1", k) for k in ("GLAD-L", "RADD", "GLAD-S2")})
     unsubscribe = install_autosave(state)
     threads = []
     nav_bridge = _shell_component("_NavBridge", threads)
@@ -232,6 +240,7 @@ def shell(data_root, monkeypatch):
                      workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
         set_loader(app_state=state, layers=layers, map_=map_)
         map_legend(app_state=state, layers=layers)
+        RemoteFactsLoader(app_state=state, gee_interface=gee)
         tiles["stage_host"] = stage_host
 
     holder = {}

@@ -29,7 +29,9 @@
       "status_cancelled": "cancelled",
       "status_stale": "out of date",
       "status_missing": "missing",
-      "status_no_data": "no data"
+      "status_no_data": "no data",
+      "status_not_covered": "not covered",
+      "status_unchecked": "not checked"
     },
     "artifact_name": {
       "label": "Name",

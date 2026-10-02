@@ -54,6 +54,7 @@ from gui.store.navigation import (
 from gui.i18n import app_available_locales, t
 from gui.scripts import set_store
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.set_context import SetContext
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
@@ -727,3 +728,4 @@ def _AppShell():
         workflow_config=WORKFLOW_PANEL_CONFIG,
     )
     _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)
+    RemoteFactsLoader(app_state=app_state, gee_interface=gee_interface)

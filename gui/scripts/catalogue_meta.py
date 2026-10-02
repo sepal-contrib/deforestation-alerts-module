@@ -1,26 +1,12 @@
-"""Catalogue metadata (coverage end, GLAD-L band list) fetched once per session.
+"""Helpers over the catalogue metadata in ``app_state.catalogue_meta``.
 
-``use_catalogue_meta`` is the one loader every step that previews a predefined
-source calls (ruling #68): it fetches what is still missing from
-``app_state.catalogue_meta`` on a worker-free async task and reports a failure
-as a toast, so the alerts and prepare steps share one fetch instead of each
-running (and silently swallowing) its own.
+``gui.scripts.remote_facts.RemoteFactsLoader`` fetches it (GLAD-L's band
+list, once per session); the steps only read it.
 """
 
 from datetime import date
 
-import solara
-from pysepal.solara.notifications import use_notifications
-
 from deforestation_alerts.engine import catalogue
-from gui.i18n import t
-
-
-async def fetch_meta(gee_interface, keys) -> dict:
-    out = {}
-    for key in keys:
-        out[key] = await gee_interface.get_info_async(catalogue.meta_request(key))
-    return out
 
 
 def coverage_text(key: str, meta) -> str:
@@ -37,34 +23,3 @@ def preview_window(project, meta, key) -> tuple[date, date]:
     # No active period yet: preview the whole catalogue (spec §6.2), not a
     # fixed look-back window.
     return catalogue.coverage(key, meta)
-
-
-def use_catalogue_meta(app_state, gee_interface) -> dict:
-    """The session-cached catalogue metadata, fetching whatever is missing.
-
-    A hook so every step that needs it (alerts, prepare) shares one fetch and
-    one cache instead of each running its own copy of the task.
-    """
-    notifications = use_notifications()
-    p = app_state.project.value
-
-    async def _load():
-        missing = [k for k in catalogue.KEYS if k not in app_state.catalogue_meta.value]
-        if missing:
-            fetched = await fetch_meta(gee_interface, missing)
-            app_state.catalogue_meta.set({**app_state.catalogue_meta.value, **fetched})
-
-    # dependencies=[p is not None]: runs on mount, then again only when a
-    # project opens or closes (not on every project switch) -- the catalogue
-    # is session-wide, not per-project, so ``missing`` is empty and the task
-    # is a no-op on every rerun after the first successful fetch.
-    task = solara.lab.use_task(_load, dependencies=[p is not None], prefer_threaded=False, raise_error=False)
-
-    def _on_error():
-        if task.error:
-            error = str(task.exception) or task.exception.__class__.__name__
-            notifications.error(t("steps.alerts.meta_failed", error=error))
-
-    solara.use_effect(_on_error, [task.pending, task.finished, task.error, task.cancelled])
-
-    return app_state.catalogue_meta.value

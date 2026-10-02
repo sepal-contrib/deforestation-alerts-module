@@ -1,0 +1,195 @@
+"""Earth Engine facts the steps need, fetched by one always-mounted leaf.
+
+- GLAD-L's band list (``catalogue.meta_request("GLAD-L")``), once per session;
+- the coverage of every source for the open project's AOI (spec §6.2): the
+  three predefined entries once per session and AOI (their last days move
+  daily), a custom entry whenever its record is missing or for another AOI;
+- the ``aoi.geojson`` sidecar of an admin or asset AOI once the project has a
+  GeoTIFF source or mask (spec §7.2).
+
+Each is a ``use_task(prefer_threaded=False)`` (``await
+gee_interface.get_info_async``) whose dependencies are values no worker
+publish changes (the project name, the AOI digest, the names to check, where
+the AOI geometry comes from, a retry counter): a worker's ``update_project``
+re-renders this leaf on its own thread, where a task restart would find no
+event loop (slice-1 NB1). Results are written with ``update_project`` from the
+task, on the loop, only into the project and AOI they were fetched for. A
+leaf, so nothing else re-renders when these reactives change.
+"""
+
+import asyncio
+import json
+import logging
+import os
+from datetime import date
+
+import solara
+from pysepal.solara.notifications import use_notifications
+
+from deforestation_alerts.engine import catalogue
+from deforestation_alerts.engine.coverage import coverage_request, parse_coverage, record_for
+from deforestation_alerts.engine.fingerprint import is_file_source
+from deforestation_alerts.project import paths
+from deforestation_alerts.project.models import PREDEFINED_KEYS
+from gui.i18n import t
+from gui.scripts import aoi_io
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
+
+
+def coverage_needed(p, refreshed) -> tuple:
+    """``(predefined keys, custom names)`` whose coverage the AOI still needs.
+
+    A predefined entry once per session and AOI (``refreshed`` holds the
+    ``(aoi_digest, key)`` pairs fetched this session), and again for a
+    project without its record (another project with the same AOI was
+    refreshed); a custom entry whenever its record is missing or stale.
+    """
+    if p is None or p.aoi is None:
+        return (), ()
+    digest = p.aoi.digest
+    pre = tuple(k for k in PREDEFINED_KEYS if (digest, k) not in refreshed or record_for(p, k) is None)
+    custom = tuple(sorted(n for n, s in p.sources.items() if s.kind == "custom" and record_for(p, n) is None))
+    return pre, custom
+
+
+def has_file_inputs(p) -> bool:
+    return p is not None and (any(is_file_source(s) for s in p.sources.values())
+                              or any(getattr(m, "origin", None) == "file" for m in p.masks.values()))
+
+
+def sidecar_needed(p) -> bool:
+    return p is not None and p.aoi is not None and p.aoi.geometry_file is None and has_file_inputs(p)
+
+
+def aoi_origin(p, result):
+    """Where the open AOI's geometry is read from: ``"result"`` (the picker's
+    selection), ``"sidecar"`` (``aoi.geojson``) or None (not available yet).
+
+    The AOI step publishes a changed AOI before it hands the new selection to
+    ``aoi_result``, so for a moment that reactive still holds the previous
+    AOI's. An Earth Engine selection names its AOI (``aoi_io.lazy_digest``)
+    and is used only when it names this one; a local selection (drawn,
+    uploaded) does not, so the sidecar, replaced together with the AOI, is
+    read instead.
+    """
+    if p is None or p.aoi is None:
+        return None
+    if result is not None and aoi_io.lazy_digest(result) == p.aoi.digest:
+        return "result"
+    return "sidecar" if p.aoi.geometry_file is not None else None
+
+
+def _error_text(exc) -> str:
+    return str(exc) or exc.__class__.__name__
+
+
+def _stage_sidecar(name, pdir, info):
+    """Off the loop: the fetched AOI as ``aoi.geojson`` staged in ``pdir``."""
+    logger.info("AOI sidecar of %s: %d features, %d bytes", name, len(info.get("features") or ()),
+                len(json.dumps(info)))  # national AOIs approach Earth Engine's response limits
+    return aoi_io.stage_sidecar(pdir, aoi_io.sidecar_gdf(info))
+
+
+def _unlink_result(fut) -> None:
+    if not fut.cancelled() and fut.exception() is None:
+        fut.result().unlink(missing_ok=True)
+
+
+@solara.component
+def RemoteFactsLoader(app_state, gee_interface):
+    notifications = use_notifications()
+    p = app_state.project.value
+    name = p.name if p is not None else None
+    digest = p.aoi.digest if p is not None and p.aoi is not None else None
+    pre, custom = coverage_needed(p, app_state.coverage_refreshed.value)
+    result = app_state.aoi_result.value
+    origin = aoi_origin(p, result)
+    retry = app_state.coverage_retry.value
+    need_sidecar = sidecar_needed(p)
+
+    # ---- GLAD-L's band list, once per session
+    async def _meta():
+        if p is None or "GLAD-L" in app_state.catalogue_meta.value:
+            return
+        info = await gee_interface.get_info_async(catalogue.meta_request("GLAD-L"))
+        app_state.catalogue_meta.set({**app_state.catalogue_meta.value, "GLAD-L": info})
+
+    meta_task = solara.lab.use_task(_meta, dependencies=[p is not None, retry], prefer_threaded=False,
+                                    raise_error=False)
+
+    # ---- coverage of the AOI
+    async def _coverage():
+        if origin is None or not (pre or custom):
+            return
+        live = app_state.project.value
+        customs = [live.sources[n] for n in custom if n in live.sources]
+        app_state.coverage_pending.set(True)
+        try:
+            pdir = paths.project_dir(name)
+            aoi = aoi_io.ee_aoi(result, None) if origin == "result" else aoi_io.ee_aoi(None, pdir)
+            raw = await gee_interface.get_info_async(coverage_request(aoi, pre, customs))
+        finally:
+            app_state.coverage_pending.set(False)
+        records = parse_coverage(raw, aoi_digest=digest, today=date.today())
+
+        def _apply(project):
+            if project.aoi is None or project.aoi.digest != digest:
+                return  # the AOI changed meanwhile: these shares are another AOI's
+            project.coverage = {**project.coverage, **records}
+
+        if app_state.update_project(name, _apply):
+            app_state.coverage_refreshed.set(app_state.coverage_refreshed.value | {(digest, k) for k in pre})
+            app_state.coverage_error.set(None)
+
+    cov_task = solara.lab.use_task(_coverage, dependencies=[name, digest, pre, custom, origin, retry],
+                                   prefer_threaded=False, raise_error=False)
+
+    # ---- the AOI geometry of an Earth Engine AOI, for GeoTIFF inputs
+    async def _sidecar():
+        if not need_sidecar or origin != "result":
+            return
+        pdir = paths.project_dir(name)
+        app_state.sidecar_pending.set(True)
+        try:
+            info = await gee_interface.get_info_async(aoi_io.sidecar_request(aoi_io.ee_aoi(result, None)))
+            staging = asyncio.ensure_future(asyncio.to_thread(_stage_sidecar, name, pdir, info))
+            try:
+                staged = await asyncio.shield(staging)
+            except asyncio.CancelledError:
+                staging.add_done_callback(_unlink_result)  # restarted: the staged file is nobody's
+                raise
+        finally:
+            app_state.sidecar_pending.set(False)
+
+        def _apply(project):
+            if project.aoi is None or project.aoi.digest != digest:
+                return
+            os.replace(staged, pdir / paths.AOI_SIDECAR)
+            project.aoi = project.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR})
+
+        try:
+            app_state.update_project(name, _apply)
+        finally:
+            staged.unlink(missing_ok=True)
+
+    side_task = solara.lab.use_task(_sidecar, dependencies=[name, digest, need_sidecar, origin],
+                                    prefer_threaded=False, raise_error=False)
+
+    def _on_meta_error():
+        if meta_task.error:
+            notifications.error(t("steps.alerts.meta_failed", error=_error_text(meta_task.exception)))
+
+    def _on_cov_error():
+        if cov_task.error:
+            message = _error_text(cov_task.exception)
+            app_state.coverage_error.set(message)
+            notifications.error(t("coverage.check_failed", error=message))
+
+    def _on_side_error():
+        if side_task.error:
+            notifications.error(t("steps.prepare.sidecar_failed", error=_error_text(side_task.exception)))
+
+    solara.use_effect(_on_meta_error, [meta_task.pending, meta_task.finished, meta_task.error, meta_task.cancelled])
+    solara.use_effect(_on_cov_error, [cov_task.pending, cov_task.finished, cov_task.error, cov_task.cancelled])
+    solara.use_effect(_on_side_error, [side_task.pending, side_task.finished, side_task.error, side_task.cancelled])

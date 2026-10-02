@@ -25,7 +25,7 @@ from deforestation_alerts.engine.fingerprint import Status, harm_key
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from gui.i18n import t
-from gui.scripts import aoi_io, catalogue_meta, raster_map
+from gui.scripts import aoi_io, raster_map
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
 from gui.scripts.solara_threads import spawn_in_context
@@ -85,7 +85,6 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     building = layers.inflight.value
     stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
     row_errors = solara.use_reactive({})
-    catalogue_meta.use_catalogue_meta(app_state, gee_interface)
     # A row's error belongs to the project and period it ran for.
     scope = (app_state.project_loaded_signal.value, p.name if p else None, p.active_period if p else None)
     solara.use_effect(lambda: row_errors.set({}), [scope])
