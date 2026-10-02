@@ -95,7 +95,8 @@ def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None
 
 
 def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
-    """Record a late row's artifacts in its own project's saved manifest.
+    """Record a late row's artifacts in its own project's saved manifest,
+    under the project's manifest lock (``io.update_saved_project``).
 
     Called under the run's ``writing(ctx.name)``, once ``update_project`` has
     refused them because that project is no longer open. The row already
@@ -106,13 +107,15 @@ def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
     """
     if not arts:
         return
-    try:
-        root = Path(ctx.pdir).parent
-        own = io.load_project(ctx.name, root=root)
+    root = Path(ctx.pdir).parent
+
+    def _apply(own):
         if ctx.period.id not in own.periods:
-            return  # the period was removed there: no orphan records
+            return False  # the period was removed there: no orphan records
         apply_artifacts(own, arts)
-        io.save_project(own, root=root)
+
+    try:
+        io.update_saved_project(ctx.name, _apply, root=root)
     except Exception:  # noqa: BLE001 - the row's files are written; only the record is lost
         logger.exception("could not record a late row in project %s", ctx.name)
 

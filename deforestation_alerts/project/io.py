@@ -4,11 +4,12 @@ import json
 import os
 import re
 import shutil
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from pydantic import ValidationError
 
@@ -16,6 +17,11 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import SCHEMA_VERSION, Project
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9 _-]+$")
+
+# One lock per project folder, process-wide: a manifest is one file shared by
+# every kernel of the server process, so a per-session lock would not do.
+_MANIFEST_LOCKS: dict = {}
+_MANIFEST_LOCKS_GUARD = threading.Lock()
 
 
 class ProjectLoadError(Exception):
@@ -78,6 +84,36 @@ def load_project(name: str, root: Optional[Path] = None) -> Project:
         return Project.model_validate(raw)
     except ValidationError as exc:
         raise ProjectLoadError(f"{manifest} is not a valid project: {exc}") from exc
+
+
+def manifest_lock(name: str, root: Optional[Path] = None) -> threading.Lock:
+    """The lock every read-modify-write of ``name``'s saved manifest takes."""
+    folder = str(paths.project_dir(name, root).resolve())
+    with _MANIFEST_LOCKS_GUARD:
+        return _MANIFEST_LOCKS.setdefault(folder, threading.Lock())
+
+
+def update_saved_project(name: str, apply: Callable[[Project], Optional[bool]],
+                         root: Optional[Path] = None) -> bool:
+    """Load ``name``'s manifest, ``apply`` a change and save it, under the
+    project's manifest lock, so two late results never lose each other's
+    record. ``apply`` returning ``False`` records nothing. Returns whether the
+    manifest was saved. ``ProjectLoadError`` and save errors propagate.
+
+    Scope: the lock serialises the late records of this process only. The
+    auto-save of a session that has the same project open writes its own
+    in-memory copy without taking it, so if the project is open in another
+    tab or kernel, that session's next save can overwrite a late record (taking
+    the lock there would not help: it would still write its own copy). Late
+    records exist for jobs whose project is no longer the open one, which is
+    the case this protects.
+    """
+    with manifest_lock(name, root):
+        p = load_project(name, root)
+        if apply(p) is False:
+            return False
+        save_project(p, root)
+        return True
 
 
 def list_projects(root: Optional[Path] = None) -> list[ProjectInfo]:

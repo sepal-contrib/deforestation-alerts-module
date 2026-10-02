@@ -128,7 +128,8 @@ def _build_tiles(job, result, notifier) -> None:
 
 
 def _record_in_own_project(job, result) -> None:
-    """Record a late set in its own project's saved manifest.
+    """Record a late set in its own project's saved manifest, under the
+    project's manifest lock (``io.update_saved_project``).
 
     Called under the job's ``writing(name)`` once ``update_project`` refused
     the set because that project is no longer open. The set's files were
@@ -137,16 +138,18 @@ def _record_in_own_project(job, result) -> None:
     failure is logged and never fails the job.
     """
     name = job.project.name
-    try:
-        root = Path(job.pdir).parent
-        own = io.load_project(name, root=root)
+    root = Path(job.pdir).parent
+
+    def _apply(own):
         changed = changed_since(job, own)
         if changed is not None:
             logger.warning("set %s is not recorded in project %s: its %s changed during the run",
                            result.alert_set.id, name, changed)
-            return  # a removed period would leave an orphan set; another AOI or grid is not this set's
+            return False  # a removed period would leave an orphan set; another AOI or grid is not this set's
         apply_result(own, result)
-        io.save_project(own, root=root)
+
+    try:
+        io.update_saved_project(name, _apply, root=root)
     except Exception:  # noqa: BLE001 - the set's files are written; only the record is lost
         logger.exception("could not record set %s in project %s", result.alert_set.id, name)
 
