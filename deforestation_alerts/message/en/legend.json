@@ -22,7 +22,8 @@
         "name": {
             "preview": "{source} · preview",
             "harmonized": "{source} · {start} → {end}",
-            "mask": "Mask {name}"
+            "mask": "Mask {name}",
+            "earlier_set": "Earlier set · {period} · {sources}"
         },
         "vis": {"rgb": "RGB composite of {bands}, {min}–{max}", "nicfi": "Planet NICFI {month}, true colour"}
     }

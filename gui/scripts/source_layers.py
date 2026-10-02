@@ -1,6 +1,7 @@
 """Names, builders and legends of the layers the steps draw on the shared map
 (spec §4.3, §9.4): ``src:<source>`` (a preview, then the harmonized raster
-under the same key) and ``mask:<mask>``, plus the Overview set's legend.
+under the same key) and ``mask:<mask>``, plus the Overview set's legend and
+the earlier sets' names and legends (``overview:set:<set id>``).
 
 One builder per file layer for the Alerts and Download & harmonize steps and
 the job that refreshes them (slice-1 Task 18 minor: they were duplicated).
@@ -51,6 +52,18 @@ def set_legend(key, alert_set):
     title = Label(key="legend.title.set", args=(("period", alert_set.period_id),
                                                 ("sources", " + ".join(alert_set.sources))))
     return legend_specs.status_legend(key, title, title)
+
+
+def earlier_set_name(alert_set) -> str:
+    return t("legend.name.earlier_set", period=alert_set.period_id, sources=" + ".join(alert_set.sources))
+
+
+def earlier_set_legend(key, alert_set):
+    """§9.4's earlier-set row: the four review statuses, lightened."""
+    name = Label(key="legend.name.earlier_set", args=(("period", alert_set.period_id),
+                                                     ("sources", " + ".join(alert_set.sources))))
+    title = Label(key="legend.title.earlier_set", args=(("period", alert_set.period_id),))
+    return legend_specs.status_legend(key, name, title, faded=True)
 
 
 def harmonized_builder(map_, path, key: str, name: str):

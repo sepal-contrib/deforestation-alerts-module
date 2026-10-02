@@ -24,10 +24,22 @@ from the shell (it never creates a map of its own):
   set is recorded before its alerts are published) count as not loaded yet,
   so nothing of the new set is drawn, counted or exported from them
   (``set_store.alerts_belong_to``).
+- **Earlier sets.** With 'Show earlier sets' on, the sets of earlier periods
+  (the footprints the active set subtracts, ``earlier_of``) are drawn
+  lightened under ``overview:set:<set id>``, each with its legend, and a click
+  on one of their alerts offers Go, which makes that set active and opens the
+  alert in Analysis. Each one's build (a ``MapLayers`` worker) reads that
+  set's store for the hit test, keeps it keyed by (project, set id, set
+  fingerprint), and draws its tiles, or its lightened centroids when the
+  tiles cannot be built (silently: the active set already warned) or the
+  project is being written. A set whose store is gone is refused with an
+  error toast.
 - **Click to review.** While the view is open, a click on the map hit-tests the
-  loaded alerts (``set_store.hit_alert``) and opens a popup with the alert's
-  summary and **Review**, which selects that alert and opens Analysis. This
-  replaces the status marker clusters. The popup is added with a key
+  loaded alerts (``set_store.hit_alert``): the active set's first, then the
+  earlier sets shown, newest first. It opens a popup with the alert's summary
+  (and, for an earlier set, its name) and **Review** (``set_store.go_to_alert``),
+  which selects that alert, switching set first if needed, and opens Analysis.
+  This replaces the status marker clusters. The popup is added with a key
   (``"overview:popup"``): pysepal's key lookups read ``.key`` on every layer,
   and a Popup added without one breaks them. It is removed when the view
   closes or the alerts change.
@@ -56,16 +68,18 @@ from ipyleaflet import GeoJSON, Popup
 from pysepal import sepalwidgets as sw
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.engine.fingerprint import Status, set_status
+from deforestation_alerts.engine.fingerprint import Status, earlier_sets, set_status
 from deforestation_alerts.message import cm
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
 from gui.i18n import t
-from gui.scripts import set_store, source_layers
+from gui.scripts import set_store
 from gui.scripts.notify_bridge import current_notifier, tracked_job
-from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
+from gui.scripts.legend_specs import status_colors
+from gui.scripts.pmtiles_map import add_set_pmtiles
+from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing, writing
 from gui.store.workflow_steps import STEPS, active_set
@@ -77,6 +91,8 @@ SET_LAYER_KEY = "overview:set"
 POPUP_KEY = "overview:popup"
 #: ``app_state.panel_view`` while the Overview view is open
 OVERVIEW_VIEW = "overview"
+#: MapLayers key prefix of the earlier sets' layers (spec §4.3)
+EARLIER_PREFIX = "overview:set:"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
 
@@ -214,9 +230,30 @@ def _make_summary_rows(counts: list[int], labels: list[str]) -> list:
     ]
 
 
-def _centroid_style(feature):
-    color = STATUS_COLORS.get(feature["properties"].get("status_code"), STATUS_COLORS[0])
-    return {"color": color, "fillColor": color}
+def earlier_of(project, alert_set) -> list:
+    """The sets whose footprints ``alert_set`` subtracts (periods that start
+    before its own), newest first: what "Show earlier sets" draws."""
+    period = project.periods.get(alert_set.period_id) if alert_set is not None else None
+    if period is None:
+        return []
+
+    def _key(e):
+        return (project.periods[e.period_id].start, e.created_at)
+
+    return sorted(earlier_sets(project, period), key=_key, reverse=True)
+
+
+def _centroid_style_for(faded: bool):
+    colors = status_colors(faded)
+
+    def _style(feature):
+        color = colors.get(feature["properties"].get("status_code"), colors[0])
+        return {"color": color, "fillColor": color}
+
+    return _style
+
+
+_centroid_style = _centroid_style_for(False)
 
 
 #: The centroid layer's own style. It must be non-empty and carry no colour:
@@ -228,18 +265,18 @@ def _centroid_style(feature):
 _CENTROID_LAYER_STYLE = {"stroke": True, "weight": 1, "opacity": 1, "fill": True, "fillOpacity": 0.9}
 
 
-def _add_centroid_layer(map_, alerts, name: str) -> None:
-    """Draw ``alerts`` as centroid points coloured by status under
-    ``SET_LAYER_KEY``: the fallback when the set's tiles cannot be shown
-    (spec §9.2, §12)."""
+def _add_centroid_layer(map_, alerts, name: str, key: str = SET_LAYER_KEY, faded: bool = False) -> None:
+    """Draw ``alerts`` as centroid points coloured by status under ``key``
+    (lightened for an earlier set): the fallback when the set's tiles cannot
+    be shown (spec §9.2, §12)."""
     layer = GeoJSON(
         data=set_store.centroid_geojson(alerts),
         point_style={"radius": 4},
         style=_CENTROID_LAYER_STYLE,
-        style_callback=_centroid_style,
+        style_callback=_centroid_style_for(faded),
         name=name,
     )
-    map_.add_layer(layer, key=SET_LAYER_KEY)
+    map_.add_layer(layer, key=key)
 
 
 def _set_alerts(project, gdf):
@@ -370,36 +407,113 @@ def OverviewTile(app_state, map_, layers):
 
         # spec §9.4: the tiles and the centroids draw the same status colours
         layers.show(SET_LAYER_KEY, build, content_id=f"{alert_set.id}:{len(alerts)}", notifier=notifications,
-                    legend=source_layers.set_legend(SET_LAYER_KEY, alert_set))
+                    legend=set_legend(SET_LAYER_KEY, alert_set))
 
     solara.use_effect(_sync_layer, [active, s.id if s else None, gdf, retries])
+
+    show_earlier, set_show_earlier = solara.use_state(False)
+    # (project, set id, set fingerprint) -> the alerts an earlier set's build
+    # loaded, for the hit test. Written by the builds (MapLayers workers), read
+    # by the click handler: keyed so that alerts of another project (set ids
+    # repeat across projects) or of a rebuilt set are never hit-tested.
+    earlier_alerts = solara.use_ref({})
+    earlier = earlier_of(p, s) if p is not None else []
+    earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)
+
+    def _earlier_build(project, e, key):
+        name = earlier_set_name(e)
+
+        def build():
+            if app_state.panel_view.value != OVERVIEW_VIEW:
+                return
+            alerts = set_store.load_set_alerts(project, e)
+            if alerts is None:
+                raise FileNotFoundError(t("steps.overview.earlier_missing", set=name))
+            earlier_alerts.current[(project.name, e.id, e.fingerprint)] = alerts
+            try:
+                pm = set_store.ensure_pmtiles(project, e)
+            except set_store.StoreBusy:
+                pm = None  # the project is being written: the points stand in, silently
+            except Exception:  # noqa: BLE001 - the points stand in for the tiles
+                logger.exception("could not build the tiles of earlier set %s", e.id)
+                pm = None
+            if app_state.panel_view.value != OVERVIEW_VIEW:
+                return
+            if pm is not None:
+                add_set_pmtiles(map_, pm, key=key, name=name, faded=True)
+            else:
+                _add_centroid_layer(map_, alerts, name, key=key, faded=True)
+
+        return build
+
+    def _sync_earlier():
+        wanted = {f"{EARLIER_PREFIX}{e.id}": e for e in earlier} if active and show_earlier else {}
+        for key in sorted(layers.on.value):
+            if key.startswith(EARLIER_PREFIX) and key not in wanted:
+                layers.hide(key)
+        # Alerts of sets no longer drawn are let go (a show below reloads its own).
+        keep = {(p.name, e.id, e.fingerprint) for e in wanted.values()}
+        for loaded in list(earlier_alerts.current):
+            if loaded not in keep:
+                earlier_alerts.current.pop(loaded, None)
+        for key, e in wanted.items():
+            layers.show(key, _earlier_build(p, e, key), content_id=f"{e.id}:{e.fingerprint}:{e.n_reviewed}",
+                        notifier=notifications, legend=earlier_set_legend(key, e))
+
+    solara.use_effect(_sync_earlier, [active, show_earlier, p.name if p is not None else None, earlier_sig])
+
+    def _on_install():
+        # The shell clears every layer when a project is installed (spec
+        # §4.3): the switch goes off with them rather than reading on over
+        # nothing, whichever of the two effects runs first.
+        earlier_alerts.current.clear()
+        set_show_earlier(False)
+
+    solara.use_effect(_on_install, [app_state.project_loaded_signal.value])
 
     def _close_popup():
         if popup_ref.current is not None:
             map_.remove_layer(popup_ref.current, none_ok=True)
             popup_ref.current = None
 
+    def _hit(project, current, lon, lat):
+        """(set, alerts, row position) of the alert under the click, or None:
+        the active set's alerts first, then the earlier sets shown, newest
+        first."""
+        s_now = active_set(project)
+        i = set_store.hit_alert(current, lon, lat)
+        if s_now is not None and i is not None:
+            return s_now, current, i
+        for e in earlier_of(project, s_now):
+            alerts = earlier_alerts.current.get((project.name, e.id, e.fingerprint))
+            if alerts is None or not layers.is_on(f"{EARLIER_PREFIX}{e.id}"):
+                continue
+            i = set_store.hit_alert(alerts, lon, lat)
+            if i is not None:
+                return e, alerts, i
+        return None
+
     def _on_map(**kwargs):
         if kwargs.get("type") != "click" or app_state.panel_view.value != OVERVIEW_VIEW:
             return
         lat, lon = kwargs["coordinates"]
-        current = _set_alerts(app_state.project.value, app_state.alerts_gdf.value)
-        i = set_store.hit_alert(current, lon, lat)
+        project = app_state.project.value
+        hit = _hit(project, _set_alerts(project, app_state.alerts_gdf.value), lon, lat) if project else None
         _close_popup()
-        if i is None:
+        if hit is None:
             return
-        row = current.iloc[i]
+        target, alerts, i = hit
+        row = alerts.iloc[i]
+        alert_id = int(row.get("alert_id", i))
         go = v.Btn(small=True, color="primary", children=[t("steps.overview.go")])
-
-        def _go(*_):
-            app_state.actual_alert_id.value = i
-            app_state.current_page_view.value = "analysis_tile"
-
-        go.on_event("click", _go)
-        summary = t("steps.overview.popup", id=int(row.get("alert_id", i)), status=row.get("status", ""),
+        go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
+        summary = t("steps.overview.popup", id=alert_id, status=row.get("status", ""),
                     area=f"{float(row.get('area_ha', 0)):.2f}")
-        body = v.Html(tag="div", children=[v.Html(tag="div", children=[summary]), go])
-        popup = Popup(location=(lat, lon), child=body, close_button=True, auto_close=True)
+        lines = [v.Html(tag="div", children=[summary])]
+        if target.id != project.active_set:
+            lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))
+        popup = Popup(location=(lat, lon), child=v.Html(tag="div", children=[*lines, go]), close_button=True,
+                      auto_close=True)
         map_.add_layer(popup, key=POPUP_KEY)
         popup_ref.current = popup
 
@@ -456,6 +570,10 @@ def OverviewTile(app_state, map_, layers):
         if s is not None:
             with solara.Div(style="padding: 0 16px;"):
                 SetSelector(app_state=app_state)
+            if earlier:
+                with solara.Div(style="padding: 0 16px;"):
+                    rv.Switch(label=t("steps.overview.show_earlier"), v_model=show_earlier,
+                              on_v_model=set_show_earlier, dense=True, hide_details=True)
             status = set_status(p, paths.project_dir(p.name), s)
             if status is Status.STALE:
                 solara.Text(t("steps.overview.stale"), classes=["warning--text"], style="padding: 0 16px;")

@@ -361,7 +361,9 @@
       "popup": "Alert {id} · {status} · {area} ha",
       "stale": "This set was built from inputs that have changed since. Re-run Integrate & vectorize to rebuild it (that discards its reviews).",
       "missing": "This set's files are missing from the project folder. Re-run Integrate & vectorize to rebuild it.",
-      "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons."
+      "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons.",
+      "show_earlier": "Show earlier sets",
+      "earlier_missing": "The alert store of {set} is missing; run Integrate & vectorize for that period again."
     },
     "sets": {
       "label": "Alert set",

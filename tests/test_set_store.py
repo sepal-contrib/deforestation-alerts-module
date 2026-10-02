@@ -362,3 +362,41 @@ def test_centroid_geojson_is_in_wgs84_and_skips_empty_geometries():
     assert len(fc["features"]) == 1
     assert fc["features"][0]["geometry"]["coordinates"] == pytest.approx((0.005, 0.005), abs=1e-6)
     assert set_store.centroid_geojson(_alerts().iloc[0:0]) == {"type": "FeatureCollection", "features": []}
+
+
+def test_a_go_wish_selects_its_alert_when_its_set_is_published(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    p.alert_sets["s"].last_alert_index = 0
+    state = _session(p)
+    alerts = _alerts().assign(alert_id=[5, 7])
+    state.goto_alert.set(("s", 7))
+    assert set_store.publish_set_alerts(state, "d", s, alerts)
+    assert state.actual_alert_id.value == 1 and state.goto_alert.value is None
+
+
+def test_a_wish_for_another_set_is_dropped_and_the_saved_position_used(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    p.alert_sets["s"].last_alert_index = 1
+    state = _session(p)
+    state.goto_alert.set(("other", 0))
+    assert set_store.publish_set_alerts(state, "d", s, _alerts())
+    assert state.actual_alert_id.value == 1 and state.goto_alert.value is None
+
+
+def test_position_of_and_load_set_alerts(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    gdf = set_store.load_set_alerts(p, s)
+    assert len(gdf) == 2 and gdf.attrs[set_store.STORE_GENERATION] == set_store.store_generation(store)
+    assert set_store.position_of(gdf.assign(alert_id=[4, 9]), 9) == 1
+    assert set_store.position_of(gdf.assign(alert_id=[4, 9]), 3) is None
+    assert set_store.position_of(None, 0) is None
+    store.unlink()
+    assert set_store.load_set_alerts(p, s) is None
+
+
+def test_every_install_drops_a_pending_go(tmp_path, monkeypatch):
+    p, s, store = _project_with_set(tmp_path, monkeypatch)
+    state = _session(p)
+    state.goto_alert.set(("s", 1))
+    state.load_project_state(p)
+    assert state.goto_alert.value is None

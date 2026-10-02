@@ -27,6 +27,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
+import numpy as np
 from shapely.geometry import Point, mapping
 
 from deforestation_alerts.engine import pmtiles as pmt
@@ -56,13 +57,13 @@ def active_store_path(p) -> Optional[Path]:
     return _store(p, s) if s is not None else None
 
 
-def load_active_alerts(p):
-    """The active set's alerts, stamped with their store's generation, or None
-    when there is no set or its store is gone."""
+def load_set_alerts(p, s):
+    """Set ``s``'s alerts, stamped with their store's generation, or None when
+    its store is gone. Blocking (parquet): call from a worker thread."""
     from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 
-    store = active_store_path(p)
-    if store is None or not store.exists():
+    store = _store(p, s)
+    if not store.exists():
         return None
     # The generation is read before the store: a store replaced during the
     # read then reads as changed, and a Save of what was read is refused.
@@ -70,6 +71,50 @@ def load_active_alerts(p):
     gdf = load_gdf_from_parquet(store)
     gdf.attrs[STORE_GENERATION] = generation
     return gdf
+
+
+def load_active_alerts(p):
+    """The active set's alerts (``load_set_alerts``), or None without one."""
+    s = active_set(p)
+    return load_set_alerts(p, s) if s is not None else None
+
+
+def position_of(gdf, alert_id) -> Optional[int]:
+    """The row position of ``alert_id`` (the engine's stable id) in ``gdf``."""
+    if gdf is None or not len(gdf):
+        return None
+    if "alert_id" not in gdf.columns:
+        i = int(alert_id)
+        return i if 0 <= i < len(gdf) else None
+    hits = np.flatnonzero(gdf["alert_id"].to_numpy() == int(alert_id))
+    return int(hits[0]) if len(hits) else None
+
+
+def go_to_alert(app_state, project_name: str, set_id: str, alert_id: int, position: int) -> bool:
+    """Overview's Go (spec §9.3). In the active set the alert at ``position``
+    of the loaded alerts is selected at once. In another set the wish waits in
+    ``goto_alert`` and the set becomes active: ``_ActiveSetLoader`` loads it on
+    its worker and ``publish_set_alerts`` selects the wished alert. Either way
+    Analysis opens. False, touching nothing, when the project or the set is
+    not the open one's.
+
+    Called from a click handler. The wish and the set switch are made under
+    ``AppState``'s lock (re-entrant: ``update_project`` takes it too), as
+    ``publish_set_alerts`` reads them: a publish of the previous active set in
+    between would otherwise take the wish for its own and drop it."""
+    with app_state._lock:
+        live = app_state.project.value
+        if live is None or live.name != project_name or set_id not in live.alert_sets:
+            return False
+        if live.active_set == set_id:
+            app_state.actual_alert_id.value = position
+        else:
+            app_state.goto_alert.set((set_id, int(alert_id)))
+            if not app_state.update_project(project_name, lambda p: setattr(p, "active_set", set_id)):
+                app_state.goto_alert.set(None)
+                return False
+    app_state.current_page_view.value = "analysis_tile"
+    return True
 
 
 def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = False) -> bool:
@@ -88,6 +133,10 @@ def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = Fals
     Integrate's publish does: the shell's loader reads the set Integrate just
     recorded while Integrate publishes it, and unserialised the two would
     interleave into one's alerts with the other's position.
+
+    A Go from Overview into this set (``goto_alert``) selects that alert
+    instead of the saved position. The wish is for the next set published
+    only: a publish of any set consumes it.
     """
     with app_state._lock:
         live = app_state.project.value
@@ -97,8 +146,14 @@ def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = Fals
             return False
         app_state.actual_alert_id.set(-1)
         app_state.alerts_gdf.set(gdf)
-        saved = live.alert_sets[s.id].last_alert_index
-        app_state.actual_alert_id.set(min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1)
+        wish = app_state.goto_alert.value
+        if wish is not None:
+            app_state.goto_alert.set(None)  # a wish is for the next set published only
+        index = position_of(gdf, wish[1]) if wish is not None and wish[0] == s.id else None
+        if index is None:
+            saved = live.alert_sets[s.id].last_alert_index
+            index = min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1
+        app_state.actual_alert_id.set(index)
         return True
 
 

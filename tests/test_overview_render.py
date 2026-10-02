@@ -632,3 +632,160 @@ def test_an_open_popup_does_not_break_the_layer_build(ov, tmp_path):
         assert map_.find_layer(KEY, none_ok=True) is None and _popups(map_) == []
     finally:
         rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Earlier sets (spec §9.3, §9.4)
+# ---------------------------------------------------------------------------
+from gui.scripts import legend_specs  # noqa: E402
+from gui.scripts.source_layers import earlier_set_name  # noqa: E402
+
+DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+
+
+def _other_set(p, tmp_path, period, *, store=True):
+    """A GLAD-L set of ``period``; with ``store``, three alerts far from January's on disk."""
+    folder = f"periods/{period.id}/sets/glad-l"
+    s = AlertSet(id=make_set_id(period.id, ["GLAD-L"]), period_id=period.id, sources=["GLAD-L"],
+                 digit_map={0: "GLAD-L"}, params=AlertSetParams(), store_rel_path=f"{folder}/alert_db.parquet",
+                 combined_rel_path=f"{folder}/c.tif", footprint_rel_path=f"{folder}/footprint.tif", n_alerts=3,
+                 n_reviewed=1, fingerprint="f", created_at=datetime.now())
+    p.periods = {**p.periods, period.id: period}
+    p.alert_sets = {**p.alert_sets, s.id: s}
+    if store:
+        path = tmp_path / p.name / s.store_rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        gpd.GeoDataFrame({"alert_id": [0, 1, 2], "status": ["Confirmed", "Not reviewed", "Not reviewed"],
+                          "area_ha": [0.5, 0.5, 0.5], "set_id": [s.id] * 3},
+                         geometry=[box(k, k, k + 0.01, k + 0.01) for k in (5, 6, 7)],
+                         crs="EPSG:4326").to_parquet(path)
+    return s
+
+
+def test_show_earlier_sets_draws_the_earlier_periods_lightened_with_their_legend(ov, tmp_path, monkeypatch):
+    drawn = []
+
+    def draw(map_, path, *, key, name, faded=False):
+        drawn.append((key, name, faded))
+        map_.remove_layer(key, none_ok=True)
+        map_.add_layer(ipyleaflet.TileLayer(name=name), key=key)
+
+    monkeypatch.setattr(overview_tile, "add_set_pmtiles", draw)
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC)
+    feb = _other_set(p, tmp_path, FEB, store=False)  # a later period: never "earlier"
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        key = f"overview:set:{dec.id}"
+        switch = rc.find(v.Switch).widget
+        assert switch.label == t("steps.overview.show_earlier") and not layers.is_on(key)
+        switch.v_model = True
+        ov.run_jobs()
+        assert layers.is_on(key) and not layers.is_on(f"overview:set:{feb.id}")
+        assert (key, earlier_set_name(dec), True) in drawn
+        entry = next(e for e in layers.legends.value if e.layer_id == key)
+        assert entry.spec.title.key == "legend.title.earlier_set"
+        assert entry.spec.colors == tuple(legend_specs.status_colors(faded=True)[code]
+                                          for code, _, _ in legend_specs.STATUS_CLASSES)
+        rc.find(v.Switch).widget.v_model = False
+        assert not layers.is_on(key) and all(e.layer_id != key for e in layers.legends.value)
+
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        state.panel_view.set("workflow")  # they leave with the view
+        assert not layers.is_on(key) and map_.find_layer(key, none_ok=True) is None
+    finally:
+        rc.close()
+
+
+def test_an_earlier_set_whose_store_is_gone_is_refused_with_a_toast(ov, tmp_path):
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC, store=False)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        assert not layers.is_on(f"overview:set:{dec.id}")
+        assert _toasts(ov, "error") == [t("steps.overview.earlier_missing", set=earlier_set_name(dec))]
+    finally:
+        rc.close()
+
+
+def test_without_tiles_an_earlier_set_falls_back_to_lightened_points(ov, tmp_path):
+    ov.pm = None
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        layer = map_.find_layer(f"overview:set:{dec.id}", none_ok=True)
+        assert isinstance(layer, ipyleaflet.GeoJSON)
+        confirmed = next(f for f in layer.data["features"] if f["properties"]["status_code"] == 1)
+        assert layer.style_callback(confirmed)["color"] == legend_specs.status_colors(faded=True)[1]
+    finally:
+        rc.close()
+
+
+def test_go_on_an_earlier_sets_alert_switches_the_set_and_opens_that_alert(ov, tmp_path):
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC)
+    state = _state(p, _alerts())
+    state.current_page_view.set("overview_tile")
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        _click(map_, 7.005, 7.005)
+        [popup] = _popups(map_)
+        summary, which, go = popup.child.children
+        assert summary.children == [t("steps.overview.popup", id=2, status="Not reviewed", area="0.50")]
+        assert which.children == [earlier_set_name(dec)]
+        go.fire_event("click", None)
+        assert state.project.value.active_set == dec.id and state.goto_alert.value == (dec.id, 2)
+        assert state.current_page_view.value == "analysis_tile"
+        # what the shell's _ActiveSetLoader does next, on its worker:
+        gdf = set_store.load_set_alerts(state.project.value, dec)
+        assert set_store.publish_set_alerts(state, "d", dec, gdf)
+        assert state.actual_alert_id.value == 2 and state.goto_alert.value is None
+    finally:
+        rc.close()
+
+
+def test_a_click_prefers_the_active_sets_alert(ov, tmp_path):
+    p = _project(tmp_path)
+    _other_set(p, tmp_path, DEC)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        _click(map_, 1.005, 1.005)
+        [popup] = _popups(map_)
+        assert len(popup.child.children) == 2  # the active set's alert: no set line
+        popup.child.children[1].fire_event("click", None)
+        assert state.actual_alert_id.value == 1 and state.goto_alert.value is None
+    finally:
+        rc.close()
+
+
+def test_installing_a_project_turns_show_earlier_off(ov, tmp_path):
+    """The shell clears every layer on an install (spec §4.3): the switch goes
+    off with the earlier sets' layers, never reading on over nothing."""
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        assert layers.is_on(f"overview:set:{dec.id}")
+        state.load_project_state(p)
+        ov.run_jobs()
+        assert rc.find(v.Switch).widget.v_model is False and not layers.is_on(f"overview:set:{dec.id}")
+    finally:
+        rc.close()

@@ -76,6 +76,9 @@ class AppState:
         # alert review
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
+        # Overview's Go into another set (spec §9.3): (set id, alert id) to
+        # select once that set's alerts are published; None otherwise
+        self.goto_alert = solara.reactive(None)
         # legends: published by MapLayers exactly while each layer is on the
         # map (spec §9.4)
         self.layer_legends = solara.reactive(())
@@ -112,6 +115,7 @@ class AppState:
             self.aoi_result.set(None)
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
+            self.goto_alert.set(None)
             self.save_error.set(None)  # before the set: the auto-save may report into it
             # An opened project was last saved when its manifest says (spec §4.1
             # "saved X ago"); a new one has never been saved: the auto-save stamps it.
