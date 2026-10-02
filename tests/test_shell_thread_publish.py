@@ -10,15 +10,17 @@ dependencies change on the save, an ``asyncio.create_task``) raises out of
 the publish, as the Project dialog's list did after ``ab1d1e6``. Here every
 tile the shell mounts is rendered for real (``AboutTile``, ``ProjectDialog``,
 ``OverviewTile``, the five step tiles with pysepal's own ``AoiView``, the
-workflow header, the Analysis set-status banner) together with the three
+workflow header, the Analysis set-status banner) together with the four
 leaves ``_AppShell`` renders in its own context (``_NavBridge``,
-``_PanelBridge``, ``_ActiveSetLoader``, compiled from gui/solara_app.py as
-tests/test_active_set_loader.py does), and a worker thread drives both entry
-points, ``AppState.update_project`` and ``AppState.commit``, through the
-changes each worker makes: artifacts recorded row by row, a set recorded and
-its alerts published, the navigation to Analysis, a Save under the project's
-writer mark. Nothing may raise into the worker and no tile may fail its
-render (``render_detached`` reports those; the report is recorded here).
+``_PanelBridge``, ``_ActiveSetLoader``, ``MapLegend``, compiled from
+gui/solara_app.py as tests/test_active_set_loader.py does), and a worker
+thread drives both entry points, ``AppState.update_project`` and
+``AppState.commit``, through the changes each worker makes: artifacts
+recorded row by row, a set recorded and its alerts published, the navigation
+to Analysis, a Save under the project's writer mark, a layer build landing
+its legend on its own thread. Nothing may raise into the worker and no tile
+may fail its render (``render_detached`` reports those; the report is
+recorded here).
 
 Earth Engine is not touched: the catalogue metadata is pre-filled (so the
 shared metadata task has nothing to fetch), ``AoiView``'s ``init_ee`` is a
@@ -43,6 +45,7 @@ import reacton
 import solara
 from pysepal.mapping import SepalMap
 from pysepal.solara.components.aoi import aoi_view
+from pysepal.solara.components.legend import LegendComponent
 from pysepal.solara.notifications import NotificationProvider, use_notifications
 from shapely.geometry import box
 from traitlets import HasTraits, Int
@@ -64,7 +67,7 @@ from deforestation_alerts.project.models import (
 from deforestation_alerts.project.models import set_id as make_set_id
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.i18n import t
-from gui.scripts import detached, set_store
+from gui.scripts import detached, legend_specs, map_layers, set_store
 from gui.scripts.detached import render_detached
 from gui.scripts.integrate_jobs import _publish_alerts, apply_result
 from gui.scripts.map_layers import MapLayers
@@ -97,11 +100,12 @@ class _NavModel(HasTraits):
     current_step = Int(allow_none=True, default_value=None)
 
 
-def _shell_component(name, threads):
+def _shell_component(name, threads, also=()):
     """Compile ``name`` from gui/solara_app.py with the names it reads (the
-    module itself initialises Earth Engine at import)."""
+    module itself initialises Earth Engine at import); ``also`` names the
+    module functions it calls, compiled into the same namespace."""
     tree = ast.parse((ROOT / "gui" / "solara_app.py").read_text())
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in {name, *also}]
 
     def _spawn(target, *args, **kwargs):
         thread = spawn_in_context(target, *args, **kwargs)
@@ -114,8 +118,9 @@ def _shell_component(name, threads):
         "logger": logging.getLogger("SEPALUI.deforestation_alerts"),
         "resolve_navigation": resolve_navigation, "apply_navigation": apply_navigation,
         "STEPS": STEPS, "RAIL_ITEMS": RAIL_ITEMS, "rail_item_for_step": rail_item_for_step,
+        "LegendComponent": LegendComponent,
     }
-    exec(compile(ast.Module(body=[node], type_ignores=[]), "gui/solara_app.py", "exec"), ns)
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]
 
 
@@ -176,6 +181,7 @@ def shell(data_root, monkeypatch):
     nav_bridge = _shell_component("_NavBridge", threads)
     panel_bridge = _shell_component("_PanelBridge", threads)
     set_loader = _shell_component("_ActiveSetLoader", threads)
+    map_legend = _shell_component("MapLegend", threads, also=("legend_props",))
     nav_model = _NavModel()
     mapapp_ref = {}
     contexts = []
@@ -195,7 +201,9 @@ def shell(data_root, monkeypatch):
     @solara.component
     def Shell():
         map_ = solara.use_memo(lambda: SepalMap(gee=True, gee_interface=gee), [])
-        layers = solara.use_memo(lambda: MapLayers(map_), [])
+        layers = solara.use_memo(
+            lambda: MapLayers(map_, legends=state.layer_legends, selected=state.selected_legend), [])
+        tiles["layers"] = layers
         stage_host = solara.use_memo(lambda: StageHost(content=[]), [])
 
         def _build():
@@ -223,6 +231,7 @@ def shell(data_root, monkeypatch):
                      stage_host=stage_host, map_=map_, mapapp_ref=mapapp_ref,
                      workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
         set_loader(app_state=state, layers=layers, map_=map_)
+        map_legend(app_state=state, layers=layers)
         tiles["stage_host"] = stage_host
 
     holder = {}
@@ -272,7 +281,7 @@ def _roots(shell):
             and name not in ("banner", "stage_host") and c.children}
 
 
-def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog):
+def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkeypatch):
     state = shell.state
     p = _project()
     io.save_project(p)
@@ -329,6 +338,19 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog):
         assert errors == [], errors[-1]
         await asyncio.sleep(0.2)
         shell.settle()
+
+        # A layer build lands its legend on its own worker thread: MapLegend
+        # re-renders there (the Analysis step hides it, as the props say).
+        builds = []
+        monkeypatch.setattr(map_layers, "spawn_in_context",
+                            lambda target, *a, **kw: builds.append(spawn_in_context(target, *a, **kw)))
+        layers = shell.tiles["layers"]
+        legend = legend_specs.alert_legend("src:RADD", "RADD", legend_specs.preview_title("RADD", "a", "b"))
+        await _wait(_publish(lambda: layers.show("src:RADD", lambda: None, legend=legend), errors))
+        assert errors == [], errors[-1]
+        for build in builds:
+            await _wait(build)
+        assert state.layer_legends.value == (legend,) and state.selected_legend.value == "src:RADD"
 
         assert shell.reports == [], shell.reports[0][1]
         assert _roots(shell) == before  # no tile was replaced by a traceback

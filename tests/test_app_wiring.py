@@ -311,7 +311,8 @@ def test_the_shell_installs_auto_save_and_one_set_context():
     assert "set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])" in shell
     for role in ("aux_model", "selected_alerts_model", "app_tile_model"):
         assert f"{role}=set_context," in shell, role
-    assert "layers = solara.use_memo(lambda: MapLayers(map_), dependencies=[])" in shell
+    assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
+    assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
     assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")

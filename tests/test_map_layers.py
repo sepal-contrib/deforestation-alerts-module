@@ -357,3 +357,73 @@ def test_a_raising_subscriber_does_not_leave_the_key_building(monkeypatch, publi
     assert layers.inflight.value == frozenset()
     layers.toggle("k", lambda: pytest.fail("the key is free: a click hides it, nothing is rebuilt"))
     assert not layers.is_on("k") and m.drawn == set()
+
+
+from gui.scripts import legend_specs  # noqa: E402
+
+
+def _legend(key, name):
+    return legend_specs.alert_legend(key, name, legend_specs.preview_title(name, "a", "b"))
+
+
+def _ids(layers):
+    return [e.layer_id for e in layers.legends.value]
+
+
+def test_a_legend_is_published_only_for_a_landed_build(monkeypatch):
+    _run_sync(monkeypatch)
+    layers = MapLayers(FakeMap())
+    layers.show("src:RADD", lambda: None, legend=_legend("src:RADD", "RADD"))
+    assert _ids(layers) == ["src:RADD"] and layers.selected.value == "src:RADD"
+    layers.show("src:GLAD-S2", _bad, legend=_legend("src:GLAD-S2", "GLAD-S2"))
+    assert _ids(layers) == ["src:RADD"]  # a failed build publishes nothing
+
+
+def test_a_superseded_build_publishes_no_legend(monkeypatch):
+    import gui.scripts.map_layers as ml
+    started = []
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: started.append((target, args)))
+    layers = MapLayers(FakeMap())
+    layers.show("src:RADD", lambda: None, legend=_legend("src:RADD", "RADD"))
+    layers.hide("src:RADD")  # switched off while still building
+    target, args = started[0]
+    target(*args)  # the build lands late
+    assert _ids(layers) == []
+
+
+def test_hide_and_clear_remove_legends_and_the_selection_falls_back(monkeypatch):
+    _run_sync(monkeypatch)
+    layers = MapLayers(FakeMap())
+    for k in ("src:A", "src:B", "src:C"):
+        layers.show(k, lambda: None, legend=_legend(k, k))
+    assert layers.selected.value == "src:C"
+    layers.select("src:A")
+    layers.hide("src:A")
+    assert _ids(layers) == ["src:B", "src:C"] and layers.selected.value == "src:C"
+    layers.clear()
+    assert _ids(layers) == [] and layers.selected.value == ""
+
+
+def test_refresh_replaces_the_legend_with_or_without_a_rebuild(monkeypatch):
+    _run_sync(monkeypatch)
+    layers = MapLayers(FakeMap())
+    built = []
+    layers.show("src:RADD", lambda: built.append(1), content_id=None,
+                legend=_legend("src:RADD", "RADD · preview"))
+    layers.refresh("src:RADD", lambda: built.append(2), "c1", legend=_legend("src:RADD", "RADD · 2026-01-01 → 2026-01-31"))
+    assert built == [1, 2]
+    assert layers.legends.value[0].label.literal == "RADD · 2026-01-01 → 2026-01-31"
+    mask_off = legend_specs.mask_legend("src:RADD", "x", None)
+    layers.refresh("src:RADD", lambda: built.append(3), "c1", legend=mask_off)  # same content: legend only
+    assert built == [1, 2] and layers.legends.value[0] is mask_off
+    layers.refresh("src:RADD", lambda: built.append(4), "c2")  # new pixels and no legend: the old one goes
+    assert built == [1, 2, 4] and _ids(layers) == [] and layers.is_on("src:RADD")
+
+
+def test_legends_publish_into_the_given_reactives(monkeypatch):
+    import solara
+    _run_sync(monkeypatch)
+    legends, selected = solara.reactive(()), solara.reactive("")
+    layers = MapLayers(FakeMap(), legends=legends, selected=selected)
+    layers.show("k", lambda: None, legend=_legend("k", "k"))
+    assert [e.layer_id for e in legends.value] == ["k"] and selected.value == "k"

@@ -328,6 +328,47 @@ def _ActiveSetLoader(app_state, layers, map_):
     solara.use_effect(_start_load, [key])
 
 
+def legend_props(app_state, translate) -> dict:
+    """Props for pysepal's LegendComponent from the published legends (spec §9.4).
+
+    Translated at every render, so a locale switch re-translates the legend
+    on screen. Hidden while the workflow shows a full-stage step (Analysis):
+    the legend's z-index (150) would float it over the stage (z-index 4).
+    """
+    from dataclasses import asdict
+
+    from gui.scripts.legend_data import resolve_label, to_legend_data
+
+    legends = app_state.layer_legends.value
+    selected = app_state.selected_legend.value
+    current = next((e for e in legends if e.layer_id == selected), None)
+    full_stage = app_state.panel_view.value == "workflow" and STEPS[app_state.active_step.value].full_stage
+    return {
+        "legend_data": asdict(to_legend_data(current.spec, translate)) if current else {},
+        "selector_options": [{"value": e.layer_id, "text": resolve_label(e.label, translate)} for e in legends],
+        "selected": current.layer_id if current else "",
+        "visible": bool(legends) and not full_stage,
+    }
+
+
+@solara.component
+def MapLegend(app_state, layers):
+    """The floating legend of the shared map: a leaf, so legend churn never
+    re-renders the shell (it renders on the thread that published, like the
+    other leaves; it starts no task).
+    """
+    from pysepal.solara.components.legend import LegendComponent
+
+    props = legend_props(app_state, t)
+    LegendComponent(
+        legend_data=props["legend_data"],
+        selector_options=props["selector_options"],
+        selected=props["selected"],
+        event_set_selected=layers.select,
+        visible=props["visible"],
+    )
+
+
 @solara.component
 @with_sepal_sessions(module_name="deforestation_alerts")
 def Page():
@@ -426,8 +467,13 @@ def _AppShell():
 
     map_ = solara.use_memo(_make_shared_map, dependencies=[])
     # The session's one registry of layers toggled on the shared map (spec
-    # §4.3); cleared when a project is installed (_ActiveSetLoader).
-    layers = solara.use_memo(lambda: MapLayers(map_), dependencies=[])
+    # §4.3); cleared when a project is installed (_ActiveSetLoader). It
+    # publishes the legends of its layers into AppState (spec §9.4), which
+    # the MapLegend leaf renders.
+    layers = solara.use_memo(
+        lambda: MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend),
+        dependencies=[],
+    )
 
     # MapApp step/dialog content is a synced traitlets `Instance(DOMWidget)` slot
     # (MapApp.vue binds `:widget="activeStep.content"`), NOT a reacton child — so a
@@ -623,6 +669,8 @@ def _AppShell():
     app_title = solara.use_memo(
         lambda: compute_title(app_state), dependencies=[app_state.project_loaded_signal.value]
     )
+    # The floating legend, a leaf mounted before MapApp (spec §9.4).
+    MapLegend(app_state=app_state, layers=layers)
     app_element = MapApp.element(
         app_title=app_title,
         app_icon="mdi-tree",
