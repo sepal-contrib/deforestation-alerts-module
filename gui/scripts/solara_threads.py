@@ -51,38 +51,6 @@ async def to_thread_in_context(fn, *args, **kwargs):
     return await asyncio.to_thread(_with_context)
 
 
-def update_job(jobs_reactive, job_id, *, skip_if_cancelled=True, **changes):
-    """Immutably update one job dict by id and publish so the UI re-renders.
-
-    Mutating a job dict in place and then calling ``reactive.set(list(...))``
-    does NOT update the browser: the old and new lists share the same dict
-    objects, so Solara's ``equals_extra(old, new)`` is True and ``set`` short-
-    circuits without firing listeners — the status card stays stuck on a
-    spinning "running" icon even after the background job has finished. Building
-    a fresh dict for the changed job makes the new list genuinely differ so the
-    update propagates.
-
-    Parameters
-    ----------
-    jobs_reactive : solara.Reactive[list[dict]]
-        The reactive holding the list of job dicts (each with an ``"id"``).
-    job_id : str
-        Id of the job to update.
-    skip_if_cancelled : bool
-        When True (default) a job the user already cancelled is left untouched,
-        so a late-finishing thread can't resurrect it as completed/failed.
-    **changes
-        Fields to overwrite on the matching job dict.
-    """
-    new_jobs = []
-    for j in jobs_reactive.value:
-        if j["id"] == job_id and not (skip_if_cancelled and j["status"] == "cancelled"):
-            new_jobs.append({**j, **changes})
-        else:
-            new_jobs.append(j)
-    jobs_reactive.set(new_jobs)
-
-
 def spawn_in_context(target, args=(), *, daemon=True):
     """Start a daemon thread that inherits the caller's Solara kernel context.
 

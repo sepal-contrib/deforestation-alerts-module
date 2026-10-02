@@ -189,10 +189,6 @@ def goto_step(page, key, wait=1500):
     page.wait_for_timeout(wait)
 
 
-def click_in_panel(page, text):
-    page.locator(f'.right-panel button:visible:has-text("{text}")').first.click()
-
-
 # ---------------------------------------------------------------- map math
 _PATTERNS = [
     (re.compile(r"[?&]x=(\d+)&y=(\d+)&z=(\d+)"), ("x", "y", "z")),

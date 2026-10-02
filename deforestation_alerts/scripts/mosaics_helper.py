@@ -43,72 +43,6 @@ def convert_julian_to_date(julian_date):
     return date.strftime("%Y-%m-%d")
 
 
-def process_decimal_date(decimal_date):
-    # Convert the decimal date to an integer representing the year
-    year = int(decimal_date)
-
-    # Calculate the fractional part representing the day of the year
-    day_of_year = (decimal_date - year) * 365
-
-    # Convert this to a date
-    date = datetime(year, 1, 1) + timedelta(days=day_of_year)
-
-    return date.strftime("%Y-%m-%d")
-
-
-def is_future_date(target_date_str):
-    """
-    Check if the given date string is in the future compared to today's date.
-
-    Parameters:
-        target_date_str (str): The target date in the format 'YYYY-MM-DD'.
-
-    Returns:
-        bool: True if the target date is greater than today's date, False otherwise.
-    """
-    today = datetime.now().date()
-    target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-    return target_date > today
-
-
-def get_planet_dates(input_date1, input_date2):
-    # Ensure input_date is a datetime object
-    if isinstance(input_date1, str):
-        input_date1 = datetime.strptime(input_date1, "%Y-%m-%d")
-
-    if isinstance(input_date2, str):
-        input_date2 = datetime.strptime(input_date2, "%Y-%m-%d")
-
-    # 1. First day of initial detection date
-    first_day_current_month = input_date1.replace(day=1)
-
-    # 2. Second day of the next month from initial detection date
-    next_month = (
-        first_day_current_month + relativedelta(months=+1) + relativedelta(days=+1)
-    )
-
-    # 3. First day of 5 month before
-    prev_month5 = first_day_current_month + relativedelta(months=-5)
-
-    # 4. First day of final detection date
-    first_day_current_month2 = input_date2.replace(day=1)
-
-    # 5. Second day of 3 month after last detection date
-    next_3month = (
-        first_day_current_month2 + relativedelta(months=3) + relativedelta(days=+1)
-    )
-    # 6. First day of 1 month before first detection date
-    prev_2month = first_day_current_month + relativedelta(months=-2)
-
-    return [
-        prev_month5.strftime("%Y-%m-%d"),
-        next_month.strftime("%Y-%m-%d"),
-        first_day_current_month.strftime("%Y-%m-%d"),
-        next_3month.strftime("%Y-%m-%d"),
-        prev_2month.strftime("%Y-%m-%d"),
-    ]
-
-
 def get_sentinel2_dates(input_date1, input_date2):
     # Ensure input_date is a datetime object
     if isinstance(input_date1, str):
@@ -152,23 +86,6 @@ def scalePlanet(image):
 
     expression1 = "min(2540, rgb) / 10"
     expression2 = "min(2540, nir / 3.937) / 10"
-
-    rgb_rscl = rgb.expression(expression1, {"rgb": rgb}).toUint8()
-    nir_rscl = (
-        nir.expression(expression2, {"nir": nir}).toUint8().select(["constant"], ["N"])
-    )
-
-    result = rgb_rscl.addBands(nir_rscl)
-    return result
-
-
-def scaleS2(image):
-    image = image.select(["B2", "B3", "B4", "B8"], ["B", "G", "R", "N"])
-    rgb = image.select(["B", "G", "R"])
-    nir = image.select(["N"])
-
-    expression1 = "min(2540, rgb / 2) / 10"
-    expression2 = "min(2540, nir / 2.2) / 10"
 
     rgb_rscl = rgb.expression(expression1, {"rgb": rgb}).toUint8()
     nir_rscl = (
@@ -323,61 +240,6 @@ def verify_raster(raster_path, threshold):
         return True
 
 
-# Función que convierte el formato de los elementos de una lista de features
-def convertir_formato(features):
-    # Estructura de estilo que se añadirá a las nuevas features
-    nuevo_estilo = {
-        "style": {
-            "stroke": True,
-            "color": "#2196F3",
-            "weight": 4,
-            "opacity": 0.5,
-            "fill": False,
-            "fillColor": None,
-            "fillOpacity": 0.1,
-            "clickable": True,
-        }
-    }
-
-    # Convertir cada feature al nuevo formato
-    nuevas_features = []
-    for feature in features:
-        # Crear una nueva estructura sin el atributo 'value' en properties
-        nueva_feature = {
-            "type": "Feature",
-            "properties": nuevo_estilo,
-            "geometry": feature["geometry"],  # Mantener la geometría original
-        }
-        nuevas_features.append(nueva_feature)
-
-    return nuevas_features
-
-
-# Función que convierte el formato de los elementos de una lista de features
-def convertir_formato2(features, color="#2196F3"):
-    # Estructura de estilo que se añadirá a las nuevas features
-    nuevo_estilo = {
-        "style": {
-            "color": color,
-            "pane": "overlayPane",
-            "attribution": None,
-        }
-    }
-
-    # Convertir cada feature al nuevo formato
-    nuevas_features = []
-    for feature in features:
-        # Crear una nueva estructura sin el atributo 'value' en properties
-        nueva_feature = {
-            "type": "Feature",
-            "properties": nuevo_estilo,
-            "geometry": feature["geometry"],  # Mantener la geometría original
-        }
-        nuevas_features.append(nueva_feature)
-
-    return nuevas_features
-
-
 def convertir_formato3(input_features, color="#2196F3"):
     """
     Convert a list of features from the input format to the output format,
@@ -435,40 +297,6 @@ def convertir_formato3(input_features, color="#2196F3"):
         converted_features.append(new_feature)
 
     return converted_features
-
-
-def save_prediction(original_img, prediction, threshold, output_path):
-
-    import rasterio
-    import numpy as np
-
-    """
-    Save prediction as geotiff .
-
-    Parameters:
-    - original_img (list of str): Input raster file path.
-    - prediction (object)
-    - output_path (str): Output raster file path.
-    """
-    # Open the input rasters
-    src1 = rasterio.open(original_img)
-
-    # Read metadata of the first raster
-    out_meta = src1.meta.copy()
-
-    # Reclassify values: set all values greater than 0.2 to 1, and others to 0
-    prediction_reclassified = np.where(prediction > threshold, 1, 0)
-
-    # Update metadata to reflect the new number of bands
-
-    out_meta.update(count=1)
-    out_meta.update({"dtype": "float32"})
-
-    # Write the stacked raster to the output file
-    with rasterio.open(output_path, "w", **out_meta) as dest:
-        dest.write(prediction_reclassified, indexes=1)
-
-    return output_path
 
 
 # Function to calculate total area
@@ -535,83 +363,6 @@ def add_files_to_zip(zip_filename, file1, file2):
         # Add the files to the zip
         zipf.write(file1, arcname=os.path.basename(file1))
         zipf.write(file2, arcname=os.path.basename(file2))
-
-
-def is_after_march_2025(target_date_str):
-    """
-    Check if the given date string is after 2025-03-31.
-
-    Parameters:
-        target_date_str (str): The target date in the format 'YYYY-MM-DD'.
-
-    Returns:
-        bool: True if the target date is after 2025-03-31, False otherwise.
-    """
-    # Define the specific date to compare against
-    specific_date = datetime.strptime("2025-03-31", "%Y-%m-%d").date()
-
-    # Parse the target date string and convert it to a date object
-    target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
-
-    # Compare the target date with the specific date
-    return target_date > specific_date
-
-
-def check_planet_collection_access():
-    # Initialize the GEE account
-    # Define the collection names and their corresponding regions
-    collections = {
-        "americas": "projects/planet-nicfi/assets/basemaps/americas",
-        "africa": "projects/planet-nicfi/assets/basemaps/africa",
-        "asia": "projects/planet-nicfi/assets/basemaps/asia",
-    }
-
-    # Initialize a dictionary to store the results
-    access_status = {}
-
-    # Iterate over each collection and check its access status
-    for region, collection in collections.items():
-        try:
-            # Load the image collection
-            img_collection = ee.ImageCollection(collection)
-
-            # Get the size of the collection
-            size = img_collection.size().getInfo()
-
-            # Check if the size is greater than 0 and update the access status dictionary accordingly
-            if size > 0:
-                access_status[region] = "has_access"
-            else:
-                access_status[region] = "no_access"
-        except ee.EEException as e:
-            # Handle the case where the collection does not exist or user doesn't have access
-            if "not found" in str(e):
-                access_status[region] = "no_access"
-            else:
-                raise  # Re-raise other EEException errors
-
-    # Return the dictionary containing the access status for each region
-    return access_status
-
-
-def check_access(dictionary):
-    """
-    Check if all values in the given dictionary are 'no_access'.
-
-    Parameters:
-        dictionary (dict): The dictionary to be checked.
-
-    Returns:
-        bool: True if all values are 'no_access', False otherwise.
-    """
-    # Iterate through each value in the dictionary
-    for value in dictionary.values():
-        # Check if any value is 'has_access'
-        if value == "has_access":
-            return False
-
-    # If no 'has_access' found, return True
-    return True
 
 
 def geojson_to_geodataframe(geojson):

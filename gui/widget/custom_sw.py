@@ -1,8 +1,5 @@
 from pysepal import color, sepalwidgets as sw
 from pysepal.scripts import utils as su
-from pysepal.scripts import decorator
-from functools import wraps
-from pysepal.message import msg
 from pysepal.frontend.resize_trigger import rt
 from copy import deepcopy
 import geopandas as gpd
@@ -13,8 +10,7 @@ from pysepal.sepalwidgets.sepalwidget import SepalWidget
 from configparser import ConfigParser
 from pathlib import Path
 from typing import List, Tuple, Union
-from warnings import warn
-from typing import Any, Callable, List, Optional
+from typing import Callable, List
 import time
 
 class ShareBtn(v.Btn, SepalWidget):
@@ -196,56 +192,3 @@ class CustomSlideGroup(sw.SepalWidget, v.Card):
         for button in self.slide_group.children:
             if hasattr(button, "color") and button.color != self.defaul_child_color:
                 button.color = self.defaul_child_color
-
-
-def decorator_loading_v2(
-    alert: Optional[v.Alert] = None,
-    button: Optional[v.Btn] = None,
-    debug: Optional[bool] = None,
-) -> Any:
-    """Decorator to execute try/except sentence and toggle loading button object.
-
-    Designed to work within the Tile object, or any object that have a self.btn and self.alert set.
-
-    Args:
-        button: Toggled button
-        alert: the alert to display the error message
-        debug: Whethers or not the exception should stop the execution. default to False
-
-    Returns:
-        The return statement of the decorated method
-    """
-    if debug is not None:
-        warn("debug argument defaults to `True`. It will be removed in v3.2")
-
-    def decorator_loading(func):
-        @wraps(func)
-        def wrapper_loading(self, *args, **kwargs):
-            # set btn and alert
-            # Change name of variable to assign it again in this scope
-            # check if they exist in the parent object if alert is not set manually
-            assert hasattr(self, "alert") or alert, msg("decorator.no_alert")
-            assert hasattr(self, "btn") or button, msg("decorator.no_button")
-            button_ = self.btn if not button else button
-            alert_ = self.alert if not alert else alert
-
-            # Clean previous loaded messages in alert
-            alert_.reset()
-            
-            button_.toggle_loading()  # Start loading
-
-            value = None
-
-            try:
-                # run the function using the catch_error decorator
-                value = decorator.catch_errors(alert=alert_)(func)(self, *args, **kwargs)
-
-            except Exception as e:
-                button_.toggle_loading()  # Start loading
-                raise e
-
-            return value
-
-        return wrapper_loading
-
-    return decorator_loading

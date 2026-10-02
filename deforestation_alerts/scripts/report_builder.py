@@ -145,22 +145,6 @@ def plot_tiff_with_overlay(
     plt.close(fig)
 
 
-# Check https://coolum001.github.io/cartopylayout.html
-def add_north_arrow(ax, x=0.95, y=0.95):
-    """Adds a north arrow to a Matplotlib axis."""
-    ax.annotate(
-        "N",
-        xy=(x, y),
-        xytext=(x, y - 0.05),
-        xycoords="axes fraction",
-        arrowprops=dict(
-            facecolor="black", width=4, headwidth=8, headlength=4, shrink=0.4
-        ),
-        ha="center",
-        fontsize=10,
-    )
-
-
 def generate_deforestation_report_with_word_template(
     image_path,
     geodataframe_path,
