@@ -45,9 +45,10 @@ import rioxarray
 from odc.geo import xr as odc_xr
 from odc.geo.geobox import GeoBox
 from rasterio.errors import NotGeoreferencedWarning
+from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 
-from deforestation_alerts.engine.raster_io import grid_profile
+from deforestation_alerts.engine.raster_io import grid_profile, tile_windows
 from deforestation_alerts.gdal_env import worker_threads
 from deforestation_alerts.project.models import GridSpec
 
@@ -66,6 +67,31 @@ WARP_CACHEMAX_BYTES = 64 * 1024 * 1024
 
 def _geobox(grid: GridSpec) -> GeoBox:
     return GeoBox((grid.height, grid.width), grid.affine, grid.epsg)
+
+
+def _misses_grid(source, grid: GridSpec) -> bool:
+    """True when ``source``'s footprint and the grid are disjoint, compared in
+    EPSG:4326. odc-geo projects the source footprint into the grid's CRS, which
+    fails ("LinearRing ... not closed") for a source far outside the grid's UTM
+    zone: such a source can only miss the grid, and gives an empty raster (a
+    GeoTIFF mask or source that covers none of the AOI, spec §7.3). An
+    antimeridian-crossing box (west > east) is left to odc-geo."""
+    if source.rio.crs is None:
+        return False
+    src = transform_bounds(source.rio.crs, "EPSG:4326", *source.rio.bounds(), densify_pts=21)
+    dst = transform_bounds(grid.epsg, "EPSG:4326",
+                           grid.xmin, grid.ymax - grid.height * grid.resolution,
+                           grid.xmin + grid.width * grid.resolution, grid.ymax, densify_pts=21)
+    if not all(np.isfinite(v) for v in (*src, *dst)) or src[0] > src[2] or dst[0] > dst[2]:
+        return False
+    return src[2] <= dst[0] or dst[2] <= src[0] or src[3] <= dst[1] or dst[3] <= src[1]
+
+
+def _write_empty(out_part_path, grid: GridSpec, count: int) -> None:
+    """The grid as no-data (0) in every band, written tile by tile."""
+    with rasterio.open(out_part_path, "w", **grid_profile(grid, count=count)) as dst:
+        for w in tile_windows(grid):
+            dst.write(np.zeros((count, w.height, w.width), "int32"), window=w)
 
 
 class _WindowWriter:
@@ -132,6 +158,12 @@ def reproject_to_grid(
         nodata = source.rio.nodata
         if band is not None:
             source = source.isel(band=[int(band) - 1])  # one chosen band, 1-based
+        if _misses_grid(source, grid):
+            try:
+                _write_empty(out_part_path, grid, source.shape[0])
+            finally:
+                opened.close()
+            return out_part_path
         if pixel_hook is not None:
             # Decide each source pixel before any cast (a float32 0.7 must not
             # become 0, NaN no-data must not become anything): the hook turns a

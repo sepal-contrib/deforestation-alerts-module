@@ -215,3 +215,18 @@ def test_one_chosen_band_of_a_multiband_file(tmp_path):
     with rasterio.open(out) as ds:
         assert ds.count == 1 and ds.dtypes == ("int32",)
         np.testing.assert_array_equal(ds.read(1), stack[1])
+
+
+def test_a_source_far_outside_the_grids_utm_zone_aligns_to_an_empty_raster(tmp_path):
+    """A source over the Congo basin (EPSG:4326) onto a UTM 21S grid: its
+    footprint does not project into the grid's CRS, where odc-geo raised
+    "LinearRing ... not closed" (the slice-4 walk's far mask). It misses the
+    grid, so the output is the grid, every band no-data."""
+    src = tmp_path / "far.tif"
+    with rasterio.open(src, "w", driver="GTiff", dtype="int32", nodata=0, count=2, width=10, height=10,
+                       crs="EPSG:4326", transform=Affine(0.005, 0, 20.0, 0, -0.005, 0.05)) as dst:
+        dst.write(np.ones((2, 10, 10), "int32"))
+    out = align.reproject_to_grid(src, GRID, tmp_path / "out.tif.part")
+    with rasterio.open(out) as ds:
+        assert (ds.count, ds.height, ds.width, ds.dtypes[0]) == (2, GRID.height, GRID.width, "int32")
+        assert ds.read().max() == 0

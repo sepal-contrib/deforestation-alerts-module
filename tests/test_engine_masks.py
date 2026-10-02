@@ -73,6 +73,21 @@ def test_a_mask_that_misses_the_grid_has_no_on_pixels(tmp_path):
     assert masks.align_mask(far, GRID, tmp_path / "m.tif") == {"on_pixels": 0}
 
 
+def test_a_mask_in_another_crs_far_from_the_grid_has_no_on_pixels(tmp_path):
+    """The slice-4 walk's far mask: EPSG:4326 over the Congo basin, 75 degrees
+    from the grid's UTM zone, where its footprint does not project into the
+    grid's CRS (odc-geo raised "LinearRing ... not closed"): no overlap, so an
+    empty mask, never a crash."""
+    far = tmp_path / "far.tif"
+    with rasterio.open(far, "w", driver="GTiff", width=10, height=10, count=1, dtype="uint8", crs="EPSG:4326",
+                       transform=Affine(0.005, 0, 20.0, 0, -0.005, 0.05)) as dst:
+        dst.write(np.ones((10, 10), "uint8"), 1)
+    assert masks.align_mask(far, GRID, tmp_path / "m.tif") == {"on_pixels": 0}
+    with rasterio.open(tmp_path / "m.tif") as r:
+        assert r.dtypes == ("int32",) and (r.height, r.width) == (GRID.height, GRID.width)
+        assert r.read(1).max() == 0
+
+
 @pytest.mark.parametrize("shift", [(0, 0, 5), (10, 0, 0)], ids=["other-shape", "other-origin"])
 def test_an_aoi_raster_off_the_grid_is_refused(tmp_path, shift):
     """A different shape would not broadcast; a shifted origin would clip in the wrong place."""
