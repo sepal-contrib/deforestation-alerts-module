@@ -16,7 +16,8 @@ size estimate (``raster_io.compressed_estimate``), want ~7 GB per Download &
 harmonize row and ~13 GB for Integrate. Delete ``<out>`` when the numbers
 are copied.
 
-Prints, per source: wall time, raw + harmonized file size, the harmonize-phase
+Prints, first, each source's coverage of the AOI (a source whose coverage
+refuses the row is skipped, as Run all skips it); then, per source: wall time, raw + harmonized file size, the harmonize-phase
 peak RSS (a VmRSS sampler around the actual reproject-and-mask call) and the
 process's whole-run peak RSS. Prints the same whole-run peak for integration.
 """
@@ -34,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ee  # noqa: E402
 
 from deforestation_alerts.engine import catalogue, grid as gridmod  # noqa: E402
+from deforestation_alerts.engine import coverage  # noqa: E402
 from deforestation_alerts.engine import runner  # noqa: E402
 from deforestation_alerts.engine.integrate import IntegrationJob, run_integration  # noqa: E402
 from deforestation_alerts.engine.runner import SourceJob, apply_artifacts, run_source_row  # noqa: E402
@@ -106,6 +108,21 @@ def _watch_harmonize():
     return lambda: peak["gb"]
 
 
+def admin_aoi(level: int, admin) -> tuple:
+    """The GAUL-2015 admin collection and its bounds (one getInfo)."""
+    fc = ee.FeatureCollection(f"FAO/GAUL/2015/level{level}").filter(ee.Filter.eq(f"ADM{level}_CODE", int(admin)))
+    coords = fc.geometry().bounds().coordinates().getInfo()[0]
+    xs, ys = [c[0] for c in coords], [c[1] for c in coords]
+    return fc, (min(xs), min(ys), max(xs), max(ys))
+
+
+def add_coverage(p: Project, fc, sources) -> None:
+    """The AOI's coverage of ``sources``, saved in ``p`` as the app's loader
+    saves it: the runner refuses a row without it (spec §7.2)."""
+    raw = coverage.coverage_request(fc, tuple(sources)).getInfo()
+    p.coverage = {**p.coverage, **coverage.parse_coverage(raw, aoi_digest=p.aoi.digest, today=date.today())}
+
+
 def integrate_into(out: Path, p: Project, per: Period, sources: list):
     """Run Integrate in ``out``: the set's files are written straight into it."""
     return run_integration(IntegrationJob(project=p, pdir=out, period=per, sources=sources,
@@ -131,12 +148,7 @@ def main():
     from pysepal.scripts.utils import init_ee
 
     init_ee()
-    fc = ee.FeatureCollection(f"FAO/GAUL/2015/level{a.level}").filter(
-        ee.Filter.eq(f"ADM{a.level}_CODE", int(a.admin))
-    )
-    coords = fc.geometry().bounds().coordinates().getInfo()[0]
-    xs, ys = [c[0] for c in coords], [c[1] for c in coords]
-    bounds = (min(xs), min(ys), max(xs), max(ys))
+    fc, bounds = admin_aoi(a.level, a.admin)
     per = Period(id=period_id(date.fromisoformat(a.start), date.fromisoformat(a.end)),
                  start=date.fromisoformat(a.start), end=date.fromisoformat(a.end))
     p = Project(name="measure", created_at=datetime.now(), updated_at=datetime.now())
@@ -150,17 +162,30 @@ def main():
     sources = a.sources.split(",")
     for s in sources:
         add_predefined_source(p, s)
+    add_coverage(p, fc, sources)
+    for s in sources:
+        print(f"{s}: covers {p.coverage[s].fraction:.1%} of the AOI")
     harmonize_peak = _watch_harmonize()
+    ran = []
     for s in sources:
         t0 = time.time()
-        meta = catalogue.meta_request(s).getInfo()
-        arts = run_source_row(SourceJob(project=p.model_copy(deep=True), pdir=out, period=per, source=s, meta=meta, aoi=fc))
+        meta = catalogue.meta_request("GLAD-L").getInfo() if s == "GLAD-L" else None
+        job = SourceJob(project=p.model_copy(deep=True), pdir=out, period=per, source=s, meta=meta, aoi=fc)
+        try:
+            arts = run_source_row(job)
+        except runner.CoverageRefused as exc:
+            print(f"{s}: skipped, {exc.state}")  # Run all skips such a row the same way
+            continue
+        ran.append(s)
         apply_artifacts(p, arts)
         sizes = {k: v.size_bytes / 1e6 for k, v in arts.items()}
         print(f"{s}: {time.time() - t0:.0f} s, files MB {sizes}, "
               f"harmonize peak {harmonize_peak():.2f} GB, peak RSS {peak_gb():.2f} GB")
+    if not ran:
+        print("integrate: skipped, no source ran")
+        return
     t0 = time.time()
-    res = integrate_into(out, p, per, sources)
+    res = integrate_into(out, p, per, ran)
     print(f"integrate: {time.time() - t0:.0f} s, {res.alert_set.n_alerts} alerts, peak RSS {peak_gb():.2f} GB")
 
 

@@ -76,11 +76,12 @@ def estimate_bytes(grid: GridSpec, bands: int = 2, itemsize: int = 4) -> int:
 
 
 def default_resolution(project: Project) -> float:
-    """Finest native resolution among the predefined sources (custom sources
-    add theirs in slice 3); 30 m when nothing is known."""
-    known = [
-        NATIVE_RESOLUTION[s.catalogue_key]
-        for s in project.sources.values()
-        if getattr(s, "kind", "") == "predefined"
-    ]
+    """Finest native resolution among the sources: the predefined table, a
+    custom source's persisted ``native.scale``; 30 m when nothing is known."""
+    known = []
+    for s in project.sources.values():
+        if s.kind == "predefined":
+            known.append(NATIVE_RESOLUTION[s.catalogue_key])
+        elif s.native is not None:
+            known.append(float(s.native.scale))
     return min(known) if known else FALLBACK_RESOLUTION

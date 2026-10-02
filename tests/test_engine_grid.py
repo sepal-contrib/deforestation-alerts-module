@@ -60,3 +60,17 @@ def test_default_resolution_is_finest_known_source():
     assert grid.default_resolution(p) == 30.0
     add_predefined_source(p, "RADD")
     assert grid.default_resolution(p) == 10.0
+
+
+def test_default_resolution_counts_custom_native_scales():
+    from datetime import datetime
+
+    from deforestation_alerts.engine import grid as gridmod
+    from deforestation_alerts.project.models import BandMap, NativeGrid, Project, add_custom_source, add_predefined_source
+
+    p = Project(name="g", created_at=datetime.now(), updated_at=datetime.now())
+    add_predefined_source(p, "GLAD-L")
+    add_custom_source(p, name="fine", origin="gee", ref="a", asset_type="IMAGE", format="radd",
+                      date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
+                      native=NativeGrid(crs="EPSG:4326", scale=5.0))
+    assert gridmod.default_resolution(p) == 5.0

@@ -32,16 +32,17 @@ pytestmark = [
 ]
 
 
-def test_glad_l_and_radd_month_end_to_end(gee, tiny_aoi, tmp_path):
+def test_glad_l_and_radd_month_end_to_end(gee, tiny_aoi, tmp_path, real_cover):
     p = Project(name="e2e", created_at=datetime.now(), updated_at=datetime.now(), look_back_days=0)
     p.aoi = AoiRecord(spec={}, name="tiny", method="DRAW", digest="tiny", bounds=BOUNDS)
     add_predefined_source(p, "GLAD-L")
     add_predefined_source(p, "RADD")
+    real_cover(p, tiny_aoi, "GLAD-L", "RADD")
     p.grid = gridmod.build_grid(BOUNDS, gridmod.auto_utm_epsg(BOUNDS), 30)
     p.periods[PERIOD.id] = PERIOD
     p.active_period = PERIOD.id
     for name in ("GLAD-L", "RADD"):
-        meta = catalogue.meta_request(name).getInfo()
+        meta = catalogue.meta_request("GLAD-L").getInfo() if name == "GLAD-L" else None
         arts = run_source_row(SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=PERIOD,
                                         source=name, meta=meta, aoi=tiny_aoi))
         apply_artifacts(p, arts)

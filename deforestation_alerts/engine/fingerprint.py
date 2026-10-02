@@ -25,7 +25,9 @@ class Status(str, Enum):
     MISSING = "missing"
     STALE = "stale"
     CURRENT = "current"
-    NO_DATA = "no_data"
+
+
+AOI_KEY = "aoi_mask"
 
 
 def fingerprint(inputs: dict) -> str:
@@ -72,12 +74,31 @@ def _source_def(src) -> dict:
     return d
 
 
+def is_file_source(src) -> bool:
+    return getattr(src, "kind", "") == "custom" and src.origin == "file"
+
+
+def user_file_missing(src) -> Optional[str]:
+    """The user's GeoTIFF path when it is gone (spec §5.3 "file not found")."""
+    return src.ref if is_file_source(src) and not os.path.exists(src.ref) else None
+
+
 def _native(src) -> Optional[list]:
-    """The projection a source is downloaded in; custom sources come in slice 3."""
-    if src.kind != "predefined":
+    """The projection a source is downloaded or read in (part of the raw fingerprint)."""
+    if src.kind == "predefined":
+        crs, scale = catalogue.NATIVE[src.catalogue_key]
+        return [crs, scale]
+    if src.native is None:
         return None
-    crs, scale = catalogue.NATIVE[src.catalogue_key]
-    return [crs, scale]
+    if src.origin == "file":
+        return [src.native.crs, list(src.native.transform or ())]
+    return [src.native.crs, src.native.scale]
+
+
+def aoi_raster_inputs(p: Project) -> dict:
+    """The AOI raster (``masks/aoi.tif``) burns the AOI polygon onto the grid."""
+    return {"stage": "aoi_mask", "aoi": p.aoi.digest if p.aoi else None,
+            "grid": p.grid.signature if p.grid else None}
 
 
 def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
@@ -95,9 +116,12 @@ def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
 
 
 def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]:
-    """None while the raw artifact or an enabled mask's artifact is not recorded.
+    """None while the raw artifact or an enabled mask's artifact is not recorded,
+    or, for a GeoTIFF source, while the AOI raster of this AOI and grid is not.
 
     Harmonizing aligns the raw file onto the grid, so the grid is an input here.
+    A GeoTIFF source is clipped to the AOI polygon by the AOI raster (an Earth
+    Engine download is clipped by its region already).
     """
     raw = p.artifacts.get(raw_key(period.id, source))
     if raw is None:
@@ -108,12 +132,14 @@ def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]
         if art is None:
             return None
         masks.append([name, p.masks[name].mode, art.content_id])
-    return {
-        "stage": "harmonized",
-        "raw": raw.content_id,
-        "grid": p.grid.signature if p.grid else None,
-        "masks": masks,
-    }
+    inputs = {"stage": "harmonized", "raw": raw.content_id, "grid": p.grid.signature if p.grid else None,
+              "masks": masks}
+    if is_file_source(p.sources[source]):
+        aoi = p.artifacts.get(AOI_KEY)
+        if aoi is None or aoi.fingerprint != fingerprint(aoi_raster_inputs(p)):
+            return None  # the GeoTIFF is clipped by the AOI raster of this AOI and grid
+        inputs["aoi_raster"] = aoi.content_id
+    return inputs
 
 
 def earlier_sets(p: Project, period: Period) -> list[AlertSet]:
@@ -144,7 +170,7 @@ def set_inputs(p: Project, period: Period, sources: list[str], params: AlertSetP
     }
 
 
-def make_artifact(key, kind, pdir, path, inputs: dict, *, no_data: bool = False) -> Artifact:
+def make_artifact(key, kind, pdir, path, inputs: dict, *, stats: Optional[dict] = None) -> Artifact:
     rel = paths.rel(pdir, path) if path is not None else ""
     size = Path(path).stat().st_size if path is not None and Path(path).exists() else 0
     return Artifact(
@@ -155,19 +181,19 @@ def make_artifact(key, kind, pdir, path, inputs: dict, *, no_data: bool = False)
         inputs=inputs,
         content_id=uuid.uuid4().hex,
         size_bytes=size,
-        no_data=no_data,
+        stats=dict(stats or {}),
         created_at=datetime.now(),
     )
 
 
 def status(p: Project, pdir, key: str, expected: Optional[dict]) -> Status:
+    """MISSING (no record, a slice-1 ``no_data`` record, no file), STALE, or CURRENT.
+    Coverage is not an artifact status: see ``coverage.window_coverage``."""
     art = p.artifacts.get(key)
-    if art is None:
+    if art is None or art.no_data or not art.rel_path:
         return Status.MISSING
     if expected is None or art.fingerprint != fingerprint(expected):
         return Status.STALE
-    if art.no_data:
-        return Status.NO_DATA
     if not (Path(pdir) / art.rel_path).exists():
         return Status.MISSING
     return Status.CURRENT

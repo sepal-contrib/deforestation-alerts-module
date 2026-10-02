@@ -14,13 +14,14 @@ FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 
 
 
 @pytest.fixture
-def proj(tmp_path):
+def proj(tmp_path, cover):
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g1", bounds=(0, 0, 1, 1))
     p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=10, height=10)
     add_predefined_source(p, "GLAD-L")
     add_predefined_source(p, "RADD")
     p.periods = {JAN.id: JAN, FEB.id: FEB}
+    cover(p, "GLAD-L", "RADD")  # the runner and plan block a row without a coverage record
     pdir = tmp_path / p.name  # the folder io.save_project(p, root=tmp_path) writes to
     pdir.mkdir()
     return p, pdir
@@ -165,10 +166,16 @@ def test_plan_and_ready_sources(proj):
     assert ready_sources(p, pdir, JAN) == ["GLAD-L"]
 
 
-def test_no_data_row_is_not_ready_and_not_pending(proj):
+def test_a_slice1_no_data_record_reads_missing(proj):
     p, pdir = proj
     key = fp.raw_key(JAN.id, "RADD")
-    p.artifacts[key] = fp.make_artifact(key, "raw_alert", pdir, None,
-                                        fp.raw_alert_inputs(p, "RADD", JAN), no_data=True)
-    row = next(r for r in plan_prepare(p, pdir, JAN) if r.source == "RADD")
-    assert row.raw is fp.Status.NO_DATA and not row.needs_run and not row.ready
+    art = fp.make_artifact(key, "raw_alert", pdir, None, fp.raw_alert_inputs(p, "RADD", JAN))
+    p.artifacts[key] = art.model_copy(update={"no_data": True})
+    assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "RADD", JAN)) is fp.Status.MISSING
+
+
+def test_an_empty_rel_path_reads_missing(proj):
+    p, pdir = proj
+    key = fp.raw_key(JAN.id, "RADD")
+    p.artifacts[key] = fp.make_artifact(key, "raw_alert", pdir, None, fp.raw_alert_inputs(p, "RADD", JAN))
+    assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "RADD", JAN)) is fp.Status.MISSING

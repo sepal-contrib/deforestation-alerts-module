@@ -46,9 +46,7 @@ from gui.store.project_writers import writing
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
-_CELL_STATUS = {
-    Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing", Status.NO_DATA: "no_data",
-}
+_CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
 
 
 @dataclass(frozen=True)
@@ -60,7 +58,7 @@ class PrepareContext:
     name: str  # the project the run belongs to
     pdir: Path
     period: Period
-    meta: dict  # catalogue metadata by catalogue key; only rows that download need theirs
+    meta: dict  # catalogue metadata by catalogue key; only a GLAD-L row that downloads needs it
     aoi: Any  # ee.FeatureCollection; None only when it is unavailable and no row downloads
     cancel: threading.Event
     row_errors: Optional[solara.Reactive] = None  # {source: message}; None in tests
@@ -142,7 +140,8 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 continue  # removed from the project meanwhile
             task.step(t("steps.prepare.job_row", source=source))
             job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
-                            source=source, meta=ctx.meta.get(src.catalogue_key), aoi=ctx.aoi, force=force)
+                            source=source, aoi=ctx.aoi, force=force,
+                            meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L" else None)
             try:
                 arts = run_source_row(job, on_tiles=tile_progress_reporter(task))
             except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)

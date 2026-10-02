@@ -106,7 +106,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         # and the AOI); a grid change re-harmonizes from the raw file on disk.
         downloads = [s for s in sources if force or by_source[s].raw in _DOWNLOADS]
         meta = app_state.catalogue_meta.value
-        if any(p.sources[s].catalogue_key not in meta for s in downloads):
+        if any(getattr(p.sources[s], "catalogue_key", None) == "GLAD-L" for s in downloads) and "GLAD-L" not in meta:
             inflight.release(*keys)
             notifications.info(t("steps.alerts.meta_loading"))
             return

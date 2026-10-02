@@ -41,12 +41,13 @@ def test_native_table_matches_earth_engine(gee, key):
     assert info["crs"] == crs and info["scale"] == pytest.approx(scale)
 
 
-def test_glad_l_downloads_natively_and_harmonizes_onto_a_utm_grid(gee, tiny_aoi, tmp_path):
+def test_glad_l_downloads_natively_and_harmonizes_onto_a_utm_grid(gee, tiny_aoi, tmp_path, real_cover):
     p = Project(name="t2", created_at=datetime.now(), updated_at=datetime.now(), look_back_days=0)
     p.aoi = AoiRecord(spec={}, name="tiny", method="DRAW", digest="tiny", bounds=BOUNDS)
     add_predefined_source(p, "GLAD-L")
     p.grid = build_grid(BOUNDS, auto_utm_epsg(BOUNDS), 30)
     p.periods[Y2025.id] = Y2025
+    real_cover(p, tiny_aoi, "GLAD-L")
     meta = catalogue.meta_request("GLAD-L").getInfo()
     tiles = []
     arts = runner.run_source_row(

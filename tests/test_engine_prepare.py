@@ -31,7 +31,6 @@ RKEY, HKEY = fp.raw_key(JAN.id, "GLAD-L"), fp.harm_key(JAN.id, "GLAD-L")
 # evaluated catalogue.meta_request("GLAD-L"): UpdResult holds 2025 and 2026
 BANDS = ["conf25", "alertDate25", "conf26", "alertDate26"]
 META = {"end": "2026-06-01", "bands": BANDS}
-BEFORE_WINDOW = {"end": "2025-06-01", "bands": BANDS}  # the window starts 2025-10-03
 
 # The grid's footprint in WGS84, padded: the AOI the fake download covers.
 _W, _S, _E, _N = Transformer.from_crs(GRID.epsg, "EPSG:4326", always_xy=True).transform_bounds(
@@ -68,11 +67,12 @@ def _write_native(path, crs="EPSG:4326", count=2, dtype="int32"):
 
 
 @pytest.fixture
-def job_factory(tmp_path, monkeypatch):
+def job_factory(tmp_path, monkeypatch, cover):
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=AOI_BOUNDS)
     p.grid = GRID
     add_predefined_source(p, "GLAD-L")
+    cover(p, "GLAD-L")  # the runner refuses a row without a coverage record
     p.periods[JAN.id] = JAN
     calls = []
 
@@ -127,26 +127,6 @@ def test_grid_change_reharmonizes_without_downloading(job_factory, tmp_path):
     assert p.artifacts[RKEY] == raw_before
     raster_io.check_header(tmp_path / arts[HKEY].rel_path, p.grid)
     assert runner.plan_prepare(p, tmp_path, JAN)[0].ready
-
-
-def test_uncovered_window_records_no_data_without_download(job_factory):
-    p, make, calls = job_factory
-    arts = runner.run_source_row(make(meta=BEFORE_WINDOW))
-    art = arts[RKEY]
-    assert art.no_data and art.rel_path == "" and calls == []
-
-
-def test_no_data_deletes_the_superseded_files(job_factory, tmp_path):
-    p, make, calls = job_factory
-    runner.apply_artifacts(p, runner.run_source_row(make()))
-    old = [tmp_path / p.artifacts[k].rel_path for k in (RKEY, HKEY)]
-    assert all(f.exists() for f in old)
-    arts = runner.run_source_row(make(force=True, meta=BEFORE_WINDOW))
-    assert set(arts) == {RKEY} and arts[RKEY].no_data
-    assert not any(f.exists() for f in old)
-    runner.apply_artifacts(p, arts)
-    row = runner.plan_prepare(p, tmp_path, JAN)[0]
-    assert row.raw is fp.Status.NO_DATA and not row.needs_run and not row.ready
 
 
 def test_missing_catalogue_metadata_is_a_clear_error(job_factory):
@@ -238,7 +218,7 @@ PARAGUAY_10M = GridSpec(epsg="EPSG:32721", resolution=10, xmin=200000, ymax=7870
 
 
 @pytest.mark.parametrize("source", ["GLAD-L", "RADD"])
-def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch, source):
+def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch, cover, source):
     """Twice the uncompressed estimate asked for ~132 GB to harmonize Paraguay
     at 10 m; the compressed estimate asks for ~6.6 GB, and RADD's 10 m download
     for ~6.9 GB. The harmonize gate fails here, so nothing is downloaded."""
@@ -246,7 +226,7 @@ def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch,
     p.aoi = p.aoi.model_copy(update={"bounds": PARAGUAY_BOUNDS})
     p.grid = PARAGUAY_10M
     add_predefined_source(p, "RADD")
-    monkeypatch.setattr(runner.catalogue, "covers", lambda *a: True)
+    cover(p, source)
     seen = _record_space_checks(monkeypatch, fail_at=2)
     job = runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=JAN,
                            source=source, meta=META, aoi="AOI")

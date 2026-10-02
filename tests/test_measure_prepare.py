@@ -59,3 +59,33 @@ def test_integrate_builds_a_job_without_a_workspace_and_leaves_no_scratch(mp, tm
     assert not hasattr(job, "workspace")
     assert job.pdir == out and job.sources == ["GLAD-L"]
     assert not (out / "scratch").exists()
+
+
+def test_the_coverage_is_saved_before_any_row_runs(mp, tmp_path, monkeypatch):
+    """The runner refuses a row without a coverage record: the script checks
+    the AOI's coverage first, as the app's loader does, and GLAD-L alone reads
+    catalogue metadata."""
+    from types import SimpleNamespace
+
+    import pysepal.scripts.utils as utils
+
+    order = []
+    raw = {k: {"fraction": 1.0, "regions": [{"name": k, "fraction": 1.0, "last": "2026-09-30"}]}
+           for k in ("GLAD-L", "RADD")}
+    monkeypatch.setattr(utils, "init_ee", lambda *a, **k: None)
+    monkeypatch.setattr(mp, "admin_aoi", lambda level, admin: ("FC", (-55.10, -10.10, -55.00, -10.00)))
+    monkeypatch.setattr(mp.coverage, "coverage_request",
+                        lambda fc, pre, custom=(): SimpleNamespace(getInfo=lambda: order.append("coverage") or raw))
+    monkeypatch.setattr(mp.catalogue, "meta_request",
+                        lambda key: SimpleNamespace(getInfo=lambda: order.append(("meta", key)) or {"bands": []}))
+
+    def fake_row(job, **kw):
+        order.append(("row", job.source, sorted(job.project.coverage)))
+        raise SystemExit(0)  # stop before any download
+
+    monkeypatch.setattr(mp, "run_source_row", fake_row)
+    monkeypatch.setattr(sys, "argv", ["measure_prepare.py", "--level", "0", "--admin", "194", "--start", "2026-01-01",
+                                      "--end", "2026-01-31", "--out", str(tmp_path / "out")])
+    with pytest.raises(SystemExit):
+        mp.main()
+    assert order == ["coverage", ("meta", "GLAD-L"), ("row", "GLAD-L", ["GLAD-L", "RADD"])]
