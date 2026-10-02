@@ -41,9 +41,12 @@ def test_copy_into(tmp_path):
     assert out.read_text() == "x" and src.exists()
 
 
-def test_scratch_dir_is_private_and_removed():
+def test_scratch_dir_is_private_and_removed(monkeypatch, tmp_path):
+    root = tmp_path / "scratch"  # not the host's tmp
+    monkeypatch.setattr(local_files.gdal_env, "scratch_dir", lambda: root)
     with local_files.scratch_dir() as d1, local_files.scratch_dir() as d2:
         assert d1 != d2 and d1.is_dir() and d2.is_dir()
+        assert d1.parent == root and d2.parent == root
         (d1 / "f").write_text("x")
     assert not d1.exists() and not d2.exists()
 

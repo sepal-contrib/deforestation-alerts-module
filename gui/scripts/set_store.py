@@ -187,7 +187,7 @@ STORE_GENERATION = "store_generation"
 def store_generation(store) -> Optional[tuple]:
     """Which write of ``store`` is on disk: ``(st_mtime_ns, st_size, st_ino)``,
     or None when the file is missing. Every writer (Integrate's swap, a review
-    Save's upload) replaces the file, so a rewrite changes it."""
+    Save's ``write_into``) replaces the file, so a rewrite changes it."""
     try:
         st = Path(store).stat()
     except FileNotFoundError:
