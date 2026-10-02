@@ -124,6 +124,36 @@ def test_a_refused_aoi_change_leaves_the_old_sidecar(data_root, no_aoiview, monk
         rc.close()
 
 
+def test_an_accepted_aoi_change_moves_the_staged_sidecar_into_place(data_root, no_aoiview):
+    from deforestation_alerts.project.models import Artifact, GridSpec
+
+    state = AppState()
+    p = Project(name="q", created_at=datetime.now(), updated_at=datetime.now())
+    old = gpd.GeoDataFrame(geometry=[box(0, 0, 1, 1)], crs="EPSG:4326")
+    aoi_io.write_sidecar(paths.project_dir("q"), old)
+    p.aoi = AoiRecord(spec={}, name="old", method="DRAW", digest=aoi_io.geometry_digest(old), bounds=(0, 0, 1, 1),
+                      geometry_file=paths.AOI_SIDECAR)
+    p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=10, height=10)
+    p.artifacts = {"k": Artifact(key="k", kind="raw_alert", rel_path="r.tif", fingerprint="f", inputs={},
+                                 content_id="c", created_at=datetime.now())}
+    state.load_project_state(p)
+    attach, rc = _attach(state, _gee([]))
+    try:
+        new = gpd.GeoDataFrame(geometry=[box(5, 5, 6, 6)], crs="EPSG:4326")
+        result = _Result(gdf=new, admin=None, method="DRAW", name="new", feature_collection=None,
+                         spec=SimpleNamespace(to_dict=lambda: {"method": "DRAW"}, asset_id=None, column=None))
+        asyncio.run(attach(result))
+        side = gpd.read_file(paths.project_dir("q") / paths.AOI_SIDECAR)
+        assert aoi_io.geometry_digest(side) == aoi_io.geometry_digest(new)
+        q = state.project.value
+        assert q.aoi.digest == aoi_io.geometry_digest(new)
+        assert q.grid is None and q.artifacts == {}
+        assert state.aoi_result.value is result
+        assert not list(paths.project_dir("q").glob(".aoi.geojson.*.tmp"))
+    finally:
+        rc.close()
+
+
 def test_the_first_pick_keeps_the_picker_mounted(data_root, monkeypatch):
     """M29: the install of the project created from the pick on screen must not
     remount the picker (its unmount clears the outline and the remount

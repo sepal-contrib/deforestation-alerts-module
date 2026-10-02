@@ -85,15 +85,11 @@ def stage_sidecar(pdir: Path, gdf) -> Path:
 
 
 def write_sidecar(pdir: Path, gdf) -> None:
-    pdir = Path(pdir)
-    pdir.mkdir(parents=True, exist_ok=True)
-    target = pdir / paths.AOI_SIDECAR
-    tmp = pdir / f".{paths.AOI_SIDECAR}.{uuid.uuid4().hex}.tmp"
+    staged = stage_sidecar(pdir, gdf)
     try:
-        gdf.to_crs(epsg=4326).to_file(tmp, driver="GeoJSON")
-        os.replace(tmp, target)
+        os.replace(staged, Path(pdir) / paths.AOI_SIDECAR)
     except BaseException:
-        tmp.unlink(missing_ok=True)
+        staged.unlink(missing_ok=True)
         raise
 
 
