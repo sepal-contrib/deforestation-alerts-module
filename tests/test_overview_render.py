@@ -24,7 +24,9 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 from shapely.geometry import box
 
-from deforestation_alerts.engine.fingerprint import fingerprint, harm_key, set_inputs
+from deforestation_alerts.engine.fingerprint import (
+    fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
+)
 from deforestation_alerts.message import cm
 from deforestation_alerts.project.models import (
     AlertSet,
@@ -66,16 +68,21 @@ def _project(tmp_path, name="d", *, current=True):
     """A project with one GLAD-L set for January, its store on disk.
 
     ``current``: its harmonized input is recorded, so the set's fingerprint
-    matches (Status.CURRENT); otherwise it is out of date (Status.STALE).
+    matches (Status.CURRENT); otherwise it is out of date (Status.STALE). The
+    raw and harmonized records carry their real fingerprints: ``set_status``
+    also compares them with their current inputs.
     """
     now = datetime.now()
     p = Project(name=name, created_at=now, updated_at=now)
     add_predefined_source(p, "GLAD-L")
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
+    p.artifacts[raw_key(JAN.id, "GLAD-L")] = Artifact(
+        key=raw_key(JAN.id, "GLAD-L"), kind="raw_alert", rel_path="r.tif",
+        fingerprint=fingerprint(raw_alert_inputs(p, "GLAD-L", JAN)), inputs={}, content_id="r1", created_at=now)
     p.artifacts[harm_key(JAN.id, "GLAD-L")] = Artifact(
-        key=harm_key(JAN.id, "GLAD-L"), kind="harmonized", rel_path="h.tif", fingerprint="x", inputs={},
-        content_id="h1", created_at=now)
+        key=harm_key(JAN.id, "GLAD-L"), kind="harmonized", rel_path="h.tif",
+        fingerprint=fingerprint(harmonized_inputs(p, "GLAD-L", JAN)), inputs={}, content_id="h1", created_at=now)
     params = AlertSetParams()
     s = AlertSet(id=make_set_id(JAN.id, ["GLAD-L"]), period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
                  params=params, store_rel_path=f"{SET_DIR}/alert_db.parquet", combined_rel_path=f"{SET_DIR}/c.tif",

@@ -119,25 +119,77 @@ def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
     }
 
 
+def mask_file_missing(mask) -> Optional[str]:
+    """A GeoTIFF mask's path when it is gone (spec §5.3 "file not found")."""
+    return mask.ref if mask.origin == "file" and not os.path.exists(mask.ref) else None
+
+
+def _mask_def(mask) -> dict:
+    d = mask.model_dump(mode="json", exclude={"name", "native"})
+    if mask.origin == "file":
+        d["file"] = _file_stamp(mask.ref)
+    return d
+
+
+def mask_raw_inputs(p: Project, name: str) -> dict:
+    """An Earth Engine mask's native download: no grid term (spec §5.3), so a
+    grid change leaves it current and only re-aligns it."""
+    m = p.masks[name]
+    return {"stage": "mask_raw", "mask": _mask_def(m), "aoi": p.aoi.digest if p.aoi else None,
+            "native": [m.native.crs, m.native.scale] if m.native else None}
+
+
+def mask_inputs(p: Project, name: str) -> Optional[dict]:
+    """The aligned mask on the grid. None while an Earth Engine mask's raw
+    download, or a GeoTIFF mask's AOI raster of this AOI and grid (it clips
+    the GeoTIFF at alignment), is not recorded."""
+    m = p.masks[name]
+    grid = p.grid.signature if p.grid else None
+    if m.origin == "gee":
+        raw = p.artifacts.get(mask_raw_key(name))
+        return None if raw is None else {"stage": "mask", "raw": raw.content_id, "grid": grid}
+    aoi = p.artifacts.get(AOI_KEY)
+    if aoi is None or aoi.fingerprint != fingerprint(aoi_raster_inputs(p)):
+        return None
+    return {"stage": "mask", "mask": _mask_def(m), "aoi": p.aoi.digest if p.aoi else None,
+            "aoi_raster": aoi.content_id, "grid": grid}
+
+
+def mask_current(p: Project, name: str) -> bool:
+    """The aligned mask's record matches its current inputs on the current
+    grid. Fingerprint only, no disk access (``status`` adds the file check)."""
+    art, expected = p.artifacts.get(mask_key(name)), mask_inputs(p, name)
+    return (art is not None and not art.no_data and expected is not None
+            and art.fingerprint == fingerprint(expected))
+
+
+def period_masks(p: Project, period: Period) -> list:
+    """The ``(name, mode)`` of the project masks on in ``period``, sorted. The
+    period is read from ``p.periods`` (the project holds the per-period
+    choices, spec §7.3); a period not in the project is read as given."""
+    period = p.periods.get(period.id, period)
+    return [(n, c.mode) for n, c in sorted(period.masks.items()) if c.on and n in p.masks]
+
+
 def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]:
-    """None while the raw artifact or an "on" mask's artifact is not recorded,
-    or, for a GeoTIFF source, while the AOI raster of this AOI and grid is not.
+    """None (blocked) while the raw artifact is not recorded, while a mask on
+    in the period is not aligned current on the current grid, or, for a
+    GeoTIFF source, while the AOI raster of this AOI and grid is not recorded.
 
     Harmonizing aligns the raw file onto the grid, so the grid is an input here.
-    A GeoTIFF source is clipped to the AOI polygon by the AOI raster (an Earth
-    Engine download is clipped by its region already).
+    The ``masks`` term holds only this period's choices (spec §5.3): changing
+    one period's masks touches no other period. A GeoTIFF source is clipped to
+    the AOI polygon by the AOI raster (an Earth Engine download is clipped by
+    its region already).
     """
     raw = p.artifacts.get(raw_key(period.id, source))
     if raw is None:
         return None
     masks = []
-    for name, choice in sorted(period.masks.items()):
-        if not (choice.on and name in p.masks):
-            continue
-        art = p.artifacts.get(mask_key(name))
-        if art is None:
-            return None
-        masks.append([name, choice.mode, art.content_id])
+    for name, mode in period_masks(p, period):
+        if not mask_current(p, name):
+            return None  # blocked until the mask is aligned on the current grid (spec §5.3)
+        masks.append([name, mode, p.artifacts[mask_key(name)].content_id])
     inputs = {"stage": "harmonized", "raw": raw.content_id, "grid": p.grid.signature if p.grid else None,
               "masks": masks}
     if is_file_source(p.sources[source]):
@@ -206,12 +258,32 @@ def status(p: Project, pdir, key: str, expected: Optional[dict]) -> Status:
 
 
 def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
+    """STALE when the set's own inputs changed, or when an input of one of its
+    sources' raw or harmonized files changed since (a mask switch, a grid, AOI
+    or look-back change: spec §5.3, §14 slice 4 (a)), before any re-run;
+    MISSING when its store is gone; else CURRENT.
+
+    Only a fingerprint mismatch counts: a raw or harmonized file deleted from
+    disk reads MISSING in its own row and is not a change of input (slice 1's
+    ``test_reopened_project_with_deleted_files_offers_a_rerun`` keeps the set
+    MISSING, not STALE). A moved user GeoTIFF reads "file not found" in its
+    row, not out of date, so its stamp is not compared here either. Manifest
+    plus ``os.stat`` only: cheap enough for a render (Task 34's badges)."""
     period = p.periods.get(alert_set.period_id)
     if period is None:
         return Status.STALE
     expected = set_inputs(p, period, alert_set.sources, alert_set.params)
     if expected is None or fingerprint(expected) != alert_set.fingerprint:
         return Status.STALE
+    for s in alert_set.sources:
+        src = p.sources.get(s)
+        if src is None:
+            return Status.STALE
+        if (user_file_missing(src) is None
+                and status(p, pdir, raw_key(period.id, s), raw_alert_inputs(p, s, period)) is Status.STALE):
+            return Status.STALE
+        if status(p, pdir, harm_key(period.id, s), harmonized_inputs(p, s, period)) is Status.STALE:
+            return Status.STALE
     if not (Path(pdir) / alert_set.store_rel_path).exists():
         return Status.MISSING
     return Status.CURRENT

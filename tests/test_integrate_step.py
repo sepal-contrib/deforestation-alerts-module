@@ -735,11 +735,18 @@ def test_the_form_starts_from_the_active_set_and_resets_for_another_project(step
 def test_the_step_names_an_active_set_that_is_out_of_date_or_missing(step, tmp_path, status):
     """Spec §5.3 and review focus 4: the step says when the active set must be
     run again, and why; a current set gets no line."""
-    from deforestation_alerts.engine.fingerprint import fingerprint, harm_key, set_inputs
+    from deforestation_alerts.engine.fingerprint import (
+        fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
+    )
 
     step.ready = ["GLAD-L"]
     p = _project("d", "GLAD-L")
-    p.artifacts[harm_key(JAN.id, "GLAD-L")] = _art(harm_key(JAN.id, "GLAD-L"), "harmonized")
+    # real fingerprints: set_status also compares the set's raw and harmonized records with their inputs
+    rkey, hkey = raw_key(JAN.id, "GLAD-L"), harm_key(JAN.id, "GLAD-L")
+    p.artifacts[rkey] = _art(rkey, "raw_alert").model_copy(
+        update={"fingerprint": fingerprint(raw_alert_inputs(p, "GLAD-L", JAN))})
+    p.artifacts[hkey] = _art(hkey, "harmonized").model_copy(
+        update={"fingerprint": fingerprint(harmonized_inputs(p, "GLAD-L", JAN))})
     s = _set("x", 0)
     if status != "stale":
         s = s.model_copy(update={"fingerprint": fingerprint(set_inputs(p, JAN, ["GLAD-L"], s.params))})

@@ -32,20 +32,23 @@ from deforestation_alerts.engine import catalogue, normalize
 from deforestation_alerts.engine.coverage import BLOCKED, record_for, window_coverage
 from deforestation_alerts.engine.download import estimate_native_bytes, export_native
 from deforestation_alerts.engine.fingerprint import (
-    AOI_KEY, Status, aoi_raster_inputs, harm_key, harmonized_inputs, is_file_source, make_artifact, mask_key,
-    raw_alert_inputs, raw_key, status, user_file_missing,
+    AOI_KEY, Status, aoi_raster_inputs, harm_key, harmonized_inputs, is_file_source, make_artifact, mask_file_missing,
+    mask_inputs, mask_key, mask_raw_inputs, mask_raw_key, period_masks, raw_alert_inputs, raw_key, status,
+    user_file_missing,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.harmonize import harmonize
-from deforestation_alerts.engine.masks import build_aoi_raster
+from deforestation_alerts.engine.masks import (
+    align_mask, build_aoi_raster, build_mask_image, export_mask_native, mask_raw_estimate,
+)
 from deforestation_alerts.engine.plan import plan_prepare  # re-exported for callers and tests
 from deforestation_alerts.engine.raster_io import compressed_estimate, ensure_free_space
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Artifact, Period, Project
 
 __all__ = [
-    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "SourceJob", "apply_artifacts", "ensure_aoi_raster",
-    "plan_prepare", "run_source_row",
+    "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskJob", "MaskNotReady", "SourceJob",
+    "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
 ]
 
 
@@ -66,9 +69,15 @@ class AoiGeometryMissing(RuntimeError):
     key = "steps.prepare.aoi_geometry_missing"
 
 
+class MaskNotReady(RuntimeError):
+    """A mask on in the period is not aligned on the current grid; run it first."""
+
+    key = "steps.prepare.mask_not_ready"
+
+
 class HarmonizeFailed(RuntimeError):
-    """Harmonizing failed after this run downloaded a new raw file (or rebuilt
-    the AOI raster).
+    """Harmonizing (or a mask's alignment) failed after this run downloaded a
+    new raw file (or rebuilt the AOI raster).
 
     ``artifacts`` holds those records (keyed like ``project.artifacts``); the
     caller applies them like a returned result, so the download is not lost. The
@@ -107,10 +116,13 @@ def _harmonize_space(p: Project) -> int:
     return 2 * compressed_estimate(estimate_bytes(p.grid))
 
 
-def _masks_ready(p: Project, period: Period) -> bool:
-    """Every mask this period turns on has a recorded download (harmonize needs them all)."""
-    return all(mask_key(name) in p.artifacts for name, choice in period.masks.items()
-               if choice.on and name in p.masks)
+def _masks_ready(p: Project, pdir: Path, period: Period) -> bool:
+    """Every mask on in the period (as ``p.periods`` holds it) is aligned
+    current on the current grid, and its aligned file is on disk: harmonize
+    reads them all, so a mask left on an old grid or deleted from disk fails
+    here, before any download (spec §5.3)."""
+    return all(status(p, pdir, mask_key(name), mask_inputs(p, name)) is Status.CURRENT
+               for name, _ in period_masks(p, period))
 
 
 def _raw_estimate(p: Project, src) -> int:
@@ -178,8 +190,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
         raise ValueError("GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment")
     # Every precondition of the harmonize is checked before a download (spec §7.3).
-    if not _masks_ready(p, period):
-        raise RuntimeError(f"{job.source}: an enabled mask has not been downloaded yet")
+    if not _masks_ready(p, pdir, period):
+        raise MaskNotReady(f"{job.source}: a mask on in this period is not aligned on the current grid; "
+                           "run the masks first")
     if file_source:
         aoi_art = ensure_aoi_raster(p, pdir)
         if aoi_art is not None:
@@ -204,8 +217,8 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
 
     try:
         harm_in = harmonized_inputs(p, job.source, period)
-        if harm_in is None:
-            raise RuntimeError(f"{job.source}: an enabled mask has not been downloaded yet")
+        if harm_in is None:  # unreachable after the checks above; never harmonize without inputs
+            raise RuntimeError(f"{job.source}: its harmonize inputs are not recorded")
         if rkey in out or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
             ensure_free_space(harm_path.parent, _harmonize_space(p))
             masks = [
@@ -220,6 +233,72 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
             out[hkey] = make_artifact(hkey, "harmonized", pdir, harm_path, harm_in, stats=stats)
     except Exception as exc:
         if rkey in out or AOI_KEY in out:
+            raise HarmonizeFailed(exc, dict(out)) from exc
+        raise
+    return out
+
+
+@dataclass(frozen=True)
+class MaskJob:
+    project: Project  # a deep copy: the worker never touches the live project
+    pdir: Path
+    name: str
+    aoi: Any  # ee.FeatureCollection; only an Earth Engine download needs it
+    force: bool = False
+
+
+def run_mask_row(job: MaskJob, *, on_tiles=None, on_wait=None) -> dict[str, Artifact]:
+    """Download (an Earth Engine mask, natively, as uint8 0/1, when its raw
+    file is missing, out of date or ``force``d) and align a mask onto the
+    grid (when the aligned file is not current). Returns the artifacts
+    written, keyed like ``project.artifacts``.
+
+    A GeoTIFF mask is read where it is and clipped at alignment by the AOI
+    raster, rebuilt first when the AOI or the grid changed. The alignment's
+    free space is checked before a download (spec §7.3); each check asks for
+    twice the compressed estimate. If the alignment fails after a download or
+    an AOI-raster build, ``HarmonizeFailed`` carries the new artifacts.
+    """
+    p, pdir, name = job.project, Path(job.pdir), job.name
+    if p.aoi is None or p.grid is None:
+        raise ValueError("the project needs an AOI and a grid before a mask runs")
+    m = p.masks[name]
+    missing = mask_file_missing(m)
+    if missing:
+        raise FileNotFoundError(f"file not found: {missing}")
+    if m.origin == "gee" and m.native is None:
+        raise ValueError(f"{name}: its native grid is unknown; edit the mask")
+    mpath = paths.mask_path(pdir, name)
+    align_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=1))
+    out: dict[str, Artifact] = {}
+    if m.origin == "gee":
+        rkey, raw_in = mask_raw_key(name), mask_raw_inputs(p, name)
+        if job.force or status(p, pdir, rkey, raw_in) in (Status.MISSING, Status.STALE):
+            raw_path = paths.mask_raw_path(pdir, name)
+            ensure_free_space(raw_path.parent, 2 * compressed_estimate(mask_raw_estimate(m, p.aoi.bounds)))
+            # A download is always followed by an alignment: check its room now too.
+            ensure_free_space(mpath.parent, align_bytes)
+            export_mask_native(build_mask_image(m, job.aoi), m.native, job.aoi, raw_path,
+                               on_tiles=on_tiles, on_wait=on_wait)
+            _drop_superseded(p, pdir, rkey, raw_path)
+            # recorded in the job's copy too, so mask_inputs sees the new content_id
+            out[rkey] = p.artifacts[rkey] = make_artifact(rkey, "raw_mask", pdir, raw_path, raw_in)
+        src_path, band, aoi_raster = paths.resolve(pdir, p.artifacts[rkey].rel_path), 1, None
+    else:
+        aoi_art = ensure_aoi_raster(p, pdir)
+        if aoi_art is not None:
+            out[AOI_KEY] = p.artifacts[AOI_KEY] = aoi_art
+        src_path, band = m.ref, int(m.band)
+        aoi_raster = paths.resolve(pdir, p.artifacts[AOI_KEY].rel_path)
+    try:
+        key, expected = mask_key(name), mask_inputs(p, name)
+        if out or job.force or status(p, pdir, key, expected) is not Status.CURRENT:
+            ensure_free_space(mpath.parent, align_bytes)
+            stats = align_mask(src_path, p.grid, mpath, band=band, aoi_raster=aoi_raster)
+            _drop_superseded(p, pdir, key, mpath)
+            out[key] = make_artifact(key, "mask", pdir, mpath, expected, stats=stats)
+    except Exception as exc:
+        if out:
             raise HarmonizeFailed(exc, dict(out)) from exc
         raise
     return out

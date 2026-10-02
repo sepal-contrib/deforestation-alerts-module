@@ -139,6 +139,7 @@
       "job_row": "Preparing {source}",
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
+      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run all aligns the masks first.",
       "mask_name_empty": "Give the mask a name.",
       "mask_name_too_long": "Use at most 24 characters.",
       "mask_name_duplicate": "Another mask already has this name.",

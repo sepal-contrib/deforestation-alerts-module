@@ -168,3 +168,22 @@ def test_an_empty_rel_path_reads_missing(proj):
     key = fp.raw_key(JAN.id, "RADD")
     p.artifacts[key] = fp.make_artifact(key, "raw_alert", pdir, None, fp.raw_alert_inputs(p, "RADD", JAN))
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "RADD", JAN)) is fp.Status.MISSING
+
+
+def test_a_look_back_change_makes_a_set_stale_before_any_rerun(proj):
+    p, pdir = proj
+    _prepare(p, pdir, JAN, "GLAD-L")
+    jan = _set(p, pdir, JAN, ["GLAD-L"])
+    assert fp.set_status(p, pdir, jan) is fp.Status.CURRENT
+    p.look_back_days = 30  # the search window changes: the raw download is out of date
+    assert fp.set_status(p, pdir, jan) is fp.Status.STALE
+
+
+def test_a_deleted_harmonized_file_is_not_an_input_change(proj):
+    """A file gone from disk reads MISSING in its row; the set built from it
+    keeps its own state (here CURRENT: its store is there)."""
+    p, pdir = proj
+    _prepare(p, pdir, JAN, "GLAD-L")
+    jan = _set(p, pdir, JAN, ["GLAD-L"])
+    (pdir / p.artifacts[fp.harm_key(JAN.id, "GLAD-L")].rel_path).unlink()
+    assert fp.set_status(p, pdir, jan) is fp.Status.CURRENT

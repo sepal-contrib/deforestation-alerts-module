@@ -5,7 +5,9 @@ Analysis controls, following every project publish. Never blocks the review.
 
 from datetime import date, datetime
 
-from deforestation_alerts.engine.fingerprint import fingerprint, harm_key, set_inputs
+from deforestation_alerts.engine.fingerprint import (
+    fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
+)
 from deforestation_alerts.project.models import (
     AlertSet,
     AlertSetParams,
@@ -27,9 +29,13 @@ def _project(tmp_path):
     add_predefined_source(p, "GLAD-L")
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
+    # real fingerprints: set_status also compares the set's raw and harmonized records with their inputs
+    p.artifacts[raw_key(JAN.id, "GLAD-L")] = Artifact(
+        key=raw_key(JAN.id, "GLAD-L"), kind="raw_alert", rel_path="r.tif",
+        fingerprint=fingerprint(raw_alert_inputs(p, "GLAD-L", JAN)), inputs={}, content_id="r1", created_at=now)
     p.artifacts[harm_key(JAN.id, "GLAD-L")] = Artifact(
-        key=harm_key(JAN.id, "GLAD-L"), kind="harmonized", rel_path="h.tif", fingerprint="x", inputs={},
-        content_id="h1", created_at=now)
+        key=harm_key(JAN.id, "GLAD-L"), kind="harmonized", rel_path="h.tif",
+        fingerprint=fingerprint(harmonized_inputs(p, "GLAD-L", JAN)), inputs={}, content_id="h1", created_at=now)
     rel = f"periods/{JAN.id}/sets/glad-l"
     s = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"}, params=AlertSetParams(),
                  store_rel_path=f"{rel}/alert_db.parquet", combined_rel_path=f"{rel}/c.tif",
