@@ -1,4 +1,6 @@
 import asyncio
+import json
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import ipyvuetify as v
@@ -9,6 +11,7 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.project import io, paths
+from deforestation_alerts.project.io import ProjectInfo
 from deforestation_alerts.project.models import AoiRecord, add_predefined_source
 from gui.i18n import t
 from gui.store.autosave import install_autosave
@@ -63,11 +66,12 @@ def dialog(monkeypatch, tmp_path):
     """A real AppState with the auto-save hook; the projects table is swapped
     for a recorder so the test calls the row actions the dialog wires up."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(rows=[], dismissed=0, root=tmp_path, state=AppState())
+    ns = SimpleNamespace(rows=[], empty=[], dismissed=0, root=tmp_path, state=AppState())
 
     @solara.component
     def _RecorderTable(title, columns, rows, empty_text):
         ns.rows.append(rows)
+        ns.empty.append(empty_text)
 
     monkeypatch.setattr(pd, "ProductTable", _RecorderTable)
     unsubscribe = install_autosave(ns.state)
@@ -299,6 +303,95 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
                 await _settle(lambda: _listed(dialog) == {"a": f"{n} / 0 / 0"}, f"save {n} listed")
             assert reports == []
             assert dialog.state.last_saved.value is not None and dialog.state.save_error.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _texts(widget):
+    out = []
+    if isinstance(widget, str):
+        return [widget]
+    for child in getattr(widget, "children", None) or []:
+        out += _texts(child)
+    return out
+
+
+def test_relative_time():
+    now = datetime(2026, 10, 1, 12, 0, 0)
+    assert pd.relative_time(now - timedelta(seconds=59), now) == "just now"
+    assert pd.relative_time(now + timedelta(seconds=5), now) == "just now"  # a clock a little ahead
+    assert pd.relative_time(now - timedelta(minutes=1), now) == "1 minute ago"
+    assert pd.relative_time(now - timedelta(minutes=59, seconds=59), now) == "59 minutes ago"
+    assert pd.relative_time(now - timedelta(hours=1), now) == "1 hour ago"
+    assert pd.relative_time(now - timedelta(hours=23), now) == "23 hours ago"
+    assert pd.relative_time(now - timedelta(days=3, hours=5), now) == "3 days ago"
+
+
+def test_filter_infos():
+    infos = [ProjectInfo(name=n, n_sources=0, n_periods=0, n_sets=0, updated_at=None)
+             for n in ("North", "north_2", "South")]
+    assert [i.name for i in pd.filter_infos(infos, " NOR ")] == ["North", "north_2"]
+    assert pd.filter_infos(infos, "") == infos and pd.filter_infos(infos, None) == infos
+    assert pd.filter_infos(infos, "zz") == []
+
+
+def test_the_search_filters_the_list(dialog):
+    async def main():
+        for name in ("north", "north_2", "south"):
+            io.save_project(pd.create_project(name))
+        box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) and len(_listed(dialog)) == 3, "three projects listed")
+            search = rc.find(v.TextField, label=t("steps.project.search")).widget
+            search.v_model = "NOR"
+            assert set(_listed(dialog)) == {"north", "north_2"}
+            search.v_model = "zz"
+            assert _listed(dialog) == {} and dialog.empty[-1] == t("steps.project.no_match", query="zz")
+            search.v_model = None  # the field's clear button
+            assert len(_listed(dialog)) == 3 and dialog.empty[-1] == t("steps.project.list_empty")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_saved_ago_follows_the_manifest_and_every_save(dialog):
+    async def main():
+        old = pd.create_project("a")
+        io.save_project(old)
+        manifest = dialog.root / "a" / paths.MANIFEST
+        raw = json.loads(manifest.read_text())
+        raw["updated_at"] = (datetime.now() - timedelta(days=3, minutes=1)).isoformat()
+        manifest.write_text(json.dumps(raw))
+        box, rc = dialog.render()
+        try:
+            dialog.state.load_project_state(io.load_project("a"))
+            await _settle(lambda: t("steps.project.saved_ago", time_ago="3 days ago") in _texts(box),
+                          "the manifest's save time")
+            p = dialog.state.project.value
+            add_predefined_source(p, "GLAD-L")
+            dialog.state.commit(p)  # auto-saved
+            await _settle(lambda: t("steps.project.saved_ago", time_ago="just now") in _texts(box),
+                          "the new save")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_saved_ago_moves_on_while_the_dialog_stays_open(dialog, monkeypatch):
+    monkeypatch.setattr(pd, "TICK_SECONDS", 0.05)
+
+    async def main():
+        box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            dialog.state.last_saved.set(datetime.now() - timedelta(seconds=59.8))
+            assert t("steps.project.saved_ago", time_ago="just now") in _texts(box)
+            await _settle(lambda: t("steps.project.saved_ago", time_ago="1 minute ago") in _texts(box),
+                          "a tick re-rendered the line")
         finally:
             rc.close()
 

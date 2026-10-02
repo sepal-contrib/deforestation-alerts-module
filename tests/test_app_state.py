@@ -133,3 +133,16 @@ def test_the_recipe_era_reactives_are_gone():
     s = AppState()
     for name in ("active_map_view", "aoi_name", "recipe_name", "recipe_folder_path", "error_message"):
         assert not hasattr(s, name), name
+
+
+def test_an_opened_project_was_last_saved_when_its_manifest_says():
+    from datetime import datetime, timedelta
+
+    from deforestation_alerts.project.models import Project
+
+    s = AppState()
+    when = datetime.now() - timedelta(days=2)
+    s.load_project_state(Project(name="p", created_at=when, updated_at=when))
+    assert s.last_saved.value == when
+    s.new_project_state(Project(name="q", created_at=when, updated_at=when))
+    assert s.last_saved.value is None or s.last_saved.value > when  # never saved before (the auto-save may stamp it)

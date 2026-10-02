@@ -16,11 +16,15 @@ loop, where solara starts such a task with a bare ``asyncio.create_task``
 A new, opened or duplicated project starts the workflow at its AOI and closes
 the dialog (``dismiss``, from the shell). Deleting the open project closes it
 first, so no auto-save can write its manifest back while the folder goes.
+
+The list can be searched by name, and the open project's line reads 'saved X
+ago', brought up to date by ``_SavedAgo``'s ticker.
 """
 
 import asyncio
 import logging
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -94,6 +98,63 @@ def _NameForm(title, create_label, open_, on_create, hint=None):
     )
 
 
+#: How often the open project's "saved X ago" line is brought up to date.
+TICK_SECONDS = 30.0
+
+
+def relative_time(when: datetime, now: datetime) -> str:
+    """'just now', 'N minutes ago', 'N hours ago', 'N days ago' (spatial_risk's
+    ``format_relative``). A time a little ahead of ``now`` reads 'just now'."""
+    seconds = max(0, int((now - when).total_seconds()))
+    if seconds < 60:
+        return t("steps.project.ago_now")
+    if seconds < 3600:
+        return plural(seconds // 60, "steps.project.ago_minutes_one", "steps.project.ago_minutes_other")
+    if seconds < 86400:
+        return plural(seconds // 3600, "steps.project.ago_hours_one", "steps.project.ago_hours_other")
+    return plural(seconds // 86400, "steps.project.ago_days_one", "steps.project.ago_days_other")
+
+
+def filter_infos(infos: list, query) -> list:
+    """The projects whose name contains ``query``, ignoring case; every project
+    for a blank query (spatial_risk's ``filter_project_infos``). Order kept."""
+    needle = (query or "").strip().lower()
+    return list(infos) if not needle else [i for i in infos if needle in i.name.lower()]
+
+
+@solara.component
+def _SavedAgo(app_state):
+    """The open project's save state, kept true while the dialog stays open.
+
+    A leaf with its own ticker: a thread started from an effect re-renders this
+    line every ``TICK_SECONDS`` and stops with the effect's cleanup, so nothing
+    but this line re-renders on a tick (spec §11).
+    """
+    _, set_tick = solara.use_state(0)
+
+    def _ticker():
+        stop = threading.Event()
+
+        def _run():
+            n = 0
+            while not stop.wait(TICK_SECONDS):
+                n += 1
+                set_tick(n)
+
+        spawn_in_context(_run)
+        return stop.set
+
+    solara.use_effect(_ticker, [])
+    # KEPT INLINE ON PURPOSE (ruling #62): the persistent save state of the
+    # open project (spec §4.1), not a one-off outcome a toast would fit.
+    if app_state.save_error.value:
+        solara.Text(t("steps.project.save_failed", error=app_state.save_error.value), classes=["error--text"])
+    elif app_state.last_saved.value:
+        solara.Text(t("steps.project.saved_ago",
+                      time_ago=relative_time(app_state.last_saved.value, datetime.now())),
+                    classes=["text--secondary"])
+
+
 def _reopen(name: str) -> Optional[Project]:
     """The project as its manifest now reads, or None once that is gone."""
     try:
@@ -112,6 +173,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     dup_open = solara.use_reactive(False)
     pending_delete, set_pending_delete = solara.use_state(None)
     typed, set_typed = solara.use_state("")
+    query, set_query = solara.use_state("")
 
     infos, set_infos = solara.use_state([])
     # The number of the last read started: a read overtaken by a newer one
@@ -221,18 +283,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                 sets=plural(len(p.alert_sets), "steps.project.count_sets_one",
                             "steps.project.count_sets_other"),
             ))
-            # KEPT INLINE ON PURPOSE (ruling #62) — the global rule routes
-            # feedback through notifications/tracked_job/the task pill, but this
-            # line names the *current, persistent* save state of the open
-            # project (not a one-off outcome a toast would fit), so it stays
-            # pinned under the summary like the autosave status spec §4.1 asks
-            # for, instead of flashing and disappearing.
-            if app_state.save_error.value:
-                solara.Text(t("steps.project.save_failed", error=app_state.save_error.value),
-                            classes=["error--text"])
-            elif app_state.last_saved.value:
-                solara.Text(t("steps.project.saved_at", time=app_state.last_saved.value.strftime("%H:%M:%S")),
-                            classes=["text--secondary"])
+            _SavedAgo(app_state=app_state)
         with solara.Row(style="gap:8px;"):
             solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True,
                           on_click=lambda: new_open.set(True))
@@ -251,14 +302,20 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                     {"kind": "delete", "on_click": (lambda n=i.name: _ask_delete(n))},
                 ],
             }
-            for i in infos
+            for i in filter_infos(infos, query)
         ]
+        if infos:
+            rv.TextField(label=t("steps.project.search"), v_model=query, on_v_model=set_query,
+                         prepend_inner_icon="mdi-magnify", dense=True, outlined=True, clearable=True,
+                         hide_details=True)
+        needle = (query or "").strip()
         ProductTable(
             title=t("steps.project.list_title"),
             columns=[{"label": t("steps.project.col_name")},
                      {"label": t("steps.project.col_counts"), "width": "140px"},
                      {"label": t("steps.project.col_updated"), "width": "130px"}],
-            rows=rows, empty_text=t("steps.project.list_empty"),
+            rows=rows,
+            empty_text=t("steps.project.no_match", query=needle) if infos and needle else t("steps.project.list_empty"),
         )
 
     _NameForm(t("steps.project.new"), t("common.create"), new_open, _create)

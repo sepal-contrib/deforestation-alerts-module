@@ -106,8 +106,9 @@ class AppState:
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
             self.save_error.set(None)  # before the set: the auto-save may report into it
-            # a new project has never been saved: the auto-save stamps it
-            self.last_saved.set(datetime.now() if loading and p is not None else None)
+            # An opened project was last saved when its manifest says (spec §4.1
+            # "saved X ago"); a new one has never been saved: the auto-save stamps it.
+            self.last_saved.set((p.updated_at or datetime.now()) if loading and p is not None else None)
             self._loading = loading
             try:
                 self.project.set(p)  # auto-save runs here unless loading
