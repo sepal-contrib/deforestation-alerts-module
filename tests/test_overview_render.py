@@ -42,7 +42,7 @@ from deforestation_alerts.project.models import (
 )
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t
-from gui.scripts import charts, overview_data
+from gui.scripts import alert_layers, charts, overview_data
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
@@ -548,5 +548,92 @@ def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(o
         # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# The map switches (the same two Integrate & vectorize offers)
+# ---------------------------------------------------------------------------
+def _switch(rc, label):
+    return next(s for s in rc.find(v.Switch).widgets if s.label == label)
+
+
+def test_the_map_switches_drive_the_shells_two_booleans(ov, tmp_path):
+    """Neither switch calls the map: ``_AlertLayers`` owns every MapLayers call,
+    which is what lets the same control sit here and in Integrate."""
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert not state.show_alerts.value
+        _switch(rc, t("steps.integrate.show_alerts")).v_model = True
+        assert state.show_alerts.value is True
+        assert layers.on.value == frozenset()  # no layer registered from here
+        _switch(rc, t("steps.integrate.show_alerts")).v_model = False
+        assert state.show_alerts.value is False
+    finally:
+        rc.close()
+
+
+def test_switching_a_layer_on_closes_the_dialog_and_off_leaves_it_open(ov, tmp_path):
+    """The map is behind this dialog: a switch that stays open would look like
+    it did nothing. Switching off has nothing to go and look at."""
+    p = _project(tmp_path)
+    closed = []
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(state.show_alerts.value))
+    try:
+        _switch(rc, t("steps.integrate.show_alerts")).v_model = True
+        assert closed == [True]  # dismissed with the layer already asked for
+        _switch(rc, t("steps.integrate.show_alerts")).v_model = False
+        assert closed == [True]
+    finally:
+        rc.close()
+
+
+def test_the_earlier_sets_switch_only_with_an_earlier_set(ov, tmp_path):
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert [s.label for s in rc.find(v.Switch).widgets] == [t("steps.integrate.show_alerts")]
+    finally:
+        rc.close()
+
+    p = _project(tmp_path, "e")
+    february = _with_february(p, tmp_path, "e")
+    state = _state(p, _alerts(set_id=february.id))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert [s.label for s in rc.find(v.Switch).widgets] == [
+            t("steps.integrate.show_alerts"), t("steps.integrate.show_earlier")]
+        _switch(rc, t("steps.integrate.show_earlier")).v_model = True
+        assert state.show_earlier_sets.value is True
+    finally:
+        rc.close()
+
+
+def test_a_switch_is_held_while_its_own_layer_is_being_built(ov, tmp_path):
+    """A flip here must not race a build Integrate started: the shell's
+    registry publishes the keys in flight and the switch follows it."""
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert _switch(rc, t("steps.integrate.show_alerts")).disabled is False
+        layers.inflight.set(frozenset({alert_layers.SET_LAYER_KEY}))
+        assert _switch(rc, t("steps.integrate.show_alerts")).disabled is True
+    finally:
+        rc.close()
+
+
+def test_no_map_switch_without_the_alerts_on_hand(ov, tmp_path):
+    """``_AlertLayers`` draws nothing without them, so a switch offered here
+    would be a lie -- and the alerts on hand are another set's until the
+    shell's loader has read the one the selector picked."""
+    map_, layers, rc = ov.render(_state(_project(tmp_path), None))
+    try:
+        assert rc.find(v.Switch).widgets == []
     finally:
         rc.close()

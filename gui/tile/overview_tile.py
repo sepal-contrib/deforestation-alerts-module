@@ -6,9 +6,15 @@ project's ``active_set``, and this view then summarises that set.
 
 Architecture layer: view. It reads; it draws nothing on the map. The alert
 layers, the earlier sets and the click-to-review popup are the shell's
-``_AlertLayers`` leaf, switched on from Integrate & vectorize, because a layer
-switched on there stays on while the user moves between steps and dialogs, and
-a view that owns a layer would have to hide it when it closes.
+``_AlertLayers`` leaf, because a layer switched on stays on while the user
+moves between steps and dialogs, and a view that owned a layer would have to
+hide it when it closes.
+
+It does carry that leaf's two switches, the same ones Integrate & vectorize
+offers and under the same labels -- they are two booleans on ``app_state``,
+which is what lets the same control sit in two places without either view
+owning a map call. Turning one on closes this dialog: the map is behind it,
+and the user would otherwise see nothing happen.
 
 Three rulings shape the component:
 
@@ -54,7 +60,7 @@ from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t
-from gui.scripts import charts, overview_data, set_store
+from gui.scripts import alert_layers, charts, overview_data, set_store
 from gui.scripts import loss_drivers as drivers
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
@@ -439,18 +445,20 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     ----------
     app_state : AppState
         The session state: the project (its active set), ``alerts_gdf`` (the
-        active set's alerts, loaded by the shell, used by the export card
-        alone) and the navigation reactives.
+        active set's alerts, loaded by the shell -- the export card and the
+        map switches are all that read them) and the navigation reactives.
     map_ : SepalMap
         The single shared map. Unused: this view draws nothing on it (the
         alert layers are the shell's ``_AlertLayers``), and it is passed only
         so the signature matches the other views the shell mounts.
     layers : MapLayers
-        The session's map-layer registry. Unused, as ``map_``.
+        The session's map-layer registry. Read, never called: the switches are
+        held while their own layer is being built (``layers.inflight``), so a
+        flip here cannot race the build another view started.
     dismiss : callable, optional
         Closes this dialog, as its own close button does
         (``navigation.dismiss_dialog``). "Review alerts" closes it before it
-        sends the user to Analysis, which shows behind it.
+        sends the user to Analysis, and a map switch closes it on its way on.
     """
     measure, set_measure = solara.use_state(charts.MEASURE_AREA)
     read, set_read = solara.use_state(_NOTHING)
@@ -532,6 +540,19 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             dismiss()
         app_state.current_page_view.value = "analysis_tile"
 
+    def _switch(reactive):
+        """Flip a map-layer switch. Turning one ON closes this dialog, because
+        the map it just changed is behind it and the user would otherwise see
+        nothing happen; turning one off leaves the dialog open, since there is
+        nothing to go and look at."""
+
+        def _on(value):
+            reactive.set(value)
+            if value and dismiss is not None:
+                dismiss()
+
+        return _on
+
     with solara.Column(style="padding: 0 8px 12px; gap: 10px;"):
         with solara.Row(style="gap: 12px; align-items: center; flex-wrap: wrap;"):
             if s is not None:
@@ -544,6 +565,22 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         if s is None:
             solara.Text(t("overview_tile.no_set"), style=_NOTE)
             return
+        if has_alerts:
+            # The same two booleans Integrate & vectorize switches, under the
+            # same labels: one switch in two places must read the same, and the
+            # shell's _AlertLayers leaf owns every MapLayers call either way.
+            # Only offered with the alerts on hand, because that leaf draws
+            # nothing without them and a dead switch would be a lie.
+            inflight = layers.inflight.value
+            with solara.Row(style="gap: 20px; align-items: center; flex-wrap: wrap;"):
+                rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
+                          on_v_model=_switch(app_state.show_alerts), dense=True, hide_details=True,
+                          disabled=alert_layers.SET_LAYER_KEY in inflight)
+                if alert_layers.earlier_of(p, s):
+                    rv.Switch(label=t("steps.integrate.show_earlier"),
+                              v_model=app_state.show_earlier_sets.value,
+                              on_v_model=_switch(app_state.show_earlier_sets), dense=True, hide_details=True,
+                              disabled=any(k.startswith(alert_layers.EARLIER_PREFIX) for k in inflight))
         status = set_status(p, paths.project_dir(p.name), s)
         if status is Status.STALE:
             solara.Text(t("steps.overview.stale"), classes=["warning--text"], style=_NOTE)
