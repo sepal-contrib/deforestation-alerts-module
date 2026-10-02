@@ -93,6 +93,7 @@ from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
 from gui.widget.report_template import ReportTemplateField
+from gui.widget.set_selector import build_set_selector
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
@@ -235,6 +236,7 @@ def shell(data_root, monkeypatch):
             _detached("header", lambda: WorkflowHeader(app_state=state))
             _detached("report_template", lambda: ReportTemplateField(app_state=state))
             tiles["banner"] = build_set_status_banner(state)
+            tiles["sets"] = build_set_selector(state)
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
                         for key in ("aoi", "alerts", "period", "prepare", "integrate", "overview")}
             wrappers["analysis"] = v.Html(tag="div")

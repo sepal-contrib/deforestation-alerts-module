@@ -77,6 +77,7 @@ from gui.i18n import t
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
+from gui.widget.set_selector import build_set_selector
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -495,6 +496,7 @@ def build_analysis_layout(
         class_="pa-0 ma-0",
         children=[
             info_button(cm.analysis_tile.description, cm.analysis_tile.info_header, cm.analysis_tile.info_md),
+            build_set_selector(app_state),
             build_set_status_banner(app_state),
             alert_info_card,
             build_navigator(app_state=app_state, id_field=id_field),

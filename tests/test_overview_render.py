@@ -217,7 +217,10 @@ def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
     state = _state(p, _alerts())
     map_, layers, rc = ov.render(state)
     try:
-        assert t("steps.overview.set_label", period=JAN.id, sources="GLAD-L", n=4, reviewed=3) in _texts(rc)
+        [select] = rc.find(v.Select).widgets
+        assert select.v_model == p.active_set
+        assert select.items == [{"text": "2026-01-01 → 2026-01-31 · GLAD-L · 4 alerts · 3 reviewed",
+                                 "value": p.active_set}]
         assert len(_export_cards(rc)) == 1
         assert t("steps.overview.stale") not in _texts(rc)  # a current set: no banner
 
@@ -228,7 +231,7 @@ def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
 
         state.close_project_state()  # no project, no set
         assert _export_cards(rc) == []
-        assert not [s for s in _texts(rc) if s.startswith(JAN.id)]
+        assert rc.find(v.Select).widgets == []
     finally:
         rc.close()
 

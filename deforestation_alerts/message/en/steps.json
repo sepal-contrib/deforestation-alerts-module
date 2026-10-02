@@ -303,12 +303,15 @@
     },
     "overview": {
       "layer_name": "Alerts (active set)",
-      "set_label": "{period} · {sources} · {n} alerts · {reviewed} reviewed",
       "go": "Review",
       "popup": "Alert {id} · {status} · {area} ha",
       "stale": "This set was built from inputs that have changed since. Re-run Integrate & vectorize to rebuild it (that discards its reviews).",
       "missing": "This set's files are missing from the project folder. Re-run Integrate & vectorize to rebuild it.",
       "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons."
+    },
+    "sets": {
+      "label": "Alert set",
+      "item": "{period} · {sources} · {n} alerts · {reviewed} reviewed"
     }
   }
 }

@@ -1,5 +1,9 @@
 """Overview of the active alert set (spec §9.2, §9.3), a right-panel view.
 
+The set shown is picked with the set selector (``gui.widget.set_selector``,
+shared with Analysis, spec §9.3): a pick changes only the project's
+``active_set``, and the shell's loader then loads that set's alerts.
+
 Architecture layer: view. It renders the set's status summary and exports in
 the right panel, and draws on the **single shared** ``SepalMap`` passed in
 from the shell (it never creates a map of its own):
@@ -65,6 +69,7 @@ from gui.scripts.pmtiles_map import STATUS_COLORS, add_set_pmtiles
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing, writing
 from gui.store.workflow_steps import STEPS, active_set
+from gui.widget.set_selector import SetSelector
 
 #: MapLayers key of the active set's tiles (or their centroid fallback)
 SET_LAYER_KEY = "overview:set"
@@ -449,8 +454,8 @@ def OverviewTile(app_state, map_, layers):
             solara.Button(cm.overview_tile.review_button, color="primary", small=True, disabled=not has_alerts,
                           on_click=_review_alerts)
         if s is not None:
-            solara.Text(t("steps.overview.set_label", period=s.period_id, sources=" + ".join(s.sources),
-                          n=s.n_alerts, reviewed=s.n_reviewed), style="padding: 0 16px;")
+            with solara.Div(style="padding: 0 16px;"):
+                SetSelector(app_state=app_state)
             status = set_status(p, paths.project_dir(p.name), s)
             if status is Status.STALE:
                 solara.Text(t("steps.overview.stale"), classes=["warning--text"], style="padding: 0 16px;")
