@@ -83,6 +83,11 @@ def test_digit_map_decides_names():
     assert set(get_unique_alerts([1000], digit_map={3: "My CCDC"})) == {"My CCDC"}
 
 
+def test_an_empty_digit_map_names_nothing():
+    """An alert set's map decides even when empty: no fall-back to the fixed layout."""
+    assert get_unique_alerts([21], digit_map={}) == []
+
+
 def test_digit_map_nine_digits():
     names = {d: f"s{d}" for d in range(9)}
     assert len(get_unique_alerts([222222222], digit_map=names)) == 9

@@ -320,3 +320,23 @@ def test_with_retries_retries_transient_errors_only():
 
     with pytest.raises(OSError):
         rx.with_retries(always, sleep=lambda s: None)
+
+
+@pytest.mark.parametrize("status, tries", [(404, 1), (403, 1), (503, 3)])
+def test_an_http_answer_below_500_is_not_retried(status, tries):
+    from types import SimpleNamespace
+
+    import aiohttp
+
+    from deforestation_alerts.scripts import raster_export as rx
+
+    calls = []
+    request = SimpleNamespace(real_url="https://earthengine-stac.storage.googleapis.com/catalog/catalog.json")
+
+    def answer():
+        calls.append(1)
+        raise aiohttp.ClientResponseError(request_info=request, history=(), status=status, message="x")
+
+    with pytest.raises(aiohttp.ClientResponseError):
+        rx.with_retries(answer, sleep=lambda s: None)
+    assert len(calls) == tries

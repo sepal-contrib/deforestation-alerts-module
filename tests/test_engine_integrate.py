@@ -554,7 +554,7 @@ def test_run_integration_refuses_no_or_duplicate_sources(ready_project, sources)
     p, pdir = ready_project
     job = integrate.IntegrationJob(project=p.model_copy(deep=True), pdir=pdir, period=JAN, sources=sources,
                                    params=AlertSetParams())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="each once"):
         integrate.run_integration(job)
 
 
@@ -565,12 +565,27 @@ def test_drawn_mode_needs_a_drawing(ready_project):
 
 
 @_LONLAT_CENTROID
-def test_staged_leftovers_of_a_killed_run_are_swept(ready_project):
+def test_staged_leftovers_of_a_killed_run_are_swept(ready_project, monkeypatch):
+    """A run overwrites its staged names anyway, so the sweep is observed where
+    the run starts building (``combine``): the leftovers, half-written ``.part``
+    files included, are gone by then."""
     p, pdir = ready_project
     sdir = paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"])
     sdir.mkdir(parents=True)
-    (sdir / "alert_db.staged.parquet").write_bytes(b"old")
+    leftovers = [sdir / "alert_db.staged.parquet", sdir / "footprint.staged.tif.part",
+                 sdir / "alert_db.staged.parquet.0123abcd.part"]
+    for f in leftovers:
+        f.write_bytes(b"old")
+    seen = []
+    real = integrate.combine
+
+    def combine(*args, **kwargs):
+        seen.append([f.exists() for f in leftovers])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(integrate, "combine", combine)
     integrate.run_integration(_job(p, pdir, JAN, AlertSetParams()))
+    assert seen == [[False, False, False]]
     assert not list(sdir.glob("*.staged.*"))
 
 

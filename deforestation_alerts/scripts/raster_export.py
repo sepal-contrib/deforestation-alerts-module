@@ -38,12 +38,15 @@ _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
 
 
 def _transient(exc: BaseException) -> bool:
+    """A network error worth retrying; an HTTP answer below 500 (a 404, a 403)
+    will not change on a retry."""
     try:
         import aiohttp
-        client_errors = (aiohttp.ClientError,)
     except ImportError:  # pragma: no cover
-        client_errors = ()
-    return isinstance(exc, (OSError, asyncio.TimeoutError) + client_errors)
+        return isinstance(exc, (OSError, asyncio.TimeoutError))
+    if isinstance(exc, aiohttp.ClientResponseError) and exc.status < 500:
+        return False
+    return isinstance(exc, (OSError, asyncio.TimeoutError, aiohttp.ClientError))
 
 
 def with_retries(fn, *, attempts: int = 3, delay_s: float = 2.0, sleep=time.sleep):

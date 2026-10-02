@@ -14,6 +14,7 @@ workers and also grows with the width (align.py), so at national scale it, not
 this module, is expected to set a run's peak.
 """
 
+import glob
 import math
 import os
 from contextlib import ExitStack
@@ -197,6 +198,16 @@ def _staged(path: Path) -> Path:
     return path.with_name(f"{path.stem}.staged{path.suffix}")
 
 
+def _sweep_staged(staged: dict[Path, Path]) -> None:
+    """Delete a killed run's staged files and their half-written ``.part``
+    siblings (``<staged>.part``, ``<staged>.<uuid>.part``)."""
+    for part in staged.values():
+        part.unlink(missing_ok=True)
+        if part.parent.is_dir():
+            for half in part.parent.glob(glob.escape(part.name) + "*.part"):
+                half.unlink(missing_ok=True)
+
+
 def _attribute_region(p: Project):
     """The export region of an Earth Engine attribute raster: the AOI's bounds."""
     import ee  # only a GEE attribute raster needs it
@@ -263,6 +274,14 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     inputs_fp = set_inputs(p, period, sources, job.params)
     sid = make_set_id(period.id, sources)
     sdir = paths.set_dir(pdir, period.id, sources)
+    combined = paths.combined_path(sdir, sources, period.start, period.end)
+    footprint = paths.footprint_path(sdir)
+    store = paths.store_path(sdir)
+    staged = {final: _staged(final) for final in (combined, footprint, store)}
+    # A run killed outright (SIGKILL) leaves its staged files behind; swept
+    # before the gate so they do not count against it. The set's folder has
+    # one writer (the ``integrate:{project}`` in-flight key).
+    _sweep_staged(staged)
     # A run stages the combined raster (3 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
@@ -280,14 +299,6 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         if art is None or not paths.resolve(pdir, art.rel_path).exists():
             raise ValueError(f"the footprint of set {s.id} is missing; re-run that set first")
         fp_paths.append(paths.resolve(pdir, art.rel_path))
-    combined = paths.combined_path(sdir, sources, period.start, period.end)
-    footprint = paths.footprint_path(sdir)
-    store = paths.store_path(sdir)
-    staged = {final: _staged(final) for final in (combined, footprint, store)}
-    # A run killed outright (SIGKILL) leaves its staged files behind; the set's
-    # folder has one writer (the ``integrate:{project}`` in-flight key).
-    for part in staged.values():
-        part.unlink(missing_ok=True)
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
         for s in sources
