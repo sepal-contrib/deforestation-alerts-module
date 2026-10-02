@@ -88,11 +88,28 @@ placement and must be updated in the same change.
    the whole persisted-summary branch: no new `AlertSet` field, no
    `summary.json`, and no edit to `Project.save`/`load`'s hand-maintained
    mirrors (architecture contract #9).
-2. **The store already holds every column needed.** From
-   `deforestation_alerts/scripts/alert_table.py` and `engine/vectorize.py`:
-   `status`, `area_ha`, `alert_date_min`/`alert_date_max` (**decimal years**,
-   not dates), `alert_sources`, `description` (loss-driver *codes*, resolved
-   through `gui/scripts/loss_drivers.py`), `admin1/2/3`, `count`, `alert_id`.
+2. **The store already holds every column needed, but two of them are filled
+   only by review.** From `deforestation_alerts/scripts/alert_table.py` and
+   `engine/vectorize.py` the store carries `status`, `area_ha`,
+   `alert_date_min`/`alert_date_max`, `alert_sources`, `description`,
+   `admin1/2/3`, `count`, `alert_id`. Three details matter:
+   - `alert_date_min/max` are `year + doy/1000` (`vectorize.yyyyddd_to_decimal`:
+     `2026045` → `2026.045`), so the inverse is exact —
+     `date(int(v), 1, 1) + timedelta(days=round((v - int(v)) * 1000) - 1)`.
+   - `description` (loss drivers) and `admin1` are written **during Analysis
+     review**, per reviewed alert (`gui/tile/analysis/export.py`), not at
+     vectorize time. `admin2`/`admin3` are created empty and **nothing ever
+     writes them**. So the driver and admin cards cover *reviewed alerts only*,
+     carry that in their subtitle, and show an empty state until there are
+     reviews. The admin rollup is **admin1 only**.
+   - `description` holds several comma-joined codes
+     (`gui/scripts/loss_drivers.codes`). An alert's **full area counts once per
+     code it names**, so the driver bars may sum past the reviewed total; the
+     card's caption says so. The alternative (splitting an alert's area between
+     its drivers) would invent a number the review never recorded.
+   - `alert_sources` is an English prose join (`report_builder.format_list`:
+     `"GLAD-L and RADD"`). It is parsed back with the existing
+     `report_builder.parse_formatted_string`, never by splitting on `", "`.
    Nothing new is computed at vectorize time.
 3. **The status palette fails CVD validation in map order.** The four
    `STATUS_CLASSES` of `gui/scripts/legend_specs.py` give a deuteranopia ΔE of
@@ -125,7 +142,13 @@ placement and must be updated in the same change.
    layer switched on in any step stays on until switched off or the project
    changes (`clear`)". Showing the alert layer from Integrate is therefore
    enough for it to survive leaving the step.
-9. **matplotlib emits a global `*` CSS selector.** Every figure's SVG starts
+9. **A test forbids palette hexes outside `legend_specs.py`.**
+   `tests/test_legend_specs.py::test_no_other_module_writes_these_colours`
+   reads every `gui/**/*.py` and fails if it finds any `ALERT_CLASSES`,
+   `STATUS_CLASSES` or `MASK_COLOR` hex. `gui/scripts/charts.py` must therefore
+   contain **no** status hex — including the `#9e9e9e` of Not reviewed — and
+   read them from `legend_specs.status_colors()`.
+10. **matplotlib emits a global `*` CSS selector.** Every figure's SVG starts
    `<style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>`,
    which would leak to the whole page when inlined. It must be stripped and
    replaced with `stroke-linejoin="round" stroke-linecap="butt"` on the root
@@ -133,7 +156,7 @@ placement and must be updated in the same change.
    inlined figures but are unreferenced; the *referenced* ids
    (`url(#p3d57174d35)`, `xlink:href="#m9b8879c56b"`) are content hashes and do
    not collide.
-10. **`svg.fonttype="none"` drifts.** matplotlib then measures text with
+11. **`svg.fonttype="none"` drifts.** matplotlib then measures text with
     DejaVu Sans while the browser renders Roboto, so labels laid out by
     matplotlib can collide. Path-ified text (`svg.fonttype="path"`) freezes the
     layout matplotlib measured; it costs ~20–32 KB per figure instead of
@@ -162,11 +185,12 @@ class SetSummary:
     by_week: tuple[tuple[date, float, int, bool], ...]       # week, ha, n, in_period
     by_driver: tuple[tuple[str, float, int], ...]            # code, ha, n — sorted
     by_source: tuple[tuple[str, float, int], ...]
-    by_admin: tuple[tuple[str, float, float, int], ...]      # name, ha, confirmed_ha, n
+    by_admin: tuple[tuple[str, float, float, int], ...]      # admin1, ha, confirmed_ha, n
+    n_reviewed: int      # the denominator of by_driver and by_admin
     largest: tuple[int, float, str, date] | None             # alert_id, ha, admin, date
 
-SUMMARY_COLUMNS = ["status", "area_ha", "alert_date_min", "alert_sources",
-                   "description", "admin1", "admin2", "alert_id"]
+SUMMARY_COLUMNS = ["alert_id", "status", "area_ha", "alert_date_min",
+                   "alert_sources", "description", "admin1"]
 
 def summarize_alerts(frame, *, period_start=None) -> SetSummary: ...
 def read_summary(store_path, set_id, *, period_start=None) -> SetSummary: ...
@@ -223,7 +247,8 @@ Layout at 1300 px, two columns (see `Dashboard.dc.html`):
   arrow glyph **and** the words "vs <period>"; never colour alone. An increase
   is drawn in the critical ink, because more loss is worse.
 - **Left column** — area by review status; history; size distribution;
-  by administrative area (a table).
+  by administrative area (a table, `admin1`, reviewed alerts only, with an
+  empty state).
 - **Right column** — the numbers table; when loss was detected; loss drivers;
   by alert source.
 - **Footer** — the existing export card (`build_export_card`), unchanged.
@@ -241,17 +266,17 @@ SVG string. No Solara import.
 | `chart_trend` | stacked columns per period, 420×196 | Rendered **only when `len(project.periods) > 1`**; otherwise the card is replaced by one line of text. The period still under review gets `hatch="///"` on its Not-reviewed segment — "not final" without spending a colour. Totals are direct-labelled. |
 | `chart_sizes` | log-binned histogram, 420×150 | Size is a magnitude: **one hue**, never the status palette. |
 | `chart_timing` | columns by week of first detection, 420×162 | Weeks before `period.start` are drawn in the de-emphasis grey with a "period starts" rule, so look-back alerts cannot read as this period's signal. |
-| `chart_drivers` | horizontal bars, 420×160 | Top 5 + Other, **one hue**. Nine nominal classes; a ninth hue is never generated and a value ramp would invent a ranking the codes do not have. |
-| `chart_sources` | horizontal bars, 420×110 | GLAD-L / RADD / both. Alerts seen by both are counted once, under "both". |
+| `chart_drivers` | horizontal bars, 420×160 | **Reviewed alerts only** (Constraint 2), stated in the subtitle, with an empty state until there are reviews. Top 5 + Other, **one hue**: nine nominal classes, so a ninth hue is never generated and a value ramp would invent a ranking the codes do not have. An alert's full area counts once per code it names, so the bars may sum past the reviewed total — the caption says so. |
+| `chart_sources` | horizontal bars, 420×110 | One bar per distinct source combination, parsed with `report_builder.parse_formatted_string`. An alert seen by two sources is counted once, under its combination ("GLAD-L + RADD"), never in both single-source bars. |
 
 Rendering and embedding:
 
-- `mpl.rcParams["svg.fonttype"] = "path"` (Constraint 10),
+- `mpl.rcParams["svg.fonttype"] = "path"` (Constraint 11),
   `hatch.linewidth = 0.6`, `font.family = ["Roboto", "Helvetica Neue", "Arial", "sans-serif"]`.
 - `charts.py` exposes `to_inline_svg(fig)` which saves to a string buffer,
   strips the global `*` `<style>` block and XML comments, and injects
   `stroke-linejoin="round" stroke-linecap="butt"`, `role="img"` and
-  `aria-label=…` onto the root `<svg>` (Constraint 9).
+  `aria-label=…` onto the root `<svg>` (Constraint 11).
 - The figure is embedded with `solara.HTML(tag="div", unsafe_innerHTML=svg)`, so
   it scales with its card and needs no CDN. `solara.FigureMatplotlib` is the
   fallback if inlining misbehaves under Voila; it wraps the SVG in an
@@ -303,12 +328,19 @@ and two switches built on the `_toggle` pattern of `gui/tile/layers_step.py`:
 `earlier_of` is non-empty). Neither hides a key that is still in
 `layers.inflight` (ruling #10). Persistence needs no code: Constraint 8.
 
-**`IntegrateStep` also owns the layer's behaviour**, through effects whose
-bodies live in `alert_layers.py` (architecture contract #7, thin tiles). No new
-shell leaf: `gui/widget/` is render-only by contract, and every tile is already
-rendered once by `render_detached` and kept mounted behind `display: none`, so a
-step's effects keep running whichever view is showing — which is exactly the
-property the alert layer needs. The step owns:
+**A shell leaf `_AlertLayers` in `gui/solara_app.py`** owns the layer's
+behaviour, with every body in `alert_layers.py` (architecture contract #7). It
+sits beside the existing `_FloatingLegend` leaf, which is the precedent: a leaf
+that owns map-wide state lives in the shell, not in `gui/widget/` (render-only
+by contract) and not in a step.
+
+The effects cannot live in `IntegrateStep`: that component early-returns
+`solara.Info(t("workflow.lock_integrate"))` when no source is ready, so hooks
+added below the return would be conditionally mounted, and `_IntegrateForm` is
+re-keyed per project and period, so it remounts. A project that has a set but
+whose harmonized files were cleaned hits exactly that path. The switches stay in
+`IntegrateStep` — they only call `layers.show`/`layers.hide` — while the leaf
+owns:
 
 - An effect keyed on `(project name, active set id, set fingerprint)` that
   calls `layers.show(ALERT_LAYER_KEY, …)`. A finished run records the set and
@@ -328,10 +360,10 @@ property the alert layer needs. The step owns:
   lookups).
 - `_on_install`, which clears the hit-test cache when a project is installed.
 
-**None of these effects may read `integrate_step`'s existing `showing` flag**
-(`panel_view == "workflow" and active_step == integrate`). That flag exists for
-the drawing control, which must only be live while the step is visible (ruling
-#77); the layer and its clicks must outlive the step being shown.
+**Nothing in the leaf may read a view flag.** `integrate_step`'s `showing`
+(`panel_view == "workflow" and active_step == integrate`) exists for the drawing
+control, which must only be live while the step is visible (ruling #77); the
+layer and its clicks must outlive both the step and the Overview dialog.
 
 The auto-show does not thread `layers` into `run_integration_job`: the worker
 keeps its current signature, and the reactive change it already makes
@@ -364,7 +396,7 @@ keeps its current signature, and the reactive change it already makes
 `tests/test_charts.py`
 - every figure returns a non-empty SVG for a zeroed and for a populated summary
 - the returned SVG contains **no** `<style` block and no `*{` selector
-  (Constraint 9)
+  (Constraint 11)
 - the root `<svg>` carries `role="img"` and a non-empty `aria-label`
 - light and dark differ in their surface colour
 
@@ -423,3 +455,6 @@ the coverage it never had. The module is deleted in the same change.
 - Reading the export card's alerts from the store instead of
   `app_state.alerts_gdf`, so Overview could export a set it has not loaded.
 - Brushing from a chart to the map.
+- Attributing `admin2`/`admin3` (and `admin1` for unreviewed alerts). Nothing
+  writes those columns today; filling them would mean a GAUL lookup per alert at
+  vectorize time, which is its own design.
