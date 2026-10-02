@@ -54,10 +54,22 @@ def test_the_aoi_geometry_comes_from_the_selection_of_this_aoi_or_the_sidecar():
     assert rf.aoi_origin(p, None) is None
     assert rf.aoi_origin(p, admin("1")) == "result"
     assert rf.aoi_origin(p, admin("2")) is None  # the previous AOI's selection
+    # its fetched sidecar is not parsed while the AOI step has not replayed
+    # the selection yet: the loader waits for the selection
     p.aoi = p.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR})
-    assert rf.aoi_origin(p, admin("2")) == "sidecar" and rf.aoi_origin(p, admin("1")) == "result"
+    assert rf.aoi_origin(p, None) is None and rf.aoi_origin(p, admin("2")) is None
+    assert rf.aoi_origin(p, admin("1")) == "result"
+    asset = p.aoi.model_copy(update={"method": "ASSET", "digest": "asset:users/x/aoi"})
+    picked = SimpleNamespace(name="x", method="ASSET", admin=None, spec=SimpleNamespace(asset_id="users/x/aoi",
+                                                                                        column="ALL"))
+    assert rf.aoi_origin(p.model_copy(update={"aoi": asset}), None) is None
+    assert rf.aoi_origin(p.model_copy(update={"aoi": asset}), picked) == "result"
     drawn = _p()  # a local AOI: its selection does not name it, the sidecar does
     assert rf.aoi_origin(drawn, SimpleNamespace(name="d", method="DRAW", admin=None, spec=None)) == "sidecar"
+    assert rf.aoi_origin(drawn, None) == "sidecar"
+    # an admin area picked without Earth Engine is recorded by its geometry, with a sidecar: a local AOI
+    local_admin = drawn.aoi.model_copy(update={"method": "ADMIN1", "digest": "9f2c"})
+    assert rf.aoi_origin(drawn.model_copy(update={"aoi": local_admin}), admin("1")) == "sidecar"
     assert rf.aoi_origin(None, None) is None
 
 
@@ -233,6 +245,133 @@ def test_a_failed_check_is_reported_and_check_again_retries_it(data_root, monkey
             state.coverage_retry.set(state.coverage_retry.value + 1)
             assert await settle(lambda: set(state.project.value.coverage) == {"GLAD-L", "RADD", "GLAD-S2"})
             assert state.coverage_error.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _sidecar_case(monkeypatch, get_info_async):
+    """An admin AOI with a GeoTIFF source, its selection handed over."""
+    monkeypatch.setattr(rf, "coverage_request", lambda aoi, pre, custom: ("COV", pre, tuple(c.name for c in custom)))
+    monkeypatch.setattr(rf.catalogue, "meta_request", lambda key: "META")
+    monkeypatch.setattr(rf.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    monkeypatch.setattr(rf.aoi_io, "sidecar_request", lambda aoi: "SIDE")
+    p = _p()
+    p.aoi = p.aoi.model_copy(update={"method": "ADMIN1", "geometry_file": None, "digest": "admin:1"})
+    _add_file(p)
+    state = AppState()
+    state.load_project_state(p)
+    state.aoi_result.set(SimpleNamespace(name="admin", method="ADMIN1", admin="1", spec=None))
+    return state, paths.project_dir(p.name), SimpleNamespace(get_info_async=get_info_async)
+
+
+_FC = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {}, "geometry": {
+    "type": "Polygon", "coordinates": [[[-55.1, -10.1], [-55.0, -10.1], [-55.0, -10.0], [-55.1, -10.0],
+                                        [-55.1, -10.1]]]}}]}
+_RAW = {k: {"fraction": 1.0, "regions": [{"name": k, "fraction": 1.0}]} for k in ("GLAD-L", "RADD", "GLAD-S2", "tif")}
+
+
+async def _settle(cond, rounds=300):
+    for _ in range(rounds):
+        await asyncio.sleep(0.01)
+        if cond():
+            return True
+    return False
+
+
+def test_check_again_fetches_a_sidecar_whose_fetch_failed(data_root, monkeypatch):
+    """A transient Earth Engine failure must not leave the GeoTIFF rows
+    without the AOI geometry for the rest of the session."""
+    from pysepal.solara.notifications.bus import get_current_bus
+
+    sidecar_asks = []
+
+    async def get_info_async(obj):
+        if obj == "SIDE":
+            sidecar_asks.append(obj)
+            if len(sidecar_asks) == 1:
+                raise RuntimeError("Earth Engine is down")
+            return _FC
+        return {"bands": ["conf26"]} if obj == "META" else _RAW
+
+    state, pdir, gee = _sidecar_case(monkeypatch, get_info_async)
+
+    async def main():
+        box, rc = _render(state, gee)
+        try:
+            assert await _settle(lambda: [x for x in get_current_bus().toasts.value if x.type.value == "error"])
+            assert [x.message for x in get_current_bus().toasts.value if x.type.value == "error"] == [
+                t("steps.prepare.sidecar_failed", error="Earth Engine is down")]
+            assert state.project.value.aoi.geometry_file is None and state.sidecar_pending.value is False
+            state.coverage_retry.set(state.coverage_retry.value + 1)  # "Check again"
+            assert await _settle(lambda: state.project.value.aoi.geometry_file == paths.AOI_SIDECAR)
+            assert len(sidecar_asks) == 2 and (pdir / paths.AOI_SIDECAR).exists()
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_sidecar_fetch_restarted_while_it_is_staged_leaves_no_temporary_file(data_root, monkeypatch):
+    import threading
+
+    staging, release = threading.Event(), threading.Event()
+    real_stage = rf.aoi_io.stage_sidecar
+
+    def slow_stage(pdir, gdf):
+        staged = real_stage(pdir, gdf)
+        staging.set()
+        assert release.wait(5)
+        return staged
+
+    async def get_info_async(obj):
+        if obj == "SIDE":
+            return _FC
+        return {"bands": ["conf26"]} if obj == "META" else _RAW
+
+    state, pdir, gee = _sidecar_case(monkeypatch, get_info_async)
+    monkeypatch.setattr(rf.aoi_io, "stage_sidecar", slow_stage)
+    tmps = lambda: list(pdir.glob(f".{paths.AOI_SIDECAR}.*.tmp"))  # noqa: E731
+
+    async def main():
+        box, rc = _render(state, gee)
+        try:
+            assert await _settle(staging.is_set)
+            assert len(tmps()) == 1
+            state.aoi_result.set(None)  # the selection goes (a project install): the task restarts
+            await asyncio.sleep(0.05)
+            release.set()
+            assert await _settle(lambda: not tmps())
+            assert state.project.value.aoi.geometry_file is None and not (pdir / paths.AOI_SIDECAR).exists()
+            assert state.sidecar_pending.value is False
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_check_does_not_follow_into_another_project(data_root, monkeypatch):
+    async def get_info_async(obj):
+        if obj == "META":
+            return {"bands": ["conf26"]}
+        raise RuntimeError("Earth Engine is down")
+
+    monkeypatch.setattr(rf, "coverage_request", lambda aoi, pre, custom: ("COV", pre))
+    monkeypatch.setattr(rf.catalogue, "meta_request", lambda key: "META")
+    monkeypatch.setattr(rf.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    state = AppState()
+    state.load_project_state(_p())
+
+    async def main():
+        box, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.coverage_error.value is not None)
+            other = _p()
+            other.name, other.aoi = "other", None  # no AOI: nothing is checked for it
+            state.load_project_state(other)
+            assert await _settle(lambda: state.coverage_error.value is None)
         finally:
             rc.close()
 

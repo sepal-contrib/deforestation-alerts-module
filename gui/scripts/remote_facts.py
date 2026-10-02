@@ -69,15 +69,27 @@ def aoi_origin(p, result):
     The AOI step publishes a changed AOI before it hands the new selection to
     ``aoi_result``, so for a moment that reactive still holds the previous
     AOI's. An Earth Engine selection names its AOI (``aoi_io.lazy_digest``)
-    and is used only when it names this one; a local selection (drawn,
-    uploaded) does not, so the sidecar, replaced together with the AOI, is
-    read instead.
+    and is used only when it names this one; until the always-mounted AOI
+    step hands it over (a pick, or the replay of a reopened project), the
+    loader waits rather than parse that AOI's fetched sidecar (national AOIs
+    run to megabytes) on the loop for a request the selection then restarts.
+    A local AOI (drawn, uploaded, or an admin area fetched without Earth
+    Engine) is not named by its selection, so the sidecar, replaced together
+    with the AOI, is read instead.
     """
     if p is None or p.aoi is None:
         return None
     if result is not None and aoi_io.lazy_digest(result) == p.aoi.digest:
         return "result"
-    return "sidecar" if p.aoi.geometry_file is not None else None
+    if p.aoi.geometry_file is None or is_ee_aoi(p.aoi):
+        return None
+    return "sidecar"
+
+
+def is_ee_aoi(aoi) -> bool:
+    """An Earth Engine AOI: one recorded by its admin code or asset id
+    (``aoi_io.build_record`` takes ``aoi_io.lazy_digest`` for it)."""
+    return str(aoi.digest).startswith(("admin:", "asset:"))
 
 
 def _error_text(exc) -> str:
@@ -173,8 +185,13 @@ def RemoteFactsLoader(app_state, gee_interface):
         finally:
             staged.unlink(missing_ok=True)
 
-    side_task = solara.lab.use_task(_sidecar, dependencies=[name, digest, need_sidecar, origin],
+    # ``retry``: "Check again" also fetches a sidecar whose fetch failed
+    side_task = solara.lab.use_task(_sidecar, dependencies=[name, digest, need_sidecar, origin, retry],
                                     prefer_threaded=False, raise_error=False)
+
+    # A failed check belongs to the project and AOI it ran for (not a writer:
+    # only a session reactive is set here, never the project).
+    solara.use_effect(lambda: app_state.coverage_error.set(None), [name, digest])
 
     def _on_meta_error():
         if meta_task.error:

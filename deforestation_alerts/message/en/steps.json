@@ -71,7 +71,7 @@
       "label_radd": "RADD (Sentinel-1, 10 m)",
       "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
       "meta_loading": "Still reading the catalogue dates; try again in a moment.",
-      "meta_failed": "Could not load the catalogue dates: {error}",
+      "meta_failed": "Could not load GLAD-L's band list: {error}",
       "delete_title": "Remove {name}?",
       "delete_message": "Its downloads and harmonized files are deleted.",
       "delete_used": "Used by {n} alert sets; they keep their alerts and will show out of date.",
