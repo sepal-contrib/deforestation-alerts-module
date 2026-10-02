@@ -143,9 +143,12 @@ def test_a_name_taken_on_disk_since_the_list_was_read_is_refused(dialog):
     """Another tab created "b" after this dialog read the list: Create must
     check the disk, or the auto-save of a new "b" overwrites that project."""
     async def main():
+        # A sentinel project: the settle below waits for the mount's read to
+        # land, not for the first render's empty list (a late read would list "b").
+        io.save_project(pd.create_project("a"))
         box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {}, "the empty list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
             other = pd.create_project("b")
             other.look_back_days = 99
             io.save_project(other)  # the other tab
@@ -155,7 +158,7 @@ def test_a_name_taken_on_disk_since_the_list_was_read_is_refused(dialog):
             _button(rc, t("steps.project.new")).fire_event("click", None)
             _submit_name(rc, "b")
 
-            assert _listed(dialog) == {}  # the list on screen did not know "b"
+            assert _listed(dialog) == {"a": "0 / 0 / 0"}  # the list on screen did not know "b"
             errors = [w.children for w in _open_form(rc).find(v.Alert).widgets]
             assert errors == [[t("steps.project.name_exists")]]
             assert dialog.state.project.value is None and manifest.read_text() == before
