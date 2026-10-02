@@ -5,6 +5,9 @@
 button that opens a popup dialog rendering Markdown (links included). Short
 per-field help belongs in the field's own ``hint``/``persistent_hint`` props,
 not here.
+
+``StepIntro`` is how every workflow step opens: its description plus an
+``InfoButton``.
 """
 
 import reacton.ipyvuetify as rv
@@ -54,3 +57,13 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
                     text=True,
                     small=True,
                 )
+
+
+@solara.component
+def StepIntro(description: str, title: str, markdown: str):
+    """A workflow step's opening line (spec §14 slice 6): its description and
+    an info button with the longer explanation. Rendered once per step, right
+    under the step's title, at the component's top level (see InfoButton)."""
+    with solara.Row(style="gap:4px;align-items:center;flex-wrap:nowrap;"):
+        solara.Text(description, classes=["text--secondary"], style="flex:1 1 auto;")
+        InfoButton(title, markdown)

@@ -10,6 +10,7 @@ from pysepal.solara.notifications import use_notifications
 from gui.i18n import t
 from gui.scripts import legend_specs, vis_layers
 from gui.widget.confirm_dialog import ConfirmDialog
+from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.vis_layer_modal import VisLayerModal
 
@@ -101,7 +102,7 @@ def LayersStep(app_state, map_, gee_interface, layers):
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.layers.title')}")
-        solara.Text(t("steps.layers.description"), classes=["text--secondary"])
+        StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
         ProductTable(
             title=t("steps.layers.list_title"),
             columns=[{"label": t("steps.layers.col_name")},

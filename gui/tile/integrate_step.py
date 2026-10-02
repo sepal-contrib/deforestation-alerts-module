@@ -52,6 +52,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store import workflow_steps
 from gui.widget.attribute_form import AttributeForm
 from gui.widget.confirm_dialog import ConfirmDialog
+from gui.widget.help import StepIntro
 
 SORTINGS = [1, 2, 3, 4]
 
@@ -203,7 +204,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.integrate.title')}")
-        solara.Text(t("steps.integrate.description"), classes=["text--secondary"])
+        StepIntro(t("steps.integrate.description"), t("steps.integrate.info_header"), t("steps.integrate.info_md"))
         solara.Text(t("steps.integrate.sources"), style="font-weight:600;")
         for c in choices:  # a disabled one shows why it is left out
             s = c["source"]

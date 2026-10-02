@@ -60,6 +60,7 @@ from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
 from gui.tile.masks_card import MasksCard
 from gui.widget.grid_form import GridForm
+from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -340,7 +341,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.prepare.title')}")
-        solara.Text(t("steps.prepare.description"), classes=["text--secondary"])
+        StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:
             # between the grid card and the sources table (spec §7.3); a mask row

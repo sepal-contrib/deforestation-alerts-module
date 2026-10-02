@@ -161,7 +161,7 @@
     "analysis_tile": {
             "description": "Review each alert with before and after imagery, confirm it, set the loss driver, then save.",
             "info_header": "About analysis",
-            "info_md": "Use the navigator to move between alerts. The before/after maps show the closest cloud-free images. Draw or edit the alert polygon, mark it confirmed or false, and **Save** writes the attributes back to the alert store.",
+            "info_md": "Move between the alerts of the active set with the navigator; the set selector switches sets. The before and after maps show the closest cloud-free images: pick one of each. Draw or edit the deforested polygon, answer **Is this a true alert?**, choose the loss drivers, then **Save** writes the review into the set's alert store. **Download alert data** writes the alert's GeoPackage, its before/after images and a Word report built from the project's report template, chosen in the export card.",
             "img_selection": {
                 "prev_image_title": "Before image",
                 "post_image_title": "After image",

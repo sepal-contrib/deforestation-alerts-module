@@ -25,6 +25,7 @@ from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.store.project_writers import writing
 from gui.tile.project_dialog import create_project, names_on_disk
+from gui.widget.help import StepIntro
 
 
 def _open_name(app_state):
@@ -152,7 +153,7 @@ def AoiStep(app_state, map_, gee_interface):
 
     with solara.Column(style="gap:16px;").key(column_key):
         solara.Markdown(f"### {t('steps.aoi.title')}")
-        solara.Text(t("steps.aoi.description"), classes=["text--secondary"])
+        StepIntro(t("steps.aoi.description"), t("steps.aoi.info_header"), t("steps.aoi.info_md"))
         if locked:
             # Inline on purpose: a persistent state description, not the outcome
             # of an action (spec §11 routes outcomes through notifications).

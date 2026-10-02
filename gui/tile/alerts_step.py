@@ -17,6 +17,7 @@ from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, not
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
+from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.source_modal import SourceModal
 
@@ -202,7 +203,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.alerts.title')}")
-        solara.Text(t("steps.alerts.description"), classes=["text--secondary"])
+        StepIntro(t("steps.alerts.description"), t("steps.alerts.info_header"), t("steps.alerts.info_md"))
         ProductTable(
             title=t("steps.alerts.list_title"),
             columns=[{"label": t("steps.alerts.col_source")},

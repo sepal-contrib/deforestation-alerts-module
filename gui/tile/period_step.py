@@ -44,6 +44,7 @@ from deforestation_alerts.project.models import period_id
 from gui.i18n import plural, t
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
+from gui.widget.help import StepIntro
 from gui.widget.period_modal import PeriodModal
 from gui.widget.product_table import ProductTable
 
@@ -234,7 +235,7 @@ def _PeriodList(app_state, layers):
 
     with solara.Column(style="gap:12px;"):
         solara.Markdown(f"### {t('steps.period.title')}")
-        solara.Text(t("steps.period.description"), classes=["text--secondary"])
+        StepIntro(t("steps.period.description"), t("steps.period.info_header"), t("steps.period.info_md"))
         with solara.Row(style="gap:8px;align-items:flex-start;"):
             rv.TextField(label=t("steps.period.look_back"), type="number", v_model=look_back,
                          on_v_model=set_look_back, dense=True, outlined=True,

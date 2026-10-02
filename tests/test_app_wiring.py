@@ -207,11 +207,28 @@ def test_rail_mirror_switches_panel_view_for_panel_items_only():
     assert "app_state.panel_view.set(item.key)" in page_body
 
 
+STEP_FILES = {
+    "aoi": "gui/tile/aoi_step.py",
+    "alerts": "gui/tile/alerts_step.py",
+    "layers": "gui/tile/layers_step.py",
+    "period": "gui/tile/period_step.py",
+    "prepare": "gui/tile/prepare_step.py",
+    "integrate": "gui/tile/integrate_step.py",
+}
+
+
 def test_workflow_tiles_open_with_description_and_info_button():
-    for rel in ("gui/tile/analysis/analysis_tile.py",):
+    """Spec §14 slice 6: every step shows its description and an info button."""
+    from gui.store.workflow_steps import STEPS
+
+    assert set(STEP_FILES) | {"analysis"} == {s.key for s in STEPS}
+    for key, rel in STEP_FILES.items():
         src = _src(rel)
-        assert "InfoButton(" in src or "info_button(" in src, rel
-        assert ".description" in src, rel
+        assert src.count("StepIntro(") == 1, rel
+        for part in ("description", "info_header", "info_md"):
+            assert f'"steps.{key}.{part}"' in src, (rel, part)
+    analysis = _src("gui/tile/analysis/analysis_tile.py")
+    assert "info_button(" in analysis and "analysis_tile.description" in analysis
 
 
 def test_pipeline_header_accent_follows_the_app_theme_not_solara():
