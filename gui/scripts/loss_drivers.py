@@ -32,6 +32,16 @@ DRIVERS = (
 )
 DEFAULT = "other"
 _KEYS = dict(DRIVERS)
+#: Labels earlier releases shipped and later corrected: stores reviewed with
+#: them must still read back to their codes.
+_RETIRED_LABELS = {
+    "expansión agricola": "agriculture_expansion",
+    "cultivo transitorio": "shifting_cultivation",
+    "élevage des animaux": "livestock_grazing",
+    "bûcherie": "logging",
+    "culture en rotation": "shifting_cultivation",
+    "minage": "mining",
+}
 _SEP = ", "
 
 
@@ -56,7 +66,7 @@ def _label_codes() -> dict:
 
     from gui.i18n import messages
 
-    table = {}
+    table = dict(_RETIRED_LABELS)
     for locale in messages.available_locales():
         labels = load_locale(MESSAGES_DIR, locale).messages
         for code, key in DRIVERS:

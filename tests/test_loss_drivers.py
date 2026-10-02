@@ -38,7 +38,8 @@ def test_a_review_made_in_another_language_stores_codes(locale, code):
 @pytest.mark.parametrize("stored, codes", [
     ("Logging, Mining and Other", ["logging", "mining", "other"]),  # English, the old join
     ("Tala and Minería", ["logging", "mining"]),  # Spanish labels, the old join
-    ("Bûcherie", ["logging"]),  # French
+    ("Bûcherie", ["logging"]),  # French, a label since corrected
+    ("Exploitation forestière and Minage", ["logging", "mining"]),  # current and retired French
     ("expansión agricola, Feux de forêt and Other", ["agriculture_expansion", "forest_fires", "other"]),
     ("logging, mining", ["logging", "mining"]),  # already codes
     ("Roads and dams", ["Roads and dams"]),  # free text keeps its "and"
@@ -65,13 +66,13 @@ def test_an_export_shows_the_drivers_in_its_language(locale):
     assert got[:2] + got[3:] == ["Tala, Minería", "Tala, Otra", "Roads"] and pd.isna(got[2])
     assert gdf["description"].tolist()[0] == "logging, mining"  # the store's frame is untouched
     locale("fr")
-    assert loss_drivers.label("logging, other") == "Bûcherie, Autre"
+    assert loss_drivers.label("logging, other") == "Exploitation forestière, Autre"
 
 
 @pytest.mark.parametrize("code, chips", [
     ("en", ["Logging", "Roads"]),
     ("es-ES", ["Tala", "Roads"]),
-    ("fr", ["Bûcherie", "Roads"]),
+    ("fr", ["Exploitation forestière", "Roads"]),
 ])
 def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypatch, locale, code, chips):
     """The chips show labels, never codes (final re-review, Important 1): a
@@ -96,5 +97,5 @@ def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypa
 
 def test_selection_is_items_and_free_text(locale):
     locale("fr")
-    assert loss_drivers.selection("Logging, Roads") == [{"text": "Bûcherie", "value": "logging"}, "Roads"]
+    assert loss_drivers.selection("Logging, Roads") == [{"text": "Exploitation forestière", "value": "logging"}, "Roads"]
     assert loss_drivers.selection(None) == []
