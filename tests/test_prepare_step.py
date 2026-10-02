@@ -8,6 +8,7 @@ calls the exact callables the step wires up (tests/test_alerts_step.py's
 pattern).
 """
 
+import asyncio
 import threading
 import uuid
 from datetime import date, datetime
@@ -18,9 +19,12 @@ import pytest
 import reacton
 import solara
 from pysepal.solara.notifications import NoopNotifier, NotificationProvider
-from pysepal.solara.notifications.bus import get_current_bus
+from pysepal.solara.notifications.bus import NotificationBus, get_current_bus
+from pysepal.solara.notifications.notifier import Notifier
+from pysepal.solara.notifications.state import TaskStatus
 
 from deforestation_alerts.engine import grid as gridmod
+from deforestation_alerts.engine.coverage import Note
 from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import HarmonizeFailed
@@ -77,11 +81,26 @@ def test_grid_error_keys():
 
 
 def test_row_cells_show_both_stages():
-    cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.STALE), running=False)
+    cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.STALE, coverage="covered"),
+                                   running=False)
     assert cells[0]["value"] == "RADD"
     assert [c.get("status") for c in cells[1:3]] == ["ready", "stale"]
-    running = prepare_jobs.row_cells(PrepareRow("RADD", Status.MISSING, Status.MISSING), running=True)
+    running = prepare_jobs.row_cells(PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered"),
+                                     running=True)
     assert running[1]["status"] == "running"
+    labelled = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT), False, label="RADD (S1)")
+    assert labelled[0]["value"] == "RADD (S1)"
+
+
+def test_row_cells_of_a_blocked_row_say_why_in_both_stages():
+    """A blocked row's files may exist (built before an AOI change or a failed
+    check), but its cells say why it cannot run, not "ready"; a missing user
+    file keeps the stage statuses (its note says what is missing)."""
+    for state in ("not_covered", "no_data", "unchecked"):
+        cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT, coverage=state), False)
+        assert [c["status"] for c in cells[1:3]] == [state, state]
+    gone = prepare_jobs.row_cells(PrepareRow("tif", Status.MISSING, Status.CURRENT, file_missing="/x.tif"), False)
+    assert [c["status"] for c in gone[1:3]] == ["missing", "ready"]
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +357,8 @@ def test_a_row_that_fails_after_the_step_moved_on_leaves_no_row_error(monkeypatc
 
 
 def test_run_rows_honours_cancel(monkeypatch):
+    """Stop ends the run before its next row, and the task reads "cancelled",
+    not "completed" (slice-1 Task 18 minor), with no error toast."""
     s = AppState()
     s.new_project_state(_project("d", "GLAD-L", "RADD"))
     cancel = threading.Event()
@@ -349,8 +370,13 @@ def test_run_rows_honours_cancel(monkeypatch):
         return {}
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    prepare_jobs.run_rows(_ctx(s, cancel), ["GLAD-L", "RADD"])
-    assert ran == ["GLAD-L"]
+    bus = NotificationBus()
+    with pytest.raises(asyncio.CancelledError):
+        prepare_jobs.run_rows(_ctx(s, cancel, notifier=Notifier(bus)), ["GLAD-L", "RADD"])
+    assert ran == ["GLAD-L"] and not is_writing("d")
+    [task] = bus.tasks.value
+    assert task.status == TaskStatus.CANCELLED
+    assert [toast for toast in bus.toasts.value if toast.type.value == "error"] == []
 
 
 def test_run_rows_skips_a_source_removed_meanwhile(monkeypatch):
@@ -845,6 +871,176 @@ def test_closing_the_project_shows_the_lock_message(step):
         assert rc.find(v.Alert, children=[t("workflow.lock_prepare")]).widgets
     finally:
         rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Coverage states, GeoTIFF rows, Stop (spec §7.3)
+# ---------------------------------------------------------------------------
+def test_stop_ends_the_job_quietly_and_gives_its_rows_back(step, monkeypatch):
+    """``run_rows`` raises ``CancelledError`` on Stop (the task reads
+    "cancelled"); the step's job treats it as an ordinary end."""
+    def cancelled(ctx, sources, force=False):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(prepare_step, "run_rows", cancelled)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()
+        assert step.table[-1][0]["cells"][1]["status"] == "running"
+        step.run_jobs()  # no CancelledError escapes the worker
+        assert step.table[-1][0]["cells"][1]["status"] == "ready"
+        assert _button(rc, t("steps.prepare.stop")).disabled and _toasts("error") == []
+    finally:
+        rc.close()
+
+
+def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
+                         (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)),
+              PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-S2", "RADD", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        blocked, radd = step.table[-1]
+        assert all(a["disabled"] for a in blocked["actions"])
+        assert blocked["notes"][0]["text"].startswith(t("coverage.not_covered_row", reason=""))
+        assert not any(a["disabled"] for a in radd["actions"][:2])
+        _button(rc, t("steps.prepare.run_all", n=1)).fire_event("click", None)
+        step.run_jobs()
+        assert [sources for _, sources, _ in step.started] == [["RADD"]]
+    finally:
+        rc.close()
+
+
+def test_the_size_column_sums_both_files_of_a_row(step):
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    p.artifacts = {k: a.model_copy(update={"size_bytes": 2_700_000}) for k, a in _arts("GLAD-L").items()}
+    state = _state(p)
+
+    box, rc = _render(state)
+    try:
+        [row] = step.table[-1]
+        assert row["cells"][0]["value"] == t("steps.alerts.label_glad_l")
+        assert row["cells"][3] == {"value": "5.4 MB", "muted": True}
+    finally:
+        rc.close()
+
+
+def test_check_again_follows_a_failed_coverage_check(step):
+    """Spec §6.2 "Failure": the unchecked rows get a Check again action, which
+    restarts the check (``coverage_retry``); none while nothing failed."""
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING, "unchecked",
+                         (Note("coverage.unchecked", tone="error"),)))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        assert not [w for w in rc.find(v.Btn).widgets if t("coverage.check_again") in w.children]
+        state.coverage_error.set("quota exceeded")
+        _button(rc, t("coverage.check_again")).fire_event("click", None)
+        assert state.coverage_retry.value == 1
+        state.coverage_pending.set(True)
+        assert _button(rc, t("coverage.check_again")).disabled
+    finally:
+        rc.close()
+
+
+def _with_tif(tmp_path, *, sidecar):
+    from deforestation_alerts.project.models import BandMap, NativeGrid, add_custom_source
+
+    tif = tmp_path / "user.tif"
+    tif.write_bytes(b"")
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    add_custom_source(p, name="tif", origin="file", ref=str(tif), asset_type="FILE", format="radd",
+                      date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
+                      native=NativeGrid(crs="EPSG:32721", scale=30.0, transform=[30, 0, 0, 0, -30, 0]))
+    if sidecar:
+        p.aoi = p.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR})
+    return p
+
+
+def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypatch, tmp_path):
+    """A GeoTIFF row is normalized locally (no Earth Engine AOI, no catalogue
+    metadata) and, when the AOI raster must be built first, claims the
+    project's AOI-raster key with its own, so two jobs never build it at once."""
+    def no_aoi(result, pdir):
+        pytest.fail("a GeoTIFF row must not build the Earth Engine AOI")
+
+    claims = []
+
+    class _Recording(prepare_step.InflightKeys):
+        def claim(self, *keys):
+            claims.append(keys)
+            return super().claim(*keys)
+
+    monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
+    monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
+    step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
+    state = _state(_with_tif(tmp_path, sidecar=True))
+
+    box, rc = _render(state)
+    try:
+        [row] = step.table[-1]
+        assert row["cells"][0]["value"] == "tif"  # a custom source by its name
+        row["actions"][1]["on_click"]()  # Re-download: still local
+        step.run_jobs()
+        [(ctx, sources, force)] = step.started
+        assert sources == ["tif"] and force and ctx.aoi is None
+        assert claims == [(prepare_step._inflight_key("d", JAN.id, "tif"), prepare_step.aoi_key("d"))]
+        assert prepare_step.aoi_key("d") == "prep:d:@aoi" and _toasts("info") == []
+    finally:
+        rc.close()
+
+
+def test_a_geotiff_row_waits_for_the_aoi_geometry(step, tmp_path):
+    step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
+    state = _state(_with_tif(tmp_path, sidecar=False))
+
+    box, rc = _render(state)
+    try:
+        step.table[-1][0]["actions"][0]["on_click"]()
+        assert step.jobs == [] and _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
+        assert step.table[-1][0]["cells"][1]["status"] == "missing"  # nothing was claimed
+    finally:
+        rc.close()
+
+
+def test_a_refusal_and_a_keyed_engine_error_read_translated(monkeypatch):
+    """Task 14 review: no raw "SRC: unchecked" text; an engine error that
+    names a message key (``AoiGeometryMissing``, ``MaskNotReady``,
+    ``MaskFileMissing``) reads that message, with its ``values``."""
+    from deforestation_alerts.engine.runner import AoiGeometryMissing, CoverageRefused
+
+    class _Keyed(FileNotFoundError):  # MaskFileMissing's shape
+        key = "steps.prepare.file_missing"
+
+        def __init__(self, path):
+            super().__init__(f"raw {path}")
+            self.values = {"path": path}
+
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L", "RADD", "GLAD-S2"))
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        if job.source == "GLAD-L":
+            raise CoverageRefused("GLAD-L", "unchecked", (Note("coverage.unchecked", tone="error"),))
+        if job.source == "GLAD-S2":
+            raise _Keyed("/m.tif")
+        cause = AoiGeometryMissing("raw engine text")
+        raise HarmonizeFailed(cause, {}) from cause  # as the runner chains it
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    errors = solara.reactive({})
+    prepare_jobs.run_rows(_ctx(s, row_errors=errors, errors_lock=threading.Lock()), ["GLAD-L", "RADD", "GLAD-S2"])
+    assert errors.value == {"GLAD-L": t("coverage.unchecked"),
+                            "RADD": t("steps.prepare.aoi_geometry_missing"),
+                            "GLAD-S2": t("steps.prepare.file_missing", path="/m.tif")}
 
 
 # ---------------------------------------------------------------------------

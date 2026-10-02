@@ -164,6 +164,7 @@
       "col_source": "Source",
       "col_download": "Download",
       "col_harmonize": "Harmonize",
+      "col_size": "Size",
       "empty": "Add alert sources first.",
       "run_all": "Run {n} pending",
       "stop": "Stop after this row",

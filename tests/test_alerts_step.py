@@ -258,6 +258,31 @@ def test_toggle_on_ready_source_draws_the_harmonized_raster_then_toggles_off(mon
         rc.close()
 
 
+def test_check_again_under_the_table_after_a_failed_coverage_check(monkeypatch, tmp_path, cover):
+    """Spec §6.2 "Failure": with a source left without a coverage record, the
+    step offers Check again (``coverage_retry``); none once every source has
+    its record for the AOI, and none while nothing failed."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _stub_children(monkeypatch)
+    p = _project_with_source()
+    state = _app_state(p)
+
+    box, rc = _render(state, _FakeMap(), object(), MapLayers(_FakeMap()))
+    try:
+        def check_again():
+            return [w for w in rc.find(v.Btn).widgets if t("coverage.check_again") in w.children]
+
+        assert check_again() == []  # no failure
+        state.coverage_error.set("quota exceeded")
+        [button] = check_again()
+        button.fire_event("click", None)
+        assert state.coverage_retry.value == 1
+        state.update_project(p.name, lambda live: cover(live, "RADD"))
+        assert check_again() == []  # every source has its record
+    finally:
+        rc.close()
+
+
 def test_toggle_is_a_no_op_while_the_build_is_still_in_flight(monkeypatch, tmp_path):
     """Ruling #66/#10: a second click on a key that is already on and still
     building must not hide it or start a second build."""

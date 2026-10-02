@@ -15,8 +15,17 @@ written (or replaced, or superseded) files in that project's folder, so its
 artifacts are recorded in that project's own saved manifest instead, and the
 run stops (the Integrate ruling #75, applied to rows). Nothing touches the
 project open now, the map or the row errors.
+
+Stop ends the run before its next row by raising ``asyncio.CancelledError``
+inside the tracked job, so the task pill reads "cancelled", not "completed"
+(slice-1 Task 18 minor); the caller treats it as an ordinary end. A refused
+or failed row's message is translated (``_failure_text``): a coverage refusal
+reads its coverage note, an engine error that names a message key reads that
+message.
 """
 
+import asyncio
+import contextlib
 import logging
 import threading
 from dataclasses import dataclass
@@ -25,9 +34,11 @@ from typing import Any, Optional
 
 import solara
 
+from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, UNCHECKED
 from deforestation_alerts.engine.fingerprint import Status, harm_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import (
+    CoverageRefused,
     HarmonizeFailed,
     SourceJob,
     apply_artifacts,
@@ -36,7 +47,8 @@ from deforestation_alerts.engine.runner import (
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
 from gui.i18n import t
-from gui.scripts import raster_map
+from gui.scripts import source_layers
+from gui.scripts.coverage_ui import note_text
 from gui.scripts.notify_bridge import (
     ERROR_TOAST_TIMEOUT,
     tile_progress_reporter,
@@ -47,6 +59,7 @@ from gui.store.project_writers import writing
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
+_BLOCKED_STATUS = {NOT_COVERED: "not_covered", NO_DATA: "no_data", UNCHECKED: "unchecked"}
 
 
 @dataclass(frozen=True)
@@ -62,6 +75,7 @@ class PrepareContext:
     aoi: Any  # ee.FeatureCollection; None only when it is unavailable and no row downloads
     cancel: threading.Event
     row_errors: Optional[solara.Reactive] = None  # {source: message}; None in tests
+    errors_lock: Any = None  # threading.Lock shared by the step's jobs around ``row_errors``
 
 
 def _digest(p) -> Optional[str]:
@@ -84,12 +98,15 @@ def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None
     live = ctx.app_state.project.value
     if live is None or live.name != ctx.name or live.active_period != ctx.period.id:
         return  # the step now shows another project's (or period's) rows
-    errors = dict(ctx.row_errors.value)
-    if message is None:
-        errors.pop(source, None)
-    else:
-        errors[source] = message
-    ctx.row_errors.set(errors)
+    # Two jobs of the step (a Run all and a single row) may finish rows at
+    # once: the read-modify-write must not drop the other's error.
+    with ctx.errors_lock or contextlib.nullcontext():
+        errors = dict(ctx.row_errors.value)
+        if message is None:
+            errors.pop(source, None)
+        else:
+            errors[source] = message
+        ctx.row_errors.set(errors)
 
 
 def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
@@ -118,11 +135,30 @@ def _record_in_own_project(ctx: PrepareContext, arts: dict) -> None:
         logger.exception("could not record a late row in project %s", ctx.name)
 
 
-def row_cells(row: PrepareRow, running: bool) -> list:
+def row_cells(row: PrepareRow, running: bool, label=None) -> list:
+    """The name and both stage cells; a row blocked by its coverage shows why
+    (not covered, no data, not checked) in both."""
     def cell(s):
-        return {"type": "status", "status": "running" if running else _CELL_STATUS[s]}
+        if running:
+            return {"type": "status", "status": "running"}
+        if row.blocked and row.file_missing is None:
+            return {"type": "status", "status": _BLOCKED_STATUS[row.coverage]}
+        return {"type": "status", "status": _CELL_STATUS[s]}
 
-    return [{"value": row.source}, cell(row.raw), cell(row.harmonized)]
+    return [{"value": label or row.source}, cell(row.raw), cell(row.harmonized)]
+
+
+def _failure_text(exc: BaseException) -> str:
+    """A row's failure for its error line and toast, translated where the
+    engine says what went wrong by a coverage note or a message key."""
+    if isinstance(exc, CoverageRefused) and exc.notes:
+        return note_text(exc.notes[0])
+    if isinstance(exc, HarmonizeFailed) and exc.__cause__ is not None:
+        return _failure_text(exc.__cause__)  # its message is the cause's
+    key = getattr(exc, "key", None)  # AoiGeometryMissing, MaskNotReady, MaskFileMissing
+    if isinstance(key, str):
+        return t(key, **(getattr(exc, "values", None) or {}))
+    return str(exc) or exc.__class__.__name__
 
 
 def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
@@ -131,7 +167,7 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                                         total_steps=len(sources)) as task:
         for source in sources:
             if ctx.cancel.is_set():
-                return
+                raise asyncio.CancelledError()  # pysepal marks the task CANCELLED
             live = _live(ctx, aoi_digest)
             if live is None:
                 return
@@ -146,7 +182,7 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 arts = run_source_row(job, on_tiles=tile_progress_reporter(task))
             except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)
                 logger.exception("row %s failed", source)
-                message = str(exc) or exc.__class__.__name__
+                message = _failure_text(exc)
                 _set_error(ctx, source, message)
                 if ctx.notifier is not None:
                     ctx.notifier.error(t("steps.prepare.row_failed", source=source, error=message),
@@ -169,8 +205,5 @@ def run_rows(ctx: PrepareContext, sources: list, force: bool = False) -> None:
                 # spec §6.2/§9.1: a source already on the map is redrawn from
                 # its new harmonized file (``refresh`` rebuilds on a new content id)
                 path = paths.resolve(ctx.pdir, harm.rel_path)
-                ctx.layers.refresh(
-                    key,
-                    lambda pth=path, k=key, s=source: raster_map.add_raster_layer(ctx.map_, pth, key=k, name=s),
-                    harm.content_id,
-                )
+                ctx.layers.refresh(key, source_layers.harmonized_builder(ctx.map_, path, key, source),
+                                   harm.content_id)
