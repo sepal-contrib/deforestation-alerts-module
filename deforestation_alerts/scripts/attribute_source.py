@@ -30,17 +30,25 @@ def materialize_attribute_bands(config, region, folder):
     An Earth Engine image is downloaded one included band at a time, each in
     its own native projection (no ``crs``/``scale``: geedim uses the selected
     band's), so an image whose bands mix projections (Sentinel-2, Landsat TOA)
-    works and no band that is not included is fetched (spec §7.4).
+    works and no band that is not included is fetched (spec §7.4). A band with
+    several statistics is downloaded once, with all its specs.
     """
     if config["kind"] == "local":
         return [(str(config["source"]), list(config["bands"]))]
     out = []
-    for i, spec in enumerate(config["bands"]):
-        band = spec["band"]
+    for i, (band, specs) in enumerate(_by_band(config["bands"]).items()):
         tif = str(Path(folder) / f"attribute_{i}_{safe_token(band)}.tif")
         download_ee_image(ee.Image(config["source"]).select([band]), tif, region=region, resampling="near")
         _set_band_descriptions(tif, [band])
-        out.append((tif, [spec]))
+        out.append((tif, specs))
+    return out
+
+
+def _by_band(specs) -> dict:
+    """``{band: [its specs]}``, in the order the bands first appear."""
+    out = {}
+    for spec in specs or []:
+        out.setdefault(spec["band"], []).append(spec)
     return out
 
 
@@ -57,13 +65,13 @@ def attribute_alerts_from_config(gdf, config, region, materialize=None):
 
 def download_estimate(config, aoi_bounds) -> int:
     """Uncompressed bytes an Earth Engine attribute raster downloads (one band
-    per included band, 4 bytes a pixel at the band's own scale)."""
+    per distinct included band, 4 bytes a pixel at the band's own scale)."""
     from deforestation_alerts.engine.download import estimate_native_bytes
 
     if not config or config.get("kind") != "gee":
         return 0
     total = 0
-    for spec in config.get("bands") or []:
+    for spec in (specs[0] for specs in _by_band(config.get("bands")).values()):
         native = (spec.get("crs") or "EPSG:4326", float(spec.get("scale") or 10.0))
         total += estimate_native_bytes(aoi_bounds, native) // 2  # one band, not two
     return total

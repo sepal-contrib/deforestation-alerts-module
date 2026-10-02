@@ -594,6 +594,8 @@ def test_the_gate_counts_an_earth_engine_attribute_download(ready_project, monke
     p, pdir = ready_project
     asked = []
     monkeypatch.setattr(integrate, "ensure_free_space", lambda folder, n: asked.append(n))
+    monkeypatch.setattr(integrate.gdal_env, "scratch_dir", lambda: pdir.parent)
+    monkeypatch.setattr(integrate, "same_disk", lambda a, b: True)
     monkeypatch.setattr(integrate, "attribute_alerts_from_config", lambda gdf, *a, **k: gdf)
     monkeypatch.setattr(integrate, "_attribute_region", lambda p: "REGION")  # no Earth Engine in this test
     cfg = {"source": "COPERNICUS/S2_SR/x", "kind": "gee",
@@ -602,4 +604,30 @@ def test_the_gate_counts_an_earth_engine_attribute_download(ready_project, monke
     from deforestation_alerts.engine.raster_io import compressed_estimate
     from deforestation_alerts.scripts.attribute_source import download_estimate
     staged = 2 * compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
-    assert asked[0] == staged + 2 * compressed_estimate(download_estimate(cfg, p.aoi.bounds))
+    # the scratch folder is on the project's disk here: one check for both
+    assert asked[0] == staged + download_estimate(cfg, p.aoi.bounds)
+
+
+@_LONLAT_CENTROID
+def test_an_attribute_download_is_gated_on_the_scratch_disk_uncompressed(ready_project, monkeypatch, tmp_path):
+    """Review A M3: the Earth Engine attribute raster lands in the scratch
+    folder (normally the system tmp), and continuous bands compress far less
+    than alerts: it is checked there, at its uncompressed size, apart from the
+    staged set files on the project's disk."""
+    from deforestation_alerts import gdal_env
+    from deforestation_alerts.scripts.attribute_source import download_estimate
+
+    p, pdir = ready_project
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(gdal_env, "scratch_dir", lambda: scratch)
+    monkeypatch.setattr(integrate, "same_disk", lambda a, b: False)  # e.g. /tmp on its own disk
+    seen = _record_space_checks(monkeypatch)
+    monkeypatch.setattr(integrate, "attribute_alerts_from_config", lambda gdf, *a, **k: gdf)
+    monkeypatch.setattr(integrate, "_attribute_region", lambda p: "REGION")
+    cfg = {"source": "COPERNICUS/S2_SR/x", "kind": "gee",
+           "bands": [{"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0}]}
+    integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_config=cfg)))
+    staged = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    assert seen == [(paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]), staged),
+                    (scratch, download_estimate(cfg, p.aoi.bounds))]

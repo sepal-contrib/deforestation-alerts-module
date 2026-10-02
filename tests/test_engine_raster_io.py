@@ -163,3 +163,9 @@ def test_concurrent_ensure_overviews_build_the_sidecar_once(tmp_path, monkeypatc
     for th in threads:
         th.join(10)
     assert sorted(results) == [False, True]
+
+
+def test_same_disk_probes_the_nearest_existing_folder(tmp_path):
+    from deforestation_alerts.engine.raster_io import same_disk
+
+    assert same_disk(tmp_path, tmp_path / "not" / "yet")

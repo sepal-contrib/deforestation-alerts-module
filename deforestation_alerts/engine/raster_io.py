@@ -10,6 +10,7 @@ a multiple of the raster's *compressed* size estimate (``compressed_estimate``).
 
 import contextlib
 import math
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -153,15 +154,26 @@ def compressed_estimate(uncompressed_bytes: int) -> int:
     return math.ceil(uncompressed_bytes * COMPRESSED_FRACTION)
 
 
+def _existing(folder: Path) -> Path:
+    """``folder`` or its nearest existing parent (what a disk check can probe)."""
+    probe = Path(folder)
+    while not probe.exists():
+        probe = probe.parent
+    return probe
+
+
+def same_disk(a, b) -> bool:
+    """True when folders ``a`` and ``b`` (or their nearest existing parents)
+    are on one filesystem, so their free space is one budget."""
+    return os.stat(_existing(a)).st_dev == os.stat(_existing(b)).st_dev
+
+
 def ensure_free_space(folder: Path, needed_bytes: int) -> None:
     """Raise ``NotEnoughSpaceError`` when ``folder``'s disk (or that of its
     nearest existing parent) has less than ``needed_bytes`` free. Callers pass
     a multiple of ``compressed_estimate``."""
     folder = Path(folder)
-    probe = folder
-    while not probe.exists():
-        probe = probe.parent
-    free = shutil.disk_usage(probe).free
+    free = shutil.disk_usage(_existing(folder)).free
     if free < needed_bytes:
         raise NotEnoughSpaceError(
             f"needs {math.ceil(needed_bytes / 1e9)} GB free in {folder}, "

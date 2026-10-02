@@ -66,6 +66,36 @@ def test_materialize_gee_downloads_each_band_alone_in_its_own_projection(tmp_pat
     assert [ra.band_names(p) for p, _ in out] == [["B4"], ["B11"]]
 
 
+@_AFFINE_MUL
+def test_a_band_with_two_statistics_downloads_once(tmp_path, monkeypatch):
+    """Review A M4: one download per band, carrying all its statistics."""
+    calls = []
+
+    def fake_download(img, filename, region=None, crs=None, scale=None, **kw):
+        calls.append(img.bands)
+        _write_raster(filename, [[1, 1], [1, 1]])
+
+    class FakeImage:
+        def __init__(self, ref, bands=None):
+            self.ref, self.bands = ref, bands
+
+        def select(self, bands):
+            return FakeImage(self.ref, tuple(bands))
+
+    monkeypatch.setattr(asrc, "download_ee_image", fake_download)
+    monkeypatch.setattr(asrc.ee, "Image", FakeImage)
+    mean = {"band": "B4", "stat": "mean", "column": "b4_mean"}
+    top = {"band": "B4", "stat": "max", "column": "b4_max"}
+    b11 = {"band": "B11", "stat": "mean", "column": "b11"}
+    cfg = {"source": "COPERNICUS/S2_SR/x", "kind": "gee", "bands": [mean, b11, top]}
+    out = asrc.materialize_attribute_bands(cfg, "REGION", tmp_path)
+    assert calls == [("B4",), ("B11",)]
+    assert [specs for _, specs in out] == [[mean, top], [b11]]
+    one = {"kind": "gee", "bands": [dict(mean, crs="EPSG:4326", scale=10.0)]}
+    two = {"kind": "gee", "bands": [dict(mean, crs="EPSG:4326", scale=10.0), dict(top, crs="EPSG:4326", scale=10.0)]}
+    assert asrc.download_estimate(two, (0.0, 0.0, 0.01, 0.01)) == asrc.download_estimate(one, (0.0, 0.0, 0.01, 0.01))
+
+
 def test_download_estimate():
     from deforestation_alerts.engine.download import estimate_native_bytes
 

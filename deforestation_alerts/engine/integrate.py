@@ -38,8 +38,9 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
+from deforestation_alerts import gdal_env
 from deforestation_alerts.engine.raster_io import (
-    BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, write_grid_raster,
+    BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, same_disk, write_grid_raster,
 )
 from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.errors import ProjectRuleError
@@ -287,11 +288,19 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     # A run stages the combined raster (3 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
-    # estimate. An Earth Engine attribute raster is downloaded first, twice its
-    # compressed estimate too (spec §7.4 step 0).
+    # estimate. An Earth Engine attribute raster is downloaded into the scratch
+    # folder (normally the system tmp), counted uncompressed: its continuous
+    # bands compress far less than alerts (spec §7.4 step 0). One budget when
+    # both are on one disk.
     staged_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1))
-    attr_bytes = 2 * compressed_estimate(download_estimate(job.params.attribute_config, p.aoi.bounds))
-    ensure_free_space(sdir, staged_bytes + attr_bytes)
+    attr_bytes = download_estimate(job.params.attribute_config, p.aoi.bounds)
+    scratch = gdal_env.scratch_dir() if attr_bytes else None
+    if scratch is not None and same_disk(scratch, sdir):
+        ensure_free_space(sdir, staged_bytes + attr_bytes)
+    else:
+        ensure_free_space(sdir, staged_bytes)
+        if scratch is not None:
+            ensure_free_space(scratch, attr_bytes)
 
     step("steps.integrate.step_combine")
     earlier = earlier_sets(p, period)
