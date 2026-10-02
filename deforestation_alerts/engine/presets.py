@@ -32,27 +32,30 @@ def days_in_year(year):
 
 def to_yyyyddd(values, encoding: str) -> np.ndarray:
     """Dates in ``encoding`` -> int64 ``yyyyddd``, 0 where invalid (NaN, <= 0,
-    a day of year outside its year, a month outside 1..12)."""
+    |value| >= 1e7 such as float32 no-data, a day of year outside its year, a
+    month outside 1..12). The bound comes before the integer cast, which would
+    otherwise overflow (and warn) on +-3.4e38."""
     v = np.asarray(values, dtype=np.float64)
     finite = np.isfinite(v)
-    v0 = np.where(finite, v, 0.0)
+    ok = finite & (np.abs(v) < 1e7)
+    v0 = np.where(ok, v, 0.0)
     if encoding == "decimal_year":
         year = np.floor(v0).astype(np.int64)
         diy = days_in_year(year)
         frac = v0 - year
         doy = 1 + np.minimum(np.floor(frac * diy + TOLERANCE_DAYS), diy - 1).astype(np.int64)
-        valid = finite & (v0 > 0)
+        valid = ok & (v0 > 0)
     else:
         iv = np.floor(v0).astype(np.int64)
         if encoding == "yyddd":
             year, doy = 2000 + iv // 1000, iv % 1000
-            valid = finite & (iv > 0) & (doy >= 1) & (doy <= days_in_year(year))
+            valid = ok & (iv > 0) & (doy >= 1) & (doy <= days_in_year(year))
         elif encoding == "yyyyddd":
             year, doy = iv // 1000, iv % 1000
-            valid = finite & (year >= 1) & (doy >= 1) & (doy <= days_in_year(year))
+            valid = ok & (year >= 1) & (doy >= 1) & (doy <= days_in_year(year))
         elif encoding == "yymm":
             year, month = 2000 + iv // 100, iv % 100
-            valid = finite & (iv > 0) & (month >= 1) & (month <= 12)
+            valid = ok & (iv > 0) & (month >= 1) & (month <= 12)
             m = np.clip(month, 1, 12)
             doy = _MONTH_START[m] + ((m > 2) & is_leap(year)).astype(np.int64)
         else:

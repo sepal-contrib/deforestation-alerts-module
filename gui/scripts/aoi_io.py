@@ -131,3 +131,24 @@ def ee_aoi(result, pdir: Optional[Path]):
     from gui.i18n import t  # imported here: the rest of the module stays Solara-free
 
     raise ValueError(t("steps.aoi.no_geometry"))
+
+
+#: metres: the simplify tolerance of an Earth Engine AOI fetched for the sidecar.
+#: The sidecar only clips GeoTIFF inputs (the AOI raster), so an edge pixel may
+#: move by up to this much; 10 m made a national or archipelago boundary
+#: (Indonesia) a payload of several MB through ``get_info_async``, close to
+#: Earth Engine's response limits. The loader logs the payload size.
+SIDECAR_SIMPLIFY_M = 30
+
+
+def sidecar_request(aoi_fc):
+    """The AOI collection's geometries, simplified, without properties (unevaluated)."""
+    import ee
+
+    return aoi_fc.map(lambda f: ee.Feature(ee.Feature(f).geometry().simplify(SIDECAR_SIMPLIFY_M)))
+
+
+def sidecar_gdf(info: dict):
+    import geopandas as gpd
+
+    return gpd.GeoDataFrame.from_features(info["features"], crs="EPSG:4326")

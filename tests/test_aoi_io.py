@@ -100,3 +100,22 @@ def test_sidecar_fallback_keeps_the_pickers_straight_edges(gee, tmp_path):
     aoi_io.write_sidecar(tmp_path, wide)
     geom = aoi_io.ee_aoi(None, tmp_path).geometry().bounds().getInfo()
     assert aoi_io.bounds_from_geojson(geom) == pytest.approx((-60, -10, -40, -5), abs=1e-6)
+
+
+def test_sidecar_gdf_from_an_evaluated_collection():
+    from gui.scripts import aoi_io
+
+    info = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}}]}
+    gdf = aoi_io.sidecar_gdf(info)
+    assert gdf.crs.to_epsg() == 4326 and len(gdf) == 1 and gdf.total_bounds.tolist() == [0, 0, 1, 1]
+
+
+def test_sidecar_request_keeps_the_geometry_and_drops_the_properties(tiny_aoi):
+    import ee
+
+    fc = ee.FeatureCollection([ee.Feature(tiny_aoi, {"name": "x", "code": 1})])
+    gdf = aoi_io.sidecar_gdf(aoi_io.sidecar_request(fc).getInfo())
+    assert list(gdf.columns) == ["geometry"] and len(gdf) == 1
+    assert tuple(gdf.total_bounds) == pytest.approx(_BOX, abs=1e-3)  # 30 m simplify, about 3e-4 degrees

@@ -52,3 +52,14 @@ def test_apply_preset_keeps_both_window_ends():
 def test_date_only_alerts_are_all_confirmed():
     a, d = presets.apply_preset(None, np.array([2401, 2413, 2402]), "date_only", "yymm", 2024001, 2024366)
     assert list(a) == [1, 0, 1] and list(d) == [2024001, 0, 2024032]
+
+
+@pytest.mark.parametrize("encoding", presets.ENCODINGS)
+def test_float32_nodata_is_no_date_without_a_cast_warning(encoding):
+    import warnings
+
+    big = float(np.finfo(np.float32).max)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = presets.to_yyyyddd(np.array([big, -big], dtype=np.float32), encoding)
+    assert list(got) == [0, 0]

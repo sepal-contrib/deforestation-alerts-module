@@ -32,6 +32,14 @@ def mask_path(pdir: Path, mask_name: str) -> Path:
     return Path(pdir) / "masks" / f"mask_{safe_token(mask_name)}.tif"
 
 
+def aoi_raster_path(pdir: Path) -> Path:
+    return Path(pdir) / "masks" / "aoi.tif"
+
+
+def mask_raw_path(pdir: Path, mask_name: str) -> Path:
+    return Path(pdir) / "masks" / "raw" / f"mask_{safe_token(mask_name)}.tif"
+
+
 def _period(pdir: Path, period_id: str) -> Path:
     return Path(pdir) / "periods" / period_id
 
