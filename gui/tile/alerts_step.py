@@ -1,19 +1,19 @@
-"""Alerts step (spec §6.2): the project's alert sources, previewed on the map."""
-
-from datetime import date
+"""Alerts step (spec §6.2): the alert sources, their coverage of the AOI, previews."""
 
 import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine import catalogue
-from deforestation_alerts.engine.coverage import record_for
-from deforestation_alerts.engine.fingerprint import harm_key
+from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, record_for, window_coverage
+from deforestation_alerts.engine.fingerprint import harm_key, is_file_source
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths
-from deforestation_alerts.project.models import add_predefined_source, remove_source
+from deforestation_alerts.project.models import (
+    add_custom_source, add_predefined_source, remove_source, sets_using_source, update_custom_source,
+)
 from gui.i18n import t
 from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
-from gui.scripts.coverage_ui import CheckAgainButton
+from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, note_text
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -21,8 +21,20 @@ from gui.widget.product_table import ProductTable
 from gui.widget.source_modal import SourceModal
 
 
-def _sets_using(p, name) -> int:
-    return sum(1 for s in p.alert_sets.values() if name in s.sources)
+def blocked_reason(p, name):
+    """Why ``name`` cannot be previewed for the active window, or None."""
+    cov = record_for(p, name)
+    if cov is None:
+        return t("coverage.unchecked")
+    a, b = catalogue_meta.preview_window(p, name)
+    state, notes = window_coverage(cov, name, a, b)
+    return note_text(notes[0]) if state in (NOT_COVERED, NO_DATA) else None
+
+
+def _message(exc: ValueError) -> str:
+    """A refusal as the modal shows it inline: the models raise message keys."""
+    text = str(exc)
+    return t(text) if text.startswith("steps.") else text
 
 
 @solara.component
@@ -30,9 +42,12 @@ def AlertsStep(app_state, map_, gee_interface, layers):
     notifications = use_notifications()
     p = app_state.project.value
     on = layers.on.value  # subscribe: the map-toggle icons follow the registry
+    building = layers.inflight.value
     modal_open = solara.use_reactive(False)
+    editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
-    meta = app_state.catalogue_meta.value  # fetched by RemoteFactsLoader
+    meta = app_state.catalogue_meta.value  # GLAD-L's band list, fetched by RemoteFactsLoader
+    pending_cov = app_state.coverage_pending.value
 
     if p is None or p.aoi is None:
         solara.Info(t("workflow.lock_alerts"))
@@ -43,10 +58,58 @@ def AlertsStep(app_state, map_, gee_interface, layers):
     # Ruling #46: the harmonized status alone misses a stale raw row (e.g.
     # after a grid change); a row is a ready preview only once ``.ready`` says
     # both raw and harmonized are current.
-    prepare_by_source = {r.source: r for r in plan_prepare(p, pdir, period)} if period is not None else {}
+    rows_by_source = {r.source: r for r in plan_prepare(p, pdir, period)} if period is not None else {}
 
-    def _add(key):
+    def _add_predefined(key):
         app_state.update_project(p.name, lambda live: add_predefined_source(live, key))
+
+    # The two custom callbacks run in SourceModal's validation task (on the
+    # loop, never from an effect); what they raise the modal shows inline, so
+    # they raise translated text, never a key.
+    def _add_custom(fields, cov):
+        def _apply(live):
+            src = add_custom_source(live, **fields)
+            live.coverage = {**live.coverage, src.name: cov}
+
+        try:
+            app_state.update_project(p.name, _apply)
+        except ValueError as exc:  # a name taken meanwhile, or the cap
+            raise ValueError(_message(exc)) from None
+
+    def _refuse_save(key):
+        notifications.warning(t(key))
+        raise ValueError(t(key))
+
+    def _save_custom(name, fields, cov):
+        if is_writing(p.name):  # a job started while the modal was open (spec §5.1)
+            _refuse_save("steps.alerts.edit_busy")
+        changes = {k: v for k, v in fields.items() if k != "name"}
+
+        def _apply(live):
+            update_custom_source(live, name, **changes)  # refused once a set used it meanwhile
+            live.coverage = {**live.coverage, name: cov}
+
+        try:
+            saved = app_state.update_project(p.name, _apply)
+        except ValueError as exc:
+            notifications.warning(_message(exc))
+            raise ValueError(_message(exc)) from None
+        if saved:
+            layers.hide(f"src:{name}")  # its preview showed the previous definition
+
+    def _edit(name):
+        if sets_using_source(p, name):
+            notifications.warning(t("steps.alerts.edit_used"))
+            return
+        if is_writing(p.name):  # spec §5.1: edit and delete wait for the project's writers
+            notifications.warning(t("steps.alerts.edit_busy"))
+            return
+        set_editing(name)
+        modal_open.set(True)
+
+    def _open_add():
+        set_editing(None)
+        modal_open.set(True)
 
     def _delete():
         name = pending_delete
@@ -62,7 +125,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             remove_source(live, name)
 
         if app_state.update_project(p.name, _apply):
-            cleanup.delete_files(paths.project_dir(p.name), gone)
+            cleanup.delete_files(pdir, gone)
 
     def _toggle(name):
         key = f"src:{name}"
@@ -73,22 +136,24 @@ def AlertsStep(app_state, map_, gee_interface, layers):
                 return
             layers.hide(key)
             return
+        reason = blocked_reason(p, name)
+        if reason:  # the toggle is disabled; a stale click builds nothing either
+            notifications.info(reason)
+            return
         src = p.sources[name]
-        row = prepare_by_source.get(name)
+        row = rows_by_source.get(name)
         if row is not None and row.ready:
-            harm = p.artifacts[harm_key(period.id, name)]
-            path = paths.resolve(pdir, harm.rel_path)
+            path = paths.resolve(pdir, p.artifacts[harm_key(period.id, name)].rel_path)
             build = source_layers.harmonized_builder(map_, path, key, name)
+        elif is_file_source(src):
+            notifications.info(t("steps.alerts.file_preview_after_harmonize"))
+            return
         else:
-            # only GLAD-L's builder reads metadata (its band list); RADD's and
-            # GLAD-S2's read none, and the ``end`` only bounds the no-period
-            # preview window until Task 18 takes it from the coverage
-            key_meta = (meta.get("GLAD-L") if src.catalogue_key == "GLAD-L"
-                        else {"end": date.today().isoformat()})
-            if key_meta is None:
+            glad_l = meta.get("GLAD-L")
+            if src.kind == "predefined" and src.catalogue_key == "GLAD-L" and glad_l is None:
                 notifications.info(t("steps.alerts.meta_loading"))
                 return
-            win = catalogue_meta.preview_window(p, key_meta, src.catalogue_key)
+            a, b = catalogue_meta.preview_window(p, name)
             try:
                 aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
             except ValueError as exc:
@@ -96,7 +161,10 @@ def AlertsStep(app_state, map_, gee_interface, layers):
                 return
 
             def build():
-                img = catalogue.build_image(src.catalogue_key, win[0], win[1], aoi, key_meta)
+                if src.kind == "predefined":
+                    img = catalogue.build_image(src.catalogue_key, a, b, aoi, glad_l or {})
+                else:
+                    img = catalogue.build_custom_image(src, a, b, aoi)
                 map_.add_ee_layer(img.select("alert"), raster_map.ALERT_EE_VIS, name=name, key=key)
 
         # show, not toggle: a click behind a superseded build must be queued,
@@ -105,20 +173,26 @@ def AlertsStep(app_state, map_, gee_interface, layers):
 
     rows = []
     for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):
-        rows.append({
-            "key": name,
-            "cells": [
-                {"value": t(catalogue.LABEL_KEYS[src.catalogue_key])},
-                {"type": "chip", "value": t("steps.alerts.kind_predefined")},
-                {"value": catalogue_meta.coverage_text(src.catalogue_key, meta.get(src.catalogue_key)),
-                 "muted": True},
-            ],
-            "actions": [
-                {"kind": "map_toggle", "is_on": f"src:{name}" in on,
-                 "loading": f"src:{name}" in layers.inflight.value, "on_click": (lambda n=name: _toggle(n))},
-                {"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))},
-            ],
-        })
+        cov = record_for(p, name)
+        reason = blocked_reason(p, name)
+        notes = []
+        if src.kind == "predefined" and src.catalogue_key == "RADD":
+            notes.append({"text": t("coverage.radd_note"), "tone": "info"})
+        if reason:
+            notes.append({"text": reason, "tone": "error"})
+        if src.kind == "predefined":
+            label, kind = t(catalogue.LABEL_KEYS[src.catalogue_key]), t("steps.alerts.kind_predefined")
+        else:
+            label, kind = name, t("steps.alerts.kind_custom", format=t(f"steps.alerts.format_{src.format}"))
+        key = f"src:{name}"
+        actions = [{"kind": "map_toggle", "is_on": key in on, "loading": key in building,
+                    "disabled": reason is not None, "on_click": (lambda n=name: _toggle(n))}]
+        if src.kind == "custom":
+            actions.append({"kind": "edit", "on_click": (lambda n=name: _edit(n))})
+        actions.append({"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))})
+        rows.append({"key": name, "notes": notes, "actions": actions,
+                     "cells": [{"value": label}, {"type": "chip", "value": kind}, chip_cell(cov, pending_cov),
+                               {"value": dates_text(cov), "muted": True}]})
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.alerts.title')}")
@@ -126,19 +200,19 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         ProductTable(
             title=t("steps.alerts.list_title"),
             columns=[{"label": t("steps.alerts.col_source")},
-                     {"label": t("steps.alerts.col_kind"), "width": "90px"},
-                     {"label": t("steps.alerts.col_coverage"), "width": "170px"}],
+                     {"label": t("steps.alerts.col_kind"), "width": "120px"},
+                     {"label": t("steps.alerts.col_coverage"), "width": "150px"},
+                     {"label": t("steps.alerts.col_dates"), "width": "150px"}],
             rows=rows, empty_text=t("steps.alerts.empty"),
         )
         # spec §6.2 "Failure": the sources left without a record can be checked again
         CheckAgainButton(app_state=app_state, show=bool(app_state.coverage_error.value)
                          and any(record_for(p, n) is None for n in p.sources))
-        solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True,
-                      on_click=lambda: modal_open.set(True))
+        solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True, on_click=_open_add)
 
-    SourceModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_add_predefined=_add,
-                on_add_custom=lambda fields, cov: None, on_save_custom=lambda name, changes, cov: None)
-    used = _sets_using(p, pending_delete) if pending_delete else 0
+    SourceModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, editing=editing,
+                on_add_predefined=_add_predefined, on_add_custom=_add_custom, on_save_custom=_save_custom)
+    used = len(sets_using_source(p, pending_delete)) if pending_delete else 0
     ConfirmDialog(
         open=pending_delete is not None,
         on_cancel=lambda: set_pending_delete(None),

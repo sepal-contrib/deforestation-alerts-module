@@ -1,11 +1,12 @@
 from datetime import date, timedelta
 
+import pytest
+
 from deforestation_alerts.engine import catalogue as cat
 
 # GLAD-L metadata as meta_request returns it: UpdResult's bands, distinct
 # across the collection (only some of its images carry conf25).
 GLAD_L_META = {
-    "end": "2026-09-30",
     "bands": ["conf25", "alertDate25", "conf26", "alertDate26", "obsCount", "obsDate", "swir1", "nir", "red"],
 }
 
@@ -22,14 +23,6 @@ def test_year_periods_split_inclusive():
         (date(2026, 1, 1), date(2026, 2, 28)),
     ]
     assert cat.year_periods(date(2026, 1, 1), date(2026, 1, 31)) == [(date(2026, 1, 1), date(2026, 1, 31))]
-
-
-def test_covers_uses_catalogue_range():
-    meta = {"end": "2026-03-01"}
-    assert cat.covers("RADD", meta, date(2026, 1, 1), date(2026, 1, 31))
-    assert not cat.covers("RADD", meta, date(2026, 3, 2), date(2026, 3, 31))
-    assert not cat.covers("RADD", meta, date(2018, 1, 1), date(2018, 12, 31))  # before 2019
-    assert cat.covers("RADD", meta, date(2018, 12, 1), date(2019, 1, 1))  # touches the start day
 
 
 def test_glad_s2_day_counts_become_yyyyddd_on_every_day():
@@ -66,10 +59,7 @@ def test_glad_l_reads_each_year_from_the_collection_that_holds_it():
     ]
 
 
-def test_glad_l_covers_needs_a_collection_for_the_window():
-    assert cat.covers("GLAD-L", GLAD_L_META, date(2024, 1, 1), date(2024, 3, 31))
-    assert cat.covers("GLAD-L", GLAD_L_META, date(2025, 11, 3), date(2026, 2, 28))
-    assert not cat.covers("GLAD-L", GLAD_L_META, date(2024, 8, 1), date(2024, 8, 31))  # the 2024 gap
-    assert cat.covers("GLAD-L", GLAD_L_META, date(2024, 12, 1), date(2025, 1, 31))  # reaches 2025
-    assert not cat.covers("GLAD-L", GLAD_L_META, date(2017, 1, 1), date(2017, 12, 31))  # before 2018
-    assert not cat.covers("GLAD-L", GLAD_L_META, date(2026, 10, 1), date(2026, 10, 31))  # after the end
+def test_only_glad_l_has_catalogue_metadata():
+    for other in ("RADD", "GLAD-S2", "nope"):
+        with pytest.raises(ValueError):
+            cat.meta_request(other)

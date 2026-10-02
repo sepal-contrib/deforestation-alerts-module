@@ -1,25 +1,14 @@
-"""Helpers over the catalogue metadata in ``app_state.catalogue_meta``.
-
-``gui.scripts.remote_facts.RemoteFactsLoader`` fetches it (GLAD-L's band
-list, once per session); the steps only read it.
-"""
+"""Preview windows of the alert sources (spec §6.2 "Show on map")."""
 
 from datetime import date
 
-from deforestation_alerts.engine import catalogue
+from deforestation_alerts.engine.coverage import data_window, record_for
 
 
-def coverage_text(key: str, meta) -> str:
-    if not meta:
-        return "…"
-    first, last = catalogue.coverage(key, meta)
-    return f"{first.isoformat()} → {last.isoformat()}"
-
-
-def preview_window(project, meta, key) -> tuple[date, date]:
+def preview_window(project, source) -> tuple:
+    """The active period's search window; without one, the span the source's
+    covering regions hold for this AOI; for an undated custom source, every date."""
     period = project.periods.get(project.active_period) if project.active_period else None
     if period is not None:
         return period.search_window(project.look_back_days)
-    # No active period yet: preview the whole catalogue (spec §6.2), not a
-    # fixed look-back window.
-    return catalogue.coverage(key, meta)
+    return data_window(record_for(project, source)) or (date(2000, 1, 1), date.today())

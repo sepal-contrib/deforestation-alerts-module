@@ -23,6 +23,7 @@ from datetime import date, datetime
 from types import SimpleNamespace
 
 import ipyvuetify as v
+import pytest
 import reacton
 import solara
 from pysepal.solara.notifications import NotificationProvider
@@ -33,7 +34,8 @@ from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
-    AoiRecord, Artifact, Period, Project, add_predefined_source,
+    AlertSet, AlertSetParams, AoiRecord, Artifact, BandMap, NativeGrid, Period, Project, RegionCoverage,
+    SourceCoverage, add_custom_source, add_predefined_source,
 )
 from gui.i18n import t
 from gui.scripts import aoi_io as aoi_io_mod
@@ -56,9 +58,9 @@ def test_available_predefined_hides_the_ones_already_added():
     assert available_predefined(p) == ["GLAD-L", "GLAD-S2"]
 
 
-def test_coverage_text():
-    assert catalogue_meta.coverage_text("RADD", {"end": "2026-09-20"}) == "2019-01-01 → 2026-09-20"
-    assert catalogue_meta.coverage_text("RADD", None) == "…"
+def _cov(fraction=1.0, first=date(2020, 1, 1), last=date(2026, 9, 23)):
+    return SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=fraction,
+                          regions=[RegionCoverage(name="sa", fraction=fraction, first=first, last=last)])
 
 
 def test_preview_window_prefers_the_active_period():
@@ -66,12 +68,20 @@ def test_preview_window_prefers_the_active_period():
     per = Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31))
     p.periods["x"] = per
     p.active_period = "x"
-    assert catalogue_meta.preview_window(p, {"end": "2026-09-20"}, "RADD") == per.search_window(p.look_back_days)
+    assert catalogue_meta.preview_window(p, "RADD") == per.search_window(p.look_back_days)
 
 
-def test_preview_window_without_period_is_the_whole_catalogue():
-    # Ruling #15: spec §6.2 says "the whole catalogue" (not the last 90 days).
-    assert catalogue_meta.preview_window(_p(), {"end": "2026-09-20"}, "RADD") == (date(2019, 1, 1), date(2026, 9, 20))
+def test_preview_window_without_period_is_the_covered_span():
+    p = _project_with_source("RADD")
+    p.coverage = {"RADD": _cov()}
+    assert catalogue_meta.preview_window(p, "RADD") == (date(2020, 1, 1), date(2026, 9, 23))
+
+
+def test_preview_window_of_an_undated_source_is_every_date():
+    p = _project_with_source("RADD")
+    p.coverage = {"RADD": SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=1.0,
+                                         regions=[RegionCoverage(name="mine", fraction=1.0)])}
+    assert catalogue_meta.preview_window(p, "RADD") == (date(2000, 1, 1), date.today())
 
 
 # ---------------------------------------------------------------------------
@@ -97,17 +107,22 @@ class _FakeMap:
         self.layers[key] = "ee"
 
 
-def _project_with_source(name="RADD"):
+def _project_with_source(name="RADD", covered=True):
+    """A project with one predefined source; ``covered`` saves a coverage
+    record that covers every window (as the conftest ``cover`` fixture does),
+    so its row can be shown on the map (Task 18: an unchecked row cannot)."""
     p = _p()
     p.aoi = AoiRecord(spec={}, name="x", method="DRAW", digest="d", bounds=(0, 0, 1, 1))
     add_predefined_source(p, name)
+    if covered:
+        p.coverage = {name: _cov(first=date(2000, 1, 1), last=date(2100, 1, 1))}
     return p
 
 
 def _app_state(p):
     state = AppState()
     state.project.value = p
-    state.catalogue_meta.value = {"GLAD-L": {"bands": ["conf25", "conf26"], "end": "2026-09-20"}}
+    state.catalogue_meta.value = {"GLAD-L": {"bands": ["conf25", "conf26"]}}
     return state
 
 
@@ -264,7 +279,7 @@ def test_check_again_under_the_table_after_a_failed_coverage_check(monkeypatch, 
     its record for the AOI, and none while nothing failed."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     _stub_children(monkeypatch)
-    p = _project_with_source()
+    p = _project_with_source(covered=False)
     state = _app_state(p)
 
     box, rc = _render(state, _FakeMap(), object(), MapLayers(_FakeMap()))
@@ -432,6 +447,352 @@ def test_delete_is_refused_while_a_writer_runs(monkeypatch, tmp_path):
         assert state.project.value.sources == {"RADD": state.project.value.sources["RADD"]}
         warnings = [toast for toast in bus.toasts.value if toast.type.value == "warning"]
         assert warnings and warnings[-1].message == t("steps.alerts.delete_busy")
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Task 18: coverage chips, dates and reasons per row; custom rows with edit
+# and delete (spec §6.2, §5.1).
+# ---------------------------------------------------------------------------
+def _render_step(state, layers, recorders):
+    """Render AlertsStep with ProductTable/ConfirmDialog/SourceModal swapped for recorders."""
+    import gui.tile.alerts_step as mod
+
+    @reacton.component
+    def Page():
+        NotificationProvider()
+        mod.AlertsStep(app_state=state, map_=layers.map_, gee_interface=SimpleNamespace(), layers=layers)
+
+    return reacton.render(Page(), handle_error=False)
+
+
+def _add_mine(p, **kw):
+    fields = dict(name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd",
+                  date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
+                  native=NativeGrid(crs="EPSG:4326", scale=10.0))
+    return add_custom_source(p, **{**fields, **kw})
+
+
+def _used_by_a_set(p, name="mine"):
+    p.alert_sets = {f"x__{name}": AlertSet(id=f"x__{name}", period_id="x", sources=[name], digit_map={3: name},
+                                           params=AlertSetParams(), store_rel_path="s", combined_rel_path="c",
+                                           footprint_rel_path="f", fingerprint="f", created_at=datetime.now())}
+
+
+def _toasts(bus, kind, message):
+    """How many times ``message`` was toasted: pysepal merges identical
+    non-error toasts within 2 s into one, bumping its ``count`` (ruling C2)."""
+    return sum(x.count for x in bus.toasts.value if x.type.value == kind and x.message == message)
+
+
+def test_rows_show_kind_coverage_dates_and_the_radd_note(monkeypatch):
+    import gui.tile.alerts_step as mod
+
+    seen = {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: None)
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    p.aoi = p.aoi.model_copy(update={"digest": "d"})
+    add_custom_source(p, name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="ccdc",
+                      date_encoding="decimal_year", band_map=BandMap(alert="detection_count", date="first_detection_date"),
+                      native=NativeGrid(crs="EPSG:4326", scale=20.0))
+    p.coverage = {"RADD": _cov(), "mine": SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=0.35,
+                                                        regions=[RegionCoverage(name="mine", fraction=0.35)])}
+    state = _app_state(p)
+    box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+    try:
+        rows = {r["key"]: r for r in seen["rows"]}
+        assert rows["RADD"]["cells"][2]["value"] == "covers the AOI"
+        assert rows["RADD"]["cells"][3]["value"] == "2020-01-01 → 2026-09-23"
+        assert any("primary humid tropical forest" in n["text"] for n in rows["RADD"]["notes"])
+        assert rows["mine"]["cells"][1]["value"] == "custom · SEPAL CCDC alerts"
+        assert rows["mine"]["cells"][2]["value"] == "covers 35% of the AOI"
+        assert [a["kind"] for a in rows["mine"]["actions"]] == ["map_toggle", "edit", "delete"]
+        assert [a["kind"] for a in rows["RADD"]["actions"]] == ["map_toggle", "delete"]  # no edit: predefined
+        assert not any(a.get("disabled") for a in rows["mine"]["actions"])
+    finally:
+        rc.close()
+
+
+def test_show_on_map_is_disabled_with_the_reason_for_an_uncovered_source(monkeypatch):
+    import gui.tile.alerts_step as mod
+
+    seen = {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: None)
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("GLAD-S2")
+    p.aoi = p.aoi.model_copy(update={"digest": "d"})
+    p.coverage = {"GLAD-S2": SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=0.0)}
+    box, rc = _render_step(_app_state(p), MapLayers(_FakeMap()), {})
+    try:
+        row = seen["rows"][0]
+        toggle = next(a for a in row["actions"] if a["kind"] == "map_toggle")
+        assert toggle["disabled"] and any("does not cover this AOI" in n["text"] for n in row["notes"])
+    finally:
+        rc.close()
+
+
+def test_show_on_map_is_disabled_until_the_coverage_is_checked_and_when_the_window_has_no_data(monkeypatch):
+    """Spec §6.2: an unchecked row, and a row whose data does not reach the
+    active window, read their reason and never build an Earth Engine preview."""
+    import gui.tile.alerts_step as mod
+
+    seen = {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: None)
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    monkeypatch.setattr(catalogue, "build_image", lambda *a, **k: pytest.fail("no preview for a blocked row"))
+    p = _project_with_source("RADD", covered=False)
+    add_predefined_source(p, "GLAD-S2")
+    per = Period(id="x", start=date(2027, 1, 1), end=date(2027, 1, 31))
+    p.periods = {"x": per}
+    p.active_period = "x"
+    p.coverage = {"GLAD-S2": _cov()}  # its data ends 2026-09-23, before the window
+    state = _app_state(p)
+    box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+    try:
+        rows = {r["key"]: r for r in seen["rows"]}
+        for name, reason in [("RADD", t("coverage.unchecked")), ("GLAD-S2", "2026-09-23")]:
+            toggle = next(a for a in rows[name]["actions"] if a["kind"] == "map_toggle")
+            assert toggle["disabled"], name
+            assert any(reason in n["text"] and n["tone"] == "error" for n in rows[name]["notes"]), rows[name]["notes"]
+        assert rows["RADD"]["cells"][3]["value"] == ""  # no dates before the check
+    finally:
+        rc.close()
+
+
+def test_a_custom_earth_engine_source_previews_its_alert_band_over_the_covered_span(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "aoi")
+    built = []
+
+    def _build_custom(src, a, b, aoi):
+        built.append((src.name, a, b, aoi))
+        return SimpleNamespace(select=lambda band: f"img.{band}")
+
+    monkeypatch.setattr(catalogue, "build_custom_image", _build_custom)
+    table_calls, _ = _stub_children(monkeypatch)
+    p = _project_with_source("RADD")
+    _add_mine(p)
+    p.coverage = {**p.coverage, "mine": _cov(first=date(2021, 3, 1), last=date(2025, 6, 30))}
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+    box, rc = _render(_app_state(p), map_, object(), layers)
+    try:
+        row = next(r for r in table_calls[-1]["rows"] if r["key"] == "mine")
+        row["actions"][0]["on_click"]()
+        assert built == [("mine", date(2021, 3, 1), date(2025, 6, 30), "aoi")]
+        assert map_.ee_calls == [("mine", "src:mine")]
+    finally:
+        rc.close()
+
+
+def test_a_geotiff_source_has_no_preview_until_it_is_harmonized(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    table_calls, _ = _stub_children(monkeypatch)
+    p = _project_with_source("RADD")
+    _add_mine(p, origin="file", ref="/data/mine.tif", asset_type="FILE", band_map=BandMap(alert=1, date=2))
+    p.coverage = {**p.coverage, "mine": _cov()}
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+    box, rc = _render(_app_state(p), map_, object(), layers)
+    try:
+        bus = get_current_bus()
+        row = next(r for r in table_calls[-1]["rows"] if r["key"] == "mine")
+        row["actions"][0]["on_click"]()
+        assert layers.on.value == frozenset() and map_.layers == {}
+        assert _toasts(bus, "info", t("steps.alerts.file_preview_after_harmonize")) == 1
+    finally:
+        rc.close()
+
+
+def test_edit_is_refused_once_a_set_used_the_source(monkeypatch):
+    import gui.tile.alerts_step as mod
+
+    seen, modal = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    add_custom_source(p, name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd",
+                      date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
+                      native=NativeGrid(crs="EPSG:4326", scale=10.0))
+    p.alert_sets = {"x__mine": AlertSet(id="x__mine", period_id="x", sources=["mine"], digit_map={3: "mine"},
+                                        params=AlertSetParams(), store_rel_path="s", combined_rel_path="c",
+                                        footprint_rel_path="f", fingerprint="f", created_at=datetime.now())}
+    state = _app_state(p)
+
+    async def main():
+        box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+        try:
+            bus = get_current_bus()
+            row = next(r for r in seen["rows"] if r["key"] == "mine")
+            next(a for a in row["actions"] if a["kind"] == "edit")["on_click"]()
+            assert modal["editing"] is None  # the modal is not opened for an edit
+            assert modal["open_"].value is False
+            warnings = [x.message for x in bus.toasts.value if x.type.value == "warning"]
+            assert any("add a new one instead" in m for m in warnings), warnings
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_edit_and_its_save_wait_for_the_projects_writers(monkeypatch):
+    """Spec §5.1: editing is refused while a job writes into the project, when
+    the modal would open and at Save (a job can start while it is open)."""
+    import gui.tile.alerts_step as mod
+    from gui.store.project_writers import writing
+
+    seen, modal = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    add_custom_source(p, name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd",
+                      date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
+                      native=NativeGrid(crs="EPSG:4326", scale=10.0))
+    state = _app_state(p)
+
+    async def main():
+        box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+        try:
+            bus = get_current_bus()
+            row = next(r for r in seen["rows"] if r["key"] == "mine")
+            with writing(p.name):
+                next(a for a in row["actions"] if a["kind"] == "edit")["on_click"]()
+                assert modal["open_"].value is False  # not opened
+                # the modal shows the refusal inline: a translated message, never a key (Task 17)
+                with pytest.raises(ValueError, match=t("steps.alerts.edit_busy")):
+                    modal["on_save_custom"]("mine", {"name": "mine", "ref": "users/x/b"}, _cov())
+            assert state.project.value.sources["mine"].ref == "users/x/a"  # nothing changed
+            assert _toasts(bus, "warning", t("steps.alerts.edit_busy")) == 2
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_save_applies_the_edit_and_its_coverage_and_drops_the_old_preview(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _sync_spawn(monkeypatch)
+    import gui.tile.alerts_step as mod
+
+    seen, modal = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    _add_mine(p)
+    state = _app_state(p)
+    map_ = _FakeMap()
+    layers = MapLayers(map_)
+
+    async def main():
+        box, rc = _render_step(state, layers, {})
+        try:
+            row = next(r for r in seen["rows"] if r["key"] == "mine")
+            next(a for a in row["actions"] if a["kind"] == "edit")["on_click"]()
+            assert modal["editing"] == "mine" and modal["open_"].value is True
+            layers.show("src:mine", lambda: map_.add_layer("x", key="src:mine"))  # the old asset's preview
+            cov = _cov(fraction=0.5)
+            modal["on_save_custom"]("mine", {"name": "mine", "ref": "users/x/b"}, cov)
+            live = state.project.value
+            assert live.sources["mine"].ref == "users/x/b" and live.sources["mine"].digit == 3
+            assert live.coverage["mine"] == cov
+            assert layers.on.value == frozenset() and "src:mine" in map_.removed
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_save_is_refused_once_a_set_used_the_source_meanwhile(monkeypatch):
+    import gui.tile.alerts_step as mod
+
+    seen, modal = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    _add_mine(p)
+    state = _app_state(p)
+
+    async def main():
+        box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+        try:
+            row = next(r for r in seen["rows"] if r["key"] == "mine")
+            next(a for a in row["actions"] if a["kind"] == "edit")["on_click"]()
+            state.update_project(p.name, _used_by_a_set)  # an Integrate ran while the modal was open
+            with pytest.raises(ValueError, match=t("steps.alerts.edit_used")):
+                modal["on_save_custom"]("mine", {"name": "mine", "ref": "users/x/b"}, _cov())
+            assert state.project.value.sources["mine"].ref == "users/x/a"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_add_custom_saves_the_source_with_its_coverage_and_raises_translated_errors(monkeypatch):
+    import gui.tile.alerts_step as mod
+
+    seen, modal = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
+    p = _project_with_source("RADD")
+    state = _app_state(p)
+    fields = dict(name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd",
+                  date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
+                  native=NativeGrid(crs="EPSG:4326", scale=10.0))
+
+    async def main():
+        box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+        try:
+            cov = _cov(fraction=0.4)
+            modal["on_add_custom"](fields, cov)
+            live = state.project.value
+            assert live.sources["mine"].digit == 3 and live.coverage["mine"] == cov
+            # the name was taken meanwhile: the modal shows the translated text inline
+            with pytest.raises(ValueError, match=t("steps.alerts.name_duplicate")):
+                modal["on_add_custom"](fields, cov)
+            for i in range(5):
+                modal["on_add_custom"]({**fields, "name": f"m{i}"}, cov)
+            with pytest.raises(ValueError, match=t("steps.alerts.cap_reached")):
+                modal["on_add_custom"]({**fields, "name": "m9"}, cov)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_delete_confirmation_names_the_sets_that_used_the_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    import gui.tile.alerts_step as mod
+
+    seen, confirm = {}, {}
+    monkeypatch.setattr(mod, "ProductTable", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(mod, "SourceModal", lambda **kw: None)
+    monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: confirm.update(kw))
+    p = _project_with_source("RADD")
+    _add_mine(p)
+    _used_by_a_set(p)
+    p.coverage = {**p.coverage, "mine": _cov()}
+    state = _app_state(p)
+    box, rc = _render_step(state, MapLayers(_FakeMap()), {})
+    try:
+        row = next(r for r in seen["rows"] if r["key"] == "mine")
+        next(a for a in row["actions"] if a["kind"] == "delete")["on_click"]()
+        assert confirm["open"] is True and confirm["message"] == t("steps.alerts.delete_used", n=1)
+        confirm["on_confirm"]()
+        live = state.project.value
+        assert "mine" not in live.sources and "mine" not in live.coverage  # a custom source's coverage goes too
+        assert "RADD" in live.coverage
     finally:
         rc.close()
 

@@ -5,8 +5,10 @@ Contract (spec D16, §7.2): bands ``alert`` (1 confirmed, 2 probable) and
 the *inclusive* window [win_start, win_end], clipped to the AOI. The old
 ``aoi_helper._from_*`` builders used strict gt/lt and dropped both end days.
 
-No builder calls getInfo: the metadata they need comes from ``meta_request``,
-which the tile evaluates with ``await gee_interface.get_info_async``.
+No builder calls getInfo. Only GLAD-L's needs metadata (UpdResult's band
+list), from ``meta_request("GLAD-L")``, which the app evaluates once per
+session with ``await gee_interface.get_info_async``. Where and when each source
+holds data for an AOI is ``engine.coverage``'s (spec §6.2).
 """
 
 from datetime import date, timedelta
@@ -22,7 +24,6 @@ LABEL_KEYS = {
     "RADD": "steps.alerts.label_radd",
     "GLAD-S2": "steps.alerts.label_glad_s2",
 }
-COVERAGE_START = {"GLAD-L": date(2018, 1, 1), "RADD": date(2019, 1, 1), "GLAD-S2": date(2019, 1, 1)}
 #: Each source's native projection as (crs, Earth Engine nominal scale in
 #: metres), like spatial_risk's per-variable default_crs/default_scale: the raw
 #: download is made in it (download.export_native) and aligned onto the project
@@ -73,39 +74,13 @@ def year_periods(start: date, end: date) -> list[tuple[date, date]]:
 
 
 def meta_request(key: str) -> ee.Dictionary:
-    """The metadata ``coverage``, ``covers`` and ``build_image`` need, unevaluated."""
-    if key == "GLAD-L":
-        col = ee.ImageCollection(GLAD_L_UPD)
-        latest = col.sort("system:time_start", False).first()
-        return ee.Dictionary({
-            # distinct across the collection: its images carry different years
-            "bands": col.aggregate_array("system:band_names").flatten().distinct(),
-            "end": ee.Date(latest.get("system:time_start")).format("yyyy-MM-dd"),
-        })
-    if key == "RADD":
-        latest = (
-            ee.ImageCollection(RADD_COLLECTION)
-            .filterMetadata("layer", "contains", "alert")
-            .sort("system:time_end", False)
-            .first()
-        )
-        return ee.Dictionary({"end": latest.get("version_date")})
-    if key == "GLAD-S2":
-        return ee.Dictionary({"end": ee.Image(GLAD_S2 + "/alert").get("date")})
-    raise ValueError(f"unknown source {key!r}")
-
-
-def coverage(key: str, meta: dict) -> tuple[date, date]:
-    """The catalogue's first and last day."""
-    return COVERAGE_START[key], date.fromisoformat(str(meta["end"])[:10])
-
-
-def covers(key: str, meta: dict, win_start: date, win_end: date) -> bool:
-    """Whether the catalogue holds any day of the window [win_start, win_end]."""
-    first, last = coverage(key, meta)
-    if win_start > last or win_end < first:
-        return False
-    return key != "GLAD-L" or bool(_glad_l_periods(meta, win_start, win_end))
+    """GLAD-L's metadata ``build_image`` needs, unevaluated: UpdResult's band
+    list. The other sources' builders read none."""
+    if key != "GLAD-L":
+        raise ValueError(f"only GLAD-L has catalogue metadata, not {key!r}")
+    col = ee.ImageCollection(GLAD_L_UPD)
+    # distinct across the collection: its images carry different years
+    return ee.Dictionary({"bands": col.aggregate_array("system:band_names").flatten().distinct()})
 
 
 def _glad_l_periods(meta: dict, win_start: date, win_end: date) -> list[tuple[str, date, date]]:
@@ -221,7 +196,7 @@ def build_image(key: str, win_start: date, win_end: date, aoi, meta: dict) -> ee
     """``key``'s alerts in the inclusive window [win_start, win_end] on the contract.
 
     ``aoi`` is an ``ee.FeatureCollection`` or an ``ee.Geometry``; ``meta`` is
-    ``meta_request(key)`` evaluated.
+    ``meta_request("GLAD-L")`` evaluated for GLAD-L, and is not read for the others.
     """
     try:
         builder = _BUILDERS[key]

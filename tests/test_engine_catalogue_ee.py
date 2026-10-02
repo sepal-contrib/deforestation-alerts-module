@@ -14,8 +14,7 @@ WINDOWS = [(date(2024, 1, 1), date(2024, 3, 31)), (date(2025, 11, 3), date(2026,
 @pytest.mark.parametrize("start,end", WINDOWS, ids=["2024Q1", "across-new-year"])
 @pytest.mark.parametrize("key", cat.KEYS)
 def test_builder_contract(gee, tiny_aoi, key, start, end):
-    meta = cat.meta_request(key).getInfo()
-    assert cat.covers(key, meta, start, end)
+    meta = cat.meta_request("GLAD-L").getInfo() if key == "GLAD-L" else {}
     img = cat.build_image(key, start, end, tiny_aoi, meta)
     info = img.getInfo()
     assert [b["id"] for b in info["bands"]] == ["alert", "date"]
@@ -30,7 +29,7 @@ def test_builder_contract(gee, tiny_aoi, key, start, end):
 def test_window_keeps_both_end_days(gee, tiny_aoi, key):
     import ee
 
-    meta = cat.meta_request(key).getInfo()
+    meta = cat.meta_request("GLAD-L").getInfo() if key == "GLAD-L" else {}
 
     def date_stats(start, end):
         img = cat.build_image(key, start, end, tiny_aoi, meta).select("date")
@@ -56,7 +55,6 @@ def test_glad_l_window_across_new_year_reads_both_years(gee, tiny_aoi):
 def test_glad_l_window_no_collection_holds_is_empty(gee, tiny_aoi):
     start, end = date(2024, 8, 1), date(2024, 8, 31)
     meta = cat.meta_request("GLAD-L").getInfo()
-    assert not cat.covers("GLAD-L", meta, start, end)
     img = cat.build_image("GLAD-L", start, end, tiny_aoi, meta)
     info = img.getInfo()
     assert [b["id"] for b in info["bands"]] == ["alert", "date"]
@@ -70,8 +68,7 @@ def test_glad_s2_dates_are_the_calendar_days_of_its_day_counts(gee):
     start, end = WINDOWS[1]
     # near Porto Velho: GLAD-S2 alerts on both sides of 2026-01-01 (271 px when checked, 2026-09-30)
     region = ee.Geometry.Rectangle([-63.60, -9.10, -63.50, -9.00])
-    meta = cat.meta_request("GLAD-S2").getInfo()
-    img = cat.build_image("GLAD-S2", start, end, region, meta)
+    img = cat.build_image("GLAD-S2", start, end, region, {})
     days = ee.Image(cat.GLAD_S2 + "/alertDate").rename("days")
     pixels = (
         img.select("date").addBands(days).updateMask(img.select("date").mask())
@@ -98,8 +95,7 @@ def test_radd_is_the_latest_version_of_its_geography(gee, geography):
 
     start, end = date(2025, 1, 1), date(2025, 12, 31)
     region = ee.Geometry.Rectangle(RADD_BOXES[geography])
-    meta = cat.meta_request("RADD").getInfo()
-    img = cat.build_image("RADD", start, end, region, meta)
+    img = cat.build_image("RADD", start, end, region, {})
     latest = (
         ee.ImageCollection(cat.RADD_COLLECTION)
         .filterMetadata("layer", "contains", "alert")
