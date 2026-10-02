@@ -72,7 +72,8 @@
       "dl_404": "El modelo no encontró pérdidas",
       "dl_task_title": "Ejecutando modelo de aprendizaje profundo",
       "dl_step_run": "Descargando imágenes y ejecutando el modelo…",
-      "dl_done": "Predicción del modelo lista."
+      "dl_done": "Predicción del modelo lista.",
+      "dl_stale": "El modelo terminó después de pasar a otra alerta: su predicción no se agregó."
     },
     "export_labels": {
       "export_title": "Guardar y exportar",

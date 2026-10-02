@@ -103,3 +103,82 @@ def test_an_alert_change_forgets_the_previous_alerts_choices():
 
     assert s.before_image.value is None and s.after_info.value is None
     assert s.prediction_files.value == {}
+
+
+def test_an_alert_change_makes_earlier_tokens_stale():
+    s = AnalysisState()
+    token = s.alert_token.value
+    assert s.is_current(token) and s.is_current(None)
+    s.reset_alert()
+    assert not s.is_current(token)
+    assert s.apply_if_current(token, lambda: s.before_info.set(["late"])) is False
+    assert s.before_info.value is None
+    assert s.apply_if_current(s.alert_token.value, lambda: s.before_info.set(["now"])) is True
+    assert s.before_info.value == ["now"]
+
+
+def _fake_imagery_widgets():
+    import solara
+
+    return SimpleNamespace(
+        imagery_ctx=solara.reactive(None),
+        imgSelection1=SimpleNamespace(disabled=False),
+        imgSelection2=SimpleNamespace(disabled=False),
+        map31=None, map32=None,
+    )
+
+
+def test_an_imagery_fetch_for_a_previous_alert_rebuilds_nothing(monkeypatch):
+    """Final review B, I2: the S2/Landsat fetches run on threads. One that ends
+    after the user moved to the next alert must not list its dates for that
+    alert, nor pick (and store) its default before/after images there: the next
+    alert's review Save would record them and its download build them."""
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    rebuilt = []
+    monkeypatch.setattr(imagery, "_set_all_loading", lambda w: None)
+    monkeypatch.setattr(imagery, "create_horizontal_slide_group_v3",
+                        lambda data, *a, **k: rebuilt.append(data[0]["source"]))
+    monkeypatch.setattr(imagery, "get_sentinel2_dates", lambda a, b: [a, b, a, b])
+
+    def _fetch_while_the_user_moves_on(grid, start, end):
+        s.reset_alert()  # view_actual_alert on the next alert
+        return [{"value": "S2_of_A", "source": "Sentinel 2", "milis": 1, "cloud_cover": 0}]
+
+    monkeypatch.setattr(imagery, "getIndividualS2", _fetch_while_the_user_moves_on)
+    monkeypatch.setattr(imagery, "getIndividualLandsat", lambda *a: [])
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): fn(*args))
+
+    imagery.build_imagery(widgets, None, None, s)
+    widgets.imagery_ctx.set({"token": s.alert_token.value, "grid": None, "fecha1": "a",
+                             "fecha2": "b", "show": [False, True, False]})
+
+    # Planet is built at once, for the alert still current; the S2 fetch (and
+    # the Landsat one after it) ended after the alert change and rebuild nothing.
+    assert rebuilt == ["Planet NICFI", "Planet NICFI"]
+
+
+def test_an_image_listed_for_a_previous_alert_is_not_stored():
+    """The date buttons keep the alert they were listed for: their default pick
+    (or a click on one still showing) stores nothing once another alert is
+    current."""
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    token = s.alert_token.value
+    s.reset_alert()
+    info = SimpleNamespace(loading=False, children=[])
+    item = {"source": "Sentinel 2", "milis": 1704067200000, "cloud_cover": 12, "value": "S2_x"}
+    imagery.image_slider_info_callback(item, info, 0, SimpleNamespace(), s, token=token)
+    assert s.before_info.value is None and info.children == []
+
+    widgets = _fake_imagery_widgets()
+    widgets.actual_alert_grid = None
+    drawn = []
+    map_ = SimpleNamespace(addLayer=lambda *a: drawn.append(a))
+    planet = {"source": "Planet NICFI", "image_id": "projects/x/nicfi", "milis": 1, "cloud_cover": 0}
+    imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
+    assert s.before_image.value is None and drawn == []
+    assert widgets.imgSelection1.disabled is False and widgets.imgSelection2.disabled is False

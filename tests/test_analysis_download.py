@@ -154,6 +154,22 @@ def test_a_failed_composite_download_leaves_no_composite_or_part_file(download_c
     assert list(ctx.scratch.iterdir()) == []
 
 
+def test_a_failed_composite_download_leaves_no_gpkg_in_the_set_folder(download_ctx, monkeypatch):
+    """Deferred T2: the gpkg was copied into the set folder before the
+    composite was downloaded, so a failed download left ``alert_0.gpkg`` behind."""
+    from gui.tile.analysis import paths
+
+    ctx = download_ctx
+
+    def _failing(*args):
+        raise RuntimeError("geedim failed")
+
+    monkeypatch.setattr(paths, "download_both_images", _failing)
+    with pytest.raises(RuntimeError):
+        _run(ctx)
+    assert list(ctx.folder.iterdir()) == []
+
+
 def test_download_uses_the_users_custom_report_template(download_ctx, data_root):
     """A custom template is the user's own file, read where it is."""
     ctx = download_ctx

@@ -72,7 +72,8 @@
       "dl_404": "Model did not find forest loss polygons",
       "dl_task_title": "Running deep-learning model",
       "dl_step_run": "Downloading images and running the model…",
-      "dl_done": "Model prediction ready."
+      "dl_done": "Model prediction ready.",
+      "dl_stale": "The model finished after you moved to another alert: its prediction was not added."
     },
     "export_labels": {
       "export_title": "Save and Export",

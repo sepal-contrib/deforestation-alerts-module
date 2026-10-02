@@ -375,13 +375,45 @@ def build_edit_tools(
         with files.lock:
             files.set({**files.value, model: pred_path})
 
-    def _apply_model1(pred_path):
-        _record_prediction(1, pred_path)
-        _enable_dl1(verify_raster(pred_path, _PRED_THRESHOLD))
+    # A run belongs to the alert it started on (``token``, captured at the
+    # click): one that ends after the user moved on must not record its
+    # raster or enable "add" for the alert now on screen, whose review Save
+    # would store the other alert's polygons. Returns whether it applied.
+    def _apply_model(model, pred_path, token):
+        if not analysis.is_current(token):
+            return False
+        valid = verify_raster(pred_path, _PRED_THRESHOLD)
+        enable = _enable_dl1 if model == 1 else _enable_dl2
 
-    def _apply_model2(pred_path):
-        _record_prediction(2, pred_path)
-        _enable_dl2(verify_raster(pred_path, _PRED_THRESHOLD))
+        def _apply():
+            _record_prediction(model, pred_path)
+            enable(valid)
+
+        return analysis.apply_if_current(token, _apply)
+
+    # ------------------------------------------------------------------
+    # An alert change (``AnalysisState.reset_alert``) puts the card back as it
+    # was built: out of edit mode, nothing drawn, the add/remove buttons
+    # disabled. The drawn features and an enabled "add" belonged to the
+    # previous alert.
+    # ------------------------------------------------------------------
+    def _reset_for_new_alert(_token=None):
+        try:
+            for n in (1, 2):
+                ns[f"dl{n}_msg"].hide()
+                ns[f"dl{n}_add"].show()
+                ns[f"dl{n}_remove"].show()
+                ns[f"dl{n}_add"].disabled = True
+                ns[f"dl{n}_remove"].disabled = True
+                ns[f"toolbar_dl{n}"].hide()
+            for name in ("save_btn", "clear_btn", "stop_btn"):
+                ns[name].disabled = True
+            ns["start_btn"].disabled = False
+            if widgets is not None:
+                widgets.draw_before.clear()
+                widgets.draw_after.clear()
+        except Exception:
+            logger.exception("Analysis: resetting the edit tools failed")
 
     # ------------------------------------------------------------------
     # add/remove prediction (OLD) — main-thread click handlers mutating
@@ -533,6 +565,7 @@ def build_edit_tools(
         ns["dl1_remove"].disabled = True
         ns["dl1_run"].loading = True
         ns["dl1_run"].disabled = True
+        token = analysis.alert_token.value  # the alert this run is for
         # Writer tracking (spec §12): the composite lands in the set's folder,
         # so the project is marked for the run and a delete is refused
         # meanwhile. The name is read now, at the click: the run keeps marking
@@ -556,11 +589,18 @@ def build_edit_tools(
                             widgets, analysis, app_state, app_tile_model,
                             task=task,
                         )
-                    _apply_model1(pred_path)
+                    applied = _apply_model(1, pred_path, token)
+                    if not applied:
+                        # Another alert is on screen: its result is dropped.
+                        # A warning, recorded on the task before the toast.
+                        reason = t("analysis_tile.model_labels.dl_stale")
+                        task.fail(reason)
+                        notifier.warning(reason)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                notifier.success(t("analysis_tile.model_labels.dl_done"))
+                if applied:
+                    notifier.success(t("analysis_tile.model_labels.dl_done"))
             finally:
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
@@ -572,6 +612,7 @@ def build_edit_tools(
         ns["dl2_remove"].disabled = True
         ns["dl2_run"].loading = True
         ns["dl2_run"].disabled = True
+        token = analysis.alert_token.value  # the alert this run is for
         project = writer_name(app_state)  # as in _on_dl1_run
 
         def _worker():
@@ -590,11 +631,18 @@ def build_edit_tools(
                             widgets, analysis, app_state, app_tile_model,
                             task=task,
                         )
-                    _apply_model2(pred_path)
+                    applied = _apply_model(2, pred_path, token)
+                    if not applied:
+                        # Another alert is on screen: its result is dropped.
+                        # A warning, recorded on the task before the toast.
+                        reason = t("analysis_tile.model_labels.dl_stale")
+                        task.fail(reason)
+                        notifier.warning(reason)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                notifier.success(t("analysis_tile.model_labels.dl_done"))
+                if applied:
+                    notifier.success(t("analysis_tile.model_labels.dl_done"))
             finally:
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False
@@ -632,6 +680,7 @@ def build_edit_tools(
         ns["dl2_remove"].on_event("click", _on_dl2_remove)
 
     _register_handlers()
+    analysis.alert_token.subscribe(_reset_for_new_alert)
 
     # add_defo_layer (OLD): the "Defo Layer" lands on both maps whenever a new
     # reviewed polygon is set. Subscribed once (the layout is built once).

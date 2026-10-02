@@ -252,6 +252,9 @@ def view_actual_alert(
         # are passed through so the worker tasks never re-touch this thread's state.
         widgets.imagery_ctx.value = {
             "alert_id": alert_id,
+            # the alert the imagery is fetched for: a fetch that ends after
+            # the next alert change drops its result (``AnalysisState.alert_token``)
+            "token": analysis.alert_token.value,
             "grid": widgets.actual_alert_grid,
             "fecha1": fecha1,
             "fecha2": fecha2,

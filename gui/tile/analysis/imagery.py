@@ -103,7 +103,8 @@ _COLOR_MAP = {
 # functions (no ``self``); explicit args replace the former instance attributes.
 # ---------------------------------------------------------------------------
 def image_slider_map_callback(
-    selected_item, map_element, model_att, widgets, analysis, selected_alerts_model
+    selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
+    token=None,
 ):
     """Add the chosen image's True/False-color + original-alert layers to a map.
 
@@ -111,7 +112,12 @@ def image_slider_map_callback(
     grid from ``widgets`` and the set's combined raster (``combined_path``) from
     ``selected_alerts_model`` (a ``SetContext``). Stores the chosen ee.Image in
     ``analysis`` per pane (``model_att`` 0 = before, 1 = after).
+
+    ``token`` is the alert the image was listed for (``AnalysisState.alert_token``):
+    once another alert is current, nothing is stored or drawn.
     """
+    if not analysis.is_current(token):
+        return
     widgets.imgSelection1.disabled = True
     widgets.imgSelection2.disabled = True
     geom = widgets.actual_alert_grid
@@ -173,10 +179,13 @@ def image_slider_map_callback(
         harmonized_img = harmonizeL8ToS2_scaled(pan_sharp).clip(geom)
         img = harmonized_img
 
-    if model_att == 0:
-        analysis.before_image.set(img)
-    elif model_att == 1:
-        analysis.after_image.set(img)
+    target = {0: analysis.before_image, 1: analysis.after_image}.get(model_att)
+    stored = analysis.apply_if_current(token, (lambda: target.set(img)) if target is not None else (lambda: None))
+    if not stored:
+        logger.info("Analysis imagery: dropped an image listed for a previous alert")
+        widgets.imgSelection1.disabled = False
+        widgets.imgSelection2.disabled = False
+        return
 
     map_element.addLayer(img, vis1, "True Color", True)
     map_element.addLayer(img, vis2, "False Color", False)
@@ -197,12 +206,15 @@ def image_slider_map_callback(
     widgets.imgSelection2.disabled = False
 
 
-def image_slider_info_callback(selected_item, info_element, model_att, widgets, analysis):
+def image_slider_info_callback(selected_item, info_element, model_att, widgets, analysis, token=None):
     """Update the selected-image info card + store the per-pane info list.
 
     Ports OLD ``AnalysisTile.image_slider_info_callback`` byte-faithfully; the
     per-pane info list lands in ``analysis.before_info`` / ``after_info``.
+    Nothing changes once ``token``'s alert is no longer current.
     """
+    if not analysis.is_current(token):
+        return
     info_element.loading = True
     info1 = selected_item["source"]
     info2 = selected_item["milis"]
@@ -210,11 +222,11 @@ def image_slider_info_callback(selected_item, info_element, model_att, widgets, 
     info4 = selected_item["value"]
     info5 = datetime.utcfromtimestamp(selected_item["milis"] / 1000).strftime("_%d%m%y")
     lista = [info1, info2, info3, info4, info5]
-    if model_att == 0:
-        analysis.before_info.set(lista)
-    elif model_att == 1:
-        analysis.after_info.set(lista)
+    target = {0: analysis.before_info, 1: analysis.after_info}.get(model_att)
+    stored = analysis.apply_if_current(token, (lambda: target.set(lista)) if target is not None else (lambda: None))
     info_element.loading = False
+    if not stored:
+        return
     info_element.children = [
         v.Html(
             tag="strong",
@@ -247,6 +259,7 @@ def create_horizontal_slide_group_v3(
     widgets,
     analysis,
     selected_alerts_model,
+    token=None,
 ):
     """Build the date-button slide group inside a selector tab + wire clicks.
 
@@ -257,6 +270,9 @@ def create_horizontal_slide_group_v3(
     implicitly.
     The nested-children indexing into ``map_component`` / ``image_slider_component``
     matches the ``AnalysisWidgets`` selector tree exactly.
+
+    ``token`` is the alert the dates were fetched for: the buttons keep it, so
+    neither the default pick nor a later click stores an image for another alert.
     """
     map_element = map_component.children[1]
     info_element = map_component.children[2].children[0]
@@ -349,8 +365,8 @@ def create_horizontal_slide_group_v3(
 
         widget.color = _COLOR_MAP.get("selected")
 
-        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model)
-        info_cb(selected_item, info_element, model_att2, widgets, analysis)
+        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model, token=token)
+        info_cb(selected_item, info_element, model_att2, widgets, analysis, token=token)
 
         widget.loading = False
         widget.disabled = False
@@ -372,8 +388,8 @@ def create_horizontal_slide_group_v3(
         selected_item = date_indices[
             slide_group.slide_group.children[default_v_model].value
         ]
-        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model)
-        info_cb(selected_item, info_element, model_att2, widgets, analysis)
+        map_cb(selected_item, map_element, model_att1, widgets, analysis, selected_alerts_model, token=token)
+        info_cb(selected_item, info_element, model_att2, widgets, analysis, token=token)
 
 
 def _set_all_loading(widgets):
@@ -431,13 +447,19 @@ def _rebuild_groups(
     widgets,
     analysis,
     selected_alerts_model,
+    token=None,
 ):
-    """Rebuild the before/after slide groups for one source (main-thread only).
+    """Rebuild the before/after slide groups for one source.
 
     Wraps the two ``create_horizontal_slide_group_v3`` calls (left/right pane) in a
-    try/except so a transient EE/geometry failure does not break the render. Called
-    from the ctx/task effects, never from a worker thread.
+    try/except so a transient EE/geometry failure does not break the render.
+    Does nothing once ``token``'s alert is no longer current: a fetch that ends
+    after the user moved on must not list its dates, or pick its images, for
+    the alert now on screen (whose own fetch rebuilds the groups).
     """
+    if not analysis.is_current(token):
+        logger.info("Analysis imagery: dropped the slide groups of a previous alert")
+        return
     try:
         create_horizontal_slide_group_v3(
             data_before,
@@ -452,6 +474,7 @@ def _rebuild_groups(
             widgets,
             analysis,
             selected_alerts_model,
+            token=token,
         )
     except Exception:
         logger.exception("Analysis imagery: before slide group rebuild failed")
@@ -469,6 +492,7 @@ def _rebuild_groups(
             widgets,
             analysis,
             selected_alerts_model,
+            token=token,
         )
     except Exception:
         logger.exception("Analysis imagery: after slide group rebuild failed")
@@ -505,6 +529,11 @@ def build_imagery(
     at the end with the current value (self-guards on ``None``).
     """
 
+    def _token_of(ctx):
+        # The alert the context was published for (``view_actual_alert`` puts
+        # the token in after its ``reset_alert``).
+        return ctx.get("token")
+
     # ------------------------------------------------------------------
     # Sentinel-2 fetch + rebuild: runs on a daemon thread (blocking .getInfo()).
     # On success rebuilds the S2 slide groups; on failure logs + routes the empty
@@ -530,6 +559,7 @@ def build_imagery(
                 widgets,
                 analysis,
                 selected_alerts_model,
+                token=_token_of(ctx),
             )
 
     # ------------------------------------------------------------------
@@ -554,6 +584,7 @@ def build_imagery(
                 widgets,
                 analysis,
                 selected_alerts_model,
+                token=_token_of(ctx),
             )
 
     # ------------------------------------------------------------------
@@ -594,6 +625,7 @@ def build_imagery(
             widgets,
             analysis,
             selected_alerts_model,
+            token=_token_of(ctx),
         )
 
         # EE fetches off the main thread (blocking .getInfo()). Independent

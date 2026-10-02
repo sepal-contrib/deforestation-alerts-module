@@ -72,7 +72,8 @@
       "dl_404": "Le modèle n'a trouvé aucune perte",
       "dl_task_title": "Exécution du modèle d'apprentissage profond",
       "dl_step_run": "Téléchargement des images et exécution du modèle…",
-      "dl_done": "Prédiction du modèle prête."
+      "dl_done": "Prédiction du modèle prête.",
+      "dl_stale": "Le modèle a terminé après votre passage à une autre alerte : sa prédiction n'a pas été ajoutée."
     },
     "export_labels": {
       "export_title": "Sauvegarder et exporter",

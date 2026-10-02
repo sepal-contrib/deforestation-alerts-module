@@ -837,6 +837,64 @@ def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
     assert before == {}
 
 
+def _edition_button(card, icon):
+    """The DL toolbar's add/remove buttons, by icon (the first of each per
+    toolbar is model 1's, the second model 2's)."""
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    return [w for w in _widgets(card) if isinstance(w, edit_tools._EditionButton)
+            and any(getattr(c, "children", None) == [icon] for c in w.children)]
+
+
+@pytest.mark.parametrize("label, model", [("M 1", 1), ("M 2", 2)])
+def test_a_model_run_for_a_previous_alert_drops_its_result(
+    edit_tools_card, monkeypatch, label, model
+):
+    """Final review B, I2: a CNN run takes a minute; the user moves to the next
+    alert meanwhile. Its prediction belongs to the alert it started on, so it is
+    neither recorded nor offered ("add" stays disabled) on the alert now on
+    screen, whose review Save would store it. The run says so with a warning."""
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+
+    def _run_while_the_user_moves_on(*_a, **_k):
+        analysis.reset_alert()  # view_actual_alert on the next alert
+        return "/tmp/pred_of_A.tif"
+
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", _run_while_the_user_moves_on)
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+
+    _dl_run_button(card, label).fire_event("click", None)
+    feedback.join()
+
+    assert analysis.prediction_files.value == {}
+    add = _edition_button(card, "fa-solid fa-plus")[model - 1]
+    assert add.disabled is True
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", t("analysis_tile.model_labels.dl_stale"))]
+    assert feedback.task().status == TaskStatus.FAILED
+
+
+def test_an_alert_change_disables_the_previous_alerts_prediction_buttons(
+    edit_tools_card, monkeypatch
+):
+    """Deferred T3 item 1: "add prediction" stayed enabled after an alert
+    change and added the previous alert's raster (now forgotten: a no-op)."""
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    _dl_run_button(card, "M 1").fire_event("click", None)
+    feedback.join()
+    add = _edition_button(card, "fa-solid fa-plus")[0]
+    assert add.disabled is False
+
+    analysis.reset_alert()
+
+    assert add.disabled is True
+    assert all(b.disabled for b in _edition_button(card, "fa-solid fa-minus"))
+
+
 @pytest.mark.parametrize("label", ["M 1", "M 2"])
 def test_edit_tools_model_run_marks_the_open_project_as_being_written(
     monkeypatch, label

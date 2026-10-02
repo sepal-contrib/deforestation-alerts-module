@@ -268,6 +268,10 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     # ``defo_layer is None``.
     before_info = analysis.before_info.value
     after_info = analysis.after_info.value
+    # Read with the images, before the lookups block: an alert change
+    # meanwhile resets it (``reset_alert``), or the next alert's drawn polygon
+    # replaces it, and neither belongs to the alert this Save writes.
+    defo_layer = analysis.defo_layer.value
     if before_info is None:
         alertas_gdf.at[actual_alert_id, "before_img"] = None
         alertas_gdf.at[actual_alert_id, "before_img_info"] = None
@@ -313,7 +317,6 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
     # A refusal: the store is not written (the admin names above stay in memory).
-    defo_layer = analysis.defo_layer.value
     if (
         status == "False Positive"
         and defo_layer is not None
@@ -426,6 +429,10 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     # raised further down used to leave a partial alert_<id>.gpkg behind.
     if not _images_picked(widgets, analysis):
         return None
+    # The picked images, read once: an alert change while the gpkg is written
+    # resets them (``reset_alert``).
+    picked = (analysis.before_info.value, analysis.after_info.value,
+              analysis.before_image.value, analysis.after_image.value)
 
     # Before any file is written: a template gone from disk is a refusal, not
     # a half-written set of downloads.
@@ -464,7 +471,6 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
         selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
             str(gpkg_local), driver="GPKG"
         )
-        local_files.copy_into(gpkg_local, gpkg_dest)
 
         # Before/after image GeoTIFF (downloaded only if not already in the set
         # folder). Built via the shared helper so it resolves to the same file
@@ -474,14 +480,15 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
             image_local = stage_alert_image(
                 folder,
                 actual_alert_id,
-                analysis.before_info.value,
-                analysis.after_info.value,
-                analysis.before_image.value,
-                analysis.after_image.value,
+                *picked,
                 widgets.actual_alert_grid,
             )
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
+
+        # Only once the composite is there: a failed download must not leave
+        # the alert's gpkg in the set folder.
+        local_files.copy_into(gpkg_local, gpkg_dest)
 
         # Zip the image + gpkg.
         zip_local = stage / zip_dest.name

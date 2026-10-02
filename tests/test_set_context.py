@@ -682,6 +682,40 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
 
 
+def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_path, monkeypatch):
+    """Final review B, I2: the admin lookups block for seconds, and the user may
+    move to the next alert meanwhile (``reset_alert``, then that alert's own
+    drawing). The Save writes the alert it started on, with its own polygon."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from gui.tile.analysis import export
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    drawn_a = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
+    drawn_b = gpd.GeoDataFrame(geometry=[box(-50.0, -20.0, -49.9, -19.9)], crs="EPSG:4326")
+    analysis = AnalysisState()
+    analysis.defo_layer.set(drawn_a)
+
+    def _move_to_the_next_alert():
+        analysis.reset_alert()
+        analysis.defo_layer.set(drawn_b)
+
+    monkeypatch.setattr(export, "ee", _AdminLookups(during=_move_to_the_next_alert))
+    widgets = SimpleNamespace(
+        confirmation_select=SimpleNamespace(v_model="Confirmed"),
+        driver_combobox=SimpleNamespace(v_model=[]),
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    s.actual_alert_id.set(0)
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
+
+    saved = gpd.read_parquet(_store(tmp_path, "d", "glad-l"))
+    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn_a))
+
+
 def test_record_review_does_not_count_missing_statuses(monkeypatch):
     import pandas as pd
     from gui.scripts.set_context import SetContext
