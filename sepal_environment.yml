@@ -36,6 +36,9 @@ dependencies:
   - ipyvuetify<3
   - ipywidgets>=8.1
   - traitlets>=5.14
+  # Locale-aware number formatting (gui/i18n.py format_number); within
+  # pysepal 4.1.0's babel<3,>=2.17
+  - babel>=2.17,<3
   # Serving: Voila in the user's SEPAL sandbox (ui.ipynb). No container.
   - voila
   # Env plumbing
