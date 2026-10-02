@@ -25,7 +25,7 @@ inside the tracked job, so the task pill reads "cancelled", not "completed"
 (slice-1 Task 18 minor); the caller treats it as an ordinary end. A refused
 or failed row's message is translated (``_failure_text``): a coverage refusal
 reads its coverage note, an engine error that names a message key reads that
-message.
+message (``error_text``), any other error its own text.
 """
 
 import asyncio
@@ -55,6 +55,7 @@ from deforestation_alerts.project.models import Period
 from gui.i18n import t
 from gui.scripts import source_layers
 from gui.scripts.coverage_ui import note_text, row_notes
+from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
     ERROR_TOAST_TIMEOUT,
     tile_progress_reporter,
@@ -160,12 +161,7 @@ def _failure_text(exc: BaseException) -> str:
     engine says what went wrong by a coverage note or a message key."""
     if isinstance(exc, CoverageRefused) and exc.notes:
         return note_text(exc.notes[0])
-    if isinstance(exc, HarmonizeFailed) and exc.__cause__ is not None:
-        return _failure_text(exc.__cause__)  # its message is the cause's
-    key = getattr(exc, "key", None)  # AoiGeometryMissing, MaskNotReady, MaskFileMissing
-    if isinstance(key, str):
-        return t(key, **(getattr(exc, "values", None) or {}))
-    return str(exc) or exc.__class__.__name__
+    return error_text(exc)  # a HarmonizeFailed carries its cause's key and values
 
 
 def _failure_toast(source: str, exc: BaseException, message: str) -> str:
@@ -180,8 +176,7 @@ def _mask_failure_toast(name: str, exc: BaseException, message: str) -> str:
     """A mask row's failure says it is a mask ("Mask forest: ..."), unless its
     keyed refusal already names the mask (``MaskFileMissing``,
     ``MaskNativeUnknown``)."""
-    cause = exc.__cause__ if isinstance(exc, HarmonizeFailed) and exc.__cause__ is not None else exc
-    if (getattr(cause, "values", None) or {}).get("name") == name:
+    if (getattr(exc, "values", None) or {}).get("name") == name:  # a HarmonizeFailed carries its cause's
         return message
     return t("steps.prepare.mask_row_failed", mask=name, error=message)
 

@@ -13,7 +13,9 @@ from typing import Optional
 import solara
 from pysepal.solara.components.inputs import FileInputComponent
 
+from deforestation_alerts.errors import ProjectRuleError
 from gui.i18n import t
+from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.widget.text_style import MUTED
 
@@ -22,12 +24,13 @@ EXTENSIONS = [".docx"]
 
 def template_value(path) -> Optional[str]:
     """What the project stores for a pick: None (the default template) or the
-    absolute path of an existing ``.docx`` file (spec §11: absolute paths)."""
+    absolute path of an existing ``.docx`` file (spec §11: absolute paths).
+    Anything else raises ``ProjectRuleError`` (``report_template_bad``)."""
     if not path:
         return None
     picked = Path(path).expanduser().absolute()
     if picked.suffix.lower() != ".docx" or not picked.is_file():
-        raise ValueError("analysis_tile.export_labels.report_template_bad")
+        raise ProjectRuleError(key="analysis_tile.export_labels.report_template_bad", path=str(path))
     return str(picked)
 
 
@@ -49,7 +52,7 @@ def ReportTemplateField(app_state):
         try:
             value = template_value(path)
         except ValueError as exc:
-            current_notifier().error(t(str(exc), path=str(path)))
+            current_notifier().error(error_text(exc))
             set_refusals(lambda n: n + 1)
             return
         if value != current:

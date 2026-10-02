@@ -33,13 +33,16 @@ from deforestation_alerts.engine.raster_io import (
     tile_windows,
     write_grid_raster,
 )
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.models import GridSpec
 from deforestation_alerts.scripts.gee_progress import geedim_download_wait, geedim_tile_progress
 from deforestation_alerts.scripts.raster_export import download_ee_image, export_bounds
 
 
-class MaskRasterError(RuntimeError):
+class MaskRasterError(KeyedError, RuntimeError):
     """A raw mask download is not the 1-band uint8 raster in the native CRS that was asked for."""
+
+    key = "errors.mask_not_as_asked"
 
 
 def _window_transform(grid: GridSpec, w) -> Affine:
@@ -105,7 +108,8 @@ def _check_raw(path: Path, crs: str) -> None:
         same_crs = src.crs is not None and src.crs == CRS.from_user_input(crs)
         dtypes = src.dtypes
     if not (same_crs and dtypes == ("uint8",)):
-        raise MaskRasterError(f"{path} is not a 1-band uint8 raster in {crs} (crs={same_crs}, dtypes={dtypes})")
+        raise MaskRasterError(f"{path} is not a 1-band uint8 raster in {crs} (crs={same_crs}, dtypes={dtypes})",
+                              path=str(path), crs=str(crs))
 
 
 def export_mask_native(image, native, aoi, out_path, *, on_tiles=None, on_wait=None) -> Path:

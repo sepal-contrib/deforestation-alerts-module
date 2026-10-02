@@ -20,12 +20,19 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.gdal_env import local_scratch_dir
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 STATUS_CODES = {"Not reviewed": 0, "Confirmed": 1, "False Positive": 2, "Need revision": 3}
 POLYGON_MIN_ZOOM = 11
+
+
+class TippecanoeMissing(KeyedError, RuntimeError):
+    """tippecanoe is neither on the PATH nor next to the interpreter."""
+
+    key = "errors.no_tippecanoe"
 
 
 def resolve_tippecanoe() -> Optional[str]:
@@ -79,7 +86,7 @@ def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None
     """
     tippecanoe = resolve_tippecanoe()
     if tippecanoe is None:
-        raise RuntimeError("tippecanoe not found on PATH or next to the interpreter")
+        raise TippecanoeMissing("tippecanoe not found on PATH or next to the interpreter")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=local_scratch_dir()) as td:

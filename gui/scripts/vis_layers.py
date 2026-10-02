@@ -2,9 +2,10 @@
 NICFI, on the shared map and the Analysis maps. Builders are blocking (map
 ids, tile servers): call them from a worker thread (MapLayers does).
 
-What a builder raises ``MapLayers`` shows as the toast, so it raises
-translated text (spec §9.1: a GeoTIFF in a folder that is not writable is
-refused with a toast naming the folder).
+What a builder raises ``MapLayers`` shows as the toast (``error_text``), so
+it raises keyed errors and never translates on its worker (spec §9.1, §11: a
+GeoTIFF in a folder that is not writable is refused with a toast naming the
+folder).
 """
 
 import os
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from deforestation_alerts.engine.raster_io import ensure_overviews
+from deforestation_alerts.errors import FolderNotWritable, UserFileMissing
 from gui.i18n import t
 from gui.scripts import legend_specs, raster_map
 from gui.scripts.legend_data import format_number
@@ -136,9 +138,11 @@ def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
             map_.add_ee_layer(img, dict(NICFI_VIS), name=layer.name, key=key, shown=shown)
         else:
             if not Path(layer.path).exists():
-                raise FileNotFoundError(t("steps.layers.err_missing", path=layer.path))
+                raise UserFileMissing(f"file not found: {layer.path}", key="steps.layers.err_missing", path=layer.path)
             if not folder_writable(layer.path):
-                raise PermissionError(t("steps.layers.err_folder", folder=str(Path(layer.path).parent)))
+                folder = str(Path(layer.path).parent)
+                raise FolderNotWritable(f"the folder {folder} is not writable", key="steps.layers.err_folder",
+                                        folder=folder)
             ensure_overviews(layer.path, resampling="nearest")
             raster_map.add_raster_layer(map_, layer.path, key=key, name=layer.name, band=int(layer.band),
                                         colormap=colormaps[layer.colormap], vmin=layer.min, vmax=layer.max,

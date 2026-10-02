@@ -53,6 +53,7 @@ from gui.store.navigation import (
 )
 from gui.i18n import app_available_locales, t
 from gui.scripts import set_store
+from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.set_context import SetContext
@@ -332,7 +333,7 @@ def _ActiveSetLoader(app_state, layers, map_):
                     # A Go into this set (Overview) will not land: forgotten,
                     # so a later publish of the set opens at its saved position.
                     set_store.drop_go_wish(app_state, s.id)
-                    notifications.error(t("steps.project.set_load_failed", error=str(exc) or exc.__class__.__name__))
+                    notifications.error(t("steps.project.set_load_failed", error=error_text(exc)))
                 return
             if loads.current["run"] != run or _kept():
                 return  # a newer load runs, or Integrate published the set meanwhile

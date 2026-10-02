@@ -104,6 +104,7 @@ import geopandas as gpd
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
@@ -117,6 +118,7 @@ from deforestation_alerts.scripts.report_builder import (
 from gui.i18n import t
 from gui.scripts import set_store
 from gui.scripts.detached import render_detached
+from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
     current_notifier,
     tile_progress_reporter,
@@ -138,14 +140,13 @@ _DEFAULT_REPORT_TEMPLATE = str(
 )
 
 
-class ReportTemplateMissing(RuntimeError):
+class ReportTemplateMissing(KeyedError, RuntimeError):
     """The project's report template is gone from disk: the download writes nothing."""
 
     key = "analysis_tile.export_labels.report_template_missing"
 
     def __init__(self, path: str):
-        super().__init__(f"report template not found: {path}")
-        self.values = {"path": path}
+        super().__init__(f"report template not found: {path}", path=path)
 
 
 def report_template_path(template: Optional[str]) -> Path:
@@ -156,13 +157,6 @@ def report_template_path(template: Optional[str]) -> Path:
     if not path.is_file():
         raise ReportTemplateMissing(template)
     return path
-
-
-def _download_error(exc: BaseException) -> str:
-    """The download's failure toast: a keyed refusal in the user's language."""
-    if isinstance(exc, ReportTemplateMissing):
-        return t(exc.key, **exc.values)
-    return str(exc) or exc.__class__.__name__
 
 
 def _save_target(app_tile_model):
@@ -180,9 +174,10 @@ def _save_target(app_tile_model):
     return (str(target.folder), target) if target is not None else ("", None)
 
 
-class SaveRefused(Exception):
+class SaveRefused(KeyedError):
     """A Save that must not write: nothing went wrong, it has nowhere to go.
-    The worker reports it as a warning, not as an error."""
+    The worker reports it as a warning, not as an error. ``key`` names the
+    reason; the worker renders it where it toasts (spec §11)."""
 
 
 def _store_of(target) -> Path:
@@ -212,11 +207,11 @@ def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
     if target is None:
         return
     if not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
-        raise SaveRefused(t("analysis_tile.export_labels.save_other_set"))
+        raise SaveRefused(key="analysis_tile.export_labels.save_other_set")
     if not app_tile_model.is_current(target):
-        raise SaveRefused(t("analysis_tile.export_labels.save_set_changed"))
+        raise SaveRefused(key="analysis_tile.export_labels.save_set_changed")
     if set_store.generation_changed(alertas_gdf, _store_of(target)):
-        raise SaveRefused(t("analysis_tile.export_labels.save_store_changed"))
+        raise SaveRefused(key="analysis_tile.export_labels.save_store_changed")
 
 
 def review_status(confirmation) -> str:
@@ -224,7 +219,7 @@ def review_status(confirmation) -> str:
 
     Anything else is refused, an unhashable value (a list) included."""
     if not isinstance(confirmation, str) or confirmation not in {status for status, _ in REVIEW_CHOICES}:
-        raise SaveRefused(t("analysis_tile.questionarie.confirmation_missing"))
+        raise SaveRefused(key="analysis_tile.questionarie.confirmation_missing")
     return confirmation
 
 
@@ -234,9 +229,10 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
     (faithful to OLD), does the blocking GEE admin lookup, persists
     ``alert_db.parquet``, and stamps ``last_save_time``. Returns ``True`` on success.
-    Guards on the gdf being present + the id in range (smoke-safe). Raises the OLD
-    "confirmation==No but a polygon is drawn" guard, surfaced by the save effect,
-    and ``SaveRefused`` for alerts of another set than the one it writes for.
+    Guards on the gdf being present + the id in range (smoke-safe). Raises
+    ``SaveRefused`` for the OLD "False Positive but a polygon is drawn" guard
+    (``false_positive_drawn``), a missing answer, and alerts of another set
+    than the one it writes for.
 
     The store it writes is the active set's AS THE SAVE STARTS: the admin
     lookups below block for seconds, and the live ``SetContext`` (ruling #84)
@@ -316,12 +312,13 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
+    # A refusal: the store is not written (the admin names above stay in memory).
     defo_layer = analysis.defo_layer.value
     if (
         status == "False Positive"
         and defo_layer is not None
     ):
-        raise Exception(t("analysis_tile.questionarie.confirmation_q"))
+        raise SaveRefused(key="analysis_tile.questionarie.false_positive_drawn")
 
     # alert_polygon + area_ha from the drawn defo layer (if any). With nothing
     # drawn, area_ha keeps the alert's own area, which Integrate stored: the
@@ -595,8 +592,8 @@ def build_export(
     # Save handler: button-triggered daemon thread (blocking GEE .getInfo() / CSV
     # write; never auto-run). The button spins for the duration; on success the
     # worker applies the OLD save effect, on failure tracked_job publishes the
-    # error (incl. the OLD "confirmation==No but a polygon is drawn" guard) as a
-    # toast and logs its traceback.
+    # error as a toast and logs its traceback; a ``SaveRefused`` (incl. the OLD
+    # "False Positive but a polygon is drawn" guard) is a warning.
     # ------------------------------------------------------------------
     def _on_save(*_):
         ns["save_btn"].loading = True
@@ -606,7 +603,7 @@ def build_export(
             # No ``total_steps`` — the save is a single opaque phase (GEE admin
             # lookups + the alert-store write), so the pill stays indeterminate.
             # On an exception tracked_job fails the task and publishes the one
-            # error toast (the raw exception text), then re-raises into except.
+            # error toast (``error_text``), then re-raises into except.
             notifier = current_notifier()
             try:
                 with tracked_job(
@@ -626,7 +623,7 @@ def build_export(
                             )
                             refused = None
                         except SaveRefused as refusal:
-                            saved, refused = False, str(refusal)
+                            saved, refused = False, error_text(refusal)
                     if not saved:
                         # `_save_attributes` refused: nothing was written and the
                         # download button stays disabled, so completing the task
@@ -676,7 +673,6 @@ def build_export(
                 with tracked_job(
                     notifier,
                     t("analysis_tile.export_labels.download_task_title"),
-                    error_format=_download_error,
                 ) as task:
                     task.step(t("analysis_tile.export_labels.download_step"))
                     # Writer tracking: the report/zip generation writes into the

@@ -24,6 +24,7 @@ from deforestation_alerts.engine.user_raster import UserRasterError, band_list_r
 from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
 from gui.i18n import t
 from gui.scripts import vis_layers
+from gui.scripts.error_text import error_text
 from gui.widget.raster_input import RasterInput, absolute, use_band_list
 from gui.widget.source_modal import _index
 
@@ -214,7 +215,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if validation.cancelled:
             submitted.current = False  # the user stopped the check: the form can be sent again
         elif validation.error:
-            set_error(str(validation.exception) or validation.exception.__class__.__name__)
+            set_error(error_text(validation.exception))
             submitted.current = False
         elif validation.finished and validation.value is not None:
             out = validation.value
@@ -282,7 +283,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                 if bands_task.pending:
                     solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
                 elif bands_task.error:
-                    solara.Text(t("steps.raster_input.bands_failed", error=str(bands_task.exception)),
+                    solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                                 classes=["error--text"])
             if kind == "gee":
                 rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=set_rgb, dense=True,

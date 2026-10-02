@@ -899,3 +899,21 @@ def test_an_earlier_sets_alerts_are_let_go_when_it_is_no_longer_shown(ov, tmp_pa
         assert [ref() is not None for ref in loaded] == [False]
     finally:
         rc.close()
+
+
+def test_the_missing_tippecanoe_warning_shows_once_per_set(ov, tmp_path):
+    """A review Save re-publishes the alerts; the centroids are redrawn, the
+    warning is not repeated (slice-1 Task 20 deferral)."""
+    ov.pm = None
+    state = _state(_project(tmp_path), _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()
+        state.alerts_gdf.set(state.alerts_gdf.value.copy())  # what a review Save publishes
+        ov.run_jobs()
+        assert _centroid_layer(map_) is not None
+        assert _toasts(ov, "warning") == [t("steps.integrate.no_tippecanoe")]
+        # the bus folds a repeat into the first toast (count 2): told once
+        assert [x.count for x in ov.bus.toasts.value if x.type.value == "warning"] == [1]
+    finally:
+        rc.close()

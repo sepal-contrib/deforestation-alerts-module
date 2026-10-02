@@ -37,6 +37,7 @@ def _shell_component(name, threads):
     from pysepal.solara.notifications import use_notifications
 
     from gui.i18n import t
+    from gui.scripts.error_text import error_text
     from gui.scripts.solara_threads import spawn_in_context
     from gui.store.workflow_steps import active_set
 
@@ -49,7 +50,7 @@ def _shell_component(name, threads):
         return thread
 
     ns = {"solara": solara, "use_notifications": use_notifications, "active_set": active_set,
-          "set_store": set_store, "spawn_in_context": _spawn, "t": t,
+          "set_store": set_store, "spawn_in_context": _spawn, "t": t, "error_text": error_text,
           "logger": logging.getLogger("SEPALUI.deforestation_alerts")}
     exec(compile(ast.Module(body=[node], type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]

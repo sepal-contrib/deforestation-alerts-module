@@ -23,6 +23,7 @@ from deforestation_alerts.project.names import validate_source_name
 from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.scripts.coverage_ui import note_text
+from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
 from gui.widget.raster_input import RasterInput, absolute, use_band_list
 
@@ -218,7 +219,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
         if validation.cancelled:
             submitted.current = False  # the user stopped the check: the form can be sent again
         elif validation.error:
-            set_error(str(validation.exception) or validation.exception.__class__.__name__)
+            set_error(error_text(validation.exception))
             submitted.current = False
         elif validation.finished and validation.value is not None:
             out = validation.value
@@ -292,7 +293,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                 if bands_task.pending:
                     solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
                 elif bands_task.error:
-                    solara.Text(t("steps.raster_input.bands_failed", error=str(bands_task.exception)),
+                    solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                                 classes=["error--text"])
                 with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True, disabled=busy):
                     for f in FORMATS:

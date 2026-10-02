@@ -15,7 +15,6 @@ import pandas as pd
 import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
-from gui.i18n import t
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
@@ -280,7 +279,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, publi
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, _AdminLookups(during=_integrate_finishes))
 
-    assert str(refused.value) == t("analysis_tile.export_labels.save_set_changed")
+    assert refused.value.key == "analysis_tile.export_labels.save_set_changed"
     assert s.project.value.active_set == "y"
     assert fresh.read_bytes() == b"set y, freshly integrated"
     assert reviewed.read_bytes() == b"set x's store"
@@ -370,7 +369,7 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, publ
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, _AdminLookups(during=_rerun_finishes))
 
-    assert str(refused.value) == t("analysis_tile.export_labels.save_store_changed")
+    assert refused.value.key == "analysis_tile.export_labels.save_store_changed"
     assert _saved_status(store) == ["Not reviewed"] * 5  # the re-run's store, untouched
     rec = s.project.value.alert_sets["x"]
     assert rec.n_alerts == 5 and rec.n_reviewed == 0
@@ -490,7 +489,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, lookups)
 
-    assert str(refused.value) == t("analysis_tile.export_labels.save_other_set")
+    assert refused.value.key == "analysis_tile.export_labels.save_other_set"
     assert store.read_bytes() == b"set x's store"
     assert lookups.calls == 0
     assert s.alerts_gdf.value["status"].tolist() == ["Not reviewed", "Not reviewed"]

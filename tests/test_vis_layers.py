@@ -22,6 +22,7 @@ from deforestation_alerts.project.models import (
 )
 from gui.i18n import t
 from gui.scripts import vis_layers as vl
+from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import STEPS, StepStatus, step_states
@@ -151,8 +152,8 @@ def test_a_geotiff_layer_gets_its_nearest_ovr_and_is_drawn_with_its_colormap(tmp
 
 
 def test_a_geotiff_in_a_read_only_folder_is_refused_with_a_toast_naming_the_folder(tmp_path, monkeypatch):
-    """Spec §9.1: the build fails with translated text; MapLayers shows it as
-    the toast and leaves the key off."""
+    """Spec §9.1: the build fails with a keyed error; MapLayers shows it
+    translated as the toast and leaves the key off."""
     _sync_spawn(monkeypatch)
     ro = tmp_path / "ro"
     ro.mkdir()
@@ -162,11 +163,12 @@ def test_a_geotiff_in_a_read_only_folder_is_refused_with_a_toast_naming_the_fold
         layer = FileVisLayer(name="t", path=str(tif))
         with pytest.raises(PermissionError) as exc:
             vl.builder(_FakeMap(), layer, "vis:t", project=_with_aoi(), aoi_bounds=PARAGUAY)()
-        assert str(exc.value) == t("steps.layers.err_folder", folder=str(ro)) and str(ro) in str(exc.value)
+        assert exc.value.key == "steps.layers.err_folder" and exc.value.values == {"folder": str(ro)}
+        shown = t("steps.layers.err_folder", folder=str(ro))
         layers, notifier = MapLayers(_FakeMap()), _Notifier()
         layers.show("vis:t", vl.builder(layers.map_, layer, "vis:t", project=_with_aoi(), aoi_bounds=PARAGUAY),
                     notifier=notifier)
-        assert notifier.errors == [str(exc.value)] and layers.on.value == frozenset()
+        assert notifier.errors == [shown] and str(ro) in shown and layers.on.value == frozenset()
         assert not (ro / "t.tif.ovr").exists()
     finally:
         ro.chmod(0o755)
@@ -176,7 +178,8 @@ def test_a_missing_geotiff_is_refused_naming_the_file(tmp_path):
     layer = FileVisLayer(name="t", path=str(tmp_path / "gone.tif"))
     with pytest.raises(FileNotFoundError) as exc:
         vl.builder(_FakeMap(), layer, "vis:t", project=_with_aoi(), aoi_bounds=PARAGUAY)()
-    assert str(exc.value) == t("steps.layers.err_missing", path=str(tmp_path / "gone.tif"))
+    assert exc.value.key == "steps.layers.err_missing" and exc.value.values == {"path": str(tmp_path / "gone.tif")}
+    assert error_text(exc.value) == t("steps.layers.err_missing", path=str(tmp_path / "gone.tif"))
 
 
 def test_earth_engine_and_nicfi_builders(gee):

@@ -28,6 +28,7 @@ from deforestation_alerts.engine.coverage import Note
 from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import HarmonizeFailed
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import (
     AoiRecord,
@@ -573,7 +574,7 @@ def test_a_download_waits_for_the_catalogue_metadata(step, monkeypatch):
 
 def test_a_download_without_an_aoi_geometry_is_refused(step, monkeypatch):
     def no_aoi(result, pdir):
-        raise ValueError(t("steps.aoi.no_geometry"))
+        raise ProjectRuleError(key="steps.aoi.no_geometry")
 
     monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
     step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))

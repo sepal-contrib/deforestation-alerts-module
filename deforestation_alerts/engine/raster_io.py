@@ -20,6 +20,7 @@ from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.windows import Window
 
+from deforestation_alerts.errors import KeyedError, UserFileMissing
 from deforestation_alerts.project.models import GridSpec
 
 # One lock per user GeoTIFF, process-wide: its ``.ovr`` sidecar is one file
@@ -31,12 +32,16 @@ _OVERVIEW_LOCKS_GUARD = threading.Lock()
 BLOCK = 512
 
 
-class GridMismatchError(RuntimeError):
+class GridMismatchError(KeyedError, RuntimeError):
     """A written raster is not on the project grid."""
 
+    key = "errors.off_grid"
 
-class NotEnoughSpaceError(RuntimeError):
+
+class NotEnoughSpaceError(KeyedError, RuntimeError):
     """The project disk cannot hold the file about to be written."""
+
+    key = "errors.not_enough_space"
 
 
 def grid_profile(grid: GridSpec, count: int) -> dict:
@@ -123,7 +128,8 @@ def check_header(path, grid: GridSpec) -> None:
     if not (same_crs and same_shape and same_transform):
         raise GridMismatchError(
             f"{path} is not on the project grid "
-            f"(crs={same_crs}, shape={same_shape}, transform={same_transform})"
+            f"(crs={same_crs}, shape={same_shape}, transform={same_transform})",
+            path=str(path),
         )
 
 
@@ -159,7 +165,10 @@ def ensure_free_space(folder: Path, needed_bytes: int) -> None:
     if free < needed_bytes:
         raise NotEnoughSpaceError(
             f"needs {math.ceil(needed_bytes / 1e9)} GB free in {folder}, "
-            f"has {free // 10**9} GB"
+            f"has {free // 10**9} GB",
+            needed_gb=math.ceil(needed_bytes / 1e9),
+            free_gb=free // 10**9,
+            folder=str(folder),
         )
 
 
@@ -174,7 +183,7 @@ def ensure_overviews(path, resampling: str = "nearest") -> bool:
     """
     path = str(path)
     if not Path(path).exists():  # not GDAL's raw RuntimeError (slice-1 Task 5 minor)
-        raise FileNotFoundError(f"file not found: {path}")
+        raise UserFileMissing(f"file not found: {path}", path=path)
     with _overview_lock(path):  # check-and-build: one writer of the sidecar at a time
         return _ensure_overviews(path, resampling)
 

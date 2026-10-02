@@ -11,6 +11,7 @@ from typing import Annotated, Literal, Optional, Union
 from affine import Affine
 from pydantic import BaseModel, Field
 
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.scripts.naming import safe_token
 
 SCHEMA_VERSION = 1
@@ -291,25 +292,25 @@ def next_custom_digit(p: Project) -> int:
     for d in CUSTOM_DIGITS:
         if d not in used:
             return d
-    raise ValueError("all 6 custom source slots are in use")
+    raise ProjectRuleError("all 6 custom source slots are in use", key="steps.alerts.cap_reached")
 
 
 def add_custom_source(p: Project, *, name: str, origin: str, ref: str, asset_type: str, format: str,
                       date_encoding: str, band_map: BandMap, native: Optional[NativeGrid]) -> CustomSource:
     """Validate the name (spec §5.1), take the lowest free custom digit and add
-    the source. Raises ``ValueError`` with a message key: ``steps.alerts.*``
-    from ``validate_source_name``, or ``steps.alerts.cap_reached`` once all 6
-    custom slots are in use -- a key too, so every caller can pass this
-    function's errors through ``t()`` (controller ruling, Task 7)."""
+    the source. Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a
+    message key: ``steps.alerts.*`` from ``validate_source_name``, or
+    ``steps.alerts.cap_reached`` once all 6 custom slots are in use (controller
+    ruling, Task 7; ``gui.scripts.error_text`` renders it)."""
     from deforestation_alerts.project.names import validate_source_name
 
     error = validate_source_name(name, p)
     if error:
-        raise ValueError(error)
+        raise ProjectRuleError(key=error)
     try:
         digit = next_custom_digit(p)
-    except ValueError:
-        raise ValueError("steps.alerts.cap_reached") from None
+    except ProjectRuleError:
+        raise ProjectRuleError(key="steps.alerts.cap_reached") from None
     src = CustomSource(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, format=format,
                        date_encoding=date_encoding, band_map=band_map, native=native, digit=digit)
     p.sources = {**p.sources, src.name: src}  # replaced, not mutated (published snapshots share it)
@@ -324,7 +325,7 @@ def update_custom_source(p: Project, name: str, **changes) -> CustomSource:
     """Edit a custom source's ref, format, encoding, band map or native grid.
     Refused once a set used it: "add a new one instead" (spec §5.1)."""
     if sets_using_source(p, name):
-        raise ValueError("steps.alerts.edit_used")
+        raise ProjectRuleError(key="steps.alerts.edit_used")
     src = p.sources[name]
     if src.kind != "custom":
         raise ValueError(f"{name} is not a custom source")
@@ -366,7 +367,7 @@ def add_mask(p: Project, *, name: str, origin: str, ref: str, asset_type: str, b
 
     error = validate_mask_name(name, p)
     if error:
-        raise ValueError(error)
+        raise ProjectRuleError(key=error)
     mask = MaskLayer(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, band=band, native=native)
     p.masks = {**p.masks, mask.name: mask}
     set_period_mask(p, period_id, mask.name, on=True, mode=mode)
@@ -377,7 +378,7 @@ def update_mask(p: Project, name: str, **changes) -> MaskLayer:
     """Edit a mask's definition. Refused once a set used it: "add a new one
     instead" (spec §5.1)."""
     if sets_using_mask(p, name):
-        raise ValueError("steps.prepare.mask_edit_used")
+        raise ProjectRuleError(key="steps.prepare.mask_edit_used")
     changes.pop("name", None)
     new = p.masks[name].model_copy(update=changes)
     p.masks = {**p.masks, name: new}

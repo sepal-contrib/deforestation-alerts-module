@@ -11,6 +11,8 @@ import numpy as np
 import rasterio
 from rasterio import features
 
+from deforestation_alerts.errors import ProjectRuleError
+
 # Columns the assembled alerts gdf already carries (convert_to_geopandas +
 # vectorize output). Attribution columns must not silently overwrite these.
 ALERT_RESERVED_COLUMNS = {
@@ -83,8 +85,9 @@ def _resolve_band_index(src, band_name):
     descs = [d if d else f"band_{i}" for i, d in enumerate(src.descriptions, start=1)]
     if band_name in descs:
         return descs.index(band_name) + 1
-    raise ValueError(
-        f"Attribution band {band_name!r} not found in raster (have {descs})"
+    raise ProjectRuleError(
+        f"Attribution band {band_name!r} not found in raster (have {descs})",
+        key="errors.attribute_band_missing", band=band_name, bands=", ".join(descs),
     )
 
 
@@ -104,7 +107,8 @@ def attribute_alerts(gdf, raster_path, band_stats):
 
     with rasterio.open(raster_path) as src:
         if src.crs is None:
-            raise ValueError(f"Attribution raster has no CRS: {raster_path}")
+            raise ProjectRuleError(f"Attribution raster has no CRS: {raster_path}", key="errors.attribute_no_crs",
+                                   path=str(raster_path))
         nodata = src.nodata
 
         # Resolve band->index + reducer up front (fail loud on bad config).

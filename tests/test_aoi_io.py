@@ -1,5 +1,4 @@
 import json
-import re
 from datetime import date
 from types import SimpleNamespace
 
@@ -9,6 +8,7 @@ from shapely.geometry import box
 
 from gui.i18n import MESSAGES_DIR
 from gui.scripts import aoi_io
+from gui.scripts.error_text import error_text
 
 _BOX = (-55.1, -10.1, -55.0, -10.0)
 
@@ -64,13 +64,15 @@ def test_auto_project_name_is_valid_and_unique():
     assert aoi_io.auto_project_name("x/y", ["x_y_20260930"], today) == "x_y_20260930_2"
 
 
-def test_ee_aoi_without_any_geometry_raises_the_translated_message(tmp_path):
-    """Steps toast str(exc) as is (ruling #64): it must be the catalogue text, not a raw English literal."""
+def test_ee_aoi_without_any_geometry_raises_the_keyed_message(tmp_path):
+    """Steps toast it through ``error_text`` (spec §11): the catalogue text, not a raw English literal."""
     text = json.loads((MESSAGES_DIR / "en" / "steps.json").read_text())["steps"]["aoi"]["no_geometry"]
-    with pytest.raises(ValueError, match=re.escape(text)):
+    with pytest.raises(ValueError) as exc:
         aoi_io.ee_aoi(None, tmp_path)  # no selection and no sidecar
-    with pytest.raises(ValueError, match=re.escape(text)):
+    assert exc.value.key == "steps.aoi.no_geometry" and error_text(exc.value) == text
+    with pytest.raises(ValueError) as exc:
         aoi_io.ee_aoi(SimpleNamespace(feature_collection=None), None)
+    assert error_text(exc.value) == text
 
 
 def test_ee_aoi_is_always_a_feature_collection(tiny_aoi, tmp_path):

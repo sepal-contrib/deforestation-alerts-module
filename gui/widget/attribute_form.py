@@ -29,6 +29,7 @@ from deforestation_alerts.scripts.raster_attribute import (
     display_column,
 )
 from gui.i18n import t
+from gui.scripts.error_text import error_text
 from gui.widget.raster_input import RasterInput, absolute
 
 _STATS = ["majority", "mean", "min", "max", "median"]
@@ -74,7 +75,7 @@ def AttributeForm(gee_interface, value, on_value):
                 names = await asyncio.to_thread(band_names, src)
                 projections = {}
         except Exception as exc:  # noqa: BLE001 - shown next to the field
-            set_error(str(exc) or exc.__class__.__name__)
+            set_error(error_text(exc))
             return
         new_rows = [{"include": True, "band": n, "stat": "majority", "column": n,
                      **(projections.get(n) or {})} for n in names]

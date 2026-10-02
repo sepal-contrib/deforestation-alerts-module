@@ -14,6 +14,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t
 from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, note_text
+from gui.scripts.error_text import error_text
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -30,12 +31,6 @@ def blocked_reason(p, name):
     a, b = catalogue_meta.preview_window(p, name)
     state, notes = window_coverage(cov, name, a, b)
     return note_text(notes[0]) if state in (NOT_COVERED, NO_DATA) else None
-
-
-def _message(exc: ValueError) -> str:
-    """A refusal as the modal shows it inline: the models raise message keys."""
-    text = str(exc)
-    return t(text) if text.startswith("steps.") else text
 
 
 @solara.component
@@ -75,7 +70,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         try:
             app_state.update_project(p.name, _apply)
         except ValueError as exc:  # a name taken meanwhile, or the cap
-            raise ValueError(_message(exc)) from None
+            raise ValueError(error_text(exc)) from None
 
     def _refuse_save(key):
         notifications.warning(t(key))
@@ -93,8 +88,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         try:
             saved = app_state.update_project(p.name, _apply)
         except ValueError as exc:
-            notifications.warning(_message(exc))
-            raise ValueError(_message(exc)) from None
+            notifications.warning(error_text(exc))
+            raise ValueError(error_text(exc)) from None
         if saved:
             layers.hide(f"src:{name}")  # its preview showed the previous definition
 
@@ -163,7 +158,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         try:
             aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
         except ValueError as exc:
-            notifications.error(str(exc))
+            notifications.error(error_text(exc))
             return
 
         def build():

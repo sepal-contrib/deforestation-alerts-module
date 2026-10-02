@@ -1,0 +1,27 @@
+{
+  "errors": {
+    "not_enough_space": "Not enough free disk space: this needs {needed_gb} GB in {folder}, and {free_gb} GB is free.",
+    "off_grid": "The raster written to {path} is not on the project grid; nothing was recorded.",
+    "raw_not_as_asked": "The download {path} is not the 2-band Int32 raster in {crs} that was asked for; nothing was recorded.",
+    "mask_not_as_asked": "The mask download {path} is not the 1-band 0/1 raster in {crs} that was asked for; nothing was recorded.",
+    "no_aoi_or_grid": "The project needs an AOI and a grid before anything is downloaded.",
+    "source_native_unknown": "{source}: its native grid (projection and scale) is unknown; edit the source.",
+    "bands_not_loaded": "{source}: its band list is not loaded from Earth Engine yet; try again in a moment.",
+    "file_not_found": "File not found: {path}",
+    "not_a_source": "{source} is not a source of this project.",
+    "not_ready": "{source} is not downloaded and harmonized for this period; run Download & harmonize first.",
+    "footprint_missing": "The footprint of the earlier set {set_id} is missing; run Integrate & vectorize on that set again first.",
+    "no_sources": "Choose at least one source, each once.",
+    "no_drawing": "The drawn-area mode needs a drawn polygon.",
+    "attribute_band_missing": "The attribute raster has no band {band} (it has {bands}).",
+    "attribute_no_crs": "The attribute raster {path} has no coordinate reference system.",
+    "no_tippecanoe": "tippecanoe was found neither next to Python nor on the PATH.",
+    "project_unreadable": "{path} could not be read: {error}",
+    "project_not_a_manifest": "{path} is not a project manifest of this app.",
+    "project_newer_schema": "{path} has schema {found}; this app reads schema {expected}.",
+    "project_invalid": "{path} is not a valid project: {error}",
+    "no_images": "Download the before and after images first.",
+    "folder_not_writable": "The folder {folder} is not writable: the layer's overviews cannot be written next to it.",
+    "ee_asset_not_found": "The Earth Engine asset {asset} does not exist, or your account cannot read it."
+  }
+}

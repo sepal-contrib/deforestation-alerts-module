@@ -12,6 +12,8 @@ from tensorflow.keras import layers, models
 from tensorflow.keras import backend as K
 from MightyMosaic import MightyMosaic
 
+from deforestation_alerts.errors import ProjectRuleError
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
@@ -76,7 +78,7 @@ def apply_dl_model(image, model, suffix):
         return img_array3.astype(np.float32)
 
     if not os.path.exists(image):
-        raise Exception("First download selected images.")
+        raise ProjectRuleError("First download selected images.", key="errors.no_images")
 
     # Input large image
     input_image = os.path.abspath(image)

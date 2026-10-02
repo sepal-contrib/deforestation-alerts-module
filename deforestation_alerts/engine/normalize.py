@@ -86,7 +86,7 @@ def normalize_file(src, aoi_bounds, win_start: date, win_end: date, out_path) ->
                 crs = ds.crs
         with rasterio.open(part) as check:
             if check.crs != crs or check.count != 2 or check.dtypes != ("int32", "int32"):
-                raise RawRasterError(f"{part} is not a 2-band Int32 raster in {crs}")
+                raise RawRasterError(f"{part} is not a 2-band Int32 raster in {crs}", path=str(part), crs=str(crs))
         part.replace(out_path)
     except BaseException:
         part.unlink(missing_ok=True)

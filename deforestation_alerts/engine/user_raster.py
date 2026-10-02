@@ -16,13 +16,15 @@ from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
 
 from deforestation_alerts.engine.download import METRES_PER_DEGREE
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.models import PRESETS, BandMap, NativeGrid
 
 
-class UserRasterError(ValueError):
-    def __init__(self, key: str, detail: str = ""):
-        super().__init__(detail or key)
-        self.key = key
+class UserRasterError(KeyedError, ValueError):
+    """A user GeoTIFF the app cannot use; ``key`` names the reason."""
+
+    def __init__(self, key: str, detail: str = "", **values):
+        super().__init__(detail or key, key=key, **values)
 
 
 @dataclass(frozen=True)

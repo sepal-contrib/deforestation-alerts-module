@@ -173,9 +173,15 @@ def _available_cores() -> int:
 def worker_threads() -> int:
     """Threads for a raster job: half the cores, at least 1 (override:
     DEFORESTATION_ALERTS_NUM_THREADS). Half leaves room for the Solara server
-    and a concurrent job on the same instance (spatial_risk ``worker_threads``)."""
-    override = os.environ.get(NUM_THREADS_ENV)
-    threads = int(override) if override else _available_cores() // 2
+    and a concurrent job on the same instance (spatial_risk ``worker_threads``).
+    A value that is not a whole number is ignored with a warning: the app must
+    start whatever the operator wrote."""
+    override = os.environ.get(NUM_THREADS_ENV, "").strip()
+    try:
+        threads = int(override) if override else _available_cores() // 2
+    except ValueError:
+        logger.warning("%s=%r is not a whole number; using half the cores", NUM_THREADS_ENV, override)
+        threads = _available_cores() // 2
     return max(1, threads)
 
 

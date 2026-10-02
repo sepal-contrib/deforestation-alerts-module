@@ -15,12 +15,14 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.fingerprint import mask_key, mask_raw_key
 from deforestation_alerts.engine.masks import build_mask_image
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
 from gui.i18n import t
 from gui.scripts import aoi_io, raster_map, source_layers
+from gui.scripts.error_text import error_text
 from gui.scripts.prepare_jobs import _CELL_STATUS
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -134,34 +136,34 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     def _add(fields, mode):
         def _apply(live):
             if period.id not in live.periods:
-                raise ValueError("steps.prepare.mask_err_changed")
+                raise ProjectRuleError(key="steps.prepare.mask_err_changed")
             add_mask(live, **fields, mode=mode, period_id=period.id)
 
         try:
             added = app_state.update_project(p.name, _apply)
         except ValueError as exc:  # a name taken meanwhile
-            raise ValueError(t(str(exc))) from None
+            raise ValueError(error_text(exc)) from None
         if not added:
             raise ValueError(t("steps.prepare.mask_err_changed"))
 
-    def _refuse_save(key):
-        notifications.warning(t(key))
-        raise ValueError(t(key))
+    def _refuse_save(text):
+        notifications.warning(text)
+        raise ValueError(text)
 
     def _save(name, changes):
         if _busy(name):  # a job started while the modal was open (spec §5.1)
-            _refuse_save("steps.prepare.mask_edit_busy")
+            _refuse_save(t("steps.prepare.mask_edit_busy"))
 
         def _apply(live):
             if name not in live.masks:  # deleted meanwhile
-                raise ValueError("steps.prepare.mask_err_changed")
+                raise ProjectRuleError(key="steps.prepare.mask_err_changed")
             update_mask(live, name, **changes)  # refused once a set used it meanwhile
 
         refused = None
         try:
             saved = app_state.update_project(p.name, _apply)
         except ValueError as exc:
-            refused = str(exc)
+            refused = error_text(exc)
         if refused is not None:
             _refuse_save(refused)
         if not saved:  # the project was closed or switched
@@ -217,7 +219,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
             try:
                 aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
             except ValueError as exc:
-                notifications.error(str(exc))
+                notifications.error(error_text(exc))
                 return
 
             def build():

@@ -427,3 +427,16 @@ def test_a_failed_tracked_job_reaches_the_server_log_once(server_log):
     assert "RuntimeError: tippecanoe died" in out and "[integrate-worker]" in out
     assert "combining" not in out  # milestones stay in the task pill
     assert _milestones(bus, "Integrate & vectorize") == ["combining"]
+
+
+def test_a_keyed_failure_is_toasted_in_words_by_default():
+    from deforestation_alerts.engine.raster_io import NotEnoughSpaceError
+    from gui.i18n import t
+
+    _logger, bus, notifier = _fresh()
+    with pytest.raises(NotEnoughSpaceError):
+        with notify_bridge.tracked_job(notifier, "Keyed job"):
+            raise NotEnoughSpaceError("needs 9 GB", needed_gb=9, free_gb=1, folder="/x")
+    expected = t("errors.not_enough_space", needed_gb=9, free_gb=1, folder="/x")
+    assert next(x for x in bus.tasks.value if x.title == "Keyed job").error_message == expected
+    assert [x.message for x in bus.toasts.value if x.type == ToastType.ERROR] == [expected]

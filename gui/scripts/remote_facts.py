@@ -33,6 +33,7 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import PREDEFINED_KEYS
 from gui.i18n import t
 from gui.scripts import aoi_io
+from gui.scripts.error_text import error_text
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -90,10 +91,6 @@ def is_ee_aoi(aoi) -> bool:
     """An Earth Engine AOI: one recorded by its admin code or asset id
     (``aoi_io.build_record`` takes ``aoi_io.lazy_digest`` for it)."""
     return str(aoi.digest).startswith(("admin:", "asset:"))
-
-
-def _error_text(exc) -> str:
-    return str(exc) or exc.__class__.__name__
 
 
 def _stage_sidecar(name, pdir, info):
@@ -195,17 +192,17 @@ def RemoteFactsLoader(app_state, gee_interface):
 
     def _on_meta_error():
         if meta_task.error:
-            notifications.error(t("steps.alerts.meta_failed", error=_error_text(meta_task.exception)))
+            notifications.error(t("steps.alerts.meta_failed", error=error_text(meta_task.exception)))
 
     def _on_cov_error():
         if cov_task.error:
-            message = _error_text(cov_task.exception)
+            message = error_text(cov_task.exception)
             app_state.coverage_error.set(message)
             notifications.error(t("coverage.check_failed", error=message))
 
     def _on_side_error():
         if side_task.error:
-            notifications.error(t("steps.prepare.sidecar_failed", error=_error_text(side_task.exception)))
+            notifications.error(t("steps.prepare.sidecar_failed", error=error_text(side_task.exception)))
 
     solara.use_effect(_on_meta_error, [meta_task.pending, meta_task.finished, meta_task.error, meta_task.cancelled])
     solara.use_effect(_on_cov_error, [cov_task.pending, cov_task.finished, cov_task.error, cov_task.cancelled])

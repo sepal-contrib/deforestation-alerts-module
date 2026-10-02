@@ -13,6 +13,7 @@ from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.project import io
 from deforestation_alerts.project.models import Project
+from gui.scripts.error_text import error_text
 from gui.store.autosave import install_autosave
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
@@ -44,10 +45,10 @@ def test_report_template_path(tmp_path):
         export_mod.report_template_path(str(tmp_path / "gone.docx"))
     assert err.value.values == {"path": str(tmp_path / "gone.docx")}
     assert err.value.key == "analysis_tile.export_labels.report_template_missing"
-    # The download's failure toast reads the keyed message, with the path.
-    toast = export_mod._download_error(err.value)
+    # The download's failure toast (tracked_job's default) reads the keyed message, with the path.
+    toast = error_text(err.value)
     assert "gone.docx" in toast and toast != err.value.key
-    assert export_mod._download_error(OSError("disk full")) == "disk full"
+    assert str(err.value) == f"report template not found: {tmp_path / 'gone.docx'}"
 
 
 @solara.component

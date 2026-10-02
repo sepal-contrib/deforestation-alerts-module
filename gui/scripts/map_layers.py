@@ -73,6 +73,7 @@ import threading
 
 import solara
 
+from gui.scripts.error_text import error_text
 from gui.scripts.legend_registry import next_selection
 from gui.scripts.solara_threads import spawn_in_context
 
@@ -267,7 +268,7 @@ class MapLayers:
                 # newer build can have drawn under it yet.
                 self.map_.remove_layer(key, none_ok=True)
             if error is not None and wanted and notifier is not None:
-                notifier.error(str(error) or error.__class__.__name__)
+                notifier.error(error_text(error))
         finally:
             with self._lock:
                 self._building = self._building - {key}

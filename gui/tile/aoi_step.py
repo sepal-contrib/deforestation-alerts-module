@@ -22,6 +22,7 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import cleanup, paths
 from gui.i18n import t
+from gui.scripts.error_text import error_text
 from gui.scripts import aoi_io
 from gui.store.project_writers import writing
 from gui.tile.project_dialog import create_project, names_on_disk
@@ -145,7 +146,7 @@ def AoiStep(app_state, map_, gee_interface):
 
     def _on_error():
         if attach_task.error:
-            notifications.error(t("steps.aoi.failed", error=str(attach_task.exception)))
+            notifications.error(t("steps.aoi.failed", error=error_text(attach_task.exception)))
 
     solara.use_effect(
         _on_error, [attach_task.pending, attach_task.finished, attach_task.error, attach_task.cancelled]

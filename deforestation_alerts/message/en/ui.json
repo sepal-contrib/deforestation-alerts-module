@@ -45,6 +45,7 @@
       "confirmation_no": "No",
       "confirmation_revision": "Need further revision",
       "confirmation_missing": "Answer \"Is this a true alert?\" before saving.",
+      "false_positive_drawn": "A false positive cannot have a drawn deforestation polygon: delete the polygon or change the answer.",
       "loss_driver_label": "Loss driver",
       "loss_driver_hint": "Analyze cause of deforestation",
       "loss_driver1": "Agriculture expansion",

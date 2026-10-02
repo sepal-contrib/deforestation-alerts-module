@@ -53,6 +53,7 @@ from deforestation_alerts.project import paths
 from gui.i18n import t
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
+from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
 from gui.scripts.solara_threads import spawn_in_context
@@ -299,7 +300,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 # read "running" for the rest of the session.
                 _give_back()
                 logger.exception("could not build the Earth Engine AOI")
-                notifications.error(str(exc) or exc.__class__.__name__)
+                notifications.error(error_text(exc))
                 return
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
                              name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,

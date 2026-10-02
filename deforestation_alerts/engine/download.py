@@ -22,6 +22,7 @@ from pyproj import Transformer
 from rasterio.crs import CRS
 
 from deforestation_alerts.engine import catalogue
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.scripts.gee_progress import geedim_download_wait, geedim_tile_progress
 from deforestation_alerts.scripts.raster_export import download_ee_image
 
@@ -30,8 +31,10 @@ from deforestation_alerts.scripts.raster_export import download_ee_image
 METRES_PER_DEGREE = 111319.49079327357
 
 
-class RawRasterError(RuntimeError):
+class RawRasterError(KeyedError, RuntimeError):
     """A download is not the 2-band Int32 raster in the native CRS that was asked for."""
+
+    key = "errors.raw_not_as_asked"
 
 
 def _native(key_or_native) -> tuple[str, float]:
@@ -63,7 +66,8 @@ def _check_raw(path: Path, crs: str) -> None:
         dtypes = src.dtypes
     if not (same_crs and dtypes == ("int32", "int32")):
         raise RawRasterError(
-            f"{path} is not a 2-band Int32 raster in {crs} (crs={same_crs}, dtypes={dtypes})"
+            f"{path} is not a 2-band Int32 raster in {crs} (crs={same_crs}, dtypes={dtypes})",
+            path=str(path), crs=str(crs),
         )
 
 

@@ -13,6 +13,7 @@ from typing import Callable, Optional
 
 from pydantic import ValidationError
 
+from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import SCHEMA_VERSION, Project
 
@@ -24,7 +25,7 @@ _MANIFEST_LOCKS: dict = {}
 _MANIFEST_LOCKS_GUARD = threading.Lock()
 
 
-class ProjectLoadError(Exception):
+class ProjectLoadError(KeyedError):
     """The manifest is missing, unreadable, or from a newer app version."""
 
 
@@ -71,19 +72,23 @@ def load_project(name: str, root: Optional[Path] = None) -> Project:
     try:
         raw = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise ProjectLoadError(f"cannot read {manifest}: {exc}") from exc
+        raise ProjectLoadError(f"cannot read {manifest}: {exc}", key="errors.project_unreadable",
+                               path=str(manifest), error=str(exc)) from exc
     if not isinstance(raw, dict):
-        raise ProjectLoadError(f"{manifest} is not a project manifest (schema mismatch)")
+        raise ProjectLoadError(f"{manifest} is not a project manifest (schema mismatch)",
+                               key="errors.project_not_a_manifest", path=str(manifest))
     version = raw.get("schema_version")
     if version != SCHEMA_VERSION:
         raise ProjectLoadError(
-            f"{manifest} has schema {version}; this app reads schema {SCHEMA_VERSION}"
+            f"{manifest} has schema {version}; this app reads schema {SCHEMA_VERSION}",
+            key="errors.project_newer_schema", path=str(manifest), found=version, expected=SCHEMA_VERSION,
         )
     raw["name"] = name
     try:
         return Project.model_validate(raw)
     except ValidationError as exc:
-        raise ProjectLoadError(f"{manifest} is not a valid project: {exc}") from exc
+        raise ProjectLoadError(f"{manifest} is not a valid project: {exc}", key="errors.project_invalid",
+                               path=str(manifest), error=str(exc)) from exc
 
 
 def manifest_lock(name: str, root: Optional[Path] = None) -> threading.Lock:

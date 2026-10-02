@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import AoiRecord
 
@@ -124,8 +125,8 @@ def ee_aoi(result, pdir: Optional[Path]):
     converted the way pysepal converts a picked gdf (planar edges).
 
     Raises:
-        ValueError: neither exists; the message is the translated
-            ``steps.aoi.no_geometry``, ready to toast.
+        ProjectRuleError: neither exists (``steps.aoi.no_geometry``; a toast
+            renders it with ``error_text``).
     """
     import ee
 
@@ -140,9 +141,7 @@ def ee_aoi(result, pdir: Optional[Path]):
         from pysepal.scripts.utils import geojson_to_ee
 
         return geojson_to_ee(json.loads(sidecar.read_text()))
-    from gui.i18n import t  # imported here: the rest of the module stays Solara-free
-
-    raise ValueError(t("steps.aoi.no_geometry"))
+    raise ProjectRuleError("no AOI selection and no aoi.geojson", key="steps.aoi.no_geometry")
 
 
 #: metres: the simplify tolerance of an Earth Engine AOI fetched for the sidecar.

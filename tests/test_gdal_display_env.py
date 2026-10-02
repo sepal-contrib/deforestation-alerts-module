@@ -100,3 +100,13 @@ def test_local_scratch_falls_back_to_a_writable_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(gdal_env, "_is_usable", lambda d: d == tmp_path / "scratch")
     monkeypatch.setattr(gdal_env, "scratch_dir", lambda: tmp_path / "scratch")
     assert gdal_env.local_scratch_dir() == tmp_path / "scratch"
+
+
+def test_a_thread_count_that_is_not_a_number_falls_back_to_half_the_cores(monkeypatch):
+    from deforestation_alerts import gdal_env
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_NUM_THREADS", "four")
+    monkeypatch.setattr(gdal_env, "_available_cores", lambda: 8)
+    assert gdal_env.worker_threads() == 4
+    monkeypatch.setenv("DEFORESTATION_ALERTS_NUM_THREADS", " 3 ")
+    assert gdal_env.worker_threads() == 3

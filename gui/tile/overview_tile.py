@@ -70,12 +70,14 @@ from pysepal.i18n import current_locale
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.fingerprint import Status, earlier_sets, set_status
+from deforestation_alerts.errors import UserFileMissing
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.overview_helper import calculate_alert_classes
 from gui.i18n import t
 from gui.scripts import set_store
+from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier, tracked_job
 from gui.scripts.legend_specs import status_colors
 from gui.scripts.pmtiles_map import add_set_pmtiles
@@ -288,10 +290,6 @@ def _set_alerts(project, gdf):
     return gdf if s is None or set_store.alerts_belong_to(gdf, s) else None
 
 
-def _error_text(exc: BaseException) -> str:
-    return str(exc) or exc.__class__.__name__
-
-
 @solara.component
 def OverviewTile(app_state, map_, layers):
     """Overview of the active alert set (spec §9.3): the status summary, exports,
@@ -317,6 +315,9 @@ def OverviewTile(app_state, map_, layers):
         lambda: v.Html(tag="tbody", children=_make_summary_rows([0, 0, 0, 0, 0], [t(k) for k in _ALERT_LABEL_KEYS])), []
     )
     popup_ref = solara.use_ref(None)
+    # (project, set id) pairs already told that tippecanoe is missing: a review
+    # Save re-publishes the alerts and redraws the centroids, without the warning.
+    warned = solara.use_ref(set())
     p = app_state.project.value
     # None while the published alerts are still another set's (_set_alerts):
     # the publish that follows re-runs everything keyed on it.
@@ -379,7 +380,10 @@ def OverviewTile(app_state, map_, layers):
             deferred.current = False
             try:
                 pm = set_store.ensure_pmtiles(project, alert_set, on_wait=_defer)
-                warning = None if pm is not None else t("steps.integrate.no_tippecanoe")
+                once = (project.name, alert_set.id)
+                warning = None if pm is not None or once in warned.current else t("steps.integrate.no_tippecanoe")
+                if pm is None:
+                    warned.current.add(once)
             except set_store.StoreBusy as exc:
                 # Stale tiles while the project is being written (an Integrate
                 # swapping this set's store in, a review Save), or a store
@@ -390,7 +394,7 @@ def OverviewTile(app_state, map_, layers):
                 pm, warning = None, None
             except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
                 logger.exception("could not build the tiles of set %s", alert_set.id)
-                pm, warning = None, t("steps.overview.tiles_failed", error=_error_text(exc))
+                pm, warning = None, t("steps.overview.tiles_failed", error=error_text(exc))
             if not _still_open():
                 return
             if pm is not None:
@@ -399,7 +403,7 @@ def OverviewTile(app_state, map_, layers):
                     return
                 except Exception as exc:  # noqa: BLE001 - the centroids stand in for the tiles
                     logger.exception("could not show the tiles of set %s", alert_set.id)
-                    warning = t("steps.overview.tiles_failed", error=_error_text(exc))
+                    warning = t("steps.overview.tiles_failed", error=error_text(exc))
             if warning is not None:
                 notifications.warning(warning)
             _add_centroid_layer(map_, alerts, name)
@@ -439,7 +443,8 @@ def OverviewTile(app_state, map_, layers):
             earlier_deferred.current.discard(key)
             alerts = set_store.load_set_alerts(project, e)
             if alerts is None:
-                raise FileNotFoundError(t("steps.overview.earlier_missing", set=name))
+                raise UserFileMissing(f"earlier set {name}: its store is missing", key="steps.overview.earlier_missing",
+                                      set=name)
             earlier_alerts.current[(project.name, e.id, e.fingerprint)] = alerts
             pm = None
             if len(alerts):  # spec §9.2: an empty set has no tiles

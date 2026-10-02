@@ -36,6 +36,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Project
 from gui.i18n import t
+from gui.scripts.error_text import error_text
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing
 from gui.widget.creation_dialog import CreationDialog
@@ -210,7 +211,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
         try:
             loaded = await asyncio.to_thread(io.load_project, name)
         except io.ProjectLoadError as exc:
-            notifications.error(t("steps.project.open_failed", name=name, error=str(exc)))
+            notifications.error(t("steps.project.open_failed", name=name, error=error_text(exc)))
             return
         app_state.load_project_state(loaded)
         _show_workflow()
@@ -258,7 +259,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                 reopened = await asyncio.to_thread(_reopen, name)
                 if reopened is not None:
                     app_state.load_project_state(reopened)
-            notifications.error(t("steps.project.delete_failed", name=name, error=str(exc)))
+            notifications.error(t("steps.project.delete_failed", name=name, error=error_text(exc)))
             return
         set_pending_delete(None)
         set_typed("")

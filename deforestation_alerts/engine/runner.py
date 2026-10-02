@@ -43,6 +43,7 @@ from deforestation_alerts.engine.masks import (
 )
 from deforestation_alerts.engine.plan import plan_prepare  # re-exported for callers and tests
 from deforestation_alerts.engine.raster_io import compressed_estimate, ensure_free_space
+from deforestation_alerts.errors import KeyedError, ProjectRuleError, UserFileMissing
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Artifact, Period, Project
 
@@ -64,52 +65,52 @@ class CoverageRefused(RuntimeError):
         self.source, self.state, self.notes = source, state, notes
 
 
-class AoiGeometryMissing(RuntimeError):
+class AoiGeometryMissing(KeyedError, RuntimeError):
     """A GeoTIFF row needs ``aoi.geojson`` for the AOI raster, and it is not
     written yet (an admin or asset AOI's geometry is being fetched)."""
 
     key = "steps.prepare.aoi_geometry_missing"
 
 
-class MaskNotReady(RuntimeError):
+class MaskNotReady(KeyedError, RuntimeError):
     """A mask on in the period is not aligned on the current grid; run it first."""
 
     key = "steps.prepare.mask_not_ready"
 
 
-class MaskFileMissing(FileNotFoundError):
+class MaskFileMissing(KeyedError, FileNotFoundError):
     """A GeoTIFF mask on in the period is gone from disk (spec §5.3 "file not
     found"): Run all cannot align it; the user moves it back or edits the mask."""
 
     key = "steps.prepare.mask_file_missing"
 
     def __init__(self, name: str, path: str):
-        super().__init__(f"{name}: file not found: {path}")
-        self.values = {"name": name, "path": path}
+        super().__init__(f"{name}: file not found: {path}", name=name, path=path)
 
 
-class MaskNativeUnknown(ValueError):
+class MaskNativeUnknown(KeyedError, ValueError):
     """An Earth Engine mask without its persisted native grid (crs, scale):
     it cannot be downloaded natively; the user edits the mask."""
 
     key = "steps.prepare.mask_native_unknown"
 
     def __init__(self, name: str):
-        super().__init__(f"{name}: its native grid is unknown; edit the mask")
-        self.values = {"name": name}
+        super().__init__(f"{name}: its native grid is unknown; edit the mask", name=name)
 
 
-class HarmonizeFailed(RuntimeError):
+class HarmonizeFailed(KeyedError, RuntimeError):
     """Harmonizing (or a mask's alignment) failed after this run downloaded a
     new raw file (or rebuilt the AOI raster).
 
     ``artifacts`` holds those records (keyed like ``project.artifacts``); the
     caller applies them like a returned result, so the download is not lost. The
-    message is the cause's, which stays chained as ``__cause__``.
+    message is the cause's (its text, and its message key and values when it
+    has them), which stays chained as ``__cause__``.
     """
 
     def __init__(self, cause: BaseException, artifacts: dict[str, Artifact]):
-        super().__init__(str(cause) or cause.__class__.__name__)
+        super().__init__(str(cause) or cause.__class__.__name__, key=getattr(cause, "key", None) or None,
+                         **(getattr(cause, "values", None) or {}))
         self.artifacts = artifacts
 
 
@@ -200,17 +201,18 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     """
     p, pdir, period = job.project, Path(job.pdir), job.period
     if p.aoi is None or p.grid is None:
-        raise ValueError("the project needs an AOI and a grid before a download")
+        raise ProjectRuleError("the project needs an AOI and a grid before a download", key="errors.no_aoi_or_grid")
     src = p.sources[job.source]
     win_start, win_end = period.search_window(p.look_back_days)
     state, notes = window_coverage(record_for(p, job.source), job.source, win_start, win_end)
     if state in BLOCKED:
         raise CoverageRefused(job.source, state, notes)
     if src.kind == "custom" and src.native is None:
-        raise ValueError(f"{job.source}: its native grid is unknown; edit the source")
+        raise ProjectRuleError(f"{job.source}: its native grid is unknown; edit the source",
+                               key="errors.source_native_unknown", source=job.source)
     missing = user_file_missing(src)
     if missing:
-        raise FileNotFoundError(f"file not found: {missing}")
+        raise UserFileMissing(f"file not found: {missing}", path=str(missing))
     file_source = is_file_source(src)
     rkey, hkey = raw_key(period.id, job.source), harm_key(period.id, job.source)
     harm_path = paths.harmonized_path(pdir, period.id, job.source, win_start, win_end)
@@ -220,7 +222,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     downloading = job.force or status(p, pdir, rkey, raw_in) in (Status.MISSING, Status.STALE)
     # Before the AOI raster and the free-space gates, so a NotEnoughSpaceError cannot hide it.
     if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
-        raise ValueError("GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment")
+        raise ProjectRuleError(
+            "GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment",
+            key="errors.bands_not_loaded", source="GLAD-L")
     # Every precondition of the harmonize is checked before a download (spec §7.3).
     _require_masks_ready(p, pdir, period, job.source)
     if file_source:
@@ -296,7 +300,7 @@ def run_mask_row(job: MaskJob, *, on_tiles=None, on_wait=None) -> dict[str, Arti
     """
     p, pdir, name = job.project, Path(job.pdir), job.name
     if p.aoi is None or p.grid is None:
-        raise ValueError("the project needs an AOI and a grid before a mask runs")
+        raise ProjectRuleError("the project needs an AOI and a grid before a mask runs", key="errors.no_aoi_or_grid")
     m = p.masks[name]
     missing = mask_file_missing(m)
     if missing:

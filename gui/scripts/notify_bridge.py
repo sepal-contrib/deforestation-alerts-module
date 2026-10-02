@@ -33,6 +33,8 @@ import sys
 import threading
 from contextlib import contextmanager
 
+from gui.scripts.error_text import error_text
+
 _LOGGER_NAME = "SEPALUI.deforestation_alerts"
 
 ERROR_TOAST_TIMEOUT = 10.0
@@ -146,7 +148,8 @@ def tracked_job(notifier, title: str, total_steps=None, error_format=None):
     mounted still leaves a trail in the server log.
 
     ``error_format`` (``Callable[[Exception], str]``) turns a failure into the
-    user-facing message; without it the raw ``str(exc)`` is used. On failure the
+    user-facing message; without it, ``error_text`` (a keyed error in the
+    user's language, any other error as its own text). On failure the
     task is marked FAILED with that message *before* the toast is published:
     pysepal's ``_TaskTrackerContextManager.__exit__`` only raises its own
     bare-exception toast while the task is not already FAILED, so failing first
@@ -167,9 +170,7 @@ def tracked_job(notifier, title: str, total_steps=None, error_format=None):
                 raise  # pysepal's __exit__ marks the task CANCELLED; not a failure
             except Exception as exc:
                 try:
-                    message = (
-                        error_format(exc) if error_format is not None else str(exc)
-                    )
+                    message = (error_format or error_text)(exc)
                 except Exception:  # a broken formatter must never mask the real failure
                     logging.getLogger(_LOGGER_NAME).exception("error_format failed")
                     message = str(exc)

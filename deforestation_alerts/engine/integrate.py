@@ -42,6 +42,7 @@ from deforestation_alerts.engine.raster_io import (
     BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, write_grid_raster,
 )
 from deforestation_alerts.engine.vectorize import vectorize_alerts
+from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, set_id as make_set_id,
@@ -258,19 +259,20 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     p, pdir, period = job.project, Path(job.pdir), job.period
     sources = sorted(job.sources, key=str.casefold)
     if not job.sources or len(set(job.sources)) != len(job.sources):
-        raise ValueError("choose at least one source, each once")
+        raise ProjectRuleError("choose at least one source, each once", key="errors.no_sources")
     if job.params.area_mode == "drawn" and not job.params.area_geojson:
-        raise ValueError("the drawn area mode needs a drawn polygon")
+        raise ProjectRuleError("the drawn area mode needs a drawn polygon", key="errors.no_drawing")
     # Both stages must be current: a harmonized file whose raw download is out
     # of date (say, for an AOI changed since) holds the old inputs' alerts.
     rows = {row.source: row for row in plan_prepare(p, pdir, period)}
     for s in sources:
         row = rows.get(s)
         if row is None:
-            raise ValueError(f"{s} is not a source of this project")
+            raise ProjectRuleError(f"{s} is not a source of this project", key="errors.not_a_source", source=s)
         if not row.ready:
-            raise ValueError(f"{s} is not downloaded and harmonized for this period "
-                             f"(download {row.raw.value}, harmonized {row.harmonized.value})")
+            raise ProjectRuleError(f"{s} is not downloaded and harmonized for this period "
+                                   f"(download {row.raw.value}, harmonized {row.harmonized.value})",
+                                   key="errors.not_ready", source=s)
     inputs_fp = set_inputs(p, period, sources, job.params)
     sid = make_set_id(period.id, sources)
     sdir = paths.set_dir(pdir, period.id, sources)
@@ -297,7 +299,8 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     for s in earlier:
         art = p.artifacts.get(footprint_key(s.id))
         if art is None or not paths.resolve(pdir, art.rel_path).exists():
-            raise ValueError(f"the footprint of set {s.id} is missing; re-run that set first")
+            raise ProjectRuleError(f"the footprint of set {s.id} is missing; re-run that set first",
+                                   key="errors.footprint_missing", set_id=s.id)
         fp_paths.append(paths.resolve(pdir, art.rel_path))
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)

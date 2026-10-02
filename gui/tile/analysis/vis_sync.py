@@ -16,6 +16,7 @@ import threading
 from datetime import date
 
 from gui.i18n import t
+from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.vis_layers import builder, nicfi_month, nicfi_region
@@ -124,10 +125,10 @@ def wire(widgets, app_state, spawn=spawn_in_context):
                 builder(m, layer, key, project=project, aoi_bounds=bounds, shown=False)()
             except (PermissionError, FileNotFoundError) as exc:
                 logger.warning("Analysis: visualization layer %s not added: %s", key, exc)
-                return str(exc)
+                return error_text(exc)
             except Exception as exc:  # noqa: BLE001 - one layer must not stop the others
                 logger.exception("Analysis: visualization layer %s failed", key)
-                return str(exc) or exc.__class__.__name__
+                return error_text(exc)
         return None
 
     def _retry_failed(_value=None):

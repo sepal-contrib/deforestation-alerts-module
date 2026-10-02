@@ -39,6 +39,7 @@ from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import AlertSetParams
 from gui.i18n import t
 from gui.scripts import set_store
+from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import STATUS_CLASSES
 from gui.scripts.notify_bridge import tracked_job
 from gui.store.project_writers import writing
@@ -159,7 +160,7 @@ def _build_tiles(job, result, notifier) -> None:
     except Exception as exc:  # noqa: BLE001 - the set's files are in place: it must still be recorded
         logger.exception("could not build the map tiles of set %s", result.alert_set.id)
         if notifier is not None:
-            notifier.warning(t("steps.integrate.tiles_failed", error=str(exc) or exc.__class__.__name__))
+            notifier.warning(t("steps.integrate.tiles_failed", error=error_text(exc)))
 
 
 def _record_in_own_project(job, result) -> None:
