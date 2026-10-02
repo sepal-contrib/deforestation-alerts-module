@@ -789,3 +789,92 @@ def test_installing_a_project_turns_show_earlier_off(ov, tmp_path):
         assert rc.find(v.Switch).widget.v_model is False and not layers.is_on(f"overview:set:{dec.id}")
     finally:
         rc.close()
+
+
+NOV = Period(id="2025-11-01_2025-11-30", start=date(2025, 11, 1), end=date(2025, 11, 30))
+#: the real tile build: the ``ov`` fixture stands in for it once a test starts
+_REAL_ENSURE = set_store.ensure_pmtiles
+
+
+def test_earlier_sets_blocked_by_a_writer_get_their_tiles_once_it_is_done(ov, tmp_path, monkeypatch):
+    """Spec §9.2: two earlier sets with stale tiles race for the project's
+    writer mark (each build takes it for its tippecanoe run). The one that
+    loses stands in with points, silently, and is rebuilt as tiles once the
+    writer is done: both end as tiles."""
+    from deforestation_alerts.engine import pmtiles as pmt
+
+    def tippecanoe(alerts, pm, *, guard=None):
+        if ov.jobs:  # the sibling's build runs while this one holds the mark
+            ov.run_jobs()
+        if guard is not None:
+            guard()
+        pm.write_bytes(b"PMTiles")
+        return pm
+
+    monkeypatch.setattr(pmt, "tippecanoe_available", lambda: True)
+    monkeypatch.setattr(pmt, "alerts_to_pmtiles", tippecanoe)
+    p = _project(tmp_path)
+    dec, nov = _other_set(p, tmp_path, DEC), _other_set(p, tmp_path, NOV)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()  # the active set's layer (stand-in tiles)
+        monkeypatch.setattr(set_store, "ensure_pmtiles", _REAL_ENSURE)
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        for e in (dec, nov):
+            key = f"overview:set:{e.id}"
+            assert layers.is_on(key) and isinstance(map_.find_layer(key, none_ok=True), ipyleaflet.TileLayer)
+        tiled = [key for _, key, _ in ov.drawn if key.startswith("overview:set:")]
+        assert sorted(tiled) == sorted(f"overview:set:{e.id}" for e in (dec, nov))
+        assert _toasts(ov, "warning") == [] and _toasts(ov, "error") == []
+    finally:
+        rc.close()
+
+
+def test_an_empty_earlier_set_has_no_tiles(ov, tmp_path):
+    p = _project(tmp_path)
+    dec = _other_set(p, tmp_path, DEC)
+    path = tmp_path / p.name / dec.store_rel_path
+    gpd.read_parquet(path).iloc[0:0].to_parquet(path)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        assert (p.name, dec.id) not in ov.ensured
+        layer = map_.find_layer(f"overview:set:{dec.id}", none_ok=True)
+        assert isinstance(layer, ipyleaflet.GeoJSON) and layer.data["features"] == []
+    finally:
+        rc.close()
+
+
+def test_an_earlier_sets_alerts_are_let_go_when_it_is_no_longer_shown(ov, tmp_path, monkeypatch):
+    """Deviation 2: the alerts loaded for the hit test do not outlive the layer."""
+    import gc
+    import weakref
+
+    loaded = []
+    real = set_store.load_set_alerts
+
+    def load(p, s):
+        gdf = real(p, s)
+        loaded.append(weakref.ref(gdf))
+        return gdf
+
+    monkeypatch.setattr(set_store, "load_set_alerts", load)
+    p = _project(tmp_path)
+    _other_set(p, tmp_path, DEC)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Switch).widget.v_model = True
+        ov.run_jobs()
+        gc.collect()
+        assert [ref() is not None for ref in loaded] == [True]
+        rc.find(v.Switch).widget.v_model = False
+        gc.collect()
+        assert [ref() is not None for ref in loaded] == [False]
+    finally:
+        rc.close()

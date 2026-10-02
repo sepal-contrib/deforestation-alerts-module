@@ -309,3 +309,28 @@ def test_a_set_whose_store_cannot_be_read_is_reported(loader, monkeypatch):
 
     assert loader.state.alerts_gdf.value is None
     assert len(toasts) == 1 and "disk gone" in toasts[0]
+
+
+def test_a_go_into_a_set_whose_load_fails_is_forgotten(loader, monkeypatch):
+    """Overview's Go into a set whose store cannot be read: the wish is
+    dropped with the failure, so a later publish of that set opens at its
+    saved position, not at the alert of the failed Go."""
+    from pysepal.solara.notifications.notifier import Notifier
+
+    monkeypatch.setattr(Notifier, "error", lambda self, message, **kw: None)
+    p = _project("a", loader.root, n=3)
+    other = _alert_set(last=2).model_copy(update={"id": "per2__glad-l", "period_id": "per2"})
+    p.alert_sets[other.id] = other
+    loader.state.load_project_state(p)
+    loader.settle()
+
+    real = set_store.load_active_alerts
+    monkeypatch.setattr(set_store, "load_active_alerts", lambda p: (_ for _ in ()).throw(OSError("disk gone")))
+    assert set_store.go_to_alert(loader.state, "a", other.id, 0, 0)
+    loader.settle()
+    assert loader.state.goto_alert.value is None
+
+    monkeypatch.setattr(set_store, "load_active_alerts", real)
+    gdf = _alerts(3).assign(set_id=other.id)
+    assert set_store.publish_set_alerts(loader.state, "a", loader.state.project.value.alert_sets[other.id], gdf)
+    assert loader.state.actual_alert_id.value == 2

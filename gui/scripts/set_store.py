@@ -101,7 +101,9 @@ def go_to_alert(app_state, project_name: str, set_id: str, alert_id: int, positi
     Called from a click handler. The wish and the set switch are made under
     ``AppState``'s lock (re-entrant: ``update_project`` takes it too), as
     ``publish_set_alerts`` reads them: a publish of the previous active set in
-    between would otherwise take the wish for its own and drop it."""
+    between would otherwise take the wish for its own and drop it. Under that
+    held lock the ``update_project`` below cannot fail: the project it checks
+    is the one just checked here."""
     with app_state._lock:
         live = app_state.project.value
         if live is None or live.name != project_name or set_id not in live.alert_sets:
@@ -110,11 +112,19 @@ def go_to_alert(app_state, project_name: str, set_id: str, alert_id: int, positi
             app_state.actual_alert_id.value = position
         else:
             app_state.goto_alert.set((set_id, int(alert_id)))
-            if not app_state.update_project(project_name, lambda p: setattr(p, "active_set", set_id)):
-                app_state.goto_alert.set(None)
-                return False
+            app_state.update_project(project_name, lambda p: setattr(p, "active_set", set_id))
     app_state.current_page_view.value = "analysis_tile"
     return True
+
+
+def drop_go_wish(app_state, set_id: str) -> None:
+    """Forget a Go into ``set_id`` (``goto_alert``) whose alerts will not be
+    published: their load failed. A later publish of that set then opens at
+    its saved position."""
+    with app_state._lock:
+        wish = app_state.goto_alert.value
+        if wish is not None and wish[0] == set_id:
+            app_state.goto_alert.set(None)
 
 
 def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = False) -> bool:

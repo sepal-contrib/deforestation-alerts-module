@@ -319,6 +319,9 @@ def _ActiveSetLoader(app_state, layers, map_):
             except Exception as exc:  # noqa: BLE001 - reported, the set stays unloaded
                 logger.exception("could not load the alerts of set %s", s.id)
                 if loads.current["run"] == run:
+                    # A Go into this set (Overview) will not land: forgotten,
+                    # so a later publish of the set opens at its saved position.
+                    set_store.drop_go_wish(app_state, s.id)
                     notifications.error(t("steps.project.set_load_failed", error=str(exc) or exc.__class__.__name__))
                 return
             if loads.current["run"] != run or _kept():

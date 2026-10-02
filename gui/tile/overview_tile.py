@@ -253,15 +253,13 @@ def _centroid_style_for(faded: bool):
     return _style
 
 
-_centroid_style = _centroid_style_for(False)
-
 
 #: The centroid layer's own style. It must be non-empty and carry no colour:
 #: ipyleaflet's GeoJSON view draws each feature with
 #: ``{...feature.properties.style, ...layer.style}``, so the layer's style wins,
 #: and ``SepalMap.add_layer`` gives a layer with an empty style pysepal's
 #: default (hollow, weight 2, the theme's primary colour), which would paint
-#: every point alike. The per-status colours come from ``_centroid_style``.
+#: every point alike. The per-status colours come from ``_centroid_style_for``.
 _CENTROID_LAYER_STYLE = {"stroke": True, "weight": 1, "opacity": 1, "fill": True, "fillOpacity": 0.9}
 
 
@@ -417,26 +415,43 @@ def OverviewTile(app_state, map_, layers):
     # by the click handler: keyed so that alerts of another project (set ids
     # repeat across projects) or of a rebuilt set are never hit-tested.
     earlier_alerts = solara.use_ref({})
+    # Earlier-set keys whose tiles were not built because the project was
+    # being written (often by a sibling's build): refreshed once it is free.
+    earlier_deferred = solara.use_ref(set())
+    # Bumped by each such refresh: MapLayers.refresh rebuilds only a new content id.
+    earlier_retry = solara.use_ref(0)
     earlier = earlier_of(p, s) if p is not None else []
     earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)
 
     def _earlier_build(project, e, key):
         name = earlier_set_name(e)
 
+        def _defer():
+            # As the active set's _defer: noted while the writer mark that
+            # blocked the build is still held, before its release re-runs
+            # _retry_earlier_when_free.
+            earlier_deferred.current.add(key)
+
         def build():
             if app_state.panel_view.value != OVERVIEW_VIEW:
                 return
+            earlier_deferred.current.discard(key)
             alerts = set_store.load_set_alerts(project, e)
             if alerts is None:
                 raise FileNotFoundError(t("steps.overview.earlier_missing", set=name))
             earlier_alerts.current[(project.name, e.id, e.fingerprint)] = alerts
-            try:
-                pm = set_store.ensure_pmtiles(project, e)
-            except set_store.StoreBusy:
-                pm = None  # the project is being written: the points stand in, silently
-            except Exception:  # noqa: BLE001 - the points stand in for the tiles
-                logger.exception("could not build the tiles of earlier set %s", e.id)
-                pm = None
+            pm = None
+            if len(alerts):  # spec §9.2: an empty set has no tiles
+                try:
+                    pm = set_store.ensure_pmtiles(project, e, on_wait=_defer)
+                except set_store.StoreBusy as exc:
+                    # The project is being written (an Integrate, a Save, a
+                    # sibling set's tile build): the points stand in, silently,
+                    # and the tiles are built once the writer is done.
+                    logger.info("tiles of earlier set %s not rebuilt now: %s", e.id, exc)
+                    _defer()
+                except Exception:  # noqa: BLE001 - the points stand in for the tiles
+                    logger.exception("could not build the tiles of earlier set %s", e.id)
             if app_state.panel_view.value != OVERVIEW_VIEW:
                 return
             if pm is not None:
@@ -461,6 +476,25 @@ def OverviewTile(app_state, map_, layers):
                         notifier=notifications, legend=earlier_set_legend(key, e))
 
     solara.use_effect(_sync_earlier, [active, show_earlier, p.name if p is not None else None, earlier_sig])
+
+    def _retry_earlier_when_free():
+        # spec §9.2: tiles skipped while the project was being written are
+        # built once the writer is done. Only the deferred keys are rebuilt,
+        # through ``refresh`` (a key switched off meanwhile stays off).
+        if busy or not earlier_deferred.current:
+            return
+        by_key = {f"{EARLIER_PREFIX}{e.id}": e for e in earlier}
+        for key in sorted(earlier_deferred.current):
+            earlier_deferred.current.discard(key)
+            e = by_key.get(key)
+            if e is None:
+                continue
+            earlier_retry.current += 1
+            layers.refresh(key, _earlier_build(p, e, key),
+                           f"{e.id}:{e.fingerprint}:{e.n_reviewed}:retry{earlier_retry.current}",
+                           legend=earlier_set_legend(key, e), notifier=notifications)
+
+    solara.use_effect(_retry_earlier_when_free, [busy])
 
     def _on_install():
         # The shell clears every layer when a project is installed (spec
