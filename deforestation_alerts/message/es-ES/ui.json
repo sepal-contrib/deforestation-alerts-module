@@ -44,6 +44,8 @@
       "confirmation_yes": "Sí",
       "confirmation_no": "No",
       "confirmation_revision": "Necesita revisión adicional",
+      "confirmation_missing": "Responde ¿Es verdadera la alerta? antes de guardar.",
+      "false_positive_drawn": "Un falso positivo no puede tener un polígono de deforestación dibujado: elimina el polígono o cambia la respuesta.",
       "loss_driver_label": "Causa de la pérdida",
       "loss_driver_hint": "Analizar causa de la pérdida",
       "loss_driver1": "Expansión agricola",
@@ -84,13 +86,18 @@
       "download_task_title": "Preparando la descarga de la alerta",
       "download_step": "Generando archivos e informe…",
       "download_done": "Descarga de la alerta lista.",
-      "download_no_recipe": "No hay ningún conjunto de alertas activo, así que no hay dónde guardar los archivos de la alerta en el proyecto. Ejecuta primero Integrate & vectorize.",
+      "download_no_recipe": "No hay ningún conjunto de alertas activo, así que no hay dónde guardar los archivos de la alerta en el proyecto. Ejecuta primero Integrar y vectorizar.",
       "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
       "download_no_images": "No hay imágenes de antes y después seleccionadas para esta alerta, así que no se pueden generar sus archivos. Elige primero una imagen de antes y otra de después.",
       "save_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que guardar.",
       "save_other_set": "Estas alertas pertenecen a otro conjunto de alertas distinto del activo, así que no se han guardado en él.",
       "save_set_changed": "El conjunto de alertas activo cambió durante el guardado, así que esta revisión no se ha guardado.",
-      "save_store_changed": "Este conjunto de alertas se reconstruyó mientras lo revisabas, así que las alertas en pantalla están desactualizadas y esta revisión no se ha guardado. Revisa las alertas reconstruidas."
+      "save_store_changed": "Este conjunto de alertas se reconstruyó mientras lo revisabas, así que las alertas en pantalla están desactualizadas y esta revisión no se ha guardado. Revisa las alertas reconstruidas.",
+      "report_template_label": "Plantilla de informe (.docx)",
+      "report_template_hint": "Todos los informes de este proyecto se generan a partir de este archivo Word. Déjalo vacío para usar la plantilla predeterminada de la aplicación.",
+      "report_template_no_project": "Abre un proyecto para elegir su plantilla de informe.",
+      "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
+      "report_template_missing": "La plantilla de informe {path} ha desaparecido. Vuelve a elegirla en la tarjeta de exportación, o deja el campo vacío para usar la plantilla predeterminada."
     }
   }
 }

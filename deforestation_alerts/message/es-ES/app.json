@@ -5,7 +5,13 @@
     "tile_failed": "El panel {tile} no se pudo mostrar ({error}). Recarga la página; los detalles están en el registro del servidor.",
     "drawer_item": {
       "about": "Acerca",
+      "project": "Proyecto",
       "aoi": "AOI",
+      "alerts": "Alertas",
+      "layers": "Capas opcionales",
+      "period": "Período",
+      "prepare": "Descargar y armonizar",
+      "integrate": "Integrar y vectorizar",
       "overview": "Resumen",
       "analysis": "Análisis"
     }

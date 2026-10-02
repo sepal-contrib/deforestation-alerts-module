@@ -30,9 +30,9 @@
       "status_completed": "completado",
       "status_failed": "fallido",
       "status_cancelled": "cancelado",
-      "status_stale": "out of date",
-      "status_missing": "missing",
-      "status_no_data": "no data",
+      "status_stale": "desactualizado",
+      "status_missing": "falta",
+      "status_no_data": "sin datos",
       "status_not_covered": "no cubierto",
       "status_unchecked": "sin comprobar"
     },
@@ -48,16 +48,16 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Select an area of interest first.",
+    "lock_alerts": "Selecciona primero un área de interés.",
     "lock_layers": "Seleccione primero un área de interés.",
-    "lock_period": "Add at least one alert source first.",
-    "lock_prepare": "Create or select a period first.",
-    "lock_integrate": "Download and harmonize at least one source first.",
-    "lock_analysis": "Run Integrate & vectorize first.",
+    "lock_period": "Añade primero al menos una fuente de alertas.",
+    "lock_prepare": "Crea o selecciona primero un período.",
+    "lock_integrate": "Descarga y armoniza primero al menos una fuente.",
+    "lock_analysis": "Ejecuta primero Integrar y vectorizar.",
     "count_sources": {
-      "one": "{count} source",
-      "many": "{count} sources",
-      "other": "{count} sources"
+      "one": "{count} fuente",
+      "many": "{count} fuentes",
+      "other": "{count} fuentes"
     },
     "count_layers": {
       "one": "{count} capa",
@@ -65,14 +65,14 @@
       "other": "{count} capas"
     },
     "count_periods": {
-      "one": "{count} period",
-      "many": "{count} periods",
-      "other": "{count} periods"
+      "one": "{count} período",
+      "many": "{count} períodos",
+      "other": "{count} períodos"
     },
     "count_ready": {
-      "one": "{count} ready",
-      "many": "{count} ready",
-      "other": "{count} ready"
+      "one": "{count} lista",
+      "many": "{count} listas",
+      "other": "{count} listas"
     },
     "count_alerts": {
       "one": "{count} alerta",

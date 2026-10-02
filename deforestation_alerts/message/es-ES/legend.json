@@ -1,0 +1,36 @@
+{
+  "legend": {
+    "alert": {
+      "confirmed": "Confirmada (confianza alta)",
+      "probable": "Probable (confianza baja)"
+    },
+    "status": {
+      "not_reviewed": "No revisada",
+      "confirmed": "Revisada: confirmada",
+      "false_positive": "Revisada: falso positivo",
+      "needs_revision": "Revisada: necesita revisión"
+    },
+    "mask": {
+      "keep": "Área conservada: se eliminan las alertas fuera de ella",
+      "exclude": "Área excluida: se eliminan las alertas dentro de ella",
+      "off": "No usada en este período"
+    },
+    "title": {
+      "preview": "{source} · vista previa {start} → {end}",
+      "harmonized": "{source} · {start} → {end}",
+      "mask": "Máscara {name}",
+      "set": "Alertas · {period} · {sources}",
+      "earlier_set": "Conjunto anterior · {period}"
+    },
+    "name": {
+      "preview": "{source} · vista previa",
+      "harmonized": "{source} · {start} → {end}",
+      "mask": "Máscara {name}",
+      "earlier_set": "Conjunto anterior · {period} · {sources}"
+    },
+    "vis": {
+      "rgb": "Compuesto RGB de {bands}, {min}–{max}",
+      "nicfi": "Planet NICFI {month}, color real"
+    }
+  }
+}
