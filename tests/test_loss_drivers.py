@@ -27,7 +27,9 @@ def test_a_review_made_in_another_language_stores_codes(locale, code):
     widgets = SimpleNamespace()
     build_review_panel(widgets, None, None, None)
     combobox = widgets.driver_combobox
-    assert combobox.v_model == ["other"]
+    assert combobox.return_object  # Vuetify 2 draws a chip from the value itself
+    assert combobox.v_model == [{"text": loss_drivers.label("other"), "value": "other"}]
+    assert loss_drivers.encode(combobox.v_model) == "other"
     values = [item["value"] for item in combobox.items]
     assert values == [c for c, _ in loss_drivers.DRIVERS]
     assert loss_drivers.encode(["logging", "mining", "other"]) == "logging, mining, other"
@@ -64,3 +66,35 @@ def test_an_export_shows_the_drivers_in_its_language(locale):
     assert gdf["description"].tolist()[0] == "logging, mining"  # the store's frame is untouched
     locale("fr")
     assert loss_drivers.label("logging, other") == "Bûcherie, Autre"
+
+
+@pytest.mark.parametrize("code, chips", [
+    ("en", ["Logging", "Roads"]),
+    ("es-ES", ["Tala", "Roads"]),
+    ("fr", ["Bûcherie", "Roads"]),
+])
+def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypatch, locale, code, chips):
+    """The chips show labels, never codes (final re-review, Important 1): a
+    reviewed alert's drivers come back as items, free text as typed, and a
+    re-save stores the same codes."""
+    from tests.test_analysis_alert_info import _alerts, _state, _wire
+
+    locale(code)
+    s = _state(tmp_path, monkeypatch)
+    widgets = _wire(s)
+    build_review_panel(widgets, None, None, None)
+    gdf = _alerts(2)
+    gdf["description"] = ["logging, Roads", None]
+    s.alerts_gdf.set(gdf)  # alert 0 is selected and drawn
+
+    selected = widgets.driver_combobox.v_model
+    assert [c["text"] if isinstance(c, dict) else c for c in selected] == chips
+    assert loss_drivers.encode(selected) == "logging, Roads"  # a re-save keeps the codes
+    typed = selected + ["Dams"]  # the user types free text next to the chips
+    assert loss_drivers.encode(typed) == "logging, Roads, Dams"
+
+
+def test_selection_is_items_and_free_text(locale):
+    locale("fr")
+    assert loss_drivers.selection("Logging, Roads") == [{"text": "Bûcherie", "value": "logging"}, "Roads"]
+    assert loss_drivers.selection(None) == []

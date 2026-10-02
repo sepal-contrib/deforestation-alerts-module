@@ -64,11 +64,13 @@ def build_review_panel(
         chips=True,
     )
     # Codes as values (``loss_drivers.DRIVERS``), labels as text: the store gets
-    # the codes, whatever the language the widgets were built in.
+    # the codes, whatever the language the widgets were built in. Objects in
+    # and out: Vuetify 2's combobox draws a chip from the selected value itself
+    # (a bare code would read "agriculture_expansion"); typed text stays a string.
     driver_combobox = sw.Combobox(
         items=drivers.items(),
-        v_model=[drivers.DEFAULT],
-        return_object=False,
+        v_model=drivers.selection(drivers.DEFAULT),
+        return_object=True,
         label=t("analysis_tile.questionarie.loss_driver_hint"),
         multiple=True,
         clearable=True,

@@ -75,6 +75,7 @@ from gui.tile.analysis.imagery import build_imagery
 from gui.tile.analysis.navigator import build_navigator
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
+from gui.scripts import loss_drivers as drivers
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
@@ -170,6 +171,13 @@ def view_actual_alert(
 
     # --- alert-info card (source / dates / status) ---
     fecha1, fecha2 = refresh_alert_info(widgets, app_state)
+
+    # --- a reviewed alert shows its stored loss drivers, in this language
+    # (the codes, read back; a re-save stores them again as codes) ---
+    stored = drivers.selection(alerta.get("description"))
+    combobox = getattr(widgets, "driver_combobox", None)
+    if stored and combobox is not None:
+        combobox.v_model = stored
 
     # --- sync the nav id field ---
     id_field.v_model = alert_id

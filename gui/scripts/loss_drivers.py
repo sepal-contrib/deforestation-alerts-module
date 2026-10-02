@@ -40,6 +40,15 @@ def items() -> list:
     return [{"text": t(key), "value": code} for code, key in DRIVERS]
 
 
+def selection(stored) -> list:
+    """A stored description as the combobox's ``v_model``: a known driver as
+    its item (the chip shows the label in the current language), free text as
+    typed. The combobox returns objects (``return_object=True``): Vuetify 2's
+    combobox draws a chip from the selected value itself, so a bare code
+    would show as "agriculture_expansion"."""
+    return [{"text": t(_KEYS[c]), "value": c} if c in _KEYS else c for c in codes(stored)]
+
+
 @lru_cache(maxsize=1)
 def _label_codes() -> dict:
     """Every shipped label of every driver (any locale, case-folded) → its code."""
