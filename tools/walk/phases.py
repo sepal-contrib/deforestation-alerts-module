@@ -66,8 +66,8 @@ def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_d
     t_run = now_ms(page)
     run.click()
     t0 = time.time()
-    wait_for(lambda: prepare_state(page)["running"] or "run 0 pending" in panel_text(page).lower(), 30, "the job to start",
-             poll=0.3)
+    wait_for(lambda: prepare_state(page)["running"] or "run 0 pending" in panel_text(page).lower(), 30,
+             "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page)
         if st["ready"] >= expect_ready and not st["running"]:
