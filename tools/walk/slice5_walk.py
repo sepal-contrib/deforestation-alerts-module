@@ -32,8 +32,10 @@ AMAZON = (-55.10, -10.10, -55.00, -10.00)
 # alert of the box lies in tree cover 2000 (and in Hansen's lossyear, and in
 # JRC GFC2020), so Exclude empties the second month's set. July / August 2025
 # have the most clustered alerts, and a mask of the box's south half (a
-# GeoTIFF, lat < -10.05) splits them: kept, July has 15 clustered pixels;
-# excluded, August has 80 (checked on Earth Engine, 2026-10-02).
+# GeoTIFF, lat < -10.05) splits them: kept, July has 15 clustered pixels
+# (checked on Earth Engine, 2026-10-02). August switches the mask off, so its
+# window (from 2 July, look-back 30 days) holds July's alerts again: the
+# footprint of July's set is what keeps them out of August's set.
 CUT = -10.05
 JUNE, JULY = "2025-07-01_2025-07-31", "2025-08-01_2025-08-31"  # the first and the second month
 JUNE_ROW, JULY_ROW = "2025-07-01 → 2025-07-31", "2025-08-01 → 2025-08-31"
@@ -112,14 +114,23 @@ def b_second_period(page, rec, *, out):
     panel = w.panel_text(page)
     assert panel.index(JULY_ROW) < panel.index(JUNE_ROW), "July is not listed first"
     assert ph.row_button(page, JULY_ROW, "mdi-radiobox-marked").count(), "July is not the selected period"
+    p = ph.manifest(DATA, PROJECT)  # the new period copied the latest period's mask choices
+    rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
+    assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
     w.goto_step(page, "prepare", 2000)
     mask_row = ph.row(page, "south")
     rec["july_mask_row"] = ph.row_text(page, "south")
     assert mask_row.locator(".v-input--switch.v-input--is-label-active").count() and "Keep" in rec["july_mask_row"], \
         rec["july_mask_row"]
     t1 = w.now_ms(page)
-    ph.row_mode(page, "south", "Exclude")
+    ph.row_switch(page, "south")  # off in August only
     ph.wait_toast(page, t1, "This period's sources are out of date")
+    w.wait_for(lambda: not ph.manifest(DATA, PROJECT)["periods"][JULY]["masks"]["south"]["on"], 30,
+               "the switch saved")
+    p = ph.manifest(DATA, PROJECT)
+    assert p["periods"][JUNE]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JUNE]["masks"]
+    # the switch in August leaves July's set current: no stale banner on it, no
+    # out-of-date badge on July's row
     overview(page)  # June's set is still the active one
     rec["overview_after_switch"] = w.panel_text(page)[:600]
     assert SET_STALE not in w.panel_text(page), rec["overview_after_switch"]
@@ -127,12 +138,13 @@ def b_second_period(page, rec, *, out):
     w.goto_step(page, "period", 2000)
     rec["june_row_after_switch"] = ph.row_text(page, JUNE_ROW)
     assert "out of date" not in rec["june_row_after_switch"], rec["june_row_after_switch"]
-    ph.run_all(page, rec, out=out, expect_ready=3, shot_name="july_ready")
+    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="july_ready")  # GLAD-L's two cells
     ph.integrate_and_land(page, rec, out=out)
     p = ph.manifest(DATA, PROJECT)
-    assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "exclude"}}, p["periods"][JULY]["masks"]
-    assert p["periods"][JUNE]["masks"]["south"]["mode"] == "keep", p["periods"][JUNE]["masks"]
+    assert p["periods"][JULY]["masks"] == {"south": {"on": False, "mode": "keep"}}, p["periods"][JULY]["masks"]
+    assert p["periods"][JUNE]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JUNE]["masks"]
     (july,) = sets_of(JULY)
+    assert july["masks_used"] == [], july["masks_used"]
     rec["july_set"], rec["july_alerts"], rec["july_footprint_from"] = july["id"], july["n_alerts"], july["footprint_from"]
     SEEN["july_set"] = july["id"]
     assert SEEN["june_set"] in july["footprint_from"], july["footprint_from"]
@@ -144,10 +156,25 @@ def c_no_repeat(page, rec, *, out):
             rasterio.open(DATA / PROJECT / july["footprint_rel_path"]) as b:
         fa, fb = a.read(1).astype(bool), b.read(1).astype(bool)
     rec["june_footprint_px"], rec["july_footprint_px"] = int(fa.sum()), int(fb.sum())
+    # Precondition: August's harmonized GLAD-L (mask off, window from 2 July)
+    # has alert pixels inside July's footprint, so a zero overlap below is the
+    # footprint at work, not two disjoint inputs.
+    p = ph.manifest(DATA, PROJECT)
+    art = next(a for k, a in p["artifacts"].items() if k.startswith(f"harm:{JULY}:") and k.endswith(":GLAD-L"))
+    with rasterio.open(DATA / PROJECT / art["rel_path"]) as r:
+        harm = r.read(1) > 0
+    assert harm.shape == fa.shape, (harm.shape, fa.shape)
+    rec["august_input_in_july_footprint_px"] = int((harm & fa).sum())
+    assert rec["august_input_in_july_footprint_px"] > 0, "August's input has no alert in July's footprint"
     rec["overlap"] = int((fa & fb).sum())
     assert rec["overlap"] == 0, f"{rec['overlap']} pixels reported by both months"
+    # Informative only: August's alerts whose first date falls before 1 August
+    # (in the look-back window). They are pixels July's set did not report
+    # (the overlap is 0): mostly north of the cut, which July's mask kept out.
     alerts = gpd.read_parquet(DATA / PROJECT / july["store_rel_path"])
-    rec["late_alerts"] = int((alerts["alert_date_min"].astype(float) < JULY_FIRST_DAY).sum())  # informative only
+    early = alerts[alerts["alert_date_min"].astype(float) < JULY_FIRST_DAY]
+    rec["august_alerts_dated_before_august"] = len(early)
+    rec["of_which_north_of_cut"] = int((early.to_crs("EPSG:4326").geometry.representative_point().y > CUT).sum())
 
 
 def d_rules(page, rec, *, out):
@@ -203,7 +230,10 @@ def e_sets(page, rec, *, out):
     page.wait_for_timeout(1500)
     _, x, y = w.lonlat_to_screen(page, point.x, point.y)
     page.mouse.click(x, y)
-    w.wait_for(lambda: page.locator(".leaflet-popup-content:visible").count(), 30, "the alert popup")
+    w.wait_for(lambda: "Alert " in (page.locator(".leaflet-popup-content:visible").first.inner_text()
+                                    if page.locator(".leaflet-popup-content:visible").count() else ""),
+               30, "the alert popup's content")
+    page.wait_for_timeout(500)
     rec["popup"] = page.locator(".leaflet-popup-content:visible").first.inner_text()
     w.shot(page, out, "earlier_popup")
     assert f"Earlier set · {JUNE} · GLAD-L" in rec["popup"], rec["popup"]
@@ -320,7 +350,7 @@ def main(argv=None):
             browser.close()
         with open(args.out / "report.json", "w") as f:
             json.dump(report, f, indent=1, ensure_ascii=False, default=str)
-        ok = ok and not report["error_toasts"]
+        ok = ok and not report["error_toasts"] and not report["bad_responses"]
     finally:
         w.stop_server(proc)
     print("WALK", "PASS" if ok else "FAIL", args.out / "report.json")
