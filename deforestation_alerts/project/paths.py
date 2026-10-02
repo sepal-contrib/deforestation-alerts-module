@@ -36,6 +36,23 @@ def aoi_raster_path(pdir: Path) -> Path:
     return Path(pdir) / "masks" / "aoi.tif"
 
 
+def imagery_dir(pdir: Path) -> Path:
+    """``<pdir>/imagery``: the project-wide scene index, shared by every period and set."""
+    return Path(pdir) / "imagery"
+
+
+def scenes_path(pdir: Path) -> Path:
+    return imagery_dir(pdir) / "scenes.parquet"
+
+
+def tiles_path(pdir: Path) -> Path:
+    return imagery_dir(pdir) / "tiles.parquet"
+
+
+def scene_manifest_path(pdir: Path) -> Path:
+    return imagery_dir(pdir) / "index.json"
+
+
 def mask_raw_path(pdir: Path, mask_name: str) -> Path:
     return Path(pdir) / "masks" / "raw" / f"mask_{safe_token(mask_name)}.tif"
 
