@@ -3,6 +3,7 @@
 cleared outside the AOI raster, on-pixels counted."""
 
 import numpy as np
+import pytest
 import rasterio
 from affine import Affine
 
@@ -70,3 +71,16 @@ def test_a_mask_that_misses_the_grid_has_no_on_pixels(tmp_path):
                        transform=Affine(10, 0, 900000, 0, -10, 8000000)) as dst:
         dst.write(np.ones((10, 10), "uint8"), 1)
     assert masks.align_mask(far, GRID, tmp_path / "m.tif") == {"on_pixels": 0}
+
+
+@pytest.mark.parametrize("shift", [(0, 0, 5), (10, 0, 0)], ids=["other-shape", "other-origin"])
+def test_an_aoi_raster_off_the_grid_is_refused(tmp_path, shift):
+    """A different shape would not broadcast; a shifted origin would clip in the wrong place."""
+    dx, dy, dw = shift
+    other = GRID.model_copy(update={"xmin": GRID.xmin + dx, "ymax": GRID.ymax + dy, "width": GRID.width + dw})
+    with raster_io.write_grid_raster(tmp_path / "aoi.tif", other, count=1) as dst:
+        dst.write(np.ones((other.height, other.width), "int32"), 1)
+    on = _tif(tmp_path / "on.tif", [np.ones((GRID.height, GRID.width))], "uint8")
+    with pytest.raises(raster_io.GridMismatchError):
+        masks.align_mask(on, GRID, tmp_path / "m.tif", aoi_raster=tmp_path / "aoi.tif")
+    assert not list(tmp_path.glob("m.tif*"))

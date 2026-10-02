@@ -26,7 +26,13 @@ from shapely.geometry import box
 
 from deforestation_alerts.engine.align import reproject_to_grid
 from deforestation_alerts.engine.download import estimate_native_bytes
-from deforestation_alerts.engine.raster_io import build_nearest_overviews, part_file, tile_windows, write_grid_raster
+from deforestation_alerts.engine.raster_io import (
+    build_nearest_overviews,
+    check_header,
+    part_file,
+    tile_windows,
+    write_grid_raster,
+)
 from deforestation_alerts.project.models import GridSpec
 from deforestation_alerts.scripts.gee_progress import geedim_download_wait, geedim_tile_progress
 from deforestation_alerts.scripts.raster_export import download_ee_image, export_bounds
@@ -128,7 +134,12 @@ def align_mask(src_path, grid: GridSpec, out_path, *, band: int = 1, aoi_raster=
     """``src_path``'s ``band`` on the grid as Int32 0/1 (spec §7.2), nearest
     overviews, header-checked; cleared outside ``aoi_raster`` when given (a
     GeoTIFF mask: an Earth Engine download is clipped already). Returns
-    ``{"on_pixels": n}``, the on-pixels left on the grid."""
+    ``{"on_pixels": n}``, the on-pixels left on the grid. An ``aoi_raster``
+    off the grid raises ``raster_io.GridMismatchError`` before anything is
+    written (a different shape would not broadcast; a shifted origin would
+    clip in the wrong place)."""
+    if aoi_raster is not None:
+        check_header(aoi_raster, grid)
     on_pixels = 0
     with part_file(Path(out_path), grid) as part:
         reproject_to_grid(src_path, grid, part, band=band, pixel_hook=mask_on_pixels)
