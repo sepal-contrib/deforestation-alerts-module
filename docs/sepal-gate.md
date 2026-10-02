@@ -1,21 +1,36 @@
 # SEPAL gate (spec §13, §14)
 
-Run this in a SEPAL sandbox (test.sepal.io or sepal.io) with the branch
-`feat/alert-monitoring-slices2-6` checked out and the module's environment
-(`sepal_environment.yml`, kernel `venv-deforestation-alerts-module`). It has two
-parts: the app in a real browser through SEPAL's proxy, and one national-scale
-measurement. Record the results at the end of this file and in the slice-1
-plan's "Slice 1 measurement" section
-(`docs/superpowers/plans/2026-09-30-slice1-foundation.md`, in the main
-checkout; the plans are not committed on this branch).
+Run this in a SEPAL sandbox (test.sepal.io or sepal.io). It has two parts:
+the app in a real browser through SEPAL's proxy, and one national-scale
+measurement. Record the results at the end of this file.
+
+## 0. Set up the branch in the sandbox
+
+The SEPAL apps page launches the published release, not this branch, so run
+the branch from your own checkout. First make the branch reachable from SEPAL
+(push `feat/alert-monitoring-slices2-6` to a remote you can clone, or copy the
+checkout into your SEPAL home). Then, in a sandbox terminal:
+
+```bash
+git clone -b feat/alert-monitoring-slices2-6 <your remote> ~/defo-alerts-gate
+cd ~/defo-alerts-gate
+micromamba create -y -n defo-alerts -f sepal_environment.yml   # once
+micromamba activate defo-alerts
+```
+
+Every command below runs in that environment, from `~/defo-alerts-gate`. The
+app and the measurement write under `DATA_DIR`, which is
+`$DEFORESTATION_ALERTS_DATA_DIR` if set, else `~/module_results/deforestation_alerts`.
 
 ## 1. The app through `/api/sandbox/jupyter/proxy/<port>`
 
-1. Open `ui.ipynb` with Voila from the SEPAL apps page (or the sandbox's Jupyter),
-   and keep the browser's developer tools open on the Network tab.
+1. Start the app with `./run_ui.sh --port <port>` (it renders `ui.ipynb` with
+   Voila), and open it through the sandbox's proxy at
+   `/api/sandbox/jupyter/proxy/<port>/voila/render/ui.ipynb`. Keep the browser's
+   developer tools open on the Network tab.
 2. Create a project on a small AOI (one district), add GLAD-L, create a period
    of one recent month, then in Download & harmonize: the grid's ⌖ button (the AOI's UTM
-   zone) at 30 m, **Save grid**, **Run all**.
+   zone) at 30 m, **Save grid**, **Run 1 pending**.
 3. Show the harmonized GLAD-L row on the map. Expected: tile requests to
    `/api/sandbox/jupyter/proxy/<port>/api/tiles/...` answer **200** and the
    raster draws, with its legend.
@@ -41,7 +56,7 @@ python scripts/measure_prepare.py --level 0 --admin 194 --start 2026-01-01 --end
 `<DATA_DIR>/_measure`; it needs about 7 GB free per Download & harmonize row
 and about 13 GB for Integrate.) The script first checks the AOI's coverage
 (one Earth Engine request, printed per source) and skips a source the runner
-refuses ("RADD: skipped, not_covered" where RADD does not reach), as Run all
+refuses ("RADD: skipped, not_covered" where RADD does not reach), as the app's Run button
 does. Copy the printed coverage, grid size, per-source wall time, raw and
 harmonized sizes, harmonize-phase peak RSS, whole-run peak RSS and the
 Integrate line. Delete `<DATA_DIR>/_measure` afterwards.
