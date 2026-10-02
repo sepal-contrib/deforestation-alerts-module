@@ -23,13 +23,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _shell_component(name):
     """Compile ``name`` from gui/solara_app.py with the names it reads."""
+    from pysepal.i18n import current_locale
+
     from gui.i18n import t
     from gui.store.workflow_steps import RAIL_ITEMS, rail_item_for_step
 
     tree = ast.parse((ROOT / "gui" / "solara_app.py").read_text())
     node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
     ns = {"solara": solara, "STEPS": STEPS, "RAIL_ITEMS": RAIL_ITEMS,
-          "rail_item_for_step": rail_item_for_step, "t": t}
+          "rail_item_for_step": rail_item_for_step, "t": t, "current_locale": current_locale}
     exec(compile(ast.Module(body=[node], type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]
 
@@ -114,3 +116,36 @@ def test_leaving_analysis_shows_the_shared_map_before_hiding_the_stage(bridge, l
         leave(bridge.state)
         assert bridge.ops == [("map", "-defo-map-hidden"), ("stage", "hide")]
         assert not bridge.stage.visible and "defo-map-hidden" not in bridge.map.classes
+
+
+def test_a_language_switch_on_overview_keeps_the_overview_title():
+    """MapApp copies the (re-translated) Workflow config onto the right panel
+    when the app re-renders for a new language; the bridge must put the
+    showing view's title and icon back afterwards."""
+    from pysepal.i18n import set_locale
+
+    from gui.i18n import t
+    from gui.store.workflow_steps import RAIL_ITEMS
+
+    overview = next(r for r in RAIL_ITEMS if r.key == "overview")
+    panel = SimpleNamespace(config={})
+    state = AppState()
+    workflow_config = {"title": "Workflow", "icon": "mdi-tune", "width": 400}
+    component = _shell_component("_PanelBridge")
+    set_locale("en")
+    _, rc = reacton.render(
+        component(app_state=state, panel_wrappers={s.key: SimpleNamespace(style_="") for s in STEPS},
+                  header_wrapper=SimpleNamespace(style_=""), stage_host=_Stage([]), map_=_Map([]),
+                  mapapp_ref={"widget": SimpleNamespace(right_panel=[panel])},
+                  workflow_config=workflow_config),
+        handle_error=False,
+    )
+    try:
+        state.panel_view.set("overview")
+        assert panel.config["title"] == t(overview.label_key)
+        panel.config = {**workflow_config}  # MapApp's prop sync on the language re-render
+        set_locale("fr")
+        assert panel.config == {**workflow_config, "title": t(overview.label_key), "icon": overview.icon}
+    finally:
+        set_locale("en")
+        rc.close()

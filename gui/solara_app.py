@@ -179,11 +179,15 @@ def _PanelBridge(
     showing step, spec §4.3.)
 
     A leaf component (same reason as ``_NavBridge``). Runs whenever
-    ``panel_view`` or ``active_step`` change, whoever set them (header click,
-    rail click, navigation bridge).
+    ``panel_view``, ``active_step`` or the locale change, whoever set them
+    (header click, rail click, navigation bridge, language selector).
     """
     view = app_state.panel_view.value
     active = app_state.active_step.value
+    # A language switch re-renders Page, and MapApp then copies the translated
+    # Workflow config onto the panel: re-apply so a non-workflow view keeps
+    # its own title and icon.
+    locale = current_locale()
 
     def _apply():
         workflow = view == "workflow"
@@ -226,7 +230,7 @@ def _PanelBridge(
         if app_state.current_page_view.value != showing_view:
             app_state.current_page_view.value = showing_view
 
-    solara.use_effect(_apply, [view, active])
+    solara.use_effect(_apply, [view, active, locale])
 
 
 init_ee()
