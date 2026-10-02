@@ -49,6 +49,8 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "needs a manifest"),
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to widen"),
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to fetch for mode"),
+    # scene_index: a server-side request-graph bug (Task 4), not reachable from the UI
+    ("deforestation_alerts/scripts/scene_index.py", "ValueError", "scene arrays of different length"),
 }
 
 

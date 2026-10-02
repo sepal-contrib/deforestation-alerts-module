@@ -1,7 +1,10 @@
 # tests/test_scene_index.py
 from datetime import date, datetime, timezone
 
+import geopandas as gpd
+import pandas as pd
 import pytest
+from shapely.geometry import Polygon
 
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import scene_index
@@ -40,3 +43,92 @@ def test_source_strings_are_the_ones_the_scalers_switch_on():
     src = (mosaics_helper.__file__ and open(mosaics_helper.__file__).read())
     for name in (scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOURCE_PLANET):
         assert f'"{name}"' in src
+
+
+RAW = {
+    "scenes": {
+        "source": ["Sentinel 2", "Sentinel 2", "Landsat"],
+        "millis": [1775088000000, 1775088000000, 1775260800000],  # 2 Apr, 2 Apr, 4 Apr 2026 UTC
+        "cloud": [12.5, 40.0, 3.25],
+        "tile": ["21LYG", "21LYH", "LC08_227068"],
+        "key": ["COPERNICUS/S2_HARMONIZED/A", "COPERNICUS/S2_HARMONIZED/B", "LC82270682026100LGN00"],
+    },
+    "tiles": {
+        "tile": ["21LYG", "21LYH", "LC08_227068"],
+        "gtype": ["Polygon", "Polygon", "Polygon"],
+        "coords": [
+            [[[-55.2, -10.2], [-55.0, -10.2], [-55.0, -10.0], [-55.2, -10.0], [-55.2, -10.2]]],
+            [[[-55.0, -10.2], [-54.8, -10.2], [-54.8, -10.0], [-55.0, -10.0], [-55.0, -10.2]]],
+            [[[-55.4, -10.4], [-54.6, -10.4], [-54.6, -9.8], [-55.4, -9.8], [-55.4, -10.4]]],
+        ],
+    },
+}
+
+
+def test_parse_scenes_pairs_each_array_into_rows():
+    tables = scene_index.parse_scenes(RAW)
+    assert list(tables.scenes.columns) == list(scene_index.SCENE_COLUMNS)
+    assert len(tables.scenes) == 3
+    row = tables.scenes.iloc[0]
+    assert row["source"] == scene_index.SOURCE_S2
+    assert row["date"] == pd.Timestamp("2026-04-02")
+    assert row["cloud"] == pytest.approx(12.5)
+    assert row["tile"] == "21LYG"
+    assert row["key"] == "COPERNICUS/S2_HARMONIZED/A"
+
+
+def test_parse_scenes_builds_tile_footprints_in_wgs84():
+    tables = scene_index.parse_scenes(RAW)
+    assert isinstance(tables.tiles, gpd.GeoDataFrame)
+    assert tables.tiles.crs.to_epsg() == 4326
+    assert len(tables.tiles) == 3
+    got = tables.tiles.set_index("tile").loc["21LYG", "geometry"]
+    assert got.equals(Polygon(RAW["tiles"]["coords"][0][0]))
+
+
+def test_parse_scenes_handles_a_multipolygon_footprint():
+    # A Sentinel-2 granule footprint is occasionally a MultiPolygon (a sliver
+    # across the antimeridian, or a split orbit edge), so the parser reads the
+    # geometry type the request reports instead of assuming Polygon.
+    raw = {
+        "scenes": {k: v[:1] for k, v in RAW["scenes"].items()},
+        "tiles": {
+            "tile": ["21LYG"],
+            "gtype": ["MultiPolygon"],
+            "coords": [[
+                [[[-55.2, -10.2], [-55.1, -10.2], [-55.1, -10.1], [-55.2, -10.1], [-55.2, -10.2]]],
+                [[[-55.0, -10.2], [-54.9, -10.2], [-54.9, -10.1], [-55.0, -10.1], [-55.0, -10.2]]],
+            ]],
+        },
+    }
+    geom = scene_index.parse_scenes(raw).tiles.iloc[0]["geometry"]
+    assert geom.geom_type == "MultiPolygon"
+    assert len(geom.geoms) == 2
+
+
+def test_parse_scenes_rejects_arrays_of_different_lengths():
+    bad = {"scenes": {**RAW["scenes"], "cloud": [1.0]}, "tiles": RAW["tiles"]}
+    with pytest.raises(ValueError, match="length"):
+        scene_index.parse_scenes(bad)
+
+
+def test_parse_scenes_of_an_empty_aoi_window_keeps_the_columns():
+    empty = {"scenes": {k: [] for k in RAW["scenes"]}, "tiles": {"tile": [], "coords": [], "gtype": []}}
+    tables = scene_index.parse_scenes(empty)
+    assert len(tables.scenes) == 0
+    assert list(tables.scenes.columns) == list(scene_index.SCENE_COLUMNS)
+    assert tables.tiles.crs.to_epsg() == 4326
+
+
+def test_parse_planet_rows_carry_no_footprint_and_no_cloud():
+    raw = {"key": ["projects/planet-nicfi/assets/basemaps/sr/2026-04"], "millis": [1775001600000]}  # 1 Apr 2026
+    df = scene_index.parse_planet(raw)
+    assert list(df.columns) == list(scene_index.SCENE_COLUMNS)
+    assert df.iloc[0]["source"] == scene_index.SOURCE_PLANET
+    assert df.iloc[0]["tile"] == ""
+    assert pd.isna(df.iloc[0]["cloud"])
+
+
+def test_empty_tables_are_usable_without_a_fetch():
+    tables = scene_index.empty_tables()
+    assert len(tables.scenes) == 0 and len(tables.tiles) == 0
