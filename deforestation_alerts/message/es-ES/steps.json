@@ -410,7 +410,7 @@
       "step_store": "Guardando las alertas",
       "step_tiles": "Generando las teselas del mapa",
       "no_tippecanoe": "tippecanoe no está instalado: Resumen mostrará los puntos de alerta sin polígonos.",
-      "tiles_failed": "No se pudieron generar las teselas del mapa ({error}); Resumen las genera de nuevo al abrirse.",
+      "tiles_failed": "No se pudieron mostrar las teselas del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
       "done": {
         "one": "{n} alerta lista para revisar",
         "many": "{n} de alertas listas para revisar",
@@ -434,17 +434,17 @@
       "project_changed": "El período, el área de interés o la cuadrícula del proyecto cambiaron mientras la ejecución estaba en curso, así que el conjunto de alertas no se registró. Ejecuta Integrar y vectorizar de nuevo.",
       "error_min_size": "Introduce un tamaño mínimo en hectáreas, 0 o más.",
       "error_max_alerts": "Introduce un número entero, 0 o más.",
-      "error_no_drawing": "Dibuja primero al menos un polígono en el mapa."
-    },
-    "overview": {
+      "error_no_drawing": "Dibuja primero al menos un polígono en el mapa.",
       "layer_name": "Alertas (conjunto activo)",
       "go": "Revisar",
       "popup": "Alerta {id} · {status} · {area} ha",
-      "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",
-      "missing": "Faltan los archivos de este conjunto en la carpeta del proyecto. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo.",
-      "tiles_failed": "No se pudieron mostrar las teselas del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
       "show_earlier": "Mostrar conjuntos anteriores",
-      "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período."
+      "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período.",
+      "show_alerts": "Mostrar estas alertas en el mapa"
+    },
+    "overview": {
+      "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",
+      "missing": "Faltan los archivos de este conjunto en la carpeta del proyecto. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo."
     },
     "sets": {
       "label": "Conjunto de alertas",

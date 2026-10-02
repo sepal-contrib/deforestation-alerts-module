@@ -40,6 +40,7 @@ from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t, tn
+from gui.scripts import alert_layers
 from gui.scripts.coverage_ui import note_text, result_note
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
@@ -90,7 +91,7 @@ def _attribute_title(attribute) -> str:
 
 
 @solara.component
-def IntegrateStep(app_state, map_, gee_interface):
+def IntegrateStep(app_state, map_, gee_interface, layers):
     # Session-wide, like the step: a run outlives the form it was started from.
     inflight = solara.use_memo(InflightKeys, [])
     p = app_state.project.value
@@ -107,17 +108,18 @@ def IntegrateStep(app_state, map_, gee_interface):
     # "missing" shows a line that says to run again; a current set shows none.
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
-        app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight,
+        app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight, layers=layers,
         name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
         last=active.params if active is not None else None, showing=showing,
+        has_set=active is not None, has_earlier=bool(alert_layers.earlier_of(p, active)),
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
     ).key(f"integrate-{app_state.project_loaded_signal.value}-{p.name}-{period.id}")
 
 
 @solara.component
-def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choices, resolution, last,
-                   showing, active_label=None, active_status=None):
+def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, period, choices, resolution, last,
+                   showing, has_set=False, has_earlier=False, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
     left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
@@ -236,6 +238,21 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, name, period, choic
                         classes=["text--secondary"])
         solara.Button(t("steps.integrate.run"), color="primary", small=True, icon_name="mdi-vector-union",
                       disabled=busy or not chosen, loading=busy, on_click=_on_run)
+        if has_set:
+            # The alerts of the run that just finished, on the shared map. Two
+            # booleans: the shell's _AlertLayers leaf owns the MapLayers calls,
+            # because a layer switched on here stays on while the user moves to
+            # Analysis or opens the Overview dashboard, and this form unmounts
+            # with the step. A switch is held while its own layer is being
+            # built, so a flip can never race the build it started.
+            inflight_keys = layers.inflight.value
+            rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
+                      on_v_model=app_state.show_alerts.set, dense=True, hide_details=True,
+                      disabled=alert_layers.SET_LAYER_KEY in inflight_keys)
+            if has_earlier:
+                rv.Switch(label=t("steps.integrate.show_earlier"), v_model=app_state.show_earlier_sets.value,
+                          on_v_model=app_state.show_earlier_sets.set, dense=True, hide_details=True,
+                          disabled=any(k.startswith(alert_layers.EARLIER_PREFIX) for k in inflight_keys))
 
     ConfirmDialog(
         open=confirm is not None,

@@ -249,7 +249,7 @@ def test_deleting_the_latest_period_removes_its_sets_and_every_file(env):
     state = _state(p)
     layers, rc = _render(state)
     try:
-        layers.show(f"overview:set:{feb}", lambda: None, content_id="tiles")
+        layers.show(f"alerts:set:{feb}", lambda: None, content_id="tiles")
         _action(env.seen, FEB_ID, "delete")["on_click"]()
         confirm = env.seen["confirm"]
         assert confirm["open"] is True
@@ -260,7 +260,7 @@ def test_deleting_the_latest_period_removes_its_sets_and_every_file(env):
         assert live.active_period == JAN_ID and live.active_set == jan
         assert not (env.pdir / "periods" / FEB_ID).exists()  # tiles, store and downloads alike
         assert len([x for x in (env.pdir / "periods" / JAN_ID).rglob("*") if x.is_file()]) == 4
-        assert not layers.is_on(f"overview:set:{feb}")
+        assert not layers.is_on(f"alerts:set:{feb}")
         assert _toasts("success") == [t("steps.period.deleted")]
     finally:
         rc.close()

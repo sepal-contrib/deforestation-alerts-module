@@ -79,6 +79,20 @@ def load_active_alerts(p):
     return load_set_alerts(p, s) if s is not None else None
 
 
+def active_set_alerts(p, gdf):
+    """``gdf`` when it holds the active set's alerts, else None.
+
+    ``alerts_gdf`` and the active set are separate reactives: Integrate records
+    a new set before it publishes that set's alerts, and the set selector
+    (spec §9.3) loads them in a worker after the selection. Until they arrive,
+    the alerts on hand are the previous set's, and every reader treats them as
+    not loaded yet: they are never tiled, drawn, counted, exported or reviewed
+    as the new set's. Without an active set, ``gdf`` is kept as it is.
+    """
+    s = active_set(p)
+    return gdf if s is None or alerts_belong_to(gdf, s) else None
+
+
 def position_of(gdf, alert_id) -> Optional[int]:
     """The row position of ``alert_id`` (the engine's stable id) in ``gdf``."""
     if gdf is None or not len(gdf):

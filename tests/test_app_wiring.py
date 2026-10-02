@@ -283,7 +283,7 @@ def test_shell_wires_the_new_tiles():
     src = (ROOT / "gui" / "solara_app.py").read_text()
     for name in ("AoiStep", "AlertsStep", "PeriodStep", "PrepareStep", "IntegrateStep",
                  "ProjectDialog", "OverviewTile", "SetContext", "MapLayers", "install_autosave",
-                 "_ActiveSetLoader"):
+                 "_ActiveSetLoader", "_AlertLayers"):
         assert name in src, name
     for gone in ("AuxModel", "AoiDateModel", "SelectedAlertsModel", "AppTileModel", "AlertFilterModel",
                  "build_recipe_layout", "build_aux_layout", "AlertsFilterTile", "Workspace(",
@@ -335,6 +335,30 @@ def test_the_shell_installs_auto_save_and_one_set_context():
     assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": panel_sentinel}' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
+    # The alert layers are a leaf of the shell, not of a step: a layer switched
+    # on in Integrate stays on while the user moves to Analysis or opens the
+    # Overview dashboard, so nothing that unmounts with a view may own it.
+    assert "_AlertLayers(app_state=app_state, layers=layers, map_=map_)" in shell
+    assert shell.index("_ActiveSetLoader(app_state=") < shell.index("_AlertLayers(app_state=")
+
+
+def test_only_the_shell_draws_the_alert_layers():
+    """Integrate & vectorize switches them with two booleans on ``app_state``
+    and the Overview view draws nothing: every ``MapLayers`` call for an alert
+    set is in ``_AlertLayers``, which the shell mounts."""
+    body = _component_body(_src("gui/solara_app.py"), "_AlertLayers")
+    for call in ("layers.hide(alert_layers.SET_LAYER_KEY)", "layers.show(alert_layers.SET_LAYER_KEY",
+                 "map_.on_interaction(_on_map)"):
+        assert call in body, call
+    for rel in ("gui/tile/integrate_step.py", "gui/tile/overview_tile.py"):
+        step = _src(rel)
+        for call in ("layers.show(", "layers.hide(", "layers.toggle(", "layers.refresh(", "add_centroid_layer(",
+                     "add_set_pmtiles("):
+            assert call not in step, f"{rel}: {call}"
+    # and the switches write nothing but the two booleans
+    integrate = _src("gui/tile/integrate_step.py")
+    assert "on_v_model=app_state.show_alerts.set" in integrate
+    assert "on_v_model=app_state.show_earlier_sets.set" in integrate
 
 
 def test_the_active_set_loader_reads_the_store_on_a_worker_and_keeps_published_alerts():

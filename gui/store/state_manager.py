@@ -73,6 +73,13 @@ class AppState:
         # mirror of pysepal ThemeState.dark, kept by an observer in Page(): the
         # header cannot read MapApp's theme from Solara's own dark mode
         self.dark = solara.reactive(False)
+        # The alert layers on the shared map, switched from Integrate &
+        # vectorize once a run has produced a set (spec §9.2). Intent, not
+        # mechanism: the shell's _AlertLayers leaf owns every MapLayers call,
+        # so a step never has to hold a build closure. A layer switched on
+        # stays on while the user moves between steps (MapLayers ruling #10).
+        self.show_alerts = solara.reactive(False)
+        self.show_earlier_sets = solara.reactive(False)
         # alert review
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
@@ -113,6 +120,8 @@ class AppState:
         # replayed AOI from a new one by its digest, not by a flag.
         with self._lock:
             self.aoi_result.set(None)
+            self.show_alerts.set(False)
+            self.show_earlier_sets.set(False)
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
             self.goto_alert.set(None)

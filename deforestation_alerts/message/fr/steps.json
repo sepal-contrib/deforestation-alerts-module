@@ -410,7 +410,7 @@
       "step_store": "Enregistrement des alertes",
       "step_tiles": "Construction des tuiles de carte",
       "no_tippecanoe": "tippecanoe n'est pas installé : Aperçu affichera les points d'alerte sans polygones.",
-      "tiles_failed": "Les tuiles de carte n'ont pas pu être construites ({error}) ; Aperçu les reconstruit à son ouverture.",
+      "tiles_failed": "Les tuiles de carte n'ont pas pu être affichées ({error}) : affichage des points d'alerte sans polygones.",
       "done": {
         "one": "{n} alerte prête à être examinée",
         "many": "{n} d'alertes prêtes à être examinées",
@@ -434,17 +434,17 @@
       "project_changed": "La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. Relancez Intégrer et vectoriser.",
       "error_min_size": "Saisissez une taille minimale en hectares, 0 ou plus.",
       "error_max_alerts": "Saisissez un nombre entier, 0 ou plus.",
-      "error_no_drawing": "Dessinez d'abord au moins un polygone sur la carte."
-    },
-    "overview": {
+      "error_no_drawing": "Dessinez d'abord au moins un polygone sur la carte.",
       "layer_name": "Alertes (jeu actif)",
       "go": "Examiner",
       "popup": "Alerte {id} · {status} · {area} ha",
-      "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",
-      "missing": "Les fichiers de ce jeu sont manquants dans le dossier du projet. Relancez Intégrer et vectoriser pour le reconstruire.",
-      "tiles_failed": "Les tuiles de carte n'ont pas pu être affichées ({error}) : affichage des points d'alerte sans polygones.",
       "show_earlier": "Afficher les jeux antérieurs",
-      "earlier_missing": "La base d'alertes de {set} est manquante ; relancez Intégrer et vectoriser pour cette période."
+      "earlier_missing": "La base d'alertes de {set} est manquante ; relancez Intégrer et vectoriser pour cette période.",
+      "show_alerts": "Afficher ces alertes sur la carte"
+    },
+    "overview": {
+      "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",
+      "missing": "Les fichiers de ce jeu sont manquants dans le dossier du projet. Relancez Intégrer et vectoriser pour le reconstruire."
     },
     "sets": {
       "label": "Jeu d'alertes",

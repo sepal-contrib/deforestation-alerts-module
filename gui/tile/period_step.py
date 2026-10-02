@@ -41,6 +41,7 @@ from deforestation_alerts.engine.fingerprint import Status, period_set_statuses
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths, periods
 from deforestation_alerts.project.models import period_id
+from gui.scripts import alert_layers
 from gui.i18n import t, tn
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -103,9 +104,9 @@ def dropped_content(p, keys) -> set:
 
 def hide_dropped_layers(layers, content_ids, set_ids=()) -> None:
     """Take off the map every layer drawn from a dropped file (a period's
-    harmonized rasters) and the Overview layers of removed sets, before the
+    harmonized rasters) and the alert layers of removed sets, before the
     files are deleted."""
-    removed = {f"overview:set:{sid}" for sid in set_ids}
+    removed = {f"{alert_layers.EARLIER_PREFIX}{sid}" for sid in set_ids}
     for key in sorted(layers.on.value):
         content = layers.content_of(key)
         if key in removed or (content is not None and content in content_ids):

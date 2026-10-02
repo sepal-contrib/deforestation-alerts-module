@@ -1,7 +1,7 @@
 """Names, builders and legends of the layers the steps draw on the shared map
 (spec §4.3, §9.4): ``src:<source>`` (a preview, then the harmonized raster
 under the same key) and ``mask:<mask>``, plus the Overview set's legend and
-the earlier sets' names and legends (``overview:set:<set id>``).
+the earlier sets' names and legends (``alerts:set:<set id>``).
 
 One builder per file layer for the Alerts and Download & harmonize steps and
 the job that refreshes them (slice-1 Task 18 minor: they were duplicated).

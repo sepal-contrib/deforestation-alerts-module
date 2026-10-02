@@ -22,6 +22,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 import ipyvuetify as v
 import solara
+from ipyleaflet import Popup
 from traitlets import HasTraits, Int
 
 from pysepal.i18n import current_locale
@@ -51,14 +52,16 @@ from gui.store.navigation import (
     page_view_for_rail_step,
     resolve_navigation,
 )
-from gui.i18n import app_available_locales, t
-from gui.scripts import set_store
+from gui.i18n import app_available_locales, format_number, t
+from gui.scripts import alert_layers, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.set_context import SetContext
+from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
+from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
 from gui.scripts.detached import render_detached
 from gui.scripts.notify_bridge import install_server_log_handler, install_task_log_handler
@@ -349,6 +352,167 @@ def _ActiveSetLoader(app_state, layers, map_):
     solara.use_effect(_start_load, [key])
 
 
+@solara.component
+def _AlertLayers(app_state, layers, map_):
+    """The alert sets on the shared map, and a click on one of their alerts.
+
+    A leaf of the shell, not a step. The layers are switched on in Integrate &
+    vectorize once a run has produced a set, and a layer stays on while the
+    user moves on to Analysis or opens the Overview dialog (``MapLayers``
+    ruling #10) -- so nothing here may be mounted inside a step's body, which
+    unmounts with its view, and nothing here reads a view flag. ``IntegrateStep``
+    in particular early-returns a lock notice before its hooks could run, and
+    re-keys its form per project and period.
+
+    It owns every ``MapLayers`` call these layers need, so the switches in
+    Integrate are two booleans on ``app_state`` and carry no build closure.
+
+    The builds themselves are in ``gui.scripts.alert_layers``; what lives here
+    is when they run: once per new set (Integrate flips ``active_set`` as its
+    last act), again when a build skipped while the project was being written
+    becomes possible, and never while the alerts on hand are still the previous
+    set's (``set_store.active_set_alerts``).
+    """
+    notifications = use_notifications()
+    p = app_state.project.value
+    # None while the published alerts are still another set's: the publish that
+    # follows re-runs every effect keyed on it.
+    gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
+    s = active_set(p)
+    show = app_state.show_alerts.value
+    show_earlier = app_state.show_earlier_sets.value
+    has_alerts = gdf is not None and len(gdf) > 0
+    popup_ref = solara.use_ref(None)
+    # (project, set id) pairs already told that tippecanoe is missing: a review
+    # Save re-publishes the alerts and redraws the centroids, without the warning.
+    warned = solara.use_memo(set, [])
+    # (project, set id, fingerprint) -> the alerts an earlier set's build
+    # loaded, for the hit test. Written by the builds (MapLayers workers), read
+    # by the click handler.
+    earlier_alerts = solara.use_memo(dict, [])
+    # Subscribes to project_writers: a build skipped while the project was
+    # being written is asked for again once the writer is done.
+    busy = is_writing(p.name) if p is not None else False
+    deferred = solara.use_memo(alert_layers.Deferred, [])
+    earlier_deferred = solara.use_memo(set, [])
+    earlier_retry = solara.use_ref(0)
+    retries, set_retries = solara.use_state(0)
+
+    def _retry_when_free():
+        if not busy and deferred.current:
+            deferred.current = False
+            set_retries(retries + 1)
+
+    solara.use_effect(_retry_when_free, [busy])
+
+    def _sync_layer():
+        if not show or s is None or not has_alerts:
+            layers.hide(alert_layers.SET_LAYER_KEY)
+            return
+        build = alert_layers.active_build(map_, project=p, alert_set=s, alerts=gdf,
+                                          notifier=notifications, warned=warned, deferred=deferred)
+        # spec §9.4: the tiles and the centroids draw the same status colours
+        layers.show(alert_layers.SET_LAYER_KEY, build, content_id=f"{s.id}:{len(gdf)}",
+                    notifier=notifications, legend=set_legend(alert_layers.SET_LAYER_KEY, s))
+
+    solara.use_effect(_sync_layer, [show, s.id if s else None, gdf, retries])
+
+    earlier = alert_layers.earlier_of(p, s) if p is not None else []
+    earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)
+
+    def _build_earlier(e):
+        return alert_layers.earlier_build(map_, project=p, alert_set=e, loaded=earlier_alerts,
+                                          deferred_keys=earlier_deferred)
+
+    def _sync_earlier():
+        wanted = {alert_layers.earlier_key(e): e for e in earlier} if show_earlier else {}
+        for key in sorted(layers.on.value):
+            if key.startswith(alert_layers.EARLIER_PREFIX) and key not in wanted:
+                layers.hide(key)
+        # Alerts of sets no longer drawn are let go (a show below reloads its own).
+        keep = {(p.name, e.id, e.fingerprint) for e in wanted.values()}
+        for loaded in list(earlier_alerts):
+            if loaded not in keep:
+                earlier_alerts.pop(loaded, None)
+        for key, e in wanted.items():
+            layers.show(key, _build_earlier(e), content_id=f"{e.id}:{e.fingerprint}:{e.n_reviewed}",
+                        notifier=notifications, legend=earlier_set_legend(key, e))
+
+    solara.use_effect(_sync_earlier, [show_earlier, p.name if p is not None else None, earlier_sig])
+
+    def _retry_earlier_when_free():
+        # spec §9.2: tiles skipped while the project was being written are
+        # built once the writer is done. Only the deferred keys are rebuilt,
+        # through ``refresh`` (a key switched off meanwhile stays off).
+        if busy or not earlier_deferred:
+            return
+        by_key = {alert_layers.earlier_key(e): e for e in earlier}
+        for key in sorted(earlier_deferred):
+            earlier_deferred.discard(key)
+            e = by_key.get(key)
+            if e is None:
+                continue
+            earlier_retry.current += 1
+            layers.refresh(key, _build_earlier(e),
+                           f"{e.id}:{e.fingerprint}:{e.n_reviewed}:retry{earlier_retry.current}",
+                           legend=earlier_set_legend(key, e), notifier=notifications)
+
+    solara.use_effect(_retry_earlier_when_free, [busy])
+
+    def _on_install():
+        # The shell clears every layer when a project is installed (spec §4.3);
+        # _install has already put both switches back to off.
+        earlier_alerts.clear()
+        earlier_deferred.clear()
+
+    solara.use_effect(_on_install, [app_state.project_loaded_signal.value])
+
+    def _close_popup():
+        if popup_ref.current is not None:
+            map_.remove_layer(popup_ref.current, none_ok=True)
+            popup_ref.current = None
+
+    def _on_map(**kwargs):
+        if kwargs.get("type") != "click":
+            return
+        lat, lon = kwargs["coordinates"]
+        project = app_state.project.value
+        current = set_store.active_set_alerts(project, app_state.alerts_gdf.value) if show else None
+        hit = alert_layers.hit_in(project, current, lon, lat, loaded=earlier_alerts, is_shown=layers.is_on)
+        _close_popup()
+        if hit is None:
+            return
+        target, alerts, i = hit
+        row = alerts.iloc[i]
+        alert_id = int(row.get("alert_id", i))
+        go = v.Btn(small=True, color="primary", children=[t("steps.integrate.go")])
+        go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
+        summary = t("steps.integrate.popup", id=alert_id, status=row.get("status", ""),
+                    area=format_number(float(row.get("area_ha", 0)), 2))
+        lines = [v.Html(tag="div", children=[summary])]
+        if target.id != project.active_set:
+            lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))
+        popup = Popup(location=(lat, lon), child=v.Html(tag="div", children=[*lines, go]), close_button=True,
+                      auto_close=True)
+        # pysepal's key lookups read ``.key`` on every layer, and a Popup added
+        # without one breaks them.
+        map_.add_layer(popup, key=alert_layers.POPUP_KEY)
+        popup_ref.current = popup
+
+    def _wire_clicks():
+        map_.on_interaction(_on_map)
+
+        def _unwire():
+            map_.on_interaction(_on_map, remove=True)
+            _close_popup()  # also after the user closed it: a closed Popup stays in map_.layers
+
+        return _unwire
+
+    # Re-wired whenever the handler would close over stale alerts: a popup's
+    # Review index belongs to the alerts it was opened on.
+    solara.use_effect(_wire_clicks, [show, show_earlier, gdf])
+
+
 def legend_props(app_state, translate) -> dict:
     """Props for pysepal's LegendComponent from the published legends (spec §9.4).
 
@@ -530,7 +694,7 @@ def _AppShell():
                                                            gee_interface=gee_interface, layers=layers),
                                        t("app.drawer_item.prepare"))[0],
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
-                                                               gee_interface=gee_interface),
+                                                               gee_interface=gee_interface, layers=layers),
                                          t("app.drawer_item.integrate"))[0],
             "layers": render_detached(lambda: LayersStep(app_state=app_state, map_=map_,
                                                          gee_interface=gee_interface, layers=layers),
@@ -752,4 +916,5 @@ def _AppShell():
         workflow_config=WORKFLOW_PANEL_CONFIG,
     )
     _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)
+    _AlertLayers(app_state=app_state, layers=layers, map_=map_)
     RemoteFactsLoader(app_state=app_state, gee_interface=gee_interface)

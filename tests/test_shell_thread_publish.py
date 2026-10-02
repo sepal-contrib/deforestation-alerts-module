@@ -237,7 +237,7 @@ def shell(data_root, monkeypatch):
             _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("period", lambda: PeriodStep(app_state=state, layers=layers))
             _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
-            _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee))
+            _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("layers", lambda: LayersStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("header", lambda: WorkflowHeader(app_state=state))
             _detached("report_template", lambda: ReportTemplateField(app_state=state))

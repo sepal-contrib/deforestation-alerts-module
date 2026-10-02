@@ -41,6 +41,8 @@ from deforestation_alerts.project.models import (
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t, tn
 from gui.scripts import integrate_jobs
+from gui.scripts.alert_layers import EARLIER_PREFIX, SET_LAYER_KEY
+from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import step_index
@@ -503,14 +505,18 @@ def _project(name="d", *sources, sets=()):
 
 
 @solara.component
-def _Harness(app_state, map_):
+def _Harness(app_state, map_, layers):
     NotificationProvider()  # the step's use_notifications() needs it rendered first
-    integrate_step.IntegrateStep(app_state=app_state, map_=map_, gee_interface=object())
+    integrate_step.IntegrateStep(app_state=app_state, map_=map_, gee_interface=object(), layers=layers)
 
 
-def _render(state):
+def _render(state, layers=None):
+    """The step over a fresh map. ``layers``: the session's layer registry, which
+    the step only reads (``inflight``, to hold a switch while its own layer is
+    being built) -- tests that assert on the switches pass their own."""
     map_ = ipyleaflet.Map()
-    box_, rc = reacton.render(_Harness(app_state=state, map_=map_), handle_error=False)
+    layers = MapLayers(map_) if layers is None else layers
+    box_, rc = reacton.render(_Harness(app_state=state, map_=map_, layers=layers), handle_error=False)
     return map_, rc
 
 
@@ -1203,3 +1209,99 @@ def test_the_band_projections_request_reads_metres(gee):
     got = user_raster.band_projections_request("USGS/SRTMGL1_003", ["elevation"]).getInfo()
     assert got["elevation"]["crs"] == "EPSG:4326"
     assert 25 < got["elevation"]["scale"] < 35  # 1 arc-second, in metres
+
+
+# ---------------------------------------------------------------------------
+# The alert layers' switches (spec §9.2): intent only
+# ---------------------------------------------------------------------------
+DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
+
+
+def _with_earlier(p):
+    """``p`` with a December GLAD-L set beside its active January one, so the
+    step has an earlier period to offer."""
+    p.periods[DEC.id] = DEC
+    sid = make_set_id(DEC.id, ["GLAD-L"])
+    p.alert_sets[sid] = AlertSet(
+        id=sid, period_id=DEC.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"}, params=AlertSetParams(),
+        store_rel_path=f"periods/{DEC.id}/sets/glad-l/alert_db.parquet",
+        combined_rel_path=f"periods/{DEC.id}/sets/glad-l/c.tif",
+        footprint_rel_path=f"periods/{DEC.id}/sets/glad-l/footprint.tif",
+        n_reviewed=1, fingerprint="f", created_at=datetime.now())
+    return p
+
+
+def _switches(rc):
+    return {w.label: w for w in rc.find(v.Switch).widgets}
+
+
+def test_the_alert_switches_appear_once_a_run_has_produced_a_set(step):
+    """Spec §9.2: the alerts of the run that just finished can be put on the
+    shared map from here. Nothing to show before a set exists, and no earlier
+    period to show until one is there."""
+    step.ready = ["GLAD-L"]
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        assert _switches(rc) == {}
+    finally:
+        rc.close()
+
+    map_, rc = _render(_state(_project("d", "GLAD-L", sets=[_set("x", 0)])))
+    try:
+        assert list(_switches(rc)) == [t("steps.integrate.show_alerts")]
+    finally:
+        rc.close()
+
+    p = _with_earlier(_project("d", "GLAD-L", sets=[_set("x", 0)]))
+    map_, rc = _render(_state(p))
+    try:
+        assert list(_switches(rc)) == [t("steps.integrate.show_alerts"), t("steps.integrate.show_earlier")]
+    finally:
+        rc.close()
+
+
+def test_the_alert_switches_only_write_the_two_booleans_the_shell_reads(step):
+    """The switches carry no build closure: the shell's ``_AlertLayers`` leaf
+    owns every ``MapLayers`` call, because a layer switched on here stays on
+    while the user moves to Analysis or opens the Overview dashboard, and this
+    form unmounts with the step."""
+    step.ready = ["GLAD-L"]
+    state = _state(_with_earlier(_project("d", "GLAD-L", sets=[_set("x", 0)])))
+    map_ = ipyleaflet.Map()
+    layers = MapLayers(map_)
+    box_, rc = reacton.render(_Harness(app_state=state, map_=map_, layers=layers), handle_error=False)
+    try:
+        assert state.show_alerts.value is False and state.show_earlier_sets.value is False
+        _switches(rc)[t("steps.integrate.show_alerts")].v_model = True
+        assert state.show_alerts.value is True and state.show_earlier_sets.value is False
+        _switches(rc)[t("steps.integrate.show_earlier")].v_model = True
+        assert state.show_earlier_sets.value is True
+        _switches(rc)[t("steps.integrate.show_alerts")].v_model = False
+        assert state.show_alerts.value is False and state.show_earlier_sets.value is True
+        assert layers.on.value == frozenset()  # no layer was asked for from here
+    finally:
+        rc.close()
+
+
+def test_a_switch_is_held_while_its_own_layer_is_being_built(step):
+    """A flip during the build it started would race it, so each switch is
+    disabled exactly while its own keys are in ``MapLayers.inflight``."""
+    step.ready = ["GLAD-L"]
+    state = _state(_with_earlier(_project("d", "GLAD-L", sets=[_set("x", 0)])))
+    map_ = ipyleaflet.Map()
+    layers = MapLayers(map_)
+    box_, rc = reacton.render(_Harness(app_state=state, map_=map_, layers=layers), handle_error=False)
+    try:
+        alerts, earlier = t("steps.integrate.show_alerts"), t("steps.integrate.show_earlier")
+        assert [_switches(rc)[k].disabled for k in (alerts, earlier)] == [False, False]
+
+        layers.inflight.set(frozenset({SET_LAYER_KEY}))
+        assert [_switches(rc)[k].disabled for k in (alerts, earlier)] == [True, False]
+
+        layers.inflight.set(frozenset({f"{EARLIER_PREFIX}{make_set_id(DEC.id, ['GLAD-L'])}"}))
+        assert [_switches(rc)[k].disabled for k in (alerts, earlier)] == [False, True]
+
+        layers.inflight.set(frozenset())
+        assert [_switches(rc)[k].disabled for k in (alerts, earlier)] == [False, False]
+    finally:
+        rc.close()
