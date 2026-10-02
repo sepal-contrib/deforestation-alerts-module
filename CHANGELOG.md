@@ -67,7 +67,8 @@
     legends; an alert's popup has a Review button that opens it in Analysis,
     in whichever shown set it belongs to.
 - **Legends** for every source, mask, visualization layer and Overview set
-  drawn on the shared map: a legend shows exactly while its layer is on.
+  drawn on the shared map: a legend shows while its layer is on, and all
+  legends are hidden while the Analysis screen shows.
 - **Reports from a template**: the project's report template (a `.docx` in
   the user's files) is picked in the export card; a template gone from disk
   refuses the download with a message.
@@ -75,7 +76,9 @@
   action, listing what it removes: a set replace lists the reviewed alerts,
   a period delete lists its sets.
 - **Translations**: the app reads in English, Spanish (es-ES) and French
-  (fr), switched from the language selector and applied in place. Strings
+  (fr), switched from the language selector and applied in place, except
+  that an open Analysis screen keeps the language it was opened in until the
+  app is reloaded. Strings
   come from one catalogue (`deforestation_alerts/message/<locale>/*.json`)
   through pysepal's `catalog()`, with plural forms for counts; engine
   errors carry message keys, so their toasts are in the user's language.
@@ -171,6 +174,9 @@
 - The legacy `cm` translator and the translation notebook, replaced by the catalogue
   above; the `deforestation_alerts/model/analysis_model.py` traitlets model (Analysis state is Solara
   reactives).
+- Code nothing used any more: the `alert_repository` service named under Changed
+  above, the `ArtifactNameField` widget with its `artifact_names` helpers, and
+  unused helpers in `mosaics_helper`, `imagery_service` and `report_builder`.
 
 ## v_1.0 (2025-03-25)
 
