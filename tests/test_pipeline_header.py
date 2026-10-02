@@ -33,10 +33,10 @@ def _reactive(p):
 
 
 def test_count_text_pluralizes_and_falls_back():
-    from gui.store.workflow_steps import STEPS
+    from gui.store.workflow_steps import STEPS, step_index
     from gui.widget.pipeline_header import count_text
 
-    aoi_spec, alerts_spec, analysis = STEPS[0], STEPS[1], STEPS[5]
+    aoi_spec, alerts_spec, analysis = STEPS[0], STEPS[1], STEPS[step_index("analysis")]
     assert count_text(analysis, _project(n_alerts=5, n_reviewed=2)) == "2 reviewed"
     assert count_text(analysis, _project(n_alerts=5, n_reviewed=0)) == "nothing yet"
     # AOI step: the badge is the AOI name (a string count).

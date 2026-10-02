@@ -10,6 +10,7 @@
             "project": "Project",
             "aoi": "AOI",
             "alerts": "Alerts",
+            "layers": "Optional layers",
             "period": "Period",
             "prepare": "Download & harmonize",
             "integrate": "Integrate & vectorize",

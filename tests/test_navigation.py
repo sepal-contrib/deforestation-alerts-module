@@ -15,14 +15,15 @@ from gui.store.navigation import (
 from gui.store.state_manager import AppState
 
 
-def test_workflow_map_covers_the_six_steps_in_order():
+def test_workflow_map_covers_the_seven_steps_in_order():
     assert PAGE_VIEW_TO_WORKFLOW == {
         "aoi_tile": 0,
         "alerts_tile": 1,
-        "period_tile": 2,
-        "prepare_tile": 3,
-        "integrate_tile": 4,
-        "analysis_tile": 5,
+        "layers_tile": 2,
+        "period_tile": 3,
+        "prepare_tile": 4,
+        "integrate_tile": 5,
+        "analysis_tile": 6,
     }
 
 
@@ -42,8 +43,8 @@ def test_resolve_unknown_view_returns_none():
 
 
 def test_resolve_workflow_and_rail_targets():
-    assert resolve_navigation("integrate_tile") == ("workflow", 4)
-    assert resolve_navigation("analysis_tile") == ("workflow", 5)
+    assert resolve_navigation("integrate_tile") == ("workflow", 5)
+    assert resolve_navigation("analysis_tile") == ("workflow", 6)
     assert resolve_navigation("overview_tile") == ("rail", 3)
     assert resolve_navigation("project_tile") == ("rail", 2)
 
@@ -72,7 +73,7 @@ def test_apply_workflow_target_dismisses_dialog_opens_panel_resets_view_sets_ste
     assert mapapp.panel_calls == ["open"]
     assert nav.current_step is None  # the Overview rail item un-highlights
     assert state.panel_view.value == "workflow"
-    assert state.active_step.value == 5
+    assert state.active_step.value == 6
 
 
 def test_apply_panel_rail_target_opens_panel_and_switches_view():
@@ -99,7 +100,7 @@ def test_apply_dialog_rail_target_only_activates_the_dialog_step():
 def test_apply_without_mapapp_still_moves_state():
     nav, state = _FakeNav(), AppState()
     apply_navigation(None, nav, state, resolve_navigation("integrate_tile"))
-    assert state.active_step.value == 4 and nav.current_step is None
+    assert state.active_step.value == 5 and nav.current_step is None
     apply_navigation(None, nav, state, resolve_navigation("overview_tile"))
     assert state.panel_view.value == "overview" and nav.current_step == 3
 

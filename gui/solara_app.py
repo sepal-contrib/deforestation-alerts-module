@@ -69,6 +69,7 @@ from gui.tile.analysis import build_analysis_layout
 from gui.tile.analysis.state import AnalysisState
 from gui.tile.aoi_step import AoiStep
 from gui.tile.integrate_step import IntegrateStep
+from gui.tile.layers_step import LayersStep
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
@@ -512,6 +513,9 @@ def _AppShell():
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
                                                                gee_interface=gee_interface),
                                          t("app.drawer_item.integrate"))[0],
+            "layers": render_detached(lambda: LayersStep(app_state=app_state, map_=map_,
+                                                         gee_interface=gee_interface, layers=layers),
+                                      t("app.drawer_item.layers"))[0],
         },
         dependencies=[],
     )

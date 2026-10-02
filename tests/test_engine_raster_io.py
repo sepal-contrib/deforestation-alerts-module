@@ -122,6 +122,14 @@ def test_ensure_overviews_skips_when_present(tmp_path):
     assert raster_io.ensure_overviews(tif) is False
 
 
+def test_ensure_overviews_names_a_missing_file(tmp_path):
+    """Slice-1 Task 5 minor: a missing file was GDAL's raw RuntimeError."""
+    missing = tmp_path / "gone.tif"
+    with pytest.raises(FileNotFoundError, match="gone.tif"):
+        raster_io.ensure_overviews(missing)
+    assert not (tmp_path / "gone.tif.ovr").exists()
+
+
 def test_ensure_overviews_rebuilds_when_stale(tmp_path):
     tif = tmp_path / "user.tif"
     _write_plain_geotiff(tif)

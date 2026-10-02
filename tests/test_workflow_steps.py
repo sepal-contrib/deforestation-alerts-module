@@ -21,7 +21,7 @@ def _states(p):
 
 
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "period", "prepare", "integrate", "analysis"]
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "analysis"]
     assert [(r.key, r.step_id, r.display) for r in RAIL_ITEMS] == [
         ("about", 1, "dialog"), ("project", 2, "dialog"), ("overview", 3, "panel")]
 
@@ -33,6 +33,7 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
     s = _states(p)
     assert s["aoi"] is StepStatus.HAS_OUTPUTS and s["alerts"] is StepStatus.EMPTY
+    assert s["layers"] is StepStatus.EMPTY
     assert s["period"] is StepStatus.LOCKED
     add_predefined_source(p, "GLAD-L")
     assert _states(p)["period"] is StepStatus.EMPTY and _states(p)["prepare"] is StepStatus.LOCKED

@@ -121,6 +121,7 @@ def _dynamic_keys():
     every value its one placeholder takes."""
     from deforestation_alerts.engine.fingerprint import Status
     from deforestation_alerts.project import periods
+    from gui.scripts.vis_layers import KINDS, NICFI_COLLECTIONS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
@@ -142,6 +143,9 @@ def _dynamic_keys():
         "steps.alerts.encoding_": list(ENCODINGS),
         # gui.tile.masks_card's origin chip
         "steps.prepare.mask_origin_": ["gee", "file"],
+        # gui.scripts.vis_layers: the layer kinds and the NICFI regions
+        "steps.layers.kind_": list(KINDS),
+        "steps.layers.region_": list(NICFI_COLLECTIONS),
     }
 
 

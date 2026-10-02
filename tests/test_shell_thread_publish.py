@@ -9,7 +9,7 @@ loop-only work there (a ``prefer_threaded=False`` ``use_task`` whose
 dependencies change on the save, an ``asyncio.create_task``) raises out of
 the publish, as the Project dialog's list did after ``ab1d1e6``. Here every
 tile the shell mounts is rendered for real (``AboutTile``, ``ProjectDialog``,
-``OverviewTile``, the five step tiles with pysepal's own ``AoiView``, the
+``OverviewTile``, the six step tiles with pysepal's own ``AoiView``, the
 workflow header, the Analysis set-status banner) together with the five
 leaves ``_AppShell`` renders in its own context (``_NavBridge``,
 ``_PanelBridge``, ``_ActiveSetLoader``, ``MapLegend``, compiled from
@@ -60,6 +60,7 @@ from deforestation_alerts.project.models import (
     AlertSetParams,
     AoiRecord,
     Artifact,
+    GeeVisLayer,
     NativeGrid,
     Period,
     Project,
@@ -88,6 +89,7 @@ from gui.tile.alerts_step import AlertsStep
 from gui.tile.analysis.analysis_tile import build_set_status_banner
 from gui.tile.aoi_step import AoiStep
 from gui.tile.integrate_step import IntegrateStep
+from gui.tile.layers_step import LayersStep
 from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
@@ -164,6 +166,8 @@ def _project():
     add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
              native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
     set_period_mask(p, JAN.id, "forest", on=False)
+    # a visualization layer: the Optional layers step renders its row on every publish
+    p.vis_layers = {"s2": GeeVisLayer(name="s2", asset="COPERNICUS/S2/x", bands=["B4", "B3", "B2"], min=0, max=3000)}
     p.coverage = {k: SourceCoverage(aoi_digest="d1", checked_on=date.today(), fraction=1.0,
                                     regions=[RegionCoverage(name=k, fraction=1.0, first=date(2000, 1, 1),
                                                             last=date(2100, 1, 1))])
@@ -220,7 +224,7 @@ def shell(data_root, monkeypatch):
         map_ = solara.use_memo(lambda: SepalMap(gee=True, gee_interface=gee), [])
         layers = solara.use_memo(
             lambda: MapLayers(map_, legends=state.layer_legends, selected=state.selected_legend), [])
-        tiles["layers"] = layers
+        tiles["map_layers"] = layers
         stage_host = solara.use_memo(lambda: StageHost(content=[]), [])
 
         def _build():
@@ -233,12 +237,13 @@ def shell(data_root, monkeypatch):
             _detached("period", lambda: PeriodStep(app_state=state, layers=layers))
             _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee))
+            _detached("layers", lambda: LayersStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("header", lambda: WorkflowHeader(app_state=state))
             _detached("report_template", lambda: ReportTemplateField(app_state=state))
             tiles["banner"] = build_set_status_banner(state)
             tiles["sets"] = build_set_selector(state)
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
-                        for key in ("aoi", "alerts", "period", "prepare", "integrate", "overview")}
+                        for key in ("aoi", "alerts", "layers", "period", "prepare", "integrate", "overview")}
             wrappers["analysis"] = v.Html(tag="div")
             return wrappers
 
@@ -315,7 +320,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         await asyncio.sleep(0.2)
         shell.settle()
         before = _roots(shell)
-        assert len(before) == 10 and shell.reports == []
+        assert len(before) == 11 and shell.reports == []
 
         # Download & harmonize: a row's artifacts, applied by run_rows on its worker
         for source in ("GLAD-L", "RADD"):
@@ -363,7 +368,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         builds = []
         monkeypatch.setattr(map_layers, "spawn_in_context",
                             lambda target, *a, **kw: builds.append(spawn_in_context(target, *a, **kw)))
-        layers = shell.tiles["layers"]
+        layers = shell.tiles["map_layers"]
         legend = legend_specs.alert_legend("src:RADD", "RADD", legend_specs.preview_title("RADD", "a", "b"))
         await _wait(_publish(lambda: layers.show("src:RADD", lambda: None, legend=legend), errors))
         assert errors == [], errors[-1]

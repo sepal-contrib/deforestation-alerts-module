@@ -24,11 +24,14 @@ def absolute(path) -> Optional[str]:
 
 @solara.component
 def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                disabled=False):
-    with rv.RadioGroup(v_model=origin, on_v_model=on_origin, row=True, dense=True, hide_details=True,
-                       disabled=disabled):
-        rv.Radio(label=t("steps.raster_input.origin_gee"), value="gee")
-        rv.Radio(label=t("steps.raster_input.origin_file"), value="file")
+                disabled=False, show_origin=True):
+    # ``show_origin=False``: the caller picks the origin itself (the
+    # visualization-layer modal's Kind select)
+    if show_origin:
+        with rv.RadioGroup(v_model=origin, on_v_model=on_origin, row=True, dense=True, hide_details=True,
+                           disabled=disabled):
+            rv.Radio(label=t("steps.raster_input.origin_gee"), value="gee")
+            rv.Radio(label=t("steps.raster_input.origin_file"), value="file")
     # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
     # events instead. Always the same wrapper, so toggling it never remounts
     # a picker (which would list the user's assets again).

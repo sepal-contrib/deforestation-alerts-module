@@ -168,6 +168,8 @@ def ensure_overviews(path, resampling: str = "nearest") -> bool:
     from osgeo import gdal
 
     path = str(path)
+    if not Path(path).exists():  # not GDAL's raw RuntimeError (slice-1 Task 5 minor)
+        raise FileNotFoundError(f"file not found: {path}")
     sidecar = Path(path + ".ovr")
     if sidecar.exists() and sidecar.stat().st_mtime < Path(path).stat().st_mtime:
         sidecar.unlink()
