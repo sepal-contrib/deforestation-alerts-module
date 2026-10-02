@@ -54,3 +54,18 @@ def test_details_note_checkbox_and_a_third_button():
         assert seconds == [1]
     finally:
         rc.close()
+
+
+def test_the_message_note_and_each_detail_sit_on_their_own_line():
+    """Slice-5 walk: inline spans ran the Replace list into the message
+    ("…will be discarded.#0 · Reviewed: confirmed · 2.88 ha") and would run
+    every listed alert into the next. Each is a block of its own."""
+    lines = ["#3 · Reviewed: confirmed · 1.50 ha", "#7 · Reviewed: false positive · 0.25 ha"]
+    _, rc = reacton.render(ConfirmDialog(open=True, on_cancel=lambda: None, on_confirm=lambda: None, message="M",
+                                         note="why", details=lines), handle_error=False)
+    try:
+        tags = {w.children[0]: w.tag for w in rc.find(v.Html).widgets
+                if len(w.children) == 1 and isinstance(w.children[0], str)}
+        assert {text: tags.get(text) for text in ["M", "why", *lines]} == {text: "div" for text in ["M", "why", *lines]}
+    finally:
+        rc.close()

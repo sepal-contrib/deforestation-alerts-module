@@ -87,11 +87,13 @@ def ConfirmDialog(
             with rv.CardTitle():
                 solara.Text(title)
             with rv.CardText():
-                solara.Text(message)
+                # One block each: inline spans run the listed lines into the
+                # message and into one another.
+                rv.Html(tag="div", children=[message])
                 if note:
-                    solara.Text(note, style=_NOTE_STYLE)
+                    rv.Html(tag="div", children=[note], style_=_NOTE_STYLE)
                 for line in details or []:
-                    solara.Text(str(line), style=_DETAIL_STYLE)
+                    rv.Html(tag="div", children=[str(line)], style_=_DETAIL_STYLE)
                 if checkbox_label:
                     solara.Checkbox(
                         label=checkbox_label,
