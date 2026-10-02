@@ -9,8 +9,11 @@ the rules here is what makes them testable without a live session.
 """
 
 from datetime import date, timedelta
+from typing import Optional
 
-from deforestation_alerts.scripts.scene_index import INDEX_VERSION
+import pandas as pd
+
+from deforestation_alerts.scripts.scene_index import INDEX_VERSION, SOURCE_CODE, row_id
 
 TTL_HOURS = 24
 TAIL_DAYS = 10
@@ -64,3 +67,107 @@ def refresh_window(manifest, want: Window, mode: str) -> Window:
             return (want[0], covered.start)
         raise ValueError("nothing to widen: the coverage already spans the wanted window")
     raise ValueError(f"nothing to fetch for mode {mode!r}")
+
+
+# -------------------------------------------------------------- scenes_for
+
+SELECTION_COLUMNS = ("id", "source", "date", "cloud", "n", "hidden")
+
+_EMPTY = pd.DataFrame(
+    {
+        "id": pd.Series(dtype=object),
+        "source": pd.Series(dtype=object),
+        "date": pd.Series(dtype="datetime64[ns]"),
+        "cloud": pd.Series(dtype="float64"),
+        "n": pd.Series(dtype="int64"),
+        "hidden": pd.Series(dtype=bool),
+    },
+    columns=list(SELECTION_COLUMNS),
+)
+
+
+def overlapping_tiles(tiles, bbox) -> set[str]:
+    """The tiles whose true footprint meets ``bbox``.
+
+    Two steps, and both are needed. The spatial index narrows candidates by
+    bounding box, which is fast and admits too much; ``intersects`` against
+    just those candidates' real geometry then settles it. Skipping the second
+    step would let a Landsat scene whose slanted footprint misses the alert
+    look like coverage, because its bounding box still reaches it.
+    """
+    if tiles is None or len(tiles) == 0:
+        return set()
+    candidates = tiles.iloc[list(tiles.sindex.query(bbox, predicate="intersects"))]
+    exact = candidates[candidates.geometry.intersects(bbox)]
+    return set(exact["tile"])
+
+
+def scenes_for(tables, bbox, start: date, end: date, *, max_cloud: Optional[float] = None) -> pd.DataFrame:
+    """The timeline's rows for one alert: one row per (collection, date).
+
+    ``start`` and ``end`` are both inclusive -- they are the dates a reviewer
+    asked to see, not a half-open interval.
+
+    ``cloud`` is the mean over exactly the granules that overlap ``bbox``,
+    which reproduces the ``aggregate_mean`` of the per-alert request this
+    replaces: that request's ``filterBounds`` chose *which* granules to
+    average, and ``CLOUDY_PIXEL_PERCENTAGE``/``CLOUD_COVER`` was always a
+    whole-granule statistic, so averaging the same subset locally gives the
+    same number.
+
+    Rows over ``max_cloud`` are returned with ``hidden=True`` instead of being
+    dropped, so the timeline can show the reviewer that an image exists there
+    before they decide to raise the limit.
+    """
+    scenes = tables.scenes
+    if scenes is None or len(scenes) == 0:
+        return _EMPTY.copy()
+
+    keep = overlapping_tiles(tables.tiles, bbox)
+    # An empty tile means an AOI-wide mosaic (a Planet basemap): there is no
+    # footprint to test, so it covers every alert.
+    in_area = scenes["tile"].isin(keep) | (scenes["tile"] == "")
+    in_window = scenes["date"].between(pd.Timestamp(start), pd.Timestamp(end))
+    rows = scenes[in_area & in_window]
+    if len(rows) == 0:
+        return _EMPTY.copy()
+
+    grouped = (
+        rows.groupby(["source", "date"], as_index=False, sort=True)
+        .agg(cloud=("cloud", "mean"), n=("key", "size"))
+    )
+    grouped["id"] = [row_id(src, d) for src, d in zip(grouped["source"], grouped["date"].dt.date)]
+    # NaN cloud (a Planet basemap) is never over the limit: it has no figure
+    # to compare, and hiding it would make the collection look unavailable.
+    if max_cloud is None:
+        grouped["hidden"] = False
+    else:
+        grouped["hidden"] = grouped["cloud"].gt(float(max_cloud)).fillna(False)
+    grouped["hidden"] = grouped["hidden"].astype(bool)
+    out = grouped.sort_values(["date", "source"], kind="stable").reset_index(drop=True)
+    return out[list(SELECTION_COLUMNS)].astype({"n": "int64"})
+
+
+def source_counts(sel: pd.DataFrame) -> dict[str, tuple[int, int]]:
+    """``{source: (visible, hidden)}`` for the collection toggles, every source
+    present even at zero so the toolbar shows a count rather than nothing."""
+    out = {name: (0, 0) for name in SOURCE_CODE}
+    for name, part in sel.groupby("source", sort=False):
+        hidden = int(part["hidden"].sum())
+        out[name] = (len(part) - hidden, hidden)
+    return out
+
+
+def month_counts(sel: pd.DataFrame) -> dict[tuple[int, int], int]:
+    """``{(year, month): visible rows}``, the number a collapsed month shows.
+
+    Visible only: with a cloud limit set, a collapsed month claiming images
+    the reviewer cannot reach on expanding it would be a lie.
+    """
+    shown = sel[~sel["hidden"]]
+    if len(shown) == 0:
+        return {}
+    counts: dict[tuple[int, int], int] = {}
+    for key in zip(shown["date"].dt.year, shown["date"].dt.month):
+        counts[key] = counts.get(key, 0) + 1
+    return counts
