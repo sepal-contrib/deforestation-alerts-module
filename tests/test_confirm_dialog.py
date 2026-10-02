@@ -69,3 +69,13 @@ def test_the_message_note_and_each_detail_sit_on_their_own_line():
         assert {text: tags.get(text) for text in ["M", "why", *lines]} == {text: "div" for text in ["M", "why", *lines]}
     finally:
         rc.close()
+
+
+def test_the_title_breaks_between_words():
+    """Slice-5 walk: "Delete the period 2025-08-01 → 2025-08-3 / 1?"."""
+    _, rc = reacton.render(ConfirmDialog(open=True, on_cancel=lambda: None, on_confirm=lambda: None, title="T"),
+                           handle_error=False)
+    try:
+        assert "word-break: normal" in rc.find(v.CardTitle).widget.style_
+    finally:
+        rc.close()

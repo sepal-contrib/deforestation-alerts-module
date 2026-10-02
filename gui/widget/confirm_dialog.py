@@ -84,7 +84,10 @@ def ConfirmDialog(
         eager=True,
     ):
         with rv.Card():
-            with rv.CardTitle():
+            # Vuetify's card title breaks anywhere (word-break: break-all):
+            # "2025-08-3 / 1?". Break between words, inside one only if it
+            # cannot fit on a line of its own.
+            with rv.CardTitle(style_="word-break: normal; overflow-wrap: anywhere;"):
                 solara.Text(title)
             with rv.CardText():
                 # One block each: inline spans run the listed lines into the
