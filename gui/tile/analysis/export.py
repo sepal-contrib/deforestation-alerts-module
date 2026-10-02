@@ -127,6 +127,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.review_panel import REVIEW_CHOICES
+from gui.tile.analysis.state import capture_alert
 from gui.widget.report_template import ReportTemplateField
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -222,7 +223,7 @@ def review_status(confirmation) -> str:
     return confirmation
 
 
-def _save_attributes(widgets, app_state, analysis, app_tile_model):
+def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
     Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
@@ -238,10 +239,16 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     follows an Integrate that activates a new set, or a project switch,
     meanwhile. The write then happens only if that set is still the active
     one (``_save_alerts_to_gdf``); otherwise the Save is refused.
+
+    ``alert`` (``state.capture_alert``) is what the Save writes: the alert, its
+    images, drawn polygon and questionnaire, read together at the click. An
+    alert change while the lookups block leaves them alone; the row written
+    is the clicked alert's, with its own values. Taken here when not given.
     """
+    alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
     folder, target = _save_target(app_tile_model)
-    alertas_gdf = app_state.alerts_gdf.value
-    actual_alert_id = app_state.actual_alert_id.value
+    alertas_gdf = alert.alerts
+    actual_alert_id = alert.alert_id
 
     # Guard: nothing to save without an alert set / valid id (smoke-safe).
     if alertas_gdf is None or actual_alert_id is None or actual_alert_id < 0:
@@ -250,13 +257,13 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
         return False
     # Before any row changes or a lookup blocks; the store writer checks again.
     _refuse_unless_current(alertas_gdf, app_tile_model, target)
-    status = review_status(widgets.confirmation_select.v_model)
+    status = review_status(alert.status)
 
     alertas_gdf.at[actual_alert_id, "status"] = status
 
     # description (loss-driver combobox): the drivers' codes, never labels
     # (``loss_drivers``); an export translates them.
-    alertas_gdf.at[actual_alert_id, "description"] = drivers.encode(widgets.driver_combobox.v_model)
+    alertas_gdf.at[actual_alert_id, "description"] = drivers.encode(alert.drivers)
 
     # before/after image name + info. Guarded (fix round 1): both are None
     # until an image is actually picked for this alert (``AnalysisState``;
@@ -265,12 +272,12 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
     # "'NoneType' object is not subscriptable" and lost the whole review, the
     # same way the drawn-polygon case below is guarded on
     # ``defo_layer is None``.
-    before_info = analysis.before_info.value
-    after_info = analysis.after_info.value
-    # Read with the images, before the lookups block: an alert change
-    # meanwhile resets it (``reset_alert``), or the next alert's drawn polygon
-    # replaces it, and neither belongs to the alert this Save writes.
-    defo_layer = analysis.defo_layer.value
+    before_info = alert.before_info
+    after_info = alert.after_info
+    # Captured with the images: an alert change meanwhile resets it
+    # (``reset_alert``), or the next alert's drawn polygon replaces it, and
+    # neither belongs to the alert this Save writes.
+    defo_layer = alert.defo_layer
     if before_info is None:
         alertas_gdf.at[actual_alert_id, "before_img"] = None
         alertas_gdf.at[actual_alert_id, "before_img_info"] = None
@@ -286,7 +293,7 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model):
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
-    selected_admin = adminL2.filterBounds(widgets.actual_bb.geometry())
+    selected_admin = adminL2.filterBounds(alert.bb.geometry())
     at1 = selected_admin.aggregate_array("ADM0_NAME").distinct()
     at2 = selected_admin.aggregate_array("ADM1_NAME").distinct()
     at3 = selected_admin.aggregate_array("ADM2_NAME").distinct()
@@ -377,19 +384,19 @@ def _save_alerts_to_gdf(alertas_gdf, app_tile_model, *, folder=None, target=None
         record(alertas_gdf, target)
 
 
-def _alert_selected(app_state) -> bool:
-    """An alert set is loaded and the selected index points into it."""
-    gdf = app_state.alerts_gdf.value
-    alert_id = app_state.actual_alert_id.value
+def _alert_selected(alert) -> bool:
+    """An alert set is loaded and the selected index points into it
+    (``alert``: ``state.capture_alert``)."""
+    gdf, alert_id = alert.alerts, alert.alert_id
     return gdf is not None and alert_id is not None and 0 <= alert_id < len(gdf)
 
 
-def _images_picked(widgets, analysis) -> bool:
+def _images_picked(alert) -> bool:
     """A before and an after image are selected for the alert under review."""
-    return analysis.before_info.value is not None and analysis.after_info.value is not None
+    return alert.before_info is not None and alert.after_info is not None
 
 
-def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None):
+def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
@@ -406,9 +413,15 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     ``task`` (the worker's ``TaskTracker``, optional) gets the composite
     download's geedim tile ticks as progress, and is handed back to
     indeterminate once the composite is staged. A cache hit produces no ticks.
+
+    ``alert`` (``state.capture_alert``, taken at the click) is the alert the
+    files are built for: its row, images and grid, read together, so the
+    composite is never one alert's images clipped to another's grid. Taken
+    here when not given.
     """
-    alertas_gdf = app_state.alerts_gdf.value
-    actual_alert_id = app_state.actual_alert_id.value
+    alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
+    alertas_gdf = alert.alerts
+    actual_alert_id = alert.alert_id
 
     if alertas_gdf is None or actual_alert_id is None or actual_alert_id < 0:
         return None
@@ -426,12 +439,9 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     # are None until an image is picked for this alert, which nothing does by
     # itself. Refused here, before any file is written: the TypeError this
     # raised further down used to leave a partial alert_<id>.gpkg behind.
-    if not _images_picked(widgets, analysis):
+    if not _images_picked(alert):
         return None
-    # The picked images, read once: an alert change while the gpkg is written
-    # resets them (``reset_alert``).
-    picked = (analysis.before_info.value, analysis.after_info.value,
-              analysis.before_image.value, analysis.after_image.value)
+    picked = (alert.before_info, alert.after_info, alert.before_image, alert.after_image)
 
     # Before any file is written: a template gone from disk is a refusal, not
     # a half-written set of downloads.
@@ -481,7 +491,7 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
                 folder,
                 actual_alert_id,
                 *picked,
-                widgets.actual_alert_grid,
+                alert.grid,
             )
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
@@ -605,6 +615,9 @@ def build_export(
     def _on_save(*_):
         ns["save_btn"].loading = True
         ns["save_btn"].disabled = True
+        # The alert saved and its values, read here on the UI thread: the
+        # worker writes them whatever is shown by the time the lookups end.
+        alert = capture_alert(analysis, widgets, app_state)
 
         def _worker():
             # No ``total_steps`` — the save is a single opaque phase (GEE admin
@@ -627,6 +640,7 @@ def build_export(
                                 app_state,
                                 analysis,
                                 app_tile_model,
+                                alert=alert,
                             )
                             refused = None
                         except SaveRefused as refusal:
@@ -670,6 +684,7 @@ def build_export(
     def _on_download(*_):
         ns["download_alert_data_btn"].loading = True
         ns["download_alert_data_btn"].disabled = True
+        alert = capture_alert(analysis, widgets, app_state)  # as in _on_save
 
         def _worker():
             # Same tracked_job shape as _on_save above; the report/zip build is
@@ -692,6 +707,7 @@ def build_export(
                             aux_model,
                             app_tile_model,
                             task=task,
+                            alert=alert,
                         )
                     if result is None:
                         # `_download_data` refused: nothing was written and no
@@ -706,7 +722,7 @@ def build_export(
                         # more milestones.
                         if not app_tile_model.recipe_folder_path:
                             reason = t("analysis_tile.export_labels.download_no_recipe")
-                        elif not _alert_selected(app_state):
+                        elif not _alert_selected(alert):
                             reason = t("analysis_tile.export_labels.download_no_alert")
                         else:
                             reason = t("analysis_tile.export_labels.download_no_images")

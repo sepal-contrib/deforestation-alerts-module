@@ -8,6 +8,7 @@ reactive must notice "a new object" without comparing contents.
 
 import threading
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import solara
 
@@ -64,6 +65,23 @@ class AnalysisState:
         current alert's. ``None`` means "not tied to an alert": always current."""
         return token is None or token == self.alert_token.value
 
+    def capture(self, read=dict) -> SimpleNamespace:
+        """The current alert's token and per-alert values, read together under
+        the lock ``reset_alert`` takes, plus what ``read()`` returns (the alert
+        id, its grid, the questionnaire...). A handler takes it on the UI
+        thread, at the click: its worker then works on one alert's values, not
+        on a mix of the alert clicked for and the one shown since."""
+        with self._alert_lock:
+            return SimpleNamespace(
+                token=self.alert_token.value,
+                defo_layer=self.defo_layer.value,
+                before_image=self.before_image.value,
+                after_image=self.after_image.value,
+                before_info=self.before_info.value,
+                after_info=self.after_info.value,
+                **read(),
+            )
+
     def apply_if_current(self, token, apply) -> bool:
         """Run ``apply()`` only while ``token`` is the current alert's, under the
         lock ``reset_alert`` takes, so an alert change cannot slip in between
@@ -74,3 +92,21 @@ class AnalysisState:
                 return False
             apply()
             return True
+
+
+def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespace:
+    """``analysis.capture`` with the alert's row and the review widgets: what a
+    Save, a Download or a CNN run uses, read at the click (UI thread)."""
+
+    def _read():
+        drivers = getattr(getattr(widgets, "driver_combobox", None), "v_model", None)
+        return {
+            "alerts": app_state.alerts_gdf.value,
+            "alert_id": app_state.actual_alert_id.value,
+            "grid": getattr(widgets, "actual_alert_grid", None),
+            "bb": getattr(widgets, "actual_bb", None),
+            "status": getattr(getattr(widgets, "confirmation_select", None), "v_model", None),
+            "drivers": list(drivers) if isinstance(drivers, (list, tuple)) else drivers,
+        }
+
+    return analysis.capture(_read)

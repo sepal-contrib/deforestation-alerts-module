@@ -1166,3 +1166,99 @@ def test_creation_dialog_keeps_field_validation_inline_with_a_justification():
     assert "KEPT INLINE ON PURPOSE" in _src(rel), (
         "the retained inline validation lost its justification comment"
     )
+
+
+# ---------------------------------------------------------------------------
+# Final re-review, Minor 3: Save, Download and a CNN run work on the alert
+# clicked for, read at the click (UI thread), never on a mix of it and the
+# alert shown by the time the worker reads.
+# ---------------------------------------------------------------------------
+def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
+    """Alert A on screen; returns the move to alert B (``view_actual_alert``).
+    (No drawn polygon for the edit tools: drawing one needs their maps.)"""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gdf = gpd.GeoDataFrame({"status": ["Not reviewed"] * 2}, geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)],
+                           crs="EPSG:4326")
+    app_state.alerts_gdf.value = gdf
+    app_state.actual_alert_id.value = 0
+    if polygon:
+        analysis.defo_layer.set("polygon of A")
+    analysis.before_info.set(["S2", 1, 0, "before of A"])
+    analysis.after_info.set(["S2", 2, 0, "after of A"])
+    widgets.actual_alert_grid = "grid of A"
+    widgets.driver_combobox.v_model = [{"text": "Logging", "value": "logging"}]
+
+    def _move_to_b():
+        app_state.actual_alert_id.value = 1
+        analysis.reset_alert()
+        if polygon:
+            analysis.defo_layer.set("polygon of B")
+        widgets.actual_alert_grid = "grid of B"
+        widgets.driver_combobox.v_model = [{"text": "Mining", "value": "mining"}]
+
+    return _move_to_b
+
+
+def _deferred(monkeypatch, module):
+    """The click's worker, held until the test runs it."""
+    held = []
+    monkeypatch.setattr(module, "spawn_in_context", lambda target, args=(), **k: held.append(target))
+    return held
+
+
+@pytest.mark.parametrize("label_key, body", [
+    ("analysis_tile.export_labels.save_btn", "_save_attributes"),
+    ("analysis_tile.export_labels.download_alert_data_btn", "_download_data"),
+])
+def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root, label_key, body):
+    import gui.tile.analysis.export as export
+
+    app_state, analysis = AppState(), AnalysisState()
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None),
+                              confirmation_select=SimpleNamespace(v_model="Yes"))
+    card = export.build_export(widgets=widgets, app_state=app_state, aux_model=_set_context_fake(),
+                               analysis=analysis, app_tile_model=_set_context_fake())
+    move_to_b = _alert_a_then_b(app_state, analysis, widgets)
+    _record_feedback(monkeypatch, export)
+    held = _deferred(monkeypatch, export)
+    seen = []
+    monkeypatch.setattr(export, body, lambda *a, **k: seen.append(k.get("alert")))
+
+    _button(card, t(label_key)).fire_event("click", None)
+    move_to_b()  # before the worker reads anything
+    held[0]()
+
+    alert = seen[0]
+    assert alert is not None and alert.alert_id == 0 and alert.grid == "grid of A"
+    assert alert.defo_layer == "polygon of A" and alert.before_info[3] == "before of A"
+    assert export.drivers.encode(alert.drivers) == "logging" and alert.status == "Yes"
+
+
+def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    app_state, analysis = AppState(), AnalysisState()
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    card = edit_tools.build_edit_tools(widgets=widgets, app_state=app_state, analysis=analysis,
+                                       app_tile_model=_set_context_fake())
+    move_to_b = _alert_a_then_b(app_state, analysis, widgets, polygon=False)
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    held = _deferred(monkeypatch, edit_tools)
+    ran = []
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(k.get("alert")) or "/p.tif")
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    run_btn = _dl_run_button(card, "M 1")
+
+    run_btn.fire_event("click", None)  # a run started while A is shown runs on A's values
+    held.pop()()
+    assert ran[0].alert_id == 0 and ran[0].grid == "grid of A" and ran[0].after_info[3] == "after of A"
+
+    run_btn.fire_event("click", None)
+    move_to_b()  # before the worker starts: nothing runs, nothing is recorded
+    held.pop()()
+    assert len(ran) == 1
+    assert analysis.prediction_files.value == {}
+    assert feedback.toasts()[-1] == ("warning", t("analysis_tile.model_labels.dl_stale"))
+    assert run_btn.loading is False and run_btn.disabled is False

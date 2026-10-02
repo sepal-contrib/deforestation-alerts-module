@@ -109,6 +109,7 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
+from gui.tile.analysis.state import capture_alert
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -148,6 +149,7 @@ def _run_cnn_model(
     app_tile_model,
     *,
     task=None,
+    alert=None,
 ):
     """Body of the OLD ``run_dl_model_*`` (worker side), without widget mutation.
 
@@ -168,21 +170,25 @@ def _run_cnn_model(
     download's geedim tile ticks as progress, and is handed back to
     indeterminate before the model pull + inference. A cache hit produces no
     ticks.
+
+    ``alert`` (``state.capture_alert``, taken at the click) is the alert the
+    composite is built for: its id, images and grid, read together. Taken
+    here when not given.
     """
     from huggingface_hub import hf_hub_download
 
-    actual_alert_id = app_state.actual_alert_id.value
+    alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
 
     on_tiles = tile_progress_reporter(task) if task is not None else None
     with geedim_tile_progress(on_tiles):
         image_local = stage_alert_image(
             app_tile_model.recipe_folder_path,
-            actual_alert_id,
-            analysis.before_info.value,
-            analysis.after_info.value,
-            analysis.before_image.value,
-            analysis.after_image.value,
-            widgets.actual_alert_grid,
+            alert.alert_id,
+            alert.before_info,
+            alert.after_info,
+            alert.before_image,
+            alert.after_image,
+            alert.grid,
         )
     if task is not None:
         task.set_progress(None)  # model pull + inference: back to indeterminate
@@ -565,7 +571,10 @@ def build_edit_tools(
         ns["dl1_remove"].disabled = True
         ns["dl1_run"].loading = True
         ns["dl1_run"].disabled = True
-        token = analysis.alert_token.value  # the alert this run is for
+        # The alert this run is for, with its images and grid, read here on
+        # the UI thread; the worker starts only while it is still current.
+        alert = capture_alert(analysis, widgets, app_state)
+        token = alert.token  # the alert this run is for
         # Writer tracking (spec §12): the composite lands in the set's folder,
         # so the project is marked for the run and a delete is refused
         # meanwhile. The name is read now, at the click: the run keeps marking
@@ -583,13 +592,16 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
-                    with writing(project):
-                        pred_path = _run_cnn_model(
-                            _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                            widgets, analysis, app_state, app_tile_model,
-                            task=task,
-                        )
-                    applied = _apply_model(1, pred_path, token)
+                    if analysis.is_current(token):
+                        with writing(project):
+                            pred_path = _run_cnn_model(
+                                _MODEL1_REPO, _MODEL1_FILE, "_m1",
+                                widgets, analysis, app_state, app_tile_model,
+                                task=task, alert=alert,
+                            )
+                        applied = _apply_model(1, pred_path, token)
+                    else:  # moved on before the worker started: nothing to run
+                        applied = False
                     if not applied:
                         # Another alert is on screen: its result is dropped.
                         # A warning, recorded on the task before the toast.
@@ -612,7 +624,10 @@ def build_edit_tools(
         ns["dl2_remove"].disabled = True
         ns["dl2_run"].loading = True
         ns["dl2_run"].disabled = True
-        token = analysis.alert_token.value  # the alert this run is for
+        # The alert this run is for, with its images and grid, read here on
+        # the UI thread; the worker starts only while it is still current.
+        alert = capture_alert(analysis, widgets, app_state)
+        token = alert.token  # the alert this run is for
         project = writer_name(app_state)  # as in _on_dl1_run
 
         def _worker():
@@ -625,13 +640,16 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
-                    with writing(project):
-                        pred_path = _run_cnn_model(
-                            _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                            widgets, analysis, app_state, app_tile_model,
-                            task=task,
-                        )
-                    applied = _apply_model(2, pred_path, token)
+                    if analysis.is_current(token):
+                        with writing(project):
+                            pred_path = _run_cnn_model(
+                                _MODEL2_REPO, _MODEL2_FILE, "_m2",
+                                widgets, analysis, app_state, app_tile_model,
+                                task=task, alert=alert,
+                            )
+                        applied = _apply_model(2, pred_path, token)
+                    else:  # moved on before the worker started: nothing to run
+                        applied = False
                     if not applied:
                         # Another alert is on screen: its result is dropped.
                         # A warning, recorded on the task before the toast.
