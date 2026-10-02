@@ -158,6 +158,9 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
     return _on_click
 
 
+EXPORT_FORMATS = ("csv", "gpkg", "geojson")
+
+
 def build_export_card(gdf, folder, sources, start, end, project):
     """Build the export card: one generate button per format + its hidden
     DownloadBtn, revealed when that format has been written. ``project`` is
@@ -169,16 +172,11 @@ def build_export_card(gdf, folder, sources, start, end, project):
     """
     gen_buttons = []
     dl_buttons = []
-    for fmt in ("csv", "gpkg", "geojson"):
-        label = t(f"overview_tile.export_{fmt}")
+    for fmt in EXPORT_FORMATS:
         gen_btn = sw.Btn(
-            msg=label, small=True, outlined=True, color="primary", class_="pa-1 ma-1"
+            msg="", small=True, outlined=True, color="primary", class_="pa-1 ma-1"
         )
-        dl_btn = sw.DownloadBtn(
-            text=f"{t('overview_tile.export_download')} {label}",
-            small=True,
-            class_="pa-1 ma-1",
-        ).hide()
+        dl_btn = sw.DownloadBtn(text="", small=True, class_="pa-1 ma-1").hide()
         gen_btn.on_event(
             "click",
             _bind_export(
@@ -188,15 +186,29 @@ def build_export_card(gdf, folder, sources, start, end, project):
         gen_buttons.append(gen_btn)
         dl_buttons.append(dl_btn)
 
-    return v.Card(
+    card = v.Card(
         class_="pa-3 ma-3",
         hover=True,
         children=[
-            v.CardTitle(class_="pa-1", children=[t("overview_tile.export_label")]),
+            v.CardTitle(class_="pa-1", children=[""]),
             v.Row(class_="d-flex justify-center", children=gen_buttons),
             v.Row(class_="d-flex justify-center", children=dl_buttons),
         ],
     )
+    return relabel_export_card(card)
+
+
+def relabel_export_card(card):
+    """Write the export card's labels in the current language, in place: the
+    card is built once per set, so a language switch relabels it rather than
+    rebuilding it (which would hide the download buttons already revealed)."""
+    title, gen_row, dl_row = card.children
+    title.children = [t("overview_tile.export_label")]
+    for fmt, gen_btn, dl_btn in zip(EXPORT_FORMATS, gen_row.children, dl_row.children):
+        label = t(f"overview_tile.export_{fmt}")
+        gen_btn.msg = label
+        dl_btn.children = [dl_btn.children[0], f"{t('overview_tile.export_download')} {label}"]
+    return card
 
 
 # Summary-table row label keys (matches old tile order); translated where the
@@ -591,6 +603,13 @@ def OverviewTile(app_state, map_, layers):
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end],
     )
+
+    def _relabel_export():
+        if export_card is not None:
+            relabel_export_card(export_card)
+
+    # Its labels follow a language switch on the same card (``locale`` read above).
+    solara.use_effect(_relabel_export, [export_card, locale])
 
     def _back_to_workflow():
         # Return the right panel to the Workflow view at the step the user was

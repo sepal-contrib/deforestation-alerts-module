@@ -233,6 +233,28 @@ def test_the_summary_rows_follow_a_language_switch(ov, tmp_path):
         rc.close()
 
 
+def test_the_export_card_follows_a_language_switch(ov, tmp_path):
+    """The export card is a raw widget built once per set (its revealed
+    download buttons must survive a re-render), so a ``set_locale`` relabels
+    the same card instead of rebuilding it. The slice-6 walk found its title
+    still English in the French Overview."""
+    state = _state(_project(tmp_path), _alerts())
+    set_locale("en")
+    map_, layers, rc = ov.render(state)
+    try:
+        [card] = _export_cards(rc)
+        set_locale("fr")
+        cards = [w for w in rc.find(v.Card).widgets if w is card]
+        assert cards == [card], "the card was rebuilt"
+        assert t("overview_tile.export_label") == "Exporter les alertes"
+        assert _export_cards(rc) == [card]
+        download = f"{t('overview_tile.export_download')} {t('overview_tile.export_csv')}"
+        assert download in _strings(card), _strings(card)
+    finally:
+        set_locale("en")
+        rc.close()
+
+
 def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
     p = _project(tmp_path)
     state = _state(p, _alerts())
@@ -259,7 +281,8 @@ def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
 
 def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(ov, tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(overview_tile, "build_export_card", lambda *a: calls.append(a) or v.Card(children=[]))
+    real = overview_tile.build_export_card  # a real card: the tile relabels it on a language switch
+    monkeypatch.setattr(overview_tile, "build_export_card", lambda *a: calls.append(a) or real(*a))
     alerts = _alerts()
     state = _state(_project(tmp_path), alerts)
     map_, layers, rc = ov.render(state)
