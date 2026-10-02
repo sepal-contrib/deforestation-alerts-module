@@ -240,3 +240,40 @@ def test_the_previous_alerts_layers_are_gone_before_the_maps_move_to_the_next_al
     state.actual_alert_id.set(0)
     analysis_tile.view_actual_alert(widgets, state, AnalysisState(), SimpleNamespace(), SimpleNamespace(v_model=None))
     assert len(at_move) == 1 and "Original Alert" not in at_move[0], at_move
+
+
+def test_a_vis_layer_added_during_an_alert_clear_is_kept():
+    """A worker's vis build that lands while the loop clears the alert layers
+    waits for the clear (the map's ``layers_lock``) instead of being dropped
+    by its write of ``layers``."""
+    import threading
+
+    from ipyleaflet import TileLayer
+
+    from gui.tile.analysis.widgets import LockedMap
+
+    map_ = LockedMap(gee=False)
+    url = "https://example.invalid/{z}/{x}/{y}.png"
+    vis = TileLayer(url=url, name="s2")
+    racer = {}
+
+    class _RacingAlertLayer(TileLayer):
+        """The alert layer: reading its key (mid-clear) starts a vis build on a worker."""
+
+        @property
+        def key(self):
+            if racer.get("armed") and "thread" not in racer:
+                racer["thread"] = threading.Thread(target=lambda: map_.add_layer(vis, key="vis:s2"), daemon=True)
+                racer["thread"].start()
+                racer["thread"].join(0.3)  # unlocked, the add completes here, inside the clear
+            return self._key
+
+        @key.setter
+        def key(self, value):
+            self._key = value
+
+    map_.add_layer(_RacingAlertLayer(url=url, name="alert"), key="alert")
+    racer["armed"] = True
+    vis_sync.clear_alert_layers(map_)
+    racer["thread"].join(5)
+    assert [getattr(lyr, "key", None) for lyr in map_.layers if not lyr.base] == ["vis:s2"]

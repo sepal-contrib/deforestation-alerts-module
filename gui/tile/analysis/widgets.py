@@ -43,6 +43,8 @@ the chosen before/after images and their info lists live in ``AnalysisState``):
     * ``show_image_collection``        — [planet, s2, landsat] default-load flags
 """
 
+import threading
+
 import ipyvuetify as v
 import solara
 from ipywidgets import jslink
@@ -52,6 +54,37 @@ from pysepal.mapping.aoi_control import AoiControl
 
 from gui.i18n import t
 from gui.widget.custom_sw import CustomDrawControl, CustomSlideGroup
+
+
+class LockedMap(SepalMap):
+    """A SepalMap whose layer list is rewritten under one per-map lock.
+
+    ipyleaflet's add/remove are read-modify-writes of ``layers``; on the
+    Analysis maps the visualization builds add layers on a worker while the
+    loop clears the alert layers (``vis_sync.clear_alert_layers``, which takes
+    ``layers_lock`` too), so an unlocked add landing mid-clear was dropped.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # Before SepalMap's own init: it adds the basemap through add_layer.
+        self.layers_lock = threading.RLock()
+        super().__init__(*args, **kwargs)
+
+    def add_layer(self, *args, **kwargs):
+        with self.layers_lock:
+            return super().add_layer(*args, **kwargs)
+
+    def remove_layer(self, *args, **kwargs):
+        with self.layers_lock:
+            return super().remove_layer(*args, **kwargs)
+
+    def add(self, *args, **kwargs):
+        with self.layers_lock:
+            return super().add(*args, **kwargs)
+
+    def remove(self, *args, **kwargs):
+        with self.layers_lock:
+            return super().remove(*args, **kwargs)
 
 
 class SepalCard(sw.SepalWidget, v.Card):
@@ -182,11 +215,11 @@ class AnalysisWidgets:
         # the shared ``theme_state`` (like the main map) so they follow the
         # app's light/dark theme instead of defaulting to the standalone theme.
         # ------------------------------------------------------------------
-        self.map_before = SepalMap(gee_interface=gee_interface, theme_state=theme_state)
+        self.map_before = LockedMap(gee_interface=gee_interface, theme_state=theme_state)
         self.map_before.add_class("custom-map-class2")
         self.map_before.add_basemap("SATELLITE")
 
-        self.map_after = SepalMap(gee_interface=gee_interface, theme_state=theme_state)
+        self.map_after = LockedMap(gee_interface=gee_interface, theme_state=theme_state)
         self.map_after.add_class("custom-map-class2")
         self.map_after.add_basemap("SATELLITE")
 

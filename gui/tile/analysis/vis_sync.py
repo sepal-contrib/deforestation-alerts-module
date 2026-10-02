@@ -13,6 +13,7 @@ spares the ``vis:`` keys this module keeps on the maps.
 import json
 import logging
 import threading
+from contextlib import nullcontext
 from datetime import date
 
 from gui.i18n import t
@@ -27,11 +28,13 @@ KEY_PREFIX = "vis:"
 
 
 def clear_alert_layers(map_) -> None:
-    """Remove every layer but the basemaps and the visualization layers (one
-    write of ``map_.layers``, so a vis build landing meanwhile is not undone
-    layer by layer)."""
-    map_.layers = tuple(lyr for lyr in map_.layers
-                        if lyr.base or str(getattr(lyr, "key", "")).startswith(KEY_PREFIX))
+    """Remove every layer but the basemaps and the visualization layers, in
+    one write of ``map_.layers`` under the map's ``layers_lock`` (a
+    ``LockedMap``): a vis layer a worker adds meanwhile waits for the write
+    instead of being dropped by it."""
+    with getattr(map_, "layers_lock", None) or nullcontext():
+        map_.layers = tuple(lyr for lyr in map_.layers
+                            if lyr.base or str(getattr(lyr, "key", "")).startswith(KEY_PREFIX))
 
 
 def _signature(layer, project) -> str:
