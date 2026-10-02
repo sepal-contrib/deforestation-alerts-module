@@ -66,7 +66,13 @@ def test_default_resolution_counts_custom_native_scales():
     from datetime import datetime
 
     from deforestation_alerts.engine import grid as gridmod
-    from deforestation_alerts.project.models import BandMap, NativeGrid, Project, add_custom_source, add_predefined_source
+    from deforestation_alerts.project.models import (
+        BandMap,
+        NativeGrid,
+        Project,
+        add_custom_source,
+        add_predefined_source,
+    )
 
     p = Project(name="g", created_at=datetime.now(), updated_at=datetime.now())
     add_predefined_source(p, "GLAD-L")

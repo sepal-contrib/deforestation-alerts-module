@@ -17,9 +17,10 @@ harmonize row and ~13 GB for Integrate. Delete ``<out>`` when the numbers
 are copied.
 
 Prints, first, each source's coverage of the AOI (a source whose coverage
-refuses the row is skipped, as Run all skips it); then, per source: wall time, raw + harmonized file size, the harmonize-phase
-peak RSS (a VmRSS sampler around the actual reproject-and-mask call) and the
-process's whole-run peak RSS. Prints the same whole-run peak for integration.
+refuses the row is skipped, as Run all skips it); then, per source: wall
+time, raw + harmonized file size, the harmonize-phase peak RSS (a VmRSS
+sampler around the actual reproject-and-mask call) and the process's
+whole-run peak RSS. Prints the same whole-run peak for integration.
 """
 
 import argparse
