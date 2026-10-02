@@ -1268,6 +1268,52 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
         rc.close()
 
 
+def test_the_masks_card_sits_between_the_grid_and_the_sources_and_runs_its_masks(step, monkeypatch):
+    """Spec §7.3: the Masks card is shown once the grid is set, before the
+    sources table; a mask row's Run and Re-download are jobs of their own,
+    and the row reads running while its key is claimed."""
+    from gui.tile import masks_card
+
+    order, masks = [], []
+    monkeypatch.setattr(masks_card, "ProductTable", lambda **kw: (order.append("masks"), masks.append(kw["rows"])))
+    sources_table = prepare_step.ProductTable
+
+    @solara.component
+    def _Sources(title, columns, rows, empty_text):
+        order.append("sources")
+        sources_table(title=title, columns=columns, rows=rows, empty_text=empty_text)
+
+    monkeypatch.setattr(prepare_step, "ProductTable", _Sources)
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    state = _state(_with_mask())
+
+    box, rc = _render(state)
+    try:
+        assert order[:2] == ["masks", "sources"]
+        [row] = masks[-1]
+        assert row["key"] == "forest"
+        next(a for a in row["actions"] if a["kind"] == "download")["on_click"]()
+        assert masks[-1][0]["cells"][5]["status"] == "running"  # claimed: the row reads running
+        step.run_jobs()
+        assert masks[-1][0]["cells"][5]["status"] == "missing"
+        next(a for a in masks[-1][0]["actions"] if a["kind"] == "redownload")["on_click"]()
+        step.run_jobs()
+        assert [(items, force) for _, items, force in step.started] == [
+            ([("mask", "forest")], False), ([("mask", "forest")], True)]
+    finally:
+        rc.close()
+
+    order.clear()
+    p = _with_mask()
+    p.grid = None
+    box, rc = _render(_state(p))
+    try:
+        assert order == []  # no grid: neither the card nor the table
+    finally:
+        rc.close()
+
+
 # ---------------------------------------------------------------------------
 # The grid size hint
 # ---------------------------------------------------------------------------

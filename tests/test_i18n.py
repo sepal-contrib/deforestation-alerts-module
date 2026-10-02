@@ -140,6 +140,8 @@ def _dynamic_keys():
         "steps.alerts.format_": list(FORMATS),
         "steps.alerts.format_help_": list(FORMATS),
         "steps.alerts.encoding_": list(ENCODINGS),
+        # gui.tile.masks_card's origin chip
+        "steps.prepare.mask_origin_": ["gee", "file"],
     }
 
 

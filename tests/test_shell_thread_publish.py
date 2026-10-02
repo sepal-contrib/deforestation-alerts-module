@@ -60,11 +60,14 @@ from deforestation_alerts.project.models import (
     AlertSetParams,
     AoiRecord,
     Artifact,
+    NativeGrid,
     Period,
     Project,
     RegionCoverage,
     SourceCoverage,
+    add_mask,
     add_predefined_source,
+    set_period_mask,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
@@ -155,6 +158,11 @@ def _project():
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
     p.grid = gridmod.build_grid(PARAGUAY, gridmod.auto_utm_epsg(PARAGUAY), 30.0)
+    # a project mask, off in the period: Download & harmonize renders its row
+    # in the Masks card (switch and mode cells included) on every publish
+    add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
+             native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
+    set_period_mask(p, JAN.id, "forest", on=False)
     p.coverage = {k: SourceCoverage(aoi_digest="d1", checked_on=date.today(), fraction=1.0,
                                     regions=[RegionCoverage(name=k, fraction=1.0, first=date(2000, 1, 1),
                                                             last=date(2100, 1, 1))])

@@ -57,6 +57,7 @@ from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store import workflow_steps
+from gui.tile.masks_card import MasksCard
 from gui.widget.grid_form import GridForm
 from gui.widget.product_table import ProductTable
 
@@ -320,6 +321,11 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         solara.Text(t("steps.prepare.description"), classes=["text--secondary"])
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:
+            # between the grid card and the sources table (spec §7.3); a mask row
+            # reads running whichever period's job claimed it, so it gets every key
+            MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
+                      rows=plan_masks(p, pdir, period), running=running, errors=row_errors.value,
+                      on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True))
             ProductTable(
                 title=t("steps.prepare.list_title"),
                 columns=[{"label": t("steps.prepare.col_source")},
