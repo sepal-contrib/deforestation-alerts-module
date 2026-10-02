@@ -66,7 +66,7 @@ def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_d
     t_run = now_ms(page)
     run.click()
     t0 = time.time()
-    wait_for(lambda: prepare_state(page)["running"] or "Run 0 pending" in panel_text(page), 30, "the job to start",
+    wait_for(lambda: prepare_state(page)["running"] or "run 0 pending" in panel_text(page).lower(), 30, "the job to start",
              poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page)
@@ -255,7 +255,7 @@ def choose(page, label, option, scope=".v-dialog--active"):
 
 def type_asset(page, asset_id, scope=".v-dialog--active"):
     """AssetSelectComponent: type an asset id, commit it (Enter, then Tab)."""
-    field = page.locator(f'{scope} .v-input:has(label:has-text("Select an asset")) input').last
+    field = page.locator(f'{scope} .v-input:has(label:has-text("Select an asset")) input:not([type="hidden"])').last
     field.click()
     field.fill(str(asset_id))
     field.press("Enter")
