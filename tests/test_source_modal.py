@@ -1,4 +1,5 @@
 import asyncio
+import time
 import threading
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -215,12 +216,20 @@ def _modal(state, open_, added, saved, editing=None):
                           editing=editing)
 
 
-async def _settle(cond, rounds=300):
-    for _ in range(rounds):
+async def _settle(cond, timeout=10.0):
+    """Poll ``cond`` until it holds or a wall-clock deadline passes (a count of
+    sleeps gives up early on a loaded machine)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         await asyncio.sleep(0.01)
         if cond():
             return True
     return False
+
+
+def _bands_listed(rc, label):
+    """The band list has loaded: the band select offers items."""
+    return any(w.items for w in rc.find(v.Select, label=label).widgets)
 
 
 def _go_custom(rc, name):
@@ -366,7 +375,8 @@ def test_an_edit_saves_through_on_save_custom(tmp_path, monkeypatch):
         box, rc = reacton.render(_modal(state, open_, added, saved, editing="mine"), handle_error=False)
         try:
             assert not rc.find(v.BtnToggle).widgets  # an edit is always custom
-            await asyncio.sleep(0.1)  # the bands load; the edit keeps its own mapping
+            # the bands load; the edit keeps its own mapping
+            assert await _settle(lambda: _bands_listed(rc, t("steps.alerts.band_alert")))
             _submit_btn(rc, t("steps.alerts.save")).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             assert [s[0] for s in saved] == ["mine"] and added == []

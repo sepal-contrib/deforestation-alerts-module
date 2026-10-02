@@ -8,6 +8,7 @@ run time; counts are plural nodes; nothing reads the legacy ``cm`` Translator.
 import ast
 import json
 import re
+from pathlib import Path
 
 import pytest
 from pysepal.i18n import set_locale
@@ -133,7 +134,7 @@ def test_no_duplicate_top_level_namespaces(locale):
     """A key defined by two files makes ``catalog()`` refuse the locale."""
     seen = {}
     for f in sorted((i18n.MESSAGES_DIR / locale).glob("*.json")):
-        for key in json.load(open(f, encoding="utf-8")):
+        for key in json.loads(Path(f).read_text(encoding="utf-8")):
             assert key not in seen, f"{locale}: namespace '{key}' defined in both {seen[key]} and {f.name}"
             seen[key] = f.name
 
@@ -141,7 +142,7 @@ def test_no_duplicate_top_level_namespaces(locale):
 @pytest.mark.parametrize("locale", LOCALES)
 def test_step_one_is_labelled_aoi(locale):
     """Dates moved to the Period step (spec §4.2): step 1 is "AOI"."""
-    app = json.load(open(i18n.MESSAGES_DIR / locale / "app.json", encoding="utf-8"))
+    app = json.loads(Path(i18n.MESSAGES_DIR / locale / "app.json").read_text(encoding="utf-8"))
     assert app["app"]["drawer_item"]["aoi"] == "AOI"
 
 
@@ -217,7 +218,7 @@ def _dynamic_keys():
 def _english() -> dict:
     catalogue = {}
     for f in sorted((i18n.MESSAGES_DIR / "en").glob("*.json")):
-        catalogue.update(json.load(open(f, encoding="utf-8")))
+        catalogue.update(json.loads(Path(f).read_text(encoding="utf-8")))
     return catalogue
 
 
@@ -307,7 +308,7 @@ def _flat(node, prefix=""):
 
 @pytest.mark.parametrize("name", PRUNED_FILES)
 def test_every_english_key_of_the_legacy_files_is_used(name):
-    keys = _flat(json.load(open(i18n.MESSAGES_DIR / "en" / name, encoding="utf-8")))
+    keys = _flat(json.loads(Path(i18n.MESSAGES_DIR / "en" / name).read_text(encoding="utf-8")))
     unused = sorted(keys - _used_keys())
     assert not unused, f"unused keys in en/{name} (delete them in every locale): {unused}"
 

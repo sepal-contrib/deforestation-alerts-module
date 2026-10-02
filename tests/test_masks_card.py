@@ -8,6 +8,7 @@ modal is rendered for real with a stub raster input (the pattern of
 """
 
 import asyncio
+import time
 import threading
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -604,8 +605,11 @@ def _modal(state, open_, added, saved, editing=None):
                                 on_save=lambda name, changes: saved.append((name, changes)), editing=editing)
 
 
-async def _settle(cond, rounds=300):
-    for _ in range(rounds):
+async def _settle(cond, timeout=10.0):
+    """Poll ``cond`` until it holds or a wall-clock deadline passes (a count of
+    sleeps gives up early on a loaded machine)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         await asyncio.sleep(0.01)
         if cond():
             return True

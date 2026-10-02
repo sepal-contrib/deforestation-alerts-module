@@ -79,9 +79,11 @@ def test_a_picked_image_and_its_info_land_in_the_state():
     assert s.before_info.value is None
 
 
-def test_an_alert_change_forgets_the_previous_alerts_choices():
+def test_an_alert_change_forgets_the_previous_alerts_choices(caplog):
     """The chosen images, their info and the CNN predictions belong to one
     alert: ``view_actual_alert`` resets them before the panes choose again."""
+    import logging
+
     from gui.store.state_manager import AppState
     from gui.tile.analysis import analysis_tile
 
@@ -91,6 +93,7 @@ def test_an_alert_change_forgets_the_previous_alerts_choices():
     alerts["alert_sources"] = ["GLAD-L"]
     alerts["alert_date_min"] = [2026.010]
     alerts["alert_date_max"] = [2026.020]
+    alerts["bounding_box"] = alerts.geometry
     app_state.alerts_gdf.set(alerts)
     app_state.actual_alert_id.set(0)
     s = AnalysisState()
@@ -99,10 +102,16 @@ def test_an_alert_change_forgets_the_previous_alerts_choices():
     s.prediction_files.set({1: "/m1.tif", 2: "/m2.tif"})
     widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
 
-    analysis_tile.view_actual_alert(widgets, app_state, s, SimpleNamespace(), SimpleNamespace(v_model=None))
+    with caplog.at_level(logging.ERROR):
+        analysis_tile.view_actual_alert(widgets, app_state, s, SimpleNamespace(), SimpleNamespace(v_model=None))
 
     assert s.before_image.value is None and s.after_info.value is None
     assert s.prediction_files.value == {}
+    # The stand-in widgets carry no maps, so the map work after the reset fails
+    # on them, and only there (not on the alert's data): one logged error.
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert [r.getMessage() for r in errors] == ["Analysis: view_actual_alert map update failed"]
+    assert errors[0].exc_info[0] is AttributeError and "draw_before" in str(errors[0].exc_info[1])
 
 
 def test_an_alert_change_makes_earlier_tokens_stale():

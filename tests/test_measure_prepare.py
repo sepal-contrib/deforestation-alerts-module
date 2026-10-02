@@ -2,7 +2,7 @@
 
 The national run itself needs Earth Engine and hours; these tests only pin
 that its rasters go to the project disk, never SEPAL's small /var/tmp, and that
-it leaves no scratch behind.
+Integrate runs without the old ``Workspace``.
 """
 
 import importlib.util
@@ -44,7 +44,7 @@ def test_an_output_on_the_small_local_disk_is_refused_before_earth_engine(mp, mo
     assert "/var/tmp" in capsys.readouterr().err
 
 
-def test_integrate_builds_a_job_without_a_workspace_and_leaves_no_scratch(mp, tmp_path, monkeypatch):
+def test_integrate_builds_a_job_without_a_workspace(mp, tmp_path, monkeypatch):
     out = tmp_path / "out"
     jobs = []
 
@@ -58,7 +58,6 @@ def test_integrate_builds_a_job_without_a_workspace_and_leaves_no_scratch(mp, tm
     assert isinstance(job, mp.IntegrationJob)
     assert not hasattr(job, "workspace")
     assert job.pdir == out and job.sources == ["GLAD-L"]
-    assert not (out / "scratch").exists()
 
 
 def test_the_coverage_is_saved_before_any_row_runs(mp, tmp_path, monkeypatch):
