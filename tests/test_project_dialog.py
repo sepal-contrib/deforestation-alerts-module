@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -84,12 +85,21 @@ def dialog(monkeypatch, tmp_path):
     unsubscribe()
 
 
-async def _settle(done, what, tries=300):
-    for _ in range(tries):
+# Generous: a list read and its re-render run on a worker thread, which a
+# loaded machine (parallel suites, a SEPAL sandbox) can hold back for seconds.
+SETTLE_SECONDS = 10.0
+
+
+async def _settle(done, what, timeout=SETTLE_SECONDS):
+    """Wait until ``done()`` is truthy: poll by wall-clock deadline, not by a
+    count of sleeps (a count gives up early when the event loop runs slowly)."""
+    deadline = time.monotonic() + timeout
+    while True:
         if done():
             return
+        if time.monotonic() > deadline:
+            raise AssertionError(f"never happened within {timeout:g} s: {what}")
         await asyncio.sleep(0.01)
-    raise AssertionError(f"never happened: {what}")
 
 
 def _listed(ns):
@@ -111,7 +121,8 @@ def _open_form(rc):
     return rc.find(v.Dialog, v_model=True)
 
 
-def _submit_name(rc, name):
+async def _submit_name(rc, name):
+    await _settle(lambda: _open_form(rc).widgets, "the name form opened")
     form = _open_form(rc)
     form.find(v.TextField, label=t("steps.project.name_label")).widget.v_model = name
     _button(form, t("common.create")).fire_event("click", None)
@@ -156,9 +167,10 @@ def test_a_name_taken_on_disk_since_the_list_was_read_is_refused(dialog):
             before = manifest.read_text()
 
             _button(rc, t("steps.project.new")).fire_event("click", None)
-            _submit_name(rc, "b")
+            await _submit_name(rc, "b")
 
             assert _listed(dialog) == {"a": "0 / 0 / 0"}  # the list on screen did not know "b"
+            await _settle(lambda: _open_form(rc).find(v.Alert).widgets, "the name refused")
             errors = [w.children for w in _open_form(rc).find(v.Alert).widgets]
             assert errors == [[t("steps.project.name_exists")]]
             assert dialog.state.project.value is None and manifest.read_text() == before
@@ -183,13 +195,19 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
                 await _settle(lambda: dialog.state.project.value is not None, "the project opened")
             if how == "new":
                 _button(rc, t("steps.project.new")).fire_event("click", None)
-                _submit_name(rc, "n")
+                await _submit_name(rc, "n")
             if how == "duplicate":
-                _button(rc, t("steps.project.duplicate")).fire_event("click", None)
-                _submit_name(rc, "c")
+                label = t("steps.project.duplicate")
+                await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets),
+                              "the Duplicate button")
+                _button(rc, label).fire_event("click", None)
+                await _submit_name(rc, "c")
             expected = {"open": "a", "new": "n", "duplicate": "c"}[how]
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == expected,
+                          f"{expected} installed")
             assert dialog.state.project.value.name == expected
             assert dialog.state.current_page_view.value == "aoi_tile"
+            await _settle(lambda: dialog.dismissed >= (2 if how == "duplicate" else 1), "the dialog closed")
             assert dialog.dismissed == (2 if how == "duplicate" else 1)
         finally:
             rc.close()
@@ -197,8 +215,9 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
     asyncio.run(main())
 
 
-def _delete(rc, dialog, name):
+async def _delete(rc, dialog, name):
     _row_action(dialog, name, "delete")()
+    await _settle(lambda: rc.find(v.Dialog, v_model=True).widgets, "the confirm dialog opened")
     confirm = rc.find(v.Dialog, v_model=True)
     confirm.find(v.TextField).widget.v_model = name
     _button(confirm, t("common.delete")).fire_event("click", None)
@@ -222,7 +241,7 @@ def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monk
             dialog.state.new_project_state(pd.create_project("a"))
             dialog.state.active_step.set(step_index("period"))
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
-            _delete(rc, dialog, "a")
+            await _delete(rc, dialog, "a")
             await _settle(lambda: _toasts("success"), "the delete finished")
             assert seen == [None]
             assert not (dialog.root / "a").exists()
@@ -248,7 +267,7 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
             add_predefined_source(p, "RADD")
             dialog.state.new_project_state(p)
             await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed")
-            _delete(rc, dialog, "a")
+            await _delete(rc, dialog, "a")
             await _settle(lambda: _toasts("error"), "the delete failed")
             assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
             live = dialog.state.project.value
@@ -347,13 +366,18 @@ def test_the_search_filters_the_list(dialog):
         box, rc = dialog.render()
         try:
             await _settle(lambda: _listed(dialog) and len(_listed(dialog)) == 3, "three projects listed")
+            # The recorder sees the rows when the table renders; the search
+            # field is shown once that render (on the read's worker) is committed.
+            await _settle(lambda: rc.find(v.TextField, label=t("steps.project.search")).widgets, "the search field")
             search = rc.find(v.TextField, label=t("steps.project.search")).widget
             search.v_model = "NOR"
-            assert set(_listed(dialog)) == {"north", "north_2"}
+            await _settle(lambda: set(_listed(dialog)) == {"north", "north_2"}, "the list filtered")
             search.v_model = "zz"
-            assert _listed(dialog) == {} and dialog.empty[-1] == t("steps.project.no_match", query="zz")
+            await _settle(lambda: _listed(dialog) == {}, "no project matched")
+            assert dialog.empty[-1] == t("steps.project.no_match", query="zz")
             search.v_model = None  # the field's clear button
-            assert len(_listed(dialog)) == 3 and dialog.empty[-1] == t("steps.project.list_empty")
+            await _settle(lambda: len(_listed(dialog)) == 3, "the filter cleared")
+            assert dialog.empty[-1] == t("steps.project.list_empty")
         finally:
             rc.close()
 
