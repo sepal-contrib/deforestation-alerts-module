@@ -425,6 +425,26 @@ def test_run_rows_marks_the_folder_busy_and_redraws_a_shown_source(monkeypatch, 
     assert drawn == [("MAP", paths.resolve(tmp_path, harm.rel_path), "src:RADD", "RADD · 2026-01-01 → 2026-01-31")]
 
 
+def test_a_row_finishing_after_the_active_period_changed_does_not_redraw_its_source(monkeypatch, tmp_path):
+    """A January run still going after the user switched to February must not
+    swap January's file into ``src:<source>`` (which may show February's)."""
+    s = AppState()
+    p = _project("d", "RADD")
+    p.periods = {**p.periods, FEB.id: FEB}
+    s.new_project_state(p)
+    refreshed = []
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        s.update_project("d", lambda live: setattr(live, "active_period", FEB.id))  # the user moves on
+        return _arts("RADD")
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    layers = SimpleNamespace(is_on=lambda k: True, refresh=lambda *a, **k: refreshed.append(a))
+    prepare_jobs.run_rows(_ctx(s, layers=layers, map_="MAP", pdir=tmp_path), ["RADD"])
+    assert harm_key(JAN.id, "RADD") in s.project.value.artifacts  # still recorded
+    assert refreshed == []
+
+
 # ---------------------------------------------------------------------------
 # PrepareStep / GridForm: render-based coverage
 # ---------------------------------------------------------------------------

@@ -129,7 +129,7 @@ class MapLayers:
         else:
             self.show(key, build, content_id, notifier, legend)
 
-    def content_of(self, key):
+    def content_of(self, key) -> str | None:
         """The content id of the key's latest request, or None (off, or shown
         without one: an Earth Engine preview)."""
         with self._lock:

@@ -214,7 +214,9 @@ def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> Non
     §9.1; ``refresh`` rebuilds on a new content id): a source's harmonized
     file (``src:<source>``), a mask's aligned file (``mask:<name>``).
     ``refresh`` replaces the layer's legend too, so each passes its own
-    (spec §9.4): a mask's names the live project's active-period choice."""
+    (spec §9.4): a mask's names the live project's active-period choice. A
+    source's layer is redrawn only while its run's period is still the active
+    one (a mask's aligned file is project-wide, not per period)."""
     if kind == "mask":
         art, key = arts.get(mask_key(name)), f"mask:{name}"
         if art is None or not ctx.layers.is_on(key):
@@ -224,6 +226,9 @@ def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> Non
         ctx.layers.refresh(key, source_layers.mask_builder(ctx.map_, path, key, source_layers.mask_name(name)),
                            art.content_id, legend=source_layers.mask_layer_legend(live, name))
         return
+    live = ctx.app_state.project.value
+    if live is None or live.active_period != ctx.period.id:
+        return  # the step now shows another period: its layer must not get this period's file
     art, key = arts.get(harm_key(ctx.period.id, name)), f"src:{name}"
     if art is not None and ctx.layers.is_on(key):
         path = paths.resolve(ctx.pdir, art.rel_path)
