@@ -285,8 +285,34 @@ def test_the_mask_palette_comes_from_the_palette_table():
 
     assert raster_map.MASK_COLOR == legend_specs.MASK_COLOR
     assert raster_map.MASK_OPACITY == legend_specs.MASK_OPACITY
-    assert list(raster_map.MASK_COLORMAP.colors) == [legend_specs.MASK_COLOR]
+    assert set(raster_map.MASK_COLORMAP.colors) == {legend_specs.MASK_COLOR}
     assert raster_map.MASK_EE_VIS == legend_specs.mask_ee_vis()
+
+
+def test_localtileserver_accepts_the_mask_colormap(tmp_path):
+    """The slice-4 walk: showing an aligned mask failed with matplotlib's "data
+    mapping points must start with x=0": localtileserver turns a
+    ListedColormap into a 256-step LinearSegmentedColormap, which needs two
+    colours or more. The real tile URL is built, in the mask grey only."""
+    import numpy as np
+    import rasterio
+    from affine import Affine
+    from localtileserver import TileClient
+    from matplotlib.colors import LinearSegmentedColormap, to_rgba
+
+    from gui.scripts import legend_specs
+
+    path = tmp_path / "mask.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=8, height=8, count=1, dtype="int32", crs="EPSG:32721",
+                       transform=Affine(10, 0, 500000, 0, -10, 8900000), nodata=0) as dst:
+        dst.write(np.ones((1, 8, 8), "int32"))
+    client = TileClient(str(path))
+    try:
+        assert "{z}" in client.get_tile_url(indexes=[1], colormap=raster_map.MASK_COLORMAP, vmin=1, vmax=1, nodata=0)
+    finally:
+        client.shutdown(force=True)
+    steps = LinearSegmentedColormap.from_list("", raster_map.MASK_COLORMAP.colors, N=256)(range(256))
+    assert {tuple(c) for c in steps} == {to_rgba(legend_specs.MASK_COLOR)}
 
 
 def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, cover, monkeypatch):

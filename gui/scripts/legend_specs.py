@@ -46,7 +46,9 @@ def status_colors(faded: bool = False) -> dict:
 
 
 def mask_colormap() -> ListedColormap:
-    return ListedColormap([MASK_COLOR], name="mask")
+    # Two stops of the one grey: localtileserver turns a ListedColormap into a
+    # LinearSegmentedColormap, which a single colour cannot make.
+    return ListedColormap([MASK_COLOR, MASK_COLOR], name="mask")
 
 
 def mask_ee_vis() -> dict:
