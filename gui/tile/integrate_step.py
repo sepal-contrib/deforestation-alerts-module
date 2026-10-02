@@ -77,14 +77,15 @@ def integrate_choices(p, pdir, period) -> list:
     return out
 
 
-def _short(src) -> str:
-    """A GeoTIFF by its file name; an Earth Engine asset id as is."""
-    return Path(src).name if "/" in str(src) and Path(src).suffix else str(src)
+def _short(attribute) -> str:
+    """A GeoTIFF by its file name; an Earth Engine asset id (dots included) as is."""
+    src = str(attribute["source"])
+    return Path(src).name if attribute.get("kind") == "local" else src
 
 
 def _attribute_title(attribute) -> str:
     if attribute and attribute.get("bands"):
-        return t("steps.integrate.attributes_named", name=_short(attribute["source"]))
+        return t("steps.integrate.attributes_named", name=_short(attribute))
     return t("steps.integrate.attributes")
 
 

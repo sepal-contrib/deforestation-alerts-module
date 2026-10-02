@@ -104,3 +104,13 @@ def test_another_sets_alerts_leave_the_card_and_the_review_state_alone(tmp_path,
     analysis_tile.view_actual_alert(widgets, s, analysis, SetContext(s), id_field)
     assert widgets.selected_alert_info.children == ["kept"]
     assert id_field.v_model is None and analysis.defo_layer.value == "drawn"
+
+
+def test_an_alert_without_a_status_reads_not_reviewed(tmp_path, monkeypatch):
+    """A missing (NaN) status is not a review, as the set badge counts it."""
+    s = _state(tmp_path, monkeypatch)
+    widgets = _wire(s)
+    gdf = _alerts(1)
+    gdf["status"] = [None]
+    s.alerts_gdf.set(gdf)
+    assert _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")

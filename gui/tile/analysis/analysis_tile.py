@@ -59,6 +59,7 @@ import logging
 
 import ee
 import ipyvuetify as v
+import pandas as pd
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
@@ -116,7 +117,7 @@ def refresh_alert_info(widgets, app_state):
     fecha2 = convert_julian_to_date(alerta["alert_date_max"])
     alert_source = alerta["alert_sources"]
 
-    if alerta["status"] != "Not reviewed":
+    if pd.notna(alerta["status"]) and alerta["status"] != "Not reviewed":
         alert_st = t("analysis_tile.alert_info.status_reviewed")
     else:
         alert_st = t("analysis_tile.alert_info.status_not_reviewed")

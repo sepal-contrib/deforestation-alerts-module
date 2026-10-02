@@ -937,6 +937,9 @@ def test_the_attribute_panel_header_names_the_raster(step):
         on_value({"source": "users/me/lc_2020", "kind": "gee",
                   "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]})
         assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="users/me/lc_2020")]
+        on_value({"source": "projects/x/assets/radd.v2", "kind": "gee",  # a dot is not a file suffix
+                  "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]})
+        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="projects/x/assets/radd.v2")]
         on_value({"source": "users/me/lc_2020", "kind": "gee", "bands": []})  # every band unticked
         assert _panel_header(rc) == [t("steps.integrate.attributes")]
         on_value(None)
