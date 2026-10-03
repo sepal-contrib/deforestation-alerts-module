@@ -31,6 +31,7 @@ from deforestation_alerts.project.models import AoiRecord, Period, Project
 from deforestation_alerts.scripts import scene_index
 from gui.i18n import t
 from gui.scripts import scene_cache
+from gui.scripts.error_text import ee_no_access
 from gui.scripts import scene_loader as sl
 from gui.store.state_manager import AppState
 
@@ -721,31 +722,93 @@ def test_the_planet_basemaps_join_the_index_and_their_access_is_recorded(
     asyncio.run(main())
 
 
-def test_no_planet_licence_costs_nothing_but_the_planet_rows(data_root, monkeypatch, local_aoi):
+def test_no_planet_licence_costs_nothing_but_the_planet_rows(
+        data_root, monkeypatch, local_aoi, caplog):
     """NICFI is licence-gated, so no access is an ordinary outcome: it is
-    recorded for the toolbar and must not cost the Sentinel-2 rows."""
+    recorded for the toolbar, must not cost the Sentinel-2 rows -- and must
+    stay quiet. An unlicensed project meets this on every refresh, so a
+    traceback here would be noise, which is why only this answer takes the
+    INFO path."""
+    import ee
+
+    refusal = ee.EEException(
+        "ImageCollection.load: ImageCollection asset "
+        "'projects/planet-nicfi/assets/basemaps/americas' not found "
+        "(does not exist or caller does not have access).")
+    assert ee_no_access(refusal) is True  # this is the branch under test
+
     monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
     monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
 
     async def get_info_async(obj):
         if obj[0] == "PLANET":
-            raise RuntimeError("caller does not have access")
+            raise refusal
         return RAW
 
     state = AppState()
     state.load_project_state(_with_period(_p()))
 
     async def main():
-        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
-        try:
-            assert await _settle(lambda: state.scene_index.value is not None)
-            assert state.scene_index.value.scenes["source"].tolist() == [S2]
-            assert state.scene_index_error.value is None  # not a failure of the index
-            planet = state.scene_manifest.value.planet
-            assert planet.region == "americas" and planet.access is False
-        finally:
-            rc.close()
+        with caplog.at_level(logging.INFO, logger="SEPALUI.deforestation_alerts.scene_loader"):
+            box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+            try:
+                assert await _settle(lambda: state.scene_index.value is not None)
+                assert state.scene_index.value.scenes["source"].tolist() == [S2]
+                assert state.scene_index_error.value is None  # not a failure of the index
+                planet = state.scene_manifest.value.planet
+                assert planet.region == "americas" and planet.access is False
+            finally:
+                rc.close()
+        assert [r for r in caplog.records if "Planet" in r.getMessage()
+                and r.levelno == logging.INFO]
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+    asyncio.run(main())
+
+
+def test_an_earth_engine_failure_that_is_not_a_refusal_records_no_access_state(
+        data_root, monkeypatch, local_aoi, caplog):
+    """An expired token, a quota or a dropped connection is not a licence
+    answer. Recording ``access=False`` for one would make a fixable fault look
+    like a permanent licence state and -- as the INFO line reaches no handler
+    in production -- leave nothing behind to find it by. The exception here is
+    an ``ee.EEException`` whose text is *not* Earth Engine's refusal wording,
+    so only ``ee_no_access``'s message test can tell it apart, and the
+    assertion below pins that rather than assuming it.
+    """
+    import ee
+
+    outage = ee.EEException("Request had invalid authentication credentials: access token expired.")
+    assert ee_no_access(outage) is False
+
+    async def get_info_async(obj):
+        if obj[0] == "PLANET":
+            raise outage
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        with caplog.at_level(logging.INFO, logger="SEPALUI.deforestation_alerts.scene_loader"):
+            box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+            try:
+                assert await _settle(lambda: state.scene_index.value is not None)
+                assert state.scene_index.value.scenes["source"].tolist() == [S2]
+                assert state.scene_index_error.value is None  # the index itself is fine
+                # nothing recorded: the licence was never answered for
+                assert state.scene_manifest.value.planet.region is None
+                assert _toasts("error") == [] and _toasts("info") == []
+            finally:
+                rc.close()
+        warnings = [r for r in caplog.records
+                    if r.levelno >= logging.WARNING and "Planet" in r.getMessage()]
+        assert len(warnings) == 1 and warnings[0].exc_info is not None
+        assert "access token expired" in warnings[0].getMessage()
 
     asyncio.run(main())
 

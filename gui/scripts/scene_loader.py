@@ -43,7 +43,7 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import scene_index, scene_query
 from gui.i18n import t
 from gui.scripts import aoi_io, remote_facts, scene_cache, vis_layers
-from gui.scripts.error_text import error_text
+from gui.scripts.error_text import ee_no_access, error_text
 from gui.scripts.solara_threads import to_thread_in_context
 
 #: Under ``SEPALUI.deforestation_alerts`` so a failure reaches the server log
@@ -238,12 +238,25 @@ def SceneIndexLoader(app_state, gee_interface):
             return (tables, None)
         try:
             raw = await gee_interface.get_info_async(chunk[1])
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - no access reads as an EE error
+            if not ee_no_access(exc):
+                # Not Earth Engine's "not found / caller does not have
+                # access", so not a licence answer: an expired token, a quota,
+                # a network failure or a defect of ours. Recording "no Planet
+                # access" for it would make a fixable fault look like a
+                # permanent licence state, so this records nothing and the
+                # reason goes to the server log in full. Same check and same
+                # reading as the sibling NICFI validator in
+                # ``gui.widget.vis_layer_modal``, so the two cannot disagree
+                # about what counts as a refusal.
+                logger.warning("Planet NICFI rows of %s not fetched: %s",
+                               name, error_text(exc), exc_info=True)
+                return (tables, None)
             # The licence gate. A project without a NICFI licence is refused
             # here, which is an ordinary outcome: it is recorded for the
-            # toolbar and logged at INFO rather than warned about. (A
-            # transient outage arrives the same way and cannot be told apart
-            # by its text; the next full refresh records the access again.)
+            # toolbar (which disables the Planet toggle and says why) and
+            # logged at INFO rather than warned about, so an unlicensed
+            # project produces no traceback on every refresh.
             logger.info("no Planet NICFI rows for %s: %s", name, error_text(exc))
             return (tables, scene_index.PlanetState(region=chunk[0], access=False))
         try:
