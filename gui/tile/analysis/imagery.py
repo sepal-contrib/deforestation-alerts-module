@@ -42,7 +42,10 @@ from deforestation_alerts.scripts.mosaics_helper import (
     harmonizeL8ToS2_scaled,
 )
 from deforestation_alerts.scripts.scene_index import SOURCE_LANDSAT, SOURCE_PLANET
+from gui.i18n import t
 from gui.scripts import raster_map
+from gui.scripts.error_text import error_text
+from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -71,6 +74,12 @@ _VIS_DEFAULT = (
     {"min": 0, "max": 3000, "bands": ["B4", "B3", "B2"]},
     {"min": 0, "max": [6500, 3000, 3000], "bands": ["B8", "B4", "B3"]},
 )
+
+#: per pane, its side and what a failed rebuild says. Keyed per side because
+#: a reviewer whose left pane went dead has to know *which* pane failed.
+_SIDE = {0: "before", 1: "after"}
+_FAILED = {0: "analysis.timeline.image_failed_before",
+           1: "analysis.timeline.image_failed_after"}
 
 
 # ---------------------------------------------------------------- the rebuild
@@ -176,6 +185,11 @@ def image_slider_map_callback(
     target = {0: analysis.before_image, 1: analysis.after_image}.get(model_att)
     stored = analysis.apply_if_current(token, (lambda: target.set(img)) if target is not None else (lambda: None))
     if not stored:
+        # Routine, not a failure: the reviewer moved on while this was
+        # rebuilding, and the next alert's own pick is already on its way. It
+        # stays at INFO (so it reaches no destination in production) precisely
+        # so that the only thing that does surface from this worker is a
+        # *failed* rebuild -- which ``wire_panes`` logs at ERROR and toasts.
         logger.info("Analysis imagery: dropped an image chosen for a previous alert")
         return
 
@@ -215,6 +229,12 @@ def wire_panes(widgets, analysis, selected_alerts_model):
     time the thread is scheduled. ``spawn_in_context`` carries the kernel
     context so the layer adds reach the browser.
 
+    Each worker body is guarded: an unhandled exception on a bare daemon
+    thread reaches only ``sys.stderr``, which is the kernel stream Voila never
+    shows, so a failed rebuild would leave nothing but a pane that did not
+    change. ``logger.exception`` + ``current_notifier().error(...)`` is the
+    same pair ``vis_sync._build`` uses for a failed visualization layer.
+
     Returns the two unsubscribe callables. ``build_analysis_layout`` discards
     them, which is correct for a builder that runs once per session and lives
     as long as the kernel (the house pattern; see ``vis_sync.wire``).
@@ -226,9 +246,29 @@ def wire_panes(widgets, analysis, selected_alerts_model):
             if not info:
                 return  # an alert change: ``reset_alert`` clears the info
             item = {"source": info[0], "keys": list(keys_reactive.value or ())}
-            spawn_in_context(image_slider_map_callback,
-                             (item, map_element, pane, widgets, analysis,
-                              selected_alerts_model, analysis.alert_token.value))
+            token = analysis.alert_token.value
+
+            def _work():
+                # The guard is HERE, at the thread boundary, because that is
+                # where the one destination this work used to have was lost:
+                # the retired selectors called the draw on the ipyvuetify event
+                # thread, where ipykernel logs a traceback. On a bare daemon
+                # thread an unhandled exception reaches only
+                # ``threading.excepthook`` -> ``sys.stderr``, which under Voila
+                # nobody ever sees, and the reviewer is left with a pane that
+                # simply did not change. ``logger.exception`` reaches
+                # ``ServerLogHandler`` (WARNING+) and the toast reaches the
+                # reviewer -- the same pair ``vis_sync._build`` uses for a
+                # failed visualization layer.
+                try:
+                    image_slider_map_callback(item, map_element, pane, widgets, analysis,
+                                              selected_alerts_model, token)
+                except Exception as exc:  # noqa: BLE001 - a dead pane must not be silent
+                    logger.exception("Analysis imagery: the %s image could not be drawn",
+                                     _SIDE[pane])
+                    current_notifier().error(t(_FAILED[pane], error=error_text(exc)))
+
+            spawn_in_context(_work)
 
         return info_reactive.subscribe(_on_pick)
 

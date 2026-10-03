@@ -158,6 +158,10 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
     assert timeline.SRC_COLOR == {"Sentinel 2": "#7fa8e0", "Landsat": "#c9a87c",
                                   "Planet NICFI": "#9bd98a"}
     assert timeline.SELECTED_COLOR == "#bf8f2d"  # the theme's primary_contrast
+    # the two greys/ambers the strip reads in: MUTED for what is secondary,
+    # WARN for the two things the reviewer has to notice rather than read (a
+    # failed index refresh, and one image standing in for both sides)
+    assert (timeline.MUTED, timeline.WARN) == ("#a8a39b", "#d9ab4e")
     assert (timeline.STRIPE_PX, timeline.SELECTED_STRIPE_PX, timeline.HIT_PX) == (2.5, 4.0, 11)
     assert (timeline.HIDDEN_SCALE, timeline.HIDDEN_OPACITY) == (0.45, 0.3)
     assert scene_query.COLLAPSED_PX == 66.0  # a collapsed month is a fixed block
@@ -1174,3 +1178,19 @@ def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
     [span] = [w for w in _walk(card) if note in (getattr(w, "children", None) or ())]
     assert timeline.WARN in (span.style_ or "")
     assert timeline.MUTED not in (span.style_ or "")
+
+
+def test_an_alert_whose_dates_are_missing_publishes_no_window_rather_than_a_wrong_one():
+    """``_as_date`` is what decides whether the gold alert band draws at all.
+
+    ``vectorize`` writes NaN into ``alert_date_min`` when a polygon's date
+    pixels are all nodata, and ``convert_julian_to_date`` renders that "N/A";
+    the ctx has to carry the *absence* so ``view_window`` / ``alert_window``
+    fall back to the period's window instead of banding a bogus date.
+    """
+    from gui.tile.analysis.analysis_tile import _as_date
+
+    assert _as_date(2026.010) == date(2026, 1, 10)
+    assert _as_date(2026.365) == date(2026, 12, 31)
+    assert _as_date(float("nan")) is None
+    assert _as_date(None) is None

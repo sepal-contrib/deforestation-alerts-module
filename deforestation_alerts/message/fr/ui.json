@@ -75,6 +75,8 @@
       "same_image": "la même image des deux côtés",
       "stale": "Index du {when}",
       "refresh_failed": "Impossible d'actualiser l'index des images : {error}",
+      "image_failed_before": "Impossible d'afficher l'image avant : {error}",
+      "image_failed_after": "Impossible d'afficher l'image après : {error}",
       "retry": "Réessayer",
       "loading": "Chargement de l'index des images…",
       "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Cliquez sur une barre du couloir supérieur pour définir l'image avant, sur celui du bas pour l'image après. Ou placez le focus sur un couloir et utilisez le clavier : les flèches gauche et droite parcourent les dates, Début et Fin sautent à la première et à la dernière image, et Entrée choisit celle que l'anneau entoure.",

@@ -43,16 +43,20 @@ Key architectural decisions (FIXED by the migration contract):
 * **``analysis`` (``AnalysisState``, spec §10)** holds the per-session review
   state as Solara reactives: the chosen images and their info, the drawn defo
   layer, the CNN predictions, ``last_save_time``. ``view_actual_alert`` resets
-  it on every alert change (``reset_alert``) and reads the Planet image lists.
+  it on every alert change (``reset_alert``); the shared timeline then publishes
+  the chosen images into it and ``imagery.wire_panes`` draws them.
 * **Heavy widgets are imperative + memoized once.** The two maps / draw controls /
-  AOI control / 3-tab selectors live on ``AnalysisWidgets`` and are mutated in
+  AOI control live on ``AnalysisWidgets`` and are mutated in
   place by ``view_actual_alert``; the per-alert effect is keyed on the alert id
   reactive so it re-runs on navigation. Guarded to no-op when no alerts are loaded
   (safe at smoke time + idempotent under render_fixed double-mount).
 
-Deferred to later tasks (TODO-marked): the imagery slide-group rebuilds + S2 /
-Landsat dictionary tasks (Task 9.2), draw-edit behavior (9.3), CNN runs (9.4), and
-save/export (9.5).
+Deferred (TODO-marked): the recipe-LOAD re-discovery/merge path for previously
+reviewed alerts. The imagery is no longer deferred: the two per-pane selectors
+and their per-alert Earth Engine fetches are retired, replaced by the one shared
+timeline (``gui/tile/analysis/timeline.py``) over the project's cached scene
+index, with ``imagery.wire_panes`` rebuilding a pane from the picked row's
+granule keys.
 """
 
 import logging
@@ -186,7 +190,9 @@ def view_actual_alert(
     alerta = gdf.iloc[alert_id]
 
     # --- alert-info card (source / dates / status) ---
-    fecha1, fecha2 = refresh_alert_info(widgets, app_state)
+    # Its ``(first, last)`` dates are for the card's own text; the timeline
+    # gets the window as real ``date``s below, through ``_as_date``.
+    refresh_alert_info(widgets, app_state)
 
     # --- a reviewed alert shows its stored loss drivers, in this language
     # (the codes, read back; a re-save stores them again as codes); an
@@ -281,9 +287,6 @@ def view_actual_alert(
             # strings ``fecha1``/``fecha2`` the info card shows
             "date_min": _as_date(alerta["alert_date_min"]),
             "date_max": _as_date(alerta["alert_date_max"]),
-            "fecha1": fecha1,
-            "fecha2": fecha2,
-            "show": list(widgets.show_image_collection),
         }
     except Exception:
         logger.exception("Analysis: view_actual_alert map update failed")
@@ -468,7 +471,11 @@ def build_analysis_layout(
             # source toolbar + 128px track + ~32px readout + 8px padding).
             ".custom-map-class2 { height: calc(100vh - 270px) !important; min-height: 320px; } "
             # The strip spans both columns, so it is a row of its own under them.
-            ".analysis-strip { width: 100%; padding: 0 4px 4px 4px; } "
+            # flex: 0 0 auto, not the default 0 1 auto: the stage is a flex
+            # column and ``.analysis-row`` already absorbs overflow
+            # (flex: 1 1 auto), so the strip must not shrink too -- that is
+            # what makes the 270px the maps give up self-enforcing.
+            ".analysis-strip { width: 100%; flex: 0 0 auto; padding: 0 4px 4px 4px; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
             "min-width: 40px; display: flex !important; align-items: center !important; }"
         ],

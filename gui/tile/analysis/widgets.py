@@ -41,10 +41,6 @@ Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts;
 the chosen before/after images and their info lists live in ``AnalysisState``):
     * ``actual_bb``                    — ee.Feature bbox (buffer+bounds) of the alert
     * ``actual_alert_grid``            — ee covering-grid bounds for downloads
-    * ``show_image_collection``        — [planet, s2, landsat] default-load flags,
-                                         kept only as part of the published
-                                         ``imagery_ctx`` payload; the timeline
-                                         offers every collection at once
 """
 
 import threading
@@ -250,14 +246,13 @@ class AnalysisWidgets:
         # ------------------------------------------------------------------
         self.actual_bb = None
         self.actual_alert_grid = None
-        self.show_image_collection = [True, False, False]
 
         # ------------------------------------------------------------------
-        # Per-alert imagery handoff (Task 9.2). ``view_actual_alert`` publishes a
-        # context dict here (alert id / grid / dates / planet dicts / show flags)
-        # and ``AlertImagery`` keys its slide-group builds + S2/Landsat use_tasks on
-        # it, so the EE fetches only run once a fresh alert context exists. ``None``
-        # while no alert is active (dormant at smoke time).
+        # Per-alert imagery handoff. ``view_actual_alert`` publishes a context
+        # dict here (alert id, token, grid, bbox, date_min/date_max) and the
+        # shared timeline renders the alert from it -- against the cached scene
+        # index, so no EE call. ``None`` while no alert is active (dormant at
+        # smoke time).
         # ------------------------------------------------------------------
         self.imagery_ctx = solara.reactive(None)
 

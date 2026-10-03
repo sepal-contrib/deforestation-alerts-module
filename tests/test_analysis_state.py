@@ -196,8 +196,10 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
 
     s = AnalysisState()
     widgets = _fake_imagery_widgets()
-    widgets.map_before = SimpleNamespace()
-    widgets.map_after = SimpleNamespace()
+    # distinguishable, because two empty SimpleNamespaces compare EQUAL and a
+    # swapped pair would then slip past the assertion at the end
+    widgets.map_before = SimpleNamespace(side="before")
+    widgets.map_after = SimpleNamespace(side="after")
     held, rebuilt = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
@@ -206,7 +208,7 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
         from the position ``wire_panes`` actually passes it in --
         ``spawn_in_context`` forwards positional args only."""
         if analysis_.is_current(token):
-            rebuilt.append((item, token))
+            rebuilt.append((item, token, map_))
 
     monkeypatch.setattr(imagery, "image_slider_map_callback", _rebuild)
     imagery.wire_panes(widgets, s, None)
@@ -224,7 +226,17 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     s.before_info.set(["Sentinel 2", 2, "1.00", "y ", "_020126"])
     fn, args = held[-1]
     fn(*args)
-    assert [item["keys"] for item, _ in rebuilt] == [["k1"]]
+    assert [item["keys"] for item, _, _ in rebuilt] == [["k1"]]
+
+    # ...and each lane reaches the pane it belongs to. The before lane must
+    # draw on the LEFT map and the after lane on the RIGHT one: a swapped pair
+    # puts every pick on the wrong side of the workspace, which is plainly
+    # wrong on screen and which nothing else in the suite notices.
+    s.after_keys.set(["k2"])
+    s.after_info.set(["Landsat", 3, "1.00", "z ", "_030126"])
+    fn, args = held[-1]
+    fn(*args)
+    assert [m for _, _, m in rebuilt] == [widgets.map_before, widgets.map_after]
 
 
 def test_reset_alert_clears_the_selection_and_its_granule_keys():

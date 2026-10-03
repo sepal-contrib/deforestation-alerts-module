@@ -75,6 +75,8 @@
       "same_image": "the same image on both sides",
       "stale": "Index from {when}",
       "refresh_failed": "Could not refresh the image index: {error}",
+      "image_failed_before": "Could not draw the before image: {error}",
+      "image_failed_after": "Could not draw the after image: {error}",
       "retry": "Try again",
       "loading": "Loading the image index…",
       "legend": "Each collection is a stripe in its own band: Sentinel-2 on top, Landsat in the middle, Planet as a bar across its month. A faded half-height stripe is over the cloud limit. The gold band is the alert window, where every image shows partial clearing: selectable, but never picked for you. Click a stripe in the upper lane to set the before image, in the lower lane to set the after image. Or put the focus on a lane and use the keyboard: the left and right arrow keys move along the dates, Home and End jump to the first and last image, and Enter chooses the one the ring is on.",

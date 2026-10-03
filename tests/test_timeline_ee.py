@@ -28,15 +28,35 @@ def _a_real_landsat_scene_id(geom):
     return ids[0]
 
 
-def test_a_landsat_scene_with_its_toa_twin_is_pan_sharpened(gee):
+def test_a_landsat_scene_with_its_toa_twin_is_pan_sharpened(gee, monkeypatch):
     """The happy path, which only Earth Engine can confirm: both halves of the
-    acquisition resolve and ``SFIM_pan_sharpen`` yields the seven harmonized
-    bands ``vis1`` / ``vis2`` ask for by name."""
+    acquisition resolve, and the image really is sharpened.
+
+    Band names cannot witness that. ``harmonizeL8ToS2_scaled`` renames
+    ``SR_B1..SR_B7`` the same way on both sides of the ``ee.Algorithms.If``
+    and ``SFIM_pan_sharpen`` preserves the names, so the two branches are
+    name-identical and only the pixels tell them apart. So: build the same
+    scene twice, once with its real TOA twin and once with the twin made
+    unreachable, and require the pixels to differ. An ``If`` wired to the
+    wrong branch, or a pan-sharpen that silently became a pass-through,
+    collapses that difference to zero.
+    """
+    import ee
+
     from gui.tile.analysis import imagery
 
     geom = _geom()
-    img = imagery._landsat_pair([_a_real_landsat_scene_id(geom)], geom)
-    assert sorted(img.bandNames().getInfo()) == ["B1", "B2", "B3", "B4", "B6", "B7", "B8"]
+    scene_id = _a_real_landsat_scene_id(geom)
+    sharpened = imagery._landsat_pair([scene_id], geom)
+    assert sorted(sharpened.bandNames().getInfo()) == ["B1", "B2", "B3", "B4", "B6", "B7", "B8"]
+
+    monkeypatch.setattr(imagery, "LANDSAT_TOA_COLLECTIONS", ("LANDSAT/LE07/C02/T1_TOA",))
+    plain = imagery._landsat_pair([scene_id], geom)
+    spread = sharpened.subtract(plain).abs().reduceRegion(
+        ee.Reducer.max(), geom, 30, bestEffort=True).getInfo()
+    values = [v for v in spread.values() if v is not None]
+    assert values, f"no overlap to compare over: {spread}"
+    assert max(values) > 0
 
 
 def test_a_landsat_scene_with_no_toa_match_still_builds_an_image(gee, monkeypatch):
