@@ -132,7 +132,6 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
-from gui.tile.analysis.review_panel import REVIEW_CHOICES
 from gui.tile.analysis.state import capture_alert
 from gui.widget.report_template import ReportTemplateField
 
@@ -224,6 +223,11 @@ def review_status(confirmation) -> str:
     """The status a Save stores (spec §10): one of the three, never a label.
 
     Anything else is refused, an unhashable value (a list) included."""
+    # Imported here, not at module level: ``review_panel`` imports
+    # ``make_save_runner`` from this module, so a module-level import of its
+    # ``REVIEW_CHOICES`` would make the pair circular.
+    from gui.tile.analysis.review_panel import REVIEW_CHOICES
+
     if not isinstance(confirmation, str) or confirmation not in {status for status, _ in REVIEW_CHOICES}:
         raise SaveRefused(key="analysis_tile.questionarie.confirmation_missing")
     return confirmation

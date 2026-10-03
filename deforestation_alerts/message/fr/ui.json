@@ -116,9 +116,6 @@
     },
     "questionarie": {
       "confirmation_q": "Est-ce une véritable alerte ?",
-      "confirmation_yes": "Oui",
-      "confirmation_no": "Non",
-      "confirmation_revision": "Nécessite une révision supplémentaire",
       "confirmation_missing": "Répondez à « Est-ce une véritable alerte ? » avant d'enregistrer.",
       "false_positive_drawn": "Un faux positif ne peut pas avoir de polygone de déforestation dessiné : supprimez le polygone ou changez la réponse.",
       "loss_driver_label": "Facteur de perte",
@@ -132,6 +129,16 @@
       "loss_driver7": "Feux de forêt",
       "loss_driver8": "Ouragans",
       "loss_driver9": "Autre"
+    },
+    "verdict": {
+      "title": "Verdict",
+      "true": "Alerte réelle",
+      "false": "Faux positif",
+      "revision": "À réexaminer",
+      "no_driver": "Aucune cause de perte n'est enregistrée pour un faux positif.",
+      "save_next": "Enregistrer et suivante",
+      "unsaved": "Modifications non enregistrées sur cette alerte",
+      "saved_at": "Enregistrée à {time}"
     },
     "edition_labels": {
       "edit_title": "Dessin d'Alerte",

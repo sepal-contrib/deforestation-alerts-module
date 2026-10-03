@@ -116,9 +116,6 @@
     },
     "questionarie": {
       "confirmation_q": "¿Es verdadera la alerta?",
-      "confirmation_yes": "Sí",
-      "confirmation_no": "No",
-      "confirmation_revision": "Necesita revisión adicional",
       "confirmation_missing": "Responde «¿Es verdadera la alerta?» antes de guardar.",
       "false_positive_drawn": "Un falso positivo no puede tener un polígono de deforestación dibujado: elimina el polígono o cambia la respuesta.",
       "loss_driver_label": "Causa de la pérdida",
@@ -132,6 +129,16 @@
       "loss_driver7": "Incendios forestales",
       "loss_driver8": "Huracanes",
       "loss_driver9": "Otra"
+    },
+    "verdict": {
+      "title": "Veredicto",
+      "true": "Alerta verdadera",
+      "false": "Falso positivo",
+      "revision": "Requiere revisión",
+      "no_driver": "En un falso positivo no se guarda ninguna causa de la pérdida.",
+      "save_next": "Guardar y siguiente",
+      "unsaved": "Cambios sin guardar en esta alerta",
+      "saved_at": "Guardada a las {time}"
     },
     "edition_labels": {
       "edit_title": "Dibujo de la alerta",

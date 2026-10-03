@@ -81,8 +81,9 @@ PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", 
 SAME_IN = {
     "es-ES": {"steps.layers.region_asia", "overview_tile.table_total"},
     "fr": {
-        # "images" and "source" are the same words in French.
+        # "images", "source" and "verdict" are the same words in French.
         "analysis.timeline.images", "analysis_tile.facts.source",
+        "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",

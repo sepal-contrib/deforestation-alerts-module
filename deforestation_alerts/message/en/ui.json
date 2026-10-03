@@ -116,9 +116,6 @@
     },
     "questionarie": {
       "confirmation_q": "Is this a true alert?",
-      "confirmation_yes": "Yes",
-      "confirmation_no": "No",
-      "confirmation_revision": "Need further revision",
       "confirmation_missing": "Answer \"Is this a true alert?\" before saving.",
       "false_positive_drawn": "A false positive cannot have a drawn deforestation polygon: delete the polygon or change the answer.",
       "loss_driver_label": "Loss driver",
@@ -132,6 +129,16 @@
       "loss_driver7": "Forest fires",
       "loss_driver8": "Hurricanes",
       "loss_driver9": "Other"
+    },
+    "verdict": {
+      "title": "Verdict",
+      "true": "True alert",
+      "false": "False positive",
+      "revision": "Needs review",
+      "no_driver": "No loss driver is stored for a false positive.",
+      "save_next": "Save & next",
+      "unsaved": "Unsaved changes on this alert",
+      "saved_at": "Saved {time}"
     },
     "edition_labels": {
       "edit_title": "Alert drawing",

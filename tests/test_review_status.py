@@ -7,8 +7,11 @@ import pytest
 from pysepal.i18n import set_locale
 
 from gui.i18n import t
+from gui.scripts.set_context import SetContext
+from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
-from gui.tile.analysis.review_panel import REVIEW_CHOICES, build_review_panel
+from gui.tile.analysis.review_panel import REVIEW_CHOICES, build_review_panel, verdict_widgets
+from gui.tile.analysis.state import AnalysisState
 
 STATUSES = ["Confirmed", "False Positive", "Need revision"]
 
@@ -21,19 +24,21 @@ def _english():
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr"])
-def test_the_select_holds_statuses_and_shows_labels(locale):
+def test_the_buttons_hold_statuses_and_show_labels(locale):
     set_locale(locale)
-    widgets = SimpleNamespace()
-    build_review_panel(widgets, None, None, None)  # it reads nothing but ``widgets``
-    select = widgets.confirmation_select
-    assert [i["value"] for i in select.items] == STATUSES
-    assert [i["text"] for i in select.items] == [t(key) for _, key in REVIEW_CHOICES]
-    assert select.v_model == "Confirmed"
+    app_state = AppState()
+    analysis = AnalysisState()
+    card = build_review_panel(SimpleNamespace(), app_state, analysis, SetContext(app_state))
+    buttons, *_ = verdict_widgets(card)
+    assert list(buttons) == STATUSES
+    labels = [b.children[1].children[0] for b in buttons.values()]
+    assert labels == [t(key) for _, key in REVIEW_CHOICES]
+    assert analysis.verdict.value is None     # no default answer is ever saved
 
 
 def test_review_status():
     for status in STATUSES:
         assert export_mod.review_status(status) == status
-    for bad in (None, "", "Yes", t("analysis_tile.questionarie.confirmation_yes"), ["Confirmed"], {"value": "Confirmed"}):
+    for bad in (None, "", "Yes", t("analysis_tile.verdict.true"), ["Confirmed"], {"value": "Confirmed"}):
         with pytest.raises(export_mod.SaveRefused):
             export_mod.review_status(bad)

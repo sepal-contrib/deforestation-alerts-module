@@ -12,6 +12,7 @@ from shapely.geometry import box
 
 from gui.scripts import loss_drivers
 from gui.tile.analysis.review_panel import build_review_panel
+from gui.tile.analysis.state import AnalysisState
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def locale():
 def test_a_review_made_in_another_language_stores_codes(locale, code):
     locale(code)
     widgets = SimpleNamespace()
-    build_review_panel(widgets, None, None, None)
+    build_review_panel(widgets, None, AnalysisState(), None)
     combobox = widgets.driver_combobox
     assert combobox.return_object  # Vuetify 2 draws a chip from the value itself
     assert combobox.v_model == [{"text": loss_drivers.label("other"), "value": "other"}]
@@ -83,7 +84,7 @@ def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypa
     locale(code)
     s = _state(tmp_path, monkeypatch)
     widgets = _wire(s)
-    build_review_panel(widgets, None, None, None)
+    build_review_panel(widgets, None, AnalysisState(), None)
     gdf = _alerts(2)
     gdf["description"] = ["logging, Roads", None]
     s.alerts_gdf.set(gdf)  # alert 0 is selected and drawn
@@ -108,7 +109,7 @@ def test_an_unreviewed_alert_shows_the_default_driver_not_the_last_ones(tmp_path
 
     s = _state(tmp_path, monkeypatch)
     widgets = _wire(s)
-    build_review_panel(widgets, None, None, None)
+    build_review_panel(widgets, None, AnalysisState(), None)
     gdf = _alerts(2)
     gdf["description"] = ["logging, Roads", None]
     s.alerts_gdf.set(gdf)  # alert 0, reviewed
