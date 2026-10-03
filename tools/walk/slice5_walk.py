@@ -233,15 +233,15 @@ def e_sets(page, rec, *, out):
     assert f"Earlier set · {JUNE} · GLAD-L" in rec["popup"], rec["popup"]
     assert f"Alert {rec['go_alert_id']} ·" in rec["popup"], rec["popup"]
     page.locator('.leaflet-popup-content button:has-text("Review")').first.click()
-    w.wait_for(lambda: ph.alert_info(page), 120, "Analysis on June's alert")
+    w.wait_for(lambda: ph.alert_facts(page), 120, "Analysis on June's alert")
     selected = page.locator('.v-select:has(label:text-is("Alert set")) .v-select__selection:visible').first
     w.wait_for(lambda: selected.inner_text().startswith(JUNE_START), 60, "Analysis's selector on June's set")
     rec["analysis_set"] = selected.inner_text()
-    go = page.locator("button:visible", has_text=re.compile(r"^\s*Go\s*$")).first
-    field = go.locator("xpath=..").locator("input").first
-    # The navigator's id field holds the alert's position in the set's store
-    # (``actual_alert_id``), not its ``alert_id``.
-    w.wait_for(lambda: field.input_value() == str(pos), 60, f"the id field at position {pos}")
+    _, field = ph.analysis_jump_field(page)
+    # Block A's jump field holds the alert's position in the set's store
+    # (``actual_alert_id``), 1-based as its counter shows it, not its ``alert_id``.
+    w.wait_for(lambda: field.input_value() == str(pos + 1), 60,
+               f"the jump field at position {pos + 1}")
     rec["id_field"] = field.input_value()
     w.shot(page, out, "go_analysis")
     ph.open_overview(page)
@@ -255,7 +255,8 @@ def f_replace_list(page, rec, *, out):
     w.wait_for(lambda: page.locator('.v-select:has(label:text-is("Alert set")) .v-select__selection:visible')
                .first.inner_text().startswith(JULY_START), 60, "Analysis on July's set")
     ph.pick_images(page, rec, out=out)
-    # "Is this a true alert?" is a select whose default is "Yes" (Confirmed)
+    # ``review_and_save`` answers "Is this a true alert?" with *True alert*
+    # (Confirmed): block B has no default answer, and an unanswered Save is refused.
     ph.review_and_save(page, rec, out=out)
     (july,) = sets_of(JULY)
     created = july["created_at"]

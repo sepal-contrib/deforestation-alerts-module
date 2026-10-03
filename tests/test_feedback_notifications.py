@@ -1198,6 +1198,26 @@ def test_the_refine_badge_follows_the_drawn_polygon(tmp_path):
     assert "2" in seen[-1] and "ha" in seen[-1]
 
 
+def test_the_refine_badge_cannot_break_an_alert_change(tmp_path):
+    """Ruling 32: this subscriber runs INSIDE ``defo_layer.set()``, so a value
+    it cannot measure would raise through ``reset_alert`` and
+    ``view_actual_alert`` -- out of a summary line and into navigation. Every
+    production writer sets a GeoDataFrame or ``None``, so this is the belt and
+    not a live path; it is pinned because Task 10 is what first gives the
+    badge a setter and makes the callback run at all."""
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    seen = []
+    edit_tools.wire_refine_badge(analysis, lambda text, color=None: seen.append(text))
+
+    analysis.defo_layer.set(object())  # no len(), no area
+    assert seen[-1] == t("analysis_tile.sections.refine_empty")  # the badge held
+    analysis.reset_alert()  # and the alert change still goes through
+    assert analysis.defo_layer.value is None
+    assert seen[-1] == t("analysis_tile.sections.refine_empty")
+
+
 class _DrawFake:
     """A ``CustomDrawControl`` stand-in: the drawn data, the clear, and the
     frontend draw event the reviewer's drawing/editing/deleting fires."""

@@ -207,6 +207,27 @@ def test_the_status_chip_names_and_paints_a_status(status, key):
     assert t(key) != f"⟦{key}⟧"
 
 
+def test_the_status_chip_wears_its_colour_as_a_swatch(tmp_path, monkeypatch):
+    """Overview's convention for this palette, stated in
+    ``overview_tile._numbers_table``: "A status wears a colour chip; the text
+    stays in the theme's ink, never in the series colour." Coloured label text
+    fails it: the grey "Not reviewed" wears is roughly 2.8:1 on the light
+    surface — below WCAG AA — and the dark theme was never verified. So the chip holds a
+    10px swatch in the status colour beside text in the theme's ink, exactly as
+    the numbers table draws it, and the chip itself is never painted.
+    """
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    _, _, chip = context.facts_widgets(card)
+    s.alerts_gdf.set(_alerts(["Confirmed"]))
+    s.actual_alert_id.value = 0
+
+    swatch, label = chip.children
+    assert context.status_color("Confirmed") in swatch.style_
+    assert label == t("legend.status.confirmed")
+    assert not chip.color  # the words stay in the theme's ink
+
+
 def test_the_facts_grid_follows_a_review_save(tmp_path, monkeypatch):
     """A Save writes the status into the row and rebinds ``alerts_gdf`` to a
     copy with the same alert still selected; the chip and the tally must both
@@ -221,12 +242,12 @@ def test_the_facts_grid_follows_a_review_save(tmp_path, monkeypatch):
     s.actual_alert_id.value = 0  # wire_alert_navigation selects; the block only watches
     assert source.children == ["GLAD-L"]
     assert detected.children == ["2026-01-10 → 2026-01-20"]
-    assert chip.children == [t("legend.status.not_reviewed")]
+    assert chip.children[-1] == t("legend.status.not_reviewed")
 
     gdf.at[0, "status"] = "Confirmed"
     s.alerts_gdf.value = gdf.copy()
-    assert chip.children == [t("legend.status.confirmed")]
-    assert chip.color == context.status_color("Confirmed")
+    assert chip.children[-1] == t("legend.status.confirmed")
+    assert context.status_color("Confirmed") in chip.children[0].style_
     assert tally.children == ["1 reviewed · 2 left"]
 
 

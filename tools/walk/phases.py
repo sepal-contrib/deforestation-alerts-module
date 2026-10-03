@@ -30,14 +30,59 @@ def visible_btn(page, text, scope=""):
     return page.locator(f'{scope} button:has-text("{text}"):visible'.strip()).first
 
 
-def alert_info(page):
-    return page.evaluate("""() => { const c = [...document.querySelectorAll('.v-card')]
-        .find(e => e.getBoundingClientRect().width > 0 && e.innerText.includes('Alert info'));
-        return c ? c.innerText.replace(/\\s+/g, ' ').slice(0, 300) : null; }""")
+# The Analysis right panel is the review console (spec 2026-10-03): block A
+# (queue counter, navigation, facts grid + status chip), block B (the verdict,
+# the loss driver, Save & next) and two sections whose bodies are COLLAPSED
+# (hidden with ``display``), so nothing inside them is ``:visible`` until the
+# header is clicked. The retired "Alert info" card's facts live in block A.
+_BLOCK_A_JS = """
+    const card = [...document.querySelectorAll('.v-card')]
+        .filter(e => e.getBoundingClientRect().width > 0)
+        .filter(e => ['Source', 'Detected', 'Status'].every(w => e.textContent.includes(w)))
+        .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+"""
+
+
+def alert_facts(page):
+    """Block A as one line: the queue counter, the navigation and the facts
+    grid's Source / Detected / Status rows with their values.
+
+    ``textContent``, not ``innerText``: the grid's labels are drawn uppercase
+    by ``text-uppercase`` and ``innerText`` applies that transform.
+    """
+    return page.evaluate("() => {%s return card ? card.textContent"
+                         ".replace(/\\s+/g, ' ').trim().slice(0, 300) : null; }" % _BLOCK_A_JS)
+
+
+def status_chip(page):
+    """The review-status chip of block A's facts grid -- the only chip in that
+    card -- in the legend's wording ("Not reviewed", "Reviewed: confirmed").
+    Its colour is a swatch span, so the words are what there is to read."""
+    return page.evaluate("() => {%s const chip = card && card.querySelector('.v-chip');"
+                         " return chip ? chip.textContent.replace(/\\s+/g, ' ').trim()"
+                         " : null; }" % _BLOCK_A_JS)
+
+
+def open_section(page, title):
+    """Open a collapsible Analysis section ("Refine polygon" / "Export this
+    alert"): its body is hidden with ``display`` until the 50px header is
+    clicked, and the header's chevron says which way it is."""
+    header = visible_btn(page, title)
+    wait_for(lambda: header.count(), 30, f'the "{title}" section header')
+    if not header.locator(".mdi-chevron-down").count():
+        header.click()
+        page.wait_for_timeout(800)
+
+
+def save_btn(page):
+    """Block B's *Save* -- exact text, since *Save & next* also reads "Save"."""
+    return page.locator("button:visible", has_text=re.compile(r"^\s*Save\s*$")).first
 
 
 def download_btn(page):
-    return page.locator('.v-card:has-text("Save and Export") button:has-text("Download"):visible').first
+    """*Download alert data*, in the Export section's body (open it first)."""
+    return page.locator('.v-card:has-text("Export this alert") '
+                        'button:has-text("Download"):visible').first
 
 
 def prepare_state(page):
@@ -100,8 +145,7 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
         modal_button(page, "Replace").click()
     t0, landed = time.time(), False
     while time.time() - t0 < timeout:
-        loc = page.locator('text="Alert info"')
-        if loc.count() and loc.first.is_visible():
+        if alert_facts(page):  # block A, with the new set's alert on screen
             landed = True
             break
         if errors(toasts_since(page, t_int)):
@@ -115,7 +159,13 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
 
 
 def review_and_save(page, rec, *, out):
+    """Block B: answer the verdict question, pick a loss driver, then **Save**
+    (not *Save & next*: the assertions below read the alert that was saved).
+    There is no default answer any more -- an unanswered Save is refused -- so
+    the verdict button is pressed here."""
     page.wait_for_timeout(2000)
+    visible_btn(page, "True alert").click()
+    page.wait_for_timeout(500)
     cb = page.locator('.v-card:has-text("Loss driver") .v-select__slot:visible').last
     cb.click()
     page.wait_for_timeout(700)
@@ -123,15 +173,19 @@ def review_and_save(page, rec, *, out):
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
     t_ms = now_ms(page)
-    page.locator('.v-card:has-text("Save and Export") button:has-text("Save"):visible').first.click()
+    save_btn(page).click()
     wait_for(lambda: any("saved" in x["msg"].lower() or x["kind"] in ("toast-error", "toast-warning")
                          for x in toasts_since(page, t_ms)), 120, "save outcome toast")
     page.wait_for_timeout(1500)
-    rec["status_after_save"] = alert_info(page)
+    rec["status_after_save"] = status_chip(page)
+    rec["facts_after_save"] = alert_facts(page)
     rec["save_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_ms)]
     shot(page, out, "saved")
     assert not errors(toasts_since(page, t_ms)), rec["save_toasts"]
-    assert rec["status_after_save"] and "Status: Reviewed" in rec["status_after_save"], rec["status_after_save"]
+    # Block A re-reads the row the save wrote, so the chip is the store's
+    # answer and not the button that was pressed.
+    assert (rec["status_after_save"] or "").startswith("Reviewed"), rec["facts_after_save"]
+    open_section(page, "Export this alert")
     assert not download_btn(page).is_disabled(), "Download still disabled after the Save"
 
 
@@ -156,6 +210,7 @@ def pick_images(page, rec, *, out):
 
 
 def download_with_images(page, rec, *, out, folder):
+    open_section(page, "Export this alert")
     before = set(os.listdir(folder))
     t_ms = now_ms(page)
     download_btn(page).click()
@@ -375,11 +430,23 @@ def legend_options(page) -> list:
         return s ? [...s.options].map(o => ({text: o.text.trim(), value: o.value, selected: o.selected})) : []; }""")
 
 
-def analysis_go_to(page, position):
-    """Analysis navigator: type ``position`` in the id field next to Go and press Go."""
+def analysis_jump_field(page):
+    """Block A's jump row, revealed: ``(go_button, number_field)``. The **#**
+    button toggles the row, and the number in it is the 1-based one the queue
+    counter shows, not the 0-based position in the store."""
+    go = page.locator("button:visible", has_text=re.compile(r"^\s*Go\s*$"))
+    if not go.count():
+        page.locator('button[aria-label="Jump to alert number"]:visible').first.click()
+        page.wait_for_timeout(600)
     go = page.locator("button:visible", has_text=re.compile(r"^\s*Go\s*$")).first
-    field = go.locator("xpath=..").locator("input").first
-    field.fill(str(position))
+    return go, go.locator("xpath=..").locator("input").first
+
+
+def analysis_go_to(page, position):
+    """Jump to ``position``, the 0-based position in the set's store: block A's
+    field holds the 1-based number its counter shows, so the Go takes ``+ 1``."""
+    go, field = analysis_jump_field(page)
+    field.fill(str(position + 1))
     go.click()
     page.wait_for_timeout(4000)
 

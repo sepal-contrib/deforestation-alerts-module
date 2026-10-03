@@ -21,7 +21,7 @@ this module's two jobs:
 WHY A RAW BUILDER (not a Solara component + effects/use_task): MapApp renders
 the Analysis step's content with ``v-if``, so it DESTROYS the DOM on close and
 REBUILDS it on reopen. Solara-component reactivity does not survive that
-rebuild. Like the sibling builders (``navigator`` / ``review_panel`` /
+rebuild. Like the sibling builders (``context`` / ``review_panel`` /
 ``build_edit_tools`` / ``export`` / ``timeline``) this is a plain module of
 functions that register ``.subscribe`` callbacks and start daemon threads for
 off-thread work -- there are no Solara hooks at all.

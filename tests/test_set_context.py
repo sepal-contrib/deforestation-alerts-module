@@ -109,9 +109,9 @@ def _alerts(n, set_id="x"):
 
 def _wire_analysis(s, ctx):
     """The two subscriptions ``build_analysis_layout`` registers, on stand-in
-    widgets. Only the info card and the position run; the map half (bbox
-    overlay, Earth Engine grid) needs geometries these rows do not carry and
-    stays inside ``view_actual_alert``'s own guard."""
+    widgets. Only the jump field, the verdict seeding and the position run; the
+    map half (bbox overlay, Earth Engine grid) needs geometries these rows do
+    not carry and stays inside ``view_actual_alert``'s own guard."""
     from gui.tile.analysis import analysis_tile
 
     widgets = SimpleNamespace()
@@ -128,7 +128,7 @@ def test_navigating_remembers_the_position_on_the_set(tmp_path, monkeypatch):
     id_field = _wire_analysis(s, ctx)
     s.alerts_gdf.set(_alerts(10))
     s.go_to(5)
-    assert id_field.v_model == 5
+    assert id_field.v_model == 6  # the 1-based number block A's counter shows
     assert s.project.value.alert_sets["x"].last_alert_index == 5
 
 

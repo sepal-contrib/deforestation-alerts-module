@@ -108,12 +108,12 @@ def a_mixed(page, rec, *, out, folder):
     rec["digit_map"] = s["digit_map"]
     assert {int(k): v for k, v in s["digit_map"].items()} == {0: "GLAD-L", 3: "radd sa", 4: "ccdc tif"}, s["digit_map"]
     named = [str(v) for v in alerts["alert_sources"]]
-    for custom in ("radd sa", "ccdc tif"):  # the Alert info card names a custom source
+    for custom in ("radd sa", "ccdc tif"):  # block A's facts name a custom source
         i = next((k for k, v in enumerate(named) if custom in v), None)
         assert i is not None, f"no alert from {custom}: {sorted(set(named))[:10]}"
         ph.analysis_go_to(page, i)
-        rec[f"alert_info_{custom}"] = ph.alert_info(page) or ""
-        assert custom in rec[f"alert_info_{custom}"], rec[f"alert_info_{custom}"]
+        rec[f"facts_{custom}"] = ph.alert_facts(page) or ""
+        assert custom in rec[f"facts_{custom}"], rec[f"facts_{custom}"]
     # the alert on screen is a "ccdc tif" one: its report names its sources
     ph.review_and_save(page, rec, out=out)
     ph.pick_images(page, rec, out=out)

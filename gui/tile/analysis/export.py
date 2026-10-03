@@ -31,7 +31,7 @@ on reopen. Content captured via ``solara.display`` lives inside an ``Output`` wh
 view is NOT recreated on that rebuild, so it vanishes the 2nd time the dialog is
 opened. A plain ipyvuetify widget tree is re-viewed from its model on reopen, so it
 survives. ``build_export`` builds the card once and RETURNS it; the parent hands it
-to MapApp as dialog content — same pattern as ``navigator`` / ``review_panel`` /
+to MapApp as dialog content — same pattern as ``context`` / ``review_panel`` /
 ``edit_tools`` and ``recipe_tile.build_recipe_layout``.
 
 Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recipe_tile``):

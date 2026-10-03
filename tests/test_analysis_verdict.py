@@ -5,8 +5,10 @@ positive, Save & next, and the save-state line.
 from datetime import datetime
 from types import SimpleNamespace
 
+import geopandas as gpd
 import pytest
 from pysepal.i18n import set_locale
+from shapely.geometry import box
 
 from deforestation_alerts.project.models import Project
 from gui.i18n import t
@@ -179,3 +181,37 @@ def test_a_refused_save_and_next_stays_on_the_alert(tmp_path, monkeypatch):
     assert app_state.actual_alert_id.value == 1
     assert app_state.alerts_gdf.value["status"].tolist() == ["Confirmed", "Not reviewed"]
     assert save_next.loading is False and save_next.disabled is False
+
+
+def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
+    """A reviewed alert opens on its stored status; an unreviewed one opens
+    with no answer, so nothing is ever saved by default. The seeding happens
+    after ``reset_alert``, which clears it."""
+    from gui.tile.analysis import analysis_tile
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    app_state = AppState()
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    app_state.new_project_state(p)
+    analysis = AnalysisState()
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    id_field = SimpleNamespace(v_model=None)
+
+    gdf = gpd.GeoDataFrame(
+        {"status": ["Confirmed", "Not reviewed"], "alert_id": [0, 1], "set_id": ["x", "x"],
+         "alert_sources": ["GLAD-L"] * 2, "alert_date_min": [2026.010] * 2,
+         "alert_date_max": [2026.020] * 2, "alert_polygon": [None, None],
+         "description": [None, None], "bounding_box": [box(0, 0, 1, 1)] * 2},
+        geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)], crs="EPSG:4326")
+    app_state.alerts_gdf.value = gdf
+    app_state.actual_alert_id.value = 0
+
+    analysis_tile.view_actual_alert(widgets, app_state, analysis, SetContext(app_state), id_field)
+    assert analysis.verdict.value == "Confirmed"
+    assert analysis.dirty.value is False          # seeding is not a change
+    assert id_field.v_model == 1                  # the 1-based number the counter shows
+
+    app_state.actual_alert_id.value = 1
+    analysis_tile.view_actual_alert(widgets, app_state, analysis, SetContext(app_state), id_field)
+    assert analysis.verdict.value is None
+    assert id_field.v_model == 2

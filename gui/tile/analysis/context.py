@@ -32,6 +32,12 @@ from gui.store.workflow_steps import active_set
 #: else) can reach them without re-deriving the tree's shape.
 _SLOTS = "_defo_context_slots"
 
+#: The status swatch beside the chip's label, as Overview's numbers table
+#: draws it: a 10px square filled with the status colour (``{color}`` is
+#: formatted in, never a literal -- the palette lives in ``legend_specs``).
+_SWATCH = ("width: 10px; height: 10px; border-radius: 2px; display: inline-block;"
+           " margin-right: 6px; background: {color};")
+
 #: status code -> the legend key that names it, so the panel, the map and the
 #: charts read the same words (as ``charts`` and ``overview_data`` derive it).
 _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
@@ -120,7 +126,9 @@ def nav_widgets(card):
 
 
 def facts_widgets(card):
-    """``(source, detected, chip)`` of a card built by ``build_context``."""
+    """``(source, detected, chip)`` of a card built by ``build_context``. The
+    chip's children are ``[swatch, label]``: the colour is on the swatch's
+    ``style_`` and the words are plain text (see ``_build_facts``)."""
     slots = getattr(card, _SLOTS)
     return slots["source"], slots["detected"], slots["chip"]
 
@@ -175,12 +183,23 @@ def _build_nav(app_state, id_field):
 
 def _build_facts():
     """What the table says about the selected alert: its source, its detection
-    window and a chip that names and paints its review status (the row labels
-    are written here, once; the values are written by every refresh)."""
+    window and a chip that names its review status and wears that status's
+    colour as a swatch (the row labels are written here, once; the values are
+    written by every refresh).
+
+    The swatch, not the words: ``overview_tile._numbers_table`` states the
+    convention for this palette — "A status wears a colour chip; the text stays
+    in the theme's ink, never in the series colour" — and the palette cannot
+    carry text: the grey ``Not reviewed`` wears is roughly 2.8:1 on the light
+    surface (WCAG AA wants 4.5:1), and the dark theme was never verified. So
+    the 10px swatch carries the colour and the label stays in the theme's ink,
+    drawn exactly as Overview's numbers table draws it.
+    """
     mono = "font-family: monospace; font-variant-numeric: tabular-nums;"
     source = v.Html(tag="span", style_=mono, children=[])
     detected = v.Html(tag="span", style_=mono, children=[])
-    chip = v.Chip(small=True, outlined=True, children=[])
+    swatch = v.Html(tag="span", style_=_SWATCH.format(color="transparent"))
+    chip = v.Chip(small=True, outlined=True, children=[swatch])
 
     def _label(key):
         return v.Html(tag="span", class_="caption text--secondary text-uppercase", children=[t(key)])
@@ -196,7 +215,8 @@ def _build_facts():
             _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
         ],
     )
-    return grid, {"source": source, "detected": detected, "chip": chip}
+    return grid, {"source": source, "detected": detected, "chip": chip,
+                  "swatch": swatch}
 
 
 def build_context(app_state, id_field) -> v.Card:
@@ -232,8 +252,10 @@ def build_context(app_state, id_field) -> v.Card:
         facts_slots["detected"].children = [
             t("analysis_tile.facts.range", first=facts["first"], last=facts["last"])
         ]
-        facts_slots["chip"].children = [t(status_label_key(facts["status"]))]
-        facts_slots["chip"].color = status_color(facts["status"])
+        facts_slots["swatch"].style_ = _SWATCH.format(
+            color=status_color(facts["status"]))
+        facts_slots["chip"].children = [facts_slots["swatch"],
+                                        t(status_label_key(facts["status"]))]
 
     app_state.alerts_gdf.subscribe(_refresh)
     app_state.actual_alert_id.subscribe(_refresh)

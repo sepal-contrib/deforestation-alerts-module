@@ -11,7 +11,7 @@ it on reopen. Content captured via ``solara.display`` lives inside an ``Output``
 whose view is NOT recreated on that rebuild, so it vanishes the 2nd time the dialog
 is opened. A plain ipyvuetify widget tree is re-viewed from its model on reopen, so
 it survives. ``build_edit_tools`` builds the body once and RETURNS it; the
-parent hands it to MapApp as dialog content — same pattern as ``navigator`` /
+parent hands it to MapApp as dialog content — same pattern as ``context`` /
 ``review_panel`` and ``recipe_tile.build_recipe_layout``.
 
 What it returns is the *Refine polygon* section's BODY, not a card: the
@@ -210,13 +210,27 @@ def wire_refine_badge(analysis, set_badge):
     stores as ``area_ha``, so the badge and the column can never disagree."""
 
     def _show(gdf=None):
-        gdf = analysis.defo_layer.value if gdf is None else gdf
-        if gdf is None or len(gdf) == 0:
-            set_badge(t("analysis_tile.sections.refine_empty"))
-            return
-        set_badge(t("analysis_tile.sections.refine_summary",
-                    shapes=tn("analysis_tile.sections.shapes", len(gdf)),
-                    area=format_number(calculate_total_area(gdf), 1)), color="primary")
+        # Guarded like ``wire_defo_layer._on_layer``, the other
+        # ``defo_layer`` subscriber, and for the same reason: this runs
+        # INSIDE ``defo_layer.set()``, so anything raising here raises
+        # through ``reset_alert`` and ``view_actual_alert`` -- out of the
+        # badge and into navigation. Every production writer holds the
+        # GeoDataFrame-or-``None`` invariant ``len`` and
+        # ``calculate_total_area`` need (``state.reset_alert`` sets ``None``,
+        # ``view_actual_alert`` a ``multipolygon_to_geodataframe``,
+        # ``_save_edition`` a ``geojson_to_geodataframe``), so this never
+        # fires today; a summary line is not worth betting the queue on it
+        # staying that way (Ruling 32).
+        try:
+            gdf = analysis.defo_layer.value if gdf is None else gdf
+            if gdf is None or len(gdf) == 0:
+                set_badge(t("analysis_tile.sections.refine_empty"))
+                return
+            set_badge(t("analysis_tile.sections.refine_summary",
+                        shapes=tn("analysis_tile.sections.shapes", len(gdf)),
+                        area=format_number(calculate_total_area(gdf), 1)), color="primary")
+        except Exception:
+            logger.exception("Analysis: the refine badge could not be written")
 
     # The badge alone. The unsaved flag is NOT wired here: ``view_actual_alert``
     # seeds ``defo_layer`` with the alert's stored polygon when it opens, and a

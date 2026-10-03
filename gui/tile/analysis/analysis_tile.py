@@ -10,7 +10,8 @@ It establishes:
   * the per-alert orchestration ``view_actual_alert`` registered as a
     ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
     plus one immediate call so a pre-selected alert renders on first build,
-  * the navigation row (``build_navigator``),
+  * the right-panel review console (``build_controls``: the head, block A,
+    block B and the two collapsible sections),
   * and the sub-component builders (imagery / review / edit / export).
 
 WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
@@ -20,7 +21,7 @@ rendered via ``render_fixed`` + ``solara.display`` goes blank on reopen, but a r
 ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
 ``build_analysis_layout`` builds the tree once and RETURNS ``(stage, controls)``
 — the step content container and the right-panel controls — same pattern
-as the sibling builders (``navigator`` / ``review_panel`` / ``build_edit_tools`` /
+as the sibling builders (``context`` / ``review_panel`` / ``build_edit_tools`` /
 ``build_export`` / ``build_timeline``) and ``recipe_tile.build_recipe_layout`` /
 ``aux_tile.build_aux_layout``. The CSS the OLD component injected via
 ``solara.Style`` (a hook) is now the first child of the returned container as a raw
@@ -61,6 +62,7 @@ granule keys.
 
 import logging
 from datetime import date
+from types import SimpleNamespace
 
 import ee
 import ipyvuetify as v
@@ -72,11 +74,12 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
 )
+from gui.tile.analysis.context import build_context
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.imagery import wire_panes
-from gui.tile.analysis.navigator import build_navigator
+from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
@@ -152,13 +155,21 @@ def view_actual_alert(
         combobox.v_model = (drivers.selection(alerta.get("description"))
                             or drivers.selection(drivers.DEFAULT))
 
-    # --- sync the nav id field ---
-    id_field.v_model = alert_id
+    # --- sync the jump field with the 1-based number the queue counter shows
+    # (block A's ``_build_nav`` converts it back on the way out) ---
+    id_field.v_model = alert_id + 1
 
     # --- forget the previous alert's drawn layer, chosen images and CNN
     # predictions: none of them may survive an alert change (the images are
     # chosen again by the imagery panes below) ---
     analysis.reset_alert()
+
+    # --- a reviewed alert opens on its stored verdict; an unreviewed one on no
+    # answer at all, so a default is never saved. After reset_alert, which
+    # clears it; the seeding is not a change, so ``dirty`` stays False. ---
+    stored = alerta.get("status")
+    analysis.verdict.set(stored if isinstance(stored, str) and stored != "Not reviewed" else None)
+    analysis.dirty.set(False)
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)
@@ -310,6 +321,72 @@ def build_set_status_banner(app_state) -> v.Html:
     return banner
 
 
+#: The two sections and the export parts, kept on the controls div so the
+#: tests (and nothing else) can reach them without re-deriving the tree.
+_PANEL = "_defo_panel_sections"
+
+
+def panel_sections(controls):
+    """``SimpleNamespace(refine, export, export_parts)`` of a panel built by
+    ``build_controls``: the two ``section.build_section`` namespaces and what
+    ``build_export`` returned."""
+    return getattr(controls, _PANEL)
+
+
+def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field) -> v.Html:
+    """The right panel: the head, the two blocks and the two sections.
+
+    In order (spec §3-§6): the help text with its info popup, the alert-set
+    selector, the set-status banner, **block A** (the queue counter, its
+    progress, the navigation row and the facts grid with its status chip),
+    **block B** (the verdict buttons, the loss driver and *Save & next*), then
+    the collapsible *Refine polygon* and *Export this alert* sections. The six
+    always-open cards of the old panel are gone with it, as is the separate
+    navigation card (block A absorbed it).
+
+    Built once per session with the rest of the layout, so every subscription
+    the sub-builders register is registered once; the section bodies are
+    assigned into their ``body_box`` here, once, and stay in the tree for the
+    session (a collapse only toggles ``display``, never a ``v-if`` rebuild).
+    """
+    refine = build_section(t("analysis_tile.sections.refine"), v.Html(tag="div"))
+    refine_body = build_edit_tools(
+        widgets=widgets, app_state=app_state, analysis=analysis,
+        app_tile_model=app_tile_model, set_badge=refine.set_badge,
+    )
+    refine.body_box.children = [refine_body]
+
+    # Built before the verdict block so the two share ONE save runner: a save
+    # from either button runs the export section's post-save step, which is
+    # what enables its build button and moves its badge on.
+    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"))
+    export_parts = build_export(
+        widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
+        app_tile_model=app_tile_model, set_badge=exports.set_badge,
+    )
+    exports.body_box.children = [export_parts.body]
+
+    controls = v.Html(
+        tag="div",
+        class_="pa-0 ma-0",
+        children=[
+            info_button(t("analysis_tile.description"), t("analysis_tile.info_header"),
+                        t("analysis_tile.info_md")),
+            build_set_selector(app_state),
+            build_set_status_banner(app_state),
+            build_context(app_state, id_field),
+            build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis,
+                               app_tile_model=app_tile_model,
+                               run_save=export_parts.run_save),
+            refine.root,
+            exports.root,
+        ],
+    )
+    setattr(controls, _PANEL, SimpleNamespace(refine=refine, export=exports,
+                                              export_parts=export_parts))
+    return controls
+
+
 def build_analysis_layout(
     aux_model,
     selected_alerts_model,
@@ -361,9 +438,15 @@ def build_analysis_layout(
     vis_sync.wire(widgets, app_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
-    # .v_model). Owned here, passed to build_navigator + the subscription.
+    # .v_model). Owned here, passed to block A's jump row (build_context,
+    # through build_controls) and to the per-alert subscription, which writes
+    # the 1-based number the queue counter shows.
+    # Empty, not the 0-based index it used to seed: the field is 1-based now
+    # and ``wire_alert_navigation`` below fills it from the selected alert
+    # before the panel is built (with none selected there is no number to
+    # show, and ``_on_go`` ignores a field it cannot read).
     id_field = v.TextField(
-        v_model=app_state.actual_alert_id.value,
+        v_model=None,
         outlined=True,
         single_line=True,
         hide_details=True,
@@ -463,54 +546,17 @@ def build_analysis_layout(
     )
     strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
 
-    # RIGHT/CONTROLS: nav + review + edit + export cards. Rendered in
-    # MapApp's docked right panel (a panel wrapper in the shell), NOT inside the
-    # stage — same chrome as AOI/Filter/Overview.
-    controls = v.Html(
-        tag="div",
-        class_="pa-0 ma-0",
-        children=[
-            info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md")),
-            build_set_selector(app_state),
-            build_set_status_banner(app_state),
-            build_navigator(app_state=app_state, id_field=id_field),
-            build_review_panel(
-                widgets=widgets,
-                app_state=app_state,
-                analysis=analysis,
-                app_tile_model=app_tile_model,
-            ),
-            # THROWAWAY: build_edit_tools returns the Refine-polygon
-            # section's body now, so it needs a card and a title to sit in
-            # until Task 10 replaces these lines with the real collapsible
-            # section (which owns both, and the summary badge).
-            v.Card(class_="ma-2", children=[
-                v.CardTitle(class_="pa-1 ma-1",
-                            children=[t("analysis_tile.sections.refine")]),
-                build_edit_tools(
-                    widgets=widgets,
-                    app_state=app_state,
-                    analysis=analysis,
-                    app_tile_model=app_tile_model,
-                ),
-            ]),
-            # THROWAWAY: build_export returns the Export section's body and
-            # its save runner now, so the body needs a card and a title to sit
-            # in until Task 10 replaces these lines with the real collapsible
-            # section (which owns both, and the summary badge the body feeds
-            # through ``set_badge``).
-            v.Card(class_="ma-2", children=[
-                v.CardTitle(class_="pa-1 ma-1",
-                            children=[t("analysis_tile.sections.export")]),
-                build_export(
-                    widgets=widgets,
-                    app_state=app_state,
-                    aux_model=aux_model,
-                    analysis=analysis,
-                    app_tile_model=app_tile_model,
-                ).body,
-            ]),
-        ],
+    # RIGHT/CONTROLS: the review console -- the head, block A, block B and the
+    # two collapsible sections (``build_controls``). Rendered in MapApp's
+    # docked right panel (a panel wrapper in the shell), NOT inside the stage
+    # -- same chrome as AOI/Filter/Overview.
+    controls = build_controls(
+        widgets=widgets,
+        app_state=app_state,
+        analysis=analysis,
+        aux_model=aux_model,
+        app_tile_model=app_tile_model,
+        id_field=id_field,
     )
 
     # STAGE: the two-map workspace, handed to MapApp as the step content.

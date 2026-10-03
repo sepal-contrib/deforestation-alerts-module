@@ -2,8 +2,8 @@
 
 Exports the parent ``build_analysis_layout`` raw-widget builder. See
 ``analysis_tile.py`` for the parent architecture + the inter-component contract
-handed to the sub-component builders in ``imagery.py`` / ``review_panel.py`` /
-``edit_tools.py`` / ``export.py`` / ``navigator.py``.
+handed to the sub-component builders in ``context.py`` / ``imagery.py`` /
+``review_panel.py`` / ``section.py`` / ``edit_tools.py`` / ``export.py``.
 """
 
 from gui.tile.analysis.analysis_tile import build_analysis_layout
