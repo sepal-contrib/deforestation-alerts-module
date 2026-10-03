@@ -96,6 +96,9 @@ def test_the_default_windows_are_the_ones_the_spec_asks_for():
     red. They are the spec's numbers: two months around the alert window is
     what the timeline shows, six is what the background widener fills."""
     assert (sl.FOREGROUND_MONTHS, sl.BACKGROUND_MONTHS) == (2, 6)
+    # and the chunk size of both paths: the spec's "one-month chunks" (§5.5),
+    # which §9 makes the answer to a payload too large for one request
+    assert sl.CHUNK_MONTHS == 1
 
 
 def test_the_wanted_window_pads_the_active_period_by_whole_months():
@@ -241,14 +244,31 @@ def test_an_empty_project_fetches_the_index_and_caches_it(data_root, monkeypatch
     async def main():
         box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
         try:
-            assert await _settle(lambda: state.scene_index.value is not None)
+            # the whole window, not the first chunk of it: the index is
+            # published as each chunk lands, so the settle has to wait for
+            # the coverage to reach the far end
+            assert await _settle(lambda: state.scene_manifest.value is not None
+                                 and state.scene_manifest.value.covered.start == date(2026, 3, 3))
             assert len(state.scene_index.value.scenes) == 1
-            assert state.scene_manifest.value.covered.start == date(2026, 3, 3)
             assert state.scene_index_error.value is None
             assert state.scene_index_pending.value is False
-            assert asked == [("SCENES", date(2026, 3, 3), date(2026, 10, 2))]
+            # The spec's payload mitigation (§5.2, §9, §11): the foreground
+            # window is fetched a month at a time, anchored at the recent end
+            # so the first chunk defines the coverage and every later one
+            # abuts it walking backwards. Seven requests, each small, and a
+            # failure part-way leaves the ones that landed on disk.
+            assert asked == [("SCENES", date(2026, 9, 2), date(2026, 10, 2)),
+                             ("SCENES", date(2026, 8, 2), date(2026, 9, 2)),
+                             ("SCENES", date(2026, 7, 2), date(2026, 8, 2)),
+                             ("SCENES", date(2026, 6, 2), date(2026, 7, 2)),
+                             ("SCENES", date(2026, 5, 2), date(2026, 6, 2)),
+                             ("SCENES", date(2026, 4, 2), date(2026, 5, 2)),
+                             ("SCENES", date(2026, 3, 3), date(2026, 4, 2))]
             _, manifest = scene_cache.read_index(paths.project_dir("sl"))
             assert manifest is not None  # it went to disk, so the next session is free
+            # and the manifest records them, in the order they landed
+            assert [(c.start, c.end, c.ok) for c in manifest.chunks] == [
+                (s, e, True) for _, s, e in asked]
             # A project that never had an index is not "rebuilding" one: that
             # word is reserved for a cache that was there and unreadable.
             assert _toasts("info") == [] and _toasts("error") == []
@@ -429,7 +449,9 @@ def test_a_widen_request_beyond_the_coverage_is_fetched_in_the_foreground(
             assert asked == []  # the cache already answers the default view
             state.scene_window_request.set((date(2026, 1, 3), date(2026, 10, 2)))
             assert await _settle(lambda: state.scene_manifest.value.covered.start == date(2026, 1, 3))
-            assert asked == [(date(2026, 1, 3), date(2026, 3, 3))]  # one side, anchored
+            # one side, anchored, and a month at a time
+            assert asked == [(date(2026, 2, 3), date(2026, 3, 3)),
+                             (date(2026, 1, 3), date(2026, 2, 3))]
         finally:
             rc.close()
 
@@ -636,9 +658,13 @@ def test_the_pending_and_widening_flags_are_raised_while_their_fetch_runs(
     async def get_info_async(obj):
         calls.append(obj)
         if len(calls) == 1:
-            await foreground.wait()  # the foreground window
-        elif len(calls) == 2:
-            await widening.wait()  # the first background month
+            await foreground.wait()  # the first foreground chunk
+        elif obj[0] < date(2026, 3, 3):
+            # The foreground window is fetched in month chunks, so the
+            # background buffer cannot be told from it by a call count any
+            # more: it is the chunks that start before the foreground's own
+            # start. Those are the widener's.
+            await widening.wait()
         return RAW
 
     monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
@@ -654,8 +680,7 @@ def test_the_pending_and_widening_flags_are_raised_while_their_fetch_runs(
             assert state.scene_index_pending.value is True
             assert state.scene_widening.value is False
             foreground.set()
-            assert await _settle(lambda: len(calls) == 2)
-            assert state.scene_widening.value is True
+            assert await _settle(lambda: state.scene_widening.value is True)
             assert state.scene_index_pending.value is False  # the foreground is done
             widening.set()
             assert await _settle(lambda: state.scene_widening.value is False)
@@ -685,8 +710,11 @@ def test_a_changed_aoi_rebuilds_the_index_rather_than_merging_into_it(
     async def main():
         box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
         try:
+            # the first chunk already carries the new digest, so the settle
+            # has to wait for the whole window to be covered
             assert await _settle(lambda: state.scene_manifest.value is not None
-                                 and state.scene_manifest.value.aoi_digest == "d1")
+                                 and state.scene_manifest.value.aoi_digest == "d1"
+                                 and state.scene_manifest.value.covered.start == date(2026, 3, 3))
             assert len(state.scene_index.value.scenes) == 0
             assert state.scene_manifest.value.covered == _covered(date(2026, 3, 3), date(2026, 10, 2))
         finally:
@@ -807,8 +835,11 @@ def test_an_earth_engine_failure_that_is_not_a_refusal_records_no_access_state(
                 rc.close()
         warnings = [r for r in caplog.records
                     if r.levelno >= logging.WARNING and "Planet" in r.getMessage()]
-        assert len(warnings) == 1 and warnings[0].exc_info is not None
-        assert "access token expired" in warnings[0].getMessage()
+        # One per chunk, and the index is fetched a month at a time, so the
+        # count is not what is being asserted: it is that every one of them
+        # carries its traceback and the real reason.
+        assert warnings and all(r.exc_info is not None for r in warnings)
+        assert all("access token expired" in r.getMessage() for r in warnings)
 
     asyncio.run(main())
 
@@ -881,7 +912,8 @@ def test_a_planet_answer_that_cannot_be_parsed_is_a_defect_not_a_licence_refusal
                 rc.close()
         warnings = [r for r in caplog.records
                     if r.levelno >= logging.WARNING and "Planet" in r.getMessage()]
-        assert len(warnings) == 1 and warnings[0].exc_info is not None
+        # one per chunk; the traceback on each is the assertion
+        assert warnings and all(r.exc_info is not None for r in warnings)
 
     asyncio.run(main())
 
@@ -992,6 +1024,54 @@ def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
             assert on_disk is None
             # a reply dropped because its AOI is gone is not a refresh failure
             assert state.scene_index_error.value is None and _toasts("error") == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_chunk_that_fails_part_way_leaves_the_chunks_that_landed(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """Review I1: the spec's payload mitigation (§5.2, §9, §11).
+
+    Before it, the foreground fetched its whole span in one ``getInfo`` and
+    there was no partial result: a payload too large meant the index never
+    built and "Try again" repeated the same oversized call. Now the months
+    that did come back are on disk and published, the failure is still
+    reported, and the manifest records which window did not land -- so an
+    empty month reads as "never successfully asked" rather than "no images".
+    """
+    asked = []
+
+    async def get_info_async(obj):
+        asked.append(obj)
+        if len(asked) == 3:
+            raise RuntimeError("Request payload size exceeds the limit")
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)  # no widening to wait on
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index_error.value is not None)
+            # the two months that landed are published and on disk
+            assert state.scene_manifest.value.covered == _covered(date(2026, 8, 2), date(2026, 10, 2))
+            assert len(state.scene_index.value.scenes) == 1
+            _, on_disk = scene_cache.read_index(paths.project_dir("sl"))
+            assert on_disk.covered == state.scene_manifest.value.covered
+            # the third chunk is recorded as the one that did not land
+            assert [(c.start, c.end, c.ok) for c in on_disk.chunks] == [
+                (date(2026, 9, 2), date(2026, 10, 2), True),
+                (date(2026, 8, 2), date(2026, 9, 2), True),
+                (date(2026, 7, 2), date(2026, 8, 2), False)]
+            # and the reviewer is told, once
+            assert _toasts("error") == [t("imagery.index_failed",
+                                          error="Request payload size exceeds the limit")]
+            assert state.scene_index_pending.value is False
         finally:
             rc.close()
 

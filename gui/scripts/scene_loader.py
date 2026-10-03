@@ -7,8 +7,16 @@ index already there.
 Two windows. The *foreground* one -- the active period's alert window padded by
 ``FOREGROUND_MONTHS`` on each side -- is what the timeline shows by default and
 what the loader fetches before anything else. The *background* one, padded by
-``BACKGROUND_MONTHS``, is filled afterwards a month at a time, so a reviewer
-pressing "one more month" usually finds it already loaded.
+``BACKGROUND_MONTHS``, is filled afterwards, so a reviewer pressing "one more
+month" usually finds it already loaded.
+
+Both are fetched in ``CHUNK_MONTHS``-month chunks through one loop, ``_fill``.
+A single ``getInfo`` over a two-year project asks Earth Engine for the whole
+span at once and has no partial result, so a payload too large would leave no
+index at all and "Try again" would repeat the same oversized call (spec §5.5,
+§9 and §11). Chunked, every chunk that landed is on disk and published, and
+the manifest's ``chunks`` records which window did not -- so an empty month
+reads as "never successfully asked" rather than "no images there".
 
 The index on disk is published **before** any fetch is attempted. That is what
 makes a stale index whose refresh fails degrade to "slightly old" instead of to
@@ -54,9 +62,15 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.scene_loader")
 
 FOREGROUND_MONTHS = 2
 BACKGROUND_MONTHS = 6
-#: How much of the background window one request takes. A month at a time, so
-#: the timeline widens while the reviewer works instead of in one long jump.
-WIDEN_MONTHS = 1
+#: How much of a multi-month window one request takes -- the chunk size of
+#: both paths, foreground and background. The spec's number: §5.5 fills the
+#: background buffer "in one-month chunks" and §9 answers "payload too large
+#: for one request" with month-chunked fetching, which §11 calls part of the
+#: design from the start. A month at a time means the timeline fills while the
+#: reviewer works instead of in one long jump, and -- the reason the review
+#: raised it -- a span too large for one ``getInfo`` leaves every chunk that
+#: did land on disk instead of leaving no index at all.
+CHUNK_MONTHS = 1
 
 Window = tuple[date, date]
 
@@ -143,12 +157,22 @@ def _one_step(covered, side: Window, months: int) -> Window:
 def fetch_window(manifest, want: Window, mode: str, *, step_months: int = 0) -> Window:
     """The one contiguous range to request for ``mode``.
 
-    ``step_months`` cuts a widen down to that many months from the coverage
-    edge (the background filler); 0 asks for the whole missing side at once,
-    which is what the foreground does for a month the reviewer asked to see.
+    ``step_months`` cuts the request down to that many months, taken from the
+    end that is already anchored, and the caller loops until ``needs_refresh``
+    goes quiet. 0 asks for the whole missing side in one request.
+
+    A ``"rebuild"`` chunk is anchored at the *recent* end of ``want``. That
+    end is where the scenes a reviewer is most often missing live, it is the
+    end ``refresh_window`` already prefers for a widen, and taking the first
+    chunk there means the coverage it defines grows backwards from it -- so
+    every later round is an ordinary widen that abuts what is covered. A
+    ``"tail"`` is never chunked: it spans ``TAIL_DAYS`` and is one request by
+    construction.
     """
     window = scene_query.refresh_window(manifest, want, mode)
     if manifest is None or mode == "rebuild":
+        if step_months:
+            window = (max(window[0], shift_months(window[1], -step_months)), window[1])
         return window  # a rebuild defines the coverage: there is nothing to abut
     if step_months and mode == "widen":
         window = _one_step(manifest.covered, window, step_months)
@@ -314,6 +338,60 @@ def SceneIndexLoader(app_state, gee_interface):
         app_state.scene_manifest.set(manifest)
         return manifest
 
+    async def _fill(manifest, want: Window):
+        """``want`` fetched in ``CHUNK_MONTHS``-month chunks, each stored as it lands.
+
+        The payload mitigation of spec §5.2, §9 and §11 -- which §11 calls
+        part of the design from the start, not a retrofit. One ``getInfo``
+        over a two-year project asks Earth Engine for ~28 months of
+        Sentinel-2 and Landsat metadata across the whole AOI, and it has no
+        partial result: either it returns or the index never builds and "Try
+        again" repeats the same oversized call. Chunked, every chunk that did
+        land is on disk, published and visible, and the manifest records the
+        window that failed.
+
+        One loop for both callers, which is what the review asked for: the
+        foreground walks it from the recent end of a rebuild, the background
+        widener from the edge of the coverage, and ``fetch_window`` anchors
+        both so every window abuts what is already covered.
+
+        Returns the manifest that landed, or ``None`` when another project or
+        AOI took over while a request was in flight.
+        """
+        # A bound, not a count: the loop ends on the first ``needs_refresh``
+        # that is quiet. It exists so a manifest that somehow stops growing
+        # cannot spin this coroutine for ever.
+        for _ in range((want[1] - want[0]).days // 28 + 4):
+            mode = scene_query.needs_refresh(manifest, want, digest=digest,
+                                             now=datetime.now(timezone.utc))
+            if not mode:
+                return manifest
+            window = fetch_window(manifest, want, mode, step_months=CHUNK_MONTHS)
+            if window[1] <= window[0]:
+                return manifest  # defensive: ``refresh_window`` returns no empty side
+            try:
+                # The manifest for the next round is the one this chunk
+                # landed, never a snapshot taken before the await: the
+                # widener and a reviewer's "one more month" both write while
+                # this runs.
+                landed = await _fetch(window, mode)
+            except Exception:
+                # Whatever landed before this chunk stays on disk and stays
+                # published. The failed window is recorded so ``ok`` is a
+                # fact rather than a constant, and so an empty month reads as
+                # "never successfully asked" rather than "no images there".
+                # The message belongs to the caller, which knows whether this
+                # was the foreground or the buffer, so the exception goes on.
+                await to_thread_in_context(
+                    scene_cache.note_failed_chunk, paths.project_dir(name), window, digest,
+                    now=datetime.now(timezone.utc))
+                raise
+            if landed is None:
+                return None  # another project opened while this was in flight
+            manifest = landed
+        logger.info("scene index of %s: chunked fetch stopped at its bound", name)
+        return manifest
+
     # ---- the index on disk, then the foreground window
     async def _load():
         if name is None or digest is None or fg is None:
@@ -356,7 +434,7 @@ def SceneIndexLoader(app_state, gee_interface):
             return
         app_state.scene_index_pending.set(True)
         try:
-            await _fetch(fetch_window(manifest, fg, mode), mode)
+            await _fill(manifest, fg)
             app_state.scene_index_error.set(None)
         except Exception as exc:  # noqa: BLE001
             # Whatever was published above stays published: a refresh that
@@ -397,26 +475,14 @@ def SceneIndexLoader(app_state, gee_interface):
             # ask Earth Engine for it twice. The months the reviewer is looking
             # at come first; the buffer waits for the next render.
             return
-        # A bound, not a count: the loop ends on the first answer that is not
-        # "widen". It exists so a manifest that somehow stops growing cannot
-        # spin this coroutine for ever.
-        bound = (bg[1] - bg[0]).days // 28 + 4
+        if scene_query.needs_refresh(manifest, bg, digest=digest, now=now) != "widen":
+            # Only a widen belongs to the buffer. A "tail" or a "rebuild" is
+            # the foreground's work, and the guard above has already returned
+            # for either of those.
+            return
         app_state.scene_widening.set(True)
         try:
-            for _ in range(bound):
-                if scene_query.needs_refresh(manifest, bg, digest=digest,
-                                             now=datetime.now(timezone.utc)) != "widen":
-                    return
-                window = fetch_window(manifest, bg, "widen", step_months=WIDEN_MONTHS)
-                if window[1] <= window[0]:
-                    return  # defensive: ``refresh_window`` returns no empty side
-                # The manifest for the next round is the one this chunk landed,
-                # never a snapshot taken before the await: the widener and a
-                # reviewer's "one more month" both write while this runs.
-                manifest = await _fetch(window, "widen")
-                if manifest is None:
-                    return  # another project opened while this was in flight
-            logger.info("scene index of %s: background widening stopped at its bound", name)
+            await _fill(manifest, bg)
         except Exception as exc:  # noqa: BLE001
             # The foreground months still answer, so this is not reported to
             # the reviewer: the only visible effect is that "one more month"

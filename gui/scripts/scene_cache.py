@@ -22,7 +22,8 @@ import pandas as pd
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.scene_index import (
-    INDEX_VERSION, SCENE_COLUMNS, WGS84, Coverage, PlanetState, SceneManifest, SceneTables, empty_tables,
+    INDEX_VERSION, SCENE_COLUMNS, WGS84, ChunkRecord, Coverage, PlanetState, SceneManifest, SceneTables,
+    empty_tables,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.scene_cache")
@@ -148,6 +149,44 @@ def merge_tables(old: SceneTables, new: SceneTables) -> SceneTables:
     )
 
 
+def _with_chunk(existing, record: ChunkRecord) -> list[ChunkRecord]:
+    """``existing`` with ``record`` added, one entry per window.
+
+    A window fetched twice -- the 24h tail, or a retry of a chunk that failed
+    -- replaces its earlier entry rather than adding a second, so the list
+    stays a description of the index rather than a log of every request ever
+    made against it.
+    """
+    kept = [c for c in existing if (c.start, c.end) != (record.start, record.end)]
+    return kept + [record]
+
+
+def note_failed_chunk(pdir, window: tuple[date, date], digest: str, *,
+                      now: datetime) -> Optional[SceneManifest]:
+    """Record that ``window`` was requested and did not land.
+
+    Spec §9: ``chunks`` records per-chunk success, so a partial failure still
+    leaves a usable index *and* a reader can tell which months are missing
+    from it instead of reading an empty month as "no images there". Only the
+    manifest is rewritten -- nothing was fetched to put in the parquet files,
+    and the coverage deliberately does not grow over a window that failed.
+
+    ``None`` when there is no index for this AOI to record it on, which is the
+    case when the very first chunk is the one that failed: there is no partial
+    index then, and the caller's error message is the whole story.
+    """
+    with _lock_for(pdir):
+        _, manifest = read_index(pdir)
+        if manifest is None or manifest.aoi_digest != digest:
+            return None
+        record = ChunkRecord(start=window[0], end=window[1], fetched_at=now, ok=False)
+        manifest = manifest.model_copy(update={"chunks": _with_chunk(manifest.chunks, record)})
+        _write_manifest(pdir, manifest)
+        logger.info("scene index of %s: chunk %s..%s did not land",
+                    Path(pdir).name, window[0], window[1])
+        return manifest
+
+
 def store_chunk(
     pdir, new_tables: SceneTables, window: tuple[date, date], digest: str, *, now: datetime,
     planet: Optional[PlanetState] = None, replace: bool = False,
@@ -174,9 +213,14 @@ def store_chunk(
         stale = old_manifest is not None and (
             old_manifest.aoi_digest != digest or old_manifest.version != INDEX_VERSION
         )
+        record = ChunkRecord(start=window[0], end=window[1], fetched_at=now)
         if replace or old is None or stale:
             tables = merge_tables(empty_tables(), new_tables)
             covered = Coverage(start=window[0], end=window[1])
+            # This chunk *is* the index now, so it is the whole chunk list
+            # too: keeping the discarded index's entries would describe
+            # months that are no longer in ``scenes.parquet``.
+            chunks = [record]
         else:
             tables = merge_tables(old, new_tables)
             # INVARIANT, not enforced by a runtime check here: ``Coverage`` is
@@ -198,11 +242,12 @@ def store_chunk(
                 start=min(old_manifest.covered.start, window[0]),
                 end=max(old_manifest.covered.end, window[1]),
             )
+            chunks = _with_chunk(old_manifest.chunks, record)
         counts = {str(k): int(v) for k, v in tables.scenes["source"].value_counts().items()}
         kept = old_manifest.planet if (old_manifest is not None and not stale) else None
         manifest = SceneManifest(
             aoi_digest=digest, refreshed=now, covered=covered, counts=counts,
-            planet=planet or kept or PlanetState(),
+            planet=planet or kept or PlanetState(), chunks=chunks,
         )
         write_index(pdir, tables, manifest)
         logger.info("scene index of %s: %d rows, %s..%s",
