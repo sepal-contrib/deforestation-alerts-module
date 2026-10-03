@@ -51,10 +51,16 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False):
         chevron.children = ["mdi-chevron-down" if state["open"] else "mdi-chevron-right"]
 
     def set_badge(text: str, color=None) -> None:
+        # The colour is written on EVERY call, the ``None`` of a neutral state
+        # included -- ``None`` is a fresh chip's own colour, so this puts the
+        # badge back as it was built. Both consumers (the refine summary, the
+        # export file count) pass a colour for their emphasised state and
+        # nothing for the others, and they mean "no colour", not "keep the
+        # previous alert's": left unwritten, the chip's emphasis was the one
+        # piece of per-alert state no reset cleared.
         badge_chip.children = [text] if text else []
         badge_chip.style_ = "" if text else _HIDDEN
-        if color is not None:
-            badge_chip.color = color
+        badge_chip.color = color
 
     header.on_event("click", lambda *_: set_open(not state["open"]))
     set_open(open)

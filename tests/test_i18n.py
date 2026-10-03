@@ -361,6 +361,25 @@ def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
     assert button == f"{first}…{last}"
 
 
+@pytest.mark.parametrize("locale", ["en", "es-ES", "fr"])
+def test_the_analysis_help_names_the_verdict_block_and_not_its_aria_label(locale):
+    """The panel's help text may only point at what the panel SHOWS.
+
+    ``questionarie.confirmation_q`` is the verdict group's ``aria-label`` and
+    nothing else (``gui/tile/analysis/review_panel.py``): a screen reader
+    announces it, no pixel carries it. The block's visible heading is
+    ``verdict.title``. Help text that bolds the question sends a sighted
+    reviewer scanning the panel for a heading that is not there -- which is
+    where this text came from, the pre-redesign panel whose visible label the
+    question was.
+    """
+    set_locale(locale)
+    info = i18n.t("analysis_tile.info_md")
+    heading = i18n.t("analysis_tile.verdict.title")
+    assert f"**{heading}**" in info, f"{locale}: the help text must name {heading!r}"
+    assert i18n.t("analysis_tile.questionarie.confirmation_q") not in info
+
+
 def test_every_catalogue_file_keeps_one_layout():
     """One layout (2-space indent, UTF-8 text) so a scripted edit is a no-op diff."""
     from pathlib import Path

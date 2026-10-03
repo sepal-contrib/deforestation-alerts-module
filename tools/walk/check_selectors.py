@@ -25,8 +25,20 @@ the tree at all. Extend ``WALK`` whenever a phase starts reaching for
 something new in the panel.
 
 What it does NOT check: CSS structure (``.v-select__slot``, ``.v-chip``),
-anything outside the Analysis controls, and whether a phase runs at all. It is
-a selector smoke test, not a substitute for running a walk.
+anything outside the Analysis controls, and whether a phase runs at all. No
+Playwright selector is evaluated and no browser is started -- the texts in
+``WALK`` are the claim, checked against the built tree. It is a selector smoke
+test, not a substitute for running a walk.
+
+And the one limit worth naming, because it is the way the collapsed-section
+bug this script exists to catch comes back: a phase that reaches for something
+``WALK`` does not DECLARE is invisible here. Nothing reads the phase sources,
+so a new ``page.get_by_text(...)`` inside a collapsed section passes this
+script in silence and times out in the walk. The declaration is the contract:
+extend ``WALK`` in the same change as the phase, or this script says nothing
+about it. (Deriving the texts from the phase sources instead -- a backward
+grep over ``tools/walk/*.py`` -- was weighed and deliberately left out: it is a
+larger change than the check it would replace.)
 """
 
 import os
@@ -62,12 +74,17 @@ HIDDEN_BY_OWN_STATE = {
 def _texts(root, hidden=False, out=None):
     """``{text: {"visible"|"hidden"}}`` for every string in ``root``'s tree.
 
-    "hidden" means some ancestor (or the widget itself) carries
-    ``display: none`` -- which is exactly what a collapsed section body and a
-    ``sw.SepalWidget.hide()`` both do.
+    "hidden" means some ancestor (or the widget itself) is out of the layout:
+    ``display: none`` (what a collapsed section body sets) or ``viz=False`` /
+    the ``d-none`` class (what ``sw.SepalWidget.hide()`` sets instead -- it
+    never touches ``style_``, so reading only that counted a hidden toolbar as
+    visible and let a phase that reaches into one pass).
     """
     out = {} if out is None else out
-    mine = hidden or "display: none" in (getattr(root, "style_", "") or "")
+    mine = (hidden
+            or "display: none" in (getattr(root, "style_", "") or "")
+            or getattr(root, "viz", True) is False
+            or "d-none" in (getattr(root, "class_", "") or "").split())
     for attr in ("msg", "label", "tooltip"):
         value = getattr(root, attr, None)
         if isinstance(value, str) and value.strip():
@@ -161,7 +178,10 @@ def main():
         for problem in problems:
             print(f"  * {problem}")
         return 1
-    print("\nOK: every walk selector above resolves in the panel as the phase expects")
+    print("\nOK: every Analysis text WALK declares is in the built tree, and "
+          "every one inside a collapsed section is opened by its phase first.\n"
+          "    No Playwright selector was evaluated, and a text no phase "
+          "declares here was not checked at all.")
     return 0
 
 

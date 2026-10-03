@@ -58,6 +58,13 @@ def test_the_badge_follows_what_it_is_told():
     assert s.badge.children == ["available after save"]
     s.set_badge("2 files ready", color="primary")
     assert s.badge.children == ["2 files ready"] and s.badge.color == "primary"
+    # And takes it back: both consumers pass no colour for their NEUTRAL
+    # states, which means "no colour" and not "keep the last one" -- the chip
+    # is per-alert state, and an emphasis left standing is the previous
+    # alert's. Same assertion as the facts status chip's
+    # (tests/test_analysis_context.py: ``assert not chip.color``).
+    s.set_badge("nothing drawn")
+    assert s.badge.children == ["nothing drawn"] and not s.badge.color
     s.set_badge("")
     assert s.badge.children == [] and "display: none" in s.badge.style_
 
@@ -77,11 +84,12 @@ def _controls(tmp_path, monkeypatch):
     """``build_controls`` as the tile builds it, on stand-in models.
 
     The heavy widgets are only touched inside the edit/CNN handlers (as
-    tests/test_feedback_notifications.py's ``edit_tools_card`` relies on) and
-    by the refine section's alert-change reset, which clears the two maps' draw
-    controls -- so a namespace with those two is enough to assemble the panel
-    and to drive an alert change through it without a caught-and-logged
-    traceback in the way.
+    tests/test_feedback_notifications.py's ``edit_tools_card`` relies on), by
+    the refine section's alert-change reset, which clears the two maps' draw
+    controls, and by ``wire_defo_layer``, which draws a set polygon on both
+    maps -- so a namespace with those four is enough to assemble the panel and
+    to drive a drawing and an alert change through it without a
+    caught-and-logged traceback in the way.
     """
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
@@ -91,8 +99,10 @@ def _controls(tmp_path, monkeypatch):
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
     draw = SimpleNamespace(clear=lambda: None)
+    shown_map = SimpleNamespace(add_layer=lambda *_: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw),
+        widgets=SimpleNamespace(draw_before=draw, draw_after=draw,
+                                map_before=shown_map, map_after=shown_map),
         app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis,
@@ -206,3 +216,29 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     assert made == []
     assert build_btn.disabled is False
     assert panel.sections.export.badge.children == ["ready to build"]
+
+
+def test_an_alert_change_takes_the_refine_badges_emphasis_with_it(tmp_path, monkeypatch):
+    """The badge COLOUR is per-alert state too: a reviewer who drew on alert 1
+    and moved to alert 2 must not meet an emphasised *nothing drawn* on a
+    section that holds nothing of this alert. Driven through the assembled
+    panel (not ``set_badge`` alone) because the leak is in what the two
+    neutral call sites mean by passing no colour.
+    """
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    panel = _controls(tmp_path, monkeypatch)
+    refine = panel.sections.refine
+    assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
+    assert not refine.badge.color          # a fresh panel carries no emphasis
+
+    gdf = gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)], crs="EPSG:4326")
+    panel.analysis.defo_layer.set(gdf)     # the reviewer drew on alert 1
+    assert refine.badge.color == "primary"
+    assert "ha" in refine.badge.children[0]
+
+    panel.analysis.reset_alert()           # and moved to alert 2
+
+    assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
+    assert not refine.badge.color

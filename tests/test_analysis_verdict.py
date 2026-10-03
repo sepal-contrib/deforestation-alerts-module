@@ -151,15 +151,12 @@ def test_a_refused_save_and_next_stays_on_the_alert(tmp_path, monkeypatch):
     """
     import pandas as pd
 
-    import gui.tile.analysis.export as export_mod
-    from tests.test_feedback_notifications import _record_feedback, _save_harness
+    from tests.test_feedback_notifications import _save_harness
 
-    app_state, analysis, widgets, model = _save_harness(tmp_path, monkeypatch)
-    feedback = _record_feedback(monkeypatch, export_mod)
-    # _record_feedback re-points spawn_in_context at a real thread; the save
-    # must finish before the assertions, as it does in _save_harness.
-    monkeypatch.setattr(export_mod, "spawn_in_context",
-                        lambda target, args=(), **k: target(*args))
+    # The harness's own recorder, not a second one: ``_record_feedback`` also
+    # re-points ``spawn_in_context`` at a real thread, and the save must have
+    # finished by the time the assertions below run.
+    app_state, analysis, widgets, model, feedback = _save_harness(tmp_path, monkeypatch)
     # Two alerts, so "stayed on this one" is a real assertion and not a clamp.
     one = app_state.alerts_gdf.value
     app_state.alerts_gdf.value = pd.concat([one, one], ignore_index=True)

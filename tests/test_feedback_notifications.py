@@ -1563,7 +1563,12 @@ def _save_harness(tmp_path, monkeypatch):
     set's alerts, as ``test_set_context`` builds them; the FAO/GAUL admin
     lookups stood in for, the notifier on a private bus, and the worker run
     inline so ``run_save`` has finished by the time it returns.
-    Returns ``(app_state, analysis, widgets, app_tile_model)``.
+    Returns ``(app_state, analysis, widgets, app_tile_model, feedback)``.
+
+    The recorder is RETURNED rather than dropped: a caller that wants the
+    toasts must not install a second one, because ``_record_feedback`` also
+    re-patches ``spawn_in_context`` -- back to a real thread, undoing the
+    inline worker this harness promises.
     """
     from datetime import datetime
 
@@ -1615,31 +1620,49 @@ def _save_harness(tmp_path, monkeypatch):
         driver_combobox=SimpleNamespace(v_model=[]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
-    _record_feedback(monkeypatch, export)
+    feedback = _record_feedback(monkeypatch, export)
     # The worker on the calling thread: the assertions below follow the save
     # it started, not a thread that may not have run yet.
     monkeypatch.setattr(
         export, "spawn_in_context", lambda target, args=(), **k: target(*args)
     )
-    return app_state, AnalysisState(), widgets, SetContext(app_state)
+    return app_state, AnalysisState(), widgets, SetContext(app_state), feedback
 
 
 def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeypatch):
     """Save & next passes ``go_next`` as ``then``: a refused save must leave
-    the reviewer on the alert that was not saved."""
+    the reviewer on the alert that was not saved.
+
+    ``moved`` alone cannot tell a save that WROTE from one that only ran:
+    ``_save_alerts_to_gdf`` returns early on an empty ``_save_target`` while
+    ``_save_attributes`` still returns True, so an advance would stay green
+    over a store that was never touched. The parquet on disk is asserted on
+    both halves, and the refusal's own warning names the reason the reviewer
+    is told -- the missing answer, not some later guard tripping by accident.
+    """
+    import geopandas as gpd
+
     from gui.tile.analysis import export as export_mod
 
-    app_state, analysis, widgets, model = _save_harness(tmp_path, monkeypatch)
+    app_state, analysis, widgets, model, feedback = _save_harness(tmp_path, monkeypatch)
+    store = tmp_path / "d" / "periods" / "per" / "sets" / "glad-l" / "alert_db.parquet"
     moved = []
     run_save = export_mod.make_save_runner(widgets, app_state, analysis, model)
 
     analysis.verdict.set(None)              # no answer: _save_attributes refuses
     run_save(None, then=lambda: moved.append(1))
     assert moved == []
+    assert ("warning", t("analysis_tile.questionarie.confirmation_missing")) \
+        in feedback.toasts()
+    assert not store.exists(), "a refused save must write nothing"
 
     analysis.verdict.set("Confirmed")
     run_save(None, then=lambda: moved.append(1))
     assert moved == [1]
+    assert ("success", t("analysis_tile.export_labels.save_done")) in feedback.toasts()
+    # The store, not just the advance: the verdict reached the parquet.
+    assert store.exists(), "the save advanced without writing the alert store"
+    assert list(gpd.read_parquet(store)["status"]) == ["Confirmed"]
 
 
 def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, monkeypatch):
@@ -1654,7 +1677,7 @@ def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, mon
     """
     import gui.tile.analysis.export as export
 
-    app_state, analysis, widgets, model = _save_harness(tmp_path, monkeypatch)
+    app_state, analysis, widgets, model, _ = _save_harness(tmp_path, monkeypatch)
     feedback = _record_feedback(monkeypatch, export)
     held = _deferred(monkeypatch, export)
     moved = []
