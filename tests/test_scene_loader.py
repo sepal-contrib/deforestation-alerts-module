@@ -941,3 +941,58 @@ def test_the_shell_mounts_the_loader_beside_the_remote_facts_one():
     assert "from gui.scripts.scene_loader import SceneIndexLoader" in shell
     assert "SceneIndexLoader(app_state=app_state, gee_interface=gee_interface)" in shell
     assert shell.index("RemoteFactsLoader(app_state=") < shell.index("SceneIndexLoader(app_state=")
+
+
+def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """``_still_current`` guards the window cancellation cannot reach.
+
+    A dependency change cancels ``_load`` at its next await -- but not every
+    AOI change is a dependency change at the moment it happens: ``AoiRecord``
+    is mutated on the open ``Project`` before anything republishes, and
+    ``to_thread_in_context`` is not cancellable once entered. The two
+    ``_still_current`` calls in ``_fetch`` straddle exactly that window, so
+    this test does what cancellation cannot do for it -- it holds the Earth
+    Engine reply, moves the digest under the in-flight fetch *without* a
+    publish, and only then lets the reply land. ``store_chunk`` compares
+    digests and would take the late chunk for the newer truth, so the stored
+    digest is the assertion.
+    """
+    held = asyncio.Event()
+    stored = []
+    real = scene_cache.store_chunk
+
+    def spy(pdir, tables, window, digest, **kwargs):
+        stored.append(digest)
+        return real(pdir, tables, window, digest, **kwargs)
+
+    async def get_info_async(obj):
+        await held.wait()
+        return RAW
+
+    monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)  # no widening to wait on
+    state = AppState()
+    state.load_project_state(_with_period(_p(digest="d1")))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index_pending.value is True)
+            # the AOI is redrawn while the reply is in flight; mutating the
+            # record publishes nothing, so nothing re-renders and nothing is
+            # cancelled -- which is the whole point of the guard
+            state.project.value.aoi.digest = "d2"
+            held.set()
+            assert await _settle(lambda: state.scene_index_pending.value is False)
+            assert stored == [], f"the replaced AOI's index was written as {stored}"
+            assert state.scene_index.value is None and state.scene_manifest.value is None
+            _, on_disk = scene_cache.read_index(paths.project_dir("sl"))
+            assert on_disk is None
+            # a reply dropped because its AOI is gone is not a refresh failure
+            assert state.scene_index_error.value is None and _toasts("error") == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())

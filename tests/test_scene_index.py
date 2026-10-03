@@ -132,3 +132,41 @@ def test_parse_planet_rows_carry_no_footprint_and_no_cloud():
 def test_empty_tables_are_usable_without_a_fetch():
     tables = scene_index.empty_tables()
     assert len(tables.scenes) == 0 and len(tables.tiles) == 0
+
+
+#: the Earth-Engine-facing functions. Pinned so a rename cannot quietly empty
+#: the assertion below, and so adding a seventh is a deliberate edit here.
+EE_FUNCTIONS = ("_window", "_row", "_s2_rows", "_landsat_rows", "scene_request", "planet_request")
+
+
+def test_scene_index_imports_earth_engine_only_inside_its_functions():
+    """The constraint ``scene_query`` asserts for itself, asserted here too.
+
+    ``scene_query`` imports ``scene_index`` at module scope, so a module-level
+    ``import ee`` here would drag Earth Engine into the offline tier *through*
+    ``scene_query`` -- and would leave
+    ``test_scene_query_never_imports_earth_engine`` passing while meaning
+    nothing. ``scene_query``'s own test is a source-text check; this one has to
+    read the tree, because this module does contain the words ``import ee`` --
+    six times, each inside a function.
+    """
+    import ast
+
+    tree = ast.parse(open(scene_index.__file__).read())
+
+    at_module_scope = [
+        node for node in tree.body
+        if (isinstance(node, ast.Import) and any(a.name.split(".")[0] == "ee" for a in node.names))
+        or (isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "ee")
+    ]
+    assert at_module_scope == [], "scene_index must not import ee at module scope"
+
+    # every top-level function that names ``ee`` carries its own import, so a
+    # seventh Earth Engine function is covered without editing this test
+    users = {node.name: node for node in tree.body
+             if isinstance(node, ast.FunctionDef)
+             and any(isinstance(n, ast.Name) and n.id == "ee" for n in ast.walk(node))}
+    assert set(EE_FUNCTIONS) <= set(users), f"expected {EE_FUNCTIONS} to use ee, found {sorted(users)}"
+    for name, node in users.items():
+        assert any(isinstance(n, ast.Import) and any(a.name == "ee" for a in n.names)
+                   for n in ast.walk(node)), f"{name} uses ee with no function-local import"

@@ -281,3 +281,63 @@ def test_an_image_layer_drawn_after_an_alert_change_is_not_added(monkeypatch):
     assert [lyr.name for lyr in map_.layers[base:]] == ["True Color"]
     map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name="later"))
     assert map_.layers[-1].name == "later"  # outside the callback, adds are not gated
+
+
+def test_a_rebuild_that_raises_reaches_the_log_and_the_reviewer(monkeypatch, caplog):
+    """The hole Task 12 exists to close, pinned behaviourally.
+
+    The pane rebuild runs on a bare daemon thread (``spawn_in_context``). An
+    unhandled exception there reaches ``threading.excepthook`` ->
+    ``sys.stderr``, which under Voila nobody ever sees, so the reviewer is left
+    with a pane that simply did not change. Removing the worker's
+    ``try/except`` + ``logger.exception`` + ``current_notifier().error(...)``
+    passed the whole suite, because nothing asserted either destination:
+    ``imagery.py`` is not in ``test_feedback_notifications.RAW_LAYOUTS``
+    either (it owns no ``tracked_job`` -- a pane redraw is not a tracked job).
+    """
+    import logging
+
+    from gui.i18n import t
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    widgets.map_before = SimpleNamespace(side="before")
+    widgets.map_after = SimpleNamespace(side="after")
+    held, toasted = [], []
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
+    monkeypatch.setattr(imagery, "current_notifier",
+                        lambda: SimpleNamespace(error=lambda message: toasted.append(message)))
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("getMapId refused")
+
+    monkeypatch.setattr(imagery, "image_slider_map_callback", _boom)
+    imagery.wire_panes(widgets, s, None)
+
+    s.before_keys.set(["k0"])
+    s.before_info.set([SOURCE_S2, 1, "1.00", "x ", "_010126"])
+    assert len(held) == 1
+    fn, args = held[0]
+    with caplog.at_level(logging.ERROR, logger="SEPALUI.deforestation_alerts.analysis"):
+        fn(*args)  # must not raise out of the worker body
+
+    # the server log: one ERROR record carrying the traceback
+    records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(records) == 1 and records[0].exc_info is not None
+    assert "before" in records[0].getMessage()
+
+    # and the reviewer: the rendered message, not the bare key
+    assert len(toasted) == 1
+    assert toasted[0] == t("analysis.timeline.image_failed_before", error="getMapId refused")
+    assert "analysis.timeline.image_failed_before" not in toasted[0]
+    assert "getMapId refused" in toasted[0]
+
+    # the after lane says *after*, so a reviewer knows which pane went dead
+    s.after_keys.set(["k1"])
+    s.after_info.set([SOURCE_S2, 2, "1.00", "y ", "_020126"])
+    fn, args = held[-1]
+    fn(*args)
+    assert len(toasted) == 2
+    assert toasted[1] == t("analysis.timeline.image_failed_after", error="getMapId refused")
+    assert toasted[1] != toasted[0]

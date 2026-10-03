@@ -1194,3 +1194,68 @@ def test_an_alert_whose_dates_are_missing_publishes_no_window_rather_than_a_wron
     assert _as_date(2026.365) == date(2026, 12, 31)
     assert _as_date(float("nan")) is None
     assert _as_date(None) is None
+
+
+# ------------------------------------- what reaches the pane (final fix wave)
+
+#: two tiles, one over the alert's bbox and one 8 degrees away
+TILES_TWO = gpd.GeoDataFrame(
+    {"tile": ["W", "E"]},
+    geometry=gpd.GeoSeries([box(0, 0, 2, 2), box(8, 8, 9, 9)], crs=scene_index.WGS84),
+    crs=scene_index.WGS84)
+
+
+def _index(rows, tiles=TILES):
+    """A ``SceneTables`` from explicit ``(source, date, cloud, tile, key)`` rows.
+
+    ``_fake_state``'s default index gives every row the same tile and the same
+    key, which is enough for geometry and copy but cannot tell one granule
+    from another. The two tests below are about exactly *which* granule keys
+    reach ``imagery.rebuild_image``, so they need distinguishable ones.
+    """
+    scenes = pd.DataFrame(
+        [(src, pd.Timestamp(d), cloud, tile, key) for src, d, cloud, tile, key in rows],
+        columns=list(scene_index.SCENE_COLUMNS),
+    ).astype({"date": "datetime64[ns]"})
+    return scene_index.SceneTables(scenes=scenes, tiles=tiles)
+
+
+def test_the_granule_keys_are_published_before_the_info_that_wakes_the_pane():
+    """``imagery.wire_panes`` subscribes to ``before_info`` and reads
+    ``before_keys`` *at that publish* (imagery.py), so ``_assign`` has to set
+    the keys first. With the two publishes swapped the pane is rebuilt from the
+    previous pick's granules -- the new date in the readout, the old image on
+    the map -- and the order was asserted in prose in three places and nowhere
+    in a test.
+    """
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (LS, "2026-08-27", 3.0, "W", "kB")]))
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets())
+    assert analysis.before_keys.value == ["kA"]  # the auto-pick's own granule
+    seen = []
+    # exactly what the pane does: read the keys when the info lands
+    analysis.before_info.subscribe(lambda _info: seen.append(list(analysis.before_keys.value)))
+    _click(_lane(card, "0"), scene_index.row_id(LS, date(2026, 8, 27)))
+    assert analysis.before_info.value[0] == LS
+    assert seen == [["kB"]], "the pane was woken while the keys were still the previous pick's"
+
+
+def test_only_the_granules_that_cover_the_alert_are_handed_to_the_rebuild():
+    """Review Focus #5 on the *assignment* side rather than the counting side.
+
+    Two granules of one date, one on a tile over the alert and one on a tile
+    eight degrees away. ``rebuild_image`` mosaics whatever keys it is given
+    and does no ``filterBounds`` of its own, so handing it both would draw a
+    mosaic of imagery that does not cover the alert -- while the row's cloud
+    figure is the mean over the covering granule only. The map and the readout
+    would then describe different granule sets.
+    """
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "near"),
+                                      (S2, "2026-04-24", 90.0, "E", "far")],
+                                     tiles=TILES_TWO))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets())
+    assert analysis.before_keys.value == ["near"]
+    # the same granule the cloud figure describes: 8.00, not the mean of 8 and 90
+    assert analysis.before_info.value[2] == "8.00"
