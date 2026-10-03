@@ -62,6 +62,8 @@
     "timeline": {
       "before": "Avant",
       "after": "Après",
+      "lane_before": "Couloir de l'image avant. Utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
+      "lane_after": "Couloir de l'image après. Utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
       "unset": "non défini",
       "max_cloud": "Nuages max.",
       "one_more_month": "+1 mois",
@@ -75,7 +77,8 @@
       "refresh_failed": "Impossible d'actualiser l'index des images : {error}",
       "retry": "Réessayer",
       "loading": "Chargement de l'index des images…",
-      "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Cliquez sur une barre du couloir supérieur pour définir l'image avant, sur celui du bas pour l'image après.",
+      "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Cliquez sur une barre du couloir supérieur pour définir l'image avant, sur celui du bas pour l'image après. Ou placez le focus sur un couloir et utilisez le clavier : les flèches gauche et droite parcourent les dates, Début et Fin sautent à la première et à la dernière image, et Entrée choisit celle que l'anneau entoure.",
+      "legend_label": "Ce que montre cette chronologie",
       "set_before": "Définir comme image avant",
       "set_after": "Définir comme image après",
       "collapsed_month": "{month}, {count} images, replié. Déplier ce mois.",

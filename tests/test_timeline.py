@@ -285,7 +285,8 @@ def test_every_locale_has_the_timeline_keys():
     root = Path(msg.__file__).parent
     keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
             "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
-            "legend", "set_before", "set_after", "collapsed_month", "no_cloud_filter"}
+            "legend", "legend_label", "lane_before", "lane_after",
+            "set_before", "set_after", "collapsed_month", "no_cloud_filter"}
     for locale in ("en", "es-ES", "fr"):
         data = json.loads((root / locale / "ui.json").read_text())
         assert keys <= set(data["analysis"]["timeline"]), locale
@@ -583,6 +584,305 @@ def test_the_legend_is_reachable_from_the_toolbar():
         "analysis.timeline.legend") for w in _walk(card))
 
 
+# ------------------------------------------------------------ keyboard navigation
+
+VIEW = (date(2026, 3, 1), date(2026, 6, 30))
+
+
+def _segs(collapsed=()):
+    return scene_query.month_segments(VIEW[0], VIEW[1], set(collapsed), timeline.TRACK_PX)
+
+
+def test_arrowing_moves_to_the_next_visible_row():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0), (S2, "2026-03-15", 5.0)],
+               start=VIEW[0], end=VIEW[1])
+    mid = scene_index.row_id(S2, date(2026, 3, 10))
+    assert timeline.step(sel, _segs(), mid, 1) == scene_index.row_id(S2, date(2026, 3, 15))
+    assert timeline.step(sel, _segs(), mid, -1) == scene_index.row_id(S2, date(2026, 3, 5))
+
+
+def test_arrowing_past_the_end_stays_put():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)], start=VIEW[0], end=VIEW[1])
+    last = scene_index.row_id(S2, date(2026, 3, 10))
+    assert timeline.step(sel, _segs(), last, 1) == last
+    first = scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.step(sel, _segs(), first, -1) == first
+
+
+def test_arrowing_skips_a_row_the_cloud_limit_hides():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 95.0), (S2, "2026-03-15", 5.0)],
+               start=VIEW[0], end=VIEW[1])
+    first = scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.step(sel, _segs(), first, 1) == scene_index.row_id(S2, date(2026, 3, 15))
+
+
+def test_arrowing_skips_a_row_inside_a_collapsed_month():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-04-10", 5.0), (S2, "2026-05-15", 5.0)],
+               start=VIEW[0], end=VIEW[1])
+    first = scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.step(sel, _segs(collapsed=[(2026, 4)]), first, 1) == \
+        scene_index.row_id(S2, date(2026, 5, 15))
+
+
+def test_arrowing_skips_a_row_outside_the_laid_out_months():
+    """A row whose month the segments do not hold at all is not drawn either,
+    so it is not reachable: ``_navigable`` must not assume ``segments`` covers
+    every row's month."""
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-07-10", 5.0), (S2, "2026-03-20", 5.0)],
+               start=VIEW[0], end=date(2026, 7, 31))
+    assert timeline.step(sel, _segs(), scene_index.row_id(S2, date(2026, 3, 20)), 1) == \
+        scene_index.row_id(S2, date(2026, 3, 20))
+
+
+def test_arrowing_from_nothing_selected_takes_the_first_visible_row():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)], start=VIEW[0], end=VIEW[1])
+    assert timeline.step(sel, _segs(), None, 1) == scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.step(sel, _segs(), None, -1) == scene_index.row_id(S2, date(2026, 3, 10))
+
+
+def test_arrowing_walks_the_rows_in_date_order_whatever_order_they_arrive_in():
+    """``scenes_for`` happens to sort by date today, but its contract does not
+    promise it; a cursor that walked the frame's row order would jump about."""
+    sel = _sel([(S2, "2026-03-15", 5.0), (S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)],
+               start=VIEW[0], end=VIEW[1])
+    shuffled = sel.iloc[[2, 0, 1]].reset_index(drop=True)
+    mid = scene_index.row_id(S2, date(2026, 3, 10))
+    assert timeline.step(shuffled, _segs(), mid, 1) == scene_index.row_id(S2, date(2026, 3, 15))
+    assert timeline.step(shuffled, _segs(), mid, -1) == scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.edge(shuffled, _segs()) == scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.edge(shuffled, _segs(), last=True) == scene_index.row_id(S2, date(2026, 3, 15))
+
+
+def test_the_edges_are_the_first_and_last_visible_rows():
+    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 95.0), (S2, "2026-03-15", 5.0)],
+               start=VIEW[0], end=VIEW[1])
+    assert timeline.edge(sel, _segs()) == scene_index.row_id(S2, date(2026, 3, 5))
+    assert timeline.edge(sel, _segs(), last=True) == scene_index.row_id(S2, date(2026, 3, 15))
+
+
+def test_the_edges_of_an_empty_selection_are_nothing():
+    sel = _sel([(S2, "2026-03-05", 95.0)], start=VIEW[0], end=VIEW[1])
+    assert timeline.edge(sel, _segs()) is None
+    assert timeline.step(sel, _segs(), None, 1) is None
+
+
+# ---- which key a ``keydown`` payload asks for
+
+def test_a_keydown_payload_is_read_by_its_key_name():
+    assert timeline.key_action({"key": "ArrowLeft"}) == "left"
+    assert timeline.key_action({"key": "ArrowRight"}) == "right"
+    assert timeline.key_action({"key": "Home"}) == "home"
+    assert timeline.key_action({"key": "End"}) == "end"
+    assert timeline.key_action({"key": "Enter"}) == "enter"
+
+
+def test_a_keydown_payload_falls_back_to_the_legacy_key_code():
+    """Older WebKit sends ``key`` as "Left"/"Right"; some send neither, only
+    ``keyCode``. ipyvue forwards every enumerable property of the event, so
+    both are there to read."""
+    assert timeline.key_action({"key": "Left"}) == "left"
+    assert timeline.key_action({"keyCode": 39}) == "right"
+    assert timeline.key_action({"keyCode": 13}) == "enter"
+
+
+def test_a_key_the_timeline_does_not_use_asks_for_nothing():
+    assert timeline.key_action({"key": "a", "keyCode": 65}) is None
+    assert timeline.key_action({}) is None
+    assert timeline.key_action(None) is None
+
+
+# ---- the lanes
+
+def _kb_state():
+    return _fake_state(rows=[(S2, "2026-04-05", 5.0), (S2, "2026-04-12", 5.0),
+                             (S2, "2026-04-24", 5.0), (LS, "2026-08-27", 3.0)])
+
+
+def test_each_lane_is_one_tab_stop():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    stops = [w for w in _walk(card)
+             if (getattr(w, "attributes", None) or {}).get("tabindex") == "0"]
+    assert len(stops) == 2  # the before lane and the after lane
+    assert {(w.attributes or {}).get("role") for w in stops} == {"listbox"}
+    # and every stripe is taken out of the tab order, so Tab is two presses
+    stripes = [w for w in _walk(card) if (w.attributes or {}).get("role") == "option"]
+    assert stripes and all((w.attributes or {}).get("tabindex") == "-1" for w in stripes)
+
+
+def test_one_bare_keydown_handler_per_lane_is_the_only_shape_ipyvue_allows():
+    """``ipyvue.VueWidget.Events.on_event`` deletes every registration sharing
+    the new one's base event, so ``on_event("keydown.left", ...)`` followed by
+    ``on_event("keydown.right", ...)`` leaves only the right arrow -- and the
+    front end, which merges one compiled ``on`` map per ``_events`` entry,
+    would keep only the last one too. Five ``keydown.<key>`` handlers can
+    never all fire; one ``keydown`` reading the payload can."""
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
+    for which in ("0", "1"):
+        assert _lane(card, which)._events == ["keydown"]
+
+
+def test_arrowing_moves_the_cursor_without_assigning_anything():
+    """Spec 4.8: arrows move, Enter assigns. If an arrow assigned, walking ten
+    scenes would queue ten map redraws."""
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    before = analysis.before_info.value
+    start = _cursor_id(lane)
+    assert start is not None, "the cursor starts on the auto-picked row"
+    _press(lane, "ArrowRight")
+    assert analysis.before_info.value is before            # nothing published
+    assert _cursor_id(lane) is not None                    # but the cursor moved
+    assert _cursor_id(lane) != start
+
+
+def test_arrowing_the_after_lane_leaves_the_before_lane_alone():
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
+    before_lane, after_lane = _lane(card, "0"), _lane(card, "1")
+    was = _cursor_id(before_lane)
+    _press(after_lane, "Home")
+    assert _cursor_id(before_lane) == was
+    assert _cursor_id(after_lane).startswith("a-")
+    assert analysis.after_info.value[3] != "Sentinel 2 2026-04-05 "  # still unassigned
+
+
+def test_a_key_the_lane_does_not_use_does_nothing():
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    was, published = _cursor_id(lane), analysis.before_info.value
+    _press(lane, "a")
+    assert _cursor_id(lane) == was and analysis.before_info.value is published
+
+
+def test_enter_assigns_the_row_the_cursor_is_on():
+    """``row_id`` is ``<source letter><YYYYMMDD>`` and ``info_tuple``'s fourth
+    element carries the ISO date, so the two can be checked against each other
+    without the test knowing which scene End landed on."""
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    _press(lane, "End")
+    cursor = _cursor_id(lane)
+    assert cursor != f"b-{scene_index.row_id(S2, date(2026, 4, 24))}", "End is not where it started"
+    _press(lane, "Enter")
+    info = analysis.before_info.value
+    assert info is not None
+    iso = info[3].strip().rsplit(" ", 1)[-1]
+    assert cursor == f"b-{scene_index.row_id(info[0], date.fromisoformat(iso))}"
+    assert _cursor_id(lane) == cursor             # Enter assigns; it does not move
+    assert analysis.before_keys.value             # and the granule keys came with it
+
+
+def test_enter_on_a_lane_whose_cursor_has_not_moved_assigns_the_selection():
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
+    lane = _lane(card, "0")
+    cursor = _cursor_id(lane)
+    analysis.before_info.set(None)
+    _press(lane, "Enter")
+    assert analysis.before_info.value is not None
+    assert _cursor_id(lane) == cursor
+
+
+def test_the_focused_stripe_is_named_for_a_screen_reader():
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
+    lane = _lane(card, "0")
+    _press(lane, "Home")
+    named = _cursor_id(lane)
+    ids = {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
+    assert named in ids  # aria-activedescendant points at a stripe that exists
+    assert named == f"b-{scene_index.row_id(S2, date(2026, 4, 5))}"
+
+
+def test_the_cursor_is_drawn_as_a_ring_on_exactly_one_stripe_per_lane():
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
+    _press(_lane(card, "0"), "End")
+    ringed = [w for w in _walk(card) if "outline: 1px dashed" in (getattr(w, "style_", "") or "")]
+    assert len(ringed) == 2  # one per lane: each lane has its own cursor
+    assert {(w.attributes or {}).get("id")[0] for w in ringed} == {"b", "a"}
+
+
+def test_a_lane_names_no_cursor_when_there_is_nothing_to_point_at():
+    """``aria-activedescendant`` is dropped rather than left empty: an empty
+    attribute is still an attribute, and it must never name a missing id."""
+    state = _fake_state(rows=[(S2, "2026-04-24", 95.0)])
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    lane = _lane(card, "0")
+    assert "aria-activedescendant" not in (lane.attributes or {})
+    _press(lane, "End")
+    assert "aria-activedescendant" not in (lane.attributes or {})
+
+
+def test_emptying_the_track_takes_the_cursor_with_it():
+    """Turning every collection off clears the lanes; an
+    ``aria-activedescendant`` left behind would name a stripe that is gone."""
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
+    lane = _lane(card, "0")
+    assert _cursor_id(lane) is not None
+    for chip in [w for w in _walk(card)
+                 if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"]:
+        chip.fire_event("click", None)
+    assert timeline.t("analysis.timeline.no_images") in _text(card)
+    assert "aria-activedescendant" not in (lane.attributes or {})
+
+
+def test_a_new_alert_clears_the_cursor_with_the_selection():
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), widgets)
+    lane = _lane(card, "0")
+    _press(lane, "End")
+    walked = _cursor_id(lane)
+    widgets.imagery_ctx.set({**_ctx(), "alert_id": 8, "token": 2})
+    assert _cursor_id(lane) != walked  # back to wherever the new auto-pick is
+
+
+def test_the_legend_is_a_button_that_opens_the_explanation():
+    """Review finding: the only description of the lanes, bands, fade and gold
+    band hung off ``aria-label`` on a ``role="note"`` span, which is not
+    focusable and is not reliably announced."""
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    badge = next(w for w in _walk(card)
+                 if (getattr(w, "attributes", None) or {}).get("aria-expanded") is not None)
+    assert badge.tag == "button"
+    assert "tabindex" not in (badge.attributes or {})  # a button is focusable already
+    assert timeline.t("analysis.timeline.legend") not in _text(card)
+    badge.fire_event("click", None)
+    assert badge.attributes["aria-expanded"] == "true"
+    assert timeline.t("analysis.timeline.legend") in _text(card)
+    badge.fire_event("click", None)
+    assert badge.attributes["aria-expanded"] == "false"
+    assert timeline.t("analysis.timeline.legend") not in _text(card)
+
+
+def test_the_legend_button_is_named_by_something_short():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    badge = next(w for w in _walk(card)
+                 if (getattr(w, "attributes", None) or {}).get("aria-expanded") is not None)
+    name = badge.attributes["aria-label"]
+    assert name == timeline.t("analysis.timeline.legend_label")
+    assert len(name) < 60 and name != timeline.t("analysis.timeline.legend")
+    # and it points at a region that is really in the tree, so the expanded
+    # explanation is the button's own
+    region = badge.attributes["aria-controls"]
+    assert region in {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
+
+
+def _lane(card, which):
+    lanes = [w for w in _walk(card)
+             if (getattr(w, "attributes", None) or {}).get("role") == "listbox"]
+    return lanes[0] if which == "0" else lanes[1]
+
+
+def _cursor_id(lane):
+    return (lane.attributes or {}).get("aria-activedescendant") or None
+
+
+def _press(lane, key: str) -> None:
+    lane.fire_event("keydown", {"key": key})
+
+
 # ---- fakes: the builder reads reactives and a context dict, nothing else
 def _manifest(hours_ago=0, planet=None):
     return scene_index.SceneManifest(
@@ -649,7 +949,11 @@ def _month_labels(card) -> list:
     out = []
     for w in _walk(card):
         label = (getattr(w, "attributes", None) or {}).get("aria-label", "")
-        if label and label not in (timeline.t("analysis.timeline.legend"),):
+        static = (timeline.t("analysis.timeline.legend"),
+                  timeline.t("analysis.timeline.legend_label"),
+                  timeline.t("analysis.timeline.lane_before"),
+                  timeline.t("analysis.timeline.lane_after"))
+        if label and label not in static:
             out.append(label)
     return out
 

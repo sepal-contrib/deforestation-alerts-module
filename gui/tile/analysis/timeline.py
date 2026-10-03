@@ -61,6 +61,9 @@ STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
+_LEGEND_ID = "analysis-timeline-legend"
+_LEGEND_HIDDEN = "display: none"
+_LEGEND_SHOWN = f"padding: 0 8px 8px; color: {MUTED}; font-size: 12px; max-width: 70ch"
 _MESSAGE_STYLE = f"padding: 14px 0; color: {MUTED}; font-size: 12.5px"
 _TRACK_STYLE = "position: relative; flex: 1 1 auto; min-width: 0"
 
@@ -249,6 +252,97 @@ def stripe_cursor(row) -> str:
     return "default" if bool(row["hidden"]) else "pointer"
 
 
+# ------------------------------------------------- keyboard navigation
+
+#: ``KeyboardEvent.key`` to the move it asks for. "Left"/"Right" are the
+#: pre-standard names older WebKit still sends.
+_KEY_NAMES = {"ArrowLeft": "left", "Left": "left", "ArrowRight": "right", "Right": "right",
+              "Home": "home", "End": "end", "Enter": "enter"}
+#: the same moves by legacy ``keyCode``, for an event that carries no ``key``
+_KEY_CODES = {37: "left", 39: "right", 36: "home", 35: "end", 13: "enter"}
+
+
+def key_action(data) -> Optional[str]:
+    """Which move a lane's ``keydown`` payload asks for, or ``None``.
+
+    The lanes listen on one bare ``keydown`` and read the key here rather than
+    registering ``keydown.left``, ``keydown.right`` and friends, because
+    ipyvue cannot hold more than one handler per base event: its
+    ``Events.on_event`` deletes every registration whose name is the new one's
+    base or starts with it, so five ``keydown.<key>`` calls leave only the
+    last. The front end agrees -- it compiles one Vue template per entry of
+    ``_events`` and merges the resulting ``on`` maps, where a second
+    ``keydown`` key overwrites the first -- so the modifier form is usable
+    only when a widget needs exactly one key, as the modals' ``keydown.esc``
+    does.
+
+    The cost of the bare form is that every key press on a focused lane
+    reaches the kernel; the payload is a handful of scalars and only while a
+    lane has focus, which is the price of the keys working at all.
+    """
+    if not isinstance(data, dict):
+        return None
+    name = _KEY_NAMES.get(str(data.get("key") or ""))
+    if name is not None:
+        return name
+    try:
+        return _KEY_CODES.get(int(data["keyCode"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _navigable(sel, segments) -> list:
+    """The row ids a key press can reach, in date order.
+
+    Hidden rows and rows inside a collapsed month are not drawn, so moving the
+    selection onto one would leave the reviewer with a selection they cannot
+    see. A click on either is ignored for the same reason. A row whose month
+    is not in ``segments`` at all is not drawn either.
+
+    The rows are sorted here rather than trusted to arrive sorted:
+    ``scene_query.scenes_for`` does sort by ``(date, source)`` today, but it
+    does not promise to, and a cursor walking the frame's row order would
+    jump about.
+    """
+    if sel is None or len(sel) == 0:
+        return []
+    ids = []
+    for _, row in sel.sort_values(["date", "source"], kind="stable").iterrows():
+        if bool(row["hidden"]):
+            continue
+        d = _as_date(row["date"])
+        seg = segments.get((d.year, d.month))
+        if seg is None or seg.collapsed:
+            continue
+        ids.append(str(row["id"]))
+    return ids
+
+
+def step(sel, segments, current_id, delta: int) -> Optional[str]:
+    """The row ``delta`` places from ``current_id``, clamped at the ends.
+
+    From nothing selected -- or from a row that is no longer drawn -- a Right
+    takes the first row and a Left the last, so the first key press always
+    lands somewhere rather than doing nothing.
+    """
+    ids = _navigable(sel, segments)
+    if not ids:
+        return None
+    if current_id not in ids:
+        return ids[0] if delta > 0 else ids[-1]
+    i = ids.index(current_id)
+    return ids[max(0, min(len(ids) - 1, i + delta))]
+
+
+def edge(sel, segments, *, last: bool = False) -> Optional[str]:
+    """The first drawn row, or the last -- what Home and End jump to."""
+    ids = _navigable(sel, segments)
+    return (ids[-1] if last else ids[0]) if ids else None
+
+
+# ------------------------------------------------------------ widget helpers
+
+
 def _walk(widget):
     """Every widget in ``widget``'s subtree, itself first. Strings are skipped."""
     yield widget
@@ -296,6 +390,11 @@ def build_timeline(app_state, analysis, widgets):
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
     after_id = solara.reactive(None)
+    #: the keyboard cursor per lane -- where the arrows have walked to, which
+    #: is not a selection until Enter. ``None`` means "wherever the selection
+    #: is", and a new alert clears it along with the selection.
+    focus_before = solara.reactive(None)
+    focus_after = solara.reactive(None)
     #: the alert the collapse set and the selection belong to, so a new alert
     #: gets its own auto-collapse instead of inheriting the last one's
     seen_alert = solara.reactive(None)
@@ -349,17 +448,82 @@ def build_timeline(app_state, analysis, widgets):
         # when the info publish wakes it, so a half-set pair is never rebuilt.
         (analysis.before_keys if lane == "b" else analysis.after_keys).set(sorted(_keys_for(row, sel)))
         (analysis.before_info if lane == "b" else analysis.after_info).set(info_tuple(row))
+        # the cursor follows a pick, whether it came from a click or from
+        # Enter, so the next arrow carries on from what is selected
+        (focus_before if lane == "b" else focus_after).set(rid)
 
     def _on_pick(lane, rid):
         sel, _ = _selection()
         _assign(lane, rid, sel)
         render()
 
+    def _cursor(lane):
+        """The keyboard cursor of a lane, which starts at its selection."""
+        focus = focus_before if lane == "b" else focus_after
+        if focus.value is None:
+            return (before_id if lane == "b" else after_id).value
+        return focus.value
+
+    def _segments_now():
+        """``(sel, segments)`` as the lanes are currently drawn, or ``(None, None)``."""
+        sel, window = _selection()
+        if sel is None or window is None:
+            return (None, None)
+        return (sel, scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX))
+
+    def _walk_to(lane, target):
+        if target is None or target == _cursor(lane):
+            return
+        (focus_before if lane == "b" else focus_after).set(target)
+        render()
+
+    def _arrow(lane, move):
+        sel, segs = _segments_now()
+        if sel is None:
+            return
+        _walk_to(lane, step(sel, segs, _cursor(lane), move))
+
+    def _jump(lane, *, last):
+        sel, segs = _segments_now()
+        if sel is None:
+            return
+        _walk_to(lane, edge(sel, segs, last=last))
+
+    def _commit(lane):
+        """Enter: assign the row the cursor is on. This is the only key that
+        publishes ``before_info`` / ``after_info``, and so the only one that
+        costs a map redraw -- a reviewer walking ten scenes with the arrows
+        queues no Earth Engine tile request at all until they press it."""
+        sel, _ = _selection()
+        target = _cursor(lane)
+        if sel is None or target is None:
+            return
+        _assign(lane, target, sel)
+        render()
+
+    def _on_key(lane, data):
+        action = key_action(data)
+        if action in ("left", "right"):
+            _arrow(lane, -1 if action == "left" else 1)
+        elif action in ("home", "end"):
+            _jump(lane, last=action == "end")
+        elif action == "enter":
+            _commit(lane)
+
+    # One tab stop per lane, not one per stripe: Tab moves between the two
+    # lanes and the arrows walk the rows inside one, which is the listbox
+    # pattern ``aria-activedescendant`` belongs to.
+    for _host, _lane, _label in ((lane_before, "b", t("analysis.timeline.lane_before")),
+                                 (lane_after, "a", t("analysis.timeline.lane_after"))):
+        _host.attributes = {"tabindex": "0", "role": "listbox", "aria-label": _label}
+        _host.on_event("keydown", lambda w, e, d, lane=_lane: _on_key(lane, d))
+
     def _render_lane(host, lane, sel, segs):
         chosen = (before_id if lane == "b" else after_id).value
+        cursor = _cursor(lane)
         set_label = t("analysis.timeline.set_before" if lane == "b"
                       else "analysis.timeline.set_after")
-        kids = []
+        kids, drawn = [], set()
         for _, row in sel.iterrows():
             d = _as_date(row["date"])
             seg = segs.get((d.year, d.month))
@@ -372,16 +536,42 @@ def build_timeline(app_state, analysis, widgets):
             # action: the cloud limit is what stands between it and a pick.
             # ``_button`` marks a handler-less stripe disabled/aria-disabled,
             # so only the label and the selected state are decided here.
-            attrs = {"aria-label": head if hidden else f"{head}, {set_label}"}
-            if not hidden and rid == chosen:
+            # ``selected`` is ``rid == chosen`` and not ``not hidden and
+            # rid == chosen``: a selection the reviewer has just pushed over
+            # the cloud limit keeps its full-height gold stripe, so lowering
+            # the limit never makes their own pick disappear into the faded
+            # rows. ``aria-selected`` says the same thing the stripe does.
+            selected = rid == chosen
+            # ``role="option"`` inside the lane's ``role="listbox"``: it is
+            # what makes ``aria-selected`` legal and what lets
+            # ``aria-activedescendant`` name this element as the cursor.
+            # ``tabindex="-1"`` keeps the lane the single tab stop.
+            attrs = {"aria-label": head if hidden else f"{head}, {set_label}",
+                     "role": "option", "aria-selected": "true" if selected else "false",
+                     "tabindex": "-1", "id": f"{lane}-{rid}"}
+            if not hidden and selected:
                 attrs["aria-current"] = "true"
             hit = (month_bar_style(segs, d) if row["source"] == SOURCE_PLANET
                    else stripe_hit_style(segs, d, row["source"]))
+            if rid == cursor:
+                # the cursor is a ring, not a fill: it says where the next
+                # Enter would land without claiming to be the selection
+                hit += "; outline: 1px dashed #bf8f2daa; outline-offset: 1px"
             kids.append(_button(
                 hit, attrs,
                 None if hidden else (lambda _w, _e, _d, lane=lane, rid=rid: _on_pick(lane, rid)),
-                stripe_bar_style(row, selected=rid == chosen), stripe_cursor(row)))
+                stripe_bar_style(row, selected=selected), stripe_cursor(row)))
+            drawn.add(rid)
         host.children = kids
+        # The key is dropped rather than set to "": an empty
+        # ``aria-activedescendant`` is still an attribute, and the id it names
+        # must be one this render actually drew -- a cursor left on a row the
+        # cloud limit has since hidden would otherwise point at nothing.
+        lane_attrs = {k: value for k, value in (host.attributes or {}).items()
+                      if k != "aria-activedescendant"}
+        if cursor in drawn:
+            lane_attrs["aria-activedescendant"] = f"{lane}-{cursor}"
+        host.attributes = lane_attrs
 
     def _expand(key):
         collapsed.set(collapsed.value - {key})
@@ -583,6 +773,11 @@ def build_timeline(app_state, analysis, widgets):
     def _clear_track():
         for host in (lane_before, lane_after, lane_axis):
             host.children = []
+        # the cursor goes with the stripes: an ``aria-activedescendant`` left
+        # behind on an emptied lane names an element that is no longer there
+        for host in (lane_before, lane_after):
+            host.attributes = {k: value for k, value in (host.attributes or {}).items()
+                               if k != "aria-activedescendant"}
         blocks.children = []
         window_band.style_ = "display: none"
 
@@ -621,6 +816,10 @@ def build_timeline(app_state, analysis, widgets):
                 b, a = scene_query.default_pick(sel, a0, a1)
                 before_id.set(b)
                 after_id.set(a)
+                # the cursor belongs to the alert too: arrowing on the last
+                # one must not leave this one's ring on a row of its own
+                focus_before.set(None)
+                focus_after.set(None)
                 for lane, rid in (("b", b), ("a", a)):
                     if rid:
                         _assign(lane, rid, sel)
@@ -659,18 +858,41 @@ def build_timeline(app_state, analysis, widgets):
     unfold = v.Btn(small=True, text=True, children=[t("analysis.timeline.expand_all")])
     unfold.on_event("click", lambda w, e, d: (collapsed.set(frozenset()), render()))
 
+    # The legend is the only description of what the lanes, bands, fade and
+    # gold band mean, and it used to hang off ``aria-label`` on a
+    # ``role="note"`` span: not focusable, and not reliably announced. It is a
+    # disclosure button now, so a keyboard reviewer can reach the explanation
+    # and a screen reader reads it as text rather than as a label.
     legend = t("analysis.timeline.legend")
-    help_badge = v.Html(tag="span", attributes={"title": legend, "aria-label": legend, "role": "note"},
+    legend_text = v.Html(tag="div", attributes={"id": _LEGEND_ID},
+                         style_=_LEGEND_HIDDEN, children=[])
+    help_badge = v.Html(tag="button",
+                        attributes={"type": "button", "title": legend,
+                                    "aria-label": t("analysis.timeline.legend_label"),
+                                    "aria-expanded": "false", "aria-controls": _LEGEND_ID},
                         style_=(f"display: inline-flex; align-items: center; justify-content: center; "
                                 f"width: 18px; height: 18px; border-radius: 9px; cursor: help; "
+                                f"background: none; padding: 0; "
                                 f"border: 1px solid #44403a; color: {MUTED}; font-size: 11px"),
                         children=["?"])
+
+    def _toggle_legend(*_):
+        shown = help_badge.attributes.get("aria-expanded") == "true"
+        help_badge.attributes = {**help_badge.attributes,
+                                 "aria-expanded": "false" if shown else "true"}
+        # cleared, not only hidden, for the same reason as ``message``: a
+        # string left in the tree is still read by a screen reader walking it
+        legend_text.children = [] if shown else [legend]
+        legend_text.style_ = _LEGEND_HIDDEN if shown else _LEGEND_SHOWN
+
+    help_badge.on_event("click", _toggle_legend)
 
     card = v.Card(flat=True, class_="analysis-timeline", children=[
         v.Html(tag="div", style_="display: flex; align-items: center; gap: 10px; padding: 0 8px 6px",
                children=[chips, help_badge, v.Spacer(), fold, unfold, slider, status]),
         v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px",
                children=[_side("left", "‹"), track, message, _side("right", "›")]),
+        legend_text,
         v.Html(tag="div", style_="padding: 8px", children=[readout_row]),
     ])
 

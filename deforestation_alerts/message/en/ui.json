@@ -62,6 +62,8 @@
     "timeline": {
       "before": "Before",
       "after": "After",
+      "lane_before": "Before image lane. Use the left and right arrow keys to move along the dates and Enter to choose the image.",
+      "lane_after": "After image lane. Use the left and right arrow keys to move along the dates and Enter to choose the image.",
       "unset": "not set",
       "max_cloud": "Max cloud",
       "one_more_month": "+1 month",
@@ -75,7 +77,8 @@
       "refresh_failed": "Could not refresh the image index: {error}",
       "retry": "Try again",
       "loading": "Loading the image index…",
-      "legend": "Each collection is a stripe in its own band: Sentinel-2 on top, Landsat in the middle, Planet as a bar across its month. A faded half-height stripe is over the cloud limit. The gold band is the alert window, where every image shows partial clearing: selectable, but never picked for you. Click a stripe in the upper lane to set the before image, in the lower lane to set the after image.",
+      "legend": "Each collection is a stripe in its own band: Sentinel-2 on top, Landsat in the middle, Planet as a bar across its month. A faded half-height stripe is over the cloud limit. The gold band is the alert window, where every image shows partial clearing: selectable, but never picked for you. Click a stripe in the upper lane to set the before image, in the lower lane to set the after image. Or put the focus on a lane and use the keyboard: the left and right arrow keys move along the dates, Home and End jump to the first and last image, and Enter chooses the one the ring is on.",
+      "legend_label": "What this timeline shows",
       "set_before": "Set as before image",
       "set_after": "Set as after image",
       "collapsed_month": "{month}, {count} images, collapsed. Expand this month.",
