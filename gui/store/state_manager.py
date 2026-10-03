@@ -68,11 +68,11 @@ class AppState:
         self.scene_index_pending = solara.reactive(False)
         self.scene_index_error = solara.reactive(None)
         self.scene_index_retry = solara.reactive(0)  # the timeline's "Try again" bumps it
-        self.scene_widening = solara.reactive(False)  # the ±6-month background fill is running
-        # The widest window the timeline has been asked to show, published by
-        # the strip's "+1 month" buttons. The loader unions it with the default
-        # ±2 months, so a month outside the cache is fetched rather than drawn
-        # empty. A tuple of two dates, or None for "the default is enough".
+        # The window the strip is showing for the alert on screen, published by
+        # its "+1 month" buttons and replaced -- not accumulated -- when
+        # another alert opens. The loader unions it with the default ±2 months,
+        # so a month outside the cache is fetched rather than drawn empty. A
+        # tuple of two dates, or None for "the default is enough".
         self.scene_window_request = solara.reactive(None)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the

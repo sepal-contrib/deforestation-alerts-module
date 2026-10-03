@@ -22,6 +22,14 @@ TAIL_DAYS = 10
 Window = tuple[date, date]
 
 
+def shift_months(d: date, months: int) -> date:
+    """``d`` moved by whole months, the day clamped to the target month's length."""
+    total = (d.year * 12 + d.month - 1) + months
+    year, month = divmod(total, 12)
+    month += 1
+    return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
+
+
 def needs_refresh(manifest, want: Window, *, digest: str, now) -> str:
     """What the cached index needs before it can answer ``want``.
 
@@ -90,11 +98,16 @@ _EMPTY = pd.DataFrame(
 def overlapping_tiles(tiles, bbox) -> set[str]:
     """The tiles whose true footprint meets ``bbox``.
 
-    Two steps, and both are needed. The spatial index narrows candidates by
-    bounding box, which is fast and admits too much; ``intersects`` against
-    just those candidates' real geometry then settles it. Skipping the second
-    step would let a Landsat scene whose slanted footprint misses the alert
-    look like coverage, because its bounding box still reaches it.
+    The footprint, not the bounding box: a Landsat scene whose slanted
+    footprint misses the alert must not look like coverage just because its
+    envelope reaches it. ``sindex.query(predicate="intersects")`` is what
+    guarantees that -- it filters its bounding-box candidates by the real
+    predicate, and an empty or missing footprint (what a Planet row would
+    leave) simply never matches, which is the answer ``intersects`` gives for
+    one too. The second pass below is therefore redundant on the pinned
+    GeoPandas, and is kept because that exactness is a property of the index's
+    predicate support and not of anything this function promises; it costs one
+    pass over a handful of candidates. Dropping *both* would be the bug.
     """
     if tiles is None or len(tiles) == 0:
         return set()

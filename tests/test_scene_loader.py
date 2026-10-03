@@ -132,14 +132,6 @@ def test_without_a_project_or_an_active_period_there_is_no_window():
     assert sl.wanted_window(_p(), date(2026, 10, 2), 2) is None
 
 
-def test_shift_months_clamps_the_day_to_the_target_month():
-    assert sl.shift_months(date(2026, 3, 31), -1) == date(2026, 2, 28)
-    assert sl.shift_months(date(2024, 1, 31), 1) == date(2024, 2, 29)
-    assert sl.shift_months(date(2026, 1, 15), -1) == date(2025, 12, 15)
-    assert sl.shift_months(date(2026, 12, 15), 1) == date(2027, 1, 15)
-    assert sl.shift_months(date(2026, 5, 3), 0) == date(2026, 5, 3)
-
-
 def test_widest_unions_the_windows_and_ignores_the_missing_ones():
     a, b = (date(2026, 3, 1), date(2026, 6, 1)), (date(2026, 1, 1), date(2026, 4, 1))
     assert sl.widest(a, b) == (date(2026, 1, 1), date(2026, 6, 1))
@@ -514,8 +506,7 @@ def test_the_widener_extends_the_coverage_a_month_at_a_time(data_root, monkeypat
     async def main():
         box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
         try:
-            assert await _settle(lambda: state.scene_widening.value is False
-                                 and state.scene_manifest.value is not None
+            assert await _settle(lambda: state.scene_manifest.value is not None
                                  and state.scene_manifest.value.covered.start == date(2026, 1, 3))
             assert state.scene_manifest.value.covered.end == date(2026, 10, 2)  # clamped at today
             assert len(windows) > 1  # the foreground window, then the widening chunks
@@ -566,8 +557,7 @@ def test_every_stored_window_touches_the_coverage_it_merges_into(
     async def main():
         box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
         try:
-            assert await _settle(lambda: state.scene_widening.value is False
-                                 and state.scene_manifest.value is not None
+            assert await _settle(lambda: state.scene_manifest.value is not None
                                  and state.scene_manifest.value.covered.start == date(2025, 11, 3))
         finally:
             rc.close()
@@ -627,8 +617,7 @@ def test_a_widen_window_pushed_off_the_coverage_edge_is_snapped_back(
     async def main():
         box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
         try:
-            assert await _settle(lambda: state.scene_widening.value is False
-                                 and state.scene_manifest.value is not None
+            assert await _settle(lambda: state.scene_manifest.value is not None
                                  and state.scene_manifest.value.covered.start == date(2025, 11, 3))
         finally:
             rc.close()
@@ -643,14 +632,19 @@ def test_a_widen_window_pushed_off_the_coverage_edge_is_snapped_back(
     assert sum(1 for covered, _ in seen if covered is not None) >= 2
 
 
-def test_the_pending_and_widening_flags_are_raised_while_their_fetch_runs(
+def test_the_pending_flag_is_raised_only_while_the_foreground_fetch_runs(
         data_root, monkeypatch, no_planet, local_aoi):
-    """Tasks 10-12 render a spinner from ``scene_index_pending`` and
-    ``scene_widening``, and every other test here only ever asserts them
-    ``False`` -- so an implementation that never raised either would pass them
-    all. Each request waits on an event the test sets, so the flag is observed
-    while the fetch is genuinely in flight, with no sleeping and no reliance on
-    an interleaving happening to occur.
+    """Tasks 10-12 render the first-load line from ``scene_index_pending``, and
+    every other test here only ever asserts it ``False`` -- so an
+    implementation that never raised it would pass them all. Each request waits
+    on an event the test sets, so the flag is observed while the fetch is
+    genuinely in flight, with no sleeping and no reliance on an interleaving
+    happening to occur.
+
+    The background buffer has no flag of its own (review m2: the one it used to
+    write was read by nothing), so it is observed here through the chunks it
+    asks for -- and the pending flag has to stay *down* while it runs, because
+    the months the reviewer is looking at have already landed.
     """
     foreground, widening = asyncio.Event(), asyncio.Event()
     calls = []
@@ -678,12 +672,13 @@ def test_the_pending_and_widening_flags_are_raised_while_their_fetch_runs(
         try:
             assert await _settle(lambda: len(calls) == 1)
             assert state.scene_index_pending.value is True
-            assert state.scene_widening.value is False
             foreground.set()
-            assert await _settle(lambda: state.scene_widening.value is True)
+            # The buffer's own chunks start before the foreground window does.
+            assert await _settle(lambda: any(obj[0] < date(2026, 3, 3) for obj in calls))
             assert state.scene_index_pending.value is False  # the foreground is done
             widening.set()
-            assert await _settle(lambda: state.scene_widening.value is False)
+            assert await _settle(lambda: state.scene_manifest.value is not None
+                                 and state.scene_manifest.value.covered.start == date(2026, 1, 3))
             assert state.scene_index_pending.value is False
         finally:
             rc.close()

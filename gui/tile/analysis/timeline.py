@@ -13,12 +13,12 @@ pixels ``scene_query.x_for`` returns, so the strip keeps its dates when the
 browser window is not 1120px wide. ``scene_query`` owns every piece of the
 arithmetic; nothing here recomputes a month's share of the track.
 
-``app_state.scene_widening`` is deliberately not rendered. A cancelled fetch's
-``finally`` can clear it while the replacement fetch is still running
-(``gui/scripts/scene_loader.py``), so a widget driven by it blinks; the strip
-instead fills in by itself when ``scene_index`` republishes. The one place the
-pending flag is read -- the first-load line -- is backed by the *absence* of an
-index as well, so that line does not depend on the flag being accurate.
+The ±6-month background fill has no widget of its own: a cancelled fetch and
+its replacement overlap, so anything driven by "a fill is running" blinks, and
+the strip instead fills in by itself when ``scene_index`` republishes. The one
+place ``scene_index_pending`` is read -- the first-load line -- is backed by the
+*absence* of an index as well, so that line does not depend on the flag being
+accurate.
 """
 
 import calendar
@@ -37,7 +37,6 @@ from deforestation_alerts.scripts.scene_index import (
     SceneTables,
 )
 from gui.i18n import format_date, t
-from gui.scripts.scene_loader import shift_months
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -118,7 +117,8 @@ def view_window(ctx, project, extra) -> Optional[tuple[date, date]]:
         if a0 is None or a1 is None:
             return None
     back, fwd = extra
-    return (shift_months(a0, -(VIEW_MONTHS + back)), shift_months(a1, VIEW_MONTHS + fwd))
+    return (scene_query.shift_months(a0, -(VIEW_MONTHS + back)),
+            scene_query.shift_months(a1, VIEW_MONTHS + fwd))
 
 
 def alert_window(ctx, project) -> tuple[Optional[date], Optional[date]]:

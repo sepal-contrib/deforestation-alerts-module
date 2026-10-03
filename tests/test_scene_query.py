@@ -22,6 +22,14 @@ def _manifest(start, end, *, age_hours=1.0, digest="abc", version=scene_index.IN
     )
 
 
+def test_shift_months_clamps_the_day_to_the_target_month():
+    assert scene_query.shift_months(date(2026, 3, 31), -1) == date(2026, 2, 28)
+    assert scene_query.shift_months(date(2024, 1, 31), 1) == date(2024, 2, 29)
+    assert scene_query.shift_months(date(2026, 1, 15), -1) == date(2025, 12, 15)
+    assert scene_query.shift_months(date(2026, 12, 15), 1) == date(2027, 1, 15)
+    assert scene_query.shift_months(date(2026, 5, 3), 0) == date(2026, 5, 3)
+
+
 def test_no_manifest_means_rebuild():
     assert scene_query.needs_refresh(None, WANT, digest="abc", now=NOW) == "rebuild"
 

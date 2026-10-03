@@ -37,7 +37,6 @@ and the retry counter during its render, never ``scene_index`` or
 would subscribe the component to its own output and re-run the tasks for ever.
 """
 
-import calendar
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -84,14 +83,6 @@ def _today() -> date:
     return date.today()
 
 
-def shift_months(d: date, months: int) -> date:
-    """``d`` moved by whole months, the day clamped to the target month's length."""
-    total = (d.year * 12 + d.month - 1) + months
-    year, month = divmod(total, 12)
-    month += 1
-    return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
-
-
 def wanted_window(project, today: date, months: int) -> Optional[Window]:
     """The active period's alert window padded by ``months`` on each side.
 
@@ -105,8 +96,8 @@ def wanted_window(project, today: date, months: int) -> Optional[Window]:
     period = project.periods.get(project.active_period)
     if period is None:
         return None
-    end = min(today, shift_months(period.end, months))
-    return (min(shift_months(period.start, -months), end), end)
+    end = min(today, scene_query.shift_months(period.end, months))
+    return (min(scene_query.shift_months(period.start, -months), end), end)
 
 
 def widest(*windows) -> Optional[Window]:
@@ -150,8 +141,8 @@ def _one_step(covered, side: Window, months: int) -> Window:
     to prevent.
     """
     if side[0] >= covered.end:  # the later side
-        return (side[0], min(side[1], shift_months(side[0], months)))
-    return (max(side[0], shift_months(side[1], -months)), side[1])  # the earlier side
+        return (side[0], min(side[1], scene_query.shift_months(side[0], months)))
+    return (max(side[0], scene_query.shift_months(side[1], -months)), side[1])  # the earlier side
 
 
 def fetch_window(manifest, want: Window, mode: str, *, step_months: int = 0) -> Window:
@@ -172,7 +163,7 @@ def fetch_window(manifest, want: Window, mode: str, *, step_months: int = 0) -> 
     window = scene_query.refresh_window(manifest, want, mode)
     if manifest is None or mode == "rebuild":
         if step_months:
-            window = (max(window[0], shift_months(window[1], -step_months)), window[1])
+            window = (max(window[0], scene_query.shift_months(window[1], -step_months)), window[1])
         return window  # a rebuild defines the coverage: there is nothing to abut
     if step_months and mode == "widen":
         window = _one_step(manifest.covered, window, step_months)
@@ -514,7 +505,6 @@ def SceneIndexLoader(app_state, gee_interface):
             # the foreground's work, and the guard above has already returned
             # for either of those.
             return
-        app_state.scene_widening.set(True)
         try:
             await _fill(manifest, bg)
         except Exception as exc:  # noqa: BLE001
@@ -523,8 +513,6 @@ def SceneIndexLoader(app_state, gee_interface):
             # has to fetch when they press it. It is logged at WARNING so the
             # server log carries the reason.
             logger.warning("scene index of %s not widened: %s", name, error_text(exc), exc_info=True)
-        finally:
-            app_state.scene_widening.set(False)
 
     # ``load.pending``/``load.finished`` are ``use_task`` status flags, not
     # worker publishes: they move once per ``_load`` run, so ``_widen`` is

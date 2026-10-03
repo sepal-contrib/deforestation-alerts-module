@@ -998,7 +998,6 @@ def _fake_state(index="default", rows=None):
         scene_index_pending=solara.reactive(False),
         scene_index_error=solara.reactive(None),
         scene_index_retry=solara.reactive(0),
-        scene_widening=solara.reactive(False),
         scene_window_request=solara.reactive(None),
     )
 
