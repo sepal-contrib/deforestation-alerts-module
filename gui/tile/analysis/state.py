@@ -45,6 +45,19 @@ class AnalysisState:
     after_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
     #: CNN prediction rasters by model number: {1: path, 2: path}
     prediction_files: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
+    #: the reviewer's answer for this alert: None until one of the three
+    #: statuses is chosen. The store, the PMTiles paint values and Overview's
+    #: counts all read these exact strings, so the verdict IS the stored value
+    #: and never a label. None is refused by the Save (``confirmation_missing``).
+    verdict: solara.Reactive = field(default_factory=_plain)
+    #: whether the reviewer changed the verdict, the drivers or the polygon
+    #: since the last save of THIS alert. Cleared by ``reset_alert`` (an alert
+    #: change forgets it) and by a save that wrote.
+    dirty: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: what each CNN run found, by model number: ``{1: (n_patches, area_ha)}``.
+    #: Derived from the prediction the worker vectorises, beside the ``.tif``
+    #: paths in ``prediction_files``.
+    prediction_shapes: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
     #: time.time() of the last review Save
     last_save_time: solara.Reactive = field(default_factory=lambda: solara.reactive(0.0))
     #: which alert the values above belong to: bumped by every ``reset_alert``.
@@ -66,6 +79,9 @@ class AnalysisState:
             self.before_keys.set([])
             self.after_keys.set([])
             self.prediction_files.set({})
+            self.verdict.set(None)
+            self.dirty.set(False)
+            self.prediction_shapes.set({})
 
     def is_current(self, token) -> bool:
         """Whether ``token`` (captured from ``alert_token``) is still the
@@ -112,8 +128,14 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
             "alert_id": app_state.actual_alert_id.value,
             "grid": getattr(widgets, "actual_alert_grid", None),
             "bb": getattr(widgets, "actual_bb", None),
-            "status": getattr(getattr(widgets, "confirmation_select", None), "v_model", None),
+            "status": analysis.verdict.value,
             "drivers": list(drivers) if isinstance(drivers, (list, tuple)) else drivers,
         }
 
     return analysis.capture(_read)
+
+
+def touch(analysis: AnalysisState) -> None:
+    """Mark the current alert as changed since its last save (the save-state
+    line in the verdict block reads it)."""
+    analysis.dirty.set(True)

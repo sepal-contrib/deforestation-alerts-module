@@ -492,8 +492,8 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
     app_state.actual_alert_id.value = 0
     analysis = AnalysisState()
     analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 0.001, 0.001)], crs="EPSG:4326"))
+    analysis.verdict.set("False Positive")
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="False Positive"),
         driver_combobox=SimpleNamespace(v_model=[]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
@@ -1216,11 +1216,11 @@ def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root,
     import gui.tile.analysis.export as export
 
     app_state, analysis = AppState(), AnalysisState()
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None),
-                              confirmation_select=SimpleNamespace(v_model="Yes"))
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
     card = export.build_export(widgets=widgets, app_state=app_state, aux_model=_set_context_fake(),
                                analysis=analysis, app_tile_model=_set_context_fake())
     move_to_b = _alert_a_then_b(app_state, analysis, widgets)
+    analysis.verdict.set("Yes")  # A's answer; ``_move_to_b`` forgets it (``reset_alert``)
     _record_feedback(monkeypatch, export)
     held = _deferred(monkeypatch, export)
     seen = []

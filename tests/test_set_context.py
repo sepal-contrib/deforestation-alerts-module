@@ -240,11 +240,11 @@ def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
 
     monkeypatch.setattr(export, "ee", lookups or _AdminLookups())
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
     analysis.before_info.set(["Planet NICFI", 1, None, "before", "_b"])
     analysis.after_info.set(["Planet NICFI", 2, None, "after", "_a"])
     s.actual_alert_id.set(alert_id)
@@ -454,14 +454,15 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     s.alerts_gdf.set(_review_alerts("x"))
 
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     monkeypatch.setattr(export, "ee", _AdminLookups())
     s.actual_alert_id.set(0)
+    analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
 
-    assert export._save_attributes(widgets, s, AnalysisState(), ctx) is True
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(
         _store(tmp_path, "d", "glad-l"),
@@ -665,12 +666,12 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     s.alerts_gdf.set(alerts)
     monkeypatch.setattr(export, "ee", _AdminLookups())
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
     analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
     analysis.defo_layer.set(drawn)
     s.actual_alert_id.set(0)
     assert export._save_attributes(widgets, s, analysis, ctx) is True
@@ -697,6 +698,7 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
     drawn_a = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
     drawn_b = gpd.GeoDataFrame(geometry=[box(-50.0, -20.0, -49.9, -19.9)], crs="EPSG:4326")
     analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
     analysis.defo_layer.set(drawn_a)
 
     def _move_to_the_next_alert():
@@ -705,7 +707,6 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
 
     monkeypatch.setattr(export, "ee", _AdminLookups(during=_move_to_the_next_alert))
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=[]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
@@ -726,12 +727,13 @@ def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
     s.alerts_gdf.set(_review_alerts("x"))
     monkeypatch.setattr(export, "ee", _AdminLookups())
     widgets = SimpleNamespace(
-        confirmation_select=SimpleNamespace(v_model="Confirmed"),
         driver_combobox=SimpleNamespace(v_model=["logging", "Minería"]),
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     s.actual_alert_id.set(0)
-    assert export._save_attributes(widgets, s, AnalysisState(), ctx) is True
+    analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["description"])
     assert saved.loc[0, "description"] == "logging, mining"

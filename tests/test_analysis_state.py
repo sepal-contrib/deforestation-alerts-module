@@ -341,3 +341,40 @@ def test_a_rebuild_that_raises_reaches_the_log_and_the_reviewer(monkeypatch, cap
     assert len(toasted) == 2
     assert toasted[1] == t("analysis.timeline.image_failed_after", error="getMapId refused")
     assert toasted[1] != toasted[0]
+
+
+def test_the_verdict_and_the_dirty_flag_are_per_alert_state():
+    from gui.tile.analysis.state import AnalysisState
+
+    s = AnalysisState()
+    assert s.verdict.value is None and s.dirty.value is False
+    s.verdict.set("Confirmed")
+    s.dirty.set(True)
+    s.prediction_shapes.set({1: (2, 3.9)})
+    s.reset_alert()
+    assert s.verdict.value is None
+    assert s.dirty.value is False
+    assert s.prediction_shapes.value == {}
+
+
+def test_capture_alert_takes_the_verdict_from_the_state():
+    from types import SimpleNamespace
+
+    from gui.store.state_manager import AppState
+    from gui.tile.analysis.state import AnalysisState, capture_alert
+
+    app_state = AppState()
+    analysis = AnalysisState()
+    analysis.verdict.set("False Positive")
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=["mining"]))
+    alert = capture_alert(analysis, widgets, app_state)
+    assert alert.status == "False Positive"
+    assert alert.drivers == ["mining"]
+
+
+def test_touch_marks_the_alert_dirty():
+    from gui.tile.analysis.state import AnalysisState, touch
+
+    s = AnalysisState()
+    touch(s)
+    assert s.dirty.value is True
