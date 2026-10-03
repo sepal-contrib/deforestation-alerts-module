@@ -1262,3 +1262,92 @@ def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
     assert analysis.prediction_files.value == {}
     assert feedback.toasts()[-1] == ("warning", t("analysis_tile.model_labels.dl_stale"))
     assert run_btn.loading is False and run_btn.disabled is False
+
+
+# ---------------------------------------------------------------------------
+# analysis/export — the review save as a runner the verdict block drives
+# ---------------------------------------------------------------------------
+def _save_harness(tmp_path, monkeypatch):
+    """One real review Save, start to finish, on the calling thread.
+
+    A project with one active set (its store lands in ``tmp_path``) and that
+    set's alerts, as ``test_set_context`` builds them; the FAO/GAUL admin
+    lookups stood in for, the notifier on a private bus, and the worker run
+    inline so ``run_save`` has finished by the time it returns.
+    Returns ``(app_state, analysis, widgets, app_tile_model)``.
+    """
+    from datetime import datetime
+
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import Point, box
+
+    import gui.tile.analysis.export as export
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+    from gui.scripts.set_context import SetContext
+
+    class _AdminLookups:  # stands in for ``export.ee``: the FAO/GAUL lookups
+        def __getattr__(self, name):
+            return lambda *a, **k: self
+
+        def getInfo(self):  # noqa: N802 - Earth Engine's name
+            return "Brasil, "
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+
+    now = datetime.now()
+    rel = "periods/per/sets/glad-l"
+    project = Project(name="d", created_at=now, updated_at=now)
+    project.alert_sets["x"] = AlertSet(
+        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
+        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
+        fingerprint="f", created_at=now,
+    )
+    project.active_set = "x"
+    app_state = AppState()
+    app_state.new_project_state(project)
+
+    poly = box(0, 0, 1, 1)
+    alerts = gpd.GeoDataFrame(
+        {"status": ["Not reviewed"], "set_id": ["x"]}, geometry=[poly], crs="EPSG:4326"
+    )
+    alerts["bounding_box"] = gpd.GeoSeries([poly], crs="EPSG:4326")
+    alerts["point"] = gpd.GeoSeries([Point(0.5, 0.5)], crs="EPSG:4326")
+    for col in ("alert_polygon", "description", "before_img", "after_img",
+                "before_img_info", "after_img_info", "admin1", "admin2",
+                "admin3", "area_ha"):
+        alerts[col] = pd.Series([None], dtype="object")
+    app_state.alerts_gdf.value = alerts
+    app_state.actual_alert_id.value = 0
+
+    widgets = SimpleNamespace(
+        driver_combobox=SimpleNamespace(v_model=[]),
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    _record_feedback(monkeypatch, export)
+    # The worker on the calling thread: the assertions below follow the save
+    # it started, not a thread that may not have run yet.
+    monkeypatch.setattr(
+        export, "spawn_in_context", lambda target, args=(), **k: target(*args)
+    )
+    return app_state, AnalysisState(), widgets, SetContext(app_state)
+
+
+def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeypatch):
+    """Save & next passes ``go_next`` as ``then``: a refused save must leave
+    the reviewer on the alert that was not saved."""
+    from gui.tile.analysis import export as export_mod
+
+    app_state, analysis, widgets, model = _save_harness(tmp_path, monkeypatch)
+    moved = []
+    run_save = export_mod.make_save_runner(widgets, app_state, analysis, model)
+
+    analysis.verdict.set(None)              # no answer: _save_attributes refuses
+    run_save(None, then=lambda: moved.append(1))
+    assert moved == []
+
+    analysis.verdict.set("Confirmed")
+    run_save(None, then=lambda: moved.append(1))
+    assert moved == [1]

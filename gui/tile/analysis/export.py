@@ -5,8 +5,11 @@ OLD ``AnalysisTile`` export card (``card06`` +
 ``label35``/``toolBarSaveExport``/``toolBarDownloads``):
 
 * The **Save** button (``save_btn``) ran the OLD ``save_attributes_to_gdf`` —
-  writing the user's confirmation / loss-driver / image-info / GEE-admin attributes
+  writing the user's verdict / loss-driver / image-info / GEE-admin attributes
   + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
+  That flow now lives in ``make_save_runner`` (module level), so the review
+  panel's own "Save & next" and this button run the SAME save; the runner's
+  ``then`` is what moves to the next alert, and only a save that wrote calls it.
 * The **Download alert data** button (``download_alert_data_btn``, disabled until a
   save happens) ran the OLD ``download_data`` — building the single-alert gpkg, the
   before/after-image GeoTIFF, the zip, and the Word report.
@@ -69,18 +72,21 @@ and the id in range, so it is smoke-safe (nothing runs at mount;
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets + scratch. Read here: ``confirmation_select`` /
-    ``driver_combobox`` (stashed by AlertReviewPanel), ``actual_alert_grid``,
-    ``actual_bb``.
+    Shared heavy widgets + scratch. Read here: ``driver_combobox`` (the loss
+    drivers, stashed by AlertReviewPanel), ``actual_alert_grid``, ``actual_bb``.
+    The reviewer's verdict is NOT a widget any more: it lives in
+    ``analysis.verdict`` and reaches a Save through ``capture_alert``.
 app_state : AppState
     Navigation + alerts source of truth (``alerts_gdf`` / ``actual_alert_id``).
 aux_model : SetContext
     ``custom_report_template`` (the project's) for the report generation.
 analysis : AnalysisState
-    ``defo_layer`` (drawn polygon), ``before_info`` / ``after_info``
-    ([0]=source, [1]=milis, [3]=value/name, [4]=date-suffix),
-    ``before_image`` / ``after_image`` (ee.Image) and ``last_save_time``
-    (save stamp).
+    ``verdict`` (the reviewer's answer: one of the three stored statuses, or
+    ``None``, which a Save refuses), ``defo_layer`` (drawn polygon),
+    ``before_info`` / ``after_info`` ([0]=source, [1]=milis, [3]=value/name,
+    [4]=date-suffix), ``before_image`` / ``after_image`` (ee.Image),
+    ``last_save_time`` (save stamp) and ``dirty``, which a Save that wrote
+    clears.
 app_tile_model : SetContext
     ``recipe_folder_path`` (the active set's folder) for the output paths,
     ``pin`` (the active set, read once) for where a Save writes
@@ -514,6 +520,105 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     return {"zip_path": str(zip_dest), "report_path": str(report_dest)}
 
 
+def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None):
+    """The review save, as a callable the verdict block drives.
+
+    ``run_save(button, then=None)``: spin ``button`` (optional), capture the
+    alert on the UI thread, write the store on a worker, and run ``then`` only
+    after a save that actually wrote — Save & next passes ``go_next``, and a
+    refusal must leave the reviewer on the alert it refused, with the message
+    that explains it.
+
+    ``apply_save`` is the post-save UI step (the export section's download
+    button + the ``alerts_gdf`` rebind); the default rebinds alone, so the
+    runner is usable before the export section is built.
+    """
+
+    def _default_apply():
+        gdf = app_state.alerts_gdf.value
+        if gdf is not None:
+            app_state.alerts_gdf.value = gdf.copy()
+
+    apply = apply_save or _default_apply
+
+    def run_save(button=None, then=None):
+        if button is not None:
+            button.loading = True
+            button.disabled = True
+        # The alert saved and its values, read here on the UI thread: the
+        # worker writes them whatever is shown by the time the lookups end.
+        alert = capture_alert(analysis, widgets, app_state)
+
+        def _worker():
+            # No ``total_steps`` — the save is a single opaque phase (GEE admin
+            # lookups + the alert-store write), so the pill stays indeterminate.
+            # On an exception tracked_job fails the task and publishes the one
+            # error toast (``error_text``), then re-raises into except.
+            notifier = current_notifier()
+            try:
+                with tracked_job(
+                    notifier, t("analysis_tile.export_labels.save_task_title")
+                ) as task:
+                    task.step(t("analysis_tile.export_labels.save_step"))
+                    # Writer tracking: register the open project while the
+                    # set's alert store is written, so deleting the project
+                    # refuses mid-write.
+                    with writing(writer_name(app_state)):
+                        try:
+                            saved = _save_attributes(
+                                widgets,
+                                app_state,
+                                analysis,
+                                app_tile_model,
+                                alert=alert,
+                            )
+                            refused = None
+                        except SaveRefused as refusal:
+                            saved, refused = False, error_text(refusal)
+                    if not saved:
+                        # `_save_attributes` refused: nothing was written and the
+                        # download button stays disabled, so completing the task
+                        # would record a DONE run for a no-op the user cannot
+                        # explain. A WARNING outcome, not an error: fail() BEFORE
+                        # the toast, so the run is already recorded as FAILED
+                        # with its reason when the message lands. (Returning
+                        # False means a missing/invalid alert id, which is what
+                        # the default message says; SaveRefused carries its
+                        # own.) The log line comes last: once the task is FAILED
+                        # it is not echoed as a milestone.
+                        reason = refused or t("analysis_tile.export_labels.save_no_alert")
+                        task.fail(reason)
+                        notifier.warning(reason)
+                        logger.warning("Analysis: save refused — %s", reason)
+                    else:
+                        # Inside the tracked block: if the apply step raises, the
+                        # run is a FAILED task + one error toast, not a green pill.
+                        apply()
+            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+                pass
+            else:
+                if saved:
+                    notifier.success(t("analysis_tile.export_labels.save_done"))
+                    # This alert's review is on disk: nothing unsaved left.
+                    analysis.dirty.set(False)
+                    # Only now — Save & next must not move off an alert whose
+                    # review was refused. Guarded: a failing ``then`` is a log
+                    # line, not a lost success toast.
+                    if then is not None:
+                        try:
+                            then()
+                        except Exception:
+                            logger.exception("Analysis: after-save step failed")
+            finally:
+                if button is not None:
+                    button.loading = False
+                    button.disabled = False
+
+        spawn_in_context(_worker)
+
+    return run_save
+
+
 def build_export(
     widgets,
     app_state,
@@ -606,74 +711,13 @@ def build_export(
         ns["toolbar_downloads"].show()
 
     # ------------------------------------------------------------------
-    # Save handler: button-triggered daemon thread (blocking GEE .getInfo() / CSV
-    # write; never auto-run). The button spins for the duration; on success the
-    # worker applies the OLD save effect, on failure tracked_job publishes the
-    # error as a toast and logs its traceback; a ``SaveRefused`` (incl. the OLD
-    # "False Positive but a polygon is drawn" guard) is a warning.
+    # Save: the shared runner (``make_save_runner``), with this section's own
+    # post-save apply step. The verdict block's "Save & next" drives the SAME
+    # runner, so there is one save flow for both buttons.
     # ------------------------------------------------------------------
-    def _on_save(*_):
-        ns["save_btn"].loading = True
-        ns["save_btn"].disabled = True
-        # The alert saved and its values, read here on the UI thread: the
-        # worker writes them whatever is shown by the time the lookups end.
-        alert = capture_alert(analysis, widgets, app_state)
-
-        def _worker():
-            # No ``total_steps`` — the save is a single opaque phase (GEE admin
-            # lookups + the alert-store write), so the pill stays indeterminate.
-            # On an exception tracked_job fails the task and publishes the one
-            # error toast (``error_text``), then re-raises into except.
-            notifier = current_notifier()
-            try:
-                with tracked_job(
-                    notifier, t("analysis_tile.export_labels.save_task_title")
-                ) as task:
-                    task.step(t("analysis_tile.export_labels.save_step"))
-                    # Writer tracking: register the open project while the
-                    # set's alert store is written, so deleting the project
-                    # refuses mid-write.
-                    with writing(writer_name(app_state)):
-                        try:
-                            saved = _save_attributes(
-                                widgets,
-                                app_state,
-                                analysis,
-                                app_tile_model,
-                                alert=alert,
-                            )
-                            refused = None
-                        except SaveRefused as refusal:
-                            saved, refused = False, error_text(refusal)
-                    if not saved:
-                        # `_save_attributes` refused: nothing was written and the
-                        # download button stays disabled, so completing the task
-                        # would record a DONE run for a no-op the user cannot
-                        # explain. A WARNING outcome, not an error: fail() BEFORE
-                        # the toast, so the run is already recorded as FAILED
-                        # with its reason when the message lands. (Returning
-                        # False means a missing/invalid alert id, which is what
-                        # the default message says; SaveRefused carries its
-                        # own.) The log line comes last: once the task is FAILED
-                        # it is not echoed as a milestone.
-                        reason = refused or t("analysis_tile.export_labels.save_no_alert")
-                        task.fail(reason)
-                        notifier.warning(reason)
-                        logger.warning("Analysis: save refused — %s", reason)
-                    else:
-                        # Inside the tracked block: if the apply step raises, the
-                        # run is a FAILED task + one error toast, not a green pill.
-                        _apply_save()
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                if saved:
-                    notifier.success(t("analysis_tile.export_labels.save_done"))
-            finally:
-                ns["save_btn"].loading = False
-                ns["save_btn"].disabled = False
-
-        spawn_in_context(_worker)
+    run_save = make_save_runner(
+        widgets, app_state, analysis, app_tile_model, apply_save=_apply_save
+    )
 
     # ------------------------------------------------------------------
     # Download handler: button-triggered daemon thread (heavy report generation /
@@ -753,7 +797,7 @@ def build_export(
     # start their workers; loading state is toggled inside the handlers.
     # ------------------------------------------------------------------
     def _register_handlers():
-        ns["save_btn"].on_event("click", _on_save)
+        ns["save_btn"].on_event("click", lambda *_: run_save(ns["save_btn"]))
         ns["download_alert_data_btn"].on_event("click", _on_download)
 
     _register_handlers()
