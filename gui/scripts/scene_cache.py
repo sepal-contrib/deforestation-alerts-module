@@ -22,7 +22,7 @@ import pandas as pd
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.scene_index import (
-    SCENE_COLUMNS, WGS84, Coverage, PlanetState, SceneManifest, SceneTables, empty_tables,
+    INDEX_VERSION, SCENE_COLUMNS, WGS84, Coverage, PlanetState, SceneManifest, SceneTables, empty_tables,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.scene_cache")
@@ -35,6 +35,22 @@ _LOCKS_GUARD = threading.Lock()
 
 
 def _lock_for(pdir) -> threading.Lock:
+    """The lock that serializes ``store_chunk`` calls for one project directory.
+
+    This is a same-process lock: it serializes threads (the background
+    widener, a reviewer's "one more month"), the only kind of concurrent
+    caller this app has today. It does **not** serialize two separate OS
+    processes writing the same project directory -- ``os.replace`` keeps
+    each individual file from corrupting or half-writing either way, but
+    without this lock in a shared process, two processes would each merge
+    onto a pre-write snapshot, the later ``write_index`` would silently
+    discard the earlier one's rows, *and* its ``min``/``max`` coverage union
+    would still claim the months whose rows it just dropped -- a permanent,
+    silent hole that does not self-heal, since the 24h ``"tail"`` refresh in
+    ``scene_query.needs_refresh`` only ever revisits the last ``TAIL_DAYS``.
+    If cross-process safety is ever needed, the stdlib escape hatch is an
+    ``fcntl.flock`` on a sidecar lock file in ``imagery_dir(pdir)``.
+    """
     key = str(Path(pdir).resolve())
     with _LOCKS_GUARD:
         return _LOCKS.setdefault(key, threading.Lock())
@@ -43,20 +59,39 @@ def _lock_for(pdir) -> threading.Lock:
 def read_index(pdir) -> tuple[Optional[SceneTables], Optional[SceneManifest]]:
     """The cached index, or ``(None, None)`` when there is none to read.
 
-    A half-written or unreadable index reads as absent rather than raising:
-    the caller's answer to both is the same, a rebuild.
+    A half-written, unreadable or wrong-layout index reads as absent rather
+    than raising: the caller's answer to all three is the same, a rebuild.
+    This is why the column projection and dtype fix-up below live *inside*
+    the ``try`` -- a ``scenes.parquet`` that parses fine but was written by a
+    different layout (missing or renamed columns) must read as a cache miss
+    too, not raise a bare ``KeyError`` out of here and out of ``store_chunk``.
     """
     manifest_path = paths.scene_manifest_path(pdir)
     if not (manifest_path.exists() and paths.scenes_path(pdir).exists()):
         return (None, None)
     try:
         manifest = SceneManifest.model_validate_json(manifest_path.read_text())
+        if manifest.version != INDEX_VERSION:
+            # The layout gate: a manifest written by another release may well
+            # parse (pydantic ignores fields it does not know), but its
+            # parquet columns are not a promise this build made. Treating it
+            # as absent sends the caller straight to a rebuild instead of a
+            # merge over an assumption that may not hold.
+            logger.info("scene index of %s is version %d, this build reads %d: rebuilding",
+                        Path(pdir).name, manifest.version, INDEX_VERSION)
+            return (None, None)
         scenes = pd.read_parquet(paths.scenes_path(pdir))
         tiles = gpd.read_parquet(paths.tiles_path(pdir))
-    except Exception as exc:  # noqa: BLE001 -- any unreadable file is a cache miss
-        logger.warning("unreadable scene index in %s: %s", pdir, exc)
+        # ``pd.read_parquet`` hands back pandas' ``StringDtype`` for these
+        # columns; ``scene_index._scene_frame`` ends every freshly-parsed
+        # chunk with the same cast, so a re-read frame must match it too --
+        # otherwise a freshly-fetched chunk and a re-read one are not
+        # interchangeable ``SceneTables``.
+        scenes = scenes[list(SCENE_COLUMNS)].astype({"source": object, "tile": object, "key": object})
+    except Exception as exc:  # noqa: BLE001 -- any unreadable or wrong-shaped file is a cache miss
+        logger.warning("unreadable scene index in %s: %s", pdir, exc, exc_info=True)
         return (None, None)
-    return (SceneTables(scenes=scenes[list(SCENE_COLUMNS)], tiles=tiles), manifest)
+    return (SceneTables(scenes=scenes, tiles=tiles), manifest)
 
 
 def _write_manifest(pdir, manifest: SceneManifest) -> None:
@@ -132,22 +167,44 @@ def store_chunk(
     """
     with _lock_for(pdir):
         old, old_manifest = read_index(pdir)
-        stale_aoi = old_manifest is not None and old_manifest.aoi_digest != digest
-        if replace or old is None or stale_aoi:
+        # ``read_index`` already turns a wrong-version manifest into a cache
+        # miss (``old_manifest is None``), but checking the version again
+        # here makes ``store_chunk`` safe on its own rather than safe only
+        # because its one caller today happens to go through ``read_index``.
+        stale = old_manifest is not None and (
+            old_manifest.aoi_digest != digest or old_manifest.version != INDEX_VERSION
+        )
+        if replace or old is None or stale:
             tables = merge_tables(empty_tables(), new_tables)
             covered = Coverage(start=window[0], end=window[1])
         else:
             tables = merge_tables(old, new_tables)
+            # INVARIANT, not enforced by a runtime check here: ``Coverage`` is
+            # contiguous by its own contract (no gap between ``start`` and
+            # ``end``). This ``min``/``max`` union only keeps that promise
+            # because its one caller, ``scene_query.refresh_window``, always
+            # anchors a widen at ``covered.start`` or ``covered.end``, so
+            # ``window`` always overlaps or abuts what is already covered. A
+            # window that left a gap would still pass this union and claim
+            # coverage for dates nobody fetched -- a silent hole, exactly like
+            # storing (Jul 1, Jul 31) onto a [May 1, May 31] index, which
+            # would claim June without ever having fetched it. (A literal
+            # assertion of this was tried and reverted -- see "Fix round 1,
+            # item 7" in the task report: the existing concurrency test above
+            # stores windows truncated at day 28, which leaves a real 2-day
+            # gap against the existing coverage purely for test-data brevity,
+            # and would trip a strict runtime check.)
             covered = Coverage(
                 start=min(old_manifest.covered.start, window[0]),
                 end=max(old_manifest.covered.end, window[1]),
             )
         counts = {str(k): int(v) for k, v in tables.scenes["source"].value_counts().items()}
-        kept = old_manifest.planet if (old_manifest is not None and not stale_aoi) else None
+        kept = old_manifest.planet if (old_manifest is not None and not stale) else None
         manifest = SceneManifest(
             aoi_digest=digest, refreshed=now, covered=covered, counts=counts,
             planet=planet or kept or PlanetState(),
         )
         write_index(pdir, tables, manifest)
-        logger.info("scene index of %s: %d rows, %s..%s", pdir, len(tables.scenes), covered.start, covered.end)
+        logger.info("scene index of %s: %d rows, %s..%s",
+                    Path(pdir).name, len(tables.scenes), covered.start, covered.end)
         return (tables, manifest)

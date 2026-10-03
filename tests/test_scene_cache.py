@@ -1,3 +1,4 @@
+import json
 import threading
 from datetime import date, datetime, timedelta, timezone
 
@@ -28,7 +29,7 @@ CHUNK = _tables([(S2, pd.Timestamp("2026-05-10"), 10.0, "W", "k1"),
                  (LS, pd.Timestamp("2026-05-12"), 3.0, "W", "k2")])
 
 
-def test_reading_a_project_with_no_index_yields_nothing():
+def test_reading_a_project_with_no_index_yields_nothing(data_root):
     assert scene_cache.read_index(paths.project_dir("absent")) == (None, None)
 
 
@@ -129,6 +130,7 @@ def test_a_failed_write_leaves_the_previous_index_in_place(data_root, monkeypatc
     with pytest.raises(OSError):
         scene_cache.store_chunk(pdir, bad, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW)
     monkeypatch.setattr(scene_cache, "_write_manifest", real)
+    assert boom["n"] == 1  # the explosion is the one this test means to trigger, not a retry
 
     tables, manifest = scene_cache.read_index(pdir)
     assert manifest.covered.end == date(2026, 5, 31)
@@ -193,6 +195,66 @@ def test_two_threads_storing_chunks_both_land(data_root):
     assert manifest.covered == scene_index.Coverage(start=date(2026, 4, 1), end=date(2026, 6, 28))
 
 
+def test_store_chunk_only_rereads_the_index_while_holding_the_lock(data_root, monkeypatch):
+    """Structural companion to the race test above: the previous test's 5/5
+    regression margin is real evidence, but it is still a race it hopes to
+    win -- a sufficiently descheduled thread could let a broken version pass
+    on a slow or loaded machine. This spies on ``read_index`` and asserts the
+    project's lock is already held every time ``store_chunk`` calls it, which
+    is true on any machine and any thread ordering, not just usually true."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+
+    real_read = scene_cache.read_index
+    locked_at_entry = []
+
+    def spy(p):
+        locked_at_entry.append(scene_cache._lock_for(p).locked())
+        return real_read(p)
+
+    monkeypatch.setattr(scene_cache, "read_index", spy)
+    start = threading.Barrier(2)
+
+    def add(month, key):
+        start.wait()
+        scene_cache.store_chunk(
+            pdir,
+            _tables([(S2, pd.Timestamp(f"2026-{month:02d}-04"), 8.0, "W", key)]),
+            (date(2026, month, 1), date(2026, month, 28)),
+            "d1",
+            now=NOW,
+        )
+
+    threads = [threading.Thread(target=add, args=(6, "k6")), threading.Thread(target=add, args=(4, "k4"))]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+
+    # One re-read per store_chunk call (the two threads), both under the lock.
+    assert len(locked_at_entry) == 2 and all(locked_at_entry)
+
+
+# ----------------------------------------------------------- dedup identity
+
+def test_the_same_key_string_under_two_sources_keeps_both_rows(data_root):
+    """``merge_tables`` dedups on ``(source, key)``, not ``key`` alone.
+    ``key`` is drawn from a different namespace per source (an asset id for
+    Sentinel-2/Planet, a ``LANDSAT_SCENE_ID`` for Landsat), so it is unique
+    only by luck; deduping on ``key`` alone would let a cross-source
+    collision silently delete one of two real granules. This would fail if
+    ``merge_tables`` deduped on ``key`` alone: the second store would then
+    treat the Landsat row as a re-fetch of the Sentinel-2 one and keep only
+    one row."""
+    pdir = paths.project_dir("p")
+    first = _tables([(S2, pd.Timestamp("2026-05-10"), 10.0, "W", "same-key")])
+    scene_cache.store_chunk(pdir, first, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    second = _tables([(LS, pd.Timestamp("2026-05-12"), 3.0, "W", "same-key")])
+    tables, _ = scene_cache.store_chunk(pdir, second, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    assert len(tables.scenes) == 2
+    assert set(tables.scenes["source"]) == {S2, LS}
+
+
 # ------------------------------------------------------- unreadable index
 
 def test_a_hand_corrupted_manifest_reads_as_no_index(data_root):
@@ -210,4 +272,37 @@ def test_a_truncated_scenes_parquet_reads_as_no_index(data_root):
     scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
     with open(paths.scenes_path(pdir), "wb") as f:
         f.write(b"not a parquet file")
+    assert scene_cache.read_index(pdir) == (None, None)
+
+
+def test_a_scenes_parquet_with_the_wrong_columns_reads_as_no_index(data_root):
+    """A ``scenes.parquet`` that parses fine but was written by a different
+    column layout -- same ``version``, so the layout gate above does not
+    catch it -- must not raise a bare ``KeyError`` out of ``read_index``
+    (and, through it, out of ``store_chunk``). This is the corruption shape
+    the brief's error-style note actually names: a readable file, a wrong
+    schema."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    renamed = pd.read_parquet(paths.scenes_path(pdir)).rename(columns={"cloud": "cloud_pct"})
+    renamed.to_parquet(paths.scenes_path(pdir), index=False)
+
+    assert scene_cache.read_index(pdir) == (None, None)
+    # store_chunk must rebuild rather than raise out of read_index's failure.
+    later = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
+    tables, manifest = scene_cache.store_chunk(pdir, later, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW)
+    assert list(tables.scenes["key"]) == ["k3"] and manifest.covered.start == date(2026, 6, 1)
+
+
+def test_a_manifest_from_a_future_version_reads_as_no_index(data_root):
+    """``read_index``'s own layout gate: a manifest a later release wrote may
+    still parse (pydantic ignores fields it does not know), but its
+    ``version`` says its parquet columns are not a promise this build made."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    manifest_path = paths.scene_manifest_path(pdir)
+    raw = json.loads(manifest_path.read_text())
+    raw["version"] = scene_index.INDEX_VERSION + 1
+    manifest_path.write_text(json.dumps(raw))
+
     assert scene_cache.read_index(pdir) == (None, None)
