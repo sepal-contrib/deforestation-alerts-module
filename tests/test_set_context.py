@@ -113,7 +113,7 @@ def _wire_analysis(s, ctx):
     stays inside ``view_actual_alert``'s own guard."""
     from gui.tile.analysis import analysis_tile
 
-    widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
+    widgets = SimpleNamespace()
     id_field = SimpleNamespace(v_model=None)
     analysis = AnalysisState()
     s.actual_alert_id.subscribe(lambda *_: analysis_tile.view_actual_alert(widgets, s, analysis, ctx, id_field))

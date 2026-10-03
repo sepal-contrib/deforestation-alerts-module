@@ -13,6 +13,7 @@ from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.tile.analysis import context
 
@@ -156,3 +157,90 @@ def test_the_jump_field_is_one_based_and_hidden_until_asked(tmp_path, monkeypatc
     field.v_model = 99         # out of range: go_to clamps
     go.fire_event("click", None)
     assert s.actual_alert_id.value == 8
+
+
+def test_facts_of_reads_the_row(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    gdf = _alerts(["Confirmed", "Not reviewed"])
+    facts = context.facts_of(gdf, 0, s.project.value)
+    assert facts["source"] == "GLAD-L"
+    assert facts["status"] == "Confirmed"
+    assert facts["first"] == "2026-01-10" and facts["last"] == "2026-01-20"
+
+
+def test_facts_of_without_a_status_reads_not_reviewed(tmp_path, monkeypatch):
+    """A missing (NaN) status is not a review, as the tally counts it."""
+    s = _state(tmp_path, monkeypatch)
+    gdf = _alerts([None])
+    assert context.facts_of(gdf, 0, s.project.value)["status"] == "Not reviewed"
+
+
+@pytest.mark.parametrize("gdf_id", [(None, 0), ("ok", None), ("ok", -1), ("ok", 9)])
+def test_facts_of_guards_nothing_to_show(tmp_path, monkeypatch, gdf_id):
+    s = _state(tmp_path, monkeypatch)
+    which, alert_id = gdf_id
+    gdf = None if which is None else _alerts(["Confirmed"])
+    assert context.facts_of(gdf, alert_id, s.project.value) is None
+
+
+def test_facts_of_refuses_another_sets_alerts(tmp_path, monkeypatch):
+    """Integrate records a new set before it publishes that set's alerts."""
+    s = _state(tmp_path, monkeypatch)
+    assert context.facts_of(_alerts(["Confirmed"], set_id="old"), 0, s.project.value) is None
+
+
+@pytest.mark.parametrize("status,key", [
+    ("Not reviewed", "legend.status.not_reviewed"),
+    ("Confirmed", "legend.status.confirmed"),
+    ("False Positive", "legend.status.false_positive"),
+    ("Need revision", "legend.status.needs_revision"),
+    (None, "legend.status.not_reviewed"),
+    ("Who knows", "legend.status.not_reviewed"),
+])
+def test_the_status_chip_names_and_paints_a_status(status, key):
+    from gui.scripts import legend_specs
+
+    assert context.status_label_key(status) == key
+    expected = legend_specs.status_colors()[
+        {"Confirmed": 1, "False Positive": 2, "Need revision": 3}.get(status, 0)]
+    assert context.status_color(status) == expected
+    assert t(key) != f"⟦{key}⟧"
+
+
+def test_the_facts_grid_follows_a_review_save(tmp_path, monkeypatch):
+    """A Save writes the status into the row and rebinds ``alerts_gdf`` to a
+    copy with the same alert still selected; the chip and the tally must both
+    move (the old card read "Not reviewed" until the next alert change)."""
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    source, detected, chip = context.facts_widgets(card)
+    _, tally, _ = context.queue_widgets(card)
+
+    gdf = _alerts(["Not reviewed"] * 3)
+    s.alerts_gdf.set(gdf)
+    s.actual_alert_id.value = 0  # wire_alert_navigation selects; the block only watches
+    assert source.children == ["GLAD-L"]
+    assert detected.children == ["2026-01-10 → 2026-01-20"]
+    assert chip.children == [t("legend.status.not_reviewed")]
+
+    gdf.at[0, "status"] = "Confirmed"
+    s.alerts_gdf.value = gdf.copy()
+    assert chip.children == [t("legend.status.confirmed")]
+    assert chip.color == context.status_color("Confirmed")
+    assert tally.children == ["1 reviewed · 2 left"]
+
+
+def test_another_sets_alerts_leave_the_facts_alone(tmp_path, monkeypatch):
+    """The totals still follow the table on hand (they are its real totals)
+    while the facts of the alert on screen stay as they were."""
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    source, _, _ = context.facts_widgets(card)
+    _, tally, _ = context.queue_widgets(card)
+    s.alerts_gdf.set(_alerts(["Confirmed"]))
+    s.actual_alert_id.value = 0
+    before = list(source.children)
+
+    s.alerts_gdf.value = _alerts(["Confirmed", "Not reviewed"], set_id="old")
+    assert source.children == before
+    assert tally.children == ["1 reviewed · 1 left"]

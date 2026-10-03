@@ -1,8 +1,10 @@
-"""The Analysis "Alert info" card (source, dates, status) and what keeps it
-current: ``view_actual_alert`` on every alert change, and a refresh when the
-alerts are rebound with the same alert still selected, which is what a
-review Save does (``export._apply_save``). Stand-in widgets, a real
-``AppState`` and ``SetContext``, as tests/test_set_context.py drives them.
+"""The guard ``view_actual_alert`` keeps over the per-alert view: alerts of
+another set than the active one must change nothing on screen. The facts the
+alert-info card used to show now live in Block A, with their own guard and
+their own tests (tests/test_analysis_context.py); what is left here is the
+tile's side of it, plus the ``_state`` / ``_alerts`` / ``_wire`` helpers
+tests/test_loss_drivers.py drives the review panel with. Stand-in widgets, a
+real ``AppState`` and ``SetContext``, as tests/test_set_context.py drives them.
 """
 
 from datetime import datetime
@@ -12,7 +14,6 @@ import geopandas as gpd
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
-from gui.i18n import t
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
@@ -41,51 +42,16 @@ def _alerts(n):
 
 
 def _wire(s):
-    widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
+    """A tile wired to one state, as ``build_analysis_layout`` wires it.
+    tests/test_loss_drivers.py drives the review panel through this.
+    """
+    widgets = SimpleNamespace()
     analysis_tile.wire_alert_navigation(widgets, s, AnalysisState(), SetContext(s),
                                         SimpleNamespace(v_model=None))
     return widgets
 
 
-def _status(widgets):
-    return widgets.selected_alert_info.children[-1]
-
-
-def test_the_alert_info_card_follows_a_review_save(tmp_path, monkeypatch):
-    """Right after the first Save the card said "Status: Not reviewed" while
-    the header said 1 reviewed; it read "Reviewed" only after a reopen. The
-    Save writes the status into the row and rebinds ``alerts_gdf`` to a copy
-    with the same alert selected, which no subscription refreshed the card on."""
-    s = _state(tmp_path, monkeypatch)
-    widgets = _wire(s)
-    gdf = _alerts(3)
-    s.alerts_gdf.set(gdf)  # the set arrives: alert 0 is selected and drawn
-    assert s.actual_alert_id.value == 0
-    assert _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")
-
-    gdf.at[0, "status"] = "Confirmed"  # _save_attributes writes into the row...
-    s.alerts_gdf.value = gdf.copy()  # ...and _apply_save rebinds a copy
-
-    assert s.actual_alert_id.value == 0
-    assert _status(widgets) == t("analysis_tile.alert_info.status_reviewed")
-    assert widgets.selected_alert_info.children[1] == "GLAD-L"
-
-
-def test_a_rebind_with_no_alert_selected_leaves_the_card_alone(tmp_path, monkeypatch):
-    s = _state(tmp_path, monkeypatch)
-    widgets = _wire(s)
-    s.alerts_gdf.set(_alerts(2))
-    s.go_to(1)
-    assert widgets.selected_alert_info.children[1] == "GLAD-L"
-    s.actual_alert_id.value = -1  # a set switch resets the selection before it publishes
-    before = list(widgets.selected_alert_info.children)
-    assert analysis_tile.refresh_alert_info(widgets, s) is None
-    assert widgets.selected_alert_info.children == before
-    s.alerts_gdf.set(_alerts(1))  # the new set: its first alert is selected and drawn once
-    assert s.actual_alert_id.value == 0 and _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")
-
-
-def test_another_sets_alerts_leave_the_card_and_the_review_state_alone(tmp_path, monkeypatch):
+def test_another_sets_alerts_leave_the_review_state_alone(tmp_path, monkeypatch):
     """Integrate records a new set before it publishes that set's alerts: until
     then ``alerts_gdf`` still holds the old set's rows, which Analysis must not
     show as the new set's (Overview already checks ``alerts_belong_to``)."""
@@ -94,23 +60,9 @@ def test_another_sets_alerts_leave_the_card_and_the_review_state_alone(tmp_path,
     old["set_id"] = "old"
     s.alerts_gdf.value = old
     s.actual_alert_id.value = 0
-    widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=["kept"]))
-    assert analysis_tile.refresh_alert_info(widgets, s) is None
-    assert widgets.selected_alert_info.children == ["kept"]
 
     analysis = AnalysisState()
     analysis.defo_layer.set("drawn")
     id_field = SimpleNamespace(v_model=None)
-    analysis_tile.view_actual_alert(widgets, s, analysis, SetContext(s), id_field)
-    assert widgets.selected_alert_info.children == ["kept"]
+    analysis_tile.view_actual_alert(SimpleNamespace(), s, analysis, SetContext(s), id_field)
     assert id_field.v_model is None and analysis.defo_layer.value == "drawn"
-
-
-def test_an_alert_without_a_status_reads_not_reviewed(tmp_path, monkeypatch):
-    """A missing (NaN) status is not a review, as the set badge counts it."""
-    s = _state(tmp_path, monkeypatch)
-    widgets = _wire(s)
-    gdf = _alerts(1)
-    gdf["status"] = [None]
-    s.alerts_gdf.set(gdf)
-    assert _status(widgets) == t("analysis_tile.alert_info.status_not_reviewed")

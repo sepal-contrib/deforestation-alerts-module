@@ -97,14 +97,11 @@
       "prev_image_title": "Before image",
       "post_image_title": "After image"
     },
-    "alert_info": {
-      "card_title": "Alert info",
-      "alert_source": "Source: ",
-      "first_date": "First Date: ",
-      "last_date": "Last Date: ",
-      "status": "Status: ",
-      "status_not_reviewed": "Not reviewed",
-      "status_reviewed": "Reviewed"
+    "facts": {
+      "source": "Source",
+      "detected": "Detected",
+      "status": "Status",
+      "range": "{first} → {last}"
     },
     "queue": {
       "counter": "{index} / {total}",

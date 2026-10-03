@@ -8,10 +8,10 @@ about it" (see
 ``docs/superpowers/specs/2026-10-03-analysis-side-panel-design.md`` §3).
 
 So far this module builds the queue line (position counter, reviewed/left
-tally, progress bar) and the navigation row (Previous / Next / jump-to-number).
-Task 3 adds the facts grid to the same card; a later task wires the card into
-the tile, so nothing here calls into ``analysis_tile`` and nothing there calls
-``build_context`` yet.
+tally, progress bar), the navigation row (Previous / Next / jump-to-number) and
+the facts grid with its status chip, which replaces the retired "Alert info"
+card. A later task wires the card into the tile, so nothing here calls into
+``analysis_tile`` and nothing there calls ``build_context`` yet.
 
 Every number is counted from the live alerts table rather than from
 ``AlertSet.n_reviewed``, so the tally moves the moment a save lands, and every
@@ -21,11 +21,20 @@ panel is built once per session and a language switch never rebuilds it.
 
 import ipyvuetify as v
 
+from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from gui.i18n import format_number, t
+from gui.scripts import set_store
+from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
+from gui.store.workflow_steps import active_set
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
 #: else) can reach them without re-deriving the tree's shape.
 _SLOTS = "_defo_context_slots"
+
+#: status code -> the legend key that names it, so the panel, the map and the
+#: charts read the same words (as ``charts`` and ``overview_data`` derive it).
+_STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 
 
 def review_counts(gdf) -> tuple:
@@ -60,6 +69,44 @@ def tally_text(total: int, reviewed: int) -> str:
              left=format_number(total - reviewed))
 
 
+def _status_code(status) -> int:
+    """The stored status as its ``STATUS_CODES`` number; anything that is not
+    one of the stored strings (a NaN, an empty cell, a value from a store
+    written by another version) is an unreviewed row."""
+    return STATUS_CODES.get(status if isinstance(status, str) else "", 0)
+
+
+def status_label_key(status) -> str:
+    return _STATUS_KEYS[_status_code(status)]
+
+
+def status_color(status) -> str:
+    """The colour the map and the charts paint this status (never a literal:
+    ``legend_specs`` is the one place the palette is written)."""
+    return status_colors()[_status_code(status)]
+
+
+def facts_of(gdf, alert_id, project):
+    """``{"source", "first", "last", "status"}`` of the selected alert, or
+    ``None`` when there is nothing to show: no table, no selection, an id out
+    of range, or alerts of another set than the active one — Integrate records
+    a new set before it publishes that set's alerts, and Overview skips them
+    the same way."""
+    s = active_set(project) if project is not None else None
+    if s is not None and not set_store.alerts_belong_to(gdf, s):
+        return None  # another set's alerts, until the new set's are published
+    if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):
+        return None
+    row = gdf.iloc[alert_id]
+    status = row.get("status")
+    return {
+        "source": str(row["alert_sources"]),
+        "first": convert_julian_to_date(row["alert_date_min"]),
+        "last": convert_julian_to_date(row["alert_date_max"]),
+        "status": status if isinstance(status, str) and status else "Not reviewed",
+    }
+
+
 def queue_widgets(card):
     """``(counter, tally, bar)`` of a card built by ``build_context``."""
     slots = getattr(card, _SLOTS)
@@ -70,6 +117,12 @@ def nav_widgets(card):
     """``(prev, next, jump, field_box, go)`` of a card built by ``build_context``."""
     slots = getattr(card, _SLOTS)
     return slots["prev"], slots["next"], slots["jump"], slots["field_box"], slots["go"]
+
+
+def facts_widgets(card):
+    """``(source, detected, chip)`` of a card built by ``build_context``."""
+    slots = getattr(card, _SLOTS)
+    return slots["source"], slots["detected"], slots["chip"]
 
 
 def _build_nav(app_state, id_field):
@@ -120,6 +173,32 @@ def _build_nav(app_state, id_field):
     return row, {"prev": prev, "next": nxt, "jump": jump, "field_box": field_box, "go": go}
 
 
+def _build_facts():
+    """What the table says about the selected alert: its source, its detection
+    window and a chip that names and paints its review status (the row labels
+    are written here, once; the values are written by every refresh)."""
+    mono = "font-family: monospace; font-variant-numeric: tabular-nums;"
+    source = v.Html(tag="span", style_=mono, children=[])
+    detected = v.Html(tag="span", style_=mono, children=[])
+    chip = v.Chip(small=True, outlined=True, children=[])
+
+    def _label(key):
+        return v.Html(tag="span", class_="caption text--secondary text-uppercase", children=[t(key)])
+
+    grid = v.Html(
+        tag="div",
+        class_="mt-3",
+        style_="display: grid; grid-template-columns: 80px minmax(0, 1fr); "
+               "gap: 6px 10px; align-items: center;",
+        children=[
+            _label("analysis_tile.facts.source"), source,
+            _label("analysis_tile.facts.detected"), detected,
+            _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
+        ],
+    )
+    return grid, {"source": source, "detected": detected, "chip": chip}
+
+
 def build_context(app_state, id_field) -> v.Card:
     """Block A, built once per session; it subscribes to the alerts table and
     the current position and refreshes itself."""
@@ -134,6 +213,8 @@ def build_context(app_state, id_field) -> v.Card:
         children=[counter, v.Html(tag="span", style_="flex: 1 1 auto;", children=[]), tally],
     )
 
+    facts_grid, facts_slots = _build_facts()
+
     def _refresh(*_):
         gdf = app_state.alerts_gdf.value
         total, reviewed = review_counts(gdf)
@@ -141,12 +222,27 @@ def build_context(app_state, id_field) -> v.Card:
         tally.children = [tally_text(total, reviewed)]
         bar.value = (100.0 * reviewed / total) if total else 0.0
 
+        # The queue line refreshes before this guard returns: another set's
+        # alerts are that table's real totals, while the facts of the alert on
+        # screen must stay as they are until the new set's rows are published.
+        facts = facts_of(gdf, app_state.actual_alert_id.value, app_state.project.value)
+        if facts is None:
+            return
+        facts_slots["source"].children = [facts["source"]]
+        facts_slots["detected"].children = [
+            t("analysis_tile.facts.range", first=facts["first"], last=facts["last"])
+        ]
+        facts_slots["chip"].children = [t(status_label_key(facts["status"]))]
+        facts_slots["chip"].color = status_color(facts["status"])
+
     app_state.alerts_gdf.subscribe(_refresh)
     app_state.actual_alert_id.subscribe(_refresh)
     _refresh()
 
     nav_row, nav_slots = _build_nav(app_state, id_field)
 
-    card = v.Card(class_="pa-3 ma-2", hover=True, children=[queue_line, bar, nav_row])
-    setattr(card, _SLOTS, {"counter": counter, "tally": tally, "bar": bar, **nav_slots})
+    card = v.Card(class_="pa-3 ma-2", hover=True,
+                  children=[queue_line, bar, nav_row, facts_grid])
+    setattr(card, _SLOTS,
+            {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots})
     return card

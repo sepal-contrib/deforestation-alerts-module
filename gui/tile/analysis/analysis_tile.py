@@ -64,7 +64,6 @@ from datetime import date
 
 import ee
 import ipyvuetify as v
-import pandas as pd
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
@@ -114,58 +113,13 @@ def _as_date(julian):
         return None
 
 
-def refresh_alert_info(widgets, app_state):
-    """Fill the Alert info card (source, dates, status) for the selected alert.
-
-    Returns the alert's ``(first date, last date)`` as shown, or None with no
-    alert selected or with alerts of another set than the active one (the
-    card is left as it is): Integrate records a new set before it publishes
-    that set's alerts, and Overview skips them the same way. Run on every
-    alert change and again when the alerts are rebound with the same alert
-    still selected: a review Save writes the status into the row and then
-    rebinds ``alerts_gdf`` to a copy (``export._apply_save``), and the card
-    kept reading "Not reviewed" until the next alert change.
-    """
-    gdf = app_state.alerts_gdf.value
-    s = active_set(app_state.project.value)
-    if s is not None and not set_store.alerts_belong_to(gdf, s):
-        return None  # another set's alerts, until the new set's are published
-    alert_id = app_state.actual_alert_id.value
-    if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):
-        return None
-    alerta = gdf.iloc[alert_id]
-    fecha1 = convert_julian_to_date(alerta["alert_date_min"])
-    fecha2 = convert_julian_to_date(alerta["alert_date_max"])
-    alert_source = alerta["alert_sources"]
-
-    if pd.notna(alerta["status"]) and alerta["status"] != "Not reviewed":
-        alert_st = t("analysis_tile.alert_info.status_reviewed")
-    else:
-        alert_st = t("analysis_tile.alert_info.status_not_reviewed")
-
-    widgets.selected_alert_info.children = [
-        v.Html(tag="strong", children=[t("analysis_tile.alert_info.alert_source")]),
-        str(alert_source),
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[t("analysis_tile.alert_info.first_date")]),
-        fecha1,
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[t("analysis_tile.alert_info.last_date")]),
-        fecha2,
-        v.Html(tag="br"),
-        v.Html(tag="strong", children=[t("analysis_tile.alert_info.status")]),
-        alert_st,
-    ]
-    return fecha1, fecha2
-
-
 def view_actual_alert(
     widgets, app_state, analysis, app_tile_model, id_field
 ):
     """Per-alert orchestration owned by the foundation.
 
     Ports the foundation-relevant parts of the OLD ``view_actual_alert``: select
-    the alert row, refresh the alert-info card + nav id field, forget the
+    the alert row, refresh the nav id field, forget the
     previous alert's review state (``analysis.reset_alert``), rebuild the bbox overlay on both maps, center/zoom, compute
     the ee bbox + covering grid (stored on ``widgets``), register the AOI, set the
     default image-collection flags, and remember the position on the active
@@ -173,9 +127,10 @@ def view_actual_alert(
     json's ``actual_alert_id``).
 
     Guards: returns early when no alerts are loaded, when they are another
-    set's than the active one (``refresh_alert_info``), or the id is out of range — so
-    it is safe at smoke time (no EE/imagery work runs) and idempotent under the
-    render_fixed double-mount. The heavy imagery loading + slide-group rebuilds are
+    set's than the active one (``context.facts_of`` applies the same guard to
+    the facts grid), or the id is out of range — so it is safe at smoke time
+    (no EE/imagery work runs) and idempotent under the render_fixed
+    double-mount. The heavy imagery loading + slide-group rebuilds are
     deferred to Task 9.2 (AlertImagery).
     """
     gdf = app_state.alerts_gdf.value
@@ -188,11 +143,6 @@ def view_actual_alert(
         return
 
     alerta = gdf.iloc[alert_id]
-
-    # --- alert-info card (source / dates / status) ---
-    # Its ``(first, last)`` dates are for the card's own text; the timeline
-    # gets the window as real ``date``s below, through ``_as_date``.
-    refresh_alert_info(widgets, app_state)
 
     # --- a reviewed alert shows its stored loss drivers, in this language
     # (the codes, read back; a re-save stores them again as codes); an
@@ -315,13 +265,10 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
       current alert changes (navigation drives it), plus one immediate call so
       a pre-selected alert renders on first build. ``view_actual_alert`` no-ops
       with no alerts loaded, so this is safe at mount/smoke time and idempotent.
-    - ``alerts_gdf``, first: the Alert info card is refreshed for the alert
-      still selected when the alerts are rebound (a review Save, see
-      ``refresh_alert_info``); with none selected it does nothing.
-    - ``alerts_gdf``, then: an alert is selected when a set first arrives (a
-      publish leaves ``actual_alert_id`` at -1, and the tile would otherwise
-      stay empty until "next"), plus one immediate call. Registered after the
-      refresh so a new set's first alert is drawn once, by the selection.
+    - ``alerts_gdf``: an alert is selected when a set first arrives (a publish
+      leaves ``actual_alert_id`` at -1, and the tile would otherwise stay empty
+      until "next"), plus one immediate call. Block A subscribes for itself, so
+      a review Save's rebind refreshes its facts grid without the tile's help.
     """
 
     def _on_alert_change(*_):
@@ -329,11 +276,6 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
     view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
-
-    def _refresh_info_cb(*_):
-        refresh_alert_info(widgets, app_state)
-
-    app_state.alerts_gdf.subscribe(_refresh_info_cb)
 
     def _select_first_alert_cb(*_):
         select_start_alert(app_state, app_tile_model)
@@ -521,20 +463,9 @@ def build_analysis_layout(
     )
     strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
 
-    # RIGHT/CONTROLS: alert-info + nav + review + edit + export cards. Rendered in
+    # RIGHT/CONTROLS: nav + review + edit + export cards. Rendered in
     # MapApp's docked right panel (a panel wrapper in the shell), NOT inside the
     # stage — same chrome as AOI/Filter/Overview.
-    alert_info_card = v.Card(
-        class_="pa-2 ma-2",
-        hover=True,
-        children=[
-            v.CardTitle(
-                class_="pa-0 ma-1",
-                children=[t("analysis_tile.alert_info.card_title")],
-            ),
-            widgets.selected_alert_info,
-        ],
-    )
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
@@ -542,7 +473,6 @@ def build_analysis_layout(
             info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md")),
             build_set_selector(app_state),
             build_set_status_banner(app_state),
-            alert_info_card,
             build_navigator(app_state=app_state, id_field=id_field),
             build_review_panel(
                 widgets=widgets,

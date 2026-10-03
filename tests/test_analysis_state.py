@@ -111,7 +111,7 @@ def test_an_alert_change_forgets_the_previous_alerts_choices(caplog):
     s.before_image.set(object())
     s.after_info.set(["Planet NICFI", 1, None, "v", "_010124"])
     s.prediction_files.set({1: "/m1.tif", 2: "/m2.tif"})
-    widgets = SimpleNamespace(selected_alert_info=SimpleNamespace(children=[]))
+    widgets = SimpleNamespace()
 
     with caplog.at_level(logging.ERROR):
         analysis_tile.view_actual_alert(widgets, app_state, s, SimpleNamespace(), SimpleNamespace(v_model=None))

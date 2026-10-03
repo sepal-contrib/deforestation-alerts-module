@@ -97,14 +97,11 @@
       "prev_image_title": "Imagen Anterior",
       "post_image_title": "Imagen Posterior"
     },
-    "alert_info": {
-      "card_title": "Información de alerta",
-      "alert_source": "Fuente: ",
-      "first_date": "Primera fecha: ",
-      "last_date": "Última fecha: ",
-      "status": "Estado: ",
-      "status_not_reviewed": "No revisada",
-      "status_reviewed": "Revisada"
+    "facts": {
+      "source": "Fuente",
+      "detected": "Detectada",
+      "status": "Estado",
+      "range": "{first} → {last}"
     },
     "queue": {
       "counter": "{index} / {total}",

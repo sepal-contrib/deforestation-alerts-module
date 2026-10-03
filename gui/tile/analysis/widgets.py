@@ -35,7 +35,6 @@ Heavy widgets (created once, data-linked):
                              ``build_analysis_layout``, which has the app and
                              analysis state this object does not
     * ``map31`` / ``map32``— the map *containers* (title + map)
-    * ``selected_alert_info`` — the alert-info card body (mutated each alert)
 
 Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts;
 the chosen before/after images and their info lists live in ``AnalysisState``):
@@ -223,23 +222,6 @@ class AnalysisWidgets:
 
         self.aoi_control = AoiControl(self.map_after)
         self.map_after.add(self.aoi_control)
-
-        # ------------------------------------------------------------------
-        # Alert-info card body — the always-rendered text block updated each
-        # alert by ``view_actual_alert``. Its card title ("Alert info") is the
-        # smoke-test anchor.
-        # ------------------------------------------------------------------
-        self.selected_alert_info = v.Html(
-            tag="div",
-            children=[
-                v.Html(tag="strong", children=[t("analysis_tile.alert_info.first_date")]),
-                "",
-                v.Html(tag="strong", children=[t("analysis_tile.alert_info.last_date")]),
-                "",
-                v.Html(tag="strong", children=[t("analysis_tile.alert_info.status")]),
-                "",
-            ],
-        )
 
         # ------------------------------------------------------------------
         # Mutable per-alert scratch slots (set by view_actual_alert / Task 9.2+).

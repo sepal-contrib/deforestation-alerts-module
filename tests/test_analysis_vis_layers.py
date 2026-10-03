@@ -130,7 +130,7 @@ def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
     monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
     stub = SimpleNamespace(hide=lambda: None)
     widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
-                              selected_alert_info=SimpleNamespace(children=[]), draw_before=stub, draw_after=stub,
+                              draw_before=stub, draw_after=stub,
                               set_synced_view=lambda *a: None)
     state = AppState()
     state.load_project_state(_p(GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
@@ -225,7 +225,7 @@ def test_the_previous_alerts_layers_are_gone_before_the_maps_move_to_the_next_al
     stub = SimpleNamespace(hide=lambda: None)
     at_move = []
     widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
-                              selected_alert_info=SimpleNamespace(children=[]), draw_before=stub, draw_after=stub)
+                              draw_before=stub, draw_after=stub)
     widgets.set_synced_view = lambda *a: at_move.append(
         [lyr.name for m in (widgets.map_before, widgets.map_after) for lyr in m.layers if not lyr.base])
     for map_ in (widgets.map_before, widgets.map_after):
