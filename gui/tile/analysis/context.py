@@ -20,7 +20,6 @@ panel is built once per session and a language switch never rebuilds it.
 """
 
 import ipyvuetify as v
-from ipywidgets import Widget
 
 from gui.i18n import format_number, t
 
@@ -79,12 +78,9 @@ def _build_nav(app_state, id_field):
     safe to press with no alerts loaded (``max_alert_id`` is -1, so every
     press lands on 0).
 
-    ``id_field`` is the ``v.TextField`` the tile owns in production, but the
-    tests drive this with a bare ``SimpleNamespace(v_model=...)`` stand-in so
-    they can set its value without building a real widget tree. An
-    ipyvuetify container's ``children`` only accepts real ``Widget``
-    instances, so the stand-in is read for its value but only spliced into
-    the rendered box when it actually is one."""
+    ``id_field`` is the ``v.TextField`` the tile owns; it sits inside
+    ``field_box`` next to ``go``, which is also where the tests read and
+    write its ``.v_model``."""
     prev = v.Btn(outlined=True, class_="flex-grow-1", style_="height: 44px;",
                  children=[v.Icon(left=True, children=["mdi-chevron-left"]),
                            t("analysis_tile.nav.previous")])
@@ -96,9 +92,8 @@ def _build_nav(app_state, id_field):
                  children=[v.Icon(children=["mdi-pound"])])
     go = v.Btn(outlined=True, color="primary", class_="ml-2", style_="height: 44px;",
                children=[t("analysis_tile.nav.go")])
-    field_children = [id_field, go] if isinstance(id_field, Widget) else [go]
     field_box = v.Html(tag="div", class_="d-flex align-center mt-2",
-                       style_="display: none;", children=field_children)
+                       style_="display: none;", children=[id_field, go])
 
     prev.on_event("click", lambda *_: app_state.go_prev())
     nxt.on_event("click", lambda *_: app_state.go_next())

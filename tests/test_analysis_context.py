@@ -4,9 +4,9 @@ progress bar. Pure helpers plus one raw-widget block driven by a real
 """
 
 from datetime import datetime
-from types import SimpleNamespace
 
 import geopandas as gpd
+import ipyvuetify as v
 import numpy as np
 import pytest
 from pysepal.i18n import set_locale
@@ -82,7 +82,7 @@ def test_the_tally_names_what_is_left():
 
 def test_the_queue_line_follows_the_alerts_and_the_position(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
-    card = context.build_context(s, SimpleNamespace(v_model=None))
+    card = context.build_context(s, v.TextField(v_model=None))
     counter, tally, bar = context.queue_widgets(card)
     assert counter.children == ["No alert set is loaded"]
 
@@ -100,7 +100,7 @@ def test_the_tally_is_formatted_in_the_language_in_force_when_it_is_written(tmp_
     """The block is built once per session and a language switch never rebuilds
     it, so the strings must be resolved at write time, not at build time."""
     s = _state(tmp_path, monkeypatch)
-    card = context.build_context(s, SimpleNamespace(v_model=None))
+    card = context.build_context(s, v.TextField(v_model=None))
     _, tally, _ = context.queue_widgets(card)
     set_locale("es-ES")
     s.alerts_gdf.set(_alerts(["Confirmed", "Not reviewed"]))
@@ -110,7 +110,7 @@ def test_the_tally_is_formatted_in_the_language_in_force_when_it_is_written(tmp_
 
 def test_the_nav_buttons_move_the_selection(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
-    card = context.build_context(s, SimpleNamespace(v_model=None))
+    card = context.build_context(s, v.TextField(v_model=None))
     prev, nxt, jump, field_box, go = context.nav_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 4))
     s.actual_alert_id.value = 0  # a real position, as the queue line leaves it
@@ -126,7 +126,7 @@ def test_the_nav_buttons_are_safe_with_no_alerts(tmp_path, monkeypatch):
     -1 with no alerts loaded, so every press clamps to 0 by construction —
     not a no-op, but it never raises and never goes negative."""
     s = _state(tmp_path, monkeypatch)
-    card = context.build_context(s, SimpleNamespace(v_model=None))
+    card = context.build_context(s, v.TextField(v_model=None))
     prev, nxt, _, _, _ = context.nav_widgets(card)
     nxt.fire_event("click", None)
     prev.fire_event("click", None)
@@ -135,11 +135,12 @@ def test_the_nav_buttons_are_safe_with_no_alerts(tmp_path, monkeypatch):
 
 def test_the_jump_field_is_one_based_and_hidden_until_asked(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
-    field = SimpleNamespace(v_model=None)
+    field = v.TextField(v_model=None)
     card = context.build_context(s, field)
     _, _, jump, field_box, go = context.nav_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
 
+    assert field in field_box.children  # the field itself ships inside the box
     assert "display: none" in field_box.style_
     jump.fire_event("click", None)
     assert "display: none" not in field_box.style_
