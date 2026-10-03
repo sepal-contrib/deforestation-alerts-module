@@ -58,6 +58,31 @@
     "export_step": "Génération de l'export {fmt}…",
     "export_done": "Export {fmt} prêt."
   },
+  "analysis": {
+    "timeline": {
+      "before": "Avant",
+      "after": "Après",
+      "unset": "non défini",
+      "max_cloud": "Nuages max.",
+      "one_more_month": "+1 mois",
+      "collapse_all": "Replier la fenêtre d'alerte",
+      "expand_all": "Déplier tous les mois",
+      "images": "images",
+      "no_images": "Aucune image ne couvre cette alerte dans cette fenêtre.",
+      "days_apart": "{days} jours d'écart",
+      "same_image": "la même image des deux côtés",
+      "stale": "Index du {when}",
+      "refresh_failed": "Impossible d'actualiser l'index des images : {error}",
+      "retry": "Réessayer",
+      "loading": "Chargement de l'index des images…",
+      "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Cliquez sur une barre du couloir supérieur pour définir l'image avant, sur celui du bas pour l'image après.",
+      "set_before": "Définir comme image avant",
+      "set_after": "Définir comme image après",
+      "collapsed_month": "{month}, {count} images, replié. Déplier ce mois.",
+      "collapse_month": "{month}. Replier ce mois.",
+      "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais."
+    }
+  },
   "analysis_tile": {
     "description": "Passez en revue chaque alerte avec les images avant et après, confirmez-la, définissez la cause de la perte, puis enregistrez.",
     "info_header": "À propos de l'analyse",

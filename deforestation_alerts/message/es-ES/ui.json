@@ -58,6 +58,31 @@
     "export_step": "Generando la exportación {fmt}…",
     "export_done": "Exportación {fmt} lista."
   },
+  "analysis": {
+    "timeline": {
+      "before": "Antes",
+      "after": "Después",
+      "unset": "sin definir",
+      "max_cloud": "Nubes máx.",
+      "one_more_month": "+1 mes",
+      "collapse_all": "Contraer la ventana de alerta",
+      "expand_all": "Expandir todos los meses",
+      "images": "imágenes",
+      "no_images": "Ninguna imagen cubre esta alerta en esta ventana.",
+      "days_apart": "{days} días de diferencia",
+      "same_image": "la misma imagen en ambos lados",
+      "stale": "Índice del {when}",
+      "refresh_failed": "No se pudo actualizar el índice de imágenes: {error}",
+      "retry": "Intentar de nuevo",
+      "loading": "Cargando el índice de imágenes…",
+      "legend": "Cada colección es una franja en su propia banda: Sentinel-2 arriba, Landsat en el medio, Planet como una barra a lo largo de su mes. Una franja atenuada de media altura supera el límite de nubes. La banda dorada es la ventana de alerta, donde todas las imágenes muestran una tala parcial: se pueden elegir, pero nunca se seleccionan por ti. Haz clic en una franja del carril superior para fijar la imagen de antes y en el inferior para la de después.",
+      "set_before": "Fijar como imagen de antes",
+      "set_after": "Fijar como imagen de después",
+      "collapsed_month": "{month}, {count} imágenes, contraído. Expandir este mes.",
+      "collapse_month": "{month}. Contraer este mes.",
+      "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta."
+    }
+  },
   "analysis_tile": {
     "description": "Revisa cada alerta con imágenes de antes y después, confírmala, define la causa de pérdida y guarda.",
     "info_header": "Acerca del análisis",

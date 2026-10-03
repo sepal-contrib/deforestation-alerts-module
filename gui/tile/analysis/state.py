@@ -35,6 +35,11 @@ class AnalysisState:
     #: their info lists: [source, millis, cloud, value, date suffix]
     before_info: solara.Reactive = field(default_factory=_plain)
     after_info: solara.Reactive = field(default_factory=_plain)
+    #: the granule keys the chosen (source, date) mosaics for *this* alert --
+    #: what ``image_slider_map_callback`` rebuilds the ee.Image from. Per
+    #: alert, because which granules overlap depends on the alert.
+    before_keys: solara.Reactive = field(default_factory=lambda: solara.reactive([]))
+    after_keys: solara.Reactive = field(default_factory=lambda: solara.reactive([]))
     #: Planet monthly image lists (None until a source publishes them)
     before_planet: solara.Reactive = field(default_factory=_plain)
     after_planet: solara.Reactive = field(default_factory=_plain)
@@ -58,6 +63,8 @@ class AnalysisState:
             self.after_image.set(None)
             self.before_info.set(None)
             self.after_info.set(None)
+            self.before_keys.set([])
+            self.after_keys.set([])
             self.prediction_files.set({})
 
     def is_current(self, token) -> bool:
