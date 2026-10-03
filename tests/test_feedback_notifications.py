@@ -1073,9 +1073,10 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
     assert order == [0.25, 0.5, 1.0, None, "inference"]
 
 
-def test_a_cnn_run_records_what_it_found(tmp_path):
-    """The worker vectorises its prediction inside its tracked job, so the row
-    can say what was found and *Add* can reuse the features."""
+def test_a_cnn_run_records_what_it_found():
+    """What a run found is remembered per model and forgotten with the alert,
+    so the row can say it and the next alert never inherits it. (That the
+    *worker* records it is pinned end to end by the run tests above.)"""
     from gui.tile.analysis import edit_tools
 
     analysis = AnalysisState()
@@ -1085,9 +1086,10 @@ def test_a_cnn_run_records_what_it_found(tmp_path):
     assert analysis.prediction_shapes.value == {}
 
 
-def test_a_prediction_with_nothing_in_it_is_the_404_warning(tmp_path):
-    """The at-run vectorisation can come back empty, where the old code only
-    found out at Add time: no "Found 0 patches", no division by zero."""
+def test_nothing_found_is_recorded_as_nothing_and_shows_as_nothing():
+    """An empty prediction records no shapes and renders no result line: the
+    row shows the ``dl_404`` warning instead of "Found 0 patches". (The run
+    that produces it is pinned by the end-to-end test below.)"""
     from gui.tile.analysis import edit_tools
 
     analysis = AnalysisState()
@@ -1095,6 +1097,39 @@ def test_a_prediction_with_nothing_in_it_is_the_404_warning(tmp_path):
     assert text == ""
     edit_tools._record_prediction_shapes(analysis, 1, 0, 0.0)
     assert analysis.prediction_shapes.value == {}
+
+
+@pytest.mark.parametrize("empty", ["no raster at all", "a raster with no patches"])
+def test_vectorise_reads_an_empty_prediction_as_nothing_found(monkeypatch, empty):
+    """The translation the row's "nothing found" rests on, run for real: a
+    prediction ``raster_to_gdf`` cannot read, and one it reads as no patches,
+    are both ``([], 0, 0.0)`` -- never a zero-area row, never a division by
+    zero in ``calculate_total_area``."""
+    import geopandas as gpd
+
+    from gui.tile.analysis import edit_tools
+
+    gdf = None if empty == "no raster at all" else gpd.GeoDataFrame(
+        geometry=[], crs="EPSG:4326")
+    monkeypatch.setattr(edit_tools, "raster_to_gdf", lambda *a, **k: gdf)
+
+    assert edit_tools.vectorise("x.tif") == ([], 0, 0.0)
+
+
+# Fix 1: every widget the builder makes must be reachable from the body it
+# returns -- see the test's own docstring.
+def test_every_widget_the_body_is_built_with_is_on_screen(edit_tools_card):
+    """``clear_btn`` was built, wired and never a child of any toolbar, so it
+    was unreachable for the life of the module while every test passed. The
+    old lookups walked the returned tree and would have said so;
+    ``edit_widgets`` reads the builder's own dict, which would not. This is
+    what pins reachability now: a slot that is never parented fails here."""
+    edit_tools, card, _analysis = edit_tools_card
+    on_screen = {id(widget) for widget in _widgets(card)}
+    slots = edit_tools.edit_widgets(card)
+    assert set(slots) >= {"start_btn", "save_btn", "stop_btn"} | {
+        f"dl{n}_{part}" for n in (1, 2) for part in ("run", "add", "remove", "msg", "found")}
+    assert sorted(name for name, widget in slots.items() if id(widget) not in on_screen) == []
 
 
 @pytest.mark.parametrize("model", [1, 2])

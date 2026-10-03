@@ -784,11 +784,17 @@ def build_edit_tools(
             ns[f"dl{n}_remove"].on_event(
                 "click", lambda *_, n=n, c=color_name: _remove_model_prediction(n, c))
 
-        # Spec §4.4: the reviewer drawing, reshaping or deleting a shape on
-        # either map marks the alert unsaved. Wired to the draw controls' own
-        # frontend event -- NOT to ``analysis.defo_layer``, which
-        # ``view_actual_alert`` also seeds when an alert opens (a subscription
-        # there would mark every freshly opened alert unsaved; Ruling 24).
+        # Spec §4.4: the reviewer's work on the drawing marks the alert
+        # unsaved. Wired to the draw controls' own frontend event -- NOT to
+        # ``analysis.defo_layer``, which ``view_actual_alert`` also seeds when
+        # an alert opens (a subscription there would mark every freshly opened
+        # alert unsaved; Ruling 24).
+        #
+        # ``on_draw`` hears only the Geoman events jupyter-leaflet forwards to
+        # the kernel: a shape created, removed or cut always, and a vertex or
+        # shape drag only for the shapes the ``data`` trait built. A reshape
+        # can therefore go unheard, so the flag does not rest on this event:
+        # *Apply* touches too, where it writes ``defo_layer``.
         for name in ("draw_before", "draw_after"):
             on_draw = getattr(getattr(widgets, name, None), "on_draw", None)
             if on_draw is not None:
