@@ -10,6 +10,7 @@ stripe that is laid out with the wrong month's origin, against the wrong
 denominator, or in pixels where percentages were meant, fails here.
 """
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -1405,3 +1406,23 @@ def test_an_alert_whose_window_was_never_widened_asks_for_nothing():
     # the alert goes away entirely: there is no view to ask for
     widgets.imagery_ctx.set(None)
     assert state.scene_window_request.value is None
+
+
+def test_a_collection_this_build_has_no_band_for_is_dropped_rather_than_raising(caplog):
+    """T10 Minor 7 / review m1's reachable trigger. Every drawing helper
+    indexes ``BAND``, ``SRC_COLOR`` and ``SRC_LABEL`` by the source string and
+    ``scene_query.row_id`` indexes ``SOURCE_CODE``, so one row naming a fourth
+    collection raised a ``KeyError`` out of the middle of ``render`` -- from
+    where it travelled back through ``reactive.set`` into the loader and was
+    reported as a failed index refresh. The index is data read from disk and
+    from Earth Engine, so a release that adds a collection and a session that
+    then opens the project on an older build reach this with no bug here."""
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      ("Sentinel 3", "2026-05-02", 4.0, "W", "kX"),
+                                      (LS, "2026-08-27", 3.0, "W", "kB")]))
+    with caplog.at_level(logging.WARNING, logger="SEPALUI.deforestation_alerts"):
+        card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _chips(card) == [("Planet 0", True), ("Sentinel-2 1", True), ("Landsat 1", True)]
+    assert _count_stripes(card) == 4  # the two drawable rows, one lane each
+    dropped = [r for r in caplog.records if "no band for" in r.getMessage()]
+    assert dropped and "Sentinel 3" in dropped[0].getMessage()

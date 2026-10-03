@@ -1076,3 +1076,107 @@ def test_a_chunk_that_fails_part_way_leaves_the_chunks_that_landed(
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_drawing_failure_is_not_reported_as_a_failed_index_refresh(
+        data_root, monkeypatch, no_planet, local_aoi, caplog):
+    """Review m1. ``reactive.set`` runs its subscribers synchronously and
+    ``timeline.render`` is subscribed to four of this component's reactives,
+    so an exception raised while drawing used to come back up through
+    ``set()`` into ``_load``'s ``except``: the reviewer was told the index
+    refresh had failed when it had succeeded, "Try again" retried a fetch that
+    was never the problem, and the publish after the failed one never ran, so
+    ``scene_index`` and ``scene_manifest`` disagreed about what is on disk.
+    """
+    async def get_info_async(obj):
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+    # a subscriber that cannot draw what it is given
+    state.scene_index.subscribe(lambda _tables: (_ for _ in ()).throw(KeyError("Sentinel 3")))
+
+    async def main():
+        with caplog.at_level(logging.ERROR, logger="SEPALUI.deforestation_alerts.scene_loader"):
+            box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+            try:
+                assert await _settle(lambda: state.scene_manifest.value is not None
+                                     and state.scene_index_pending.value is False)
+                # the manifest is published even though the index publish before
+                # it raised: the two no longer disagree about what is on disk
+                assert state.scene_manifest.value.covered == _covered(date(2026, 3, 3),
+                                                                      date(2026, 10, 2))
+                # and it is NOT an index-refresh failure: no "Try again" state,
+                # and the message names the drawing rather than the refresh
+                assert state.scene_index_error.value is None
+                # one message, not one per chunk: the bus collapses a toast
+                # identical to the one already up
+                assert _toasts("error") == [t("imagery.index_draw_failed", error="'Sentinel 3'")]
+            finally:
+                rc.close()
+        drawn = [r for r in caplog.records if "could not be drawn" in r.getMessage()]
+        assert drawn and all(r.exc_info is not None for r in drawn)
+
+    asyncio.run(main())
+
+
+def test_a_fetch_failure_is_still_reported_as_a_failed_index_refresh(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """The other half of the pair from review m1: the two failure modes have
+    to be distinguishable, so this is the one that really is a refresh
+    failure and must keep saying so."""
+    async def get_info_async(obj):
+        raise RuntimeError("Earth Engine is unreachable")
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index_error.value is not None)
+            assert state.scene_index_error.value == "Earth Engine is unreachable"
+            assert _toasts("error") == [t("imagery.index_failed", error="Earth Engine is unreachable")]
+            assert state.scene_index_pending.value is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_waiting_for_the_aoi_clears_an_error_left_by_the_run_before(
+        data_root, monkeypatch, no_planet):
+    """Review m4. The ``origin is None`` branch is a run that did not fail --
+    it is waiting for the AOI step to replay the selection -- so an error left
+    behind by the run before it must not stay on screen labelling the index as
+    old and offering a "Try again" with nothing yet to retry."""
+    def ee_aoi(result, pdir):
+        if result is None:
+            raise RuntimeError("no AOI geometry available")
+        return "AOI"
+
+    async def get_info_async(obj):
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.aoi_io, "ee_aoi", ee_aoi)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    p = _with_period(_p(digest="asset:users/x/aoi"))
+    p.aoi.geometry_file = None
+    state.load_project_state(p)
+    state.scene_index_error.set("Earth Engine is unreachable")  # the last run's failure
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index_error.value is None)
+            assert state.scene_index.value is None  # still waiting, not fetched
+        finally:
+            rc.close()
+
+    asyncio.run(main())

@@ -169,6 +169,7 @@
     }
   },
   "imagery": {
+    "index_draw_failed": "The image index loaded but the timeline could not be drawn: {error}",
     "index_failed": "Could not refresh the image index: {error}",
     "index_rebuilding": "Rebuilding the image index for this area"
   }

@@ -169,6 +169,7 @@
     }
   },
   "imagery": {
+    "index_draw_failed": "El índice de imágenes se cargó pero no se pudo dibujar la línea de tiempo: {error}",
     "index_failed": "No se pudo actualizar el índice de imágenes: {error}",
     "index_rebuilding": "Reconstruyendo el índice de imágenes de esta zona"
   }

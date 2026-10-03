@@ -34,6 +34,7 @@ from deforestation_alerts.scripts.scene_index import (
     SOURCE_LANDSAT,
     SOURCE_PLANET,
     SOURCE_S2,
+    SceneTables,
 )
 from gui.i18n import format_date, t
 from gui.scripts.scene_loader import shift_months
@@ -204,6 +205,33 @@ def pair_note(before_id, after_id) -> Optional[str]:
 
 
 # --------------------------------------------------------------- the geometry
+
+
+def _only_sources_we_can_draw(tables: SceneTables) -> SceneTables:
+    """``tables`` without rows whose ``source`` this module has no band for.
+
+    Every drawing helper indexes ``BAND``, ``SRC_COLOR`` and ``SRC_LABEL`` by
+    the source string, and ``scene_query.row_id`` indexes ``SOURCE_CODE`` --
+    so one row naming a fourth collection used to raise a ``KeyError`` out of
+    the middle of ``render``, from where it travelled back through
+    ``reactive.set`` into the loader and was reported as a failed index
+    refresh (T10 Minor 7, review m1). The index is *data*: it is read from
+    disk and from Earth Engine, so a release that adds a collection and a
+    session that then opens the same project on an older build make this
+    reachable without any bug in this file.
+
+    A filter rather than a startup assertion over the key sets, because the
+    trigger is a row and not a mismatch between the three dicts: an assertion
+    would hold on a build that is about to raise anyway, and raising at import
+    would cost the whole app for one unknown row. Dropping the row costs that
+    collection's stripes and says so in the server log.
+    """
+    known = tables.scenes["source"].isin(BAND)
+    if known.all():
+        return tables
+    logger.warning("timeline: no band for %s, dropping those rows",
+                   sorted(set(tables.scenes.loc[~known, "source"])))
+    return SceneTables(scenes=tables.scenes[known], tiles=tables.tiles)
 
 
 def stripe_hit_style(segments, d: date, source: str) -> str:
@@ -438,6 +466,7 @@ def build_timeline(app_state, analysis, widgets):
         window = view_window(ctx, app_state.project.value, extra.value)
         if tables is None or ctx is None or window is None or ctx.get("bbox") is None:
             return (None, None)
+        tables = _only_sources_we_can_draw(tables)
         return (scene_query.scenes_for(tables, ctx["bbox"], window[0], window[1],
                                        max_cloud=max_cloud.value), window)
 

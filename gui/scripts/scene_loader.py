@@ -235,6 +235,33 @@ def SceneIndexLoader(app_state, gee_interface):
         return (live is not None and live.name == name
                 and live.aoi is not None and live.aoi.digest == digest)
 
+    def _publish(reactive, value) -> None:
+        """``reactive.set(value)``, with a subscriber's failure kept out of
+        the fetch path.
+
+        ``solara.reactive.set`` runs its subscribers synchronously, and
+        ``timeline.render`` is subscribed to four of the reactives this
+        component publishes. So an exception raised while *drawing* used to
+        travel back up through ``set()`` into ``_load``'s ``except``, where it
+        was reported to the reviewer as "Could not refresh the image index" --
+        a refresh that had in fact succeeded -- and, because it unwound the
+        line it was raised from, the publish after it never happened:
+        ``scene_index`` and ``scene_manifest`` were left disagreeing about
+        what is on disk (review m1).
+
+        A draw failure is its own failure. It is logged with its traceback and
+        toasted with its own message, in the shape
+        ``gui.tile.analysis.vis_sync`` established, and it is deliberately
+        *not* written to ``scene_index_error``: that reactive labels the index
+        as old and offers "Try again", which would retry a fetch that was
+        never the problem.
+        """
+        try:
+            reactive.set(value)
+        except Exception as exc:  # noqa: BLE001 - a drawing bug must not read as a fetch failure
+            logger.exception("scene index of %s was published but could not be drawn", name)
+            notifications.error(t("imagery.index_draw_failed", error=error_text(exc)))
+
     async def _with_planet(tables, window: Window):
         """``(tables, planet)``: the NICFI basemaps of ``window`` added.
 
@@ -334,8 +361,8 @@ def SceneIndexLoader(app_state, gee_interface):
         )
         if not _still_current():
             return None
-        app_state.scene_index.set(merged)
-        app_state.scene_manifest.set(manifest)
+        _publish(app_state.scene_index, merged)
+        _publish(app_state.scene_manifest, manifest)
         return manifest
 
     async def _fill(manifest, want: Window):
@@ -395,9 +422,9 @@ def SceneIndexLoader(app_state, gee_interface):
     # ---- the index on disk, then the foreground window
     async def _load():
         if name is None or digest is None or fg is None:
-            app_state.scene_index.set(None)
-            app_state.scene_manifest.set(None)
-            app_state.scene_index_error.set(None)
+            _publish(app_state.scene_index, None)
+            _publish(app_state.scene_manifest, None)
+            _publish(app_state.scene_index_error, None)
             return
         if origin is None:
             # No AOI geometry to ask about yet. An index of *this* AOI keeps
@@ -405,19 +432,26 @@ def SceneIndexLoader(app_state, gee_interface):
             # the AOI that was just replaced describes other tiles, so it goes.
             shown = app_state.scene_manifest.value
             if shown is not None and shown.aoi_digest != digest:
-                app_state.scene_index.set(None)
-                app_state.scene_manifest.set(None)
+                _publish(app_state.scene_index, None)
+                _publish(app_state.scene_manifest, None)
+            # This run did not fail -- it is waiting for the AOI step to
+            # replay the selection -- so an error left by the run before it
+            # must not stay on screen labelling the index as old and offering
+            # a "Try again" that has nothing to retry yet (review m4). The
+            # task re-runs by itself when ``origin`` arrives, and that run is
+            # the one whose outcome the reviewer should be reading.
+            _publish(app_state.scene_index_error, None)
             return
         pdir = paths.project_dir(name)
         tables, manifest, had_files = await to_thread_in_context(_read, pdir)
         if tables is not None and manifest is not None and manifest.aoi_digest == digest:
             # Published before any fetch: a stale index answers while it
             # refreshes, and keeps answering if the refresh fails.
-            app_state.scene_index.set(tables)
-            app_state.scene_manifest.set(manifest)
+            _publish(app_state.scene_index, tables)
+            _publish(app_state.scene_manifest, manifest)
         else:
-            app_state.scene_index.set(None)
-            app_state.scene_manifest.set(None)
+            _publish(app_state.scene_index, None)
+            _publish(app_state.scene_manifest, None)
             if manifest is None and had_files:
                 # There were index files and ``read_index`` could not use them:
                 # a corrupt, truncated or older-layout cache. It says nothing
@@ -430,12 +464,12 @@ def SceneIndexLoader(app_state, gee_interface):
         now = datetime.now(timezone.utc)
         mode = scene_query.needs_refresh(manifest, fg, digest=digest, now=now)
         if not mode:
-            app_state.scene_index_error.set(None)
+            _publish(app_state.scene_index_error, None)
             return
-        app_state.scene_index_pending.set(True)
+        _publish(app_state.scene_index_pending, True)
         try:
             await _fill(manifest, fg)
-            app_state.scene_index_error.set(None)
+            _publish(app_state.scene_index_error, None)
         except Exception as exc:  # noqa: BLE001
             # Whatever was published above stays published: a refresh that
             # failed must not cost the reviewer the index they already had.
@@ -444,7 +478,7 @@ def SceneIndexLoader(app_state, gee_interface):
             # and in a toast, because this leaf runs wherever the reviewer is.
             message = error_text(exc)
             logger.warning("scene index of %s not refreshed: %s", name, message, exc_info=True)
-            app_state.scene_index_error.set(message)
+            _publish(app_state.scene_index_error, message)
             notifications.error(t("imagery.index_failed", error=message))
         finally:
             # Known, deferred: a dependency change cancels this task at its
@@ -453,7 +487,7 @@ def SceneIndexLoader(app_state, gee_interface):
             # can blink off mid-fetch. The fix is a generation counter (only
             # the newest run may lower the flag) and it belongs with the task
             # that renders the flag, not here.
-            app_state.scene_index_pending.set(False)
+            _publish(app_state.scene_index_pending, False)
 
     load = solara.lab.use_task(_load, dependencies=[name, digest, fg, origin, retry],
                                prefer_threaded=False, raise_error=False)

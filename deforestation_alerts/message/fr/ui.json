@@ -169,6 +169,7 @@
     }
   },
   "imagery": {
+    "index_draw_failed": "L'index des images est chargé mais la frise chronologique n'a pas pu être dessinée : {error}",
     "index_failed": "Impossible d'actualiser l'index des images : {error}",
     "index_rebuilding": "Reconstruction de l'index des images de cette zone"
   }
