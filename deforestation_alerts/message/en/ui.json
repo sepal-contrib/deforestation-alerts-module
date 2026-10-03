@@ -111,6 +111,12 @@
       "tally": "{reviewed} reviewed · {left} left",
       "empty": "No alert set is loaded"
     },
+    "nav": {
+      "previous": "Previous",
+      "next": "Next",
+      "jump": "Jump to alert number",
+      "go": "Go"
+    },
     "questionarie": {
       "confirmation_q": "Is this a true alert?",
       "confirmation_yes": "Yes",

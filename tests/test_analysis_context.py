@@ -106,3 +106,52 @@ def test_the_tally_is_formatted_in_the_language_in_force_when_it_is_written(tmp_
     s.alerts_gdf.set(_alerts(["Confirmed", "Not reviewed"]))
     s.actual_alert_id.value = 0
     assert tally.children == ["1 revisadas · 1 pendientes"]
+
+
+def test_the_nav_buttons_move_the_selection(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, SimpleNamespace(v_model=None))
+    prev, nxt, jump, field_box, go = context.nav_widgets(card)
+    s.alerts_gdf.set(_alerts(["Not reviewed"] * 4))
+    s.actual_alert_id.value = 0  # a real position, as the queue line leaves it
+
+    nxt.fire_event("click", None)
+    assert s.actual_alert_id.value == 1
+    prev.fire_event("click", None)
+    assert s.actual_alert_id.value == 0
+
+
+def test_the_nav_buttons_are_safe_with_no_alerts(tmp_path, monkeypatch):
+    """``go_to`` is ``max(0, min(idx, max_alert_id))`` and ``max_alert_id`` is
+    -1 with no alerts loaded, so every press clamps to 0 by construction —
+    not a no-op, but it never raises and never goes negative."""
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, SimpleNamespace(v_model=None))
+    prev, nxt, _, _, _ = context.nav_widgets(card)
+    nxt.fire_event("click", None)
+    prev.fire_event("click", None)
+    assert s.actual_alert_id.value == 0
+
+
+def test_the_jump_field_is_one_based_and_hidden_until_asked(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    field = SimpleNamespace(v_model=None)
+    card = context.build_context(s, field)
+    _, _, jump, field_box, go = context.nav_widgets(card)
+    s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
+
+    assert "display: none" in field_box.style_
+    jump.fire_event("click", None)
+    assert "display: none" not in field_box.style_
+
+    field.v_model = 7          # the reviewer types the number the counter shows
+    go.fire_event("click", None)
+    assert s.actual_alert_id.value == 6
+
+    field.v_model = "not a number"
+    go.fire_event("click", None)
+    assert s.actual_alert_id.value == 6   # unchanged, no exception
+
+    field.v_model = 99         # out of range: go_to clamps
+    go.fire_event("click", None)
+    assert s.actual_alert_id.value == 8

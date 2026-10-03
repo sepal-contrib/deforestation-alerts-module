@@ -111,6 +111,12 @@
       "tally": "{reviewed} revisadas · {left} pendientes",
       "empty": "No hay ningún conjunto de alertas cargado"
     },
+    "nav": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "jump": "Ir al número de alerta",
+      "go": "Ir"
+    },
     "questionarie": {
       "confirmation_q": "¿Es verdadera la alerta?",
       "confirmation_yes": "Sí",

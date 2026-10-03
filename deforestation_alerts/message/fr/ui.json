@@ -111,6 +111,12 @@
       "tally": "{reviewed} examinées · {left} restantes",
       "empty": "Aucun lot d'alertes n'est chargé"
     },
+    "nav": {
+      "previous": "Précédente",
+      "next": "Suivante",
+      "jump": "Aller au numéro d'alerte",
+      "go": "Aller"
+    },
     "questionarie": {
       "confirmation_q": "Est-ce une véritable alerte ?",
       "confirmation_yes": "Oui",
