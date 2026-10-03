@@ -180,14 +180,17 @@ analyst preferences, not per-alert state.
 
 The vertical saving is modest and should not be oversold. Today's two selectors
 sit side by side, one under each pane, so they cost the same height as one:
-`.custom-map-class2` reserves 300px of chrome. The new strip is a toolbar (32px),
-the timeline card (about 148px: two 45px lanes, a 27px axis, the window label and
-padding) and the readout (36px) — about 235px with gaps. So
-`calc(100vh - 300px)` becomes `calc(100vh - 250px)`: roughly 50px back to the
-maps, and a little more when a collection is toggled off and its band collapses.
-The legend lives in the existing info dialog rather than on the strip, which is
-what keeps it to 235px. The win here is correctness and speed; the height is a
-bonus.
+`.custom-map-class2` reserves 300px of chrome. So `calc(100vh - 300px)` becomes
+`calc(100vh - 270px)`: the track is 128px (an 11px hit margin, two 45px lanes
+and the 27px axis), which with the toolbar, the window label, the readout and
+the gaps makes the strip about 203–206px, and the per-column chrome outside the
+strip is 64px — 270px in all. That is roughly 30px back to the maps, and a
+little more when a collection is toggled off and its band collapses. 270 was
+measured twice independently while the strip was built, and the measurement
+beat the 250px this section first estimated, so do not "fix" the code back to
+250. The legend lives in the existing info dialog rather than on the strip,
+which is what keeps the strip to about 205px. The win here is correctness and
+speed; the height is a bonus.
 
 ### 4.8 Keyboard access
 
@@ -249,12 +252,18 @@ change — only how its metadata is retrieved.
 ```
 <project_dir>/imagery/
   scenes.parquet   one row per granule
-  tiles.parquet    one row per distinct tile: tile, source, geometry (WKB, EPSG:4326)
+  tiles.parquet    one row per distinct tile: tile, geometry (WKB, EPSG:4326)
   index.json       manifest
 ```
 
-`scenes.parquet` columns: `source` (str), `acquired` (datetime64, UTC), `cloud`
-(float32), `tile` (str), `key` (str), `minx` / `miny` / `maxx` / `maxy` (float32).
+`scenes.parquet` columns: `source` (str), `date` (datetime64\[ns\], the UTC
+acquisition instant), `cloud` (float32), `tile` (str), `key` (str) — and nothing
+else. There is deliberately **no per-scene geometry and no per-scene bounding
+box**, for the reason §5.1 gives: every granule of a tile shares the tile's
+footprint, `tile` is the foreign key into `tiles.parquet`, and §6 tests the
+footprint once per tile rather than once per scene. An earlier draft of this
+section listed `acquired` and `minx` / `miny` / `maxx` / `maxy`; that
+contradicted §5.1 and the implemented frame follows §5.1.
 
 `index.json`:
 
