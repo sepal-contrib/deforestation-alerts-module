@@ -871,7 +871,7 @@ def build_timeline(app_state, analysis, widgets):
                                     "aria-label": t("analysis.timeline.legend_label"),
                                     "aria-expanded": "false", "aria-controls": _LEGEND_ID},
                         style_=(f"display: inline-flex; align-items: center; justify-content: center; "
-                                f"width: 18px; height: 18px; border-radius: 9px; cursor: help; "
+                                f"width: 18px; height: 18px; border-radius: 9px; cursor: pointer; "
                                 f"background: none; padding: 0; "
                                 f"border: 1px solid #44403a; color: {MUTED}; font-size: 11px"),
                         children=["?"])
@@ -890,9 +890,9 @@ def build_timeline(app_state, analysis, widgets):
     card = v.Card(flat=True, class_="analysis-timeline", children=[
         v.Html(tag="div", style_="display: flex; align-items: center; gap: 10px; padding: 0 8px 6px",
                children=[chips, help_badge, v.Spacer(), fold, unfold, slider, status]),
+        legend_text,
         v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px",
                children=[_side("left", "‹"), track, message, _side("right", "›")]),
-        legend_text,
         v.Html(tag="div", style_="padding: 8px", children=[readout_row]),
     ])
 

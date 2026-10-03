@@ -698,7 +698,11 @@ def _kb_state():
                              (S2, "2026-04-24", 5.0), (LS, "2026-08-27", 3.0)])
 
 
-def test_each_lane_is_one_tab_stop():
+def test_the_lanes_are_the_only_elements_claiming_an_explicit_tab_stop():
+    """Not the only tab stops: the toolbar's buttons, the chips, the slider and
+    the legend button are all natively focusable and meant to be. What this
+    pins is that the two lanes are the only elements that *claim* a tab stop
+    with ``tabindex="0"``, and that no stripe claims one at all."""
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
     stops = [w for w in _walk(card)
              if (getattr(w, "attributes", None) or {}).get("tabindex") == "0"]
@@ -721,6 +725,44 @@ def test_one_bare_keydown_handler_per_lane_is_the_only_shape_ipyvue_allows():
         assert _lane(card, which)._events == ["keydown"]
 
 
+def test_the_arrows_walk_the_right_way_and_home_and_end_reach_the_right_ends():
+    """The glue between ``key_action``'s string and ``step``'s ``delta`` is two
+    lines, and it is the likeliest typo site in the widget: ``step(..., -1)``
+    is pinned as a pure function and ``key_action({"key": "ArrowLeft"})`` is
+    pinned as a lookup, but nothing tied the two together through the handler.
+    Inverting the direction left every other test passing.
+
+    ``_kb_state``'s navigable rows are, in date order: 2026-04-05, 04-12,
+    04-24 (all Sentinel 2) and 2026-08-27 (Landsat). June and July are
+    collapsed by ``auto_collapsed``, and the auto-pick starts the cursor on
+    04-24, the last row before the alert window opens.
+    """
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
+    lane = _lane(card, "0")
+    first = f"b-{scene_index.row_id(S2, date(2026, 4, 5))}"
+    second = f"b-{scene_index.row_id(S2, date(2026, 4, 12))}"
+    third = f"b-{scene_index.row_id(S2, date(2026, 4, 24))}"
+    last = f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
+    assert _cursor_id(lane) == third
+    _press(lane, "ArrowLeft")
+    assert _cursor_id(lane) == second, "Left goes to the earlier row"
+    _press(lane, "ArrowLeft")
+    assert _cursor_id(lane) == first
+    _press(lane, "ArrowLeft")
+    assert _cursor_id(lane) == first, "and stops at the first, it does not wrap"
+    _press(lane, "ArrowRight")
+    assert _cursor_id(lane) == second, "Right goes to the later row"
+    _press(lane, "ArrowRight")
+    _press(lane, "ArrowRight")
+    assert _cursor_id(lane) == last
+    _press(lane, "ArrowRight")
+    assert _cursor_id(lane) == last, "and stops at the last"
+    _press(lane, "Home")
+    assert _cursor_id(lane) == first, "Home is the first row, not the last"
+    _press(lane, "End")
+    assert _cursor_id(lane) == last, "End is the last row, not the first"
+
+
 def test_arrowing_moves_the_cursor_without_assigning_anything():
     """Spec 4.8: arrows move, Enter assigns. If an arrow assigned, walking ten
     scenes would queue ten map redraws."""
@@ -736,15 +778,30 @@ def test_arrowing_moves_the_cursor_without_assigning_anything():
     assert _cursor_id(lane) != start
 
 
-def test_arrowing_the_after_lane_leaves_the_before_lane_alone():
+def test_each_lane_has_a_cursor_of_its_own():
+    """Asserting the landed id and not merely its ``a-`` prefix: the prefix
+    comes from the lane that *rendered* the id, not from the cursor it read, so
+    one shared reactive behind both lanes would satisfy ``startswith("a-")``
+    while the after lane's own cursor had never moved. It did."""
     analysis = _fake_analysis()
     card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
     before_lane, after_lane = _lane(card, "0"), _lane(card, "1")
-    was = _cursor_id(before_lane)
+    b_pick = f"b-{scene_index.row_id(S2, date(2026, 4, 24))}"
+    a_pick = f"a-{scene_index.row_id(LS, date(2026, 8, 27))}"
+    assert (_cursor_id(before_lane), _cursor_id(after_lane)) == (b_pick, a_pick)
+
     _press(after_lane, "Home")
-    assert _cursor_id(before_lane) == was
-    assert _cursor_id(after_lane).startswith("a-")
-    assert analysis.after_info.value[3] != "Sentinel 2 2026-04-05 "  # still unassigned
+    assert _cursor_id(after_lane) == f"a-{scene_index.row_id(S2, date(2026, 4, 5))}"
+    assert _cursor_id(before_lane) == b_pick, "the before lane did not move with it"
+
+    _press(before_lane, "ArrowRight")
+    assert _cursor_id(before_lane) == f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
+    assert _cursor_id(after_lane) == f"a-{scene_index.row_id(S2, date(2026, 4, 5))}", \
+        "and the after lane stayed where its own Home put it"
+
+    # and neither walk published anything: both sides still read their auto-pick
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
 
 
 def test_a_key_the_lane_does_not_use_does_nothing():
@@ -825,6 +882,27 @@ def test_emptying_the_track_takes_the_cursor_with_it():
                  if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"]:
         chip.fire_event("click", None)
     assert timeline.t("analysis.timeline.no_images") in _text(card)
+    assert "aria-activedescendant" not in (lane.attributes or {})
+
+
+def test_dropping_the_alert_takes_the_cursor_off_the_lane():
+    """``imagery_ctx`` going to ``None`` empties the track through
+    ``_clear_track``, which is the one emptying path ``_render_lane`` never
+    runs for -- so the ``aria-activedescendant`` drop has to happen there too,
+    or the lane goes on naming a stripe that is no longer in the tree.
+
+    ``test_emptying_the_track_takes_the_cursor_with_it`` does not cover this:
+    the chips are switched off one at a time, so the last render before the
+    track empties is a ``_render_lane`` that has already dropped the key.
+    """
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(_kb_state(), _fake_analysis(), widgets)
+    lane = _lane(card, "0")
+    _press(lane, "End")
+    assert _cursor_id(lane) == f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
+    widgets.imagery_ctx.set(None)
+    assert timeline.t("analysis.timeline.no_images") in _text(card)
+    assert list(lane.children) == []
     assert "aria-activedescendant" not in (lane.attributes or {})
 
 
