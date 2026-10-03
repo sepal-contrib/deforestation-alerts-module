@@ -371,9 +371,12 @@ pruned files: an English key no code uses fails
 `alert_info.status_not_reviewed`, `questionarie.confirmation_yes`,
 `questionarie.confirmation_no`, `questionarie.confirmation_revision`,
 `edition_labels.save_edit_button`, `edition_labels.edit_title`,
-`export_labels.export_title`, `export_labels.save_btn` is **kept** (the
-secondary Save), `edition_labels.start_edit_button` and
-`.stop_edit_button` are **kept** (now visible labels, not tooltips).
+`export_labels.export_title`.
+
+Kept, with a new job: `export_labels.save_btn` is the secondary *Save* of block
+B; `questionarie.confirmation_q` is the verdict group's `aria-label`;
+`edition_labels.start_edit_button` and `.stop_edit_button` become visible
+labels instead of tooltips.
 
 `analysis_tile.info_md` and `analysis_tile.description` are rewritten in all
 three locales: they name the navigator card, the export card and a *Save* that

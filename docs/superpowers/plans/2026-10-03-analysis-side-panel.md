@@ -1293,7 +1293,7 @@ git commit -m "refactor(analysis): the review save becomes a runner the panel ca
   - `REVIEW_CHOICES` — unchanged name and statuses, new label keys:
     `(("Confirmed", "analysis_tile.verdict.true"), ("False Positive", "analysis_tile.verdict.false"), ("Need revision", "analysis_tile.verdict.revision"))`
     (`export.review_status` keeps importing it.)
-  - `build_review_panel(widgets, app_state, analysis, app_tile_model) -> v.Card` — same signature as today, now using all four arguments.
+  - `build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=None) -> v.Card` — today's four arguments plus the save runner. `run_save` is **the export section's runner** when the tile has one (Task 10 passes it), so a save from the verdict block runs the same `_apply_save` and enables the export build button; left out, the block makes its own with `make_save_runner`'s default apply, which is what the tests use.
   - `verdict_widgets(card) -> (buttons, driver_box, note, save_next, save, state_line)` for the tests. `buttons` is a dict keyed by status.
   - `widgets.driver_combobox` stays the contract; `widgets.confirmation_select` is **gone**.
 
@@ -1513,8 +1513,13 @@ def verdict_widgets(card):
     return (s["buttons"], s["driver_box"], s["note"], s["save_next"], s["save"], s["state_line"])
 
 
-def build_review_panel(widgets, app_state, analysis, app_tile_model):
-    """Build and return the verdict card."""
+def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=None):
+    """Build and return the verdict card.
+
+    ``run_save`` is the export section's runner when the tile has one, so a
+    save from here runs the same post-save step and the export section's build
+    button lights up; without it the block makes its own.
+    """
     buttons = {}
     for status, key in REVIEW_CHOICES:
         btn = v.Btn(
@@ -1562,7 +1567,8 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model):
                  children=[t("analysis_tile.export_labels.save_btn")])
     state_line = v.Html(tag="div", class_="caption mt-2", children=[])
 
-    run_save = make_save_runner(widgets, app_state, analysis, app_tile_model)
+    if run_save is None:
+        run_save = make_save_runner(widgets, app_state, analysis, app_tile_model)
     save.on_event("click", lambda *_: run_save(save))
     save_next.on_event("click", lambda *_: run_save(save_next, then=app_state.go_next))
 
@@ -2090,6 +2096,9 @@ Replace the `controls` block of `build_analysis_layout` with:
     )
     refine.body_box.children = [refine_body]
 
+    # Built before the verdict block so the two share one save runner: a save
+    # from either button runs the export section's _apply_save, which is what
+    # enables its build button.
     exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"))
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
@@ -2107,7 +2116,8 @@ Replace the `controls` block of `build_analysis_layout` with:
             build_set_status_banner(app_state),
             build_context(app_state, id_field),
             build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis,
-                               app_tile_model=app_tile_model),
+                               app_tile_model=app_tile_model,
+                               run_save=export_parts.run_save),
             refine.root,
             exports.root,
         ],
