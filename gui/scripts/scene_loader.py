@@ -219,22 +219,44 @@ def SceneIndexLoader(app_state, gee_interface):
         *recorded* rather than only logged so the toolbar can disable the
         Planet toggle and say why (spec §5.4).
         """
-        chunk = None
         try:
             chunk = _planet_chunk(p, window)
-            if chunk is None:
-                # This chunk asked NICFI nothing, so it has learnt nothing:
-                # ``store_chunk`` keeps what the manifest already recorded for
-                # ``None``. Reporting "no access" here would switch the Planet
-                # toggle off as soon as the first widening month landed.
-                return (tables, None)
-            rows = scene_index.parse_planet(await gee_interface.get_info_async(chunk[1]))
         except Exception as exc:  # noqa: BLE001
+            # Nothing in ``_planet_chunk`` is an expected failure -- "no NICFI
+            # over this AOI" is a ``None`` return -- so an exception here is a
+            # defect or an Earth Engine client that was never initialised. It
+            # reaches the server log in full and claims nothing about the
+            # licence, because it learnt nothing about it.
+            logger.warning("Planet NICFI request for %s could not be built: %s",
+                           name, error_text(exc), exc_info=True)
+            return (tables, None)
+        if chunk is None:
+            # This chunk asked NICFI nothing, so it has learnt nothing:
+            # ``store_chunk`` keeps what the manifest already recorded for
+            # ``None``. Reporting "no access" here would switch the Planet
+            # toggle off as soon as the first widening month landed.
+            return (tables, None)
+        try:
+            raw = await gee_interface.get_info_async(chunk[1])
+        except Exception as exc:  # noqa: BLE001
+            # The licence gate. A project without a NICFI licence is refused
+            # here, which is an ordinary outcome: it is recorded for the
+            # toolbar and logged at INFO rather than warned about. (A
+            # transient outage arrives the same way and cannot be told apart
+            # by its text; the next full refresh records the access again.)
             logger.info("no Planet NICFI rows for %s: %s", name, error_text(exc))
-            # A request that could not even be built says nothing about
-            # access; one Earth Engine refused says there is none.
-            return (tables, None if chunk is None
-                    else scene_index.PlanetState(region=chunk[0], access=False))
+            return (tables, scene_index.PlanetState(region=chunk[0], access=False))
+        try:
+            rows = scene_index.parse_planet(raw)
+        except Exception as exc:  # noqa: BLE001
+            # Earth Engine answered and ``parse_planet`` could not read the
+            # answer: a defect on our side, not a permission problem.
+            # Recording "no Planet access" would hide a bug behind a
+            # plausible-looking outcome, so this records nothing and the
+            # traceback goes to the server log.
+            logger.warning("Planet NICFI rows of %s could not be read: %s",
+                           name, error_text(exc), exc_info=True)
+            return (tables, None)
         return (
             scene_index.SceneTables(
                 scenes=pd.concat([tables.scenes, rows], ignore_index=True), tiles=tables.tiles),
@@ -258,6 +280,17 @@ def SceneIndexLoader(app_state, gee_interface):
         # inside it, so no lock is held here and no pre-read snapshot is
         # passed in: the background widener and this call merge onto each
         # other rather than over each other.
+        #
+        # Checked here too, as late as it can be: ``to_thread_in_context`` is
+        # not cancellable, so an AOI changed while a chunk is in flight would
+        # have this ``store_chunk`` write the *old* AOI's rows after the
+        # rebuild of the new one -- ``scene_cache`` compares digests and would
+        # take this chunk for the newer truth. It self-heals (the publish
+        # below is blocked, and the next ``read_index`` sees the mismatch and
+        # rebuilds), but it costs a refetch, so the window is kept as narrow
+        # as one check can make it.
+        if not _still_current():
+            return None
         merged, manifest = await to_thread_in_context(
             scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
             now=datetime.now(timezone.utc), replace=(mode == "rebuild"),
@@ -323,6 +356,12 @@ def SceneIndexLoader(app_state, gee_interface):
             app_state.scene_index_error.set(message)
             notifications.error(t("imagery.index_failed", error=message))
         finally:
+            # Known, deferred: a dependency change cancels this task at its
+            # next await, and this ``finally`` can run *after* the replacement
+            # run has already set the flag True -- so a spinner driven by it
+            # can blink off mid-fetch. The fix is a generation counter (only
+            # the newest run may lower the flag) and it belongs with the task
+            # that renders the flag, not here.
             app_state.scene_index_pending.set(False)
 
     load = solara.lab.use_task(_load, dependencies=[name, digest, fg, origin, retry],

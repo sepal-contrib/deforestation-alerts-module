@@ -16,6 +16,7 @@ fail loudly if the behaviour they name regresses:
 """
 
 import asyncio
+import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -88,6 +89,14 @@ def _manifest(start, end, *, digest="d1", age_hours=0.0):
 
 
 # --------------------------------------------------------------- pure windows
+def test_the_default_windows_are_the_ones_the_spec_asks_for():
+    """Every component test below monkeypatches these, so without this one
+    assertion the defaults could be changed to 1 and 3 and nothing would go
+    red. They are the spec's numbers: two months around the alert window is
+    what the timeline shows, six is what the background widener fills."""
+    assert (sl.FOREGROUND_MONTHS, sl.BACKGROUND_MONTHS) == (2, 6)
+
+
 def test_the_wanted_window_pads_the_active_period_by_whole_months():
     p = _with_period(_p())
     # The pad is whole months on the start; the end is padded and then clamped
@@ -550,6 +559,112 @@ def test_every_stored_window_touches_the_coverage_it_merges_into(
     assert len(seen) >= 4 and sum(1 for covered, _ in seen if covered is not None) >= 3
 
 
+def test_a_widen_window_pushed_off_the_coverage_edge_is_snapped_back(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """Requirement 1 again, with the threat injected.
+
+    The test above proves the windows this loader computes today are
+    contiguous; this one proves the *guard* is what keeps them so. With
+    ``scene_query.refresh_window`` returning a widen window pushed ten days
+    away from the coverage edge -- the way another window source (a per-tile
+    refetch, a "jump to this date") could get it wrong -- nothing that reaches
+    ``store_chunk`` may still leave a gap. Neutralise ``contiguous`` and the
+    pairs this spy records go non-contiguous and the assertion fails.
+    """
+    seen = []
+    real_store = scene_cache.store_chunk
+    real_refresh = sl.scene_query.refresh_window
+    off = timedelta(days=10)
+
+    def off_edge(manifest, want, mode):
+        start, end = real_refresh(manifest, want, mode)
+        if mode != "widen" or manifest is None:
+            return (start, end)
+        # push the near edge away from what is covered, in whichever
+        # direction this side is being widened
+        return (start + off, end) if start >= manifest.covered.end else (start, end - off)
+
+    def spy(pdir, tables, window, digest, **kwargs):
+        _, before = scene_cache.read_index(pdir)
+        live = None if kwargs.get("replace") or before is None or before.aoi_digest != digest else before.covered
+        seen.append((live, window))
+        return real_store(pdir, tables, window, digest, **kwargs)
+
+    async def get_info_async(obj):
+        return RAW
+
+    monkeypatch.setattr(sl.scene_query, "refresh_window", off_edge)
+    monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 6)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_widening.value is False
+                                 and state.scene_manifest.value is not None
+                                 and state.scene_manifest.value.covered.start == date(2025, 11, 3))
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+    day = timedelta(days=1)
+    gaps = [(covered, window) for covered, window in seen
+            if covered is not None and (window[0] - covered.end > day or covered.start - window[1] > day)]
+    assert gaps == [], f"an off-edge window reached store_chunk unsnapped: {gaps}"
+    # not vacuous: at least one widening chunk went through off_edge
+    assert sum(1 for covered, _ in seen if covered is not None) >= 2
+
+
+def test_the_pending_and_widening_flags_are_raised_while_their_fetch_runs(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """Tasks 10-12 render a spinner from ``scene_index_pending`` and
+    ``scene_widening``, and every other test here only ever asserts them
+    ``False`` -- so an implementation that never raised either would pass them
+    all. Each request waits on an event the test sets, so the flag is observed
+    while the fetch is genuinely in flight, with no sleeping and no reliance on
+    an interleaving happening to occur.
+    """
+    foreground, widening = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def get_info_async(obj):
+        calls.append(obj)
+        if len(calls) == 1:
+            await foreground.wait()  # the foreground window
+        elif len(calls) == 2:
+            await widening.wait()  # the first background month
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 4)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: len(calls) == 1)
+            assert state.scene_index_pending.value is True
+            assert state.scene_widening.value is False
+            foreground.set()
+            assert await _settle(lambda: len(calls) == 2)
+            assert state.scene_widening.value is True
+            assert state.scene_index_pending.value is False  # the foreground is done
+            widening.set()
+            assert await _settle(lambda: state.scene_widening.value is False)
+            assert state.scene_index_pending.value is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_changed_aoi_rebuilds_the_index_rather_than_merging_into_it(
         data_root, monkeypatch, no_planet, local_aoi):
     pdir = paths.project_dir("sl")
@@ -662,6 +777,48 @@ def test_a_planet_request_that_cannot_even_be_built_costs_nothing(data_root, mon
             assert state.scene_manifest.value.planet.access is False
         finally:
             rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_planet_answer_that_cannot_be_parsed_is_a_defect_not_a_licence_refusal(
+        data_root, monkeypatch, local_aoi, caplog):
+    """Earth Engine answered, so the licence is there; ``parse_planet`` failing
+    on the answer is a bug on our side. Recording "no Planet access" for it
+    would hide that bug behind a plausible-looking outcome and leave nothing in
+    the server log, so this path records nothing and warns with the traceback.
+    """
+    def boom(raw):
+        raise KeyError("millis")
+
+    async def get_info_async(obj):
+        return PLANET_RAW if obj[0] == "PLANET" else RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
+    monkeypatch.setattr(sl.scene_index, "parse_planet", boom)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    async def main():
+        with caplog.at_level(logging.INFO, logger="SEPALUI.deforestation_alerts.scene_loader"):
+            box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+            try:
+                assert await _settle(lambda: state.scene_index.value is not None)
+                assert state.scene_index.value.scenes["source"].tolist() == [S2]
+                assert state.scene_index_error.value is None  # the index itself is fine
+                # nothing recorded: the answer said access exists, and this
+                # failure says nothing about the licence either way
+                assert state.scene_manifest.value.planet.region is None
+                # the reviewer is told nothing: the months they asked for are
+                # all there, and a defect of ours is not theirs to act on
+                assert _toasts("error") == [] and _toasts("info") == []
+            finally:
+                rc.close()
+        warnings = [r for r in caplog.records
+                    if r.levelno >= logging.WARNING and "Planet" in r.getMessage()]
+        assert len(warnings) == 1 and warnings[0].exc_info is not None
 
     asyncio.run(main())
 
