@@ -141,5 +141,9 @@
       "report_template_bad": "{path} n'est pas un fichier Word (.docx) de votre dossier SEPAL ; le modèle de rapport n'a pas été changé.",
       "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau dans la carte d'export, ou videz le champ pour utiliser le modèle par défaut."
     }
+  },
+  "imagery": {
+    "index_failed": "Impossible d'actualiser l'index des images : {error}",
+    "index_rebuilding": "Reconstruction de l'index des images de cette zone"
   }
 }

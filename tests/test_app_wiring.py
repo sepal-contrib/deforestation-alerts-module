@@ -323,6 +323,7 @@ def test_no_traitlets_models_in_new_code():
                 "gui/scripts/inflight.py", "gui/scripts/integrate_jobs.py", "gui/scripts/map_layers.py",
                 "gui/scripts/pmtiles_map.py", "gui/scripts/prepare_jobs.py", "gui/scripts/raster_map.py",
                 "gui/scripts/remote_facts.py", "gui/scripts/coverage_ui.py",
+                "gui/scripts/scene_cache.py", "gui/scripts/scene_loader.py",
                 "gui/scripts/set_context.py", "gui/scripts/set_store.py", "gui/scripts/tile_proxy.py",
                 "deforestation_alerts/scripts/alert_store.py", "deforestation_alerts/scripts/alert_table.py"):
         path = ROOT / rel

@@ -141,5 +141,9 @@
       "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
       "report_template_missing": "La plantilla de informe {path} ha desaparecido. Vuelve a elegirla en la tarjeta de exportación, o deja el campo vacío para usar la plantilla predeterminada."
     }
+  },
+  "imagery": {
+    "index_failed": "No se pudo actualizar el índice de imágenes: {error}",
+    "index_rebuilding": "Reconstruyendo el índice de imágenes de esta zona"
   }
 }

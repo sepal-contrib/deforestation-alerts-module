@@ -141,5 +141,9 @@
       "report_template_bad": "{path} is not a Word file (.docx) in your SEPAL folder; the report template was not changed.",
       "report_template_missing": "The report template {path} is gone. Pick it again in the export card, or clear the field to use the default template."
     }
+  },
+  "imagery": {
+    "index_failed": "Could not refresh the image index: {error}",
+    "index_rebuilding": "Rebuilding the image index for this area"
   }
 }

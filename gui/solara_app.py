@@ -57,6 +57,7 @@ from gui.scripts import alert_layers, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.remote_facts import RemoteFactsLoader
+from gui.scripts.scene_loader import SceneIndexLoader
 from gui.scripts.set_context import SetContext
 from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend
 from gui.scripts.solara_threads import spawn_in_context
@@ -879,3 +880,6 @@ def _AppShell():
     _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)
     _AlertLayers(app_state=app_state, layers=layers, map_=map_)
     RemoteFactsLoader(app_state=app_state, gee_interface=gee_interface)
+    # App level, not inside a step: the project's scene index survives every
+    # navigation, so opening Analysis finds the timeline already loaded.
+    SceneIndexLoader(app_state=app_state, gee_interface=gee_interface)

@@ -59,6 +59,21 @@ class AppState:
         self.coverage_retry = solara.reactive(0)  # "Check again" bumps it
         self.coverage_refreshed = solara.reactive(frozenset())  # {(aoi_digest, key)} refreshed this session
         self.sidecar_pending = solara.reactive(False)
+        # The project's scene index, fetched by gui.scripts.scene_loader.
+        # SceneIndexLoader (holds DataFrames; cached on disk, not in the
+        # project document). The timeline reads it for every alert, so it is
+        # compared by identity: a merged copy is a new index.
+        self.scene_index = solara.reactive(None, equals=lambda a, b: a is b)
+        self.scene_manifest = solara.reactive(None, equals=lambda a, b: a is b)
+        self.scene_index_pending = solara.reactive(False)
+        self.scene_index_error = solara.reactive(None)
+        self.scene_index_retry = solara.reactive(0)  # the timeline's "Try again" bumps it
+        self.scene_widening = solara.reactive(False)  # the ±6-month background fill is running
+        # The widest window the timeline has been asked to show, published by
+        # the strip's "+1 month" buttons. The loader unions it with the default
+        # ±2 months, so a month outside the cache is fetched rather than drawn
+        # empty. A tuple of two dates, or None for "the default is enough".
+        self.scene_window_request = solara.reactive(None)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the
         # auto-save hook skips that publish (it would just rewrite the file).
@@ -123,6 +138,14 @@ class AppState:
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
             self.goto_alert.set(None)
+            # The scene index is per project and per AOI: the previous
+            # project's granules must not answer this one's alerts for the
+            # moment it takes SceneIndexLoader to read the new index, and the
+            # "+1 month" window belongs to the view that asked for it.
+            self.scene_index.set(None)
+            self.scene_manifest.set(None)
+            self.scene_index_error.set(None)
+            self.scene_window_request.set(None)
             self.save_error.set(None)  # before the set: the auto-save may report into it
             # An opened project was last saved when its manifest says (spec §4.1
             # "saved X ago"); a new one has never been saved: the auto-save stamps it.
