@@ -38,8 +38,11 @@ class AnalysisState:
     #: the granule keys the chosen (source, date) mosaics for *this* alert --
     #: what ``image_slider_map_callback`` rebuilds the ee.Image from. Per
     #: alert, because which granules overlap depends on the alert.
-    before_keys: solara.Reactive = field(default_factory=lambda: solara.reactive([]))
-    after_keys: solara.Reactive = field(default_factory=lambda: solara.reactive([]))
+    #: These compare by list equality, so setting ``[]`` on an already-empty
+    #: one notifies nobody: the matching ``*_info`` publish is the trigger,
+    #: and the timeline sets the keys *before* the info for that reason.
+    before_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
+    after_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
     #: Planet monthly image lists (None until a source publishes them)
     before_planet: solara.Reactive = field(default_factory=_plain)
     after_planet: solara.Reactive = field(default_factory=_plain)

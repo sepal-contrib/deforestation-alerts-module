@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import geopandas as gpd
 import pandas as pd
 import pytest
+from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import AoiRecord, Period, Project
@@ -146,11 +147,30 @@ def test_one_scene_on_both_sides_is_named_as_that_and_not_as_zero_change():
 
 # ------------------------------------------------------------- the geometry
 
+def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
+    """Every other geometry test reads these through ``timeline.*``, so it
+    would still pass on a 500px track in the wrong colours. These are the
+    literals from the spec and the approved mockup, written out here on
+    purpose: nothing below may be "adjusted" without this test saying so."""
+    assert (timeline.TRACK_PX, timeline.LANE_H, timeline.AXIS_H) == (1120.0, 45, 27)
+    assert timeline.VIEW_MONTHS == 2  # the default view is the alert window +/- 2 months
+    assert timeline.BAND == {"Sentinel 2": (0, 17), "Landsat": (19, 14), "Planet NICFI": (35, 10)}
+    assert timeline.SRC_COLOR == {"Sentinel 2": "#7fa8e0", "Landsat": "#c9a87c",
+                                  "Planet NICFI": "#9bd98a"}
+    assert timeline.SELECTED_COLOR == "#bf8f2d"  # the theme's primary_contrast
+    assert (timeline.STRIPE_PX, timeline.SELECTED_STRIPE_PX, timeline.HIT_PX) == (2.5, 4.0, 11)
+    assert (timeline.HIDDEN_SCALE, timeline.HIDDEN_OPACITY) == (0.45, 0.3)
+    assert scene_query.COLLAPSED_PX == 66.0  # a collapsed month is a fixed block
+    # the display labels, which are UI-only: the keys above are the data strings
+    assert timeline.SRC_LABEL == {"Sentinel 2": "Sentinel-2", "Landsat": "Landsat",
+                                  "Planet NICFI": "Planet"}
+
+
 def test_a_stripe_lands_on_its_own_date():
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX)
     style = timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
     pct = 100 * scene_query.x_for(segs, date(2026, 3, 11)) / timeline.TRACK_PX
-    assert f"{pct:.3f}%" in style
+    assert _left_pct(style) == pytest.approx(pct, abs=0.001)
     assert "width: 11px" in style
 
 
@@ -309,11 +329,14 @@ def test_the_upper_lane_sets_the_before_image_and_the_lower_one_the_after():
     # the only stripe outside the alert window's collapsed months and not
     # already chosen on that side: the Landsat one for "before"
     target = scene_index.row_id(LS, date(2026, 8, 27))
+    was_after = analysis.after_info.value
     _click(upper, target)
     assert analysis.before_info.value[0] == LS
-    assert analysis.after_info.value[0] == LS
+    # the upper lane is the before side *only*: the after publish is untouched
+    assert analysis.after_info.value is was_after
     _click(lower, scene_index.row_id(S2, date(2026, 4, 24)))
     assert analysis.after_info.value[0] == S2
+    assert analysis.before_info.value[0] == LS
 
 
 def test_a_hidden_row_is_drawn_but_carries_no_click_handler():
@@ -326,6 +349,11 @@ def test_a_hidden_row_is_drawn_but_carries_no_click_handler():
                if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith(aria)]
     assert buttons and all("click" not in (b._events or []) for b in buttons)
     assert all("cursor: default" in (b.style_ or "") for b in buttons)
+    # ``disabled``, not only ``aria-disabled``: the native attribute is what
+    # takes the stripe out of the tab order, which Task 11's keyboard
+    # navigation needs for hidden rows.
+    assert all(b.attributes.get("disabled") == "disabled" for b in buttons)
+    assert all(b.attributes.get("aria-disabled") == "true" for b in buttons)
 
 
 def test_the_builder_renders_an_empty_timeline_before_any_index_arrives():
@@ -355,6 +383,52 @@ def test_an_index_that_lands_after_the_build_fills_the_strip():
         scenes=scenes.assign(tile="W", key="k")[list(scene_index.SCENE_COLUMNS)], tiles=TILES))
     assert timeline.t("analysis.timeline.no_images") not in _text(card)
     assert analysis.before_info.value[0] == S2
+
+
+def test_a_second_alert_on_the_same_index_still_gets_its_own_pick():
+    """``ctx["alert_id"]`` is ``actual_alert_id``, an *index* into the active
+    set's rows, so a different alert can land on the same number -- switching
+    sets, or reloading one. Keyed on the index alone the builder treats the
+    second alert as the first and skips the auto-collapse and the auto-pick,
+    while ``reset_alert`` has already cleared ``before_info``: the readout then
+    names an image nobody published. The identity is the index *and*
+    ``AnalysisState.alert_token``, which ``reset_alert`` bumps.
+    """
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-06-10", 8.0), (S2, "2026-08-27", 3.0)]
+    state = _fake_state(rows=rows)
+    analysis = _fake_analysis()
+    widgets = _fake_widgets()
+    # the tile publishes ``analysis.alert_token.value`` as the ctx's token
+    # (analysis_tile.py), so the fake has to carry the live one, not a literal
+    first = dict(_ctx())
+    first["token"] = analysis.alert_token.value
+    widgets.imagery_ctx.set(first)
+    card = timeline.build_timeline(state, analysis, widgets)
+    assert analysis.before_info.value[0] == S2  # 2026-04-24, the first alert's pick
+    # June is inside the first alert's window, so it is folded away and the
+    # Landsat row has no stripe at all
+    assert not _clickable_for(card, date(2026, 6, 10))
+
+    # what the tile does on every alert change, in its order
+    analysis.reset_alert()
+    assert analysis.before_info.value is None
+    moved = dict(_ctx(date_min=date(2026, 6, 20), date_max=date(2026, 7, 10)))
+    assert moved["alert_id"] == 7  # the same index as the first alert
+    moved["token"] = analysis.alert_token.value  # bumped by reset_alert
+    assert moved["token"] != first["token"]
+    widgets.imagery_ctx.set(moved)
+
+    # a fresh pick for the new dates, not the first alert's
+    assert analysis.before_info.value is not None
+    assert analysis.before_info.value[0] == LS
+    assert analysis.before_info.value[3] == "Landsat 2026-06-10 "
+    assert analysis.before_keys.value
+    # and the readout agrees with what was published, rather than still
+    # naming the previous alert's image
+    text = _text(card)
+    assert "Landsat 2026-06-10" in text and "Sentinel-2 2026-04-24" not in text
+    # the new window re-collapsed from scratch: June is a margin month now
+    assert _clickable_for(card, date(2026, 6, 10))
 
 
 def test_a_stale_index_whose_refresh_failed_reports_both_the_age_and_the_failure():
@@ -446,11 +520,32 @@ def test_a_collapsed_month_shows_its_visible_count_and_expands_on_click():
     state = _fake_state(rows=[(S2, "2026-06-05", 8.0), (S2, "2026-06-15", 8.0), (S2, "2026-04-24", 8.0)])
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     block = next(w for w in _walk(card)
-                 if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith("JUN 2026"))
+                 if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith("Jun 2026"))
     assert "2" in _text(block) and timeline.t("analysis.timeline.images") in _text(block)
     stripes = _count_stripes(card)
     block.fire_event("click", None)
     assert _count_stripes(card) == stripes + 4  # two rows, in both lanes
+
+
+def test_the_month_labels_are_in_the_readers_language():
+    """``strftime("%b")`` gives "JUN" in every locale, and that label is
+    interpolated into the translated ``collapsed_month`` / ``collapse_month``
+    aria-labels -- so a French reader would hear "JUN 2026, 2 images, repli\u00e9."
+    """
+    rows = [(S2, "2026-06-05", 8.0), (S2, "2026-06-15", 8.0), (S2, "2026-04-24", 8.0)]
+    english = _month_labels(timeline.build_timeline(_fake_state(rows=rows), _fake_analysis(),
+                                                   _fake_widgets()))
+    assert any(label.startswith("Jun 2026") for label in english)   # the collapsed block
+    assert any(label.startswith("Apr") for label in english)        # an axis month
+    set_locale("fr")
+    try:
+        french = _month_labels(timeline.build_timeline(_fake_state(rows=rows), _fake_analysis(),
+                                                       _fake_widgets()))
+    finally:
+        set_locale("en")
+    assert any(label.startswith("juin 2026") for label in french)
+    assert any(label.startswith("avr.") for label in french)
+    assert not [label for label in french if "Jun" in label or "Apr" in label]
 
 
 def test_widening_past_the_coverage_asks_the_loader_for_the_month():
@@ -547,6 +642,23 @@ def _walk(widget):
     for child in (getattr(widget, "children", None) or ()):
         if not isinstance(child, str):
             yield from _walk(child)
+
+
+def _month_labels(card) -> list:
+    """Every month aria-label in the tree: the blocks' and the axis ticks'."""
+    out = []
+    for w in _walk(card):
+        label = (getattr(w, "attributes", None) or {}).get("aria-label", "")
+        if label and label not in (timeline.t("analysis.timeline.legend"),):
+            out.append(label)
+    return out
+
+
+def _clickable_for(card, when: date) -> list:
+    """The clickable stripes whose aria-label names ``when``."""
+    return [w for w in _walk(card)
+            if when.isoformat() in ((getattr(w, "attributes", None) or {}).get("aria-label", ""))
+            and "click" in (getattr(w, "_events", None) or [])]
 
 
 def _left_pct(style: str) -> float:

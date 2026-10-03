@@ -35,7 +35,7 @@ from deforestation_alerts.scripts.scene_index import (
     SOURCE_PLANET,
     SOURCE_S2,
 )
-from gui.i18n import t
+from gui.i18n import format_date, t
 from gui.scripts.scene_loader import shift_months
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -258,8 +258,18 @@ def _walk(widget):
 
 
 def _button(style, attrs, handler, child_style, cursor="pointer"):
+    """One absolutely-positioned button wrapping one coloured span.
+
+    A button with no handler is marked ``disabled``, not merely
+    ``aria-disabled``: the native attribute is what takes it out of the tab
+    order, so a row the cloud limit hides or a month that is folded away is
+    skipped by keyboard navigation without a tabindex of its own.
+    """
     attributes = {"type": "button"}
     attributes.update(attrs)
+    if handler is None:
+        attributes["disabled"] = "disabled"
+        attributes["aria-disabled"] = "true"
     btn = v.Html(tag="button", attributes=attributes,
                  style_=f"{style}; background: none; border: 0; padding: 0; cursor: {cursor}",
                  children=[v.Html(tag="span", style_=child_style)])
@@ -360,10 +370,10 @@ def build_timeline(app_state, analysis, widgets):
             head = f"{SRC_LABEL[row['source']]}, {d.isoformat()}"
             # A hidden row is not clickable, so its label must not offer the
             # action: the cloud limit is what stands between it and a pick.
+            # ``_button`` marks a handler-less stripe disabled/aria-disabled,
+            # so only the label and the selected state are decided here.
             attrs = {"aria-label": head if hidden else f"{head}, {set_label}"}
-            if hidden:
-                attrs["aria-disabled"] = "true"
-            elif rid == chosen:
+            if not hidden and rid == chosen:
                 attrs["aria-current"] = "true"
             hit = (month_bar_style(segs, d) if row["source"] == SOURCE_PLANET
                    else stripe_hit_style(segs, d, row["source"]))
@@ -387,7 +397,11 @@ def build_timeline(app_state, analysis, widgets):
         for key, seg in sorted(segs.items()):
             if not seg.collapsed:
                 continue
-            label = date(seg.year, seg.month, 1).strftime("%b %Y").upper()
+            # the locale's own month name: a CLDR pattern, not strftime, which
+            # would put "JUN 2026" inside a French aria-label. The visible
+            # label is uppercased by CSS, so the text a screen reader reads
+            # and the text interpolated into ``collapsed_month`` stay natural.
+            label = format_date(date(seg.year, seg.month, 1), "MMM y")
             n = counts.get(key, 0)
             btn = v.Html(
                 tag="button",
@@ -400,7 +414,8 @@ def build_timeline(app_state, analysis, widgets):
                         "border-right: 1px dashed #44403a; display: flex; flex-direction: column; "
                         f"align-items: center; justify-content: center; gap: 3px; color: {MUTED}"),
                 children=[
-                    v.Html(tag="span", style_="font-size: 9px; letter-spacing: 0.1em", children=[label]),
+                    v.Html(tag="span", style_="font-size: 9px; letter-spacing: 0.1em; "
+                                              "text-transform: uppercase", children=[label]),
                     v.Html(tag="span", style_="font-size: 16px; font-weight: 600; color: #f0ece6; "
                                               "line-height: 1", children=[str(n)]),
                     v.Html(tag="span", style_="font-size: 8px", children=[t("analysis.timeline.images")]),
@@ -428,14 +443,15 @@ def build_timeline(app_state, analysis, widgets):
         for key, seg in sorted(segs.items()):
             if seg.collapsed:
                 continue
-            label = date(seg.year, seg.month, 1).strftime("%b").upper()
+            label = format_date(date(seg.year, seg.month, 1), "MMM")
             btn = v.Html(
                 tag="button",
                 attributes={"type": "button",
                             "aria-label": t("analysis.timeline.collapse_month", month=label)},
                 style_=(f"position: absolute; left: calc({_pct(seg.x + seg.w / 2):.3f}% - 26px); "
                         "top: 7px; width: 52px; height: 18px; background: none; border: 0; "
-                        f"color: {MUTED}; font-size: 9.5px; letter-spacing: 0.1em; cursor: pointer"),
+                        f"color: {MUTED}; font-size: 9.5px; letter-spacing: 0.1em; "
+                        "text-transform: uppercase; cursor: pointer"),
                 children=[label])
             btn.on_event("click", lambda w, e, d, key=key: _collapse(key))
             kids.append(btn)
@@ -589,8 +605,17 @@ def build_timeline(app_state, analysis, widgets):
 
         ctx = widgets.imagery_ctx.value
         a0, a1 = alert_window(ctx, app_state.project.value)
-        if seen_alert.value != (ctx or {}).get("alert_id"):
-            seen_alert.set((ctx or {}).get("alert_id"))
+        # ``alert_id`` is ``actual_alert_id``, an *index* into the active set's
+        # GeoDataFrame, so it repeats across sets and across a reload of the
+        # same set. ``token`` is ``AnalysisState.alert_token``, which
+        # ``reset_alert`` bumps on every alert change, so the pair is the
+        # identity: without it a second alert landing on index 7 inherits the
+        # first one's collapse set and selection while ``reset_alert`` has
+        # already cleared ``before_info`` -- a readout contradicting the
+        # published pair, and no auto-pick at all.
+        identity = ((ctx or {}).get("alert_id"), (ctx or {}).get("token"))
+        if seen_alert.value != identity:
+            seen_alert.set(identity)
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
                 b, a = scene_query.default_pick(sel, a0, a1)
