@@ -178,7 +178,7 @@ LANDSAT_COLLECTIONS = ("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC09/C02/T1_L2")
 #: the TOA collection to pan-sharpen it, and those are two different assets.
 KEY_PROPERTY = {SOURCE_S2: "system:id", SOURCE_LANDSAT: "LANDSAT_SCENE_ID", SOURCE_PLANET: "system:id"}
 
-#: The cloud prefilters ``imagery_service`` applies today, kept so the
+#: The cloud prefilters the retired ``imagery_service`` applied, kept so the
 #: candidate set does not change (spec §5.1).
 MAX_CLOUD = 90
 
@@ -267,7 +267,7 @@ def scene_request(aoi, start: date, end: date):
     property ``FeatureCollection.filterDate`` reads.
 
     The ``CLOUDY_PIXEL_PERCENTAGE`` / ``CLOUD_COVER`` < ``MAX_CLOUD`` prefilters
-    are the ones ``imagery_service`` applies today, kept so the candidate set
+    are the ones the retired ``imagery_service`` applied, kept so the candidate set
     does not change (spec §5.1). The slider's top stop therefore means
     "everything the index holds", not literally 100%.
     """

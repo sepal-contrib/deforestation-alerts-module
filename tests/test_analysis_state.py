@@ -1,10 +1,13 @@
 import ast
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
 import geopandas as gpd
 from shapely.geometry import box
 
+from deforestation_alerts.scripts import scene_index
+from deforestation_alerts.scripts.scene_index import SOURCE_S2
 from gui.tile.analysis.edit_tools import wire_defo_layer
 from gui.tile.analysis.state import AnalysisState
 
@@ -68,15 +71,23 @@ def test_nothing_under_analysis_imports_traitlets_or_pysepal_model():
     assert not (ROOT / "deforestation_alerts" / "model" / "analysis_model.py").exists()
 
 
-def test_a_picked_image_and_its_info_land_in_the_state():
-    from gui.tile.analysis import imagery
+def test_the_timeline_does_not_auto_pick_an_image_from_inside_the_alert_window():
+    """What the retired selectors enforced by only offering out-of-window
+    images, the timeline enforces in ``default_pick`` instead -- because a long
+    GLAD window can leave a reviewer no other choice than an in-window image,
+    so hiding them was never right. The rows are still offered: the same two
+    scenes are picked the moment the window no longer covers them.
+    """
+    from deforestation_alerts.scripts import scene_query
 
-    s = AnalysisState()
-    info = SimpleNamespace(loading=False, children=[])
-    item = {"source": "Sentinel 2", "milis": 1704067200000, "cloud_cover": 12, "value": "S2_x"}
-    imagery.image_slider_info_callback(item, info, 1, SimpleNamespace(), s)
-    assert s.after_info.value == ["Sentinel 2", 1704067200000, 12, "S2_x", "_010124"]
-    assert s.before_info.value is None
+    sel = _selection([(SOURCE_S2, "2026-06-10", 1.0), (SOURCE_S2, "2026-07-01", 1.0)])
+    assert scene_query.default_pick(sel, date(2026, 5, 3), date(2026, 8, 23)) == (None, None)
+    assert len(sel) == 2  # offered, just not chosen for the reviewer
+    assert not sel["hidden"].any()  # and not faded either: only the pick refuses
+    # the proof that the refusal is the window and nothing else about the rows
+    narrow = scene_query.default_pick(sel, date(2026, 6, 20), date(2026, 6, 21))
+    assert narrow == (scene_index.row_id(SOURCE_S2, date(2026, 6, 10)),
+                      scene_index.row_id(SOURCE_S2, date(2026, 7, 1)))
 
 
 def test_an_alert_change_forgets_the_previous_alerts_choices(caplog):
@@ -129,68 +140,104 @@ def test_an_alert_change_makes_earlier_tokens_stale():
 def _fake_imagery_widgets():
     import solara
 
-    return SimpleNamespace(
-        imagery_ctx=solara.reactive(None),
-        imgSelection1=SimpleNamespace(disabled=False),
-        imgSelection2=SimpleNamespace(disabled=False),
-        map31=None, map32=None,
-    )
+    return SimpleNamespace(imagery_ctx=solara.reactive(None), map31=None, map32=None)
 
 
-def test_an_imagery_fetch_for_a_previous_alert_rebuilds_nothing(monkeypatch):
-    """Final review B, I2: the S2/Landsat fetches run on threads. One that ends
-    after the user moved to the next alert must not list its dates for that
-    alert, nor pick (and store) its default before/after images there: the next
-    alert's review Save would record them and its download build them."""
-    from gui.tile.analysis import imagery
+def _selection(rows):
+    """A timeline selection frame for ``rows``, through the real query."""
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import box as _box
 
-    s = AnalysisState()
-    widgets = _fake_imagery_widgets()
-    rebuilt = []
-    monkeypatch.setattr(imagery, "_set_all_loading", lambda w: None)
-    monkeypatch.setattr(imagery, "create_horizontal_slide_group_v3",
-                        lambda data, *a, **k: rebuilt.append(data[0]["source"]))
-    monkeypatch.setattr(imagery, "get_sentinel2_dates", lambda a, b: [a, b, a, b])
+    from deforestation_alerts.scripts import scene_query
 
-    def _fetch_while_the_user_moves_on(grid, start, end):
-        s.reset_alert()  # view_actual_alert on the next alert
-        return [{"value": "S2_of_A", "source": "Sentinel 2", "milis": 1, "cloud_cover": 0}]
-
-    monkeypatch.setattr(imagery, "getIndividualS2", _fetch_while_the_user_moves_on)
-    monkeypatch.setattr(imagery, "getIndividualLandsat", lambda *a: [])
-    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): fn(*args))
-
-    imagery.build_imagery(widgets, None, None, s)
-    widgets.imagery_ctx.set({"token": s.alert_token.value, "grid": None, "fecha1": "a",
-                             "fecha2": "b", "show": [False, True, False]})
-
-    # Planet is built at once, for the alert still current; the S2 fetch (and
-    # the Landsat one after it) ended after the alert change and rebuild nothing.
-    assert rebuilt == ["Planet NICFI", "Planet NICFI"]
+    tiles = gpd.GeoDataFrame({"tile": ["W"]},
+                             geometry=gpd.GeoSeries([_box(0, 0, 2, 2)], crs=scene_index.WGS84),
+                             crs=scene_index.WGS84)
+    scenes = pd.DataFrame(
+        [(src, pd.Timestamp(d), cloud, "W", f"k{i}") for i, (src, d, cloud) in enumerate(rows)],
+        columns=list(scene_index.SCENE_COLUMNS),
+    ).astype({"date": "datetime64[ns]"})
+    return scene_query.scenes_for(scene_index.SceneTables(scenes=scenes, tiles=tiles),
+                                  _box(0.5, 0.5, 1.5, 1.5), date(2026, 1, 1), date(2026, 12, 31),
+                                  max_cloud=40.0)
 
 
-def test_an_image_listed_for_a_previous_alert_is_not_stored():
-    """The date buttons keep the alert they were listed for: their default pick
-    (or a click on one still showing) stores nothing once another alert is
-    current."""
+def test_an_image_chosen_for_a_previous_alert_is_not_drawn():
+    """The token gate the old fetch threads needed still holds, one layer
+    further in: the timeline publishes into ``before_info`` and the pane
+    rebuilds off that publish, so a rebuild that lands after the next alert
+    change must store nothing and draw nothing.
+    """
     from gui.tile.analysis import imagery
 
     s = AnalysisState()
     token = s.alert_token.value
     s.reset_alert()
-    info = SimpleNamespace(loading=False, children=[])
-    item = {"source": "Sentinel 2", "milis": 1704067200000, "cloud_cover": 12, "value": "S2_x"}
-    imagery.image_slider_info_callback(item, info, 0, SimpleNamespace(), s, token=token)
-    assert s.before_info.value is None and info.children == []
+    assert not s.is_current(token)
+    assert s.apply_if_current(token, lambda: s.before_image.set("X")) is False
+    assert s.before_image.value is None
 
     widgets = _fake_imagery_widgets()
     widgets.actual_alert_grid = None
     drawn = []
     map_ = SimpleNamespace(addLayer=lambda *a: drawn.append(a))
-    planet = {"source": "Planet NICFI", "image_id": "projects/x/nicfi", "milis": 1, "cloud_cover": 0}
-    imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
+    item = {"source": "Planet NICFI", "keys": ["projects/x/nicfi"]}
+    imagery.image_slider_map_callback(item, map_, 0, widgets, s, None, token=token)
     assert s.before_image.value is None and drawn == []
-    assert widgets.imgSelection1.disabled is False and widgets.imgSelection2.disabled is False
+
+
+def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
+    """``wire_panes`` reads the token on the publishing thread, at the publish,
+    not inside the worker: a pick made for one alert cannot be rebuilt against
+    the alert that is current by the time the worker runs.
+    """
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    widgets.map_before = SimpleNamespace()
+    widgets.map_after = SimpleNamespace()
+    held, rebuilt = [], []
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
+
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None):
+        """``image_slider_map_callback``'s own signature, so the token is read
+        from the position ``wire_panes`` actually passes it in --
+        ``spawn_in_context`` forwards positional args only."""
+        if analysis_.is_current(token):
+            rebuilt.append((item, token))
+
+    monkeypatch.setattr(imagery, "image_slider_map_callback", _rebuild)
+    imagery.wire_panes(widgets, s, None)
+
+    s.before_keys.set(["k0"])
+    s.before_info.set(["Sentinel 2", 1, "1.00", "x ", "_010126"])
+    assert len(held) == 1
+    s.reset_alert()  # the user moves on before the worker is let go
+    fn, args = held[0]
+    fn(*args)
+    assert rebuilt == []
+
+    # and the same publish for the alert that *is* current rebuilds
+    s.before_keys.set(["k1"])
+    s.before_info.set(["Sentinel 2", 2, "1.00", "y ", "_020126"])
+    fn, args = held[-1]
+    fn(*args)
+    assert [item["keys"] for item, _ in rebuilt] == [["k1"]]
+
+
+def test_reset_alert_clears_the_selection_and_its_granule_keys():
+    analysis = AnalysisState()
+    analysis.before_info.set(["Sentinel 2", 1, "1.00", "x ", "_010126"])
+    analysis.before_keys.set(["k"])
+    analysis.reset_alert()
+    assert analysis.before_info.value is None and analysis.before_keys.value == []
+
+
+def test_nothing_under_analysis_holds_a_retired_planet_reactive():
+    analysis = AnalysisState()
+    assert not hasattr(analysis, "before_planet") and not hasattr(analysis, "after_planet")
 
 
 def test_an_image_layer_drawn_after_an_alert_change_is_not_added(monkeypatch):
@@ -216,10 +263,9 @@ def test_an_image_layer_drawn_after_an_alert_change_is_not_added(monkeypatch):
     map_.addLayer = _add_ee_layer
     widgets = _fake_imagery_widgets()
     widgets.actual_alert_grid = None
-    planet = {"source": "Planet NICFI", "image_id": "projects/x/nicfi", "milis": 1, "cloud_cover": 0}
+    planet = {"source": "Planet NICFI", "keys": ["projects/x/nicfi"]}
     imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
 
     assert [lyr.name for lyr in map_.layers[base:]] == ["True Color"]
-    assert widgets.imgSelection1.disabled is False and widgets.imgSelection2.disabled is False
     map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name="later"))
     assert map_.layers[-1].name == "later"  # outside the callback, adds are not gated

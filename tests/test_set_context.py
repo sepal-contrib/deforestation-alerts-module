@@ -444,8 +444,7 @@ def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, mon
 def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     """Before any Planet/S2/Landsat image is picked for the alert under
     review, ``AnalysisState.before_info`` / ``after_info`` are still ``None``
-    (only set by ``imagery.image_slider_info_callback`` once an image is
-    chosen). Save must not crash subscripting them (fix-round regression
+    (only set by the timeline's ``_assign`` once an image is chosen). Save must not crash subscripting them (fix-round regression
     for the Task 23 review finding) and persists the review with the
     before/after image columns left empty."""
     from gui.tile.analysis import export
@@ -557,11 +556,13 @@ def _pick_image(ctx, monkeypatch, add_raster_layer):
     monkeypatch.setattr(raster_map, "add_raster_layer", add_raster_layer)
     map_ = _Map()
     widgets = SimpleNamespace(
-        imgSelection1=SimpleNamespace(disabled=False), imgSelection2=SimpleNamespace(disabled=False),
         actual_alert_grid=ee.Geometry.Rectangle([-55.10, -10.10, -55.00, -10.00]),
     )
-    item = {"image_id": "projects/planet-nicfi/assets/basemaps/americas/"
-                        "planet_medres_normalized_analytic_2024-01_mosaic", "source": "Planet NICFI"}
+    # what the timeline publishes for a picked row: the collection, and the
+    # granule keys it mosaics for this alert (one, for a NICFI basemap)
+    item = {"source": "Planet NICFI",
+            "keys": ["projects/planet-nicfi/assets/basemaps/americas/"
+                     "planet_medres_normalized_analytic_2024-01_mosaic"]}
     imagery.image_slider_map_callback(item, map_, 0, widgets, AnalysisState(), ctx)
     return map_, widgets
 
@@ -588,7 +589,6 @@ def test_original_alert_is_the_sets_combined_raster_band_3(tmp_path, monkeypatch
     [(on_map, path, kw)] = calls
     assert on_map is map_ and path == combined
     assert kw == {"key": "original-alert", "name": "Original Alert", "band": 3, "opacity": 0.5, "visible": False}
-    assert not widgets.imgSelection1.disabled and not widgets.imgSelection2.disabled
 
 
 def test_the_original_alert_layer_starts_hidden(tmp_path, monkeypatch, gee):
@@ -617,18 +617,18 @@ def test_no_original_alert_without_the_combined_raster(tmp_path, monkeypatch, ge
     assert calls == []
 
 
-def test_a_failed_original_alert_layer_leaves_the_selectors_usable(tmp_path, monkeypatch, gee):
-    """Ruling #85: the tile server starts in the slide click handler; a failure
-    there must not leave the image selectors disabled."""
+def test_a_failed_original_alert_layer_keeps_the_panes_own_layers(tmp_path, monkeypatch, gee):
+    """Ruling #85: the tile server starts in the pick handler, after the pane's
+    own two layers are added; a failure there must not take them with it (it
+    used to also leave the retired image selectors disabled)."""
     ctx = SetContext(_state(tmp_path, monkeypatch))
     _combined(tmp_path)
 
     def _boom(*a, **k):
         raise OSError("tile server did not start")
 
-    map_, widgets = _pick_image(ctx, monkeypatch, _boom)
+    map_, _ = _pick_image(ctx, monkeypatch, _boom)
     assert map_.ee_layers == ["True Color", "False Color"]
-    assert not widgets.imgSelection1.disabled and not widgets.imgSelection2.disabled
 
 
 def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monkeypatch):

@@ -43,9 +43,6 @@ class AnalysisState:
     #: and the timeline sets the keys *before* the info for that reason.
     before_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
     after_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
-    #: Planet monthly image lists (None until a source publishes them)
-    before_planet: solara.Reactive = field(default_factory=_plain)
-    after_planet: solara.Reactive = field(default_factory=_plain)
     #: CNN prediction rasters by model number: {1: path, 2: path}
     prediction_files: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
     #: time.time() of the last review Save

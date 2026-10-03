@@ -8,7 +8,6 @@ import ast
 import numpy as np
 
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
 from operator import itemgetter
 from ipyleaflet import GeoData
 from shapely.geometry import shape
@@ -41,43 +40,6 @@ def convert_julian_to_date(julian_date):
 
     # Return the formatted date string
     return date.strftime("%Y-%m-%d")
-
-
-def get_sentinel2_dates(input_date1, input_date2):
-    # Ensure input_date is a datetime object
-    if isinstance(input_date1, str):
-        input_date1 = datetime.strptime(input_date1, "%Y-%m-%d")
-
-    if isinstance(input_date2, str):
-        input_date2 = datetime.strptime(input_date2, "%Y-%m-%d")
-
-    # 1. First day of initial detection date
-    first_day_current_month = input_date1.replace(day=1)
-
-    # 2. Second day of the next month from initial detection date
-    next_month = (
-        first_day_current_month + relativedelta(months=+1) + relativedelta(days=+1)
-    )
-
-    # 4. First day of 3 month before
-    prev_month3 = first_day_current_month + relativedelta(months=-3)
-
-    # 5. First day of final detection date
-    first_day_current_month2 = input_date2.replace(day=1)
-
-    # 5. Second day of 3 month after last detection date
-    next_3month = (
-        first_day_current_month2 + relativedelta(months=2) + relativedelta(days=+1)
-    )
-    # 6. First day of 1 month before first detection date
-    prev_1month = first_day_current_month2 + relativedelta(months=-1)
-
-    return [
-        prev_month3.strftime("%Y-%m-%d"),
-        input_date1.strftime("%Y-%m-%d"),
-        prev_1month.strftime("%Y-%m-%d"),
-        next_3month.strftime("%Y-%m-%d"),
-    ]
 
 
 def scalePlanet(image):

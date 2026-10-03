@@ -64,7 +64,7 @@ def test_the_whole_index_arrives_in_one_round_trip(tables):
     assert len(tables.scenes) > 0
     assert set(tables.scenes["source"]) <= {scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT}
     assert tables.scenes["date"].between(pd.Timestamp(START), pd.Timestamp(END)).all()
-    assert tables.scenes["cloud"].between(0, 90).all()  # the < 90 prefilter imagery_service applies today
+    assert tables.scenes["cloud"].between(0, 90).all()  # the < 90 prefilter the retired imagery_service applied
     assert (tables.scenes["key"] != "").all()
 
 

@@ -92,12 +92,7 @@
     "info_md": "Desplázate entre las alertas del conjunto activo con el navegador; el selector de conjuntos cambia de conjunto. Los mapas de antes y después muestran las imágenes sin nubes más cercanas: elige una de cada una. Dibuja o edita el polígono deforestado, responde **¿Es verdadera la alerta?**, elige las causas de la pérdida y luego **Guardar** escribe la revisión en la base de alertas del conjunto. **Descargar** los datos de la alerta escribe el GeoPackage de la alerta, sus imágenes de antes/después y un informe de Word generado a partir de la plantilla de informe del proyecto, elegida en la tarjeta de exportación.",
     "img_selection": {
       "prev_image_title": "Imagen Anterior",
-      "post_image_title": "Imagen Posterior",
-      "selected_img_info": "Fuente: Fecha: Cobertura de nubes:",
-      "selected_img_info_source": "Fuente: ",
-      "selected_img_info_date": "Fecha: ",
-      "selected_img_info_cloud": "Cobertura de nubes: ",
-      "no_images_msg": "No hay imágenes disponibles en el área o fechas seleccionadas."
+      "post_image_title": "Imagen Posterior"
     },
     "alert_info": {
       "card_title": "Información de alerta",

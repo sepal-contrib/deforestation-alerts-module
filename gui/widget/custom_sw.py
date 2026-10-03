@@ -1,4 +1,4 @@
-from pysepal import color, sepalwidgets as sw
+from pysepal import color
 from pysepal.scripts import utils as su
 from pysepal.frontend.resize_trigger import rt
 from copy import deepcopy
@@ -153,42 +153,3 @@ class CustomDrawControl(GeomanDrawControl):
         output["geometry"] = circle[0].__geo_interface__
 
         return output
-
-
-class CustomSlideGroup(sw.SepalWidget, v.Card):
-    def __init__(self, slide_items=None, defaul_child_color="green", **kwargs):
-        # Set default properties for the v.Card
-        kwargs.setdefault("flat", True)  # Make the card flat
-        kwargs.setdefault("elevation", 0)  # Remove elevation
-        kwargs.setdefault("width", '100%')  # Remove outline
-
-        # Initialize base class v.Card
-        super().__init__(**kwargs)
-        # Initialize slide group and loading spinner
-        self.defaul_child_color = defaul_child_color
-        self.slide_group = v.SlideGroup(class_="d-flex align-center", style_="width:100%",  center_active=True, show_arrows=True, children=slide_items or [])
-        self.loading_spinner = v.Card(
-            children=[
-                v.Row(
-                    class_="d-flex align-center",
-                    children=[
-                        v.ProgressCircular(
-                            indeterminate=True, color="primary", size=24, class_="mx-4"
-                        ),
-                        "Searching images..",
-                    ],
-                )
-            ]
-        )
-
-        # Set the initial state to show the slide group
-        self.children = [self.slide_group]
-
-    def set_loading_state(self, is_loading):
-        """Set the loading state of the component."""
-        self.children = [self.loading_spinner] if is_loading else [self.slide_group]
-
-    def reset_default_color(self):
-        for button in self.slide_group.children:
-            if hasattr(button, "color") and button.color != self.defaul_child_color:
-                button.color = self.defaul_child_color

@@ -4,8 +4,9 @@ Architecture layer: view-support. This is a *plain* (non-component) class built
 ONCE by the parent ``AnalysisTile`` via ``solara.use_memo(..., dependencies=[])``.
 It holds the imperative ipyvuetify / pysepal widgets the OLD ``AnalysisTile``
 god-class kept as ``self.*`` — the two synced ``SepalMap``s, the two
-``CustomDrawControl``s, the ``AoiControl``, and the two 3-tab Planet/S2/Landsat
-image-selector cards (``imgSelection1/2``).
+``CustomDrawControl``s and the ``AoiControl``. The two 3-tab Planet/S2/Landsat
+image-selector cards that stood here are retired: one shared timeline under
+both panes replaces them (``gui/tile/analysis/timeline.py``).
 
 Why a plain class and not Solara reactives: these are heavy ipyleaflet/ipyvuetify
 widgets that must be created once and mutated imperatively (re-creating a map on
@@ -30,17 +31,20 @@ Heavy widgets (created once, data-linked):
     * ``draw_after``       — CustomDrawControl on ``map_after`` (was ``draw_alerts2``);
                              ``.data`` two-way linked to ``draw_before``
     * ``aoi_control``      — AoiControl on ``map_after``
-    * ``imgSelection1``    — left 3-tab image-selector card (Planet/S2/Landsat)
-    * ``imgSelection2``    — right 3-tab image-selector card
-    * ``map31`` / ``map32``— the OLD map *containers* (title + map + info card);
-                             ``create_horizontal_slide_group_v3`` indexes into these
+    * ``timeline``         — the shared image timeline card; filled in by
+                             ``build_analysis_layout``, which has the app and
+                             analysis state this object does not
+    * ``map31`` / ``map32``— the map *containers* (title + map)
     * ``selected_alert_info`` — the alert-info card body (mutated each alert)
 
 Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts;
 the chosen before/after images and their info lists live in ``AnalysisState``):
     * ``actual_bb``                    — ee.Feature bbox (buffer+bounds) of the alert
     * ``actual_alert_grid``            — ee covering-grid bounds for downloads
-    * ``show_image_collection``        — [planet, s2, landsat] default-load flags
+    * ``show_image_collection``        — [planet, s2, landsat] default-load flags,
+                                         kept only as part of the published
+                                         ``imagery_ctx`` payload; the timeline
+                                         offers every collection at once
 """
 
 import threading
@@ -49,12 +53,12 @@ from contextlib import contextmanager
 import ipyvuetify as v
 import solara
 from ipywidgets import jslink
-from pysepal import color, sepalwidgets as sw
+from pysepal import sepalwidgets as sw
 from pysepal.mapping import SepalMap
 from pysepal.mapping.aoi_control import AoiControl
 
 from gui.i18n import t
-from gui.widget.custom_sw import CustomDrawControl, CustomSlideGroup
+from gui.widget.custom_sw import CustomDrawControl
 
 
 class LockedMap(SepalMap):
@@ -104,73 +108,6 @@ class LockedMap(SepalMap):
     def remove(self, *args, **kwargs):
         with self.layers_lock:
             return super().remove(*args, **kwargs)
-
-
-class SepalCard(sw.SepalWidget, v.Card):
-    """SepalWidget + v.Card mix (so the image-selector sub-cards keep .show/.hide).
-
-    Mirrors the OLD ``analysis_tile.SepalCard`` so the 3-tab selector construction
-    (and ``create_horizontal_slide_group_v3``'s ``.show()/.hide()`` calls on the
-    per-source cards) ports over unchanged.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-
-def _build_image_selector():
-    """Build one 3-tab (Planet / Sentinel-2 / Landsat) image-selector card.
-
-    Ports the OLD ``initialize_layout`` ``imgSelection1``/``imgSelection2``
-    construction verbatim (the two are identical, so this is factored out). Each
-    tab has a "no images" card + a hidden ``CustomSlideGroup`` card; the future
-    ``create_horizontal_slide_group_v3`` (Task 9.2) indexes into this exact tree
-    (``card.children[1].children[<tab>].children[1].children[1]`` is the slide
-    group), so the structure must match the OLD layout precisely.
-    """
-    tabs = v.Tabs(
-        v_model=0,
-        children=[
-            v.Tab(children=["Planet"]),
-            v.Tab(children=["Sentinel-2"]),
-            v.Tab(children=["Landsat"]),
-        ],
-        background_color=color.main,
-        dark=True,
-    )
-    tab_items = v.TabsItems(
-        v_model=0,
-        children=[
-            v.TabItem(
-                children=[
-                    SepalCard(
-                        children=[
-                            v.CardTitle(children=[source]),
-                            v.CardText(
-                                children=[t("analysis_tile.img_selection.no_images_msg")]
-                            ),
-                        ],
-                        class_="ma-0",
-                    ),
-                    SepalCard(
-                        children=[
-                            v.CardTitle(children=[source]),
-                            CustomSlideGroup(),
-                        ]
-                    ).hide(),
-                ]
-            )
-            for source in ("Planet", "Sentinel-2", "Landsat")
-        ],
-    )
-    # Browser-side link, like the two maps: a Python-originated switch writes
-    # both (``imagery._show_tab``).
-    jslink((tabs, "v_model"), (tab_items, "v_model"))
-    # ``analysis-selector`` marks the selector strip so the stage stylesheet can
-    # draw a theme-aware outline around it (see ``style_el`` in analysis_tile.py).
-    return v.Card(
-        class_="pa-1 ma-1 analysis-selector", flat=True, children=[tabs, tab_items]
-    )
 
 
 def info_button(description: str, header: str, md: str) -> v.Html:
@@ -261,38 +198,25 @@ class AnalysisWidgets:
             class_="pa-1 ma-1",
             children=[t("analysis_tile.img_selection.post_image_title")],
         )
-        selected_img_before_info = v.Html(
-            tag="div",
-            class_="pa-1 ma-2",
-            children=[t("analysis_tile.img_selection.selected_img_info")],
-        )
-        selected_img_after_info = v.Html(
-            tag="div",
-            class_="pa-1 ma-2",
-            children=[t("analysis_tile.img_selection.selected_img_info")],
-        )
-        imgInfo1 = v.Card(children=[selected_img_before_info])
-        imgInfo2 = v.Card(children=[selected_img_after_info])
-
-        # OLD map *containers* (title + map + info). The slide-group builder
-        # indexes children[1] (map) / children[2] (info), so keep this shape. The
-        # ``analysis-mapbox`` class (styled in analysis_tile.py) marks the map
-        # container for the full-stage workspace layout (the map height is set by
-        # the ``.custom-map-class2`` rule in analysis_tile.py).
+        # The map *containers* (title + map). The per-pane "selected image"
+        # info line under each map is gone with the selectors: the timeline's
+        # own readout names both chosen images in one place, beside the gap
+        # between them. The ``analysis-mapbox`` class (styled in
+        # analysis_tile.py) marks the map container for the full-stage
+        # workspace layout (the map height is set by the
+        # ``.custom-map-class2`` rule in analysis_tile.py).
         self.map31 = v.Container(
             class_="pa-1 ma-1 analysis-mapbox",
-            children=[map1_title, self.map_before, imgInfo1],
+            children=[map1_title, self.map_before],
         )
         self.map32 = v.Container(
             class_="pa-1 ma-1 analysis-mapbox",
-            children=[map2_title, self.map_after, imgInfo2],
+            children=[map2_title, self.map_after],
         )
 
-        # ------------------------------------------------------------------
-        # Two 3-tab image-selector cards.
-        # ------------------------------------------------------------------
-        self.imgSelection1 = _build_image_selector()
-        self.imgSelection2 = _build_image_selector()
+        # One shared timeline under both panes replaces the two per-pane
+        # selectors; built by the tile, which has the app and analysis state.
+        self.timeline = None
 
         # ------------------------------------------------------------------
         # Draw controls (data-linked) + AOI control.

@@ -92,12 +92,7 @@
     "info_md": "Déplacez-vous entre les alertes du jeu actif avec le navigateur ; le sélecteur de jeux permet de changer de jeu. Les cartes avant et après affichent les images sans nuages les plus proches : choisissez-en une pour chacune. Dessinez ou modifiez le polygone déforesté, répondez à **Est-ce une véritable alerte ?**, choisissez les facteurs de perte, puis **Sauvegarder** écrit la révision dans la base d'alertes du jeu. **Télécharger** les données de l'alerte écrit le GeoPackage de l'alerte, ses images avant/après et un rapport Word généré à partir du modèle de rapport du projet, choisi dans la carte d'export.",
     "img_selection": {
       "prev_image_title": "Image précédente",
-      "post_image_title": "Image postérieure",
-      "selected_img_info": "Source : Date : Couverture nuageuse :",
-      "selected_img_info_source": "Source : ",
-      "selected_img_info_date": "Date : ",
-      "selected_img_info_cloud": "Couverture nuageuse : ",
-      "no_images_msg": "Aucune image n'est disponible pour la date/la zone sélectionnée"
+      "post_image_title": "Image postérieure"
     },
     "alert_info": {
       "card_title": "Info d'Alerte",

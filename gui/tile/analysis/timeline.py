@@ -56,6 +56,9 @@ SRC_COLOR = {SOURCE_S2: "#7fa8e0", SOURCE_LANDSAT: "#c9a87c", SOURCE_PLANET: "#9
 SRC_LABEL = {SOURCE_S2: "Sentinel-2", SOURCE_LANDSAT: "Landsat", SOURCE_PLANET: "Planet"}
 SELECTED_COLOR = "#bf8f2d"  # the theme's primary_contrast
 MUTED = "#a8a39b"
+#: amber, for the two things the reviewer has to notice rather than read:
+#: a refresh that failed, and one image standing in for both sides.
+WARN = "#d9ab4e"
 HIT_PX = 11
 STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
@@ -701,7 +704,14 @@ def build_timeline(app_state, analysis, widgets):
         both = _row_of(sel, before_id.value) is not None and _row_of(sel, after_id.value) is not None
         note = pair_note(before_id.value, after_id.value) if both else None
         if note:
-            kids.append(v.Html(tag="span", style_=f"margin-left: auto; color: {MUTED}", children=[note]))
+            # A single-day window can legally pick the same scene for both
+            # sides, and both panes still draw it -- an empty pane would read
+            # as a failure. So the note is the whole warning, and in MUTED it
+            # would sit in the same grey as the neutral "N days apart" tail
+            # and be read as one. Amber, like the refresh failure.
+            same = before_id.value == after_id.value
+            kids.append(v.Html(tag="span", children=[note],
+                               style_=f"margin-left: auto; color: {WARN if same else MUTED}"))
         readout_row.children = kids
 
     def _render_status():
@@ -727,7 +737,7 @@ def build_timeline(app_state, analysis, widgets):
             retry = v.Btn(x_small=True, text=True, children=[t("analysis.timeline.retry")])
             retry.on_event("click", lambda w, e, d: app_state.scene_index_retry.set(
                 app_state.scene_index_retry.value + 1))
-            kids.append(v.Html(tag="span", style_="color: #d9ab4e; margin-left: 8px", children=[
+            kids.append(v.Html(tag="span", style_=f"color: {WARN}; margin-left: 8px", children=[
                 t("analysis.timeline.refresh_failed", error=error)]))
             kids.append(retry)
         elif app_state.scene_index_pending.value or (manifest is None

@@ -21,7 +21,7 @@ ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
 ``build_analysis_layout`` builds the tree once and RETURNS ``(stage, controls)``
 — the step content container and the right-panel controls — same pattern
 as the sibling builders (``navigator`` / ``review_panel`` / ``build_edit_tools`` /
-``build_export`` / ``build_imagery``) and ``recipe_tile.build_recipe_layout`` /
+``build_export`` / ``build_timeline``) and ``recipe_tile.build_recipe_layout`` /
 ``aux_tile.build_aux_layout``. The CSS the OLD component injected via
 ``solara.Style`` (a hook) is now the first child of the returned container as a raw
 ``v.Html(tag="style", ...)`` element. The two former ``use_effect``s become
@@ -56,6 +56,7 @@ save/export (9.5).
 """
 
 import logging
+from datetime import date
 
 import ee
 import ipyvuetify as v
@@ -71,8 +72,9 @@ from deforestation_alerts.scripts.mosaics_helper import (
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
-from gui.tile.analysis.imagery import build_imagery
+from gui.tile.analysis.imagery import wire_panes
 from gui.tile.analysis.navigator import build_navigator
+from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
 from gui.scripts import loss_drivers as drivers
@@ -92,6 +94,20 @@ _ALERT_BB_STYLE = {
     "dashArray": "2",
     "fillOpacity": 0,
 }
+
+
+def _as_date(julian):
+    """An alert's Julian date as a ``date``, or ``None``.
+
+    ``vectorize`` writes NaN when a polygon's date pixels are all nodata, and
+    ``convert_julian_to_date`` renders that "N/A"; the timeline needs the
+    absence itself so it can fall back to the period's window.
+    """
+    text = convert_julian_to_date(julian)
+    try:
+        return date.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
 
 
 def refresh_alert_info(widgets, app_state):
@@ -244,32 +260,29 @@ def view_actual_alert(
         )
         widgets.actual_alert_grid = grid_descarga.geometry().bounds(1)
 
-        # default image-collection load order (Planet, then S2 fallback). The
-        # planet dicts are populated by the Recipe/Filter tile; guard if absent.
-        widgets.show_image_collection = [True, False, False]
-        before_planet = analysis.before_planet.value
-        after_planet = analysis.after_planet.value
-        if before_planet and before_planet[0].get("value") == "Not available":
-            widgets.show_image_collection = [False, True, False]
-        if after_planet and after_planet[0].get("value") == "Not available":
-            widgets.show_image_collection = [False, True, False]
-
-        # Task 9.2 (AlertImagery) handoff: publish the per-alert imagery context.
-        # AlertImagery keys its Planet slide-group build + S2/Landsat use_tasks on
-        # this reactive, so the slide-group rebuilds and EE fetches only run once a
-        # fresh context exists (and the auto-switch to the Sentinel-2 tab when
-        # Planet is "Not available" lands there). The grid/bbox/dates computed above
-        # are passed through so the worker tasks never re-touch this thread's state.
+        # Publish the per-alert imagery context: the one thing an alert
+        # change has to do for the shared timeline, which answers the alert
+        # from the project-level scene index with no EE round trip
+        # (``timeline.render``). The grid/bbox/dates computed above are passed
+        # through so the timeline never re-touches this thread's state. The
+        # Planet-first / S2-fallback load order the retired per-pane selectors
+        # branched on is gone with them: the timeline offers every collection
+        # at once and ``default_pick`` chooses by acquisition date.
         widgets.imagery_ctx.value = {
             "alert_id": alert_id,
-            # the alert the imagery is fetched for: a fetch that ends after
+            # the alert the imagery is fetched for: a rebuild that ends after
             # the next alert change drops its result (``AnalysisState.alert_token``)
             "token": analysis.alert_token.value,
             "grid": widgets.actual_alert_grid,
+            # the alert's own bounding box, in EPSG:4326, as the timeline's
+            # local tile-overlap test needs it: a shapely geometry, no ee call
+            "bbox": alerta["bounding_box"],
+            # the acquisition-date window, as dates rather than the "N/A"-able
+            # strings ``fecha1``/``fecha2`` the info card shows
+            "date_min": _as_date(alerta["alert_date_min"]),
+            "date_max": _as_date(alerta["alert_date_max"]),
             "fecha1": fecha1,
             "fecha2": fecha2,
-            "before_planet": before_planet,
-            "after_planet": after_planet,
             "show": list(widgets.show_image_collection),
         }
     except Exception:
@@ -376,12 +389,13 @@ def build_analysis_layout(
         ``custom_report_template`` (the project's; used by ``build_export``).
     selected_alerts_model : SetContext
         ``combined_path``, the set's combined raster: the "Original Alert"
-        layer (used by ``build_imagery``).
+        layer (used by ``imagery.image_slider_map_callback``).
     analysis : AnalysisState
         The session's review state (chosen images and their info, drawn defo
         layer, CNN predictions, ``last_save_time``), handed to every
-        sub-builder. The parent resets it per alert and reads the Planet image
-        lists (in ``view_actual_alert``).
+        sub-builder. The parent resets it per alert
+        (``view_actual_alert``); the timeline publishes the chosen images into
+        it and ``imagery.wire_panes`` draws them.
     app_tile_model : SetContext
         ``recipe_folder_path`` (the active set's folder) for the output paths,
         ``alert_set`` + ``remember_position`` for the review position and
@@ -426,14 +440,14 @@ def build_analysis_layout(
             # to the dark surface so the workspace matches the rest of the app.
             ".analysis-stage { background-color: #ffffff; transition: background-color 0.2s; } "
             ".analysis-stage.analysis-stage--dark { background-color: #121212; } "
-            # Outline drawing the limits of each image-selector strip. The border
+            # Outline drawing the limits of the timeline strip. The border
             # colour tracks the theme (subtle dark line on light, subtle light line
             # on dark) via the same ``--dark`` marker on the stage. The maps are NOT
             # bordered: a light line framing the near-black map panels reads as a
             # harsh white border, so the maps draw their own limit via the basemap.
-            ".analysis-stage .analysis-selector { border: 1px solid rgba(0, 0, 0, 0.18); "
+            ".analysis-stage .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); "
             "border-radius: 4px; } "
-            ".analysis-stage.analysis-stage--dark .analysis-selector { "
+            ".analysis-stage.analysis-stage--dark .analysis-timeline { "
             "border-color: rgba(255, 255, 255, 0.18); } "
             ".analysis-row { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; "
             "width: 100%; } "
@@ -448,10 +462,13 @@ def build_analysis_layout(
             # (display:block) that breaks the flex-grow chain, so the map cannot be
             # grown to fill the column via flex. Use a viewport-relative fixed
             # height instead (the MapApp step container is full-viewport): tall maps
-            # that fill the stage, leaving ~300px for the title + selector strip +
-            # selected-image info line.
-            ".custom-map-class2 { height: calc(100vh - 300px) !important; min-height: 320px; } "
-            ".analysis-col .v-slide-group__content { flex-wrap: nowrap; } "
+            # that fill the stage, leaving room for the per-column title plus the
+            # one shared strip below both of them. Measured: ~64px of per-column
+            # chrome (the map card's title + padding) and ~206px of strip (38px
+            # source toolbar + 128px track + ~32px readout + 8px padding).
+            ".custom-map-class2 { height: calc(100vh - 270px) !important; min-height: 320px; } "
+            # The strip spans both columns, so it is a row of its own under them.
+            ".analysis-strip { width: 100%; padding: 0 4px 4px 4px; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
             "min-width: 40px; display: flex !important; align-items: center !important; }"
         ],
@@ -469,35 +486,34 @@ def build_analysis_layout(
     # Layout: left two-map panel + right scrolling control panel (ports OLD
     # initialize_layout left_panel / right_panel), as a raw ipyvuetify tree.
     # ------------------------------------------------------------------
-    # LEFT/STAGE: two equal map+selector columns side by side. Each column gets
-    # min-width:0 (the overflow fix) so the slide group scrolls instead of
-    # resizing the maps.
+    # The one shared image timeline, under both panes. Built HERE because
+    # ``build_analysis_layout`` runs once per session
+    # (``solara_app``'s ``solara.use_memo(..., dependencies=[])``), and
+    # ``build_timeline`` registers five reactive subscriptions and discards
+    # their unsubscribers: correct for a builder that lives as long as the
+    # kernel, a compounding leak anywhere that re-runs per alert or per step
+    # entry. It needs no alert: an alert change reaches it through
+    # ``widgets.imagery_ctx``.
+    widgets.timeline = build_timeline(app_state, analysis, widgets)
+
+    # One subscription per pane, so a pick on the strip rebuilds that pane's
+    # image from its granule keys and draws it. Side-effect only (the two
+    # unsubscribers are discarded for the same reason as above).
+    wire_panes(widgets, analysis, selected_alerts_model)
+
+    # LEFT/STAGE: the two map columns, now carrying only their map -- the
+    # selector that used to sit under each one is replaced by the single strip
+    # below both of them. Each column keeps min-width:0 so a wide child
+    # scrolls inside the column instead of resizing the maps.
     left_inner_row = v.Html(
         tag="div",
         class_="analysis-row",
         children=[
-            v.Html(
-                tag="div",
-                class_="analysis-col",
-                children=[widgets.map31, widgets.imgSelection1],
-            ),
-            v.Html(
-                tag="div",
-                class_="analysis-col",
-                children=[widgets.map32, widgets.imgSelection2],
-            ),
+            v.Html(tag="div", class_="analysis-col", children=[widgets.map31]),
+            v.Html(tag="div", class_="analysis-col", children=[widgets.map32]),
         ],
     )
-
-    # Imagery sub-component: owns the slide-group orchestration over the
-    # panes/selectors above. Returns None (side-effect only: registers the
-    # imagery_ctx subscription + fires once), so just call it.
-    build_imagery(
-        widgets=widgets,
-        app_state=app_state,
-        selected_alerts_model=selected_alerts_model,
-        analysis=analysis,
-    )
+    strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
 
     # RIGHT/CONTROLS: alert-info + nav + review + edit + export cards. Rendered in
     # MapApp's docked right panel (a panel wrapper in the shell), NOT inside the
@@ -548,7 +564,7 @@ def build_analysis_layout(
     stage = v.Container(
         fluid=True,
         class_="pa-0 ma-0 analysis-stage",
-        children=[style_el, left_inner_row],
+        children=[style_el, left_inner_row, strip_row],
     )
 
     # Drive the stage background + outline colours off the app theme by toggling

@@ -1068,3 +1068,109 @@ def _click(lane, row_id_: str) -> None:
            and "click" in (getattr(w, "_events", None) or [])]
     assert len(hit) == 1, f"{len(hit)} clickable stripes for {row_id_}"
     hit[0].fire_event("click", None)
+
+
+# ------------------------------------------------- the rebuild from the keys
+
+def test_rebuilding_a_sentinel2_image_mosaics_exactly_the_given_granules(monkeypatch):
+    from gui.tile.analysis import imagery
+
+    calls = {}
+
+    class FakeImage:
+        def __init__(self, key):
+            calls.setdefault("images", []).append(key)
+
+    class FakeCollection:
+        def __init__(self, images):
+            calls["collection"] = len(images)
+
+        def mosaic(self):
+            return self
+
+        def clip(self, geom):
+            calls["clipped"] = geom
+            return self
+
+    monkeypatch.setattr(imagery.ee, "Image", FakeImage)
+    monkeypatch.setattr(imagery.ee, "ImageCollection", FakeCollection)
+    imagery.rebuild_image(S2, ["a", "b"], "GEOM")
+    assert calls["images"] == ["a", "b"] and calls["collection"] == 2
+    assert calls["clipped"] == "GEOM"
+
+
+def test_rebuilding_without_keys_returns_nothing_rather_than_an_empty_mosaic():
+    from gui.tile.analysis import imagery
+
+    assert imagery.rebuild_image(S2, [], "GEOM") is None
+
+
+def test_rebuilding_a_landsat_image_looks_the_scene_ids_up_in_both_collections(monkeypatch):
+    from gui.tile.analysis import imagery
+
+    seen = []
+    monkeypatch.setattr(imagery, "_landsat_pair", lambda keys, geom: seen.append((keys, geom)) or "IMG")
+    assert imagery.rebuild_image(LS, ["LC8X"], "GEOM") == "IMG"
+    assert seen == [(["LC8X"], "GEOM")]
+    # the two halves of one acquisition, named where a test can reach them:
+    # the surface-reflectance product the index is built from, and the TOA
+    # product band 8 pan-sharpens it
+    assert imagery.LANDSAT_SR_COLLECTIONS == scene_index.LANDSAT_COLLECTIONS
+    assert imagery.LANDSAT_TOA_COLLECTIONS == ("LANDSAT/LC08/C02/T1_TOA", "LANDSAT/LC09/C02/T1_TOA")
+
+
+def test_an_in_window_image_is_offered_by_hand_even_though_nothing_picks_it():
+    """The invariant this plan inverts, from the widget's side. The retired
+    selectors only ever *listed* out-of-window dates, so an in-window image
+    was unreachable; the timeline draws every date and leaves the refusal to
+    ``default_pick``, because a long GLAD window can leave a reviewer no other
+    choice. So: nothing in the gold band is auto-picked, and a click inside it
+    still assigns."""
+    rows = [(S2, "2026-04-24", 8.0), (S2, "2026-06-10", 8.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(rows=rows)
+    analysis = _fake_analysis()
+    widgets = _fake_widgets()
+    ctx = dict(_ctx())
+    ctx["token"] = analysis.alert_token.value
+    widgets.imagery_ctx.set(ctx)
+    card = timeline.build_timeline(state, analysis, widgets)
+
+    in_window = scene_index.row_id(S2, date(2026, 6, 10))
+    # not chosen for the reviewer: 2026-06-10 is inside [2026-05-03, 2026-08-23]
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+    # June lies wholly inside the window, so it opens folded away -- and the
+    # reviewer can unfold it, which is what "offered, just not chosen" means
+    assert not _clickable_for(card, date(2026, 6, 10))
+    june = timeline.format_date(date(2026, 6, 1), "MMM y")
+    [block] = [w for w in _walk(card)
+               if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith(june)]
+    block.fire_event("click", None)
+    assert _clickable_for(card, date(2026, 6, 10))
+
+    lanes = [w for w in _walk(card)
+             if (w.style_ or "").startswith(f"position: relative; height: {timeline.LANE_H}px")]
+    _click(lanes[0], in_window)
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-06-10 "
+    assert analysis.before_keys.value  # and its granules are published with it
+
+
+def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
+    """A single-day alert window with one scene on it: ``default_pick`` legally
+    returns the same id twice. Both panes then draw the identical image, which
+    is confusing unless the strip says so, so the note is rendered in the
+    warning colour the refresh failure uses -- not in the muted grey a
+    neutral "N days apart" gets."""
+    state = _fake_state(rows=[(S2, "2026-06-10", 8.0)])
+    analysis = _fake_analysis()
+    widgets = _fake_widgets()
+    ctx = dict(_ctx(date_min=date(2026, 6, 10), date_max=date(2026, 6, 10)))
+    ctx["token"] = analysis.alert_token.value
+    widgets.imagery_ctx.set(ctx)
+    card = timeline.build_timeline(state, analysis, widgets)
+
+    note = timeline.t("analysis.timeline.same_image")
+    assert note in _text(card)
+    [span] = [w for w in _walk(card) if note in (getattr(w, "children", None) or ())]
+    assert timeline.WARN in (span.style_ or "")
+    assert timeline.MUTED not in (span.style_ or "")
