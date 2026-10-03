@@ -140,17 +140,33 @@
       "unsaved": "Cambios sin guardar en esta alerta",
       "saved_at": "Guardada a las {time}"
     },
+    "sections": {
+      "refine": "Precisar el polígono",
+      "refine_empty": "sin dibujar",
+      "refine_summary": "{shapes} · {area} ha",
+      "shapes": {
+        "one": "{n} forma",
+        "many": "{n} de formas",
+        "other": "{n} formas"
+      }
+    },
     "edition_labels": {
-      "edit_title": "Dibujo de la alerta",
       "start_edit_button": "Comenzar dibujo",
-      "save_edit_button": "Guardar",
+      "apply_edit_button": "Aplicar",
       "stop_edit_button": "Detener dibujo"
     },
     "model_labels": {
       "dl_button1": "Modelo pequeño y rápido",
       "dl_button2": "Modelo grande pero más lento",
+      "run": "Ejecutar",
       "dl_button_add": "Agregar al mapa",
       "dl_button_remove": "Quitar del mapa",
+      "found": "Encontrados {patches} · {area} ha",
+      "patches": {
+        "one": "{n} parche",
+        "many": "{n} de parches",
+        "other": "{n} parches"
+      },
       "dl_404": "El modelo no encontró pérdidas",
       "dl_task_title": "Ejecutando modelo de aprendizaje profundo",
       "dl_step_run": "Descargando imágenes y ejecutando el modelo…",

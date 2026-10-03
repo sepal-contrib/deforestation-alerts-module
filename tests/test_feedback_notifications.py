@@ -786,23 +786,38 @@ def edit_tools_card():
     return edit_tools, card, analysis
 
 
-def _dl_run_button(card, label):
-    for widget in _widgets(card):
-        if list(getattr(widget, "children", None) or []) == [label]:
-            return widget
-    raise AssertionError(f"no DL run button {label!r} in the card")
+def _found(*, patches=2, area=3.9):
+    """What ``vectorise`` gives the worker for a prediction with something in
+    it, without a raster to read: its features, their count and their area."""
+    feature = {"type": "Feature", "properties": {},
+               "geometry": {"type": "Polygon",
+                            "coordinates": [[[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}
+    return ([feature] * patches, patches, area)
 
 
-@pytest.mark.parametrize("label, model", [("M 1", 1), ("M 2", 2)])
+def _slots(card):
+    """The section body's named widgets: both models' *Run* buttons now carry
+    the same label, so a walk by label can no longer tell them apart."""
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    return edit_tools.edit_widgets(card)
+
+
+def _dl_run_button(card, model):
+    return _slots(card)[f"dl{model}_run"]
+
+
+@pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_publishes_success(
-    edit_tools_card, monkeypatch, label, model
+    edit_tools_card, monkeypatch, model
 ):
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
 
-    run_btn = _dl_run_button(card, label)
+    run_btn = _dl_run_button(card, model)
     run_btn.fire_event("click", None)
     feedback.join()
 
@@ -818,6 +833,9 @@ def test_edit_tools_model_run_publishes_success(
         ("success", t("analysis_tile.model_labels.dl_done"))
     ]
     assert run_btn.loading is False and run_btn.disabled is False
+    # and the row reports what it found, counted and measured in the language
+    assert analysis.prediction_shapes.value == {model: (2, 3.9)}
+    assert _slots(card)[f"dl{model}_found"].children == ["Found 2 patches \u00b7 3.9 ha"]
 
 
 def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
@@ -825,30 +843,27 @@ def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
     other's: ``prediction_files`` is replaced, never mutated in place."""
     edit_tools, card, analysis = edit_tools_card
     before = analysis.prediction_files.value
-    paths = {"M 1": "/tmp/pred_m1.tif", "M 2": "/tmp/pred_m2.tif"}
+    paths = {1: "/tmp/pred_m1.tif", 2: "/tmp/pred_m2.tif"}
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
-    for label in ("M 1", "M 2"):
+    for model in (1, 2):
         feedback = _record_feedback(monkeypatch, edit_tools)
-        monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, _p=paths[label], **k: _p)
-        _dl_run_button(card, label).fire_event("click", None)
+        monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, _p=paths[model], **k: _p)
+        _dl_run_button(card, model).fire_event("click", None)
         feedback.join()
 
     assert analysis.prediction_files.value == {1: "/tmp/pred_m1.tif", 2: "/tmp/pred_m2.tif"}
     assert before == {}
 
 
-def _edition_button(card, icon):
-    """The DL toolbar's add/remove buttons, by icon (the first of each per
-    toolbar is model 1's, the second model 2's)."""
-    import gui.tile.analysis.edit_tools as edit_tools
-
-    return [w for w in _widgets(card) if isinstance(w, edit_tools._EditionButton)
-            and any(getattr(c, "children", None) == [icon] for c in w.children)]
+def _edition_button(card, kind):
+    """Both models' add ("add") or remove ("remove") button, model 1's first."""
+    return [_slots(card)[f"dl{n}_{kind}"] for n in (1, 2)]
 
 
-@pytest.mark.parametrize("label, model", [("M 1", 1), ("M 2", 2)])
+@pytest.mark.parametrize("model", [1, 2])
 def test_a_model_run_for_a_previous_alert_drops_its_result(
-    edit_tools_card, monkeypatch, label, model
+    edit_tools_card, monkeypatch, model
 ):
     """Final review B, I2: a CNN run takes a minute; the user moves to the next
     alert meanwhile. Its prediction belongs to the alert it started on, so it is
@@ -862,13 +877,15 @@ def test_a_model_run_for_a_previous_alert_drops_its_result(
         return "/tmp/pred_of_A.tif"
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _run_while_the_user_moves_on)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
 
-    _dl_run_button(card, label).fire_event("click", None)
+    _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
 
     assert analysis.prediction_files.value == {}
-    add = _edition_button(card, "fa-solid fa-plus")[model - 1]
+    assert analysis.prediction_shapes.value == {}
+    add = _edition_button(card, "add")[model - 1]
     assert add.disabled is True
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", t("analysis_tile.model_labels.dl_stale"))]
@@ -883,21 +900,24 @@ def test_an_alert_change_disables_the_previous_alerts_prediction_buttons(
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
-    _dl_run_button(card, "M 1").fire_event("click", None)
+    _dl_run_button(card, 1).fire_event("click", None)
     feedback.join()
-    add = _edition_button(card, "fa-solid fa-plus")[0]
+    add = _edition_button(card, "add")[0]
     assert add.disabled is False
 
     analysis.reset_alert()
 
     assert add.disabled is True
-    assert all(b.disabled for b in _edition_button(card, "fa-solid fa-minus"))
+    assert all(b.disabled for b in _edition_button(card, "remove"))
+    # and the row no longer reports the previous alert's prediction
+    assert _slots(card)["dl1_found"].children == []
 
 
-@pytest.mark.parametrize("label", ["M 1", "M 2"])
+@pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_marks_the_open_project_as_being_written(
-    monkeypatch, label
+    monkeypatch, model
 ):
     """Spec §12: the CNN composite lands in the set's folder, so the Project
     dialog's delete guard must see the open project's name for the whole run
@@ -926,18 +946,19 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
         return "/tmp/pred.tif"
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _run)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
 
-    _dl_run_button(card, label).fire_event("click", None)
+    _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
 
     assert busy == [True] and not is_writing("d")
     assert feedback.errors == []
 
 
-@pytest.mark.parametrize("label", ["M 1", "M 2"])
+@pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
-    edit_tools_card, monkeypatch, label
+    edit_tools_card, monkeypatch, model
 ):
     edit_tools, card, _model = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
@@ -947,7 +968,7 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
 
-    run_btn = _dl_run_button(card, label)
+    run_btn = _dl_run_button(card, model)
     run_btn.fire_event("click", None)
     feedback.join()
 
@@ -958,9 +979,9 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
     )
 
 
-@pytest.mark.parametrize("label", ["M 1", "M 2"])
+@pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
-    edit_tools_card, monkeypatch, server_log, label
+    edit_tools_card, monkeypatch, server_log, model
 ):
     """``tracked_job`` logs the failure with its traceback (the raw exception,
     behind the friendly dl_404 toast); the run worker logged it again, so one
@@ -973,7 +994,7 @@ def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
 
-    _dl_run_button(card, label).fire_event("click", None)
+    _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
 
     out = server_log.getvalue()
@@ -982,9 +1003,9 @@ def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
     assert len(feedback.errors) == 1
 
 
-@pytest.mark.parametrize("label", ["M 1", "M 2"])
+@pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
-    edit_tools_card, monkeypatch, label
+    edit_tools_card, monkeypatch, model
 ):
     """The verify/apply step used to publish its own dl_404 toast and let the
     worker fail the task AFTER it; it now fails inside the tracked job, so the
@@ -992,13 +1013,14 @@ def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
     edit_tools, card, _model = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
 
     def _bad_raster(path, threshold):
         raise OSError("not a raster")
 
     monkeypatch.setattr(edit_tools, "verify_raster", _bad_raster)
 
-    run_btn = _dl_run_button(card, label)
+    run_btn = _dl_run_button(card, model)
     run_btn.fire_event("click", None)
     feedback.join()
 
@@ -1049,6 +1071,159 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
 
     assert result == "/tmp/pred.tif"
     assert order == [0.25, 0.5, 1.0, None, "inference"]
+
+
+def test_a_cnn_run_records_what_it_found(tmp_path):
+    """The worker vectorises its prediction inside its tracked job, so the row
+    can say what was found and *Add* can reuse the features."""
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    edit_tools._record_prediction_shapes(analysis, 1, 2, 3.9)
+    assert analysis.prediction_shapes.value == {1: (2, 3.9)}
+    analysis.reset_alert()
+    assert analysis.prediction_shapes.value == {}
+
+
+def test_a_prediction_with_nothing_in_it_is_the_404_warning(tmp_path):
+    """The at-run vectorisation can come back empty, where the old code only
+    found out at Add time: no "Found 0 patches", no division by zero."""
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    text = edit_tools.found_text(analysis, 1)
+    assert text == ""
+    edit_tools._record_prediction_shapes(analysis, 1, 0, 0.0)
+    assert analysis.prediction_shapes.value == {}
+
+
+@pytest.mark.parametrize("model", [1, 2])
+def test_a_run_that_finds_nothing_says_so_and_leaves_the_drawing_alone(
+    edit_tools_card, monkeypatch, model
+):
+    """Review Focus: the model returns zero patches. The row says so with the
+    dl_404 warning instead of a "Found 0 patches" line, nothing is offered to
+    add, and what the reviewer already drew is untouched (not cleared, and not
+    marked unsaved by a run the reviewer did not draw)."""
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: ([], 0, 0.0))
+    drawn = object()
+    analysis.defo_layer.set(drawn)
+
+    _dl_run_button(card, model).fire_event("click", None)
+    feedback.join()
+
+    assert feedback.errors == []
+    assert feedback.toasts() == [("warning", t("analysis_tile.model_labels.dl_404"))]
+    assert analysis.prediction_shapes.value == {}
+    assert _slots(card)[f"dl{model}_found"].children == []
+    add, remove = _slots(card)[f"dl{model}_add"], _slots(card)[f"dl{model}_remove"]
+    assert add.viz is False and remove.viz is False and _slots(card)[f"dl{model}_msg"].viz is True
+    assert analysis.defo_layer.value is drawn and analysis.dirty.value is False
+
+
+def test_the_refine_badge_follows_the_drawn_polygon(tmp_path):
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    seen = []
+    edit_tools.wire_refine_badge(analysis, lambda text, color=None: seen.append(text))
+    assert seen[-1] == t("analysis_tile.sections.refine_empty")
+
+    gdf = gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01),
+                                     shapely_box(1, 1, 1.01, 1.01)], crs="EPSG:4326")
+    analysis.defo_layer.set(gdf)
+    assert "2" in seen[-1] and "ha" in seen[-1]
+
+
+class _DrawFake:
+    """A ``CustomDrawControl`` stand-in: the drawn data, the clear, and the
+    frontend draw event the reviewer's drawing/editing/deleting fires."""
+
+    def __init__(self):
+        self.data = []
+        self.drawn = []
+
+    def on_draw(self, callback):
+        self.drawn.append(callback)
+
+    def clear(self):
+        self.data = []
+
+    def show(self):
+        pass
+
+    hide = show
+
+    def to_json(self):
+        return {"features": [{"type": "Feature", "properties": {},
+                              "geometry": {"type": "Polygon", "coordinates": [
+                                  [[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}]}
+
+
+def _draw_widgets():
+    """``AnalysisWidgets`` reduced to what the edit handlers touch."""
+    maps = [SimpleNamespace(add_layer=lambda layer: None,
+                            find_layer=lambda name, none_ok=False: None) for _ in range(2)]
+    w = SimpleNamespace(map_before=maps[0], map_after=maps[1],
+                        draw_before=_DrawFake(), draw_after=_DrawFake(),
+                        driver_combobox=SimpleNamespace(v_model=None))
+
+    def _set_synced_draw_data(features):
+        w.draw_before.data = list(features)
+        w.draw_after.data = list(features)
+
+    w.set_synced_draw_data = _set_synced_draw_data
+    return w
+
+
+def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypatch):
+    """Ruling 24 / spec §4.4: the reviewer drawing or editing the polygon makes
+    the verdict block read "Unsaved changes on this alert" -- while
+    ``view_actual_alert`` *seeding* a freshly opened alert's stored polygon must
+    not, which is why the flag hangs off the draw controls' own event and the
+    edit handlers the reviewer operates, never off ``analysis.defo_layer``."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+
+    # seeding: view_actual_alert publishing the alert's stored polygon
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)],
+                                             crs="EPSG:4326"))
+    assert analysis.dirty.value is False, "seeding an alert's polygon is not a change"
+
+    # the reviewer draws (or edits, or deletes) a shape on either map
+    for control in (widgets.draw_before, widgets.draw_after):
+        analysis.dirty.set(False)
+        assert control.drawn, "the draw control's own event is not wired"
+        for callback in control.drawn:
+            callback(control, "created", {})
+        assert analysis.dirty.value is True
+
+    # applying the drawing is a change too
+    analysis.dirty.set(False)
+    slots["save_btn"].fire_event("click", None)
+    assert analysis.defo_layer.value is not None and analysis.dirty.value is True
+
+    # and so are adding a model's prediction to the drawing and taking it off
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found(patches=1, area=1.0))
+    analysis.prediction_files.set({1: "/tmp/pred.tif"})
+    for name in ("dl1_add", "dl1_remove"):
+        analysis.dirty.set(False)
+        slots[name].fire_event("click", None)
+        assert analysis.dirty.value is True, name
 
 
 # ---------------------------------------------------------------------------
@@ -1248,8 +1423,9 @@ def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
     held = _deferred(monkeypatch, edit_tools)
     ran = []
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(k.get("alert")) or "/p.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
     monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
-    run_btn = _dl_run_button(card, "M 1")
+    run_btn = _dl_run_button(card, 1)
 
     run_btn.fire_event("click", None)  # a run started while A is shown runs on A's values
     held.pop()()

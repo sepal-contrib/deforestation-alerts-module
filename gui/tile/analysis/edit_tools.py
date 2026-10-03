@@ -10,14 +10,21 @@ Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUIL
 it on reopen. Content captured via ``solara.display`` lives inside an ``Output``
 whose view is NOT recreated on that rebuild, so it vanishes the 2nd time the dialog
 is opened. A plain ipyvuetify widget tree is re-viewed from its model on reopen, so
-it survives. ``build_edit_tools`` builds the card once and RETURNS it; the parent
-hands it to MapApp as dialog content — same pattern as ``navigator`` /
+it survives. ``build_edit_tools`` builds the body once and RETURNS it; the
+parent hands it to MapApp as dialog content — same pattern as ``navigator`` /
 ``review_panel`` and ``recipe_tile.build_recipe_layout``.
+
+What it returns is the *Refine polygon* section's BODY, not a card: the
+section (``section.build_section``) owns the card, the title and the summary
+badge, and the body keeps that badge reading what is drawn
+(``wire_refine_badge``). The body is built once and survives a collapse —
+the section only toggles its ``display`` — so the edit session's imperative
+``.show()`` / ``.hide()`` / ``.disabled`` state is never rebuilt.
 
 Ported OLD handlers:
 
 * Edit (``toolBarEdition``): ``start_edition_function`` / ``save_edition_function``
-  / ``stop_edition_function`` / ``clear_edition_function`` — toggle the two
+  / ``stop_edition_function`` — toggle the two
   ``CustomDrawControl``s (``draw_before`` / ``draw_after`` on ``widgets``) + the
   DL toolbars + the Alert-BB / Defo-Layer map-layer visibility, and persist the
   user-drawn polygon to ``analysis.defo_layer``.
@@ -25,9 +32,17 @@ Ported OLD handlers:
   (download both images + ``cnn_worker.apply_dl_model`` with a FILE-PATH model arg),
   ``verify_model*_output`` + ``enable_dl*`` (show/hide the add/remove/msg buttons),
   ``add_model*_prediction`` / ``remove_model*_prediction`` (mutate
-  ``draw_before.data`` from the prediction raster).
+  ``draw_before.data`` from the prediction raster). The OLD
+  ``clear_edition_function`` and its button are gone: the button was built and
+  wired but never a child of the toolbar, so it has never been on screen.
 * ``add_defo_layer`` — ``wire_defo_layer`` subscribes to ``analysis.defo_layer``
   and adds a "Defo Layer" GeoData layer to both maps.
+
+Each run's prediction is vectorised by the worker (``vectorise``), not at
+*Add* time: the row can then report what the model found
+(``prediction_shapes`` / ``found_text``), *Add* is instant, and a prediction
+with nothing in it is the ``dl_404`` warning instead of a "Found 0 patches"
+row with nothing to add.
 
 Threading (FIXED by the task contract):
 
@@ -75,11 +90,17 @@ app_state : AppState
     Navigation + alerts source of truth (``actual_alert_id``).
 analysis : AnalysisState
     ``defo_layer`` (the user-drawn polygon GeoDataFrame), the chosen
-    ``before/after_image`` + ``before/after_info`` the CNN downloads, and
-    ``prediction_files`` (the CNN rasters by model number).
+    ``before/after_image`` + ``before/after_info`` the CNN downloads,
+    ``prediction_files`` (the CNN rasters by model number) and
+    ``prediction_shapes`` (what each run found). Every edit the reviewer makes
+    here ``touch``es it, so the verdict block's save-state line reads
+    *Unsaved changes on this alert*.
 app_tile_model : SetContext
     ``recipe_folder_path`` — the active set's folder the before/after composite
     and the CNN's prediction raster are written to.
+set_badge : callable or None
+    The section's ``set_badge(text, color=None)`` (already-translated text),
+    kept reading what is drawn.
 """
 
 import logging
@@ -93,6 +114,7 @@ from deforestation_alerts import gdal_env
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import (
+    calculate_total_area,
     convertir_formato3,
     filter_features_by_color,
     geojson_to_geodataframe,
@@ -100,7 +122,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     simplify_and_extract_features,
     verify_raster,
 )
-from gui.i18n import t
+from gui.i18n import format_number, t, tn
 from gui.scripts.notify_bridge import (
     current_notifier,
     tile_progress_reporter,
@@ -109,7 +131,7 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
-from gui.tile.analysis.state import capture_alert
+from gui.tile.analysis.state import capture_alert, touch
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -127,6 +149,82 @@ _MODEL2_FILE = "Model2.keras"
 # simplify_and_extract_features).
 _PRED_THRESHOLD = 0.20
 _SIMPLIFY_TOLERANCE = 15
+
+#: the attribute the section body carries its named widgets on
+_EDIT_SLOTS = "_defo_edit_slots"
+
+
+def edit_widgets(body):
+    """The section body's named widgets, by name (``start_btn`` / ``save_btn``
+    / ``stop_btn``, and per model ``dl{n}_run`` / ``_add`` / ``_remove`` /
+    ``_msg`` / ``_found``).
+
+    Both model rows now carry the same *Run* label, so a walk of the tree by
+    label can no longer tell model 1's button from model 2's -- same reason
+    ``review_panel.verdict_widgets`` exists.
+    """
+    return getattr(body, _EDIT_SLOTS)
+
+
+def vectorise(path):
+    """``(features, n_patches, area_ha)`` of a prediction raster.
+
+    Ran at *Add* time before; the worker now does it inside its tracked job, so
+    the row can report what was found and *Add* is instant. ``color`` is applied
+    by the caller (``convertir_formato3``), which is what distinguishes the two
+    models' features on the map.
+    """
+    gdf = raster_to_gdf(path, "4326", _PRED_THRESHOLD)
+    if gdf is None or len(gdf) == 0:
+        return [], 0, 0.0
+    return (simplify_and_extract_features(gdf, "geometry", _SIMPLIFY_TOLERANCE),
+            int(len(gdf)), float(calculate_total_area(gdf)))
+
+
+def _record_prediction_shapes(analysis, model, n_patches, area_ha):
+    """Remember what a run found, replacing the dict in one locked read-and-set
+    so two runs finishing together cannot drop each other's numbers. Nothing is
+    recorded for an empty prediction: the row shows the ``dl_404`` warning."""
+    if n_patches <= 0:
+        return
+    with analysis._alert_lock:
+        shapes = dict(analysis.prediction_shapes.value)
+        shapes[model] = (int(n_patches), float(area_ha))
+        analysis.prediction_shapes.set(shapes)
+
+
+def found_text(analysis, model) -> str:
+    """The row's result line, or ``""`` when this model found nothing yet."""
+    found = analysis.prediction_shapes.value.get(model)
+    if not found:
+        return ""
+    n, area = found
+    return t("analysis_tile.model_labels.found",
+             patches=tn("analysis_tile.model_labels.patches", n),
+             area=format_number(area, 1))
+
+
+def wire_refine_badge(analysis, set_badge):
+    """Keep a section badge reading the drawn polygon: *nothing drawn*, or the
+    shape count and the area -- the same ``calculate_total_area`` the save
+    stores as ``area_ha``, so the badge and the column can never disagree."""
+
+    def _show(gdf=None):
+        gdf = analysis.defo_layer.value if gdf is None else gdf
+        if gdf is None or len(gdf) == 0:
+            set_badge(t("analysis_tile.sections.refine_empty"))
+            return
+        set_badge(t("analysis_tile.sections.refine_summary",
+                    shapes=tn("analysis_tile.sections.shapes", len(gdf)),
+                    area=format_number(calculate_total_area(gdf), 1)), color="primary")
+
+    # The badge alone. The unsaved flag is NOT wired here: ``view_actual_alert``
+    # seeds ``defo_layer`` with the alert's stored polygon when it opens, and a
+    # ``touch`` on this subscription would mark every alert unsaved on sight
+    # (Ruling 24). It hangs off the reviewer's own edits instead.
+    analysis.defo_layer.subscribe(lambda gdf: _show(gdf))
+    _show()
+    return _show
 
 
 class _EditionButton(v.Btn, sw.SepalWidget):
@@ -224,12 +322,24 @@ def build_edit_tools(
     app_state,
     analysis,
     app_tile_model,
+    set_badge=None,
 ):
-    """Build and return the edit-tools + CNN card (OLD ``card04``).
+    """Build and return the *Refine polygon* section's BODY (OLD ``card04``).
+
+    The section owns the card and the title, so what comes back is a plain
+    ``v.Html`` div: the three edit buttons over one row per CNN model.
+
+    ``set_badge`` is the section's own ``set_badge`` (already-translated text
+    in, see ``section.build_section``): given one, the body keeps it reading
+    what is drawn.
 
     The before/after composite the CNN runs on is a file of the active set's
     folder (see ``paths.stage_alert_image``).
     """
+    # What each run found, by ``(alert token, model)``: the features *Add*
+    # puts on the map, vectorised once by the worker. Per build (one session)
+    # and cleared on every alert change, so no alert's shapes reach the next.
+    features_cache = {}
 
     # ------------------------------------------------------------------
     # Widgets (created once so the OLD .show()/.hide()/.disabled imperative
@@ -239,102 +349,64 @@ def build_edit_tools(
     def _build_widgets():
         ns = {}
 
-        # --- edit toolbar (start / save / stop) ---
-        ns["start_btn"] = _EditionButton(
-            color=color.primary,
-            disabled=False,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-pen"])],
-        )
-        ns["clear_btn"] = _EditionButton(
-            color=color.error,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-trash"])],
-        )
-        ns["save_btn"] = _EditionButton(
-            color=color.primary,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-floppy-disk"])],
-        )
-        ns["stop_btn"] = _EditionButton(
-            color=color.secondary,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-x"])],
+        # --- the edit buttons (start / apply / stop) ---
+        # Labelled and 44px, like the verdict block's: an icon-only button
+        # whose meaning lived in a hover tooltip was unreadable on a touch
+        # screen, and there is room for the words in the panel.
+        def _edit_button(label, **kwargs):
+            return v.Btn(
+                class_="flex-grow-1", style_="height: 44px; text-transform: none;",
+                children=[label], **kwargs,
+            )
+
+        ns["start_btn"] = _edit_button(
+            t("analysis_tile.edition_labels.start_edit_button"), color=color.primary)
+        ns["save_btn"] = _edit_button(
+            t("analysis_tile.edition_labels.apply_edit_button"), outlined=True, disabled=True)
+        ns["stop_btn"] = _edit_button(
+            t("analysis_tile.edition_labels.stop_edit_button"), outlined=True, disabled=True)
+        ns["edit_row"] = v.Html(
+            tag="div", class_="d-flex", style_="gap: 8px;",
+            children=[ns["start_btn"], ns["save_btn"], ns["stop_btn"]],
         )
 
-        tt_start = sw.Tooltip(
-            ns["start_btn"],
-            tooltip=t("analysis_tile.edition_labels.start_edit_button"),
-            top=True, open_delay=100, close_delay=100,
-        )
-        tt_save = sw.Tooltip(
-            ns["save_btn"],
-            tooltip=t("analysis_tile.edition_labels.save_edit_button"),
-            top=True, open_delay=100, close_delay=100,
-        )
-        tt_stop = sw.Tooltip(
-            ns["stop_btn"],
-            tooltip=t("analysis_tile.edition_labels.stop_edit_button"),
-            top=True, open_delay=100, close_delay=100,
-        )
-        ns["toolbar_edition"] = v.Toolbar(
-            class_="px-1 d-flex justify-space-around",
-            children=[tt_start, tt_save, tt_stop],
-        )
-
-        # --- DL model 1 toolbar (run / add / remove / msg) ---
-        ns["dl1_run"] = v.Btn(
-            class_="pa-1 ma-1", color=color.secondary, rounded=True, small=True,
-            children=["M 1"],
-        )
-        ns["dl1_add"] = _EditionButton(
-            color=color.primary,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-plus"])],
-        )
-        ns["dl1_remove"] = _EditionButton(
-            color=color.error,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-minus"])],
-        )
-        ns["dl1_msg"] = _EditionButton(
-            color=color.error, disabled=False,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
-        ).hide()
-        tt_dl1 = sw.Tooltip(ns["dl1_run"], tooltip=t("analysis_tile.model_labels.dl_button1"),
-                            top=True, open_delay=100, close_delay=100)
-        tt_dl1_add = sw.Tooltip(ns["dl1_add"], tooltip=t("analysis_tile.model_labels.dl_button_add"),
+        # --- one row per CNN model: its name + Run, the add/remove pair
+        # (shown in edit mode only) and what the run found ---
+        for n, model_name in ((1, t("analysis_tile.model_labels.dl_button1")),
+                              (2, t("analysis_tile.model_labels.dl_button2"))):
+            ns[f"dl{n}_run"] = v.Btn(
+                color=color.primary, small=True, style_="text-transform: none;",
+                children=[t("analysis_tile.model_labels.run")],
+            )
+            ns[f"dl{n}_add"] = _EditionButton(
+                color=color.primary,
+                children=[t("analysis_tile.model_labels.dl_button_add")],
+            )
+            ns[f"dl{n}_remove"] = _EditionButton(
+                color=color.error,
+                children=[t("analysis_tile.model_labels.dl_button_remove")],
+            )
+            # The one button that keeps its icon and its tooltip: it IS the
+            # "found nothing" warning, and it carries no state of its own.
+            ns[f"dl{n}_msg"] = _EditionButton(
+                color=color.error, disabled=False,
+                children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
+            ).hide()
+            tt_msg = sw.Tooltip(ns[f"dl{n}_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)
-        tt_dl1_rem = sw.Tooltip(ns["dl1_remove"], tooltip=t("analysis_tile.model_labels.dl_button_remove"),
-                                top=True, open_delay=100, close_delay=100)
-        tt_dl1_msg = sw.Tooltip(ns["dl1_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
-                                top=True, open_delay=100, close_delay=100)
-        ns["toolbar_dl1"] = sw.Toolbar(
-            children=[tt_dl1, tt_dl1_add, tt_dl1_rem, tt_dl1_msg]
-        ).hide()
-
-        # --- DL model 2 toolbar (run / add / remove / msg) ---
-        ns["dl2_run"] = v.Btn(
-            class_="pa-1 ma-1", color=color.secondary, rounded=True, small=True,
-            children=["M 2"],
-        )
-        ns["dl2_add"] = _EditionButton(
-            color=color.primary,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-plus"])],
-        )
-        ns["dl2_remove"] = _EditionButton(
-            color=color.error,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-minus"])],
-        )
-        ns["dl2_msg"] = _EditionButton(
-            color=color.error, disabled=False,
-            children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
-        ).hide()
-        tt_dl2 = sw.Tooltip(ns["dl2_run"], tooltip=t("analysis_tile.model_labels.dl_button2"),
-                            top=True, open_delay=100, close_delay=100)
-        tt_dl2_add = sw.Tooltip(ns["dl2_add"], tooltip=t("analysis_tile.model_labels.dl_button_add"),
-                                top=True, open_delay=100, close_delay=100)
-        tt_dl2_rem = sw.Tooltip(ns["dl2_remove"], tooltip=t("analysis_tile.model_labels.dl_button_remove"),
-                                top=True, open_delay=100, close_delay=100)
-        tt_dl2_msg = sw.Tooltip(ns["dl2_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
-                                top=True, open_delay=100, close_delay=100)
-        ns["toolbar_dl2"] = sw.Toolbar(
-            children=[tt_dl2, tt_dl2_add, tt_dl2_rem, tt_dl2_msg]
-        ).hide()
+            ns[f"toolbar_dl{n}"] = sw.Toolbar(
+                children=[ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg]
+            ).hide()
+            ns[f"dl{n}_found"] = v.Html(tag="div", class_="caption text--secondary", children=[])
+            ns[f"dl{n}_row"] = v.Html(tag="div", class_="mt-3", children=[
+                v.Html(tag="div", class_="d-flex align-center", style_="gap: 8px;", children=[
+                    v.Html(tag="span", class_="body-2", style_="flex: 1 1 auto;",
+                           children=[model_name]),
+                    ns[f"dl{n}_run"],
+                ]),
+                ns[f"toolbar_dl{n}"],
+                ns[f"dl{n}_found"],
+            ])
 
         return ns
 
@@ -381,21 +453,34 @@ def build_edit_tools(
         with files.lock:
             files.set({**files.value, model: pred_path})
 
+    def _show_found(model):
+        text = found_text(analysis, model)
+        ns[f"dl{model}_found"].children = [text] if text else []
+
     # A run belongs to the alert it started on (``token``, captured at the
     # click): one that ends after the user moved on must not record its
     # raster or enable "add" for the alert now on screen, whose review Save
-    # would store the other alert's polygons. Returns whether it applied.
-    def _apply_model(model, pred_path, token):
+    # would store the other alert's polygons.
+    #
+    # ``found`` is ``vectorise``'s ``(features, n_patches, area_ha)``. Returns
+    # ``(applied, valid)``: whether this was still the current alert's run, and
+    # whether the prediction holds anything to add -- an empty one is the
+    # ``dl_404`` warning, not a "Found 0 patches" row.
+    def _apply_model(model, pred_path, token, found):
         if not analysis.is_current(token):
-            return False
-        valid = verify_raster(pred_path, _PRED_THRESHOLD)
+            return False, False
+        features, n_patches, area_ha = found
+        valid = n_patches > 0 and verify_raster(pred_path, _PRED_THRESHOLD)
         enable = _enable_dl1 if model == 1 else _enable_dl2
 
         def _apply():
             _record_prediction(model, pred_path)
+            features_cache[(token, model)] = features
+            _record_prediction_shapes(analysis, model, n_patches, area_ha)
             enable(valid)
+            _show_found(model)
 
-        return analysis.apply_if_current(token, _apply)
+        return analysis.apply_if_current(token, _apply), valid
 
     # ------------------------------------------------------------------
     # An alert change (``AnalysisState.reset_alert``) puts the card back as it
@@ -405,6 +490,7 @@ def build_edit_tools(
     # ------------------------------------------------------------------
     def _reset_for_new_alert(_token=None):
         try:
+            features_cache.clear()
             for n in (1, 2):
                 ns[f"dl{n}_msg"].hide()
                 ns[f"dl{n}_add"].show()
@@ -412,7 +498,11 @@ def build_edit_tools(
                 ns[f"dl{n}_add"].disabled = True
                 ns[f"dl{n}_remove"].disabled = True
                 ns[f"toolbar_dl{n}"].hide()
-            for name in ("save_btn", "clear_btn", "stop_btn"):
+                # Set empty, not from ``found_text``: this runs on the token
+                # bump, which ``reset_alert`` does BEFORE it clears
+                # ``prediction_shapes``.
+                ns[f"dl{n}_found"].children = []
+            for name in ("save_btn", "stop_btn"):
                 ns[name].disabled = True
             ns["start_btn"].disabled = False
             if widgets is not None:
@@ -427,26 +517,31 @@ def build_edit_tools(
     # set_synced_draw_data since Python-originated writes propagate to
     # draw_after only through the explicit helper, never headlessly).
     # ------------------------------------------------------------------
-    def _add_model_prediction(path, color_name, add_btn, remove_btn):
+    def _add_model_prediction(model, color_name):
+        path = analysis.prediction_files.value.get(model)
         if not path:
             return
+        add_btn, remove_btn = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
         try:
-            defo_gdf_layer = raster_to_gdf(path, "4326", _PRED_THRESHOLD)
-            edit_layer = simplify_and_extract_features(
-                defo_gdf_layer, "geometry", _SIMPLIFY_TOLERANCE
-            )
+            # The run already vectorised it; only a panel reopened on a
+            # prediction this build never saw has to do it again.
+            features = features_cache.get((analysis.alert_token.value, model))
+            if features is None:
+                features, _n, _area = vectorise(path)
             orig_features = widgets.draw_before.data
-            new_features = convertir_formato3(edit_layer, color_name)
+            new_features = convertir_formato3(features, color_name)
             widgets.draw_before.clear()
             widgets.draw_after.clear()
             widgets.set_synced_draw_data(orig_features + new_features)
             add_btn.disabled = True
             remove_btn.disabled = False
+            touch(analysis)  # the drawing changed (spec §4.4)
         except Exception:
             logger.exception("Analysis: add prediction failed")
             notify(t("analysis_tile.model_labels.dl_404"), type_="error")
 
-    def _remove_model_prediction(color_name, add_btn, remove_btn):
+    def _remove_model_prediction(model, color_name):
+        add_btn, remove_btn = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
         try:
             orig_features = widgets.draw_before.data
             widgets.draw_before.clear()
@@ -454,6 +549,7 @@ def build_edit_tools(
             widgets.set_synced_draw_data(filter_features_by_color(orig_features, color_name))
             add_btn.disabled = False
             remove_btn.disabled = True
+            touch(analysis)  # the drawing changed (spec §4.4)
         except Exception:
             logger.exception("Analysis: remove prediction failed")
 
@@ -483,7 +579,6 @@ def build_edit_tools(
                     )
                 )
 
-            ns["clear_btn"].disabled = False
             ns["save_btn"].disabled = False
             ns["stop_btn"].disabled = False
             ns["toolbar_dl1"].show()
@@ -502,6 +597,7 @@ def build_edit_tools(
                 analysis.defo_layer.set(geojson_to_geodataframe(
                     widgets.draw_before.to_json()
                 ).set_crs(epsg="4326", allow_override=True, inplace=True))
+                touch(analysis)  # the reviewed polygon changed (spec §4.4)
         except Exception:
             logger.exception("Analysis: save edition failed")
         finally:
@@ -534,24 +630,11 @@ def build_edit_tools(
             ns["dl2_remove"].disabled = True
 
             ns["save_btn"].disabled = True
-            ns["clear_btn"].disabled = True
             ns["start_btn"].disabled = False
         except Exception:
             logger.exception("Analysis: stop edition failed")
         finally:
             widget.loading = False
-
-    def _clear_edition(widget, event, data):
-        widget.loading = True
-        widget.disabled = True
-        try:
-            widgets.draw_before.clear()
-            widgets.draw_after.clear()
-        except Exception:
-            logger.exception("Analysis: clear edition failed")
-        finally:
-            widget.loading = False
-            widget.disabled = False
 
     # ------------------------------------------------------------------
     # CNN run handlers: button-triggered daemon threads (CPU/IO-bound; never
@@ -592,6 +675,7 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
+                    applied = valid = False
                     if analysis.is_current(token):
                         with writing(project):
                             pred_path = _run_cnn_model(
@@ -599,9 +683,12 @@ def build_edit_tools(
                                 widgets, analysis, app_state, app_tile_model,
                                 task=task, alert=alert,
                             )
-                        applied = _apply_model(1, pred_path, token)
-                    else:  # moved on before the worker started: nothing to run
-                        applied = False
+                            # Vectorised here, inside the job and inside the
+                            # writer guard that keeps the set's folder alive:
+                            # the row can then say what was found and *Add* is
+                            # instant. A failure fails the run like any other.
+                            found = vectorise(pred_path)
+                        applied, valid = _apply_model(1, pred_path, token, found)
                     if not applied:
                         # Another alert is on screen: its result is dropped.
                         # A warning, recorded on the task before the toast.
@@ -611,8 +698,13 @@ def build_edit_tools(
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                if applied:
+                if applied and valid:
                     notifier.success(t("analysis_tile.model_labels.dl_done"))
+                elif applied:
+                    # The run worked; the model simply found no forest loss.
+                    # Nothing is recorded and nothing is offered to add, so the
+                    # reviewer's own drawing is left exactly as it was.
+                    notifier.warning(t("analysis_tile.model_labels.dl_404"))
             finally:
                 ns["dl1_run"].loading = False
                 ns["dl1_run"].disabled = False
@@ -640,6 +732,7 @@ def build_edit_tools(
                     error_format=_dl_404,
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
+                    applied = valid = False
                     if analysis.is_current(token):
                         with writing(project):
                             pred_path = _run_cnn_model(
@@ -647,9 +740,12 @@ def build_edit_tools(
                                 widgets, analysis, app_state, app_tile_model,
                                 task=task, alert=alert,
                             )
-                        applied = _apply_model(2, pred_path, token)
-                    else:  # moved on before the worker started: nothing to run
-                        applied = False
+                            # Vectorised here, inside the job and inside the
+                            # writer guard that keeps the set's folder alive:
+                            # the row can then say what was found and *Add* is
+                            # instant. A failure fails the run like any other.
+                            found = vectorise(pred_path)
+                        applied, valid = _apply_model(2, pred_path, token, found)
                     if not applied:
                         # Another alert is on screen: its result is dropped.
                         # A warning, recorded on the task before the toast.
@@ -659,8 +755,13 @@ def build_edit_tools(
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                if applied:
+                if applied and valid:
                     notifier.success(t("analysis_tile.model_labels.dl_done"))
+                elif applied:
+                    # The run worked; the model simply found no forest loss.
+                    # Nothing is recorded and nothing is offered to add, so the
+                    # reviewer's own drawing is left exactly as it was.
+                    notifier.warning(t("analysis_tile.model_labels.dl_404"))
             finally:
                 ns["dl2_run"].loading = False
                 ns["dl2_run"].disabled = False
@@ -674,28 +775,24 @@ def build_edit_tools(
         ns["start_btn"].on_event("click", _start_edition)
         ns["save_btn"].on_event("click", _save_edition)
         ns["stop_btn"].on_event("click", _stop_edition)
-        ns["clear_btn"].on_event("click", _clear_edition)
 
-        def _on_dl1_add(*_):
-            _add_model_prediction(analysis.prediction_files.value.get(1), "lime",
-                                  ns["dl1_add"], ns["dl1_remove"])
+        for n, (run, color_name) in enumerate(((_on_dl1_run, "lime"),
+                                               (_on_dl2_run, "purple")), start=1):
+            ns[f"dl{n}_run"].on_event("click", run)
+            ns[f"dl{n}_add"].on_event(
+                "click", lambda *_, n=n, c=color_name: _add_model_prediction(n, c))
+            ns[f"dl{n}_remove"].on_event(
+                "click", lambda *_, n=n, c=color_name: _remove_model_prediction(n, c))
 
-        def _on_dl1_remove(*_):
-            _remove_model_prediction("lime", ns["dl1_add"], ns["dl1_remove"])
-
-        def _on_dl2_add(*_):
-            _add_model_prediction(analysis.prediction_files.value.get(2), "purple",
-                                  ns["dl2_add"], ns["dl2_remove"])
-
-        def _on_dl2_remove(*_):
-            _remove_model_prediction("purple", ns["dl2_add"], ns["dl2_remove"])
-
-        ns["dl1_run"].on_event("click", _on_dl1_run)
-        ns["dl1_add"].on_event("click", _on_dl1_add)
-        ns["dl1_remove"].on_event("click", _on_dl1_remove)
-        ns["dl2_run"].on_event("click", _on_dl2_run)
-        ns["dl2_add"].on_event("click", _on_dl2_add)
-        ns["dl2_remove"].on_event("click", _on_dl2_remove)
+        # Spec §4.4: the reviewer drawing, reshaping or deleting a shape on
+        # either map marks the alert unsaved. Wired to the draw controls' own
+        # frontend event -- NOT to ``analysis.defo_layer``, which
+        # ``view_actual_alert`` also seeds when an alert opens (a subscription
+        # there would mark every freshly opened alert unsaved; Ruling 24).
+        for name in ("draw_before", "draw_after"):
+            on_draw = getattr(getattr(widgets, name, None), "on_draw", None)
+            if on_draw is not None:
+                on_draw(lambda *_a, **_k: touch(analysis))
 
     _register_handlers()
     analysis.alert_token.subscribe(_reset_for_new_alert)
@@ -704,21 +801,14 @@ def build_edit_tools(
     # reviewed polygon is set. Subscribed once (the layout is built once).
     wire_defo_layer(widgets, analysis)
 
+    if set_badge is not None:
+        wire_refine_badge(analysis, set_badge)
+
     # ------------------------------------------------------------------
-    # Layout: OLD card04 = edit title + toolBarEdition + toolBarDL1/2. The OLD
-    # inline alert is gone: failures are error toasts (see _on_dl*_run).
+    # Layout: the section's body -- the edit buttons over one row per model.
+    # The card and the title belong to the section; the OLD inline alert is
+    # gone (failures are toasts, see _on_dl*_run).
     # ------------------------------------------------------------------
-    card = v.Card(
-        class_="pa-2 ma-2",
-        hover=True,
-        children=[
-            v.CardTitle(
-                class_="pa-1 ma-1",
-                children=[t("analysis_tile.edition_labels.edit_title")],
-            ),
-            ns["toolbar_edition"],
-            ns["toolbar_dl1"],
-            ns["toolbar_dl2"],
-        ],
-    )
-    return card
+    body = v.Html(tag="div", children=[ns["edit_row"], ns["dl1_row"], ns["dl2_row"]])
+    setattr(body, _EDIT_SLOTS, ns)
+    return body

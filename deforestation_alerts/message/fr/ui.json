@@ -140,17 +140,33 @@
       "unsaved": "Modifications non enregistrées sur cette alerte",
       "saved_at": "Enregistrée à {time}"
     },
+    "sections": {
+      "refine": "Affiner le polygone",
+      "refine_empty": "rien de dessiné",
+      "refine_summary": "{shapes} · {area} ha",
+      "shapes": {
+        "one": "{n} forme",
+        "many": "{n} de formes",
+        "other": "{n} formes"
+      }
+    },
     "edition_labels": {
-      "edit_title": "Dessin d'Alerte",
       "start_edit_button": "Commencer à dessiner",
-      "save_edit_button": "Sauvegarder",
+      "apply_edit_button": "Appliquer",
       "stop_edit_button": "Arrêter de dessiner"
     },
     "model_labels": {
       "dl_button1": "Modèle plus petit et rapide",
       "dl_button2": "Modèle plus grand mais plus lent",
+      "run": "Exécuter",
       "dl_button_add": "Ajouter à la carte",
       "dl_button_remove": "Retirer de la carte",
+      "found": "Trouvé {patches} · {area} ha",
+      "patches": {
+        "one": "{n} parcelle",
+        "many": "{n} de parcelles",
+        "other": "{n} parcelles"
+      },
       "dl_404": "Le modèle n'a trouvé aucune perte",
       "dl_task_title": "Exécution du modèle d'apprentissage profond",
       "dl_step_run": "Téléchargement des images et exécution du modèle…",

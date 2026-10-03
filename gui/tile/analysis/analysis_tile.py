@@ -480,12 +480,20 @@ def build_analysis_layout(
                 analysis=analysis,
                 app_tile_model=app_tile_model,
             ),
-            build_edit_tools(
-                widgets=widgets,
-                app_state=app_state,
-                analysis=analysis,
-                app_tile_model=app_tile_model,
-            ),
+            # THROWAWAY: build_edit_tools returns the Refine-polygon
+            # section's body now, so it needs a card and a title to sit in
+            # until Task 10 replaces these lines with the real collapsible
+            # section (which owns both, and the summary badge).
+            v.Card(class_="ma-2", children=[
+                v.CardTitle(class_="pa-1 ma-1",
+                            children=[t("analysis_tile.sections.refine")]),
+                build_edit_tools(
+                    widgets=widgets,
+                    app_state=app_state,
+                    analysis=analysis,
+                    app_tile_model=app_tile_model,
+                ),
+            ]),
             build_export(
                 widgets=widgets,
                 app_state=app_state,

@@ -140,17 +140,31 @@
       "unsaved": "Unsaved changes on this alert",
       "saved_at": "Saved {time}"
     },
+    "sections": {
+      "refine": "Refine polygon",
+      "refine_empty": "nothing drawn",
+      "refine_summary": "{shapes} · {area} ha",
+      "shapes": {
+        "one": "{n} shape",
+        "other": "{n} shapes"
+      }
+    },
     "edition_labels": {
-      "edit_title": "Alert drawing",
       "start_edit_button": "Start Drawing",
-      "save_edit_button": "Save",
+      "apply_edit_button": "Apply",
       "stop_edit_button": "Stop Drawing"
     },
     "model_labels": {
       "dl_button1": "Smaller and faster model",
       "dl_button2": "Larger but slower model",
+      "run": "Run",
       "dl_button_add": "Add to map",
       "dl_button_remove": "Remove from map",
+      "found": "Found {patches} · {area} ha",
+      "patches": {
+        "one": "{n} patch",
+        "other": "{n} patches"
+      },
       "dl_404": "Model did not find forest loss polygons",
       "dl_task_title": "Running deep-learning model",
       "dl_step_run": "Downloading images and running the model…",
