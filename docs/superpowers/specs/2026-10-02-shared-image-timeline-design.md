@@ -69,7 +69,7 @@ harmonisation of the chosen image. No migration of already-saved review records.
 |---|---|
 | Index scope | Per **project**, shared by the project and all its sets |
 | Index location | `<project_dir>/imagery/`, beside `masks/` |
-| Staleness | Refresh when more than 24h has passed since `fetched_at` |
+| Staleness | Refresh when more than 24h has passed since `refreshed` |
 | Background buffer | Widen to the period ±6 months in the background |
 | Default view | Alert window ±2 months |
 | Dates | Switch to acquisition date; **no migration** of existing records |
@@ -256,9 +256,11 @@ change — only how its metadata is retrieved.
   index.json       manifest
 ```
 
-`scenes.parquet` columns: `source` (str), `date` (datetime64\[ns\], the UTC
-acquisition instant), `cloud` (float32), `tile` (str), `key` (str) — and nothing
-else. There is deliberately **no per-scene geometry and no per-scene bounding
+`scenes.parquet` columns: `source` (str), `date` (datetime64 at **millisecond**
+resolution, UTC — `pd.to_datetime(..., unit="ms")`, and the value itself is the
+acquisition **day**, not the instant within it, because that is the resolution
+the granule metadata is read at), `cloud` (float32), `tile` (str), `key` (str)
+— and nothing else. There is deliberately **no per-scene geometry and no per-scene bounding
 box**, for the reason §5.1 gives: every granule of a tile shares the tile's
 footprint, `tile` is the foreign key into `tiles.parquet`, and §6 tests the
 footprint once per tile rather than once per scene. An earlier draft of this
@@ -268,12 +270,13 @@ contradicted §5.1 and the implemented frame follows §5.1.
 `index.json`:
 
 ```json
-{ "schema_version": 1,
+{ "version": 1,
   "aoi_digest": "...",
-  "fetched_at": "2026-10-02T09:14:00Z",
-  "covered": ["2026-01-01", "2026-10-02"],
+  "refreshed": "2026-10-02T09:14:00Z",
+  "covered": {"start": "2026-01-01", "end": "2026-10-02"},
+  "counts": {"Sentinel 2": 412, "Landsat": 96, "Planet NICFI": 0},
   "chunks": [{"start": "...", "end": "...", "fetched_at": "...", "ok": true}],
-  "planet": {"region": "americas", "access": true, "months": ["2026-03", "..."]} }
+  "planet": {"region": "americas", "access": true} }
 ```
 
 Both parquet files are written through the atomic pattern the project already
@@ -320,11 +323,21 @@ replaces today's silent "Not available".
 
 - **First build.** Foreground fetch of the active set's period ±2 months,
   clamped to today. This is the only blocking wait.
-- **Background widening.** Once the foreground result lands, a daemon worker
+- **Background widening.** Once the foreground result lands, a background task
   extends coverage to the period ±6 months in one-month chunks, appending to
-  `scenes.parquet` and updating `chunks` as each lands. Progress through
-  `notify_bridge.tracked_job`.
-- **Staleness.** On load, if `now - fetched_at > 24h`, re-fetch only the tail
+  `scenes.parquet` and updating `chunks` as each lands. It carries **no progress
+  surface**: an earlier draft of this section routed it through
+  `notify_bridge.tracked_job`, which turned out to be unimplementable where the
+  widener runs. `tracked_job` must be entered on the thread executing the body
+  and `forward_logs_to` keys on `threading.get_ident()`, while the widener is a
+  Solara `use_task` sharing its thread with every other component's render work
+  — measured identical idents, and with the app logger at INFO (which
+  `gui/solara_app.py` sets) an unrelated component's render-loop line was
+  delivered into the widener's tracker. Giving it a pill would mean first moving
+  it onto its own worker thread via `spawn_in_context`, which is a design change
+  rather than a progress indicator. The widen is silent by design; its result is
+  visible as the strip gaining months.
+- **Staleness.** On load, if `now - refreshed > 24h`, re-fetch only the tail
   (`covered.end - 10 days` → today) and merge, deduplicating on
   `(source, key)`. Only the recent edge of an archive gains scenes.
 - **Rebuild.** A full rebuild happens only when `aoi_digest` does not match the

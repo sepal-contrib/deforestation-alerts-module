@@ -161,11 +161,19 @@ def test_scene_index_imports_earth_engine_only_inside_its_functions():
     ]
     assert at_module_scope == [], "scene_index must not import ee at module scope"
 
-    # every top-level function that names ``ee`` carries its own import, so a
-    # seventh Earth Engine function is covered without editing this test
-    users = {node.name: node for node in tree.body
-             if isinstance(node, ast.FunctionDef)
-             and any(isinstance(n, ast.Name) and n.id == "ee" for n in ast.walk(node))}
+    # every function that names ``ee`` carries its own import, so a seventh
+    # Earth Engine function is covered without editing this test. The
+    # candidates are the module's own functions plus the methods of its
+    # models -- ``async def`` and methods included, since either could
+    # reach for ``ee`` -- but NOT functions nested inside those, which
+    # legitimately inherit their parent's local import.
+    defs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    candidates = [node for node in tree.body if isinstance(node, defs)]
+    candidates += [child
+                   for node in tree.body if isinstance(node, ast.ClassDef)
+                   for child in node.body if isinstance(child, defs)]
+    users = {node.name: node for node in candidates
+             if any(isinstance(n, ast.Name) and n.id == "ee" for n in ast.walk(node))}
     assert set(EE_FUNCTIONS) <= set(users), f"expected {EE_FUNCTIONS} to use ee, found {sorted(users)}"
     for name, node in users.items():
         assert any(isinstance(n, ast.Import) and any(a.name == "ee" for a in n.names)
