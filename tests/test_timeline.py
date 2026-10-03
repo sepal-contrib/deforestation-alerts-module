@@ -567,7 +567,10 @@ def test_widening_past_the_coverage_asks_the_loader_for_the_month():
     assert state.scene_window_request.value[0] < date(2026, 3, 3)
 
 
-def test_a_widened_request_only_ever_grows():
+def test_repeated_widening_on_the_same_alert_is_cumulative():
+    """Two presses ask for two months, not one -- that is the feature. The
+    request is recomputed from ``extra``, which grows, rather than unioned
+    with whatever was there, which is what made it leak across alerts."""
     state = _fake_state()
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     buttons = [w for w in _walk(card)
@@ -1351,3 +1354,54 @@ def test_a_collapsed_month_counts_only_the_collections_that_are_on():
     _chip_click(card, "Landsat")
     june = [lab for lab in _month_labels(card) if lab.startswith("Jun 2026,")]
     assert june == [timeline.t("analysis.timeline.collapsed_month", month="Jun 2026", count=1)]
+
+
+def test_opening_another_alert_asks_for_its_own_window_not_the_widened_one():
+    """Finding I2 from the final review. ``scene_window_request`` was absolute
+    and monotone and was reset only on a project switch, so "+1 month" on a
+    Jan-2024 alert still widened the foreground fetch of a Dec-2026 one opened
+    afterwards -- one unchunked ``getInfo`` over roughly three years, where
+    spec §5.5 promises one foreground single-month fetch."""
+    state = _fake_state()
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(state, _fake_analysis(), widgets)
+    left = [w for w in _walk(card)
+            if timeline.t("analysis.timeline.one_more_month") in _text(w)
+            and "click" in (getattr(w, "_events", None) or [])][0]
+    left.fire_event("click", None)
+    # alert A's own view: its window padded by the two months of ``VIEW_MONTHS``
+    # plus the one just asked for
+    assert state.scene_window_request.value == (date(2026, 2, 3), date(2026, 10, 23))
+
+    # a different alert, two years earlier, with nothing in the index for it
+    widgets.imagery_ctx.set({"alert_id": 9, "token": 2, "bbox": box(0.5, 0.5, 1.5, 1.5),
+                             "date_min": date(2024, 1, 10), "date_max": date(2024, 1, 20)})
+    asked = state.scene_window_request.value
+    assert asked == (date(2023, 10, 10), date(2024, 3, 20)), (
+        "the foreground request still carries the other alert's dates")
+    # the widened width persists as a preference (spec §4.7) -- three months
+    # back, not two -- but the months are this alert's
+    assert asked[1] < date(2026, 1, 1)
+
+    # and coming back to A asks for A's window again, not the union of both
+    widgets.imagery_ctx.set(dict(_ctx()))
+    assert state.scene_window_request.value == (date(2026, 2, 3), date(2026, 10, 23))
+
+
+def test_an_alert_whose_window_was_never_widened_asks_for_nothing():
+    """``extra == (0, 0)`` has to publish ``None`` rather than the alert's own
+    ±2 months: that span lies inside the padding ``wanted_window`` already
+    puts around the active period, so a request for it would make every alert
+    change look like a widen to the loader."""
+    state = _fake_state()
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(state, _fake_analysis(), widgets)
+    assert state.scene_window_request.value is None
+    left = [w for w in _walk(card)
+            if timeline.t("analysis.timeline.one_more_month") in _text(w)
+            and "click" in (getattr(w, "_events", None) or [])][0]
+    left.fire_event("click", None)
+    assert state.scene_window_request.value is not None
+    # the alert goes away entirely: there is no view to ask for
+    widgets.imagery_ctx.set(None)
+    assert state.scene_window_request.value is None

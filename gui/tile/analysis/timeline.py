@@ -401,6 +401,11 @@ def build_timeline(app_state, analysis, widgets):
     #: the alert the collapse set and the selection belong to, so a new alert
     #: gets its own auto-collapse instead of inheriting the last one's
     seen_alert = solara.reactive(None)
+    #: the alert ``scene_window_request`` was last published for. Separate
+    #: from ``seen_alert`` on purpose: the auto-pick waits for rows to pick
+    #: from, while the window request is what *gets* the rows, so it has to be
+    #: made for an alert whose months are not in the index yet.
+    asked_alert = solara.reactive(None)
 
     lane_before = v.Html(tag="div", style_=f"{_LANE_STYLE}; margin-top: 11px")
     lane_axis = v.Html(tag="div", style_=f"position: relative; height: {AXIS_H}px")
@@ -777,25 +782,39 @@ def build_timeline(app_state, analysis, widgets):
                                children=[t("analysis.timeline.loading")]))
         status.children = kids
 
-    def _widen(side):
-        """One more month on ``side``, and a request for it if the cache is short.
+    def _ask_for_the_view():
+        """Ask the loader for the months *this* alert's view needs, and no others.
 
         Widening the local view is not enough: outside the cached coverage the
         extra month would simply draw empty. ``scene_window_request`` is what
         ``SceneIndexLoader`` unions with its own ±2 months, so the month is
         fetched in the foreground and the strip fills in when it lands
         (``scene_index`` is one of the reactives ``render`` subscribes to).
-        The request only ever grows, so a reviewer who widens and then moves
-        to another alert keeps the context they asked for.
+
+        The request is the current alert's view window, absolute but *replaced*
+        rather than unioned. It used to only ever grow, and because it was
+        reset only on a project switch, "+1 month" on a Jan-2024 alert still
+        widened the foreground fetch of a Dec-2026 one opened afterwards --
+        roughly Nov 2023 to Feb 2027 in one ``getInfo``, where spec §5.5
+        promises one foreground single-month fetch. Cumulative widening on the
+        same alert is unaffected: ``extra`` grows and the window is recomputed
+        from it, so a second press asks for two months, not one.
+
+        ``extra == (0, 0)`` asks for nothing: the alert's own ±2 months lie
+        inside ``wanted_window``'s padding of the active period, which the
+        loader already fetches, and a request equal to it would be noise. A
+        widen that is already cached is not refetched either -- the loader
+        asks ``needs_refresh``, which answers "" for a covered window.
         """
+        window = view_window(widgets.imagery_ctx.value, app_state.project.value, extra.value)
+        app_state.scene_window_request.set(
+            None if window is None or extra.value == (0, 0) else window)
+
+    def _widen(side):
+        """One more month on ``side``, and a request for it if the cache is short."""
         back, fwd = extra.value
         extra.set((back + 1, fwd) if side == "left" else (back, fwd + 1))
-        window = view_window(widgets.imagery_ctx.value, app_state.project.value, extra.value)
-        if window is not None:
-            was = app_state.scene_window_request.value
-            app_state.scene_window_request.set(
-                window if was is None else (min(was[0], window[0]), max(was[1], window[1]))
-            )
+        _ask_for_the_view()
         render()
 
     def _collapse_window():
@@ -821,6 +840,23 @@ def build_timeline(app_state, analysis, widgets):
         window_band.style_ = "display: none"
 
     def render(*_):
+        ctx = widgets.imagery_ctx.value
+        # ``alert_id`` is ``actual_alert_id``, an *index* into the active set's
+        # GeoDataFrame, so it repeats across sets and across a reload of the
+        # same set. ``token`` is ``AnalysisState.alert_token``, which
+        # ``reset_alert`` bumps on every alert change, so the pair is the
+        # identity: without it a second alert landing on index 7 inherits the
+        # first one's collapse set and selection while ``reset_alert`` has
+        # already cleared ``before_info`` -- a readout contradicting the
+        # published pair, and no auto-pick at all.
+        identity = ((ctx or {}).get("alert_id"), (ctx or {}).get("token"))
+        if asked_alert.value != identity:
+            # Before the empty-state return below, not after it: the window
+            # width is an analyst preference that persists across alerts
+            # (spec §4.7), and the alert that most needs its months fetched is
+            # exactly the one the index has nothing for yet.
+            asked_alert.set(identity)
+            _ask_for_the_view()
         rows, window = _in_window()
         sel = None if rows is None or window is None else _enabled(rows)
         if sel is None or len(sel) == 0:
@@ -846,17 +882,7 @@ def build_timeline(app_state, analysis, widgets):
         # is still read by a screen reader walking the subtree.
         message.children = []
 
-        ctx = widgets.imagery_ctx.value
         a0, a1 = alert_window(ctx, app_state.project.value)
-        # ``alert_id`` is ``actual_alert_id``, an *index* into the active set's
-        # GeoDataFrame, so it repeats across sets and across a reload of the
-        # same set. ``token`` is ``AnalysisState.alert_token``, which
-        # ``reset_alert`` bumps on every alert change, so the pair is the
-        # identity: without it a second alert landing on index 7 inherits the
-        # first one's collapse set and selection while ``reset_alert`` has
-        # already cleared ``before_info`` -- a readout contradicting the
-        # published pair, and no auto-pick at all.
-        identity = ((ctx or {}).get("alert_id"), (ctx or {}).get("token"))
         if seen_alert.value != identity:
             seen_alert.set(identity)
             if a0 is not None and a1 is not None:
