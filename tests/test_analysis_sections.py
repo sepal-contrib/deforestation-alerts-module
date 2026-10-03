@@ -77,8 +77,11 @@ def _controls(tmp_path, monkeypatch):
     """``build_controls`` as the tile builds it, on stand-in models.
 
     The heavy widgets are only touched inside the edit/CNN handlers (as
-    tests/test_feedback_notifications.py's ``edit_tools_card`` relies on), so a
-    bare namespace is enough to assemble the panel.
+    tests/test_feedback_notifications.py's ``edit_tools_card`` relies on) and
+    by the refine section's alert-change reset, which clears the two maps' draw
+    controls -- so a namespace with those two is enough to assemble the panel
+    and to drive an alert change through it without a caught-and-logged
+    traceback in the way.
     """
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
@@ -87,8 +90,10 @@ def _controls(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
+    draw = SimpleNamespace(clear=lambda: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(), app_state=app_state, analysis=analysis,
+        widgets=SimpleNamespace(draw_before=draw, draw_after=draw),
+        app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis,
                            sections=analysis_tile.panel_sections(controls))
@@ -104,8 +109,21 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_two_sections(tmp_path, mon
     panel = _controls(tmp_path, monkeypatch)
     *head, block_a, block_b, refine, export = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
-    assert context.facts_widgets(block_a)       # block A owns the facts grid
-    assert review_panel.verdict_widgets(block_b)  # block B owns the verdict
+    # What each block OWNS, named. ``facts_widgets`` / ``verdict_widgets``
+    # return tuples that are truthy whatever they hold, so ``assert <the
+    # tuple>`` only ever catches the AttributeError of the slots being absent:
+    # give either accessor a ``getattr(..., {})`` default and such a line
+    # silently stops checking anything.
+    source, detected, chip = context.facts_widgets(block_a)
+    assert isinstance(chip, v.Chip)                       # the status chip
+    assert (source.tag, detected.tag) == ("span", "span")  # the two fact values
+    buttons, _, _, save_next, save, _ = review_panel.verdict_widgets(block_b)
+    # The three statuses the store, the PMTiles paint values and Overview's
+    # counts all read -- the verdict IS the stored string, never a label.
+    assert set(buttons) == {"Confirmed", "False Positive", "Need revision"}
+    # The literal English (the fixture pins the locale), not ``t()`` of the
+    # same key, which passes on the ``⟦key⟧`` placeholder too.
+    assert save.children == ["Save"] and save_next.children[0] == "Save & next"
     assert [refine, export] == [panel.sections.refine.root, panel.sections.export.root]
 
 
@@ -145,7 +163,7 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     """
     from gui.tile.analysis import export as export_mod
     from gui.tile.analysis import review_panel
-    from tests.test_analysis_download import _alerts_gdf, _build_button
+    from tests.conftest import _alerts_gdf, _build_button
 
     made = []
     monkeypatch.setattr(review_panel, "make_save_runner",
@@ -157,12 +175,34 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     panel.app_state.alerts_gdf.value = _alerts_gdf()
     panel.app_state.actual_alert_id.value = 0
     build_btn = _build_button(panel.sections.export_parts.body)
-    _, _, _, save_next, save, _ = review_panel.verdict_widgets(panel.controls.children[4])
+    # Unpacked by name, as the sibling test above does: with
+    # ``children[4]`` an insertion into the head reads block A's card instead
+    # and fails with ``AttributeError: _defo_verdict_slots``, saying nothing
+    # about what moved.
+    *_, block_b, _refine, _export = panel.controls.children
+    _, _, _, save_next, save, _ = review_panel.verdict_widgets(block_b)
 
     assert build_btn.disabled is True
     save.fire_event("click", None)
 
     assert made == []                      # block B built no runner of its own
     assert build_btn.disabled is False     # the export section's apply_save ran
-    assert panel.sections.export.badge.children == [t("analysis_tile.sections.export_build")]
-    assert save_next is not save
+    # The literal English, as the export badge's own tests use since Task 9's
+    # round: ``t()`` of the same key on both sides passes on the ``⟦key⟧``
+    # placeholder a missing or misshapen key renders.
+    assert panel.sections.export.badge.children == ["ready to build"]
+
+    # And so does *Save & next*: BOTH buttons drive that one runner. Not
+    # ``save_next is not save`` -- ``build_review_panel`` constructs them
+    # separately, so no reachable implementation makes them one object and the
+    # assertion cannot fail. Driven from the section's empty state, so the two
+    # effects below are this click's and not the previous one's still standing.
+    panel.analysis.reset_alert()           # the reviewer moved on
+    assert build_btn.disabled is True
+    assert panel.sections.export.badge.children == ["available after save"]
+
+    save_next.fire_event("click", None)
+
+    assert made == []
+    assert build_btn.disabled is False
+    assert panel.sections.export.badge.children == ["ready to build"]

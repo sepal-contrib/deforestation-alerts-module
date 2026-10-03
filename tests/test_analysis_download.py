@@ -12,14 +12,15 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import geopandas as gpd
 import pytest
-from shapely.geometry import box
 
-from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.state import AnalysisState
+# ``_in`` / ``_build_button`` / ``_alerts_gdf`` live in conftest: the assembled
+# panel's tests (tests/test_analysis_sections.py) drive the same export section
+# through ``build_controls`` and need them too.
+from tests.conftest import _alerts_gdf, _build_button, _in
 
 # Smallest valid JPEG so python-docx's add_picture accepts the stubbed renders.
 _JPEG_1PX = base64.b64decode(
@@ -31,21 +32,6 @@ _JPEG_1PX = base64.b64decode(
 _BEFORE_INFO = ["Sentinel 2", 1700000000, None, "S2_before", "_010124"]
 _AFTER_INFO = ["Sentinel 2", 1700000001, None, "S2_after", "_020224"]
 _TIF_NAME = "alert_0_010124_020224.tif"
-
-
-def _alerts_gdf():
-    gdf = gpd.GeoDataFrame(
-        {
-            "admin1": ["Paraguay"], "admin2": ["Canindeyú"], "admin3": ["Curuguaty"],
-            "alert_date_min": [2026.001], "alert_date_max": [2026.010],
-            "before_img": ["S2_before"], "after_img": ["S2_after"],
-            "alert_sources": ["GLAD-L"], "area_ha": [1.25],
-            "alert_polygon": [None],
-        },
-        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
-    )
-    gdf["bounding_box"] = gdf.geometry.envelope
-    return gdf
 
 
 @pytest.fixture()
@@ -260,22 +246,6 @@ def test_the_report_is_built_from_the_projects_template(download_ctx):
 # ---------------------------------------------------------------------------
 # The export section's summary badge (Task 9)
 # ---------------------------------------------------------------------------
-def _in(root):
-    """Every widget of ``root``'s tree, root included."""
-    yield root
-    for child in getattr(root, "children", None) or []:
-        if hasattr(child, "children") or hasattr(child, "msg"):
-            yield from _in(child)
-
-
-def _build_button(body):
-    label = t("analysis_tile.export_labels.download_alert_data_btn")
-    for widget in _in(body):
-        if getattr(widget, "msg", None) == label:
-            return widget
-    raise AssertionError("no build button in the export section body")
-
-
 def _downloads_toolbar(body):
     from pysepal import sepalwidgets as sw
 

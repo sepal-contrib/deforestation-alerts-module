@@ -1640,3 +1640,30 @@ def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeyp
     analysis.verdict.set("Confirmed")
     run_save(None, then=lambda: moved.append(1))
     assert moved == [1]
+
+
+def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, monkeypatch):
+    """A stale *Save & next* must not move the reviewer on from where they are.
+
+    The save is slow (GEE admin lookups plus the store write), so the reviewer
+    can navigate by hand while it runs. ``then`` is ``app_state.go_next``: left
+    unguarded, the late save advances from the alert the reviewer chose, so they
+    land one alert FURTHER than where they went, with nothing to say why. The
+    write itself still happened — the success toast below proves this is not a
+    refusal passing for a guard.
+    """
+    import gui.tile.analysis.export as export
+
+    app_state, analysis, widgets, model = _save_harness(tmp_path, monkeypatch)
+    feedback = _record_feedback(monkeypatch, export)
+    held = _deferred(monkeypatch, export)
+    moved = []
+    run_save = export.make_save_runner(widgets, app_state, analysis, model)
+
+    analysis.verdict.set("Confirmed")
+    run_save(None, then=lambda: moved.append(1))  # the save starts here...
+    analysis.reset_alert()                        # ...the reviewer moves on...
+    held.pop()()                                  # ...and only now does it land
+
+    assert ("success", t("analysis_tile.export_labels.save_done")) in feedback.toasts()
+    assert moved == []

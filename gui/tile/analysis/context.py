@@ -1,17 +1,23 @@
 """Block A of the Analysis controls: where am I, and what is this alert.
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Holds
-the set selector, the set-status banner, the queue position with its progress
-bar, the navigation row, and the facts grid with its status chip — the part of
-the panel that answers "which alert of how many, and what does the table say
-about it" (see
+the queue position with its progress bar, the navigation row, and the facts
+grid with its status chip — the part of the panel that answers "which alert of
+how many, and what does the table say about it" (see
 ``docs/superpowers/specs/2026-10-03-analysis-side-panel-design.md`` §3).
 
-So far this module builds the queue line (position counter, reviewed/left
-tally, progress bar), the navigation row (Previous / Next / jump-to-number) and
-the facts grid with its status chip, which replaces the retired "Alert info"
-card. A later task wires the card into the tile, so nothing here calls into
-``analysis_tile`` and nothing there calls ``build_context`` yet.
+The set selector and the set-status banner are NOT built here, although the
+spec's block table counts them as block A: ``analysis_tile.build_controls``
+renders both as siblings in the head, ABOVE this card — the banner is a
+full-width warning strip and the selector a ``v-select`` with its own label,
+and neither belongs inside a ``pa-3`` card with the queue counter (recorded in
+that spec section).
+
+This module builds the queue line (position counter, reviewed/left tally,
+progress bar), the navigation row (Previous / Next / jump-to-number) and the
+facts grid with its status chip, which replaces the retired "Alert info" card.
+``analysis_tile.build_controls`` calls ``build_context`` and puts the card
+between the head and block B; nothing here calls back into ``analysis_tile``.
 
 Every number is counted from the live alerts table rather than from
 ``AlertSet.n_reviewed``, so the tally moves the moment a save lands, and every

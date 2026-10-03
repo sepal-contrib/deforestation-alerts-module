@@ -136,6 +136,21 @@ def view_actual_alert(
     double-mount. The heavy imagery loading + slide-group rebuilds are
     deferred to Task 9.2 (AlertImagery).
     """
+    # Both guards below return BEFORE the jump field and the verdict are
+    # touched, so between a set switch and the moment the new set's rows are
+    # published the panel still shows the previous alert's number and the
+    # previous alert's stored answer. Deliberate and the same shape as block
+    # A's facts grid (``context.facts_of`` returns None and the grid keeps its
+    # values; there is a test for it): the alternative is a panel that blanks
+    # and re-fills on every set switch. The window is new in KIND for the
+    # verdict, though — it is now SEEDED from the row rather than only ever
+    # reviewer-entered — so for those milliseconds the verdict buttons show
+    # another alert's answer. Harmless to the store: a Save captures
+    # ``analysis.verdict`` with the alert's token (``capture_alert``) and
+    # ``_save_attributes`` refuses a row of another set
+    # (``export_labels.save_other_set``), so the stale answer cannot be
+    # written onto the new set's alert. If that window ever has to close, the
+    # fix is to clear the verdict here rather than to leave the guards.
     gdf = app_state.alerts_gdf.value
     s = active_set(app_state.project.value)
     if s is not None and not set_store.alerts_belong_to(gdf, s):

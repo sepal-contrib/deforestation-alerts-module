@@ -551,9 +551,12 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
 
     ``run_save(button, then=None)``: spin ``button`` (optional), capture the
     alert on the UI thread, write the store on a worker, and run ``then`` only
-    after a save that actually wrote — Save & next passes ``go_next``, and a
-    refusal must leave the reviewer on the alert it refused, with the message
-    that explains it.
+    after a save that actually wrote **and only while the alert that was saved
+    is still the one on screen** — Save & next passes ``go_next``, so a refusal
+    must leave the reviewer on the alert it refused (with the message that
+    explains it), and a save that lands after the reviewer navigated by hand
+    must not advance from where they went. ``then`` runs on the worker thread,
+    before the button unspins, so a slow ``then`` keeps the button spinning.
 
     ``apply_save`` is the post-save UI step (the export section's download
     button + the ``alerts_gdf`` rebind); the default rebinds alone, so the
@@ -644,9 +647,18 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                     # save did not write.
                     analysis.apply_if_current(token, lambda: analysis.dirty.set(False))
                     # Only now — Save & next must not move off an alert whose
-                    # review was refused. Guarded: a failing ``then`` is a log
-                    # line, not a lost success toast.
-                    if then is not None:
+                    # review was refused. And only for the alert this save was
+                    # for: ``then`` is ``go_next``, so a save that lands after
+                    # the reviewer navigated by hand would advance from THERE
+                    # and leave them one alert further than where they went,
+                    # with nothing to say why. ``is_current``, not
+                    # ``apply_if_current``: ``go_next`` republishes
+                    # ``actual_alert_id``, whose subscriber runs the whole
+                    # per-alert orchestration (``reset_alert`` included), and
+                    # that must not run under ``_alert_lock``.
+                    # Guarded: a failing ``then`` is a log line, not a lost
+                    # success toast.
+                    if then is not None and analysis.is_current(token):
                         try:
                             then()
                         except Exception:
@@ -773,7 +785,9 @@ def build_export(
         # hrefs pointing at the previous alert's zip and report, and anything
         # that reveals the toolbar again (a build of the new alert that is still
         # running when this fires) would offer them for the alert on screen.
-        # ``set_url()`` with no path puts both back to "#", disabled.
+        # ``set_url()`` with no path points both at the sandbox file route's
+        # own "#" (nothing of this project's), disables them and drops their
+        # ``download`` attribute.
         ns["files_dwn_btn"].set_url()
         ns["report_dwn_btn"].set_url()
         built.update(saved=False, files=0)
@@ -933,8 +947,14 @@ def build_export(
                 # alert this build was for. An unconditional re-enable would
                 # undo ``_forget_previous_alert``'s disable and leave a
                 # clickable build button under "available after save".
-                if analysis.is_current(token):
-                    ns["download_alert_data_btn"].disabled = False
+                # Through ``apply_if_current``, like the three apply sites
+                # above: a bare ``is_current`` check followed by the write is
+                # two statements outside ``_alert_lock``, and a ``reset_alert``
+                # landing between them re-enables the button anyway.
+                analysis.apply_if_current(
+                    token,
+                    lambda: setattr(ns["download_alert_data_btn"], "disabled", False),
+                )
 
         spawn_in_context(_worker)
 

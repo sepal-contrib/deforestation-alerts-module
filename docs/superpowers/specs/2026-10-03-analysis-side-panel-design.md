@@ -55,6 +55,14 @@ block structure is the change, not the technology.
 A and B together are the loop, and they fit one screen with no scroll at the
 panel's width. C is everything done occasionally, one click away.
 
+**As shipped:** the table counts the set selector and the set-status banner as
+part of block A, but `analysis_tile.build_controls` renders both in the head,
+as siblings **above** block A's card, and `context.build_context` builds
+neither. The banner is a full-width warning strip and the selector a
+`v-select` with its own label; inside a `pa-3` card with the queue counter and
+the facts grid they read as facts about *this alert*, which is what block A is
+for. Everything else about block A is as the table says.
+
 Decisions taken during brainstorming and binding on this design:
 
 * **App theme, not the mockups' palette.** The boards are hand-styled dark HTML
@@ -204,7 +212,13 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model) -> Callable
   with the message that explains it;
 * `then` runs inside the worker's success path, where `_apply_save` already
   rebinds `alerts_gdf`; `go_next` only sets a reactive, which is safe from a
-  worker thread exactly as that rebind is.
+  worker thread exactly as that rebind is;
+* and only while the alert that was saved is still the one on screen
+  (`analysis.is_current(token)`, the guard the per-alert applies use): a save
+  that lands after the reviewer navigated by hand would otherwise advance from
+  *there*, leaving them one alert further than where they went. `is_current`
+  rather than `apply_if_current`, because `go_next`'s subscriber runs the whole
+  per-alert orchestration and must not run under `_alert_lock`.
 
 The export section keeps the template field, *Download alert data* and the two
 download buttons. `export_labels.save_btn` is reused for the secondary *Save*.
@@ -469,7 +483,9 @@ fails through `tests/conftest.py`'s `_no_live_ee` guard):
    `defo_layer`; false on `reset_alert` and after a save that wrote.
 10. **Save & next advances only on a save that wrote**: a refused save (no
     verdict / another set / a rebuilt store) leaves `actual_alert_id` where it
-    was and still shows its warning.
+    was and still shows its warning. And only for the alert it saved: a save
+    that lands after the reviewer navigated by hand writes, toasts and does
+    **not** advance.
 11. Collapsing a section leaves its body in the widget tree with its imperative
     state intact (the draw-control and CNN toolbar visibility survive a
     collapse-expand cycle).

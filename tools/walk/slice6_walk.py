@@ -52,7 +52,14 @@ def write_template(data: Path) -> Path:
 
 
 def pick_template(page, rec, *, out, data, template):
-    """Analysis export card → the report template field → navigate to the file."""
+    """Analysis Export section → the report template field → navigate to the file.
+
+    The section is opened first: the field is a child of the Export body, which
+    the review console keeps COLLAPSED (``display: none``), and ``pick_file``
+    needs its button ``:visible``. Without this the phase times out and
+    ``run_phases`` aborts every phase after it.
+    """
+    ph.open_section(page, "Export this alert")  # idempotent
     ph.pick_file(page, "Report template", template)  # Task 6's FileInputComponent helper
     w.wait_for(lambda: ph.manifest(data, PROJECT).get("report_template") == str(template), 30,
                "the template saved in project.json")

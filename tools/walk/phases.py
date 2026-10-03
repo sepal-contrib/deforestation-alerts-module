@@ -74,9 +74,19 @@ def open_section(page, title):
         page.wait_for_timeout(800)
 
 
+#: Block B, by the title ``review_panel`` gives its card.
+_VERDICT_CARD = '.v-card:has-text("Verdict")'
+
+
 def save_btn(page):
-    """Block B's *Save* -- exact text, since *Save & next* also reads "Save"."""
-    return page.locator("button:visible", has_text=re.compile(r"^\s*Save\s*$")).first
+    """Block B's *Save* -- exact text, since *Save & next* also reads "Save",
+    and SCOPED to the verdict card, since three other catalogue strings render
+    exactly "Save" too (the alert-source, period and visualization modals'
+    own Save buttons). All three live inside modals today, so a document-wide
+    match is unique only by luck: a modal a preceding phase left open -- or any
+    future panel-level Save -- would be clicked instead, with no diagnostic."""
+    return page.locator(f"{_VERDICT_CARD} button:visible",
+                        has_text=re.compile(r"^\s*Save\s*$")).first
 
 
 def download_btn(page):
@@ -145,7 +155,14 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
         modal_button(page, "Replace").click()
     t0, landed = time.time(), False
     while time.time() - t0 < timeout:
-        if alert_facts(page):  # block A, with the new set's alert on screen
+        # Block A's card is on screen. NOT "the new set's alert is on screen":
+        # the Source / Detected / Status labels are written once at build and
+        # the values are left alone while another set's rows are current
+        # (``context.facts_of`` returns None), so this is truthy as soon as the
+        # Analysis panel is visible, alert or no alert. Same semantics as the
+        # retired ``text="Alert info"`` anchor; the assertions that follow the
+        # 5s settle below are what read the alert itself.
+        if alert_facts(page):
             landed = True
             break
         if errors(toasts_since(page, t_int)):

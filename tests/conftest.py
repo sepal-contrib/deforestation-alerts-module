@@ -176,3 +176,53 @@ def real_cover(gee):
         return p
 
     return _cover
+
+
+# ---------------------------------------------------------------------------
+# Shared widget-tree helpers for the Analysis export tests.
+#
+# Plain functions rather than fixtures: the callers are module-level helpers
+# (``test_analysis_download._export_harness``) as often as tests, and a fixture
+# would have to be threaded through them. They live here because two test
+# modules need them -- ``test_analysis_download`` drives the export section on
+# its own and ``test_analysis_sections`` drives it through the assembled panel
+# -- and a test module importing another test module's privates couples the two
+# files' refactors together. Imports are function-local so conftest, which is
+# imported before every test module, does not pull geopandas in at collection.
+# ---------------------------------------------------------------------------
+def _in(root):
+    """Every widget of ``root``'s tree, root included."""
+    yield root
+    for child in getattr(root, "children", None) or []:
+        if hasattr(child, "children") or hasattr(child, "msg"):
+            yield from _in(child)
+
+
+def _build_button(body):
+    """*Download alert data* in an export section body (found by its ``msg``)."""
+    from gui.i18n import t
+
+    label = t("analysis_tile.export_labels.download_alert_data_btn")
+    for widget in _in(body):
+        if getattr(widget, "msg", None) == label:
+            return widget
+    raise AssertionError("no build button in the export section body")
+
+
+def _alerts_gdf():
+    """One alert row with every column a Save or a build reads."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gdf = gpd.GeoDataFrame(
+        {
+            "admin1": ["Paraguay"], "admin2": ["Canindeyú"], "admin3": ["Curuguaty"],
+            "alert_date_min": [2026.001], "alert_date_max": [2026.010],
+            "before_img": ["S2_before"], "after_img": ["S2_after"],
+            "alert_sources": ["GLAD-L"], "area_ha": [1.25],
+            "alert_polygon": [None],
+        },
+        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    return gdf
