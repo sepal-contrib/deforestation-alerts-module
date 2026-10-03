@@ -256,13 +256,33 @@ def test_overview_export_failure_fails_the_task_with_one_error_toast(
 # ---------------------------------------------------------------------------
 # analysis/export — raw layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
+def _export_layout(export, **kwargs):
+    """The Export section's body plus the Save button the verdict block owns.
+
+    ``build_export`` returns the section body and the one ``run_save`` runner;
+    the Save button itself lives in the verdict block now, wired to that
+    runner. These tests assert the feedback a real Save publishes, so they
+    drive the runner through a stand-in button wired exactly as
+    ``review_panel`` wires its own, and hang it beside the body so
+    ``_button(card, ...)`` finds both.
+    """
+    import ipyvuetify as v
+    from pysepal import sepalwidgets as sw
+
+    parts = export.build_export(**kwargs)
+    save_btn = sw.Btn(msg=t("analysis_tile.export_labels.save_btn"))
+    save_btn.on_event("click", lambda *_: parts.run_save(save_btn))
+    return v.Html(tag="div", children=[parts.body, save_btn])
+
+
 @pytest.fixture()
 def export_card(monkeypatch, data_root):
     import gui.tile.analysis.export as export
 
     app_state = AppState()
     app_tile_model = _set_context_fake()
-    card = export.build_export(
+    card = _export_layout(
+        export,
         widgets=None,  # only touched inside _save_attributes / _download_data
         app_state=app_state,
         aux_model=_set_context_fake(),
@@ -422,7 +442,8 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
     )
     app_state.actual_alert_id.value = 0
     ctx = SetContext(app_state)
-    card = export.build_export(
+    card = _export_layout(
+        export,
         widgets=None,  # the refusal comes before any widget is read
         app_state=app_state,
         aux_model=ctx,
@@ -498,8 +519,8 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
         actual_bb=SimpleNamespace(geometry=lambda: None),
     )
     ctx = SetContext(app_state)
-    card = export.build_export(widgets=widgets, app_state=app_state, aux_model=ctx,
-                               analysis=analysis, app_tile_model=ctx)
+    card = _export_layout(export, widgets=widgets, app_state=app_state, aux_model=ctx,
+                          analysis=analysis, app_tile_model=ctx)
     feedback = _record_feedback(monkeypatch, export)
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
@@ -629,7 +650,8 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
         recipe_folder_path=str(data_root / "r"), custom_report_template=None
     )
     widgets = SimpleNamespace(actual_alert_grid=None)  # no image picked: AnalysisState() starts empty
-    card = export.build_export(
+    card = _export_layout(
+        export,
         widgets=widgets,
         app_state=app_state,
         aux_model=_set_context_fake(),
@@ -1427,8 +1449,9 @@ def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root,
 
     app_state, analysis = AppState(), AnalysisState()
     widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
-    card = export.build_export(widgets=widgets, app_state=app_state, aux_model=_set_context_fake(),
-                               analysis=analysis, app_tile_model=_set_context_fake())
+    card = _export_layout(export, widgets=widgets, app_state=app_state,
+                          aux_model=_set_context_fake(), analysis=analysis,
+                          app_tile_model=_set_context_fake())
     move_to_b = _alert_a_then_b(app_state, analysis, widgets)
     analysis.verdict.set("Yes")  # A's answer; ``_move_to_b`` forgets it (``reset_alert``)
     _record_feedback(monkeypatch, export)

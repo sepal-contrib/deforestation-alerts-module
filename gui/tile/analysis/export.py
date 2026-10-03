@@ -2,14 +2,22 @@
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports the
 OLD ``AnalysisTile`` export card (``card06`` +
-``label35``/``toolBarSaveExport``/``toolBarDownloads``):
+``label35``/``toolBarSaveExport``/``toolBarDownloads``) as the **body of the
+collapsible Export section** (spec §5): the section owns the title, and the
+verdict block owns the Save, so ``build_export`` builds neither.
 
-* The **Save** button (``save_btn``) ran the OLD ``save_attributes_to_gdf`` —
+* The OLD **Save** button (``save_btn``) ran ``save_attributes_to_gdf`` —
   writing the user's verdict / loss-driver / image-info / GEE-admin attributes
   + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
-  That flow now lives in ``make_save_runner`` (module level), so the review
-  panel's own "Save & next" and this button run the SAME save; the runner's
-  ``then`` is what moves to the next alert, and only a save that wrote calls it.
+  That flow now lives in ``make_save_runner`` (module level) and the button
+  itself in the verdict block, which drives that runner; the runner's ``then``
+  is what moves to the next alert, and only a save that wrote calls it.
+  ``build_export`` returns the runner so there is ONE save for the panel.
+* The section's **summary badge** (``set_badge``) says what the section can
+  offer without opening it: nothing until a save of this alert lands, then a
+  build, then the count of files that build left ready. An alert change takes
+  it back to the first state, because the build button and the two download
+  links belong to the alert they were made for.
 * The **Download alert data** button (``download_alert_data_btn``, disabled until a
   save happens) ran the OLD ``download_data`` — building the single-alert gpkg, the
   before/after-image GeoTIFF, the zip, and the Word report.
@@ -103,6 +111,7 @@ DownloadBtns get ``$HOME``-relative URLs (``local_files.home_relative``).
 import logging
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import ee
@@ -119,7 +128,7 @@ from deforestation_alerts.scripts.report_builder import (
     add_files_to_zip,
     generate_deforestation_report_with_word_template,
 )
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import loss_drivers as drivers
 from gui.scripts import set_store
 from gui.scripts.detached import render_detached
@@ -642,8 +651,20 @@ def build_export(
     aux_model,
     analysis,
     app_tile_model,
+    set_badge=None,
 ):
-    """Build and return the export card (OLD ``card06``) with the save + download flow.
+    """Build and return the Export section's body and the review save runner.
+
+    ``SimpleNamespace(body, run_save)``: ``body`` is what the collapsible
+    Export section wraps (the report-template field, the build button and the
+    hidden downloads toolbar) — the section owns the title, and the verdict
+    block owns the Save, so neither is built here. ``run_save`` is the one
+    save runner, handed to the verdict block so both save paths run the same
+    post-save step and light up the build button below.
+
+    ``set_badge(text, color=None)`` is the section's badge setter (``None``
+    before Task 10 wires one). It takes text that is ALREADY translated, so
+    every message key the badge shows is resolved here.
 
     The alert store, the zip and the report it writes land in the active set's
     folder.
@@ -658,12 +679,6 @@ def build_export(
     def _build_widgets():
         ns = {}
 
-        ns["save_btn"] = sw.Btn(
-            msg=t("analysis_tile.export_labels.save_btn"),
-            color="primary",
-            outlined=True,
-            class_="pa-1 ma-1",
-        )
         ns["download_alert_data_btn"] = sw.Btn(
             msg=t("analysis_tile.export_labels.download_alert_data_btn"),
             color="primary",
@@ -680,9 +695,9 @@ def build_export(
             text=t("analysis_tile.export_labels.report_dwn_btn"),
         )
 
-        ns["toolbar_save_export"] = sw.Toolbar(
-            class_="pa-1 ma-1 d-flex justify-space-between",
-            children=[ns["save_btn"], ns["download_alert_data_btn"]],
+        ns["toolbar_build"] = sw.Toolbar(
+            class_="pa-1 ma-1 d-flex",
+            children=[ns["download_alert_data_btn"]],
         )
         ns["toolbar_downloads"] = sw.Toolbar(
             class_="pa-1 ma-1 d-flex justify-space-between",
@@ -693,6 +708,58 @@ def build_export(
 
     ns = _build_widgets()
 
+    # What this section can offer for the alert under review: whether a save
+    # of it has landed (so a build is possible) and how many files the last
+    # build left ready. Kept here rather than read back off the build button's
+    # ``disabled``, which is ALSO true while a build runs (the click handler
+    # spins it) and would make the badge say "available after save" over a
+    # build in progress. Reset by every alert change.
+    built = {"saved": False, "files": 0}
+
+    # ------------------------------------------------------------------
+    # The section's summary badge: what this section can offer right now,
+    # without opening it. Three states, in the order a reviewer meets them —
+    # nothing to build yet, a build is possible, the files are ready.
+    # ------------------------------------------------------------------
+    def _badge(text, color=None):
+        if set_badge is not None:
+            set_badge(text, color=color)
+
+    def _show_badge_for_state():
+        # ``viz`` is sw.SepalWidget's shown flag (what .show()/.hide() write);
+        # a plain widget has none, and then the toolbar counts as shown.
+        revealed = getattr(ns["toolbar_downloads"], "viz", True)
+        files = built["files"] if revealed else 0
+        if not built["saved"]:
+            _badge(t("analysis_tile.sections.export_after_save"))
+        elif files:
+            _badge(tn("analysis_tile.sections.export_files", files), color="primary")
+        else:
+            _badge(t("analysis_tile.sections.export_build"))
+
+    # ------------------------------------------------------------------
+    # An alert change takes the section back to its empty state. What it can
+    # offer belongs to ONE alert: the build button was enabled by a save of
+    # the previous alert, and the two download links still point at that
+    # alert's zip and report. Left alone they are a badge that counts files
+    # the reviewer cannot get for the alert in front of them — the same leak
+    # as the save stamp that used to outlive its alert.
+    #
+    # Keyed on ``alert_token`` (bumped by EVERY ``reset_alert``), not on the
+    # save stamp: the stamp is cleared to the value it already has when no
+    # save landed on the previous alert, and a reactive set to an equal value
+    # notifies nobody.
+    # ------------------------------------------------------------------
+    def _forget_previous_alert(*_):
+        ns["download_alert_data_btn"].disabled = True
+        ns["toolbar_downloads"].hide()
+        built.update(saved=False, files=0)
+        _show_badge_for_state()
+
+    # Registered once (the builder runs once per session); the unsubscriber is
+    # deliberately discarded, as everywhere else under analysis/.
+    analysis.alert_token.subscribe(_forget_previous_alert)
+
     # ------------------------------------------------------------------
     # Post-save apply (OLD save effect, success path) — enable the download button
     # + poke the alerts_gdf reactive. Runs at the END of the save worker's tracked
@@ -702,6 +769,12 @@ def build_export(
     # ------------------------------------------------------------------
     def _apply_save():
         ns["download_alert_data_btn"].disabled = False
+        built["saved"] = True
+        # Right after the enable, not at the end: the rebind below can raise
+        # (a gdf that refuses to copy), and a badge still reading "available
+        # after save" over an enabled build button would be a lie the error
+        # toast does not explain.
+        _show_badge_for_state()
         # Poke the alerts_gdf reactive so dependents refresh. The save mutated
         # the gdf in place (.at[id, col]) which does NOT change the reactive's
         # object identity, so Overview (whose refresh effect keys on
@@ -726,6 +799,12 @@ def build_export(
             path=local_files.home_relative(result["report_path"])
         )
         ns["toolbar_downloads"].show()
+        # What the badge counts: the files this build actually produced, read
+        # off the result rather than assumed to be two.
+        built["files"] = len(
+            [p for p in (result.get("zip_path"), result.get("report_path")) if p]
+        )
+        _show_badge_for_state()
 
     # ------------------------------------------------------------------
     # Save: the shared runner (``make_save_runner``), with this section's own
@@ -814,7 +893,6 @@ def build_export(
     # start their workers; loading state is toggled inside the handlers.
     # ------------------------------------------------------------------
     def _register_handlers():
-        ns["save_btn"].on_event("click", lambda *_: run_save(ns["save_btn"]))
         ns["download_alert_data_btn"].on_event("click", _on_download)
 
     _register_handlers()
@@ -823,22 +901,20 @@ def build_export(
     template_field = render_detached(lambda: ReportTemplateField(app_state=app_state),
                                      "report template", notify=False)[0]
 
+    # The badge's opening state, once everything it reads exists: a build is
+    # not possible until a save of this alert has landed.
+    _show_badge_for_state()
+
     # ------------------------------------------------------------------
-    # Layout: OLD card06 = export title + (new) report template field +
-    # toolBarSaveExport + toolBarDownloads
-    # (hidden). The OLD inline error alert is gone: failures are error toasts.
+    # Layout: the section BODY — the report template field, the build button's
+    # row, and the (hidden) downloads toolbar. No title and no Save: the
+    # collapsible section owns the first and the verdict block the second.
+    # The OLD inline error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
-    card = v.Card(
-        class_="pa-2 ma-2",
-        hover=True,
-        children=[
-            v.CardTitle(
-                class_="pa-1 ma-1",
-                children=[t("analysis_tile.export_labels.export_title")],
-            ),
-            template_field,
-            ns["toolbar_save_export"],
-            ns["toolbar_downloads"],
-        ],
+    return SimpleNamespace(
+        body=v.Html(
+            tag="div",
+            children=[template_field, ns["toolbar_build"], ns["toolbar_downloads"]],
+        ),
+        run_save=run_save,
     )
-    return card

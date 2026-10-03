@@ -141,6 +141,13 @@
       "saved_at": "Saved {time}"
     },
     "sections": {
+      "export": "Export this alert",
+      "export_after_save": "available after save",
+      "export_build": "ready to build",
+      "export_files": {
+        "one": "{n} file ready",
+        "other": "{n} files ready"
+      },
       "refine": "Refine polygon",
       "refine_empty": "nothing drawn",
       "refine_summary": "{shapes} · {area} ha",
@@ -172,7 +179,6 @@
       "dl_stale": "The model finished after you moved to another alert: its prediction was not added."
     },
     "export_labels": {
-      "export_title": "Save and Export",
       "save_btn": "Save",
       "download_alert_data_btn": "Download",
       "files_dwn_btn": "Files",

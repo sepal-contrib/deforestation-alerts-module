@@ -141,6 +141,14 @@
       "saved_at": "Enregistrée à {time}"
     },
     "sections": {
+      "export": "Exporter cette alerte",
+      "export_after_save": "disponible après l'enregistrement",
+      "export_build": "prêt à générer",
+      "export_files": {
+        "one": "{n} fichier prêt",
+        "many": "{n} de fichiers prêts",
+        "other": "{n} fichiers prêts"
+      },
       "refine": "Affiner le polygone",
       "refine_empty": "rien de dessiné",
       "refine_summary": "{shapes} · {area} ha",
@@ -174,7 +182,6 @@
       "dl_stale": "Le modèle a terminé après votre passage à une autre alerte : sa prédiction n'a pas été ajoutée."
     },
     "export_labels": {
-      "export_title": "Sauvegarder et exporter",
       "save_btn": "Sauvegarder",
       "download_alert_data_btn": "Télécharger",
       "files_dwn_btn": "Fichiers",

@@ -16,6 +16,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import box
 
+from gui.i18n import t, tn
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.state import AnalysisState
@@ -254,3 +255,120 @@ def test_the_report_is_built_from_the_projects_template(download_ctx):
     result = _run(ctx)
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
     assert "MARKER-6f1c" in text
+
+
+# ---------------------------------------------------------------------------
+# The export section's summary badge (Task 9)
+# ---------------------------------------------------------------------------
+def _in(root):
+    """Every widget of ``root``'s tree, root included."""
+    yield root
+    for child in getattr(root, "children", None) or []:
+        if hasattr(child, "children") or hasattr(child, "msg"):
+            yield from _in(child)
+
+
+def _build_button(body):
+    label = t("analysis_tile.export_labels.download_alert_data_btn")
+    for widget in _in(body):
+        if getattr(widget, "msg", None) == label:
+            return widget
+    raise AssertionError("no build button in the export section body")
+
+
+def _downloads_toolbar(body):
+    from pysepal import sepalwidgets as sw
+
+    for widget in _in(body):
+        if isinstance(widget, sw.Toolbar) and any(
+            isinstance(child, sw.DownloadBtn)
+            for child in (getattr(widget, "children", None) or [])
+        ):
+            return widget
+    raise AssertionError("no downloads toolbar in the export section body")
+
+
+def _export_harness(tmp_path, monkeypatch, set_badge=None):
+    """``build_export``'s arguments, wired so a save and a build run inline.
+
+    What the badge says is imperative, per-alert widget state, so it is read
+    through the very paths that change it — the shared ``run_save`` and the
+    build button's own click handler — with only the blocking bodies stubbed
+    and ``spawn_in_context`` running on the calling thread. No notification
+    provider is mounted, so the workers publish to a ``NoopNotifier``.
+    """
+    app_state = AppState()
+    app_state.alerts_gdf.value = _alerts_gdf()
+    app_state.actual_alert_id.value = 0
+    analysis = AnalysisState()
+    widgets = SimpleNamespace(actual_alert_grid=None, driver_combobox=None)
+    model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None)
+
+    monkeypatch.setattr(export_mod, "spawn_in_context", lambda target, *a, **k: target())
+    monkeypatch.setattr(export_mod, "_save_attributes", lambda *a, **k: True)
+    monkeypatch.setattr(
+        export_mod,
+        "_download_data",
+        lambda *a, **k: {
+            "zip_path": str(tmp_path / "alert_0.zip"),
+            "report_path": str(tmp_path / "alert_0.docx"),
+        },
+    )
+    monkeypatch.setattr(export_mod.local_files, "home_relative", str)
+
+    parts = export_mod.build_export(
+        widgets=widgets,
+        app_state=app_state,
+        aux_model=model,
+        analysis=analysis,
+        app_tile_model=model,
+        set_badge=set_badge,
+    )
+    build_btn = _build_button(parts.body)
+    return SimpleNamespace(
+        parts=parts,
+        analysis=analysis,
+        app_state=app_state,
+        build_btn=build_btn,
+        downloads=_downloads_toolbar(parts.body),
+        save=parts.run_save,
+        build=lambda: build_btn.fire_event("click", None),
+    )
+
+
+def test_the_export_badge_follows_what_is_available(tmp_path, monkeypatch):
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
+    )
+    assert seen[-1] == t("analysis_tile.sections.export_after_save")
+
+    harness.save()  # a save landed: the build is possible
+    assert seen[-1] == t("analysis_tile.sections.export_build")
+
+    harness.build()  # the zip and the report are there
+    assert seen[-1] == tn("analysis_tile.sections.export_files", 2)
+
+
+def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, monkeypatch):
+    """What this section can offer belongs to ONE alert.
+
+    The save stamp leaked across alerts earlier on this branch; the build
+    button and the two download links are the same kind of per-alert state.
+    An alert change (``reset_alert``) must take the badge back to "available
+    after save", and with it the button that would rebuild the previous
+    alert's files and the links that still point at them.
+    """
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
+    )
+    harness.save()
+    harness.build()
+    assert seen[-1] == tn("analysis_tile.sections.export_files", 2)
+
+    harness.analysis.reset_alert()  # the reviewer moved on
+
+    assert seen[-1] == t("analysis_tile.sections.export_after_save")
+    assert harness.build_btn.disabled is True
+    assert harness.downloads.viz is False
