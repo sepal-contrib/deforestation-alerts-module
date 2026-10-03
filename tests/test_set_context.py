@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
+from gui.scripts import loss_drivers
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
@@ -735,6 +736,43 @@ def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
     analysis.verdict.set("Confirmed")
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["description"])
+    assert saved.loc[0, "description"] == "logging, mining"
+
+
+def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
+    """Spec §4.2: there was no loss, so there is no cause to record — and the
+    verdict block hides the field and says so, which would otherwise be a lie
+    (the combobox starts on ``DEFAULT``, so every false positive stored
+    ``"other"``).
+
+    The widget itself is NOT cleared: switching the answer back to Confirmed
+    still has the driver the reviewer picked, and saves it.
+    """
+    from gui.tile.analysis import export
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    widgets = SimpleNamespace(
+        driver_combobox=SimpleNamespace(v_model=["logging", "Minería"]),
+        actual_bb=SimpleNamespace(geometry=lambda: None),
+    )
+    s.actual_alert_id.set(0)
+    analysis = AnalysisState()
+
+    analysis.verdict.set("False Positive")
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["status", "description"])
+    assert saved.loc[0, "status"] == "False Positive"
+    assert saved.loc[0, "description"] == ""
+    assert loss_drivers.codes(saved.loc[0, "description"]) == []
+    # the draft the reviewer picked is still in the widget
+    assert widgets.driver_combobox.v_model == ["logging", "Minería"]
+
+    analysis.verdict.set("Confirmed")  # they change their mind
+    assert export._save_attributes(widgets, s, analysis, ctx) is True
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["description"])
     assert saved.loc[0, "description"] == "logging, mining"
 

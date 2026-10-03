@@ -8,7 +8,9 @@ next** is the panel's one primary button: it saves and advances only if the
 save wrote (spec §4).
 
 Nothing is stashed on ``widgets`` any more except ``driver_combobox``, which
-``_save_attributes`` reads for the drivers.
+``state.capture_alert`` reads for the drivers at the click (the save then
+writes the captured value — and writes none at all for a false positive, which
+is why hiding the field here is not a lie).
 
 Props
 -----
@@ -168,5 +170,10 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
 
 
 def _pick(analysis, status):
+    # ``dirty`` follows a verdict *change* (spec §4.4): ``verdict.set`` on an
+    # equal value notifies nobody, so pressing the already-selected answer
+    # after a save must not flip the line to "Unsaved changes" either.
+    if analysis.verdict.value == status:
+        return
     analysis.verdict.set(status)
     touch(analysis)

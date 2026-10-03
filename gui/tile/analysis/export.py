@@ -273,7 +273,20 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
 
     # description (loss-driver combobox): the drivers' codes, never labels
     # (``loss_drivers``); an export translates them.
-    alertas_gdf.at[actual_alert_id, "description"] = drivers.encode(alert.drivers)
+    #
+    # A false positive stores NO driver (spec §4.2): there was no loss, so
+    # there is no cause to record, and the verdict block hides the field and
+    # says so. Decided HERE and not by clearing the widget: the combobox keeps
+    # the draft, so switching the answer back to Confirmed still has the
+    # driver the reviewer picked. Without this guard every false positive
+    # stored the combobox's own ``loss_drivers.DEFAULT`` ("other"), or an
+    # earlier pick, invisibly and unremovably.
+    # ``""`` is what ``drivers.encode`` itself returns for an empty selection
+    # and reads back to no codes through ``codes`` / ``selection`` / ``label``
+    # / ``with_labels``.
+    alertas_gdf.at[actual_alert_id, "description"] = (
+        "" if status == "False Positive" else drivers.encode(alert.drivers)
+    )
 
     # before/after image name + info. Guarded (fix round 1): both are None
     # until an image is actually picked for this alert (``AnalysisState``;

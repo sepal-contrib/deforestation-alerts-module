@@ -36,8 +36,12 @@ def test_reset_alert_clears_the_per_alert_values():
     s = AnalysisState()
     s.defo_layer.set(_gdf())
     s.before_info.set(["Planet", 1, 0, "v", "_010124"])
+    # The save stamp is one of them: it says a save landed on THIS alert, so
+    # an untouched alert must not inherit the previous one's (spec §4.4).
+    s.last_save_time.set(1791030720.0)
     s.reset_alert()
     assert s.defo_layer.value is None and s.before_info.value is None
+    assert s.last_save_time.value == 0.0
 
 
 def test_a_drawn_layer_lands_on_both_maps_once_per_value():

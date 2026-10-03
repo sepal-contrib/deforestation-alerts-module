@@ -89,6 +89,44 @@ def test_the_state_line_reads_unsaved_then_saved(tmp_path, monkeypatch):
     assert state_line.children == [t("analysis_tile.verdict.saved_at", time="14:32")]
 
 
+def test_an_alert_change_forgets_the_previous_alerts_save_time(tmp_path, monkeypatch):
+    """Spec §4.4: *Saved HH:MM* means a save landed on **this** alert in this
+    session, so an untouched alert must show the empty line and not inherit
+    the previous one's stamp.
+
+    ``reset_alert`` sets ``dirty`` to the ``False`` it already holds, which
+    notifies nobody, so only the ``last_save_time`` subscription can carry the
+    re-render — asserted on the rendered line, not on the reactive alone.
+    """
+    card, _, analysis, _ = _panel(monkeypatch, tmp_path)
+    *_, state_line = review_panel.verdict_widgets(card)
+
+    analysis.verdict.set("Confirmed")
+    analysis.dirty.set(False)  # as a save that wrote leaves it
+    analysis.last_save_time.set(datetime(2026, 10, 3, 14, 32).timestamp())
+    assert state_line.children == [t("analysis_tile.verdict.saved_at", time="14:32")]
+
+    analysis.reset_alert()  # the reviewer moves to another alert
+    assert analysis.last_save_time.value == 0.0
+    assert state_line.children == []
+
+
+def test_re_clicking_the_chosen_verdict_does_not_mark_the_alert_unsaved(tmp_path, monkeypatch):
+    """``dirty`` follows a verdict *change* (spec §4.4): pressing the answer
+    that is already selected after a save must not claim unsaved changes."""
+    card, _, analysis, _ = _panel(monkeypatch, tmp_path)
+    buttons, *_ = review_panel.verdict_widgets(card)
+
+    buttons["Confirmed"].fire_event("click", None)
+    analysis.dirty.set(False)  # as a save that wrote leaves it
+    buttons["Confirmed"].fire_event("click", None)
+    assert analysis.verdict.value == "Confirmed"
+    assert analysis.dirty.value is False
+
+    buttons["Need revision"].fire_event("click", None)  # a real change still counts
+    assert analysis.dirty.value is True
+
+
 def test_save_and_next_asks_to_advance_and_plain_save_does_not(tmp_path, monkeypatch):
     calls = []
     card, _, _, _ = _panel(monkeypatch, tmp_path, saves=lambda b, then: calls.append(then))

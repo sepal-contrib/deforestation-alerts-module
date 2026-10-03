@@ -82,6 +82,11 @@ class AnalysisState:
             self.verdict.set(None)
             self.dirty.set(False)
             self.prediction_shapes.set({})
+            # The stamp belongs to the alert that was saved, not to the
+            # session: an untouched alert must show no time at all, never the
+            # previous alert's (spec §4.4). 0.0 is the declared default and
+            # the empty state the verdict block's save-state line reads.
+            self.last_save_time.set(0.0)
 
     def is_current(self, token) -> bool:
         """Whether ``token`` (captured from ``alert_token``) is still the
