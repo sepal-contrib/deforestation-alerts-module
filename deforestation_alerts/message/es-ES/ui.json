@@ -90,9 +90,9 @@
     }
   },
   "analysis_tile": {
-    "description": "Revisa cada alerta con imágenes de antes y después, confírmala, define la causa de pérdida y guarda.",
+    "description": "Revisa cada alerta comparando sus imágenes de antes y después: da un veredicto, define la causa de la pérdida y luego guarda y pasa a la siguiente.",
     "info_header": "Acerca del análisis",
-    "info_md": "Desplázate entre las alertas del conjunto activo con el navegador; el selector de conjuntos cambia de conjunto. Los mapas de antes y después muestran las imágenes sin nubes más cercanas: elige una de cada una. Dibuja o edita el polígono deforestado, responde **¿Es verdadera la alerta?**, elige las causas de la pérdida y luego **Guardar** escribe la revisión en la base de alertas del conjunto. **Descargar** los datos de la alerta escribe el GeoPackage de la alerta, sus imágenes de antes/después y un informe de Word generado a partir de la plantilla de informe del proyecto, elegida en la tarjeta de exportación.",
+    "info_md": "El selector de conjuntos cambia el conjunto de alertas activo; el contador debajo muestra qué alerta de cuántas, cuántas están revisadas y cuántas quedan, y **Anterior** / **Siguiente** (o el botón **#**, para ir a un número) permiten moverte entre ellas. Los dos mapas muestran las imágenes de antes y después elegidas en la línea de tiempo compartida debajo de ellos. Responde **¿Es verdadera la alerta?** con uno de los tres botones, elige las causas de la pérdida y luego **Guardar y siguiente** escribe la revisión en la base de alertas del conjunto y abre la siguiente alerta — **Guardar** te mantiene en esta. **Precisar el polígono** abre las herramientas de dibujo y los dos modelos de detección automática; **Exportar esta alerta** genera su GeoPackage, sus imágenes de antes/después y un informe de Word a partir de la plantilla de informe del proyecto, elegida en esa sección.",
     "img_selection": {
       "prev_image_title": "Imagen Anterior",
       "post_image_title": "Imagen Posterior"
