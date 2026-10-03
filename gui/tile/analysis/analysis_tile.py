@@ -269,7 +269,7 @@ def view_actual_alert(
         # Publish the per-alert imagery context: the one thing an alert
         # change has to do for the shared timeline, which answers the alert
         # from the project-level scene index with no EE round trip
-        # (``timeline.render``). The grid/bbox/dates computed above are passed
+        # (``timeline.render``). The bbox and dates computed above are passed
         # through so the timeline never re-touches this thread's state. The
         # Planet-first / S2-fallback load order the retired per-pane selectors
         # branched on is gone with them: the timeline offers every collection
@@ -279,7 +279,6 @@ def view_actual_alert(
             # the alert the imagery is fetched for: a rebuild that ends after
             # the next alert change drops its result (``AnalysisState.alert_token``)
             "token": analysis.alert_token.value,
-            "grid": widgets.actual_alert_grid,
             # the alert's own bounding box, in EPSG:4326, as the timeline's
             # local tile-overlap test needs it: a shapely geometry, no ee call
             "bbox": alerta["bounding_box"],

@@ -249,10 +249,11 @@ class AnalysisWidgets:
 
         # ------------------------------------------------------------------
         # Per-alert imagery handoff. ``view_actual_alert`` publishes a context
-        # dict here (alert id, token, grid, bbox, date_min/date_max) and the
-        # shared timeline renders the alert from it -- against the cached scene
-        # index, so no EE call. ``None`` while no alert is active (dormant at
-        # smoke time).
+        # dict here -- alert_id, token, bbox, date_min, date_max, and nothing
+        # else, because a dead key sends the next reader hunting for a
+        # consumer that does not exist -- and the shared timeline renders the
+        # alert from it, against the cached scene index, so no EE call.
+        # ``None`` while no alert is active (dormant at smoke time).
         # ------------------------------------------------------------------
         self.imagery_ctx = solara.reactive(None)
 
