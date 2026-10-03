@@ -574,6 +574,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         # The alert saved and its values, read here on the UI thread: the
         # worker writes them whatever is shown by the time the lookups end.
         alert = capture_alert(analysis, widgets, app_state)
+        token = alert.token  # the alert this save is for
 
         def _worker():
             # No ``total_steps`` — the save is a single opaque phase (GEE admin
@@ -619,14 +620,29 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                     else:
                         # Inside the tracked block: if the apply step raises, the
                         # run is a FAILED task + one error toast, not a green pill.
-                        apply()
+                        #
+                        # Only while the alert saved is still the one on screen:
+                        # ``apply_save`` is per-alert UI (the export section's
+                        # build button and its badge), and a save that lands
+                        # after the reviewer moved on would otherwise announce
+                        # "ready to build" over an alert nobody saved. The
+                        # set-wide half — re-publishing ``alerts_gdf`` so
+                        # Overview's counts and markers see the write — is NOT
+                        # per-alert and still has to run: the store write landed
+                        # either way. That half is exactly ``_default_apply``.
+                        if not analysis.apply_if_current(token, apply):
+                            _default_apply()
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
                 if saved:
                     notifier.success(t("analysis_tile.export_labels.save_done"))
                     # This alert's review is on disk: nothing unsaved left.
-                    analysis.dirty.set(False)
+                    # Keyed on the token for the same reason as the apply above:
+                    # ``reset_alert`` has already cleared the flag for the alert
+                    # now on screen, which may carry edits of its own that this
+                    # save did not write.
+                    analysis.apply_if_current(token, lambda: analysis.dirty.set(False))
                     # Only now — Save & next must not move off an alert whose
                     # review was refused. Guarded: a failing ``then`` is a log
                     # line, not a lost success toast.
@@ -753,6 +769,13 @@ def build_export(
     def _forget_previous_alert(*_):
         ns["download_alert_data_btn"].disabled = True
         ns["toolbar_downloads"].hide()
+        # The links, not only the toolbar that hides them: hiding leaves the two
+        # hrefs pointing at the previous alert's zip and report, and anything
+        # that reveals the toolbar again (a build of the new alert that is still
+        # running when this fires) would offer them for the alert on screen.
+        # ``set_url()`` with no path puts both back to "#", disabled.
+        ns["files_dwn_btn"].set_url()
+        ns["report_dwn_btn"].set_url()
         built.update(saved=False, files=0)
         _show_badge_for_state()
 
@@ -825,12 +848,14 @@ def build_export(
         ns["download_alert_data_btn"].loading = True
         ns["download_alert_data_btn"].disabled = True
         alert = capture_alert(analysis, widgets, app_state)  # as in _on_save
+        token = alert.token  # the alert this build is for
 
         def _worker():
             # Same tracked_job shape as _on_save above; the report/zip build is
             # one opaque long phase, but the composite download inside it drives
             # the progress ring (``task=`` below).
             notifier = current_notifier()
+            applied = False
             try:
                 with tracked_job(
                     notifier,
@@ -874,17 +899,42 @@ def build_export(
                         # raises ValueError for a path outside $HOME, and that
                         # must be a FAILED task + one error toast,
                         # not a green pill with download buttons that never show.
-                        _apply_download(result)
+                        #
+                        # And only while the alert built for is still on screen.
+                        # The build is slow (an imagery export plus the Word
+                        # report), so the reviewer can navigate while it runs,
+                        # and this apply is itself what REVEALS the toolbar: a
+                        # stale one would hand the reviewer the previous alert's
+                        # GeoPackage and report under a badge counting them as
+                        # the current alert's.
+                        applied = analysis.apply_if_current(
+                            token, lambda: _apply_download(result)
+                        )
+                        if not applied:
+                            # Said, not swallowed: the files exist (they were
+                            # written into the set's folder) but nothing on
+                            # screen offers them, and the reviewer waited for
+                            # them. Recorded on the task before the toast, as
+                            # the model runs do with ``dl_stale``.
+                            reason = t("analysis_tile.export_labels.download_stale")
+                            task.fail(reason)
+                            notifier.warning(reason)
+                            logger.warning("Analysis: download dropped — %s", reason)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
                 pass
             else:
-                if result is not None:
+                if applied:
                     notifier.success(
                         t("analysis_tile.export_labels.download_done")
                     )
             finally:
                 ns["download_alert_data_btn"].loading = False
-                ns["download_alert_data_btn"].disabled = False
+                # The spinner always stops; the button only comes back for the
+                # alert this build was for. An unconditional re-enable would
+                # undo ``_forget_previous_alert``'s disable and leave a
+                # clickable build button under "available after save".
+                if analysis.is_current(token):
+                    ns["download_alert_data_btn"].disabled = False
 
         spawn_in_context(_worker)
 

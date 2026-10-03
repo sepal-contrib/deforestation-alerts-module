@@ -192,6 +192,7 @@
       "download_task_title": "Preparando la descarga de la alerta",
       "download_step": "Generando archivos e informe…",
       "download_done": "Descarga de la alerta lista.",
+      "download_stale": "Los archivos de la alerta terminaron de generarse después de pasar a otra alerta: no se ofrecieron para descargar aquí.",
       "download_no_recipe": "No hay ningún conjunto de alertas activo, así que no hay dónde guardar los archivos de la alerta en el proyecto. Ejecuta primero Integrar y vectorizar.",
       "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
       "download_no_images": "No hay imágenes de antes y después seleccionadas para esta alerta, así que no se pueden generar sus archivos. Elige primero una imagen de antes y otra de después.",

@@ -262,9 +262,11 @@ def _export_layout(export, **kwargs):
     ``build_export`` returns the section body and the one ``run_save`` runner;
     the Save button itself lives in the verdict block now, wired to that
     runner. These tests assert the feedback a real Save publishes, so they
-    drive the runner through a stand-in button wired exactly as
-    ``review_panel`` wires its own, and hang it beside the body so
-    ``_button(card, ...)`` finds both.
+    drive the runner through a stand-in button whose RUNNER WIRING is exactly
+    ``review_panel``'s (``run_save(button)``), and hang it beside the body so
+    ``_button(card, ...)`` finds both. Only the wiring matches: the stand-in is
+    an ``sw.Btn(msg=...)`` because ``_button`` finds buttons by their ``.msg``,
+    while ``review_panel`` builds a ``v.Btn(children=[...])``, which has none.
     """
     import ipyvuetify as v
     from pysepal import sepalwidgets as sw
@@ -1516,6 +1518,39 @@ def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
     assert analysis.prediction_files.value == {}
     assert feedback.toasts()[-1] == ("warning", t("analysis_tile.model_labels.dl_stale"))
     assert run_btn.loading is False and run_btn.disabled is False
+
+
+def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
+    """A stale build is a FAILED task + one warning, never a green pill.
+
+    Its files were written into the set's folder, but nothing on screen may
+    offer them for the alert now under review — so the reviewer, who waited
+    for a slow build, is told, in the shape a stale model run already uses.
+    """
+    import gui.tile.analysis.export as export
+
+    app_state, analysis = AppState(), AnalysisState()
+    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    card = _export_layout(export, widgets=widgets, app_state=app_state,
+                          aux_model=_set_context_fake(), analysis=analysis,
+                          app_tile_model=_set_context_fake())
+    move_to_b = _alert_a_then_b(app_state, analysis, widgets)
+    feedback = _record_feedback(monkeypatch, export)
+    held = _deferred(monkeypatch, export)
+    monkeypatch.setattr(export, "_download_data", lambda *a, **k: {
+        "zip_path": "/set/alert_0.zip", "report_path": "/set/alert_0.docx"})
+    build_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+
+    build_btn.fire_event("click", None)
+    move_to_b()  # before the worker's apply: its files belong to A
+    held.pop()()
+
+    reason = t("analysis_tile.export_labels.download_stale")
+    assert feedback.toasts() == [("warning", reason)]  # and no success beside it
+    assert feedback.task().status == TaskStatus.FAILED
+    assert feedback.task().error_message == reason
+    # The spinner stopped, but the button stays as the alert change left it.
+    assert build_btn.loading is False and build_btn.disabled is True
 
 
 # ---------------------------------------------------------------------------

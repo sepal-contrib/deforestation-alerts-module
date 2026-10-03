@@ -16,7 +16,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import box
 
-from gui.i18n import t, tn
+from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.state import AnalysisState
@@ -288,7 +288,18 @@ def _downloads_toolbar(body):
     raise AssertionError("no downloads toolbar in the export section body")
 
 
-def _export_harness(tmp_path, monkeypatch, set_badge=None):
+def _download_buttons(body):
+    """The two ``sw.DownloadBtn`` of the downloads toolbar, in tree order."""
+    from pysepal import sepalwidgets as sw
+
+    return [
+        child
+        for child in (getattr(_downloads_toolbar(body), "children", None) or [])
+        if isinstance(child, sw.DownloadBtn)
+    ]
+
+
+def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
     """``build_export``'s arguments, wired so a save and a build run inline.
 
     What the badge says is imperative, per-alert widget state, so it is read
@@ -296,6 +307,10 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None):
     build button's own click handler — with only the blocking bodies stubbed
     and ``spawn_in_context`` running on the calling thread. No notification
     provider is mounted, so the workers publish to a ``NoopNotifier``.
+
+    ``defer=True`` holds each click's worker in ``harness.held`` instead
+    (``harness.run()`` runs the oldest), so a test can land a worker *after*
+    an alert change — the ordering an inline worker can never produce.
     """
     app_state = AppState()
     app_state.alerts_gdf.value = _alerts_gdf()
@@ -304,7 +319,13 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None):
     widgets = SimpleNamespace(actual_alert_grid=None, driver_combobox=None)
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None)
 
-    monkeypatch.setattr(export_mod, "spawn_in_context", lambda target, *a, **k: target())
+    held = []
+    monkeypatch.setattr(
+        export_mod,
+        "spawn_in_context",
+        (lambda target, *a, **k: held.append(target)) if defer
+        else (lambda target, *a, **k: target()),
+    )
     monkeypatch.setattr(export_mod, "_save_attributes", lambda *a, **k: True)
     monkeypatch.setattr(
         export_mod,
@@ -331,8 +352,11 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None):
         app_state=app_state,
         build_btn=build_btn,
         downloads=_downloads_toolbar(parts.body),
+        download_btns=_download_buttons(parts.body),
         save=parts.run_save,
         build=lambda: build_btn.fire_event("click", None),
+        held=held,
+        run=lambda: held.pop(0)(),
     )
 
 
@@ -341,13 +365,16 @@ def test_the_export_badge_follows_what_is_available(tmp_path, monkeypatch):
     harness = _export_harness(
         tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
     )
-    assert seen[-1] == t("analysis_tile.sections.export_after_save")
+    # The literal English, not ``t()``/``tn()`` of the same key: a missing or
+    # misshapen key renders the truthy placeholder ``⟦key⟧`` on both sides of
+    # such a comparison, and the assertion passes on nothing.
+    assert seen[-1] == "available after save"
 
     harness.save()  # a save landed: the build is possible
-    assert seen[-1] == t("analysis_tile.sections.export_build")
+    assert seen[-1] == "ready to build"
 
     harness.build()  # the zip and the report are there
-    assert seen[-1] == tn("analysis_tile.sections.export_files", 2)
+    assert seen[-1] == "2 files ready"
 
 
 def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, monkeypatch):
@@ -365,10 +392,72 @@ def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, mon
     )
     harness.save()
     harness.build()
-    assert seen[-1] == tn("analysis_tile.sections.export_files", 2)
+    assert seen[-1] == "2 files ready"
 
     harness.analysis.reset_alert()  # the reviewer moved on
 
-    assert seen[-1] == t("analysis_tile.sections.export_after_save")
+    assert seen[-1] == "available after save"
     assert harness.build_btn.disabled is True
     assert harness.downloads.viz is False
+    # The links themselves, not only the toolbar that hides them: a later
+    # reveal must not resurrect the previous alert's zip and report.
+    for btn in harness.download_btns:
+        assert "alert_0" not in btn.href and btn.disabled is True
+
+
+def test_a_build_that_lands_after_the_alert_change_offers_nothing(tmp_path, monkeypatch):
+    """A worker that finishes after the reviewer moved on applies nothing.
+
+    The build is slow (an imagery download plus the Word report), so the
+    reviewer can navigate while it runs. Its apply step is what reveals the
+    downloads toolbar, so "the toolbar is hidden" is no protection: left
+    unguarded, the stale worker shows the previous alert's zip and report
+    under a badge counting them, beside the alert now on screen.
+    """
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text),
+        defer=True,
+    )
+    harness.save()
+    harness.run()  # the save of this alert landed while it was on screen
+    assert harness.build_btn.disabled is False
+
+    harness.build()  # the build starts here...
+    harness.analysis.reset_alert()  # ...the reviewer moves on...
+    harness.run()  # ...and only now does the build land
+
+    assert harness.downloads.viz is False
+    assert harness.build_btn.disabled is True  # not re-enabled by the worker
+    assert seen[-1] == "available after save"
+    for btn in harness.download_btns:
+        assert "alert_0" not in btn.href and btn.disabled is True
+
+
+def test_a_save_that_lands_after_the_alert_change_offers_no_build(tmp_path, monkeypatch):
+    """The save path has the same hole, and the set-wide half still runs.
+
+    A late ``_apply_save`` would enable the build button and badge "ready to
+    build" for an alert that was never saved. The ``alerts_gdf`` rebind is NOT
+    alert-scoped — the store write did land, and Overview's counts read that
+    reactive — so it has to happen even when the alert-scoped half is dropped.
+    """
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text),
+        defer=True,
+    )
+    before = harness.app_state.alerts_gdf.value
+
+    harness.save()  # the save starts here...
+    harness.analysis.reset_alert()  # ...the reviewer moves on...
+    harness.analysis.dirty.set(True)  # ...and edits the alert now on screen
+    harness.run()  # ...and only now does the save land
+
+    assert harness.build_btn.disabled is True
+    assert seen[-1] == "available after save"
+    # The new alert's unsaved edit is still unsaved: the save wrote the
+    # previous alert's review, not this one's.
+    assert harness.analysis.dirty.value is True
+    # ...but the write did happen, so the set's gdf was still re-published.
+    assert harness.app_state.alerts_gdf.value is not before
