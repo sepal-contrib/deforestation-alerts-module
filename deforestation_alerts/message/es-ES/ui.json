@@ -116,7 +116,7 @@
     },
     "questionarie": {
       "confirmation_q": "¿Es verdadera la alerta?",
-      "confirmation_missing": "Responde «¿Es verdadera la alerta?» antes de guardar.",
+      "confirmation_missing": "Responde en «Veredicto» antes de guardar.",
       "false_positive_drawn": "Un falso positivo no puede tener un polígono de deforestación dibujado: elimina el polígono o cambia la respuesta.",
       "loss_driver_label": "Causa de la pérdida",
       "loss_driver_hint": "Analizar causa de la pérdida",

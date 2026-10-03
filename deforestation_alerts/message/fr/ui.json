@@ -116,7 +116,7 @@
     },
     "questionarie": {
       "confirmation_q": "Est-ce une véritable alerte ?",
-      "confirmation_missing": "Répondez à « Est-ce une véritable alerte ? » avant d'enregistrer.",
+      "confirmation_missing": "Répondez sous « Verdict » avant d'enregistrer.",
       "false_positive_drawn": "Un faux positif ne peut pas avoir de polygone de déforestation dessiné : supprimez le polygone ou changez la réponse.",
       "loss_driver_label": "Facteur de perte",
       "loss_driver_hint": "Analyser la cause de la déforestation",

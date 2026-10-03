@@ -362,22 +362,34 @@ def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr"])
-def test_the_analysis_help_names_the_verdict_block_and_not_its_aria_label(locale):
-    """The panel's help text may only point at what the panel SHOWS.
+def test_the_analysis_copy_names_the_verdict_block_and_not_its_aria_label(locale):
+    """Copy that directs the reviewer may only point at what the panel SHOWS.
 
     ``questionarie.confirmation_q`` is the verdict group's ``aria-label`` and
     nothing else (``gui/tile/analysis/review_panel.py``): a screen reader
     announces it, no pixel carries it. The block's visible heading is
-    ``verdict.title``. Help text that bolds the question sends a sighted
-    reviewer scanning the panel for a heading that is not there -- which is
-    where this text came from, the pre-redesign panel whose visible label the
-    question was.
+    ``verdict.title``. Copy that names the question sends a sighted reviewer
+    scanning the panel for a heading that is not there -- which is where this
+    text came from, the pre-redesign panel whose visible label the question
+    was.
+
+    Two strings direct the reviewer to that block: the info dialog's
+    ``info_md``, and ``confirmation_missing``, the warning a Save with no
+    verdict raises (``gui/tile/analysis/export.py``). The warning is the
+    sharper of the two -- it fires at the moment the reviewer is hunting for
+    the control -- so both are pinned here.
     """
     set_locale(locale)
-    info = i18n.t("analysis_tile.info_md")
+    question = i18n.t("analysis_tile.questionarie.confirmation_q")
     heading = i18n.t("analysis_tile.verdict.title")
+
+    info = i18n.t("analysis_tile.info_md")
     assert f"**{heading}**" in info, f"{locale}: the help text must name {heading!r}"
-    assert i18n.t("analysis_tile.questionarie.confirmation_q") not in info
+    assert question not in info
+
+    refusal = i18n.t("analysis_tile.questionarie.confirmation_missing")
+    assert heading in refusal, f"{locale}: the refusal must name {heading!r}"
+    assert question not in refusal
 
 
 def test_every_catalogue_file_keeps_one_layout():
