@@ -416,15 +416,41 @@ def build_timeline(app_state, analysis, widgets):
     chips = v.Html(tag="div", style_="display: flex; align-items: center; gap: 8px", children=[])
     status = v.Html(tag="div", style_=f"font-size: 11.5px; color: {MUTED}", children=[])
 
-    def _selection():
-        """``(rows, window)`` for what is on screen, or ``(None, None)``."""
+    def _in_window():
+        """``(rows, window)`` for everything the view window holds, or
+        ``(None, None)``.
+
+        Every collection, including the ones the reviewer has switched off.
+        This is what the chips count: spec §4.6 wants the in-view count, which
+        is the number that tells the reviewer whether re-enabling a collection
+        is worth it -- a chip reading 0 because its own toggle is off says
+        nothing. The cloud limit is applied here, as the ``hidden`` flag
+        ``source_counts`` splits on, so "+2 over the cloud limit" survives the
+        split too.
+        """
         tables = app_state.scene_index.value
         ctx = widgets.imagery_ctx.value
         window = view_window(ctx, app_state.project.value, extra.value)
         if tables is None or ctx is None or window is None or ctx.get("bbox") is None:
             return (None, None)
-        sel = scene_query.scenes_for(tables, ctx["bbox"], window[0], window[1], max_cloud=max_cloud.value)
-        return (sel[sel["source"].isin(sources.value)].reset_index(drop=True), window)
+        return (scene_query.scenes_for(tables, ctx["bbox"], window[0], window[1],
+                                       max_cloud=max_cloud.value), window)
+
+    def _enabled(rows):
+        """``rows`` less the collections that are toggled off: what is drawn.
+
+        The lanes, the month counts, the blocks, the readout and the auto-pick
+        all take this frame -- a hidden collection must not reappear as a
+        stripe or inflate a collapsed month's count.
+        """
+        return rows[rows["source"].isin(sources.value)].reset_index(drop=True)
+
+    def _selection():
+        """``(rows, window)`` for what is on screen, or ``(None, None)``."""
+        rows, window = _in_window()
+        if rows is None or window is None:
+            return (None, None)
+        return (_enabled(rows), window)
 
     def _keys_for(row, sel):
         """Every granule key the chosen (source, date) mosaics for this alert."""
@@ -654,8 +680,11 @@ def build_timeline(app_state, analysis, widgets):
         sources.set(sources.value ^ {name})
         render()
 
-    def _render_chips(sel):
-        counts = scene_query.source_counts(sel) if sel is not None else {}
+    def _render_chips(rows):
+        # ``rows`` is the whole view window, not ``_enabled(rows)``: a chip
+        # counts what its collection holds here whether or not it is switched
+        # on, so a disabled chip tells the reviewer what they are hiding.
+        counts = scene_query.source_counts(rows) if rows is not None else {}
         planet = getattr(app_state.scene_manifest.value, "planet", None)
         kids = []
         for name in (SOURCE_PLANET, SOURCE_S2, SOURCE_LANDSAT):
@@ -792,13 +821,22 @@ def build_timeline(app_state, analysis, widgets):
         window_band.style_ = "display: none"
 
     def render(*_):
-        sel, window = _selection()
-        if sel is None or window is None or len(sel) == 0:
+        rows, window = _in_window()
+        sel = None if rows is None or window is None else _enabled(rows)
+        if sel is None or len(sel) == 0:
             track.style_ = "display: none"
-            message.children = [t("analysis.timeline.no_images")]
+            # Two different facts, and they were one message until the final
+            # review: "nothing was found here" is the index's answer, while
+            # "everything found here is in a collection you switched off" is
+            # the reviewer's own doing and is undone by one click on a chip.
+            # Saying the first when the second is true made the strip claim
+            # the index was empty while it held rows.
+            empty = rows is None or len(rows) == 0
+            message.children = [t("analysis.timeline.no_images" if empty
+                                  else "analysis.timeline.sources_off")]
             message.style_ = _MESSAGE_STYLE
             _clear_track()
-            _render_chips(sel)
+            _render_chips(rows)
             _render_readout(sel)
             _render_status()
             return
@@ -840,7 +878,7 @@ def build_timeline(app_state, analysis, widgets):
         _render_lane(lane_after, "a", sel, segs)
         _render_axis(segs)
         _render_blocks(segs, sel)
-        _render_chips(sel)
+        _render_chips(rows)
         _render_readout(sel)
         _render_status()
 

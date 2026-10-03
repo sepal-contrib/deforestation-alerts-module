@@ -71,6 +71,7 @@
       "expand_all": "Déplier tous les mois",
       "images": "images",
       "no_images": "Aucune image ne couvre cette alerte dans cette fenêtre.",
+      "sources_off": "Toutes les images de cette fenêtre se trouvent dans des collections que vous avez désactivées.",
       "days_apart": "{days} jours d'écart",
       "same_image": "la même image des deux côtés",
       "stale": "Index du {when}",

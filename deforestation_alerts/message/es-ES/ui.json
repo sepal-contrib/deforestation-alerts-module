@@ -71,6 +71,7 @@
       "expand_all": "Expandir todos los meses",
       "images": "imágenes",
       "no_images": "Ninguna imagen cubre esta alerta en esta ventana.",
+      "sources_off": "Todas las imágenes de esta ventana están en colecciones que has desactivado.",
       "days_apart": "{days} días de diferencia",
       "same_image": "la misma imagen en ambos lados",
       "stale": "Índice del {when}",

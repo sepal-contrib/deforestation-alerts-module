@@ -885,7 +885,9 @@ def test_emptying_the_track_takes_the_cursor_with_it():
     for chip in [w for w in _walk(card)
                  if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"]:
         chip.fire_event("click", None)
-    assert timeline.t("analysis.timeline.no_images") in _text(card)
+    # ``sources_off``, not ``no_images``: the index holds rows, they are just
+    # all in collections this test has switched off
+    assert timeline.t("analysis.timeline.sources_off") in _text(card)
     assert "aria-activedescendant" not in (lane.attributes or {})
 
 
@@ -1259,3 +1261,93 @@ def test_only_the_granules_that_cover_the_alert_are_handed_to_the_rebuild():
     assert analysis.before_keys.value == ["near"]
     # the same granule the cloud figure describes: 8.00, not the mean of 8 and 90
     assert analysis.before_info.value[2] == "8.00"
+
+
+# ------------------------------------------------- the chips (final fix wave)
+
+def _chips(card) -> list:
+    """``[(label, pressed)]`` for the three collection chips, in their order."""
+    return [(_text(w), (w.attributes or {}).get("aria-pressed") == "true")
+            for w in _walk(card)
+            if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None]
+
+
+def _chip_click(card, label_start: str) -> None:
+    hit = [w for w in _walk(card)
+           if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None
+           and _text(w).startswith(label_start)]
+    assert len(hit) == 1, f"{len(hit)} chips starting {label_start!r}"
+    hit[0].fire_event("click", None)
+
+
+def test_a_chip_counts_what_its_collection_holds_in_the_window():
+    """Spec §4.6's in-view count, which is the number that tells the reviewer
+    whether re-enabling a collection is worth it. Before the final fix the
+    source filter ran inside ``_selection()``, so every chip but the enabled
+    ones read 0 and the count said nothing at all."""
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (LS, "2026-08-27", 3.0, "W", "kB"),
+                                      (LS, "2026-09-02", 2.0, "W", "kC"),
+                                      (PL, "2026-05-01", float("nan"), "", "kP")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", True)]
+
+    _chip_click(card, "Landsat")
+    # the two Landsat scenes are no longer drawn, but the chip still says how
+    # many of them turning it back on would bring back
+    assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", False)]
+    # two drawn rows, and ``_count_stripes`` counts a lane each: the S2
+    # stripe and the Planet bar, before and after
+    assert _count_stripes(card) == 4
+
+
+def test_a_chip_still_splits_the_cloud_hidden_rows_while_its_collection_is_off():
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (S2, "2026-05-11", 77.0, "W", "kB")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _chips(card)[1] == ("Sentinel-2 1 +1", True)  # one shown, one over the limit
+    _chip_click(card, "Sentinel-2")
+    assert _chips(card)[1] == ("Sentinel-2 1 +1", False)
+
+
+def test_with_every_collection_off_the_strip_says_so_rather_than_claiming_no_images():
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (LS, "2026-08-27", 3.0, "W", "kB")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    for name in ("Planet", "Sentinel-2", "Landsat"):
+        _chip_click(card, name)
+    assert _chips(card) == [("Planet 0", False), ("Sentinel-2 1", False), ("Landsat 1", False)]
+    assert _count_stripes(card) == 0
+    shown = _text(card)
+    off = timeline.t("analysis.timeline.sources_off")
+    assert off in shown, f"expected the switched-off message, got: {shown!r}"
+    assert timeline.t("analysis.timeline.no_images") not in shown
+    # the rendered string, not the key: ``t`` returns the bare key for a
+    # template given no values, and that would pass an assertion on the key
+    assert "analysis.timeline" not in off
+
+
+def test_an_index_with_no_rows_in_the_window_still_says_no_images():
+    """The other half of the pair: ``no_images`` must keep meaning exactly
+    what it says, so this is the case it is now reserved for."""
+    state = _fake_state(index=_index([(S2, "2025-01-05", 8.0, "W", "kA")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert timeline.t("analysis.timeline.no_images") in _text(card)
+    assert timeline.t("analysis.timeline.sources_off") not in _text(card)
+    assert _chips(card) == [("Planet 0", True), ("Sentinel-2 0", True), ("Landsat 0", True)]
+
+
+def test_a_collapsed_month_counts_only_the_collections_that_are_on():
+    """The other side of the split: the chips widen to the whole window, the
+    month counts must not -- a collapsed month claiming hidden stripes would
+    expand to fewer than it promised."""
+    # June lies wholly inside the alert window, so it opens collapsed
+    state = _fake_state(index=_index([(S2, "2026-06-04", 8.0, "W", "kA"),
+                                      (LS, "2026-06-11", 3.0, "W", "kB"),
+                                      (S2, "2026-04-24", 5.0, "W", "kC")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    june = [lab for lab in _month_labels(card) if lab.startswith("Jun 2026,")]
+    assert june == [timeline.t("analysis.timeline.collapsed_month", month="Jun 2026", count=2)]
+    _chip_click(card, "Landsat")
+    june = [lab for lab in _month_labels(card) if lab.startswith("Jun 2026,")]
+    assert june == [timeline.t("analysis.timeline.collapsed_month", month="Jun 2026", count=1)]

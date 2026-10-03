@@ -71,6 +71,7 @@
       "expand_all": "Expand every month",
       "images": "images",
       "no_images": "No images cover this alert in this window.",
+      "sources_off": "The images in this window are all in collections you have switched off.",
       "days_apart": "{days} days apart",
       "same_image": "the same image on both sides",
       "stale": "Index from {when}",
