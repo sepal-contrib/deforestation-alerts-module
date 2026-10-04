@@ -100,8 +100,24 @@ def _landsat_pair(keys, geom):
     rather than an asset id: the id is what finds the pair.
     """
     where = ee.Filter.inList("LANDSAT_SCENE_ID", list(keys))
-    sr_img = _merged(LANDSAT_SR_COLLECTIONS).filter(where).mosaic().select(_SR_BANDS)
+    sr_match = _merged(LANDSAT_SR_COLLECTIONS).filter(where)
     toa_match = _merged(LANDSAT_TOA_COLLECTIONS).filter(where)
+    # A mosaic is a *computed* image, and a computed image carries no fixed
+    # projection: ``.projection()`` on one answers the WGS84 default at one
+    # degree -- 111 km per pixel. ``SFIM_pan_sharpen`` sizes its kernel from
+    # both projections and ends on ``.reproject(pan.projection())``, so bare
+    # mosaics pin the sharpened result to that 111 km grid: a whole alert grid
+    # lands inside a single pixel and the pane draws one flat colour. (This is
+    # what a row's keys becoming a *set* of granules cost us -- the single
+    # scene's ``.first()`` this replaced carried the scene's own projection.)
+    # So put that grid back: the surface product is 30 m and its panchromatic
+    # twin is the same CRS at 15 m. Taken from the SR side alone, because the
+    # TOA collection is empty on the fallback path below and ``.first()`` on an
+    # empty collection is null -- and ``ee.Algorithms.If`` resolves both
+    # branches, so the unused one has to stay buildable.
+    sr_proj = sr_match.first().select(_SR_BANDS[0]).projection()
+    sr_img = sr_match.mosaic().select(_SR_BANDS).setDefaultProjection(sr_proj)
+    pan = toa_match.mosaic().select("B8").setDefaultProjection(sr_proj.atScale(15))
     # T1_TOA is not a perfect mirror of T1_L2: a scene can be in the surface
     # product and missing from the TOA one. Pan-sharpening against an empty
     # mosaic would leave a dead pane for a scene the reviewer can see on the
@@ -111,8 +127,7 @@ def _landsat_pair(keys, geom):
     # trip per pick; ``tests/test_timeline_ee.py`` is what confirms against
     # live Earth Engine that the unused branch's empty-pan graph resolves
     # instead of raising.
-    sharpened = harmonizeL8ToS2_scaled(
-        SFIM_pan_sharpen(sr_img, toa_match.mosaic().select("B8")))
+    sharpened = harmonizeL8ToS2_scaled(SFIM_pan_sharpen(sr_img, pan))
     plain = harmonizeL8ToS2_scaled(sr_img)
     return ee.Image(
         ee.Algorithms.If(toa_match.size().gt(0), sharpened, plain)

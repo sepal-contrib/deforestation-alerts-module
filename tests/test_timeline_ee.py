@@ -79,3 +79,37 @@ def test_a_landsat_scene_with_no_toa_match_still_builds_an_image(gee, monkeypatc
     img = imagery._landsat_pair([scene_id], geom)
     assert img is not None
     assert img.bandNames().size().getInfo() > 0  # the SR fallback, not a raise
+
+
+def test_the_pan_sharpened_landsat_keeps_the_scene_grid_and_is_not_one_flat_pixel(gee):
+    """The regression behind "Landsat shows nothing": a flat olive square.
+
+    ``_landsat_pair`` mosaics its granules before pan-sharpening, and an Earth
+    Engine composite has no fixed projection -- ``.projection()`` on one is the
+    default WGS84 at *one degree* (~111 km) per pixel. ``SFIM_pan_sharpen``
+    reads both projections to size its kernel and ends on
+    ``.reproject(pan.projection())``, so with composites it pins the result to
+    a 111 km grid. A whole alert grid then falls inside a single pixel and the
+    pane draws one uniform colour -- which is what the reviewer sees.
+
+    Two assertions, because either alone is weak: the output must still be on
+    the scene's metre-scale grid, and the pixels over the grid must actually
+    vary. ``test_a_landsat_scene_with_its_toa_twin_is_pan_sharpened`` does not
+    catch this -- a flat image still differs from the unsharpened one.
+    """
+    import ee
+
+    from gui.tile.analysis import imagery
+
+    geom = _geom()
+    scene_id = _a_real_landsat_scene_id(geom)
+    img = imagery._landsat_pair([scene_id], geom)
+
+    scale = img.projection().nominalScale().getInfo()
+    assert scale < 100, f"output is on the 1-degree default grid, not the scene's: {scale} m/px"
+
+    stats = img.select(["B4", "B3", "B2"]).reduceRegion(
+        ee.Reducer.stdDev(), geom, 30, bestEffort=True).getInfo()
+    spreads = [v for v in stats.values() if v is not None]
+    assert spreads, f"no pixels to measure over: {stats}"
+    assert min(spreads) > 0, f"the image is one flat colour over the grid: {stats}"
