@@ -11,6 +11,7 @@ of the job-status icon maps formerly duplicated across train_model_list.py /
 inference_output_list.py.
 """
 
+import re
 from typing import Optional
 
 import reacton.ipyvuetify as rv
@@ -42,7 +43,40 @@ ERROR_LINE = "grid-column:1/-1;padding:0 8px 5px;font-size:0.75rem;"
 NOTE_CLASSES = {"info": "info--text", "warning": "warning--text", "error": "error--text",
                 "success": "success--text", None: "text--secondary"}
 
-ACTIONS_COL_WIDTH = "112px"
+# The table budget (spec D4). A table's fixed columns, its Actions column, the
+# column gaps and the row padding must leave its name column MIN_FLEX_PX at
+# the width it gets: the Workflow panel's content, or an outlined card's
+# (``pa-3`` and a 1px border on each side) inside it.
+ACTION_PX = 24  # one x-small icon button
+PANEL_CONTENT_PX = 448
+CARD_CONTENT_PX = 422
+MIN_FLEX_PX = 120
+_GAP_PX = 8  # GRID_BASE's column-gap
+_ROW_PADDING_PX = 16  # ROW_EXTRA's 8px on each side
+_PX = re.compile(r"(\d+)px")
+
+
+def actions_px(n_actions: int) -> int:
+    """The Actions column: room for ``n_actions`` buttons (at least 2, so its
+    header still reads), plus 8."""
+    return ACTION_PX * max(n_actions, 2) + 8
+
+
+def actions_width(n_actions: int) -> str:
+    return f"{actions_px(n_actions)}px"
+
+
+def fixed_width_px(columns, n_actions: int) -> int:
+    """Everything but the flexible column(s): the fixed widths (``"140px"``; a
+    column without one is flexible), the Actions column, the gaps between the
+    columns and the row's padding."""
+    fixed = sum(int(m.group(1)) for c in columns if (m := _PX.fullmatch(str(c.get("width", "")))))
+    return fixed + actions_px(n_actions) + _GAP_PX * len(columns) + _ROW_PADDING_PX
+
+
+def fits(columns, n_actions: int, content_px: int = PANEL_CONTENT_PX) -> bool:
+    """True when the table leaves its name column at least MIN_FLEX_PX."""
+    return content_px - fixed_width_px(columns, n_actions) >= MIN_FLEX_PX
 
 # Vuetify theme tokens, so status chips follow the app accent in light and dark.
 # "cancelled" stays a literal grey: it is deliberately neutral, not a theme tone.
@@ -84,6 +118,11 @@ _ACTION_ICONS = {
 }
 
 
+def status_text(status: str) -> str:
+    """A status's label (``widgets.product_table.status_*``), or the raw value."""
+    return t(f"widgets.product_table.status_{status}") if status in STATUS_ICONS else str(status)
+
+
 def action_icon(kind: str, is_on: bool = False) -> str:
     """Standard icon for an action kind (map_toggle and select switch on is_on)."""
     if kind == "map_toggle":
@@ -121,18 +160,18 @@ def _render_cell(cell: dict, first: bool):
         return
     if ctype == "status":
         status = cell.get("status", "")
-        with rv.Html(tag="div", style_=CELL):
+        label = status_text(status)
+        # compact: the icon alone, its label (or the cell's ``title``) as the tooltip
+        attributes = {"title": cell.get("title") or label} if cell.get("compact") else {}
+        with rv.Html(tag="div", style_=CELL, attributes=attributes):
             rv.Icon(
                 children=[STATUS_ICONS.get(status, "mdi-help-circle")],
                 color=STATUS_COLORS.get(status, "grey"),
                 small=True,
             )
-            label = (
-                t(f"widgets.product_table.status_{status}")
-                if status in STATUS_ICONS
-                else str(status)
-            )
-            solara.Text(label, classes=["text--secondary"], style="font-size:0.8rem;")
+            if not cell.get("compact"):
+                # clips with an ellipsis, like the name, in a narrow stage column
+                solara.Text(label, classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
         return
     if ctype == "chip":
         with rv.Html(tag="div", style_=CELL):
@@ -194,10 +233,14 @@ def ProductTable(
     Args:
         title: header label; rendered as ``TITLE (n)``.
         columns: content columns ``[{"label", "width"?}]``; an Actions column
-            is appended automatically when ``show_actions``.
+            is appended automatically when ``show_actions``, sized for the
+            most actions any row has (``actions_width``).
         rows: ``[{"key", "cells": [CellSpec], "actions": [ActionSpec],
             "notes": [{"text": str, "tone": "info"|"warning"|"error"|
-            "success"|None}], "error": str|None}]``. Each note is a line
+            "success"|None}], "error": str|None}]``. A status cell
+            ``{"type": "status", "status", "compact": True, "title"?}`` shows
+            its icon only, with ``title`` (else its label) as the tooltip.
+            Each note is a line
             under the row in its tone's colour (None: muted); ``error`` is
             one more error-tone note after them. See module docstring /
             spec for CellSpec and ActionSpec shapes.
@@ -211,7 +254,7 @@ def ProductTable(
     widths = [c.get("width", "minmax(0,1fr)") for c in columns]
     labels = [c["label"] for c in columns]
     if show_actions:
-        widths.append(ACTIONS_COL_WIDTH)
+        widths.append(actions_width(max((len(r.get("actions") or []) for r in rows), default=0)))
         labels.append(t("common.actions"))
     grid = grid_style(widths)
 
