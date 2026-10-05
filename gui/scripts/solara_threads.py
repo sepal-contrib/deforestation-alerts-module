@@ -82,3 +82,28 @@ def spawn_in_context(target, args=(), *, daemon=True):
         kernel_context.set_context_for_thread(ctx, thread)
     thread.start()
     return thread
+
+
+def use_loop_dependencies(dependencies: list) -> list:
+    """Hook: a ``use_task``'s ``dependencies`` as of the last render that ran
+    on the event loop.
+
+    A worker publish re-renders the components it touches in the worker
+    thread itself, which has no event loop. A ``prefer_threaded=False``
+    ``use_task`` whose dependencies changed in such a render would start its
+    task there, and ``asyncio.create_task`` would raise "no running event
+    loop" into the render and take the app down. Off the loop this returns the
+    dependencies of the last render on the loop, so the task's effect does not
+    fire. The next render on the loop brings them up to date and starts the
+    task. A value that moves on the loop (a task's own ``pending`` and
+    ``finished``) always re-renders on the loop as well, so no change is lost.
+    """
+    import solara
+
+    held = solara.use_ref(dependencies)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return held.current
+    held.current = dependencies
+    return dependencies
