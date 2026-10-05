@@ -273,7 +273,8 @@
       "error_exists": "Une période avec ces dates existe déjà.",
       "error_locked": "Cette période a des jeux d'alertes ; ses dates ne peuvent pas changer.",
       "error_not_latest": "Cette période a des jeux d'alertes et une période ultérieure existe : la supprimer changerait l'empreinte à partir de laquelle ces jeux ultérieurs ont été construits. Supprimez d'abord les périodes ultérieures.",
-      "error_bad_look_back": "La rétrospection doit être un nombre entier de jours, 0 ou plus."
+      "error_bad_look_back": "La rétrospection doit être un nombre entier de jours, 0 ou plus.",
+      "add": "Ajouter une période"
     },
     "prepare": {
       "title": "Télécharger et harmoniser",
@@ -366,7 +367,9 @@
       "col_origin": "Origine",
       "col_on": "Activé",
       "col_mode": "Mode",
-      "col_align": "Aligné"
+      "col_align": "Aligné",
+      "mask_name_hint": "24 caractères au plus ; il nomme aussi les fichiers du masque.",
+      "mask_mode_label": "Mode dans la période active"
     },
     "integrate": {
       "title": "Intégrer et vectoriser",

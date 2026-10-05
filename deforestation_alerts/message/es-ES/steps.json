@@ -273,7 +273,8 @@
       "error_exists": "Ya existe un período con estas fechas.",
       "error_locked": "Este período tiene conjuntos de alertas; sus fechas no se pueden cambiar.",
       "error_not_latest": "Este período tiene conjuntos de alertas y existe un período posterior: eliminarlo cambiaría la huella a partir de la cual se generaron esos conjuntos posteriores. Elimina primero los períodos posteriores.",
-      "error_bad_look_back": "La retrospección debe ser un número entero de días, 0 o más."
+      "error_bad_look_back": "La retrospección debe ser un número entero de días, 0 o más.",
+      "add": "Añadir período"
     },
     "prepare": {
       "title": "Descargar y armonizar",
@@ -366,7 +367,9 @@
       "col_origin": "Origen",
       "col_on": "Activada",
       "col_mode": "Modo",
-      "col_align": "Alineada"
+      "col_align": "Alineada",
+      "mask_name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la máscara.",
+      "mask_mode_label": "Modo en el período activo"
     },
     "integrate": {
       "title": "Integrar y vectorizar",

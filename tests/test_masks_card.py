@@ -37,6 +37,7 @@ from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.tile import masks_card
 from gui.widget import mask_modal
+from gui.widget.enter_key import ENTER_DEFAULT
 
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
 MAR = Period(id="2026-03-01_2026-03-31", start=date(2026, 3, 1), end=date(2026, 3, 31))
@@ -636,6 +637,15 @@ def _shown(rc, text):
     return [w for w in rc.find(v.Html).widgets if text in str(w.children)]
 
 
+def _defaults(rc):
+    """The buttons Enter would press (gui/widget/enter_key)."""
+    return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
+
+
+def _icons(btn):
+    return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
+
+
 def test_a_geotiff_mask_is_validated_added_inside_the_task_and_the_modal_closes(tmp_path, monkeypatch):
     path = _tif(tmp_path / "forest.tif")
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
@@ -781,6 +791,7 @@ def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
             assert _name_field(rc).disabled is True and _StubRasterInput.seen.disabled is True
             assert rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0].disabled is True
             assert rc.find(v.RadioGroup, v_model="keep").widgets[0].disabled is True
+            assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
             else:
@@ -877,6 +888,44 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
             th.join()
             assert errors == []
             assert _name_field(rc).v_model == "x"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_mask_form_sits_on_the_form_frame(monkeypatch):
+    monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            dialog = rc.find(v.Dialog).widget
+            assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
+            assert (_name_field(rc).hint, _name_field(rc).persistent_hint) == (
+                t("steps.prepare.mask_name_hint"), True)
+            fieldset = rc.find(v.Html, tag="fieldset").widget
+            assert fieldset.children[0].children == [t("steps.prepare.mask_mode_label")]
+            assert rc.find(v.RadioGroup, v_model="keep").widget in fieldset.children
+            add = _submit_btn(rc)
+            assert _defaults(rc) == [add] and _icons(add) == ["mdi-plus"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_mask_edit_has_a_save_button_and_no_mode_fieldset(monkeypatch):
+    monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
+        try:
+            save = _submit_btn(rc, t("steps.alerts.save"))
+            assert _defaults(rc) == [save] and _icons(save) == ["mdi-content-save-outline"]
+            assert not rc.find(v.Html, tag="fieldset").widgets
         finally:
             rc.close()
 

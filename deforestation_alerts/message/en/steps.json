@@ -262,7 +262,8 @@
       "error_exists": "A period with these dates already exists.",
       "error_locked": "This period has alert sets; its dates can't change.",
       "error_not_latest": "This period has alert sets and a later period exists: deleting it would change the footprint the later sets were built from. Delete the later periods first.",
-      "error_bad_look_back": "Look-back must be a whole number of days, 0 or more."
+      "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
+      "add": "Add period"
     },
     "prepare": {
       "title": "Download & harmonize",
@@ -351,7 +352,9 @@
       "col_origin": "Origin",
       "col_on": "On",
       "col_mode": "Mode",
-      "col_align": "Aligned"
+      "col_align": "Aligned",
+      "mask_name_hint": "At most 24 characters; it also names the mask's files.",
+      "mask_mode_label": "Mode in the active period"
     },
     "integrate": {
       "title": "Integrate & vectorize",

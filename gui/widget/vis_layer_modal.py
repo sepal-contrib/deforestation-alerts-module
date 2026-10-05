@@ -3,8 +3,9 @@ palette, or three bands as RGB), a GeoTIFF in the user's SEPAL folder (a band
 and a colormap) or Planet NICFI (a month, the region from the AOI centroid,
 access checked).
 
-It follows ``source_modal``'s rules (Task 17), as ``mask_modal`` does: the
-Save is a ``TaskButtonComponent`` over a ``use_task``; ``on_save`` (which calls
+It follows ``source_modal``'s rules (Task 17), on the same form frame
+(``gui/widget/form_dialog``), as ``mask_modal`` does: the Add/Save is a
+``SubmitTaskButton`` over a ``use_task``; ``on_save`` (which calls
 ``update_project``) runs inside that task, on the loop, never in its
 completion effect; closing the dialog cancels a check still running; the
 fields are frozen while their values are checked; a project or AOI change
@@ -18,13 +19,14 @@ from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
+from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine.user_raster import UserRasterError, band_list_request, check_file, read_header
 from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
 from gui.i18n import t
 from gui.scripts import vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
+from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
@@ -115,10 +117,9 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
 
 @solara.component
 def VisLayerModal(open_, app_state, gee_interface, on_save, editing=None):
-    dialog = rv.Dialog(v_model=open_.value, on_v_model=open_.set, max_width="520px", eager=True, persistent=True)
-    # persistent blocks ESC too; restore it as a plain cancel. A hook: unconditional.
-    rv.use_event(dialog, "keydown.esc", lambda *_: open_.set(False))
-    with dialog:
+    # The form frame (gui/widget/form_dialog), 560px like every form that picks
+    # a raster: persistent, an outside click nudges it, ESC closes it.
+    with use_form_dialog(open_, "560px"):
         if open_.value:  # mounted per opening: a clean form, and no asset listing while closed
             _VisLayerForm(open_=open_, app_state=app_state, gee_interface=gee_interface, on_save=on_save,
                           editing=editing)
@@ -240,6 +241,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     name_error = vis_layers.validate_name(name, p, current=editing) if name and p is not None else None
     title = t("steps.layers.edit_title", name=editing) if l0 is not None else t("steps.layers.add_title")
+    button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
 
     def _band_select(label, value, on_value):
         rv.Select(label=label, items=band_items, v_model=value, on_v_model=on_value, dense=True, outlined=True,
@@ -254,56 +256,53 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                 rv.TextField(label=t("steps.layers.field_max"), v_model=vmax, on_v_model=set_vmax, type="number",
                              dense=True, outlined=True, disabled=busy)
 
-    with rv.Card():
-        with rv.CardTitle():
-            solara.Text(title)
-        with rv.CardText():
-            rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
-                      items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
-                      dense=True, outlined=True, disabled=busy)
-            rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
-                         outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
-                         error_messages=[t(name_error)] if name_error else [])
-            if raster:
-                RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
-                            asset_types=("IMAGE",), disabled=busy, show_origin=False)
-                if bands_task.pending:
-                    solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
-                elif bands_task.error:
-                    solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                                classes=["error--text"])
-            if kind == "gee":
-                rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=set_rgb, dense=True,
-                          hide_details=True, disabled=busy)
-                if rgb:
-                    _band_select(t("steps.layers.field_red"), red, set_red)
-                    _band_select(t("steps.layers.field_green"), green, set_green)
-                    _band_select(t("steps.layers.field_blue"), blue, set_blue)
-                else:
-                    _band_select(t("steps.layers.field_band"), band, set_band)
-                _range_fields()
-                if not rgb:
-                    rv.TextField(label=t("steps.layers.field_palette"), v_model=palette, on_v_model=set_palette,
-                                 dense=True, outlined=True, disabled=busy)
-            elif kind == "file":
-                _band_select(t("steps.layers.field_band"), band, set_band)
-                rv.Select(label=t("steps.layers.field_colormap"), v_model=colormap, on_v_model=set_colormap,
-                          items=list(vis_layers.COLORMAPS), dense=True, outlined=True, disabled=busy)
-                _range_fields()
+    def _actions():
+        # spec §11: an async button is a task button. While the check runs it
+        # reads Cancel and stops the check, and it carries no Enter class.
+        SubmitTaskButton(label=t("common.save") if l0 is not None else t("steps.layers.add"),
+                         icon="mdi-content-save-outline" if l0 is not None else "mdi-plus",
+                         external_busy=bool(name_error), **button)
+
+    # a validation error stays inline in the form (spec §11; form_card shows it)
+    with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
+        rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
+                  items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
+                  dense=True, outlined=True, disabled=busy)
+        rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
+                     outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
+                     error_messages=[t(name_error)] if name_error else [])
+        if raster:
+            RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
+                        asset_types=("IMAGE",), disabled=busy, show_origin=False)
+            if bands_task.pending:
+                solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+            elif bands_task.error:
+                solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
+                            classes=["error--text"])
+        if kind == "gee":
+            rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=set_rgb, dense=True,
+                      hide_details=True, disabled=busy)
+            if rgb:
+                _band_select(t("steps.layers.field_red"), red, set_red)
+                _band_select(t("steps.layers.field_green"), green, set_green)
+                _band_select(t("steps.layers.field_blue"), blue, set_blue)
             else:
-                rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,
-                             outlined=True, disabled=busy, placeholder="YYYY-MM", hint=t("steps.layers.month_hint"),
-                             persistent_hint=True)
-                if region is not None:
-                    solara.Text(t("steps.layers.region", region=vis_layers.region_label(region)),
-                                classes=["text--secondary"])
-            rv.Checkbox(label=t("steps.layers.field_show_in_analysis"), v_model=show, on_v_model=set_show, dense=True,
-                        hide_details=True, disabled=busy)
-            if error:  # validation errors stay inline in the modal (spec §11)
-                solara.Text(error, classes=["error--text"])
-        with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
-            solara.Button(t("common.cancel"), text=True, small=True, on_click=lambda: open_.set(False))
-            # spec §11: an async button is a TaskButtonComponent (while the check
-            # runs it reads Cancel and stops it)
-            TaskButtonComponent(label=t("common.save"), cancel_label=t("common.cancel"), small=True,
-                                external_busy=bool(name_error), **use_task_button(validation, on_start=_submit))
+                _band_select(t("steps.layers.field_band"), band, set_band)
+            _range_fields()
+            if not rgb:
+                rv.TextField(label=t("steps.layers.field_palette"), v_model=palette, on_v_model=set_palette,
+                             dense=True, outlined=True, disabled=busy)
+        elif kind == "file":
+            _band_select(t("steps.layers.field_band"), band, set_band)
+            rv.Select(label=t("steps.layers.field_colormap"), v_model=colormap, on_v_model=set_colormap,
+                      items=list(vis_layers.COLORMAPS), dense=True, outlined=True, disabled=busy)
+            _range_fields()
+        else:
+            rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,
+                         outlined=True, disabled=busy, placeholder="YYYY-MM", hint=t("steps.layers.month_hint"),
+                         persistent_hint=True)
+            if region is not None:
+                solara.Text(t("steps.layers.region", region=vis_layers.region_label(region)),
+                            classes=["text--secondary"])
+        rv.Checkbox(label=t("steps.layers.field_show_in_analysis"), v_model=show, on_v_model=set_show, dense=True,
+                    hide_details=True, disabled=busy)
