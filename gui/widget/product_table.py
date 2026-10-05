@@ -138,15 +138,21 @@ def grid_style(widths) -> str:
 
 
 def _render_chip(item: dict):
+    # Its column can be narrower than a translation (the coverage chip has
+    # 140 px). The text clips with an ellipsis, and the chip's title shows it
+    # whole on hover.
+    text = str(item.get("value", ""))
     children = []
     if item.get("icon"):
         children.append(rv.Icon(children=[item["icon"]], x_small=True, left=True))
-    children.append(str(item.get("value", "")))
+    children.append(rv.Html(tag="span", style_=NAME_TEXT, children=[text]))
     rv.Chip(
         children=children,
         x_small=True,
         outlined=item.get("outlined", True),
         color=item.get("color"),
+        style_="max-width:100%;",
+        attributes={"title": text},
     )
 
 
