@@ -295,7 +295,6 @@
       "col_source": "Fuente",
       "col_download": "Descarga",
       "col_harmonize": "Armonizar",
-      "col_size": "Tamaño",
       "empty": "Añade primero fuentes de alertas.",
       "run_all": {
         "one": "Ejecutar {n} pendiente",
@@ -360,12 +359,12 @@
       "mask_delete_busy": "Un trabajo está escribiendo en este proyecto; elimina la máscara cuando termine.",
       "mask_edit_busy": "Un trabajo está escribiendo en este proyecto; edita la máscara cuando termine.",
       "col_mask": "Máscara",
-      "col_origin": "Origen",
-      "col_on": "Activada",
       "col_mode": "Modo",
       "col_align": "Alineada",
       "mask_name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la máscara.",
-      "mask_mode_label": "Modo en el período activo"
+      "mask_mode_label": "Modo en el período activo",
+      "mask_mode_off": "Inactiva",
+      "size_note": "{size} en disco"
     },
     "integrate": {
       "title": "Integrar y vectorizar",

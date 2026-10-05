@@ -284,7 +284,6 @@
       "col_source": "Source",
       "col_download": "Download",
       "col_harmonize": "Harmonize",
-      "col_size": "Size",
       "empty": "Add alert sources first.",
       "run_all": {
         "one": "Run {n} pending",
@@ -345,12 +344,12 @@
       "mask_delete_busy": "A job is writing into this project; delete the mask once it has finished.",
       "mask_edit_busy": "A job is writing into this project; edit the mask once it has finished.",
       "col_mask": "Mask",
-      "col_origin": "Origin",
-      "col_on": "On",
       "col_mode": "Mode",
       "col_align": "Aligned",
       "mask_name_hint": "At most 24 characters; it also names the mask's files.",
-      "mask_mode_label": "Mode in the active period"
+      "mask_mode_label": "Mode in the active period",
+      "mask_mode_off": "Off",
+      "size_note": "{size} on disk"
     },
     "integrate": {
       "title": "Integrate & vectorize",

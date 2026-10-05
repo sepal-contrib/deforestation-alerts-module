@@ -1,7 +1,8 @@
 """The Masks card of Download & harmonize (spec §7.3, §5.1).
 
-One row per project mask, with its choice in the active period (on, keep or
-exclude), its download and alignment status, its size and its actions. A
+One row per project mask, with its choice in the active period (one Mode
+select: off, keep or exclude), one compact status for its download and
+alignment, and its actions; its origin and size are the row's first note. A
 switch only edits the project: it replaces the period's ``masks`` dict and
 starts no job. Editing is refused once a set used the mask; editing and
 deleting wait for the project's writers (when the modal would open, and again
@@ -13,7 +14,7 @@ import reacton.ipyvuetify as rv
 import solara
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.engine.fingerprint import mask_key, mask_raw_key
+from deforestation_alerts.engine.fingerprint import Status, mask_key, mask_raw_key
 from deforestation_alerts.engine.masks import build_mask_image
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import cleanup, paths
@@ -27,7 +28,16 @@ from gui.scripts.prepare_jobs import CELL_STATUS
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.mask_modal import MaskModal
-from gui.widget.product_table import ProductTable
+from gui.widget.product_table import ProductTable, status_text
+
+MASK_ACTIONS = 5  # an Earth Engine mask's: download, re-download, map, edit, delete
+
+
+def mask_columns() -> list:
+    """Mask | Mode | compact status (spec D4), measured at ``CARD_CONTENT_PX``."""
+    return [{"label": t("steps.prepare.col_mask")},
+            {"label": t("steps.prepare.col_mode"), "width": "96px"},
+            {"label": "", "width": "28px"}]
 
 
 def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None) -> bool:
@@ -36,8 +46,22 @@ def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None)
                                                                                 mode=mode))
 
 
-def _status(s, busy):
-    return {"type": "status", "status": "running" if busy else CELL_STATUS[s]}
+def mask_status(r, busy) -> dict:
+    """One compact status for both stages (spec D4): running while claimed,
+    else the download stage when it is not current, else the alignment
+    stage. Its tooltip names both (a GeoTIFF mask has no download)."""
+    def label(s):
+        return status_text("running" if busy else CELL_STATUS[s])
+
+    if busy:
+        shown = "running"
+    elif r.raw is not None and r.raw is not Status.CURRENT:
+        shown = CELL_STATUS[r.raw]
+    else:
+        shown = CELL_STATUS[r.aligned]
+    parts = [] if r.raw is None else [f"{t('steps.prepare.col_download')}: {label(r.raw)}"]
+    parts.append(f"{t('steps.prepare.col_align')}: {label(r.aligned)}")
+    return {"type": "status", "status": shown, "compact": True, "title": " · ".join(parts)}
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,
@@ -56,7 +80,9 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         busy = mask_inflight_key(p.name, r.name) in running
         size = sum(a.size_bytes for k in (mask_raw_key(r.name), mask_key(r.name))
                    if (a := p.artifacts.get(k)) is not None)
-        notes = []
+        origin = t(f"steps.prepare.mask_origin_{r.origin}")
+        size_note = t("steps.prepare.size_note", size=size_text(size)) if size else ""
+        notes = [{"text": f"{origin} · {size_note}" if size_note else origin, "tone": None}]
         if r.file_missing:
             notes.append({"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"})
         if r.on and r.mode == "keep" and r.covers_none:
@@ -75,30 +101,25 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
             {"kind": "delete", "on_click": (lambda n=r.name: delete(n))},
         ]
 
-        # Keyed by the refusals: a refused switch leaves the props unchanged, so
-        # only a remount puts the user's flip back to what the project holds.
-        def _switch_cell(n=r.name, value=r.on):
-            rv.Switch(v_model=value, on_v_model=lambda v: switch(n, on=bool(v)), dense=True, hide_details=True,
-                      class_="ma-0").key(f"mask-on:{n}:{refusals}")
+        def _choose(v, n=r.name):
+            if v == "off":
+                switch(n, on=False)  # the mode is kept for when it is on again
+            elif v:
+                switch(n, on=True, mode=v)
 
-        def _mode_cell(n=r.name, value=r.mode, enabled=r.on):
-            rv.Select(v_model=value, on_v_model=lambda v: switch(n, mode=v), dense=True, hide_details=True,
-                      disabled=not enabled,
-                      items=[{"text": t("steps.prepare.mask_mode_keep"), "value": "keep"},
+        # One select for the old On switch and Mode select (spec D4). Keyed by
+        # the refusals: a refused switch leaves the props unchanged, so only a
+        # remount puts the user's choice back to what the project holds.
+        def _mode_cell(n=r.name, value=r.mode if r.on else "off"):
+            rv.Select(v_model=value, on_v_model=_choose, dense=True, hide_details=True,
+                      items=[{"text": t("steps.prepare.mask_mode_off"), "value": "off"},
+                             {"text": t("steps.prepare.mask_mode_keep"), "value": "keep"},
                              {"text": t("steps.prepare.mask_mode_exclude"), "value": "exclude"}],
                       ).key(f"mask-mode:{n}:{refusals}")
 
         out.append({
             "key": r.name,
-            "cells": [
-                {"value": r.name},
-                {"type": "chip", "value": t(f"steps.prepare.mask_origin_{r.origin}")},
-                {"type": "render", "fn": _switch_cell},
-                {"type": "render", "fn": _mode_cell},
-                _status(r.raw, busy) if r.raw is not None else {"value": "—", "muted": True},
-                _status(r.aligned, busy),
-                {"value": size_text(size), "muted": True},
-            ],
+            "cells": [{"value": r.name}, {"type": "render", "fn": _mode_cell}, mask_status(r, busy)],
             "notes": notes,
             "error": errors.get(f"@mask:{r.name}"),
             "actions": actions,
@@ -242,20 +263,12 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
                                  run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,
                                  delete=set_pending_delete, switch=_switch, refusals=refusals)
     with rv.Card(outlined=True, class_="pa-3"):
-        ProductTable(
-            title=t("steps.prepare.masks_title"),
-            columns=[{"label": t("steps.prepare.col_mask")},
-                     {"label": t("steps.prepare.col_origin"), "width": "90px"},
-                     {"label": t("steps.prepare.col_on"), "width": "52px"},
-                     {"label": t("steps.prepare.col_mode"), "width": "100px"},
-                     {"label": t("steps.prepare.col_download"), "width": "90px"},
-                     {"label": t("steps.prepare.col_align"), "width": "90px"},
-                     {"label": t("steps.prepare.col_size"), "width": "70px"}],
-            rows=table_rows, empty_text=t("steps.prepare.masks_empty"),
-        )
-        solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"], style="font-size:0.78rem;")
-        solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", small=True, outlined=True,
+        # spec D4: a nested list's Add button sits above it, outlined and full width
+        solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", small=True, outlined=True, block=True,
                       on_click=_open_add)
+        ProductTable(title=t("steps.prepare.masks_title"), columns=mask_columns(), rows=table_rows,
+                     empty_text=t("steps.prepare.masks_empty"))
+        solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"], style="font-size:0.78rem;")
     MaskModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_add=_add, on_save=_save,
               editing=editing)
     used = len(sets_using_mask(p, pending_delete)) if pending_delete else 0

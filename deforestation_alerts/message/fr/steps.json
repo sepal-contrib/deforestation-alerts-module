@@ -295,7 +295,6 @@
       "col_source": "Source",
       "col_download": "Téléchargement",
       "col_harmonize": "Harmonisation",
-      "col_size": "Taille",
       "empty": "Ajoutez d'abord des sources d'alertes.",
       "run_all": {
         "one": "Exécuter {n} en attente",
@@ -360,12 +359,12 @@
       "mask_delete_busy": "Une tâche écrit dans ce projet ; supprimez le masque une fois celle-ci terminée.",
       "mask_edit_busy": "Une tâche écrit dans ce projet ; modifiez le masque une fois celle-ci terminée.",
       "col_mask": "Masque",
-      "col_origin": "Origine",
-      "col_on": "Activé",
       "col_mode": "Mode",
       "col_align": "Aligné",
       "mask_name_hint": "24 caractères au plus ; il nomme aussi les fichiers du masque.",
-      "mask_mode_label": "Mode dans la période active"
+      "mask_mode_label": "Mode dans la période active",
+      "mask_mode_off": "Inactif",
+      "size_note": "{size} sur le disque"
     },
     "integrate": {
       "title": "Intégrer et vectoriser",

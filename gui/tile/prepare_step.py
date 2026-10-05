@@ -68,6 +68,15 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _DOWNLOADS = (Status.MISSING, Status.STALE)  # the runner downloads these (and anything forced)
 
+SOURCE_ACTIONS = 3  # download, re-download, map
+
+
+def source_columns() -> list:
+    """Source | Download | Harmonize (spec D4): the size on disk is a note."""
+    return [{"label": t("steps.prepare.col_source")},
+            {"label": t("steps.prepare.col_download"), "width": "100px"},
+            {"label": t("steps.prepare.col_harmonize"), "width": "100px"}]
+
 
 def _inflight_key(project: str, period_id: str, source: str) -> str:
     return f"prep:{project}:{period_id}:{source}"
@@ -139,11 +148,12 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
             notes.append(result)
         size = sum(a.size_bytes for k in (raw_key(period.id, r.source), harm_key(period.id, r.source))
                    if (a := p.artifacts.get(k)) is not None)
+        if size:
+            notes.append({"text": t("steps.prepare.size_note", size=size_text(size)), "tone": None})
         key = f"src:{r.source}"
         out.append({
             "key": r.source,
-            "cells": row_cells(r, running=busy, label=_label(p, r.source))
-            + [{"value": size_text(size), "muted": True}],
+            "cells": row_cells(r, running=busy, label=_label(p, r.source)),
             "notes": notes,
             "error": errors.get(r.source),
             "actions": [
@@ -370,14 +380,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
                       rows=plan_masks(p, pdir, period), running=running, errors=errors,
                       on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True))
-            ProductTable(
-                title=t("steps.prepare.list_title"),
-                columns=[{"label": t("steps.prepare.col_source")},
-                         {"label": t("steps.prepare.col_download"), "width": "110px"},
-                         {"label": t("steps.prepare.col_harmonize"), "width": "110px"},
-                         {"label": t("steps.prepare.col_size"), "width": "80px"}],
-                rows=table_rows, empty_text=t("steps.prepare.empty"),
-            )
+            ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
+                         empty_text=t("steps.prepare.empty"))
             with solara.Row(style="gap:8px;"):
                 solara.Button(tn("steps.prepare.run_all", len(pending)), color="primary", small=True,
                               icon_name="mdi-play", disabled=not pending or bool(mine),

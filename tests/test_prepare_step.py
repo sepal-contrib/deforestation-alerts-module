@@ -1119,7 +1119,7 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
         rc.close()
 
 
-def test_the_size_column_sums_both_files_of_a_row(step):
+def test_the_size_note_sums_both_files_of_a_row(step):
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
     p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
     p.artifacts = {k: a.model_copy(update={"size_bytes": 2_700_000}) for k, a in _arts("GLAD-L").items()}
@@ -1128,8 +1128,9 @@ def test_the_size_column_sums_both_files_of_a_row(step):
     box, rc = _render(state)
     try:
         [row] = step.table[-1]
-        assert row["cells"][0]["value"] == t("steps.alerts.label_glad_l")
-        assert row["cells"][3] == {"value": "5.4 MB", "muted": True}
+        assert row["cells"][0]["value"] == t("steps.alerts.label_glad_l") and len(row["cells"]) == 3
+        assert row["notes"][-1] == {"text": t("steps.prepare.size_note", size="5.4 MB"), "tone": None}
+        assert len(row["actions"]) == prepare_step.SOURCE_ACTIONS  # the budget's count is the most a row has
     finally:
         rc.close()
 
@@ -1490,9 +1491,9 @@ def test_the_masks_card_sits_between_the_grid_and_the_sources_and_runs_its_masks
         [row] = masks[-1]
         assert row["key"] == "forest"
         next(a for a in row["actions"] if a["kind"] == "download")["on_click"]()
-        assert masks[-1][0]["cells"][5]["status"] == "running"  # claimed: the row reads running
+        assert masks[-1][0]["cells"][2]["status"] == "running"  # claimed: the row reads running
         step.run_jobs()
-        assert masks[-1][0]["cells"][5]["status"] == "missing"
+        assert masks[-1][0]["cells"][2]["status"] == "missing"
         next(a for a in masks[-1][0]["actions"] if a["kind"] == "redownload")["on_click"]()
         step.run_jobs()
         assert [(items, force) for _, items, force in step.started] == [
