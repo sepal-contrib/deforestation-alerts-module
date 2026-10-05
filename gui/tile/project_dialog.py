@@ -431,6 +431,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
         open=manage_open.value, infos=infos, selected=selected.value, on_select=selected.set,
         on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
         current=p.name if p is not None else None, busy=load_task.pending or delete_task.pending,
+        covered=pending_delete is not None,
     )
     ConfirmDeleteDialog(
         open=pending_delete is not None, name=pending_delete or "", size_bytes=size,

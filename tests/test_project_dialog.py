@@ -88,9 +88,10 @@ def dialog(monkeypatch, tmp_path):
 
     @solara.component
     def _RecorderManage(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                        busy=False):
+                        busy=False, covered=False):
         ns.manage.append(dict(open=open, infos=infos, selected=selected, on_select=on_select, on_open=on_open,
-                              on_delete=on_delete, on_cancel=on_cancel, current=current, busy=busy))
+                              on_delete=on_delete, on_cancel=on_cancel, current=current, busy=busy,
+                              covered=covered))
 
     monkeypatch.setattr(pd, "ManageProjectsDialog", _RecorderManage)
     unsubscribe = install_autosave(ns.state)
@@ -392,6 +393,27 @@ def test_the_confirmation_shows_the_folder_size_counted_off_thread(dialog):
             _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
             await _settle(lambda: not _open_form(rc).widgets, "the confirm dialog closed")
             assert (dialog.root / "a").exists()
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_manage_is_covered_while_the_delete_confirmation_is_open(dialog):
+    # Manage releases its focus trap under the confirmation (see
+    # test_manage_projects), so the confirmation's name field keeps the focus.
+    async def main():
+        io.save_project(pd.create_project("a"))
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            assert dialog.manage[-1]["covered"] is False
+            dialog.manage[-1]["on_delete"]("a")
+            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+            assert dialog.manage[-1]["covered"] is True
+            _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+            await _settle(lambda: not _open_form(rc).widgets, "the confirm dialog closed")
+            assert dialog.manage[-1]["covered"] is False
         finally:
             rc.close()
 

@@ -75,7 +75,7 @@ def test_count_chips_accent_only_the_alert_sets():
 # ---------------------------------------------------------------------------
 # ManageProjectsDialog
 # ---------------------------------------------------------------------------
-def _render_manage(infos, *, current=None, busy=False, selected=None):
+def _render_manage(infos, *, current=None, busy=False, selected=None, covered=False):
     ns = SimpleNamespace(calls=[], open=solara.reactive(True), selected=solara.reactive(selected))
 
     def _select(name):
@@ -88,7 +88,7 @@ def _render_manage(infos, *, current=None, busy=False, selected=None):
             open=ns.open.value, infos=infos, selected=ns.selected.value, on_select=_select,
             on_open=lambda: ns.calls.append(("open", ns.selected.value)),
             on_delete=lambda name: ns.calls.append(("delete", name)),
-            on_cancel=lambda: ns.calls.append(("cancel",)), current=current, busy=busy)
+            on_cancel=lambda: ns.calls.append(("cancel",)), current=current, busy=busy, covered=covered)
 
     ns.box, ns.rc = reacton.render(Page(), handle_error=False)
     return ns
@@ -100,6 +100,22 @@ def test_the_manage_frame_is_spatial_risks():
         dialog = ns.rc.find(v.Dialog).widget
         assert dialog.max_width == "480px" and dialog.eager and not dialog.persistent
         assert t("steps.project.manage_title") in _texts(dialog)
+    finally:
+        ns.rc.close()
+
+
+def test_manage_lets_go_of_the_focus_while_a_dialog_covers_it():
+    # Two open dialogs that both retain focus pull it back and forth (VDialog's
+    # onFocusin): the delete confirmation's name field never got it on the
+    # first opening, and the browser hit "Maximum call stack size exceeded".
+    ns = _render_manage([_info("a")])
+    try:
+        assert ns.rc.find(v.Dialog).widget.retain_focus is True
+    finally:
+        ns.rc.close()
+    ns = _render_manage([_info("a")], covered=True)
+    try:
+        assert ns.rc.find(v.Dialog).widget.retain_focus is False
     finally:
         ns.rc.close()
 

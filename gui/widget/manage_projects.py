@@ -59,7 +59,7 @@ def count_chips(info) -> list[tuple[str, bool]]:
 
 @solara.component
 def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                         busy=False):
+                         busy=False, covered=False):
     """Search, open and delete the saved projects.
 
     ``infos``: the ``io.list_projects()`` read the caller holds. ``selected``:
@@ -68,7 +68,11 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
     different things (the list selection, a chip). ``on_select(name | None)``,
     ``on_open()`` (the footer), ``on_delete(name)`` (a row's trash button; the
     caller opens the confirmation), ``on_cancel()`` (Cancel, ESC, a click
-    outside). ``busy``: a load or a delete runs.
+    outside). ``busy``: a load or a delete runs. ``covered``: a dialog opened
+    from this one (the delete confirmation) is on top. This dialog then lets
+    go of the focus: two open dialogs that both retain focus pull it back and
+    forth (VDialog's ``onFocusin``), so the one on top never keeps it, and the
+    browser's call stack overflows.
     """
     query, set_query = solara.use_state("")
 
@@ -87,7 +91,7 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
     open_disabled = busy or not any(i.name == selected for i in shown)
 
     with rv.Dialog(v_model=open, on_v_model=lambda v: None if v else on_cancel(), max_width="480px",
-                   eager=True):
+                   eager=True, retain_focus=not covered):
         with rv.Card():
             with rv.CardTitle():
                 solara.Text(t("steps.project.manage_title"))
