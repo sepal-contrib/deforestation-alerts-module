@@ -279,15 +279,24 @@ def open_overview(page, wait=5000):
 
 
 def show_alerts(page, on=True, label="Show these alerts on the map"):
-    """Flip Integrate & vectorize's alert switch -- what draws the active set
-    on the shared map now that the Overview dashboard draws nothing. The layer
-    stays on while the user moves to another step (MapLayers ruling #10)."""
+    """Flip the active set's alert switch, which draws the set on the shared
+    map. The layer stays on while the user moves to another step (MapLayers
+    ruling #10). Integrate & vectorize's switch is used when that step is open.
+    With every source out of date, the step is locked and shows no form, so
+    the walk uses the Overview dialog's copy of the switch instead: the same
+    boolean, and turning it ON closes the dialog."""
     goto_step(page, "integrate", 2000)
     row = page.locator(f'.right-panel .v-input--switch:has(label:text-is("{label}"))').first
-    wait_for(lambda: row.count(), 30, f'the "{label}" switch')
+    locked = page.locator(f'.right-panel :text-is("{en("workflow.lock_integrate")}")')
+    wait_for(lambda: row.count() or locked.count(), 30, f'the "{label}" switch or the Integrate lock')
+    if not row.count():
+        open_overview(page, wait=2000)
+        row = page.locator(f'.dialog-card .v-input--switch:has(label:text-is("{label}"))').first
+        wait_for(lambda: row.count(), 60, f'the Overview\'s "{label}" switch')
     if row.locator("input").first.is_checked() != on:
         row.locator(".v-input--selection-controls__input").first.click()
         page.wait_for_timeout(2000)
+    close_dialog(page)
 
 
 def overview_reviewed(page, rec, *, out, n=1):

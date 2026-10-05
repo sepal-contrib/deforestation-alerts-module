@@ -167,8 +167,9 @@ def d_legends(page, rec, *, out):
     assert ph.legend_text(page) == "", ph.legend_text(page)  # hidden while Analysis shows
     w.goto_step(page, "prepare", 2000)
     w.wait_for(lambda: ph.legend_text(page), 15, "the legend back")
-    # The set's own layer: switched on in Integrate & vectorize (the Overview
-    # dashboard draws nothing), and it keeps its legend across a step change.
+    # The set's own layer keeps its legend across a step change. With hansen
+    # off, both sources are out of date and Integrate is locked, so
+    # show_alerts uses the Overview's copy of the switch.
     ph.show_alerts(page)
     w.wait_for(lambda: all(s in ph.legend_text(page) for s in STATUSES), 120, "the set's four status chips")
     rec["set_legend"] = ph.legend_text(page)
