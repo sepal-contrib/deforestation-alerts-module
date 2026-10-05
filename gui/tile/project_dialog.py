@@ -22,7 +22,8 @@ loop, where solara starts such a task with a bare ``asyncio.create_task``
 (the ``_ActiveSetLoader`` pattern in the shell).
 
 A new, opened or duplicated project starts the workflow at its AOI and closes
-the dialog (``dismiss``, from the shell). Deleting the open project closes it
+the dialog (``dismiss``, from the shell). Opening the project already open
+only closes the dialogs: it is not read again over its in-memory state. Deleting the open project closes it
 first, so no auto-save can write its manifest back while the folder goes; a
 failed delete opens it again as it now reads.
 """
@@ -131,9 +132,10 @@ def folder_size(name: str, root: Optional[Path] = None) -> int:
 
 
 @solara.component
-def _NameFields(title, open_, on_create, on_open_existing, infos, hint):
+def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current):
     """The name form's card. Mounted only while the form is open, so every
-    opening starts with an empty name and reads the folders again."""
+    opening starts with an empty name and reads the folders again.
+    ``current``: the open project's name, taken but never offered to open."""
     name, set_name = solara.use_state("")
     error, set_error = solara.use_state(None)
     # Enter and a click can both press Create before the form closes.
@@ -145,7 +147,10 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint):
     typed = name.strip()
     # A listed project of that name (folders without a manifest are not listed,
     # so nothing to open there): offered instead of a name that cannot be used.
-    match = next((i.name for i in infos if typed and i.name.casefold() == typed.casefold()), None)
+    # Not the open project: it is open already, and opening it again would
+    # read it back from disk over what is only in memory.
+    match = next((i.name for i in infos if typed and i.name.casefold() == typed.casefold()
+                  and i.name != current), None)
 
     def _type(value):
         set_name(value or "")
@@ -181,7 +186,7 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint):
 
 
 @solara.component
-def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None):
+def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, current=None):
     """New and Duplicate's name form (420px, on the form frame).
 
     ``on_create(name)`` installs the project and returns whether it did; the
@@ -191,7 +196,7 @@ def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None):
     with use_form_dialog(open_, max_width="420px"):
         if open_.value:
             _NameFields(title=title, open_=open_, on_create=on_create, on_open_existing=on_open_existing,
-                        infos=infos, hint=hint)
+                        infos=infos, hint=hint, current=current)
 
 
 #: How often the open project's "saved X ago" line is brought up to date.
@@ -331,8 +336,17 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
 
     def _open(name):
-        if name:
-            load_task(name)
+        if not name:
+            return
+        open_now = app_state.project.peek()
+        if open_now is not None and open_now.name == name:
+            # Manage opens on the open project, with Open as Enter's default.
+            # It is not read again: after a failed auto-save the disk is behind
+            # what is in memory, and a reload would silently drop that.
+            manage_open.set(False)
+            dismiss()
+            return
+        load_task(name)
 
     def _open_manage():
         selected.set(p.name if p is not None else None)
@@ -443,16 +457,17 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     # came and went with the open project would shift the ones after it, and
     # reacton would remount them (the delete confirmation would lose its
     # typed name when the open project is closed for its delete).
+    current = p.name if p is not None else None
     _NameForm(title=t("steps.project.new"), open_=new_open, on_create=_create, on_open_existing=_open_instead,
-              infos=infos)
+              infos=infos, current=current)
     _NameForm(title=t("steps.project.duplicate_title", name=p.name) if p is not None else "", open_=dup_open,
               on_create=_duplicate, on_open_existing=_open_instead, infos=infos,
-              hint=t("steps.project.duplicate_hint"))
+              hint=t("steps.project.duplicate_hint"), current=current)
 
     ManageProjectsDialog(
         open=manage_open.value, infos=infos, selected=selected.value, on_select=selected.set,
         on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
-        current=p.name if p is not None else None, busy=load_task.pending or delete_task.pending,
+        current=current, busy=load_task.pending or delete_task.pending,
         covered=pending_delete is not None,
     )
     ConfirmDeleteDialog(

@@ -645,3 +645,57 @@ def test_a_failed_duplicate_toasts_and_leaves_create_working(dialog, monkeypatch
             rc.close()
 
     asyncio.run(main())
+
+
+def test_opening_the_open_project_closes_the_dialogs_and_keeps_it_as_it_is(dialog, monkeypatch):
+    """Manage opens on the open project with Open as Enter's default. Open
+    there must not read it again from disk: after a failed auto-save that
+    would silently drop what is only in memory."""
+    loads = []
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+            live = dialog.state.project.value
+            dialog.state.current_page_view.value = "period_tile"  # wherever the user was
+            monkeypatch.setattr(dialog.state, "load_project_state", lambda p: loads.append(p))
+            _button(rc, t("steps.project.manage")).fire_event("click", None)
+            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+            assert dialog.manage[-1]["selected"] == "a"
+            dialog.manage[-1]["on_open"]()  # Enter, or a click on Open
+            await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
+            await asyncio.sleep(0.05)
+            assert loads == [] and dialog.state.project.value is live
+            assert dialog.dismissed == 1 and dialog.state.current_page_view.value == "period_tile"
+            assert not _toasts("success")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
+    async def main():
+        io.save_project(pd.create_project("north"))
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "north": "0 / 0 / 0"}, "the list read")
+            for form in (t("steps.project.new"), t("steps.project.duplicate")):
+                _button(rc, form).fire_event("click", None)
+                await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+                field = _name_field(rc)
+                field.v_model = "A"
+                assert field.error_messages == [t("steps.project.name_exists")], form
+                labels = [w.children for w in _open_form(rc).find(v.Btn).widgets]
+                assert not any(t("steps.project.open_instead", name="a") in c for c in labels), form
+                field.v_model = "north"  # another listed project is still offered
+                _button(_open_form(rc), t("steps.project.open_instead", name="north"))
+                _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+                await _settle(lambda: not _open_form(rc).widgets, "the name form closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
