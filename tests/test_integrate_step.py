@@ -591,6 +591,11 @@ def _checkbox(rc, label):
     return next(w for w in rc.find(v.Checkbox).widgets if w.label == label)
 
 
+def _origin(rc):
+    """RasterInput's origin Select (Earth Engine / GeoTIFF)."""
+    return rc.find(v.Select, label=t("steps.raster_input.origin_label")).widget
+
+
 def _strings(widget):
     out = []
     for child in getattr(widget, "children", None) or []:
@@ -1034,7 +1039,7 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             load = _button(rc, t("steps.integrate.attr_load"))
             load.fire_event("click", None)
             await _settle(lambda: t("steps.integrate.attr_no_source") in _texts(rc))
@@ -1072,7 +1077,7 @@ def test_attribute_form_shows_a_load_failure_next_to_the_field(pickers, tmp_path
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             pickers.path.set(str(tmp_path / "missing.tif"))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
             await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
@@ -1088,9 +1093,9 @@ def test_attribute_form_restores_a_saved_config(pickers):
            "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=[]), handle_error=False)
     try:
-        assert rc.find(v.RadioGroup).widget.v_model == "file" and pickers.path.value == "/home/u/lc.tif"
+        assert _origin(rc).v_model == "file" and pickers.path.value == "/home/u/lc.tif"
         assert _checkbox(rc, "lc").v_model is True
-        assert [w.v_model for w in rc.find(v.Select).widgets] == ["median"]
+        assert [w.v_model for w in rc.find(v.Select).widgets if w is not _origin(rc)] == ["median"]
     finally:
         rc.close()
 
@@ -1104,7 +1109,7 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
             await _settle(lambda: seen)
@@ -1151,9 +1156,9 @@ def test_attribute_form_keeps_a_saved_bands_projection_on_edit(pickers):
     seen = []
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
     try:
-        assert rc.find(v.RadioGroup).widget.v_model == "gee"
+        assert _origin(rc).v_model == "gee"
         assert pickers.asset.value["asset_id"] == "users/me/lc"
-        rc.find(v.Select).widget.v_model = "mean"
+        rc.find(v.Select, v_model="majority").widget.v_model = "mean"
         assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "b1", "crs": "EPSG:32721",
                                       "scale": 30.0}]
     finally:

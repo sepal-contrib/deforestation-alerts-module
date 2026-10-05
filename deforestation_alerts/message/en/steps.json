@@ -199,7 +199,9 @@
       "origin_file": "GeoTIFF in my SEPAL folder",
       "file": "GeoTIFF",
       "bands_loading": "Reading the bands…",
-      "bands_failed": "Could not read the bands: {error}"
+      "bands_failed": "Could not read the bands: {error}",
+      "origin_label": "Raster source",
+      "origin_hint": "Where to read the raster from"
     },
     "period": {
       "title": "Periods",

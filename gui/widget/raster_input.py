@@ -35,11 +35,12 @@ def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMA
                 disabled=False, show_origin=True):
     # ``show_origin=False``: the caller picks the origin itself (the
     # visualization-layer modal's Kind select)
-    if show_origin:
-        with rv.RadioGroup(v_model=origin, on_v_model=on_origin, row=True, dense=True, hide_details=True,
-                           disabled=disabled):
-            rv.Radio(label=t("steps.raster_input.origin_gee"), value="gee")
-            rv.Radio(label=t("steps.raster_input.origin_file"), value="file")
+    if show_origin:  # an outlined field like the others in the form (spec D2), not radios
+        rv.Select(label=t("steps.raster_input.origin_label"), v_model=origin, on_v_model=on_origin,
+                  items=[{"text": t("steps.raster_input.origin_gee"), "value": "gee"},
+                         {"text": t("steps.raster_input.origin_file"), "value": "file"}],
+                  dense=True, outlined=True, hint=t("steps.raster_input.origin_hint"), persistent_hint=True,
+                  disabled=disabled)
     # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
     # events instead. Always the same wrapper, so toggling it never remounts
     # a picker (which would list the user's assets again).
