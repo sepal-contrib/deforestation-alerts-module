@@ -101,11 +101,22 @@ def download_btn(page):
                         'button:has-text("Download"):visible').first
 
 
+def compact_stages(titles, label) -> int:
+    """How many stages read ``label`` in compact status tooltips: a Masks row
+    shows one icon whose title is ``"Download: ready · Aligned: ready"``
+    (``masks_card.mask_status``), one stage per ``Column: status``."""
+    return sum(len(re.findall(rf": {re.escape(label)}(?= ·|$)", t or "")) for t in titles)
+
+
 def prepare_state(page):
-    return {
-        "ready": page.locator('.right-panel :text-is("ready")').count(),
-        "running": page.locator('.right-panel :text-is("running")').count(),
-    }
+    """The "ready" / "running" stages on the panel: a source row's status
+    cells (their label), and a Masks row's compact status (its tooltip)."""
+    titles = page.locator(".right-panel [title]").evaluate_all("es => es.map(e => e.getAttribute('title'))")
+    out = {}
+    for state in ("ready", "running"):
+        label = en(f"widgets.product_table.status_{state}")
+        out[state] = page.locator(f'.right-panel :text-is("{label}")').count() + compact_stages(titles, label)
+    return out
 
 
 def save_grid(page, *, resolution="30"):

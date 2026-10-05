@@ -37,3 +37,21 @@ def test_the_labels_the_walks_pick_exist():
                 "steps.integrate.attr_add", "steps.integrate.attr_load", "steps.integrate.attr_loaded",
                 "steps.period.new", "steps.period.created"):
         assert walklib.en(key), key
+
+
+def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
+    """A Masks row shows one compact status icon (Task 8): its stages are in
+    its tooltip, so the walks' "ready" count reads them there."""
+    from types import SimpleNamespace
+
+    from deforestation_alerts.engine.fingerprint import Status
+    from gui.tile.masks_card import mask_status
+
+    gee = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False)["title"]
+    tif = mask_status(SimpleNamespace(raw=None, aligned=Status.CURRENT), busy=False)["title"]
+    stale = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.STALE), busy=False)["title"]
+    busy = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.MISSING), busy=True)["title"]
+    ready, running = walklib.en("widgets.product_table.status_ready"), walklib.en("widgets.product_table.status_running")
+    assert phases.compact_stages([gee, tif, stale, "Prepare: ready to go"], ready) == 4
+    assert phases.compact_stages([busy], running) == 2
+    assert phases.compact_stages([gee], running) == 0
