@@ -70,7 +70,8 @@
       "chip_saved": "enregistré",
       "chip_save_failed": "échec de l'enregistrement",
       "open_instead": "Ouvrir {name} à la place",
-      "name_hint": "Lettres, chiffres, espaces, « - » et « _ »."
+      "name_hint": "Lettres, chiffres, espaces, « - » et « _ ».",
+      "duplicate_failed": "Impossible de dupliquer {name} : {error}"
     },
     "aoi": {
       "title": "Zone d'intérêt",

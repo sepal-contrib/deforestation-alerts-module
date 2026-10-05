@@ -67,13 +67,25 @@ def create_project(name: str) -> Project:
 
 
 def duplicate_with_sidecar(p: Project, new_name: str, root: Optional[Path] = None) -> Project:
+    """The copy, with its AOI sidecar copied into its new folder.
+
+    Raises ``OSError`` when the sidecar cannot be copied. A folder this call
+    made is removed again first, so the name stays free for a retry (the name
+    form checks the disk for every folder)."""
     q = io.duplicate_project(p, new_name.strip())
     if p.aoi and p.aoi.geometry_file:
         src = paths.project_dir(p.name, root) / p.aoi.geometry_file
         if src.exists():
-            dst = paths.project_dir(q.name, root) / p.aoi.geometry_file
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            folder = paths.project_dir(q.name, root)
+            fresh = not folder.exists()
+            dst = folder / p.aoi.geometry_file
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+            except OSError:
+                if fresh:
+                    shutil.rmtree(folder, ignore_errors=True)
+                raise
     return q
 
 
@@ -147,7 +159,9 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint):
             set_error(t(_NAME_ERRORS[err]))
             return
         launched.current = True
-        on_create(typed)
+        if not on_create(typed):
+            launched.current = False  # failed (the caller toasted): Create works again
+            return
         open_.set(False)
 
     def _actions():
@@ -170,7 +184,8 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint):
 def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None):
     """New and Duplicate's name form (420px, on the form frame).
 
-    ``on_create(name)`` installs the project; the form closes itself after.
+    ``on_create(name)`` installs the project and returns whether it did; the
+    form closes itself after, or stays open on the name when it did not.
     ``on_open_existing(name)`` opens the listed project the typed name matches.
     """
     with use_form_dialog(open_, max_width="420px"):
@@ -337,13 +352,20 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     def _create(name):
         app_state.new_project_state(create_project(name))
         _show_workflow()
+        return True
 
     def _duplicate(name):
         if p is None:  # closed (a delete) while the form was open
-            return
+            return True  # nothing to copy: the form just closes
+        try:
+            copy = duplicate_with_sidecar(p, name)
+        except OSError as exc:  # the sidecar's folder or copy (disk full, permissions)
+            notifications.error(t("steps.project.duplicate_failed", name=p.name, error=error_text(exc)))
+            return False
         # The copy is where another area gets monitored (spec D10): start at its AOI.
-        app_state.new_project_state(duplicate_with_sidecar(p, name))
+        app_state.new_project_state(copy)
         _show_workflow()
+        return True
 
     async def _delete():
         name = pending_delete

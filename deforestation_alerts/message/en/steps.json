@@ -64,7 +64,8 @@
       "chip_saved": "saved",
       "chip_save_failed": "save failed",
       "open_instead": "Open {name} instead",
-      "name_hint": "Letters, digits, spaces, '-' and '_'."
+      "name_hint": "Letters, digits, spaces, '-' and '_'.",
+      "duplicate_failed": "Could not duplicate {name}: {error}"
     },
     "aoi": {
       "title": "Area of interest",

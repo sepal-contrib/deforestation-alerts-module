@@ -70,7 +70,8 @@
       "chip_saved": "guardado",
       "chip_save_failed": "error al guardar",
       "open_instead": "Abrir {name} en su lugar",
-      "name_hint": "Letras, dígitos, espacios, '-' y '_'."
+      "name_hint": "Letras, dígitos, espacios, '-' y '_'.",
+      "duplicate_failed": "No se pudo duplicar {name}: {error}"
     },
     "aoi": {
       "title": "Área de interés",

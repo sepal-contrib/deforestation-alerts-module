@@ -601,3 +601,47 @@ def test_saved_ago_moves_on_while_the_dialog_stays_open(dialog, monkeypatch):
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_failed_duplicate_toasts_and_leaves_create_working(dialog, monkeypatch):
+    """Copying the AOI sidecar can fail on disk trouble: a toast, the form
+    stays open on the name, nothing is installed, no half-made folder blocks
+    the name, and Create works again."""
+    real_copy = pd.shutil.copy2
+    failures = [OSError("disk full")]
+
+    def flaky_copy(src, dst, *args, **kwargs):
+        if failures:
+            raise failures.pop()
+        return real_copy(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(pd.shutil, "copy2", flaky_copy)
+
+    async def main():
+        p = pd.create_project("a")
+        p.aoi = AoiRecord(spec={}, name="x", method="DRAW", digest="d", bounds=(0, 0, 1, 1),
+                          geometry_file=paths.AOI_SIDECAR)
+        io.save_project(p)
+        (dialog.root / "a" / paths.AOI_SIDECAR).write_text('{"type": "FeatureCollection", "features": []}')
+        _box, rc = dialog.render()
+        try:
+            dialog.state.load_project_state(io.load_project("a"))
+            label = t("steps.project.duplicate")
+            await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets), "the Duplicate button")
+            _button(rc, label).fire_event("click", None)
+            await _submit_name(rc, "c")
+            await _settle(lambda: _toasts("error"), "the failure toasted")
+            assert _toasts("error") == [t("steps.project.duplicate_failed", name="a", error="disk full")]
+            assert dialog.state.project.value.name == "a" and dialog.dismissed == 0
+            assert not (dialog.root / "c").exists()  # the half-made folder is gone
+            assert _name_field(rc).v_model == "c"  # the form stays open on the name
+            create = _button(_open_form(rc), t("common.create"))
+            assert not create.disabled
+            create.fire_event("click", None)  # the retry
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c", "c installed")
+            assert (dialog.root / "c" / paths.AOI_SIDECAR).exists()
+            await _settle(lambda: not _open_form(rc).widgets, "the name form closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
