@@ -22,6 +22,14 @@ the same handler-side ``pending`` guards — and ``HTMLElement.click()`` on a
 disabled button is a no-op, so a button that is disabled (Load with nothing
 selected, Delete before the project name is typed) cannot fire via Enter.
 
+Where Enter is heard: ipyvuetify's overlay div (``[vuetify-overlay]``), which
+holds every dialog, stops each keydown's propagation (it keeps Jupyter's
+shortcuts out of the widgets), so a listener on ``document`` never hears a key
+pressed inside a dialog in its bubble phase. The capture phase still passes
+``document``: there the listener hooks a one-shot listener onto the topmost
+dialog (``hearOnLeaving``), which hears that Enter as it bubbles out of the
+dialog, after the focused control's own handlers, before the overlay stops it.
+
 When Enter presses the button — HTML's implicit form submission, applied to
 the dialog on top:
 
@@ -130,14 +138,33 @@ module.exports = {
       if (!this.isPlainEnter(e)) return;
       const top = this.topmostDialog();
       const around = e.target.closest(".v-dialog__content");
+      if (around && around === top) {
+        // The normal way, but heard on the dialog itself: ipyvuetify's
+        // overlay div, where the dialogs live, stops every keydown before
+        // it reaches document.
+        this.hearOnLeaving(around, e);
+        return;
+      }
       // Only the focus left in a dialog under the topmost one; everything
       // else goes the normal way, below.
-      if (!top || !around || around === top) return;
+      if (!top || !around) return;
       const button = this.defaultButton(top);
       if (!button) return;
       e.preventDefault();
       e.stopPropagation();
       this.press(button);
+    },
+    hearOnLeaving(dialog, e) {
+      // Bubble phase on the dialog: after the focused control's own handlers,
+      // before the overlay stops the event. For this event only.
+      const listener = (ev) => {
+        dialog.removeEventListener("keydown", listener);
+        if (ev === e) this.onEnterKeydown(ev);
+      };
+      dialog.addEventListener("keydown", listener);
+      // Dispatch is synchronous: a control that stopped the event left the
+      // listener unheard, and it goes now.
+      setTimeout(() => dialog.removeEventListener("keydown", listener), 0);
     },
     onEnterKeydown(e) {
       if (!this.isPlainEnter(e) || !this.enterIsFree(e.target)) return;
