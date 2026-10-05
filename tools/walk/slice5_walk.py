@@ -267,7 +267,8 @@ def f_replace_list(page, rec, *, out):
     page.wait_for_timeout(1000)
     rec["replace_dialog"] = ph.modal_text(page)
     w.shot(page, out, "replace_dialog")
-    assert "1 reviewed alert(s) in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
+    # A plural node since 734b8cb: "1 reviewed alert", no "(s)".
+    assert "1 reviewed alert in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
     # each listed alert on a line of its own (ConfirmDialog's details are blocks)
     assert re.search(r"^#\d+ · Reviewed: confirmed · [\d.]+ ha$", rec["replace_dialog"], re.M), rec["replace_dialog"]
     ph.modal_button(page, "Cancel").click()
