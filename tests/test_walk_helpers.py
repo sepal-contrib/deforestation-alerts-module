@@ -2,6 +2,9 @@
 app's own class names. A renamed key or class breaks this test, instead of a
 walk timing out twenty minutes in."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from gui.widget.enter_key import ENTER_DEFAULT
@@ -37,6 +40,40 @@ def test_the_labels_the_walks_pick_exist():
                 "steps.integrate.attr_add", "steps.integrate.attr_load", "steps.integrate.attr_loaded",
                 "steps.period.new", "steps.period.created"):
         assert walklib.en(key), key
+
+
+#: The f-string key families the walks build, and every value they fill in.
+KEY_FAMILIES = {
+    "analysis.timeline.lane_{lane}": ("before", "after"),
+    "widgets.product_table.status_{state}": ("ready", "running"),
+}
+
+
+def test_every_label_key_a_walk_names_exists():
+    """Every ``en("…")`` literal in tools/walk resolves to an English text,
+    including the keys a walk reads lazily inside a phase; an f-string key is
+    expanded over its family's values."""
+    walk_dir = Path(walklib.__file__).parent
+    found = set()
+    for path in sorted(walk_dir.glob("*.py")):
+        found |= set(re.findall(r'(?<![\w])en\((f?"[^"]+")\)', path.read_text(encoding="utf-8")))
+    keys = set()
+    for literal in found:
+        key = literal.lstrip("f").strip('"')
+        if literal.startswith("f") and "{" in key:
+            assert key in KEY_FAMILIES, f"add {key!r} and its values to KEY_FAMILIES"
+            name = re.search(r"\{(\w+)\}", key).group(1)
+            keys |= {key.replace("{" + name + "}", value) for value in KEY_FAMILIES[key]}
+        else:
+            keys.add(key)
+    assert len(keys) >= 25, sorted(keys)  # the scan sees the walks
+    missing = []
+    for key in sorted(keys):
+        try:
+            walklib.en(key)
+        except KeyError:
+            missing.append(key)
+    assert not missing, missing
 
 
 def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
