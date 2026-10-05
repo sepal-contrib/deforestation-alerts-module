@@ -8,6 +8,7 @@ sets with Go, the Replace list and deleting the latest period.
 import argparse
 import json
 import re
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -312,6 +313,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8985)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice5_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     south_mask_tif(USER / "south.tif", AMAZON)
     seed(PROJECT, AMAZON, sources=("GLAD-L",), period=tuple(JUNE.split("_")), look_back=30, root=DATA)

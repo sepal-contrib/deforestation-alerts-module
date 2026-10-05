@@ -11,6 +11,7 @@ import argparse
 import glob
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -267,6 +268,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8984)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice4_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     make_rasters.probability_tif(USER / "probability.tif", AMAZON)
     make_rasters.far_mask_tif(USER / "far.tif")

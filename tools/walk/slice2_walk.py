@@ -5,6 +5,7 @@
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,6 +25,9 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice2_walk"))
     args = ap.parse_args(argv)
     data = Path.home() / "module_results" / "deforestation_alerts_walk_slice2"
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(data, ignore_errors=True)
     seed(PROJECT, BOX, sources=("GLAD-L", "RADD"), period=("2025-06-01", "2026-08-31"), look_back=0, root=data)
     args.out.mkdir(parents=True, exist_ok=True)
     proc = w.start_server(args.port, data, args.out / "server.log")

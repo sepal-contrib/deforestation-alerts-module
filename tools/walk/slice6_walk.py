@@ -8,6 +8,7 @@ Project dialog's "saved X ago", and the app in Spanish and French.
 import argparse
 import json
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -26,6 +27,7 @@ REPO = Path(__file__).resolve().parents[2]
 MESSAGES = REPO / "deforestation_alerts" / "message"
 MARKER = "MARKER-SLICE6"
 STEP_KEYS = ("aoi", "alerts", "layers", "period", "prepare", "integrate")
+DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice6"
 
 
 def catalogue(locale, name):
@@ -252,10 +254,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8986)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice6_walk"))
-    ap.add_argument("--data", type=Path, default=Path.home() / "module_results" / "deforestation_alerts_walk_slice6",
+    ap.add_argument("--data", type=Path, default=DATA,
                     help="the walk's data dir (DEFORESTATION_ALERTS_DATA_DIR); keep it under $HOME")
     args = ap.parse_args(argv)
     data = args.data
+    if data == DATA:
+        # The walk's own data dir, rebuilt: files a previous run left (a set's
+        # downloads) would hide what this run writes.
+        # Only the walk's own default dir: a --data the caller names is theirs.
+        shutil.rmtree(data, ignore_errors=True)
     seed(PROJECT, BOX, sources=("GLAD-L", "RADD"), period=("2025-06-01", "2026-08-31"), look_back=0, root=data)
     for name in OTHERS:
         seed(name, BOX, root=data)
