@@ -223,22 +223,33 @@ def review_and_save(page, rec, *, out):
     assert not download_btn(page).is_disabled(), "Download still disabled after the Save"
 
 
+def _lane_options(page, lane):
+    """The pickable stripes of one timeline lane (``"before"`` / ``"after"``):
+    ``role=option`` buttons, disabled while the cloud limit hides them. Planet
+    is left out: a NICFI pick depends on the account's access."""
+    host = page.locator(f'.analysis-timeline:visible [role="listbox"][aria-label^="{en(f"analysis.timeline.lane_{lane}")}"]')
+    return host.locator('button[role="option"]:not([disabled]):not([aria-label^="Planet"])')
+
+
 def pick_images(page, rec, *, out):
-    tabs = page.locator('.v-tab:has-text("Sentinel-2"):visible')
-    for i in range(tabs.count()):
-        tabs.nth(i).click()
-        page.wait_for_timeout(3000)
-    wait_for(lambda: page.locator(".v-slide-group button:visible").count() >= 2, 240, "image buttons")
-    groups = page.locator(".v-slide-group:visible")
+    """The shared image timeline (``gui/tile/analysis/timeline.py``): one click
+    on a stripe of the upper lane sets the before image, of the lower lane the
+    after image. Picks the earliest before and the latest after stripe drawn,
+    as the retired per-pane selectors' first and last buttons did."""
+    before, after = _lane_options(page, "before"), _lane_options(page, "after")
+    wait_for(lambda: before.count() and after.count(), 240, "image stripes in both timeline lanes")
     picked = []
-    for g in range(groups.count()):
-        b = groups.nth(g).locator("button")
-        if b.count():
-            k = b.count() - 1 if g else 0
-            picked.append(b.nth(k).inner_text())
-            b.nth(k).click()
-            page.wait_for_timeout(4000)
+    for opts, k in ((before, 0), (after, -1)):
+        btn = opts.nth(k if k >= 0 else opts.count() - 1)
+        picked.append(btn.get_attribute("aria-label"))
+        # Stripes are a few px apart and overlap their neighbours' hit areas:
+        # the click goes to this one, not to the point under its centre.
+        btn.dispatch_event("click")
+        page.wait_for_timeout(4000)
     rec["picked"] = picked
+    unset = en("analysis.timeline.unset")
+    readout = page.locator(".analysis-timeline:visible").first
+    wait_for(lambda: readout.inner_text().count(f": {unset}") == 0, 30, "both images set in the readout")
     shot(page, out, "images_picked")
     assert len(picked) >= 2, picked
 
