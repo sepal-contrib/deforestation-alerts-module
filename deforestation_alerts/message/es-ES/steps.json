@@ -1,8 +1,7 @@
 {
   "steps": {
     "project": {
-      "title": "Proyecto",
-      "none_open": "No hay ningún proyecto abierto. Crea uno, abre uno o elige un área de interés en el primer paso para empezar uno automáticamente.",
+      "none_open": "Crea uno, abre uno guardado o elige un área de interés en el primer paso para empezar uno automáticamente.",
       "new": "Nuevo proyecto",
       "duplicate": "Duplicar",
       "name_label": "Nombre del proyecto",
@@ -46,17 +45,12 @@
         "other": "hace {count} días"
       },
       "save_failed": "Error al guardar: {error}",
-      "list_title": "Proyectos",
       "list_empty": "Todavía no hay proyectos guardados.",
-      "col_name": "Nombre",
-      "col_counts": "Fuentes / períodos / conjuntos",
-      "col_updated": "Actualizado",
       "opened": "{name} abierto",
       "open_failed": "No se pudo abrir {name}: {error}",
       "set_load_failed": "No se pudieron cargar las alertas del conjunto activo: {error}",
       "set_missing": "Faltan los archivos del conjunto de alertas activo ({path}). Vuelve a ejecutar Integrar y vectorizar para reconstruirlo.",
       "delete_title": "¿Eliminar {name}?",
-      "delete_message": "Esto elimina la carpeta del proyecto y todos sus archivos. Escribe el nombre del proyecto para confirmar.",
       "delete_busy": "Una tarea todavía está escribiendo en este proyecto. Espera a que termine y luego elimínalo.",
       "delete_failed": "No se pudo eliminar {name}: {error}",
       "deleted": "{name} eliminado",
@@ -69,7 +63,14 @@
       "delete_type_label": "Escribe {name} para confirmar",
       "delete_open_warning": "Este proyecto está abierto: se cerrará primero.",
       "size_counting": "Esto elimina la carpeta del proyecto y todo su contenido (calculando su tamaño…).",
-      "delete_size": "Esto elimina la carpeta del proyecto y todo su contenido ({size})."
+      "delete_size": "Esto elimina la carpeta del proyecto y todo su contenido ({size}).",
+      "empty_heading": "Ningún proyecto abierto",
+      "manage": "Gestionar",
+      "manage_count": "Gestionar proyectos ({count})",
+      "chip_saved": "guardado",
+      "chip_save_failed": "error al guardar",
+      "open_instead": "Abrir {name} en su lugar",
+      "name_hint": "Letras, dígitos, espacios, '-' y '_'."
     },
     "aoi": {
       "title": "Área de interés",

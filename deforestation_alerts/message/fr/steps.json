@@ -1,8 +1,7 @@
 {
   "steps": {
     "project": {
-      "title": "Projet",
-      "none_open": "Aucun projet n'est ouvert. Créez-en un, ouvrez-en un, ou choisissez une zone d'intérêt dans la première étape pour en démarrer un automatiquement.",
+      "none_open": "Créez-en un, ouvrez-en un enregistré, ou choisissez une zone d'intérêt dans la première étape pour en démarrer un automatiquement.",
       "new": "Nouveau projet",
       "duplicate": "Dupliquer",
       "name_label": "Nom du projet",
@@ -46,17 +45,12 @@
         "other": "il y a {count} jours"
       },
       "save_failed": "Échec de l'enregistrement : {error}",
-      "list_title": "Projets",
       "list_empty": "Aucun projet enregistré pour l'instant.",
-      "col_name": "Nom",
-      "col_counts": "Sources / périodes / jeux",
-      "col_updated": "Mis à jour",
       "opened": "{name} ouvert",
       "open_failed": "Impossible d'ouvrir {name} : {error}",
       "set_load_failed": "Impossible de charger les alertes du jeu actif : {error}",
       "set_missing": "Les fichiers du jeu d'alertes actif sont manquants ({path}). Relancez Intégrer et vectoriser pour le reconstruire.",
       "delete_title": "Supprimer {name} ?",
-      "delete_message": "Cela supprime le dossier du projet et tous ses fichiers. Saisissez le nom du projet pour confirmer.",
       "delete_busy": "Une tâche écrit encore dans ce projet. Attendez qu'elle se termine, puis supprimez.",
       "delete_failed": "Impossible de supprimer {name} : {error}",
       "deleted": "{name} supprimé",
@@ -69,7 +63,14 @@
       "delete_type_label": "Saisissez {name} pour confirmer",
       "delete_open_warning": "Ce projet est ouvert : il sera d'abord fermé.",
       "size_counting": "Cela supprime le dossier du projet et tout son contenu (calcul de sa taille…).",
-      "delete_size": "Cela supprime le dossier du projet et tout son contenu ({size})."
+      "delete_size": "Cela supprime le dossier du projet et tout son contenu ({size}).",
+      "empty_heading": "Aucun projet ouvert",
+      "manage": "Gérer",
+      "manage_count": "Gérer les projets ({count})",
+      "chip_saved": "enregistré",
+      "chip_save_failed": "échec de l'enregistrement",
+      "open_instead": "Ouvrir {name} à la place",
+      "name_hint": "Lettres, chiffres, espaces, « - » et « _ »."
     },
     "aoi": {
       "title": "Zone d'intérêt",

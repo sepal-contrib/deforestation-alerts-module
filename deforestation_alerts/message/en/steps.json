@@ -1,8 +1,7 @@
 {
   "steps": {
     "project": {
-      "title": "Project",
-      "none_open": "No project is open. Create one, open one, or pick an area of interest in the first step to start one automatically.",
+      "none_open": "Create one, open a saved one, or pick an area of interest in the first step to start one automatically.",
       "new": "New project",
       "duplicate": "Duplicate",
       "name_label": "Project name",
@@ -40,17 +39,12 @@
         "other": "{count} days ago"
       },
       "save_failed": "Saving failed: {error}",
-      "list_title": "Projects",
       "list_empty": "No saved projects yet.",
-      "col_name": "Name",
-      "col_counts": "Sources / periods / sets",
-      "col_updated": "Updated",
       "opened": "Opened {name}",
       "open_failed": "Could not open {name}: {error}",
       "set_load_failed": "Could not load the alerts of the active set: {error}",
       "set_missing": "The active alert set's files are missing ({path}). Re-run Integrate & vectorize to rebuild it.",
       "delete_title": "Delete {name}?",
-      "delete_message": "This deletes the project folder and every file in it. Type the project name to confirm.",
       "delete_busy": "A task is still writing into this project. Wait for it to finish, then delete.",
       "delete_failed": "Could not delete {name}: {error}",
       "deleted": "Deleted {name}",
@@ -63,7 +57,14 @@
       "delete_type_label": "Type {name} to confirm",
       "delete_open_warning": "This project is open: it will be closed first.",
       "size_counting": "This deletes the project folder and everything in it (measuring its size…).",
-      "delete_size": "This deletes the project folder and everything in it ({size})."
+      "delete_size": "This deletes the project folder and everything in it ({size}).",
+      "empty_heading": "No project open",
+      "manage": "Manage",
+      "manage_count": "Manage projects ({count})",
+      "chip_saved": "saved",
+      "chip_save_failed": "save failed",
+      "open_instead": "Open {name} instead",
+      "name_hint": "Letters, digits, spaces, '-' and '_'."
     },
     "aoi": {
       "title": "Area of interest",

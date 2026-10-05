@@ -1413,9 +1413,10 @@ def test_no_inline_feedback_surfaces_are_left():
             )
 
 
-def test_creation_dialog_keeps_field_validation_inline_with_a_justification():
-    """The one documented exception — and it must stay documented."""
-    rel = "gui/widget/creation_dialog.py"
+def test_the_form_frame_keeps_field_validation_inline_with_a_justification():
+    """The one documented exception, and it must stay documented: every form
+    shows its validation error through gui/widget/form_dialog's form_error."""
+    rel = "gui/widget/form_dialog.py"
     assert "rv.Alert" in _called(rel), "the field-validation alert disappeared"
     assert "KEPT INLINE ON PURPOSE" in _src(rel), (
         "the retained inline validation lost its justification comment"

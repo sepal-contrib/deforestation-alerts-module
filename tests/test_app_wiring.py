@@ -318,7 +318,8 @@ def test_removed_modules_are_gone():
                 "deforestation_alerts/model/aux_model.py", "deforestation_alerts/model/aoi_date_model.py",
                 "deforestation_alerts/model/alerts_model.py", "deforestation_alerts/model/app_model.py",
                 "gui/Dockerfile", "gui/supervisord.conf", "docker-compose.yml", ".dockerignore",
-                "deforestation_alerts/scripts/workspace.py", "gui/scripts/scratch_registry.py"):
+                "deforestation_alerts/scripts/workspace.py", "gui/scripts/scratch_registry.py",
+                "gui/widget/creation_dialog.py"):
         assert not (ROOT / rel).exists(), rel
 
 
