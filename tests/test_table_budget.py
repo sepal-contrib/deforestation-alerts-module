@@ -3,9 +3,11 @@ least ``MIN_FLEX_PX`` at the width it gets, and ``ProductTable`` sizes its
 Actions column from its rows."""
 
 import ipyvuetify as v
+import pytest
 import reacton
 
 from gui.i18n import t
+from gui.tile import alerts_step, layers_step, period_step
 from gui.widget import product_table
 from gui.widget.product_table import (
     CARD_CONTENT_PX, MIN_FLEX_PX, NAME_TEXT, PANEL_CONTENT_PX, ProductTable, actions_px, actions_width, fits,
@@ -92,3 +94,21 @@ def test_a_status_label_clips_and_a_compact_status_is_its_icon_with_a_tooltip():
 def test_status_text():
     assert status_text("ready") == t("widgets.product_table.status_ready")
     assert status_text("odd") == "odd"
+
+
+
+#: Every step table, at the width it gets: ``(id, columns_fn, n_actions, content_px)``.
+#: A table inside an outlined card (masks, attribute layers) gets CARD_CONTENT_PX.
+STEP_TABLES = [
+    ("sources", alerts_step.source_columns, alerts_step.SOURCE_ACTIONS, PANEL_CONTENT_PX),
+    ("layers", layers_step.layer_columns, layers_step.LAYER_ACTIONS, PANEL_CONTENT_PX),
+    ("periods", period_step.period_columns, period_step.PERIOD_ACTIONS, PANEL_CONTENT_PX),
+]
+
+
+@pytest.mark.parametrize("columns_fn, n_actions, content_px",
+                         [pytest.param(fn, n, px, id=name) for name, fn, n, px in STEP_TABLES])
+def test_every_step_table_fits_the_panel(columns_fn, n_actions, content_px):
+    columns = columns_fn()
+    left = content_px - fixed_width_px(columns, n_actions)
+    assert fits(columns, n_actions, content_px), f"{left} px left to the name column, {MIN_FLEX_PX} needed"

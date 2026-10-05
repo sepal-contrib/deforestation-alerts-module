@@ -23,6 +23,14 @@ from gui.widget.product_table import ProductTable
 from gui.widget.source_modal import SourceModal
 
 
+SOURCE_ACTIONS = 3  # the most a row has: map, edit (a custom source), delete
+
+
+def source_columns() -> list:
+    """Source | Coverage (spec D4): the kind and the dates are the row's first note."""
+    return [{"label": t("steps.alerts.col_source")}, {"label": t("steps.alerts.col_coverage"), "width": "140px"}]
+
+
 def blocked_reason(p, name):
     """Why ``name`` cannot be previewed for the active window, or None."""
     cov = record_for(p, name)
@@ -177,15 +185,16 @@ def AlertsStep(app_state, map_, gee_interface, layers):
     for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):
         cov = record_for(p, name)
         reason = blocked_reason(p, name)
-        notes = []
-        if src.kind == "predefined" and src.catalogue_key == "RADD":
-            notes.append({"text": t("coverage.radd_note"), "tone": "info"})
-        if reason:
-            notes.append({"text": reason, "tone": "error"})
         if src.kind == "predefined":
             label, kind = t(catalogue.LABEL_KEYS[src.catalogue_key]), t("steps.alerts.kind_predefined")
         else:
             label, kind = name, t("steps.alerts.kind_custom", format=t(f"steps.alerts.format_{src.format}"))
+        dates = dates_text(cov)
+        notes = [{"text": f"{kind} · {dates}" if dates else kind, "tone": None}]
+        if src.kind == "predefined" and src.catalogue_key == "RADD":
+            notes.append({"text": t("coverage.radd_note"), "tone": "info"})
+        if reason:
+            notes.append({"text": reason, "tone": "error"})
         key = f"src:{name}"
         actions = [{"kind": "map_toggle", "is_on": key in on, "loading": key in building,
                     "disabled": reason is not None, "on_click": (lambda n=name: _toggle(n))}]
@@ -193,24 +202,19 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             actions.append({"kind": "edit", "on_click": (lambda n=name: _edit(n))})
         actions.append({"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))})
         rows.append({"key": name, "notes": notes, "actions": actions,
-                     "cells": [{"value": label}, {"type": "chip", "value": kind}, chip_cell(cov, pending_cov),
-                               {"value": dates_text(cov), "muted": True}]})
+                     "cells": [{"value": label}, chip_cell(cov, pending_cov)]})
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.alerts.title')}")
         StepIntro(t("steps.alerts.description"), t("steps.alerts.info_header"), t("steps.alerts.info_md"))
-        ProductTable(
-            title=t("steps.alerts.list_title"),
-            columns=[{"label": t("steps.alerts.col_source")},
-                     {"label": t("steps.alerts.col_kind"), "width": "120px"},
-                     {"label": t("steps.alerts.col_coverage"), "width": "150px"},
-                     {"label": t("steps.alerts.col_dates"), "width": "150px"}],
-            rows=rows, empty_text=t("steps.alerts.empty"),
-        )
+        # spec D4: a step list's Add button sits above it, full width
+        solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
+                      on_click=_open_add)
+        ProductTable(title=t("steps.alerts.list_title"), columns=source_columns(), rows=rows,
+                     empty_text=t("steps.alerts.empty"))
         # spec §6.2 "Failure": the sources left without a record can be checked again
         CheckAgainButton(app_state=app_state, show=bool(app_state.coverage_error.value)
                          and any(record_for(p, n) is None for n in p.sources))
-        solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True, on_click=_open_add)
 
     SourceModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, editing=editing,
                 on_add_predefined=_add_predefined, on_add_custom=_add_custom, on_save_custom=_save_custom)

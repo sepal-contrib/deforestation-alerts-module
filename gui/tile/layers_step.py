@@ -15,8 +15,24 @@ from gui.widget.product_table import ProductTable
 from gui.widget.vis_layer_modal import VisLayerModal
 
 
+LAYER_ACTIONS = 3  # map, edit, delete
+
+
 def _key(name: str) -> str:
     return f"vis:{name}"
+
+
+def layer_columns() -> list:
+    """Name only (spec D4): the kind and "in Analysis" are chips, the details a note."""
+    return [{"label": t("steps.layers.col_name")}]
+
+
+def layer_cell(layer) -> dict:
+    """The name with its kind chip, and an "in Analysis" chip when it is shown there."""
+    chips = [{"value": t(f"steps.layers.kind_{layer.kind}")}]
+    if layer.show_in_analysis:
+        chips.append({"value": t("steps.layers.in_analysis"), "color": "primary"})
+    return {"value": layer.name, "chips": chips}
 
 
 @solara.component
@@ -88,30 +104,22 @@ def LayersStep(app_state, map_, gee_interface, layers):
     rows = []
     for name, layer in sorted(p.vis_layers.items(), key=lambda kv: kv[0].casefold()):
         key = _key(name)
-        rows.append({"key": name, "cells": [
-            {"value": name},
-            {"type": "chip", "value": t(f"steps.layers.kind_{layer.kind}")},
-            {"value": vis_layers.vis_layers_summary(layer), "muted": True},
-            {"type": "chip", "value": t("steps.layers.in_analysis")} if layer.show_in_analysis else {"value": ""},
-        ], "actions": [
-            {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
-             "on_click": (lambda n=name: _toggle(n))},
-            {"kind": "edit", "on_click": (lambda n=name: _edit(n))},
-            {"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))},
-        ]})
+        rows.append({"key": name, "cells": [layer_cell(layer)],
+                     "notes": [{"text": vis_layers.vis_layers_summary(layer), "tone": None}],
+                     "actions": [
+                         {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
+                          "on_click": (lambda n=name: _toggle(n))},
+                         {"kind": "edit", "on_click": (lambda n=name: _edit(n))},
+                         {"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))},
+                     ]})
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.layers.title')}")
         StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
-        ProductTable(
-            title=t("steps.layers.list_title"),
-            columns=[{"label": t("steps.layers.col_name")},
-                     {"label": t("steps.layers.col_kind"), "width": "100px"},
-                     {"label": t("steps.layers.col_details"), "width": "150px"},
-                     {"label": "", "width": "90px"}],
-            rows=rows, empty_text=t("steps.layers.empty"),
-        )
-        solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, on_click=_open_add)
+        solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
+                      on_click=_open_add)
+        ProductTable(title=t("steps.layers.list_title"), columns=layer_columns(), rows=rows,
+                     empty_text=t("steps.layers.empty"))
 
     VisLayerModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_save=_save, editing=editing)
     ConfirmDialog(

@@ -50,6 +50,15 @@ from gui.widget.period_modal import PeriodModal
 from gui.widget.product_table import ProductTable
 
 
+PERIOD_ACTIONS = 3  # select, edit, delete
+
+
+def period_columns() -> list:
+    return [{"label": t("steps.period.col_period")},
+            {"label": t("steps.period.col_sets"), "width": "40px"},
+            {"label": t("steps.period.col_status"), "width": "84px"}]
+
+
 def period_label(period) -> str:
     return t("steps.period.range", start=period.start.isoformat(), end=period.end.isoformat())
 
@@ -240,15 +249,14 @@ def _PeriodList(app_state, layers):
                          hint=t("steps.period.look_back_hint"), persistent_hint=True)
             solara.Button(t("steps.period.apply"), small=True, outlined=True,
                           disabled=str(look_back).strip() == str(p.look_back_days), on_click=_apply_look_back)
+        solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
+                      on_click=_new)
         ProductTable(
             title=t("steps.period.list_title"),
-            columns=[{"label": t("steps.period.col_period")},
-                     {"label": t("steps.period.col_sets"), "width": "40px"},
-                     {"label": t("steps.period.col_status"), "width": "84px"}],
+            columns=period_columns(),
             rows=period_rows(p, pdir, select=_select, edit=_edit, delete=_ask_delete),
             empty_text=t("steps.period.empty"),
         )
-        solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, on_click=_new)
     PeriodModal(open_=modal_open, app_state=app_state, on_submit=_submit, editing=editing)
     pending = p.periods.get(pending_delete) if pending_delete else None
     doomed = periods.sets_of(p, pending_delete) if pending is not None else []

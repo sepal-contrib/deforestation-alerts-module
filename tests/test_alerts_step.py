@@ -532,12 +532,15 @@ def test_rows_show_kind_coverage_dates_and_the_radd_note(monkeypatch):
     box, rc = _render_step(state, MapLayers(_FakeMap()), {})
     try:
         rows = {r["key"]: r for r in seen["rows"]}
-        assert rows["RADD"]["cells"][2]["value"] == "covers the AOI"
-        assert rows["RADD"]["cells"][3]["value"] == "2020-01-01 → 2026-09-23"
-        assert any("primary humid tropical forest" in n["text"] for n in rows["RADD"]["notes"])
-        assert rows["mine"]["cells"][1]["value"] == "custom · SEPAL CCDC alerts"
-        assert rows["mine"]["cells"][2]["value"] == "covers 35% of the AOI"
+        assert seen["columns"] == mod.source_columns()
+        assert len(rows["RADD"]["cells"]) == 2 and rows["RADD"]["cells"][1]["value"] == "covers the AOI"
+        # spec D4: the kind and the dates are the row's first, muted note
+        assert rows["RADD"]["notes"][0] == {"text": "predefined · 2020-01-01 → 2026-09-23", "tone": None}
+        assert any("primary humid tropical forest" in n["text"] for n in rows["RADD"]["notes"][1:])
+        assert rows["mine"]["notes"][0] == {"text": "custom · SEPAL CCDC alerts", "tone": None}  # no dates
+        assert rows["mine"]["cells"][1]["value"] == "covers 35% of the AOI"
         assert [a["kind"] for a in rows["mine"]["actions"]] == ["map_toggle", "edit", "delete"]
+        assert len(rows["mine"]["actions"]) == mod.SOURCE_ACTIONS  # the budget's count is the most a row has
         assert [a["kind"] for a in rows["RADD"]["actions"]] == ["map_toggle", "delete"]  # no edit: predefined
         assert not any(a.get("disabled") for a in rows["mine"]["actions"])
     finally:
@@ -587,7 +590,7 @@ def test_show_on_map_is_disabled_until_the_coverage_is_checked_and_when_the_wind
             toggle = next(a for a in rows[name]["actions"] if a["kind"] == "map_toggle")
             assert toggle["disabled"], name
             assert any(reason in n["text"] and n["tone"] == "error" for n in rows[name]["notes"]), rows[name]["notes"]
-        assert rows["RADD"]["cells"][3]["value"] == ""  # no dates before the check
+        assert rows["RADD"]["notes"][0] == {"text": t("steps.alerts.kind_predefined"), "tone": None}  # no dates yet
     finally:
         rc.close()
 

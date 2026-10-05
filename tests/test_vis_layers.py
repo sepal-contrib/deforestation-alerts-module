@@ -651,19 +651,22 @@ def test_the_step_is_locked_without_an_aoi(monkeypatch):
         rc.close()
 
 
-def test_rows_show_kind_details_and_the_analysis_chip(monkeypatch):
+def test_rows_show_the_kind_and_analysis_chips_and_the_details_note(monkeypatch):
     seen, _, _ = _stub_children(monkeypatch)
     state = _state(_layers_project())
     box, rc = _render_step(state, _FakeMap(), MapLayers(_FakeMap()))
     try:
+        assert seen["columns"] == layers_step.layer_columns()
         assert [r["key"] for r in seen["rows"]] == ["height", "planet", "S2"]  # by name, case-folded
         s2 = next(r for r in seen["rows"] if r["key"] == "S2")
-        assert [c.get("value") for c in s2["cells"]] == ["S2", t("steps.layers.kind_gee"), "B4, B3, B2 · 0–3000",
-                                                         t("steps.layers.in_analysis")]
+        assert s2["cells"] == [{"value": "S2", "chips": [
+            {"value": t("steps.layers.kind_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
+        assert s2["notes"] == [{"text": "B4, B3, B2 · 0–3000", "tone": None}]
         assert [a["kind"] for a in s2["actions"]] == ["map_toggle", "edit", "delete"]
+        assert len(s2["actions"]) == layers_step.LAYER_ACTIONS
         planet = next(r for r in seen["rows"] if r["key"] == "planet")
-        assert planet["cells"][2]["value"] == t("steps.layers.nicfi_period_month") and planet["cells"][3] == {
-            "value": ""}
+        assert planet["cells"][0]["chips"] == [{"value": t("steps.layers.kind_nicfi")}]  # not in Analysis: no chip
+        assert planet["notes"] == [{"text": t("steps.layers.nicfi_period_month"), "tone": None}]
     finally:
         rc.close()
 

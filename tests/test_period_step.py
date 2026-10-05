@@ -147,6 +147,7 @@ def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
     ]
     assert feb["cells"][1]["value"] == "0" and t("steps.period.note_frozen") not in [n["text"] for n in feb["notes"]]
     assert [a["kind"] for a in feb["actions"]] == ["select", "edit", "delete"]
+    assert len(feb["actions"]) == period_step.PERIOD_ACTIONS
     assert feb["actions"][0]["is_on"] and not jan["actions"][0]["is_on"]
 
 
