@@ -143,14 +143,27 @@ def use_loop_dependencies(dependencies: list) -> list:
     if loop is not None:
         home.current = (loop, reacton.core.get_render_context(required=False))
         held.current = dependencies
+        # Caught up. Also frees a wake-up lost with a loop that closed before
+        # running it, which would otherwise hold back every later one.
+        waking.current = False
         return dependencies
     if home.current is None or waking.current or equals(held.current, dependencies):
         return held.current
     loop, context = home.current
 
+    def _done():
+        # Cleared first, then checked again: a worker render landing between
+        # a check and the clear saw ``waking`` set and scheduled nothing. Once
+        # cleared, a later worker render schedules its own wake-up (two wake-ups
+        # at once only cost a render).
+        waking.current = False
+        if alive.current and not equals(held.current, latest.current):
+            waking.current = True
+            loop.call_later(_WAKE_RETRY_S, _wake)
+
     def _wake():
         if not alive.current or equals(held.current, latest.current):
-            waking.current = False
+            _done()
             return
         if context is not None and getattr(context, "_is_rendering", False):
             loop.call_later(_WAKE_RETRY_S, _wake)
@@ -159,7 +172,7 @@ def use_loop_dependencies(dependencies: list) -> list:
         if alive.current and not equals(held.current, latest.current):
             loop.call_later(_WAKE_RETRY_S, _wake)  # a worker render took it over
         else:
-            waking.current = False
+            _done()
 
     waking.current = True
     try:

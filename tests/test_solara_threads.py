@@ -29,10 +29,13 @@ from gui.scripts import scene_loader
 from gui.scripts.solara_threads import use_loop_dependencies
 
 
-def _leaf(*, guarded, slow_on=None):
+def _leaf(*, guarded, slow_on=None, record_held=False):
     """A leaf whose ``use_task`` depends on ``status`` (and, for the plain
     hazard, on ``value``). ``slow_on``: a ``value`` whose render takes half a
-    second, so the loop can move ``status`` while a worker is rendering."""
+    second, so the loop can move ``status`` while a worker is rendering.
+    ``record_held``: a run records the dependencies the hook handed the task,
+    not the values the latest render saw (a task already started runs the
+    latest render's function, so those can be newer than what started it)."""
     value, status, runs = solara.reactive(0), solara.reactive(0), []
 
     @solara.component
@@ -47,7 +50,7 @@ def _leaf(*, guarded, slow_on=None):
         held = use_loop_dependencies(raw)  # a hook: called on every render
 
         async def _work():
-            runs.append((seen, moved))
+            runs.append(tuple(held) if record_held else (seen, moved))
 
         solara.lab.use_task(_work, dependencies=held if guarded else raw, prefer_threaded=False,
                             raise_error=False)
@@ -138,3 +141,67 @@ def test_the_scene_widener_waits_for_the_loop():
     # Its dependencies include the foreground load's status, which moves on
     # the loop while a worker may be rendering the loader.
     assert "use_loop_dependencies(" in inspect.getsource(scene_loader.SceneIndexLoader)
+
+
+def test_a_worker_change_landing_as_the_wake_up_ends_is_not_lost(monkeypatch):
+    """The wake-up's last check found the dependencies caught up; a worker
+    render changes them right after that check, while the wake-up still reads
+    as running, so that render schedules nothing. The wake-up must notice it
+    as it ends and render once more. Driven deterministically: the worker
+    publish runs inside the wake-up's own equality check, once it is True."""
+    import sys
+
+    import reacton.utils
+
+    value, _status, runs, Leaf = _leaf(guarded=True, record_held=True)
+    errors, trigger = [], []
+    real_equals = reacton.utils.equals
+
+    def spy(a, b):
+        result = real_equals(a, b)
+        if result and trigger and sys._getframe(1).f_code.co_name == "_wake":
+            thread = _worker(trigger.pop(), errors)
+            thread.join()  # the worker's render, between the check and what follows it
+        return result
+
+    monkeypatch.setattr(reacton.utils, "equals", spy)
+
+    async def main():
+        _box, rc = solara.render(Leaf(), handle_error=False)
+        await asyncio.sleep(0.05)
+        trigger.append(lambda: value.set(2))  # once the wake-up for value=1 has caught up
+        await _join(_worker(lambda: value.set(1), errors))
+        await asyncio.sleep(0.3)
+        rc.close()
+
+    asyncio.run(main())
+    assert errors == [] and not trigger
+    assert runs[-1] == (2, 0), runs
+
+
+def test_a_wake_up_lost_with_its_loop_does_not_hold_back_the_next_one():
+    """A wake-up scheduled on a loop that closed before running it: the next
+    render on a loop starts afresh, so a later worker change still wakes it."""
+    value, status, runs, Leaf = _leaf(guarded=True)
+    errors = []
+    first = asyncio.new_event_loop()
+
+    async def mount():
+        out = solara.render(Leaf(), handle_error=False)
+        await asyncio.sleep(0.05)
+        return out
+
+    _box, rc = first.run_until_complete(mount())
+    _worker(lambda: value.set(1), errors).join()  # schedules a wake-up on `first`...
+    first.close()  # ...which never runs
+
+    async def main():
+        status.set(1)  # a render on this loop
+        await asyncio.sleep(0.05)
+        await _join(_worker(lambda: value.set(2), errors))
+        await asyncio.sleep(0.3)
+        rc.close()
+
+    asyncio.run(main())
+    assert errors == []
+    assert runs[-1] == (2, 1), runs
