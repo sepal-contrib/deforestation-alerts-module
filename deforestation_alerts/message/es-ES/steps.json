@@ -370,7 +370,7 @@
       "title": "Integrar y vectorizar",
       "description": "Combina las fuentes descargadas, omite los píxeles que un período anterior ya reportó y convierte los grupos en alertas.",
       "info_header": "Acerca de Integrar y vectorizar",
-      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes conservar solo un área dibujada y limitar el número de alertas, ordenadas como elijas.\n4. Un **raster de atributos** opcional (Earth Engine o GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, Análisis se abre en el nuevo conjunto.",
+      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes conservar solo un área dibujada y limitar el número de alertas, ordenadas como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, Análisis se abre en el nuevo conjunto.",
       "sources": "Fuentes a combinar",
       "min_size": "Tamaño mínimo de alerta",
       "min_size_hint": "Se descartan los grupos más pequeños que esto ({px} píxeles en la cuadrícula).",
@@ -384,8 +384,6 @@
       "sorting_4": "Alertas más antiguas primero",
       "max_alerts": "Número máximo de alertas",
       "max_alerts_hint": "0 conserva todas las alertas.",
-      "attributes": "Raster de atributos (opcional)",
-      "attributes_named": "Raster de atributos: {name}",
       "attr_load": "Cargar bandas",
       "attr_no_source": "Elige primero una imagen o un GeoTIFF.",
       "attr_loaded": "Bandas de {source}",
@@ -449,7 +447,11 @@
       "attr_add_title": "Añadir una capa de atributos",
       "attr_edit_title": "Editar capa de atributos {name}",
       "attr_err_no_bands": "Conserva al menos una banda.",
-      "attr_err_duplicate": "Otra capa de atributos ya lee este raster."
+      "attr_err_duplicate": "Otra capa de atributos ya lee este raster.",
+      "attr_list_title": "Capas de atributos",
+      "attr_empty": "Ninguna capa de atributos. Cada una añade estadísticas de sus bandas a cada alerta.",
+      "attr_col_raster": "Raster",
+      "attr_columns": "Columnas: {columns}"
     },
     "overview": {
       "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",

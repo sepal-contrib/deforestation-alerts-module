@@ -7,7 +7,7 @@ import pytest
 import reacton
 
 from gui.i18n import t
-from gui.tile import alerts_step, layers_step, masks_card, period_step, prepare_step
+from gui.tile import alerts_step, integrate_step, layers_step, masks_card, period_step, prepare_step
 from gui.widget import product_table
 from gui.widget.product_table import (
     CARD_CONTENT_PX, MIN_FLEX_PX, NAME_TEXT, PANEL_CONTENT_PX, ProductTable, actions_px, actions_width, fits,
@@ -105,6 +105,7 @@ STEP_TABLES = [
     ("periods", period_step.period_columns, period_step.PERIOD_ACTIONS, PANEL_CONTENT_PX),
     ("prepare", prepare_step.source_columns, prepare_step.SOURCE_ACTIONS, PANEL_CONTENT_PX),
     ("masks", masks_card.mask_columns, masks_card.MASK_ACTIONS, CARD_CONTENT_PX),
+    ("attribute_layers", integrate_step.attribute_columns, integrate_step.ATTRIBUTE_ACTIONS, CARD_CONTENT_PX),
 ]
 
 

@@ -4,7 +4,7 @@ The step is mounted for the whole session, so ``IntegrateStep`` is a gate
 over the project reactive and the form is a child keyed by the project load,
 the project and the active period (GridForm's pattern, ruling #18): opening,
 reopening or switching a project remounts it with that project's values, so
-one project's sources, sizes, drawing or attribute raster never run in
+one project's sources, sizes, drawing or attribute layers never run in
 another. The child gets plain values, never the project, and reads the live
 project only when Run is clicked.
 
@@ -25,8 +25,6 @@ files are current, with what its harmonized file found, and shows a source of
 the period that is not covered or has no data disabled, with the reason; the
 run is told which were left out, for an empty set's toast.
 """
-
-from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
@@ -51,9 +49,11 @@ from gui.scripts.integrate_jobs import (
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store import workflow_steps
-from gui.widget.attribute_form import AttributeForm
+from gui.widget.attribute_form import layer_label
+from gui.widget.attribute_modal import AttributeModal
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
+from gui.widget.product_table import ProductTable
 
 SORTINGS = [1, 2, 3, 4]
 
@@ -78,16 +78,26 @@ def integrate_choices(p, pdir, period) -> list:
     return out
 
 
-def _short(attribute) -> str:
-    """A GeoTIFF by its file name; an Earth Engine asset id (dots included) as is."""
-    src = str(attribute["source"])
-    return Path(src).name if attribute.get("kind") == "local" else src
+#: Edit and delete: the attribute table's actions (its budget, tests/test_table_budget.py).
+ATTRIBUTE_ACTIONS = 2
 
 
-def _attribute_title(attribute) -> str:
-    if attribute and attribute.get("bands"):
-        return t("steps.integrate.attributes_named", name=_short(attribute))
-    return t("steps.integrate.attributes")
+def attribute_columns() -> list:
+    """The attribute-layer table's columns: the raster (flex) and the actions."""
+    return [{"label": t("steps.integrate.attr_col_raster")}]
+
+
+def attribute_rows(layers, *, edit, delete) -> list:
+    """The ``ProductTable`` rows of the attribute layers (spec D3); pure.
+    ``edit`` and ``delete`` take the layer's index."""
+    return [{
+        "key": f"{i}:{layer.get('source')}",
+        "cells": [{"value": layer_label(layer)}],
+        "notes": [{"text": t("steps.integrate.attr_columns",
+                             columns=", ".join(b["column"] for b in layer.get("bands", []))), "tone": None}],
+        "actions": [{"kind": "edit", "on_click": lambda i=i: edit(i)},
+                    {"kind": "delete", "on_click": lambda i=i: delete(i)}],
+    } for i, layer in enumerate(layers)]
 
 
 @solara.component
@@ -129,17 +139,11 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
     area_mode, set_area_mode = solara.use_state(last.area_mode if last else "aoi")
     sorting, set_sorting = solara.use_state(last.sorting if last else 1)
     max_alerts, set_max_alerts = solara.use_state(str(last.max_alerts if last else 0))
-    # Interim (the list card replaces it): the set's first attribute layer.
-    attribute, set_attribute = solara.use_state(next(iter(last.attribute_list()), None) if last else None)
-    # The attribute form lists the user's Earth Engine assets when it mounts:
-    # it waits for its panel to be opened once, then stays mounted.
-    attribute_opened, set_attribute_opened = solara.use_state(False)
-    # The panel's open index (None: closed). Passing it as v_model is what makes
-    # ipyvue bind the browser's v-model at all: left at its "!!disabled!!"
-    # default, a click opens the panel in the browser but never reaches
-    # _on_panel. A constant v_model is not enough either: the re-render that
-    # mounts the form would push it back and close the panel.
-    attribute_panel, set_attribute_panel = solara.use_state(None)
+    # The attribute layers (spec D3) are form state until Run, like the fields
+    # above. A set made before the list reopens with its one raster.
+    attr_layers, set_attr_layers = solara.use_state(last.attribute_list() if last else [])
+    attr_modal = solara.use_reactive(False)  # the modal mounts its form (an asset listing) only when open
+    attr_editing, set_attr_editing = solara.use_state(None)  # the layer's index; None: adding
     confirm, set_confirm = solara.use_state(None)  # (params, reviewed count, their lines) awaiting Replace
 
     def _sync_draw():
@@ -184,8 +188,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
 
     def _on_run():
         drawing = draw.to_json() if area_mode == "drawn" else None
-        params, err = params_from_form(min_size, area_mode, drawing, sorting, max_alerts,
-                                       [attribute] if attribute else [])
+        params, err = params_from_form(min_size, area_mode, drawing, sorting, max_alerts, attr_layers)
         if err:
             notifications.error(t(err))
             return
@@ -201,10 +204,16 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
         set_confirm(None)
         _launch(params)
 
-    def _on_panel(open_index):
-        set_attribute_panel(open_index)
-        if open_index is not None:
-            set_attribute_opened(True)
+    def _open_attr(index=None):
+        set_attr_editing(index)
+        attr_modal.set(True)
+
+    def _save_attr(index, layer):
+        set_attr_layers(lambda cur: [*cur, layer] if index is None
+                        else [layer if j == index else old for j, old in enumerate(cur)])
+
+    def _delete_attr(index):
+        set_attr_layers(lambda cur: [old for j, old in enumerate(cur) if j != index])
 
     with solara.Column(style="gap:16px;"):
         solara.Markdown(f"### {t('steps.integrate.title')}")
@@ -226,12 +235,13 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
         rv.TextField(label=t("steps.integrate.max_alerts"), v_model=max_alerts, on_v_model=set_max_alerts,
                      type="number", dense=True, outlined=True, hint=t("steps.integrate.max_alerts_hint"),
                      persistent_hint=True)
-        with rv.ExpansionPanels(flat=True, v_model=attribute_panel, on_v_model=_on_panel):
-            with rv.ExpansionPanel():
-                rv.ExpansionPanelHeader(children=[_attribute_title(attribute)])
-                with rv.ExpansionPanelContent():
-                    if attribute_opened:
-                        AttributeForm(gee_interface=gee_interface, value=attribute, on_value=set_attribute)
+        # A nested list: an outlined card (422 px of content) with an outlined Add above the table (spec D4).
+        with rv.Card(outlined=True, class_="pa-3"):
+            solara.Button(t("steps.integrate.attr_add"), icon_name="mdi-plus", small=True, outlined=True,
+                          block=True, classes=["mb-2"], on_click=lambda: _open_attr(None))
+            ProductTable(title=t("steps.integrate.attr_list_title"), columns=attribute_columns(),
+                         rows=attribute_rows(attr_layers, edit=_open_attr, delete=_delete_attr),
+                         empty_text=t("steps.integrate.attr_empty"))
         if active_status is not None:
             solara.Text(t(f"steps.integrate.set_{active_status}", set=active_label), classes=["warning--text"])
         if sid:
@@ -265,3 +275,5 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
         confirm_color="warning",
         details=confirm[2] if confirm else None,
     )
+    AttributeModal(open_=attr_modal, gee_interface=gee_interface, layers=attr_layers, editing=attr_editing,
+                   on_save=_save_attr)
