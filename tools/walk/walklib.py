@@ -127,6 +127,18 @@ def new_page(playwright, report: dict):
     return browser, page
 
 
+#: Page errors the walks' environment raises on every load, before the app
+#: renders: Solara's ``main.js`` calls ``voila.renderMathJax()`` once the
+#: widgets are built, and nothing loads MathJax. Not the app's.
+AMBIENT_PAGE_ERRORS = ("MathJax is not defined",)
+
+
+def app_page_errors(report: dict) -> list:
+    """The page errors ``new_page`` recorded, less the ambient ones: a walk
+    that gates on page errors gates on these."""
+    return [e for e in report.get("page_errors", []) if e.strip() not in AMBIENT_PAGE_ERRORS]
+
+
 def wait_for(fn, timeout, what, poll=0.5):
     t0, last = time.time(), None
     while time.time() - t0 < timeout:

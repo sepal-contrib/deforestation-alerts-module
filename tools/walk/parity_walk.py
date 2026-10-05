@@ -1,8 +1,11 @@
 """Parity gate walk (spec 2026-10-05, project dialog parity, §4): the app
 starts on the Project dialog; Manage projects lists the projects and gates
-Open; the name form nudges on an outside click, refuses a bad name live and
-closes on Escape; every step table fits the Workflow panel; Enter submits the
-period form from its date field; the source modal nudges.
+Open; a row's trash opens the type-the-name confirmation with the focus in
+its field, and Enter deletes; the name form nudges on an outside click,
+refuses a bad name live and closes on Escape; every step table fits the
+Workflow panel; Enter submits the period form from its date field; the source
+modal nudges. A page error fails the walk (``walklib.AMBIENT_PAGE_ERRORS``
+aside).
 
     python -m tools.walk.parity_walk --port 8987 --out /tmp/parity_walk
 """
@@ -23,6 +26,7 @@ from tools.walk.seed_project import seed
 DATA = Path.home() / "module_results" / "deforestation_alerts_walk_parity"
 USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a user's
 A, B = "parity_a", "parity_b"
+TMP = "parity_tmp"  # seeded to be deleted
 AMAZON = (-55.10, -10.10, -55.00, -10.00)  # GLAD-L and RADD both cover it
 SOURCES = ("GLAD-L", "RADD")
 PERIOD = ("2025-06-01", "2025-06-30")
@@ -37,6 +41,12 @@ NUDGES = ("da-dialog-nudge-a", "da-dialog-nudge-b")
 PROJECT_DIALOG_PX = 560  # the Project rail item's dialog_width
 NAME_FORM_PX = 420
 MIN_NAME_PX = 100  # spec D4 budgets 120 px; 20 px of slack for padding and rounding
+
+#: The focused element's field label, and whether it sits in a MODAL.
+_FOCUS_JS = """() => { const a = document.activeElement; if (!a) return null;
+    const f = a.closest('.v-input'); const l = f && f.querySelector('label');
+    return {tag: a.tagName, label: l ? l.innerText : null,
+            in_modal: !!a.closest('.v-dialog--active:not(.dialog-container)')}; }"""
 
 _RAIL_WIDTH_JS = """() => { const c = [...document.querySelectorAll('.dialog-card')]
     .find(e => e.getBoundingClientRect().width > 0);
@@ -62,7 +72,7 @@ def outside_clicks_nudge(page, rec, key):
 
 def startup(page, rec, *, out, port):
     """The app opens on the Project dialog: 560 px, nothing open, Manage
-    projects counting the two seeded projects (spec A4, D5)."""
+    projects counting the three seeded projects (spec A4, D5)."""
     page.goto(w.app_url(port), wait_until="load", timeout=180000)
     manage_btn = page.locator(f"{w.RAIL_DIALOG} {w.MANAGE_BUTTON}:visible").first
     w.wait_for(lambda: w.dialog_visible(page) and manage_btn.count(), 300, "the Project dialog at startup")
@@ -73,7 +83,7 @@ def startup(page, rec, *, out, port):
     w.shot(page, out, "startup_project")
     assert w.en("steps.project.empty_heading").lower() in rec["dialog"].lower(), rec["dialog"]
     assert abs((rec["dialog_px"] or 0) - PROJECT_DIALOG_PX) <= 2, rec["dialog_px"]
-    assert manage_btn.is_enabled() and "(2)" in rec["manage_button"], rec["manage_button"]
+    assert manage_btn.is_enabled() and "(3)" in rec["manage_button"], rec["manage_button"]
 
 
 def manage(page, rec, *, out):
@@ -93,6 +103,39 @@ def manage(page, rec, *, out):
     ph.modal_button(page, w.en("common.cancel")).click()
     w.wait_for(lambda: not ph.dialog_open(page), 15, "Manage projects closed")
     assert w.dialog_visible(page), "Cancel in Manage projects closed the Project dialog"
+
+
+def delete_confirm(page, rec, *, out, report):
+    """A row's trash opens the type-the-name confirmation over Manage with the
+    focus in its name field, on its first opening (Manage lets go of the
+    focus; two dialogs that both hold it overflow the browser's stack). Enter
+    with the name typed deletes: the project leaves the disk and the list.
+    ``report``: the walk's, whose page errors the phase must not add to."""
+    errors_before = len(w.app_page_errors(report))
+    w.open_manage(page)
+    row = w.manage_item(page, TMP)
+    w.wait_for(lambda: row.count() and row.is_visible(), 15, f"{TMP} listed")
+    row.locator("button:has(.mdi-delete-outline)").first.click()
+    label = w.en("steps.project.delete_type_label").format(name=TMP)
+    field = ph.modal_field(page, label)
+    w.wait_for(lambda: field.count() and field.is_visible(), 15, "the delete confirmation's name field")
+    rec["focus"] = w.wait_for(lambda: (f := page.evaluate(_FOCUS_JS)) and f["label"] == label and f, 10,
+                              "the focus in the name field on the first opening")
+    assert rec["focus"]["in_modal"], rec["focus"]
+    w.shot(page, out, "delete_confirm")
+    page.keyboard.type(TMP)
+    w.wait_for(lambda: field.input_value() == TMP, 10, "the typed name")
+    page.keyboard.press("Enter")
+    w.wait_for(lambda: not (DATA / TMP).exists(), 60, f"{TMP} deleted from disk")
+    w.wait_for(lambda: not row.count(), 30, f"{TMP} gone from Manage projects")
+    for name in (A, B):
+        assert w.manage_item(page, name).count(), f"{name} left Manage projects with {TMP}"
+    rec["left"] = sorted(d.name for d in DATA.iterdir() if (d / "project.json").exists())
+    assert rec["left"] == [A, B], rec["left"]
+    ph.modal_button(page, w.en("common.cancel")).click()
+    w.wait_for(lambda: not ph.dialog_open(page), 15, "Manage projects closed")
+    rec["page_errors"] = w.app_page_errors(report)[errors_before:]
+    assert not rec["page_errors"], rec["page_errors"]
 
 
 def new_form(page, rec, *, out):
@@ -200,12 +243,13 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8987)
     ap.add_argument("--out", type=Path, default=Path("/tmp/parity_walk"))
     args = ap.parse_args(argv)
-    # The walk's own data dir, rebuilt: startup counts the projects on disk (A and B).
+    # The walk's own data dir, rebuilt: startup counts the projects on disk (A, B, TMP).
     shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     make_rasters.probability_tif(USER / "probability.tif", AMAZON)
     seed(A, AMAZON, sources=SOURCES, period=PERIOD, look_back=0, root=DATA)
     seed(B, AMAZON, root=DATA)
+    seed(TMP, AMAZON, root=DATA)
     args.out.mkdir(parents=True, exist_ok=True)
     proc = w.start_server(args.port, DATA, args.out / "server.log")
     report, ok = {}, False
@@ -216,6 +260,7 @@ def main(argv=None):
             ok = ph.run_phases(page, [
                 ("startup", lambda pg, r: startup(pg, r, out=out, port=args.port)),
                 ("manage", lambda pg, r: manage(pg, r, out=out)),
+                ("delete_confirm", lambda pg, r: delete_confirm(pg, r, out=out, report=report)),
                 ("new_form", lambda pg, r: new_form(pg, r, out=out)),
                 ("open", lambda pg, r: w.open_project(pg, A)),
                 ("tables", lambda pg, r: tables(pg, r, out=out)),
@@ -224,10 +269,12 @@ def main(argv=None):
             ], report, args.out / "report.json")
             report["error_toasts"] = [x for x in w.toasts_since(page) if x["kind"] == "toast-error"]
             report["page_errors_count"] = len(report.get("page_errors", []))
+            report["app_page_errors"] = w.app_page_errors(report)
             browser.close()
         with open(args.out / "report.json", "w") as f:
             json.dump(report, f, indent=1, ensure_ascii=False, default=str)
-        ok = ok and not report["error_toasts"] and not report["bad_responses"]
+        ok = (ok and not report["error_toasts"] and not report["bad_responses"]
+              and not report["app_page_errors"])
     finally:
         w.stop_server(proc)
     print("WALK", "PASS" if ok else "FAIL", args.out / "report.json")
