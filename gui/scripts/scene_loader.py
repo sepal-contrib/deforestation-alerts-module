@@ -480,6 +480,14 @@ def SceneIndexLoader(app_state, gee_interface):
             # that renders the flag, not here.
             _publish(app_state.scene_index_pending, False)
 
+    # Plain dependencies, unlike the widener's below: safe only because they
+    # move on the event loop alone. The project's name, its AOI digest, the
+    # active period (``fg``), the AOI origin and the retry change in the
+    # Project dialog's, the AOI step's and the Period step's handlers, never
+    # in a worker publish (tests/test_solara_threads.py guards the active
+    # period). Should a worker ever publish one of them, wrap the list in
+    # ``use_loop_dependencies`` (gui/scripts/solara_threads.py), or the task
+    # starts in the worker's render and raises "no running event loop".
     load = solara.lab.use_task(_load, dependencies=[name, digest, fg, origin, retry],
                                prefer_threaded=False, raise_error=False)
 

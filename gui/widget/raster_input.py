@@ -55,7 +55,12 @@ def use_band_list(gee_interface, origin, ref, asset_type):
     """The bands of the picked raster: ``task.value == (names, header)``.
 
     Its dependencies are the input's own values, which no worker publish
-    changes, so the task never restarts off the event loop."""
+    changes, so the task never restarts off the event loop. They are plain,
+    not ``use_loop_dependencies`` (gui/scripts/solara_threads.py): safe only
+    while the origin and the picked raster move in the pickers' handlers on
+    the loop alone. Should a worker ever publish them, wrap them in that
+    hook, or the task starts in the worker's render and raises "no running
+    event loop"."""
 
     async def _load():
         if not ref:

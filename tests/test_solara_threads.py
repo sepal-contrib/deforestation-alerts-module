@@ -205,3 +205,31 @@ def test_a_wake_up_lost_with_its_loop_does_not_hold_back_the_next_one():
     asyncio.run(main())
     assert errors == []
     assert runs[-1] == (2, 1), runs
+
+
+def test_only_the_period_steps_handlers_move_the_active_period():
+    """SceneIndexLoader's foreground load takes the active period (``fg``) as a
+    plain dependency, not through ``use_loop_dependencies``: safe only while
+    no worker publish moves it. It moves in ``deforestation_alerts.project.periods``
+    alone, called from the Period step's handlers on the loop. A new caller,
+    or a direct assignment, must be checked for the thread it runs on (and
+    the loader's dependencies wrapped if it is a worker)."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    movers = {"new_period", "edit_period", "delete_period", "select_period"}
+    assigns, calls = [], []
+    for path in sorted([*(root / "gui").rglob("*.py"), *(root / "deforestation_alerts").rglob("*.py")]):
+        rel = path.relative_to(root).as_posix()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            targets = (node.targets if isinstance(node, ast.Assign)
+                       else [node.target] if isinstance(node, (ast.AugAssign, ast.AnnAssign)) else [])
+            if any(isinstance(tg, ast.Attribute) and tg.attr == "active_period" for tg in targets):
+                assigns.append(rel)
+            if isinstance(node, ast.Call) and (getattr(node.func, "attr", None) in movers
+                                               or getattr(node.func, "id", None) in movers):
+                calls.append(rel)
+    assert set(assigns) == {"deforestation_alerts/project/periods.py"}, assigns
+    assert set(calls) <= {"gui/tile/period_step.py", "deforestation_alerts/project/periods.py"}, calls
+    assert "gui/tile/period_step.py" in calls  # the scan sees the real callers
