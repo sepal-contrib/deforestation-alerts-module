@@ -100,8 +100,8 @@ def test_a_chip_clips_its_text_with_an_ellipsis_and_shows_it_whole_on_hover():
     # an ellipsis there, not be cut mid-letter, and stay readable on hover.
     text = "vérification de la couverture d'une très longue zone…"
     rows = [{"key": "a", "cells": [{"value": "GLAD-L"}, {"type": "chip", "value": text}], "actions": []}]
-    box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}, {"label": "cov", "width": "140px"}],
-                                          rows=rows, empty_text="-"))
+    _box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}, {"label": "cov", "width": "140px"}],
+                                           rows=rows, empty_text="-"))
     try:
         (chip,) = rc.find(v.Chip).widgets
         assert chip.attributes.get("title") == text
