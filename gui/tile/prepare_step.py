@@ -50,7 +50,7 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.project import paths
-from gui.i18n import format_number, t, tn
+from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
@@ -112,13 +112,6 @@ def aoi_key(project: str) -> str:
     """The in-flight key of the project's AOI raster (``masks/aoi.tif``),
     shared by every period: one AOI-raster build at a time."""
     return f"prep:{project}:@aoi"
-
-
-def size_text(n: int) -> str:
-    """A row's size on disk: "" for nothing yet, MB below 1 GB (never "0.0")."""
-    if not n:
-        return ""
-    return f"{format_number(n / 1e9, 1)} GB" if n >= 1e9 else f"{format_number(max(n / 1e6, 0.1), 1)} MB"
 
 
 def _label(p, source):

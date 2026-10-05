@@ -61,7 +61,15 @@
       "delete_failed": "Impossible de supprimer {name} : {error}",
       "deleted": "{name} supprimé",
       "duplicate_title": "Dupliquer {name}",
-      "duplicate_hint": "La copie conserve l'AOI, les sources et la grille, sans périodes ni jeux d'alertes."
+      "duplicate_hint": "La copie conserve l'AOI, les sources et la grille, sans périodes ni jeux d'alertes.",
+      "manage_title": "Gérer les projets",
+      "chip_open": "ouvert",
+      "modified": "modifié {time_ago}",
+      "open_selected": "Ouvrir",
+      "delete_type_label": "Saisissez {name} pour confirmer",
+      "delete_open_warning": "Ce projet est ouvert : il sera d'abord fermé.",
+      "size_counting": "Cela supprime le dossier du projet et tout son contenu (calcul de sa taille…).",
+      "delete_size": "Cela supprime le dossier du projet et tout son contenu ({size})."
     },
     "aoi": {
       "title": "Zone d'intérêt",

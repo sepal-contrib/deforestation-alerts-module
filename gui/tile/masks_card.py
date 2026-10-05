@@ -21,7 +21,7 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
-from gui.i18n import t, tn
+from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
 from gui.scripts.prepare_jobs import CELL_STATUS
@@ -73,7 +73,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
     keyed ``@mask:<name>``); ``on``/``building``: the map keys shown and being
     built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``).
     """
-    from gui.tile.prepare_step import mask_inflight_key, size_text  # prepare_step renders this card
+    from gui.tile.prepare_step import mask_inflight_key  # prepare_step renders this card
 
     out = []
     for r in rows:

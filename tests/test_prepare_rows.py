@@ -76,9 +76,11 @@ def test_a_missing_user_file():
 
 
 def test_size_text():
-    assert prepare_step.size_text(0) == ""
-    assert prepare_step.size_text(5_400_000) == "5.4 MB"
-    assert prepare_step.size_text(2_500_000_000) == "2.5 GB"
+    from gui.i18n import size_text
+
+    assert size_text(0) == ""
+    assert size_text(5_400_000) == "5.4 MB"
+    assert size_text(2_500_000_000) == "2.5 GB"
 
 
 def test_a_refused_row_is_reported_with_its_reason(monkeypatch):

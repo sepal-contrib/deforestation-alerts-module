@@ -337,7 +337,7 @@ def test_a_rows_pixel_count_is_counted_in_the_language(locale, many, one):
 
 
 def test_counted_labels_agree_with_their_count():
-    from gui.tile.prepare_step import size_text
+    from gui.i18n import size_text
 
     assert i18n.tn("steps.prepare.run_all", 1) == "Run 1 pending"
     assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")

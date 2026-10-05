@@ -96,6 +96,15 @@ def tn(key: str, count, /, **values) -> str:
     return t(key, count=count, n=format_number(count), **values)
 
 
+def size_text(n: int) -> str:
+    """A size on disk: "" for nothing yet, MB below 1 GB (never "0.0"), GB
+    from 1 GB on, with the locale's separators (``format_number``). Prepare's
+    rows and the project delete confirmation show it."""
+    if not n:
+        return ""
+    return f"{format_number(n / 1e9, 1)} GB" if n >= 1e9 else f"{format_number(max(n / 1e6, 0.1), 1)} MB"
+
+
 def format_date(value, fmt: str = "medium") -> str:
     """A date in the current locale: ``format_date(d)`` reads "2 Feb 2026",
     "2 feb 2026", "2 févr. 2026"; ``fmt`` may also be a CLDR pattern such as

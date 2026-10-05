@@ -40,6 +40,7 @@ from gui.scripts.error_text import error_text
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing
 from gui.widget.creation_dialog import CreationDialog
+from gui.widget.manage_projects import filter_infos, relative_time
 from gui.widget.product_table import ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -101,26 +102,6 @@ def _NameForm(title, create_label, open_, on_create, hint=None):
 
 #: How often the open project's "saved X ago" line is brought up to date.
 TICK_SECONDS = 30.0
-
-
-def relative_time(when: datetime, now: datetime) -> str:
-    """'just now', 'N minutes ago', 'N hours ago', 'N days ago' (spatial_risk's
-    ``format_relative``). A time a little ahead of ``now`` reads 'just now'."""
-    seconds = max(0, int((now - when).total_seconds()))
-    if seconds < 60:
-        return t("steps.project.ago_now")
-    if seconds < 3600:
-        return t("steps.project.ago_minutes", count=seconds // 60)
-    if seconds < 86400:
-        return t("steps.project.ago_hours", count=seconds // 3600)
-    return t("steps.project.ago_days", count=seconds // 86400)
-
-
-def filter_infos(infos: list, query) -> list:
-    """The projects whose name contains ``query``, ignoring case; every project
-    for a blank query (spatial_risk's ``filter_project_infos``). Order kept."""
-    needle = (query or "").strip().lower()
-    return list(infos) if not needle else [i for i in infos if needle in i.name.lower()]
 
 
 @solara.component

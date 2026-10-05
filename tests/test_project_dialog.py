@@ -12,7 +12,6 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.project import io, paths
-from deforestation_alerts.project.io import ProjectInfo
 from deforestation_alerts.project.models import AoiRecord, add_predefined_source
 from gui.i18n import t
 from gui.store.autosave import install_autosave
@@ -338,25 +337,6 @@ def _texts(widget):
     for child in getattr(widget, "children", None) or []:
         out += _texts(child)
     return out
-
-
-def test_relative_time():
-    now = datetime(2026, 10, 1, 12, 0, 0)
-    assert pd.relative_time(now - timedelta(seconds=59), now) == "just now"
-    assert pd.relative_time(now + timedelta(seconds=5), now) == "just now"  # a clock a little ahead
-    assert pd.relative_time(now - timedelta(minutes=1), now) == "1 minute ago"
-    assert pd.relative_time(now - timedelta(minutes=59, seconds=59), now) == "59 minutes ago"
-    assert pd.relative_time(now - timedelta(hours=1), now) == "1 hour ago"
-    assert pd.relative_time(now - timedelta(hours=23), now) == "23 hours ago"
-    assert pd.relative_time(now - timedelta(days=3, hours=5), now) == "3 days ago"
-
-
-def test_filter_infos():
-    infos = [ProjectInfo(name=n, n_sources=0, n_periods=0, n_sets=0, updated_at=None)
-             for n in ("North", "north_2", "South")]
-    assert [i.name for i in pd.filter_infos(infos, " NOR ")] == ["North", "north_2"]
-    assert pd.filter_infos(infos, "") == infos and pd.filter_infos(infos, None) == infos
-    assert pd.filter_infos(infos, "zz") == []
 
 
 def test_the_search_filters_the_list(dialog):

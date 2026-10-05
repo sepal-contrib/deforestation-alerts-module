@@ -61,7 +61,15 @@
       "delete_failed": "No se pudo eliminar {name}: {error}",
       "deleted": "{name} eliminado",
       "duplicate_title": "Duplicar {name}",
-      "duplicate_hint": "La copia conserva la AOI, las fuentes y la cuadrícula, sin períodos ni conjuntos de alertas."
+      "duplicate_hint": "La copia conserva la AOI, las fuentes y la cuadrícula, sin períodos ni conjuntos de alertas.",
+      "manage_title": "Gestionar proyectos",
+      "chip_open": "abierto",
+      "modified": "modificado {time_ago}",
+      "open_selected": "Abrir",
+      "delete_type_label": "Escribe {name} para confirmar",
+      "delete_open_warning": "Este proyecto está abierto: se cerrará primero.",
+      "size_counting": "Esto elimina la carpeta del proyecto y todo su contenido (calculando su tamaño…).",
+      "delete_size": "Esto elimina la carpeta del proyecto y todo su contenido ({size})."
     },
     "aoi": {
       "title": "Área de interés",

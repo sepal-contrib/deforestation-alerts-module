@@ -55,7 +55,15 @@
       "delete_failed": "Could not delete {name}: {error}",
       "deleted": "Deleted {name}",
       "duplicate_title": "Duplicate {name}",
-      "duplicate_hint": "The copy keeps the AOI, sources and grid, without periods or alert sets."
+      "duplicate_hint": "The copy keeps the AOI, sources and grid, without periods or alert sets.",
+      "manage_title": "Manage projects",
+      "chip_open": "open",
+      "modified": "modified {time_ago}",
+      "open_selected": "Open",
+      "delete_type_label": "Type {name} to confirm",
+      "delete_open_warning": "This project is open: it will be closed first.",
+      "size_counting": "This deletes the project folder and everything in it (measuring its size…).",
+      "delete_size": "This deletes the project folder and everything in it ({size})."
     },
     "aoi": {
       "title": "Area of interest",
