@@ -9,6 +9,7 @@ attribute layers in one set, one from Earth Engine and one from a GeoTIFF.
 
 import argparse
 import re
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -250,6 +251,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8983)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice3_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     make_rasters.ccdc_tif(USER / "ccdc.tif", AMAZON, when=date(2026, 3, 14))
     make_rasters.slope_tif(USER / "slope.tif", AMAZON)
