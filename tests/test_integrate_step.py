@@ -81,8 +81,19 @@ def test_params_from_form_refuses_bad_numbers(min_size, max_alerts, key):
 
 
 def test_params_from_form_keeps_the_drawing_only_for_a_drawn_area():
-    params, _ = integrate_jobs.params_from_form("0", "aoi", FC, 2, "", {"source": "x"})
-    assert params.area_geojson is None and params.max_alerts == 0 and params.attribute_config == {"source": "x"}
+    params, _ = integrate_jobs.params_from_form("0", "aoi", FC, 2, "", [{"source": "x"}])
+    assert params.area_geojson is None and params.max_alerts == 0
+    assert params.attribute_layers == [{"source": "x"}] and params.attribute_config is None
+
+
+def test_params_from_form_writes_the_layers_never_the_legacy_raster():
+    """Spec D3: a new run writes ``attribute_layers`` and leaves
+    ``attribute_config`` None; without layers the dump is the old one."""
+    a, b = {"source": "a.tif", "kind": "local", "bands": []}, {"source": "users/me/b", "kind": "gee", "bands": []}
+    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", (a, b))
+    assert params.attribute_layers == [a, b] and params.attribute_config is None
+    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", None)
+    assert params.attribute_layers == [] and "attribute_layers" not in params.model_dump(mode="json")
 
 
 def _set(sid, reviewed, sources=("GLAD-L",), params=None):
@@ -895,7 +906,7 @@ def test_the_attribute_raster_form_mounts_when_opened_and_reaches_the_job(step):
 
         _run(rc)
         step.run_jobs()
-        assert step.runs[0].params.attribute_config == cfg
+        assert step.runs[0].params.attribute_layers == [cfg] and step.runs[0].params.attribute_config is None
     finally:
         rc.close()
 

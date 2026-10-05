@@ -330,6 +330,26 @@ def test_run_integration_attributes_the_stored_alerts(ready_project):
     assert list(gpd.read_parquet(pdir / res.alert_set.store_rel_path)["attr"]) == [7, 7]
 
 
+@_LONLAT_CENTROID
+@pytest.mark.filterwarnings("ignore:Use `@` matmul:PendingDeprecationWarning")
+def test_run_integration_attributes_the_alerts_with_each_layer(ready_project, monkeypatch):
+    p, pdir = ready_project
+    layers = []
+    for column, value in (("first", 7), ("second", 3)):
+        raster = pdir / f"{column}.tif"
+        with raster_io.write_grid_raster(raster, GRID, count=1) as dst:
+            dst.write(np.full((GRID.height, GRID.width), value, "int32"), 1)
+        layers.append({"source": str(raster), "kind": "local",
+                       "bands": [{"band": "band_1", "stat": "max", "column": column}]})
+    # GeoTIFF layers need no Earth Engine export region
+    monkeypatch.setattr(integrate, "_attribute_region", lambda p: pytest.fail("no Earth Engine layer"))
+    res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1, attribute_layers=layers)))
+    assert list(res.alerts["first"]) == [7, 7] and list(res.alerts["second"]) == [3, 3]
+    stored = gpd.read_parquet(pdir / res.alert_set.store_rel_path)
+    assert list(stored["first"]) == [7, 7] and list(stored["second"]) == [3, 3]
+    assert res.alert_set.params.attribute_layers == layers
+
+
 def _record(p, res):
     """Apply a result to ``p`` like the UI does."""
     p.artifacts.update(res.artifacts)
@@ -631,3 +651,34 @@ def test_an_attribute_download_is_gated_on_the_scratch_disk_uncompressed(ready_p
     staged = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
     assert seen == [(paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]), staged),
                     (scratch, download_estimate(cfg, p.aoi.bounds))]
+
+
+@_LONLAT_CENTROID
+def test_the_gate_sums_the_earth_engine_layers_and_each_layer_attributes_in_order(ready_project, monkeypatch):
+    """Spec D3: the free-space gate counts every Earth Engine layer's download
+    (a GeoTIFF layer downloads nothing); one export region serves them all,
+    and a GeoTIFF layer gets none."""
+    from deforestation_alerts.scripts.attribute_source import download_estimate
+
+    p, pdir = ready_project
+    asked, regions, applied = [], [], []
+    monkeypatch.setattr(integrate, "ensure_free_space", lambda folder, n: asked.append(n))
+    monkeypatch.setattr(integrate.gdal_env, "scratch_dir", lambda: pdir.parent)
+    monkeypatch.setattr(integrate, "same_disk", lambda a, b: True)
+    monkeypatch.setattr(integrate, "_attribute_region", lambda p: regions.append(p.name) or "REGION")
+    monkeypatch.setattr(integrate, "attribute_alerts_from_config",
+                        lambda gdf, cfg, region: applied.append((cfg["source"], region)) or gdf)
+    s2 = {"source": "COPERNICUS/S2_SR/x", "kind": "gee",
+          "bands": [{"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0}]}
+    local = {"source": str(pdir / "lc.tif"), "kind": "local",
+             "bands": [{"band": "band_1", "stat": "max", "column": "lc"}]}
+    dem = {"source": "USGS/SRTMGL1_003", "kind": "gee",
+           "bands": [{"band": "elevation", "stat": "mean", "column": "elevation", "crs": "EPSG:4326",
+                      "scale": 30.0}]}
+    integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_layers=[s2, local, dem])))
+    staged = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    each = [download_estimate(cfg, p.aoi.bounds) for cfg in (s2, dem)]
+    assert all(n > 0 for n in each)
+    assert asked[0] == staged + sum(each)  # the scratch folder is on the project's disk here: one check
+    assert regions == ["d"]
+    assert applied == [(s2["source"], "REGION"), (local["source"], None), (dem["source"], "REGION")]

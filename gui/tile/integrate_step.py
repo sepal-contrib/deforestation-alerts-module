@@ -129,7 +129,8 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
     area_mode, set_area_mode = solara.use_state(last.area_mode if last else "aoi")
     sorting, set_sorting = solara.use_state(last.sorting if last else 1)
     max_alerts, set_max_alerts = solara.use_state(str(last.max_alerts if last else 0))
-    attribute, set_attribute = solara.use_state(last.attribute_config if last else None)
+    # Interim (the list card replaces it): the set's first attribute layer.
+    attribute, set_attribute = solara.use_state(next(iter(last.attribute_list()), None) if last else None)
     # The attribute form lists the user's Earth Engine assets when it mounts:
     # it waits for its panel to be opened once, then stays mounted.
     attribute_opened, set_attribute_opened = solara.use_state(False)
@@ -183,7 +184,8 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
 
     def _on_run():
         drawing = draw.to_json() if area_mode == "drawn" else None
-        params, err = params_from_form(min_size, area_mode, drawing, sorting, max_alerts, attribute)
+        params, err = params_from_form(min_size, area_mode, drawing, sorting, max_alerts,
+                                       [attribute] if attribute else [])
         if err:
             notifications.error(t(err))
             return

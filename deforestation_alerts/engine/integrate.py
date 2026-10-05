@@ -288,12 +288,14 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     # A run stages the combined raster (3 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
-    # estimate. An Earth Engine attribute raster is downloaded into the scratch
-    # folder (normally the system tmp), counted uncompressed: its continuous
-    # bands compress far less than alerts (spec §7.4 step 0). One budget when
-    # both are on one disk.
+    # estimate. Each Earth Engine attribute layer is downloaded into the
+    # scratch folder (normally the system tmp), counted uncompressed: its
+    # continuous bands compress far less than alerts (spec §7.4 step 0). The
+    # layers' downloads are summed (spec D3). One budget when both are on one
+    # disk.
     staged_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1))
-    attr_bytes = download_estimate(job.params.attribute_config, p.aoi.bounds)
+    layers = job.params.attribute_list()
+    attr_bytes = sum(download_estimate(layer, p.aoi.bounds) for layer in layers)
     scratch = gdal_env.scratch_dir() if attr_bytes else None
     if scratch is not None and same_disk(scratch, sdir):
         ensure_free_space(sdir, staged_bytes + attr_bytes)
@@ -327,15 +329,17 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         vgdf = sort_and_cut(vgdf, job.params.sorting, job.params.max_alerts)
 
         # The alerts, attribute statistics included, are built before the
-        # footprint: the attribute raster (an Earth Engine export for "gee") is
+        # footprint: the attribute layers (Earth Engine exports for "gee") are
         # the step most likely to fail.
         step("steps.integrate.step_store")
         alerts = convert_to_geopandas(vgdf.to_crs(epsg=4326), digit_map=digit_map)
         alerts["alert_id"] = range(len(alerts))
         alerts["set_id"] = sid
-        if job.params.attribute_config:
-            region = _attribute_region(p) if job.params.attribute_config.get("kind") == "gee" else None
-            alerts = attribute_alerts_from_config(alerts, job.params.attribute_config, region)
+        if layers:
+            # One export region serves every Earth Engine layer; a GeoTIFF needs none.
+            region = _attribute_region(p) if any(layer.get("kind") == "gee" for layer in layers) else None
+            for layer in layers:  # in order: a layer's columns follow the earlier layers'
+                alerts = attribute_alerts_from_config(alerts, layer, region if layer.get("kind") == "gee" else None)
         save_gdf_to_parquet(alerts, str(staged[store]))
 
         step("steps.integrate.step_footprint")
