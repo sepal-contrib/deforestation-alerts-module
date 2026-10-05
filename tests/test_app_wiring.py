@@ -36,6 +36,15 @@ def test_steps_data_derives_from_the_rail_registry():
     assert "step_display" not in src and "step_actions" not in src
 
 
+def test_the_app_starts_on_the_project_dialog():
+    """Spec A4/D5: the Project dialog (rail step 2) opens at startup, not About."""
+    from gui.store.workflow_steps import rail_item_for_step
+
+    src = _src("gui/solara_app.py")
+    assert "initial_step=2," in src and "initial_step=1" not in src
+    assert rail_item_for_step(2).key == "project"
+
+
 def test_workflow_panel_is_wired():
     src = _src("gui/solara_app.py")
     assert "WorkflowHeader(app_state=app_state)" in src
@@ -324,11 +333,15 @@ def test_removed_modules_are_gone():
 
 
 def test_no_traitlets_models_in_new_code():
+    # Not gui/widget/enter_key.py: its VuetifyTemplate.template trait is the
+    # library boundary (Global Constraints), like stage_host.py.
     for rel in ("deforestation_alerts/project", "deforestation_alerts/engine", "gui/tile/aoi_step.py",
                 "gui/tile/alerts_step.py", "gui/tile/period_step.py", "gui/tile/prepare_step.py",
                 "gui/tile/integrate_step.py", "gui/tile/project_dialog.py", "gui/store/state_manager.py",
                 "gui/store/autosave.py", "gui/widget/source_modal.py", "gui/widget/raster_input.py",
-                "gui/widget/grid_form.py",
+                "gui/widget/grid_form.py", "gui/widget/dialog_nudge.py", "gui/widget/form_dialog.py",
+                "gui/widget/attribute_modal.py", "gui/widget/manage_projects.py", "gui/widget/mask_modal.py",
+                "gui/widget/vis_layer_modal.py", "gui/widget/period_modal.py", "gui/widget/product_table.py",
                 "gui/widget/attribute_form.py", "gui/scripts/aoi_io.py", "gui/scripts/catalogue_meta.py",
                 "gui/scripts/inflight.py", "gui/scripts/integrate_jobs.py", "gui/scripts/map_layers.py",
                 "gui/scripts/pmtiles_map.py", "gui/scripts/prepare_jobs.py", "gui/scripts/raster_map.py",

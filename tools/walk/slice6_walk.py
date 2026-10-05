@@ -1,6 +1,6 @@
 """Slice 6 gate walk (spec §14 row 6): a report from the project's template,
-an info button and description on every step, the Project dialog's search and
-"saved X ago", and the app in Spanish and French.
+an info button and description on every step, Manage projects' search, the
+Project dialog's "saved X ago", and the app in Spanish and French.
 
     python -m tools.walk.slice6_walk --port 8986 --out /tmp/slice6_walk
 """
@@ -82,12 +82,12 @@ def info_buttons(page, rec, *, out):
         w.goto_step(page, key, 2000)
         assert steps[key]["description"][:60] in w.panel_text(page), f"{key}: no description"
         page.locator(".right-panel .mdi-information-outline:visible").first.click()
-        w.wait_for(lambda: page.locator(".v-dialog--active").count(), 15, f"{key}: info dialog")
-        text = page.locator(".v-dialog--active").last.inner_text()
+        w.wait_for(lambda: page.locator(ph.MODAL).count(), 15, f"{key}: info dialog")
+        text = page.locator(ph.MODAL).last.inner_text()
         assert steps[key]["info_header"] in text, f"{key}: {text[:200]}"
         seen[key] = text[:120]
-        page.locator('.v-dialog--active button:has-text("Close")').last.click()
-        w.wait_for(lambda: not page.locator(".v-dialog--active").count(), 15, f"{key}: info dialog closed")
+        page.locator(f'{ph.MODAL} button:has-text("Close")').last.click()
+        w.wait_for(lambda: not page.locator(ph.MODAL).count(), 15, f"{key}: info dialog closed")
     ui = catalogue("en", "ui")["analysis_tile"]
     w.goto_step(page, "analysis", 4000)
     w.wait_for(lambda: ui["description"][:60] in w.panel_text(page), 60, "the Analysis panel")
@@ -95,40 +95,45 @@ def info_buttons(page, rec, *, out):
     def _open_info():  # a click while the panel swaps from the last step can land on the leaving tile
         page.locator(".right-panel .mdi-information-outline:visible").last.click()
         page.wait_for_timeout(1500)
-        return page.locator(".v-dialog--active").count()
+        return page.locator(ph.MODAL).count()
 
     w.wait_for(_open_info, 30, "analysis: info dialog", poll=1)
-    assert ui["info_header"] in page.locator(".v-dialog--active").last.inner_text()
+    assert ui["info_header"] in page.locator(ph.MODAL).last.inner_text()
     # Close, not Escape: the raw dialog never takes the focus, so Escape does
     # not reach it (the first walk left it open over the rail)
-    page.locator('.v-dialog--active button:has-text("Close")').last.click()
-    w.wait_for(lambda: not page.locator(".v-dialog--active").count(), 15, "analysis: info dialog closed")
+    page.locator(f'{ph.MODAL} button:has-text("Close")').last.click()
+    w.wait_for(lambda: not page.locator(ph.MODAL).count(), 15, "analysis: info dialog closed")
     rec["info"] = seen
     w.shot(page, out, "info_buttons")
 
 
 def _listed(page):
-    """Which of the seeded projects the dialog's list shows now (the open
-    project's own name also heads the dialog, so it is not a list witness)."""
-    text = w.dialog_text(page)
-    return {name: name in text for name in OTHERS}
+    """Which of the seeded projects Manage projects lists now: a line that is
+    the name (``north_s6`` must not count on ``north_s6_b``'s line)."""
+    text = ph.modal_text(page)
+    return {name: bool(re.search(rf"(?m)^\s*{re.escape(name)}(\s|$)", text)) for name in OTHERS}
 
 
 def project_search(page, rec, *, out):
-    page.locator('[data-step-id="2"]').first.click()
-    w.wait_for(lambda: w.dialog_visible(page), 30, "Project dialog")
-    field = page.locator('.dialog-card .v-text-field:has(label:has-text("Search projects")) input').first
+    """Manage projects' search narrows its list; Cancel leaves the Project
+    dialog open for the next phase."""
+    w.open_manage(page)
+    search = w.en("steps.project.search")
+    field = ph.modal(page).locator(f'.v-text-field:has(label:has-text("{search}")) input').first
     w.wait_for(lambda: all(_listed(page).values()), 30, "the seeded projects listed")
     field.fill("north")
     w.wait_for(lambda: _listed(page) == {"north_s6": True, "north_s6_b": True, "south_s6": False}, 15,
                "the search narrows the list")
     field.fill("zz")
-    w.wait_for(lambda: 'No project name contains "zz".' in w.dialog_text(page) and not any(_listed(page).values()),
-               15, "the no-match line")
+    no_match = w.en("steps.project.no_match").format(query="zz")
+    w.wait_for(lambda: no_match in ph.modal_text(page) and not any(_listed(page).values()), 15, "the no-match line")
     field.fill("")
     w.wait_for(lambda: all(_listed(page).values()), 15, "the list back")
     rec["listed"] = _listed(page)
     w.shot(page, out, "project_search")
+    ph.modal_button(page, w.en("common.cancel")).click()
+    w.wait_for(lambda: not ph.dialog_open(page), 15, "Manage projects closed")
+    assert w.dialog_visible(page), "Cancel in Manage projects closed the Project dialog"
 
 
 def _saved_line(page):
@@ -179,7 +184,7 @@ def _switch(page, code):
     """Pick ``code`` in the language selector and wait until the pipeline
     header reads that language (the prepare segment's tooltip is its label)."""
     page.locator("button:has(.mdi-translate)").first.click()
-    page.locator(f'.v-dialog--active .v-list-item:has-text("({code})")').first.click()
+    page.locator(f'{ph.MODAL} .v-list-item:has-text("({code})")').first.click()
     label = catalogue(code, "app")["app"]["drawer_item"]["prepare"]
     page.locator(f'[data-step-key="prepare"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
 

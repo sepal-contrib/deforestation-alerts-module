@@ -833,7 +833,10 @@ def _AppShell():
         repo_url="https://github.com/sepal-contrib/deforestation-alerts-module",
         main_map=[map_],
         steps_data=steps_data,
-        initial_step=1,  # auto-open About at startup (rail step id 1)
+        # Open the Project dialog at startup (rail step id 2): work starts by
+        # creating, opening or managing a project (spec A4). About stays one
+        # rail click away.
+        initial_step=2,
         theme_state=theme_state,
         model=nav_model,
         right_panel_config=WORKFLOW_PANEL_CONFIG,

@@ -68,9 +68,10 @@ def a_switch(page, rec, *, out):
     before = raw_files()
     rec["raw_files"] = sorted(before)
     assert before, "no raw source file recorded"
+    # One Mode select per mask row: Exclude, then Off, then on again (Exclude).
     for label, act in (("exclude", lambda: ph.row_mode(page, "hansen", "Exclude")),
-                       ("off", lambda: ph.row_switch(page, "hansen")),
-                       ("on", lambda: ph.row_switch(page, "hansen"))):
+                       ("off", lambda: ph.row_mode(page, "hansen", ph.MODE_OFF)),
+                       ("on", lambda: ph.row_mode(page, "hansen", "Exclude"))):
         w.goto_step(page, "prepare", 2000)
         t0 = w.now_ms(page)
         act()
@@ -156,7 +157,7 @@ def d_legends(page, rec, *, out):
     for mode, text in (("Keep", "Kept area"), ("Exclude", "Excluded area")):
         ph.row_mode(page, "hansen", mode)
         w.wait_for(lambda: text in ph.legend_text(page), 30, f"the mask legend reads {text}")
-    ph.row_switch(page, "hansen")  # off in this period
+    ph.row_mode(page, "hansen", ph.MODE_OFF)  # off in this period
     w.wait_for(lambda: "Not used in this period" in ph.legend_text(page), 30, "the mask legend reads off")
     ph.row_button(page, "hansen", "mdi-map-minus").click()
     w.wait_for(lambda: "Mask hansen" not in [o["text"] for o in ph.legend_options(page)]
@@ -191,7 +192,7 @@ def add_layer(page, rec, *, kind, name, fill, out) -> bool:
     fill()
     _modal_check(page, "Show in Analysis")
     w.shot(page, out, f"layer_modal_{name}")
-    ph.modal_button(page, "Save").click()
+    ph.primary_button(page).click()  # "Add layer": the form's Enter default
     w.wait_for(lambda: not ph.dialog_open(page) or "has no access to Planet NICFI" in ph.modal_text(page), 180,
                f"{name} saved or refused")
     if ph.dialog_open(page):
@@ -231,7 +232,7 @@ def e_vis_layers(page, rec, *, out, s2):
         ph.modal_field(page, "Max").fill("3000")
 
     def tif():
-        ph.pick_file(page, "GeoTIFF", USER / "slope.tif", scope=".v-dialog--active")
+        ph.pick_file(page, "GeoTIFF", USER / "slope.tif", scope=ph.MODAL)
         w.wait_for(lambda: "Reading the bands" not in ph.modal_text(page), 60, "the file's bands")
         ph.choose(page, "Band", "slope")
         ph.choose(page, "Colormap", "viridis")

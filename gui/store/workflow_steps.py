@@ -112,7 +112,9 @@ STEPS: List[StepSpec] = [
 
 RAIL_ITEMS: List[RailItem] = [
     RailItem("about", 1, "about_tile", "app.drawer_item.about", "mdi-help-circle", "dialog", 1300),
-    RailItem("project", 2, "project_tile", "app.drawer_item.project", "mdi-folder-open", "dialog", 900),
+    # spatial_risk's ProjectPanel width: the status block only. Manage
+    # projects (480 px) and the name form (420 px) open over it.
+    RailItem("project", 2, "project_tile", "app.drawer_item.project", "mdi-folder-open", "dialog", 560),
     # The Overview dashboard is the widest dialog: two columns of charts
     # (spec §9.5), the same 1300 px About uses.
     RailItem("overview", 3, "overview_tile", "app.drawer_item.overview", "mdi-chart-bar", "dialog", 1300),

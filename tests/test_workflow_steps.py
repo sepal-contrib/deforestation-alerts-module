@@ -23,9 +23,11 @@ def _states(p):
 def test_order_and_rail():
     assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "analysis"]
     # Every rail item is a dialog: the Overview dashboard is the widest, over
-    # the map and the panel alike (spec §9.5).
+    # the map and the panel alike (spec §9.5). The Project dialog is
+    # spatial_risk's status block (spec D5): Manage projects and the name form
+    # open over it as dialogs of their own.
     assert [(r.key, r.step_id, r.display, r.dialog_width) for r in RAIL_ITEMS] == [
-        ("about", 1, "dialog", 1300), ("project", 2, "dialog", 900), ("overview", 3, "dialog", 1300)]
+        ("about", 1, "dialog", 1300), ("project", 2, "dialog", 560), ("overview", 3, "dialog", 1300)]
 
 
 def test_gates_follow_the_project(tmp_path, monkeypatch):

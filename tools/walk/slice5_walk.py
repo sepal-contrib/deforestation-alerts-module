@@ -98,7 +98,7 @@ def b_second_period(page, rec, *, out):
     end.fill(JULY.split("_")[1])
     page.wait_for_timeout(800)
     t0 = w.now_ms(page)
-    ph.modal_button(page, "Save").click()
+    ph.primary_button(page).click()  # "Add period": the form's Enter default
     ph.wait_toast(page, t0, "Period created")
     w.wait_for(lambda: not ph.dialog_open(page), 15, "the period modal closed")
     panel = w.panel_text(page)
@@ -108,12 +108,11 @@ def b_second_period(page, rec, *, out):
     rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
     assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
     w.goto_step(page, "prepare", 2000)
-    mask_row = ph.row(page, "south")
     rec["july_mask_row"] = ph.row_text(page, "south")
-    assert mask_row.locator(".v-input--switch.v-input--is-label-active").count() and "Keep" in rec["july_mask_row"], \
-        rec["july_mask_row"]
+    rec["july_mask_mode"] = ph.row_mode_value(page, "south")
+    assert rec["july_mask_mode"] == "Keep", rec["july_mask_row"]
     t1 = w.now_ms(page)
-    ph.row_switch(page, "south")  # off in August only
+    ph.row_mode(page, "south", ph.MODE_OFF)  # off in August only
     ph.wait_toast(page, t1, "This period's sources are out of date")
     w.wait_for(lambda: not ph.manifest(DATA, PROJECT)["periods"][JULY]["masks"]["south"]["on"], 30,
                "the switch saved")
