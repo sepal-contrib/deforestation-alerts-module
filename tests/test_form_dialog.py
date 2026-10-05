@@ -80,8 +80,11 @@ def test_the_dialog_closing_itself_calls_on_close_and_opening_does_not():
     box, rc = reacton.render(_form(open_, closed), handle_error=False)
     try:
         dialog = rc.find(v.Dialog).widget
-        dialog.v_model = True
+        open_.set(False)  # the caller closing it is not the dialog closing itself
+        assert dialog.v_model is False and closed == []
+        dialog.v_model = True  # a real False -> True change: opening
         assert closed == []
+        open_.set(True)
         dialog.v_model = False
         assert open_.value is False and closed == [True]
     finally:

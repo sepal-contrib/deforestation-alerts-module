@@ -221,6 +221,11 @@ module.exports = {
         if (!button.isConnected || !button.closest(".v-dialog__content--active")) {
           return;
         }
+        // Nothing if the button is no longer the default. A second Enter
+        // within one round-trip finds it before its class goes (a task
+        // button turning into Cancel), and this echo comes after the
+        // removal: clicking it would cancel what the first Enter started.
+        if (!button.classList.contains("%(cls)s")) return;
         if (!button.disabled) {
           // A click, so Enter runs the button's own handler.
           button.click();

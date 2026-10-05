@@ -24,3 +24,15 @@ def test_the_barrier_is_echoed():
     widget.send = sent.append
     widget.vue_enter_barrier(7)
     assert sent == [{"method": "enter_barrier_passed", "args": [7]}]
+
+
+def test_the_echo_clicks_only_a_button_still_marked_default():
+    # A second Enter within one round-trip finds the button before its class
+    # goes (a SubmitTaskButton turning into Cancel); its echo arrives after the
+    # removal, so the echo handler must check the class again before clicking,
+    # or Enter would cancel the check the first Enter started.
+    handler = enter_key._TEMPLATE.split("jupyter_enter_barrier_passed(token) {")[1]
+    handler = handler.split("\n    },\n")[0]
+    check = 'button.classList.contains("da-enter-default")'
+    assert check in handler and "button.click()" in handler
+    assert handler.index(check) < handler.index("button.click()")
