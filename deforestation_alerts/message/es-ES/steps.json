@@ -145,7 +145,12 @@
       "kind_custom": "personalizada · {format}",
       "file_preview_after_harmonize": "Una fuente GeoTIFF se muestra una vez armonizada.",
       "err_aoi_not_ready": "La geometría de la AOI todavía no está lista; inténtalo de nuevo en un momento.",
-      "err_aoi_changed": "La AOI cambió durante la comprobación; añade la fuente de nuevo."
+      "err_aoi_changed": "La AOI cambió durante la comprobación; añade la fuente de nuevo.",
+      "mode_label": "Tipo de fuente",
+      "mode_hint": "Una fuente del catálogo, o tu propio recurso de Earth Engine o GeoTIFF.",
+      "predefined_hint": "Cada fuente indica qué parte de la AOI cubre.",
+      "name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la fuente.",
+      "format_label": "Formato de las alertas"
     },
     "layers": {
       "title": "Capas opcionales",

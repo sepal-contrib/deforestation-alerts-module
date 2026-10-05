@@ -138,7 +138,12 @@
       "kind_custom": "custom · {format}",
       "file_preview_after_harmonize": "A GeoTIFF source is shown once it is harmonized.",
       "err_aoi_not_ready": "The AOI geometry is not ready yet; try again in a moment.",
-      "err_aoi_changed": "The AOI changed during the check; add the source again."
+      "err_aoi_changed": "The AOI changed during the check; add the source again.",
+      "mode_label": "Source type",
+      "mode_hint": "A catalogue source, or your own Earth Engine asset or GeoTIFF.",
+      "predefined_hint": "Each source shows how much of the AOI it covers.",
+      "name_hint": "At most 24 characters; it also names the source's files.",
+      "format_label": "Alert format"
     },
     "layers": {
       "title": "Optional layers",

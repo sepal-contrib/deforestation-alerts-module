@@ -145,7 +145,12 @@
       "kind_custom": "personnalisée · {format}",
       "file_preview_after_harmonize": "Une source GeoTIFF s'affiche une fois harmonisée.",
       "err_aoi_not_ready": "La géométrie de l'AOI n'est pas encore prête ; réessayez dans un instant.",
-      "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau."
+      "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau.",
+      "mode_label": "Type de source",
+      "mode_hint": "Une source du catalogue, ou votre propre asset Earth Engine ou GeoTIFF.",
+      "predefined_hint": "Chaque source indique quelle part de l'AOI elle couvre.",
+      "name_hint": "24 caractères au plus ; il nomme aussi les fichiers de la source.",
+      "format_label": "Format des alertes"
     },
     "layers": {
       "title": "Couches facultatives",

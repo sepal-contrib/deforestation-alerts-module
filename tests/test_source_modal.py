@@ -18,6 +18,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.widget import source_modal as sm
+from gui.widget.enter_key import ENTER_DEFAULT
 
 
 def _p():
@@ -233,8 +234,7 @@ def _bands_listed(rc, label):
 
 
 def _go_custom(rc, name):
-    toggle = rc.find(v.BtnToggle).widgets[0]
-    toggle.v_model = "custom"
+    rc.find(v.Select, label=t("steps.alerts.mode_label")).widget.v_model = "custom"
     field = rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0]
     field.v_model = name
 
@@ -374,9 +374,10 @@ def test_an_edit_saves_through_on_save_custom(tmp_path, monkeypatch):
     async def main():
         box, rc = reacton.render(_modal(state, open_, added, saved, editing="mine"), handle_error=False)
         try:
-            assert not rc.find(v.BtnToggle).widgets  # an edit is always custom
+            assert not rc.find(v.Select, label=t("steps.alerts.mode_label")).widgets  # an edit is always custom
             # the bands load; the edit keeps its own mapping
             assert await _settle(lambda: _bands_listed(rc, t("steps.alerts.band_alert")))
+            assert _icons(_submit_btn(rc, t("steps.alerts.save"))) == ["mdi-content-save-outline"]
             _submit_btn(rc, t("steps.alerts.save")).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             assert [s[0] for s in saved] == ["mine"] and added == []
@@ -574,6 +575,113 @@ def test_the_sidecar_is_read_off_the_event_loop(monkeypatch):
             assert await _settle(lambda: open_.value is False)
             assert len(threads) == 1 and threads[0] is not threading.main_thread()
             assert [a[0] for a in added] == [{"name": "side"}]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------- the form frame
+def _defaults(rc):
+    """The buttons Enter would press (gui/widget/enter_key)."""
+    return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
+
+
+def _icons(btn):
+    return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
+
+
+def test_the_source_form_sits_on_the_form_frame():
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():  # the form's band-list task runs on this loop
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            dialog = rc.find(v.Dialog).widget
+            assert (dialog.max_width, dialog.persistent, dialog.no_click_animation, dialog.eager) == (
+                "560px", True, True, True)
+            mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
+            assert mode.v_model == "predefined" and mode.outlined and mode.dense
+            assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.mode_hint"), True)
+            assert [(i["value"], i["disabled"]) for i in mode.items if "disabled" in i] == [("custom", False)]
+            predefined = rc.find(v.Select, label=t("steps.alerts.predefined_label")).widget
+            assert (predefined.hint, predefined.persistent_hint) == (t("steps.alerts.predefined_hint"), True)
+            add = _submit_btn(rc)
+            assert _defaults(rc) == [add] and _icons(add) == ["mdi-plus"]
+            dialog.fire_event("click:outside", None)
+            assert "da-dialog-nudge-a" in (rc.find(v.Dialog).widget.content_class or "").split()
+            assert open_.value is True  # an outside click nudges the form, it does not close it
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_custom_fields_have_hints_and_the_format_presets_sit_in_a_fieldset(monkeypatch):
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "mine")
+            name = rc.find(v.TextField, label=t("steps.alerts.name_label")).widget
+            assert (name.hint, name.persistent_hint) == (t("steps.alerts.name_hint"), True)
+            # by tag: the finder does not descend into a match, and the frame's
+            # field column is itself an Html (a div)
+            fieldset = rc.find(v.Html, tag="fieldset").widget
+            legend, *rest = fieldset.children
+            assert legend.tag == "legend" and legend.children == [t("steps.alerts.format_label")]
+            [presets] = [c for c in rest if isinstance(c, v.RadioGroup)]
+            assert [r.value for r in presets.children] == list(sm.FORMATS)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
+    """Review Focus 1: while the check runs, the primary button reads Cancel
+    and carries no Enter class, so a second Enter cannot stop the check."""
+    asked, done, release = _hanging(monkeypatch)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            _go_custom(rc, "enter")
+            await asyncio.sleep(0.05)
+            assert _defaults(rc) == [_submit_btn(rc)]  # idle: Add is the one default
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: len(asked) == 1)
+            [stop] = [b for b in rc.find(v.Btn).widgets
+                      if any(isinstance(c, v.ProgressCircular) for c in b.children)]
+            assert t("common.cancel") in stop.children
+            assert _defaults(rc) == []  # Enter presses nothing mid-check
+            release.set()
+            assert await _settle(lambda: open_.value is False)
+            assert len(done) == 1 and [a[0] for a in added] == [{"name": "enter"}]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
+    p = _p()
+    p.sources = {f"c{i}": CustomSource(name=f"c{i}", origin="gee", ref=f"users/x/c{i}", format="radd",
+                                       native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3 + i)
+                 for i in range(sm.MAX_CUSTOM)}
+    state, open_, added, saved = _state(p), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
+            [custom] = [i for i in mode.items if i["value"] == "custom"]
+            assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
+            assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
+            assert mode.v_model == "predefined"
         finally:
             rc.close()
 

@@ -7,7 +7,7 @@ from datetime import date
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
+from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import (
@@ -25,6 +25,7 @@ from gui.scripts import aoi_io
 from gui.scripts.coverage_ui import note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
+from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 FORMATS = ("radd", "ccdc", "date_only")
@@ -116,10 +117,9 @@ async def validate_custom(gee_interface, project, aoi_fc, *, name, origin, ref, 
 
 @solara.component
 def SourceModal(open_, app_state, gee_interface, on_add_predefined, on_add_custom, on_save_custom, editing=None):
-    dialog = rv.Dialog(v_model=open_.value, on_v_model=open_.set, max_width="560px", eager=True, persistent=True)
-    # persistent blocks ESC too; restore it as a plain cancel. A hook: unconditional.
-    rv.use_event(dialog, "keydown.esc", lambda *_: open_.set(False))
-    with dialog:
+    # The form frame (gui/widget/form_dialog): persistent, an outside click
+    # nudges it, ESC closes it. Its hooks run on every render, open or not.
+    with use_form_dialog(open_, "560px"):
         if open_.value:  # mounted per opening: a clean form, and no asset listing while closed
             _SourceForm(open_=open_, app_state=app_state, gee_interface=gee_interface, editing=editing,
                         on_add_predefined=on_add_predefined, on_add_custom=on_add_custom,
@@ -254,66 +254,67 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
 
     name_error = validate_source_name(name, p, current=editing) if name else None
     title = t("steps.alerts.edit_title", name=editing) if src0 is not None else t("steps.alerts.add_title")
-    with rv.Card():
-        with rv.CardTitle():
-            solara.Text(title)
-        with rv.CardText():
-            if src0 is None:
-                with rv.BtnToggle(v_model=mode, on_v_model=lambda v: v and set_mode(v), mandatory=True, dense=True,
-                                  disabled=busy):
-                    rv.Btn(value="predefined", small=True, children=[t("steps.alerts.mode_predefined")])
-                    rv.Btn(value="custom", small=True, disabled=cap_reached,
-                           children=[t("steps.alerts.mode_custom", n=n_custom)])
-                if cap_reached:
-                    solara.Text(t("steps.alerts.cap_reached"), classes=["text--secondary"])
-            if mode == "predefined":
-                if items:
-                    rv.Select(label=t("steps.alerts.predefined_label"), items=items, v_model=key,
-                              on_v_model=set_key, dense=True, outlined=True)
-                    if key == "RADD":
-                        solara.Text(t("coverage.radd_note"), classes=["text--secondary"])
-                else:
-                    solara.Text(t("steps.alerts.all_added"), classes=["text--secondary"])
+    waiting = mode == "predefined" and key is not None and pending_cov and record_for(p, key) is None
+    button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
+
+    def _actions():
+        # spec §11: an async button is a task button. While the check runs it
+        # reads Cancel and stops the check, and it carries no Enter class, so
+        # Enter cannot stop it (Review Focus 1). The predefined branch of
+        # _submit adds at once and never starts the task.
+        SubmitTaskButton(
+            label=t("coverage.chip_checking") if waiting else
+            (t("steps.alerts.save") if src0 is not None else t("steps.alerts.add")),
+            icon="mdi-content-save-outline" if src0 is not None else "mdi-plus",
+            external_busy=waiting or (mode == "predefined" and key is None)
+            or (mode == "custom" and bool(name_error)),
+            **button,
+        )
+
+    # a validation error stays inline in the form (spec §11; form_card shows it)
+    with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
+        if src0 is None:  # an edit is always custom
+            rv.Select(label=t("steps.alerts.mode_label"), v_model=mode,
+                      on_v_model=lambda value: value and set_mode(value),
+                      items=[{"text": t("steps.alerts.mode_predefined"), "value": "predefined"},
+                             {"text": t("steps.alerts.mode_custom", n=n_custom), "value": "custom",
+                              "disabled": cap_reached}],
+                      hint=t("steps.alerts.cap_reached") if cap_reached else t("steps.alerts.mode_hint"),
+                      persistent_hint=True, dense=True, outlined=True, disabled=busy)
+        if mode == "predefined":
+            if items:
+                rv.Select(label=t("steps.alerts.predefined_label"), items=items, v_model=key,
+                          on_v_model=set_key, dense=True, outlined=True, hint=t("steps.alerts.predefined_hint"),
+                          persistent_hint=True)
+                if key == "RADD":
+                    solara.Text(t("coverage.radd_note"), classes=["text--secondary"])
             else:
-                rv.TextField(label=t("steps.alerts.name_label"), v_model=name, on_v_model=set_name, dense=True,
-                             outlined=True, disabled=src0 is not None or busy,
-                             error_messages=[t(name_error)] if name_error else [])
-                RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
-                            disabled=busy)
-                if asset_type == "IMAGE_COLLECTION":
-                    solara.Text(t("steps.alerts.collection_help"), classes=["text--secondary"])
-                if bands_task.pending:
-                    solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
-                elif bands_task.error:
-                    solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                                classes=["error--text"])
+                solara.Text(t("steps.alerts.all_added"), classes=["text--secondary"])
+        else:
+            rv.TextField(label=t("steps.alerts.name_label"), v_model=name, on_v_model=set_name, dense=True,
+                         outlined=True, disabled=src0 is not None or busy, hint=t("steps.alerts.name_hint"),
+                         persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
+            RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
+                        disabled=busy)
+            if asset_type == "IMAGE_COLLECTION":
+                solara.Text(t("steps.alerts.collection_help"), classes=["text--secondary"])
+            if bands_task.pending:
+                solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+            elif bands_task.error:
+                solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
+                            classes=["error--text"])
+            with field_group(t("steps.alerts.format_label")):
                 with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True, disabled=busy):
                     for f in FORMATS:
                         rv.Radio(label=f"{t(f'steps.alerts.format_{f}')} — {t(f'steps.alerts.format_help_{f}')}",
                                  value=f)
-                if fmt in ("radd", "ccdc"):
-                    rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
-                              on_v_model=set_alert_band, dense=True, outlined=True, disabled=busy)
-                if fmt is not None:
-                    rv.Select(label=t("steps.alerts.band_date"), items=band_items, v_model=date_band,
-                              on_v_model=set_date_band, dense=True, outlined=True, disabled=busy)
-                if fmt == "date_only":
-                    rv.Select(label=t("steps.alerts.encoding_label"), v_model=encoding, on_v_model=set_encoding,
-                              dense=True, outlined=True, disabled=busy,
-                              items=[{"text": t(f"steps.alerts.encoding_{e}"), "value": e} for e in ENCODINGS])
-            if error:  # validation errors stay inline in the modal (spec §11)
-                solara.Text(error, classes=["error--text"])
-        with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
-            solara.Button(t("common.cancel"), text=True, small=True, on_click=lambda: open_.set(False))
-            waiting = mode == "predefined" and key is not None and pending_cov and record_for(p, key) is None
-            # spec §11: an async button is a TaskButtonComponent (while the check
-            # runs it reads Cancel and stops it); the predefined branch of
-            # _submit adds at once and never starts the task
-            TaskButtonComponent(
-                label=t("coverage.chip_checking") if waiting else
-                (t("steps.alerts.save") if src0 is not None else t("steps.alerts.add")),
-                cancel_label=t("common.cancel"), small=True, icon="mdi-plus",
-                external_busy=waiting or (mode == "predefined" and key is None)
-                or (mode == "custom" and bool(name_error)),
-                **use_task_button(validation, on_start=_submit),
-            )
+            if fmt in ("radd", "ccdc"):
+                rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
+                          on_v_model=set_alert_band, dense=True, outlined=True, disabled=busy)
+            if fmt is not None:
+                rv.Select(label=t("steps.alerts.band_date"), items=band_items, v_model=date_band,
+                          on_v_model=set_date_band, dense=True, outlined=True, disabled=busy)
+            if fmt == "date_only":
+                rv.Select(label=t("steps.alerts.encoding_label"), v_model=encoding, on_v_model=set_encoding,
+                          dense=True, outlined=True, disabled=busy,
+                          items=[{"text": t(f"steps.alerts.encoding_{e}"), "value": e} for e in ENCODINGS])
