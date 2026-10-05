@@ -102,6 +102,15 @@ def test_notification_provider_mounted_before_tiles():
     assert "render_detached(" in shell_body and "MapApp.element" in shell_body
 
 
+def test_the_enter_listener_is_mounted_once_in_page():
+    """Enter presses the open dialog's default button (gui/widget/enter_key):
+    one listener, on document, mounted by Page."""
+    src = _src("gui/solara_app.py")
+    page_body = src[src.index("def Page():"):src.index("def _AppShell():")]
+    assert page_body.count("EnterKeyListener()") == 1
+    assert "EnterKeyListener()" not in src[src.index("def _AppShell():"):]
+
+
 def test_render_fixed_tile_needs_the_provider_rendered_first():
     """The mechanism the shell split relies on, against real pysepal 4: a tile
     render_fixed inside the provider's parent body finds no bus (and would

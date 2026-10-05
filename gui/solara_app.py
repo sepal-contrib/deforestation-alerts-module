@@ -79,6 +79,7 @@ from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
+from gui.widget.enter_key import EnterKeyListener
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
@@ -550,6 +551,9 @@ def Page():
     # publishes --sepal-notification-right-offset so the pill tracks the
     # right panel.
     NotificationProvider()
+    # Enter presses the open dialog's default button (gui/widget/enter_key):
+    # one listener on document, so where it sits in the tree does not matter.
+    EnterKeyListener()
     _AppShell()
 
 
