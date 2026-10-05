@@ -387,7 +387,6 @@
       "attributes": "Raster de atributos (opcional)",
       "attributes_named": "Raster de atributos: {name}",
       "attr_load": "Cargar bandas",
-      "attr_clear": "Quitar",
       "attr_no_source": "Elige primero una imagen o un GeoTIFF.",
       "attr_loaded": "Bandas de {source}",
       "attr_written_as": "escrito como {column}",
@@ -445,7 +444,12 @@
       "popup": "Alerta {id} · {status} · {area} ha",
       "show_earlier": "Mostrar conjuntos anteriores",
       "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período.",
-      "show_alerts": "Mostrar estas alertas en el mapa"
+      "show_alerts": "Mostrar estas alertas en el mapa",
+      "attr_add": "Añadir capa de atributos",
+      "attr_add_title": "Añadir una capa de atributos",
+      "attr_edit_title": "Editar capa de atributos {name}",
+      "attr_err_no_bands": "Conserva al menos una banda.",
+      "attr_err_duplicate": "Otra capa de atributos ya lee este raster."
     },
     "overview": {
       "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",

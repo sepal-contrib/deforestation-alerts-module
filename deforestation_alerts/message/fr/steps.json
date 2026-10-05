@@ -387,7 +387,6 @@
       "attributes": "Raster d'attributs (optionnel)",
       "attributes_named": "Raster d'attributs : {name}",
       "attr_load": "Charger les bandes",
-      "attr_clear": "Retirer",
       "attr_no_source": "Choisissez d'abord une image ou un GeoTIFF.",
       "attr_loaded": "Bandes de {source}",
       "attr_written_as": "écrit sous {column}",
@@ -445,7 +444,12 @@
       "popup": "Alerte {id} · {status} · {area} ha",
       "show_earlier": "Afficher les jeux antérieurs",
       "earlier_missing": "La base d'alertes de {set} est manquante ; relancez Intégrer et vectoriser pour cette période.",
-      "show_alerts": "Afficher ces alertes sur la carte"
+      "show_alerts": "Afficher ces alertes sur la carte",
+      "attr_add": "Ajouter une couche d'attributs",
+      "attr_add_title": "Ajouter une couche d'attributs",
+      "attr_edit_title": "Modifier la couche d'attributs {name}",
+      "attr_err_no_bands": "Conservez au moins une bande.",
+      "attr_err_duplicate": "Une autre couche d'attributs lit déjà ce raster."
     },
     "overview": {
       "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",

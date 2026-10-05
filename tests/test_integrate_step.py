@@ -39,6 +39,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
+from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS
 from gui.i18n import t, tn
 from gui.scripts import integrate_jobs
 from gui.scripts.alert_layers import EARLIER_PREFIX, SET_LAYER_KEY
@@ -1016,7 +1017,7 @@ def pickers(monkeypatch):
 
 
 @solara.component
-def _AttrHarness(gee_interface, initial, seen):
+def _AttrHarness(gee_interface, initial, seen, reserved=ALERT_RESERVED_COLUMNS):
     NotificationProvider()
     value, set_value = solara.use_state(initial)
 
@@ -1024,7 +1025,7 @@ def _AttrHarness(gee_interface, initial, seen):
         seen.append(new)
         set_value(new)
 
-    attribute_form.AttributeForm(gee_interface=gee_interface, value=value, on_value=on_value)
+    attribute_form.AttributeForm(gee_interface=gee_interface, value=value, on_value=on_value, reserved=reserved)
 
 
 async def _settle(done, tries=200):
@@ -1073,9 +1074,6 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
             pickers.path.set(str(tmp_path / "other.tif"))  # picked, not loaded yet
             _checkbox(rc, "lc").v_model = True
             assert seen[-1]["source"] == str(tif)  # the rows still describe the loaded raster
-
-            _button(rc, t("steps.integrate.attr_clear")).fire_event("click", None)
-            assert seen[-1] is None and not rc.find(v.Checkbox).widgets
         finally:
             rc.close()
 
@@ -1140,19 +1138,29 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
     asyncio.run(main())
 
 
-def test_attribute_form_remove_drops_a_stale_error(pickers, tmp_path):
-    cfg = {"source": "/home/u/lc.tif", "kind": "local",
-           "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
+def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, tmp_path):
+    """Review focus 3: another layer writes ``b1`` already, so this raster's
+    ``b1`` is written ``b1_2``, and ``count`` (an alert column) ``count_2``;
+    each field's hint says so."""
+    from deforestation_alerts.scripts.raster_attribute import reserved_for
+
+    tif = _geotiff(tmp_path / "other.tif", ["b1", "count"])
+    other = {"source": "/home/u/lc.tif", "kind": "local", "bands": [{"band": "b1", "stat": "mean", "column": "b1"}]}
     seen = []
 
     async def main():
-        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen,
+                                               reserved=reserved_for([other])), handle_error=False)
         try:
-            pickers.path.set(str(tmp_path / "missing.tif"))
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
-            await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
-            _button(rc, t("steps.integrate.attr_clear")).fire_event("click", None)
-            assert seen == [None] and not any("missing.tif" in s for s in _texts(rc))
+            await _settle(lambda: seen)
+            assert [b["column"] for b in seen[-1]["bands"]] == ["b1_2", "count_2"]
+            b1, count = rc.find(v.TextField).widgets
+            assert b1.v_model == "b1" and b1.persistent_hint
+            assert b1.hint == t("steps.integrate.attr_written_as", column="b1_2")
+            assert count.hint == t("steps.integrate.attr_written_as", column="count_2")
         finally:
             rc.close()
 

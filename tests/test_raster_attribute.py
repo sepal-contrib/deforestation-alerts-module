@@ -208,3 +208,16 @@ def test_build_attribute_config_keeps_a_bands_projection_only_when_known():
         {"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0},
         {"band": "lc", "stat": "majority", "column": "lc"},
     ]
+
+
+def test_reserved_for_adds_every_other_layers_columns():
+    """Review focus 3: a layer's columns never take an alert column or
+    another layer's; the layer being edited does not reserve its own."""
+    a = {"source": "a.tif", "kind": "local", "bands": [{"band": "b1", "stat": "mean", "column": "b1"}]}
+    b = {"source": "users/me/b", "kind": "gee", "bands": [{"band": "b1", "stat": "max", "column": "b1_2"},
+                                                           {"band": "s", "stat": "min", "column": "slope"}]}
+    assert ra.reserved_for([]) == ra.ALERT_RESERVED_COLUMNS
+    assert ra.reserved_for([a, b]) == ra.ALERT_RESERVED_COLUMNS | {"b1", "b1_2", "slope"}
+    assert ra.reserved_for([a, b], skip=1) == ra.ALERT_RESERVED_COLUMNS | {"b1"}
+    assert ra.reserved_for([a, b], skip=0, reserved={"count"}) == {"count", "b1_2", "slope"}
+    assert "b1" not in ra.ALERT_RESERVED_COLUMNS  # the shared set is never mutated

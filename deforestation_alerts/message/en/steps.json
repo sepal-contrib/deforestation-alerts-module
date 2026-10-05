@@ -372,7 +372,6 @@
       "attributes": "Attribute raster (optional)",
       "attributes_named": "Attribute raster: {name}",
       "attr_load": "Load bands",
-      "attr_clear": "Remove",
       "attr_no_source": "Pick an image or a GeoTIFF first.",
       "attr_loaded": "Bands of {source}",
       "attr_written_as": "written as {column}",
@@ -426,7 +425,12 @@
       "popup": "Alert {id} · {status} · {area} ha",
       "show_earlier": "Show earlier sets",
       "earlier_missing": "The alert store of {set} is missing; run Integrate & vectorize for that period again.",
-      "show_alerts": "Show these alerts on the map"
+      "show_alerts": "Show these alerts on the map",
+      "attr_add": "Add attribute layer",
+      "attr_add_title": "Add an attribute layer",
+      "attr_edit_title": "Edit attribute layer {name}",
+      "attr_err_no_bands": "Keep at least one band.",
+      "attr_err_duplicate": "Another attribute layer already reads this raster."
     },
     "overview": {
       "stale": "This set was built from inputs that have changed since. Re-run Integrate & vectorize to rebuild it (that discards its reviews).",
