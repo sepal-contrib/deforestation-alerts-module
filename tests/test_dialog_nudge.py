@@ -21,7 +21,7 @@ def test_the_hook_counts_clicks_and_resets_when_the_dialog_opens_or_closes():
         nudge, on_click_outside = dialog_nudge.use_outside_click_nudge(open_.value)
         seen["nudge"], seen["click"] = nudge, on_click_outside
 
-    box, rc = reacton.render(Probe(), handle_error=False)
+    _box, rc = reacton.render(Probe(), handle_error=False)
     try:
         assert seen["nudge"] == ""
         seen["click"]()

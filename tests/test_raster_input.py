@@ -49,7 +49,7 @@ def _origin(rc):
 
 
 def test_the_origin_is_an_outlined_select_with_a_hint(pickers):
-    box, rc = reacton.render(_Harness(), handle_error=False)
+    _box, rc = reacton.render(_Harness(), handle_error=False)
     try:
         select = _origin(rc)
         assert select.v_model == "gee" and select.outlined is True and select.dense is True
@@ -65,7 +65,7 @@ def test_the_origin_is_an_outlined_select_with_a_hint(pickers):
 
 def test_picking_the_origin_switches_the_picker(pickers):
     seen = []
-    box, rc = reacton.render(_Harness(seen=seen), handle_error=False)
+    _box, rc = reacton.render(_Harness(seen=seen), handle_error=False)
     try:
         _origin(rc).v_model = "file"
         assert seen == ["file"] and _origin(rc).v_model == "file"
@@ -75,7 +75,7 @@ def test_picking_the_origin_switches_the_picker(pickers):
 
 
 def test_a_disabled_input_disables_the_origin_and_blocks_the_picker(pickers):
-    box, rc = reacton.render(_Harness(disabled=True), handle_error=False)
+    _box, rc = reacton.render(_Harness(disabled=True), handle_error=False)
     try:
         assert _origin(rc).disabled is True
         assert rc.find(v.Html, style_="pointer-events:none;opacity:0.6;").widgets
@@ -84,7 +84,7 @@ def test_a_disabled_input_disables_the_origin_and_blocks_the_picker(pickers):
 
 
 def test_without_the_origin_only_the_picker_is_shown(pickers):
-    box, rc = reacton.render(_Harness(initial="file", show_origin=False), handle_error=False)
+    _box, rc = reacton.render(_Harness(initial="file", show_origin=False), handle_error=False)
     try:
         assert not rc.find(v.Select).widgets
         assert pickers.file_label == t("steps.raster_input.file")

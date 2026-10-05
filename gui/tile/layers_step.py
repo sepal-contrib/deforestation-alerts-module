@@ -14,7 +14,6 @@ from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.vis_layer_modal import VisLayerModal
 
-
 LAYER_ACTIONS = 3  # map, edit, delete
 
 

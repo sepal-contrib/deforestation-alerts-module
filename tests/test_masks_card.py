@@ -163,7 +163,7 @@ def test_the_mode_select_reads_off_for_a_mask_that_is_off():
             out["cells"][1]["fn"]()
         return main
 
-    box, rc = reacton.render(Cell(), handle_error=False)
+    _box, rc = reacton.render(Cell(), handle_error=False)
     try:
         select = rc.find(v.Select).widget
         assert select.v_model == "off"
@@ -939,7 +939,7 @@ def test_the_mask_form_sits_on_the_form_frame(monkeypatch):
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             dialog = rc.find(v.Dialog).widget
             assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
@@ -961,7 +961,7 @@ def test_a_mask_edit_has_a_save_button_and_no_mode_fieldset(monkeypatch):
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
         try:
             save = _submit_btn(rc, t("steps.alerts.save"))
             assert _defaults(rc) == [save] and _icons(save) == ["mdi-content-save-outline"]

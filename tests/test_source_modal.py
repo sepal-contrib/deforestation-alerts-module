@@ -595,7 +595,7 @@ def test_the_source_form_sits_on_the_form_frame():
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
     async def main():  # the form's band-list task runs on this loop
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             dialog = rc.find(v.Dialog).widget
             assert (dialog.max_width, dialog.persistent, dialog.no_click_animation, dialog.eager) == (
@@ -622,7 +622,7 @@ def test_the_custom_fields_have_hints_and_the_format_presets_sit_in_a_fieldset(m
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _go_custom(rc, "mine")
             name = rc.find(v.TextField, label=t("steps.alerts.name_label")).widget
@@ -647,7 +647,7 @@ def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _go_custom(rc, "enter")
             await asyncio.sleep(0.05)
@@ -675,7 +675,7 @@ def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
     state, open_, added, saved = _state(p), solara.reactive(True), [], []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
             [custom] = [i for i in mode.items if i["value"] == "custom"]

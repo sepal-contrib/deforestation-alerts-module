@@ -128,7 +128,7 @@ def SubmitTaskButton(label, on_start, on_cancel, running=False, cancel_label=Non
     else:
         children = [rv.Icon(left=True, small=True, children=[icon])] if icon else []
     text = (cancel_label or t("common.cancel")) if running else label
-    btn = rv.Btn(children=children + [text], color="error" if running else color, small=True,
+    btn = rv.Btn(children=[*children, text], color="error" if running else color, small=True,
                  disabled=(not running) and external_busy, class_="" if running else ENTER_DEFAULT)
 
     def _click(*_):

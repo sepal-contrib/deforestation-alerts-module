@@ -594,7 +594,7 @@ def test_the_layer_form_sits_on_the_form_frame(monkeypatch, editing, label, icon
     state, open_, saved = _state(p), solara.reactive(True), []
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, saved, editing=editing), handle_error=False)
+        _box, rc = reacton.render(_modal(state, open_, saved, editing=editing), handle_error=False)
         try:
             dialog = rc.find(v.Dialog).widget
             assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
