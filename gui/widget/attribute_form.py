@@ -97,6 +97,21 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
         on_value(build_attribute_config(src, src_kind, new_rows, reserved=reserved))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _cancel_on_unmount():
+        def cleanup():
+            # closing the modal (ESC, Cancel) unmounts this form, and use_task
+            # does not cancel on unmount: stop a load still running, or it
+            # would hand the bands it read to a form the user closed
+            if load_task.pending:
+                try:
+                    load_task.cancel()
+                except RuntimeError:
+                    pass
+
+        return cleanup
+
+    solara.use_effect(_cancel_on_unmount, [])
     # the host's Save must not fire on the config held before this load
     solara.use_effect(lambda: on_busy(load_task.pending) if on_busy else None, [load_task.pending])
 

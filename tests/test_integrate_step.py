@@ -1139,6 +1139,48 @@ def test_attribute_form_reports_its_load_as_busy(pickers, tmp_path):
     assert seen_busy == [False, True, False]
 
 
+def test_closing_the_form_during_a_load_stops_it(pickers, monkeypatch, tmp_path):
+    """ESC or Cancel unmounts the form mid-load, and use_task does not cancel
+    on unmount: the load must stop there, or it writes the bands it read into
+    a form the user closed (as the source, mask and vis modals stop theirs)."""
+    import threading
+
+    reading, release, read = threading.Event(), threading.Event(), []
+
+    def slow_band_names(src):
+        reading.set()
+        release.wait(5)
+        read.append(src)
+        return ["lc"]
+
+    monkeypatch.setattr(attribute_form, "band_names", slow_band_names)
+    shown, seen = solara.reactive(True), []
+
+    @solara.component
+    def _Host():
+        NotificationProvider()
+        if shown.value:
+            attribute_form.AttributeForm(gee_interface=None, value=None, on_value=seen.append)
+
+    async def main():
+        _box, rc = reacton.render(_Host(), handle_error=False)
+        try:
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tmp_path / "lc.tif"))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(reading.is_set)
+            shown.set(False)  # the modal closed: the form unmounts
+            release.set()
+            await _settle(lambda: read)  # the read itself ran to its end...
+            await asyncio.sleep(0.1)
+            assert seen == []  # ...and nothing was handed back
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_attribute_form_shows_a_load_failure_next_to_the_field(pickers, tmp_path):
     seen = []
 
