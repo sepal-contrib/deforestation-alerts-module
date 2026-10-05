@@ -224,6 +224,10 @@ def languages(page, rec, *, out):
         except AssertionError:
             rec[f"{code}_analysis_follows_switch"] = False
         statuses = list(catalogue(code, "legend")["legend"]["status"].values())
+        # Analysis covers the shared map with its own before/after maps and
+        # hides the map legend (slice4 asserts it), so the legend is read on a
+        # step that shows the shared map.
+        w.goto_step(page, "prepare", 1500)
         w.wait_for(lambda: all(v in ph.legend_text(page) for v in statuses), 60,
                    f"{code}: the alert set's legend")
         ph.open_overview(page)  # the dashboard: a dialog, read with dialog_text
