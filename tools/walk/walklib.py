@@ -128,8 +128,12 @@ def new_page(playwright, report: dict):
 
 
 #: Page errors the walks' environment raises on every load, before the app
-#: renders: Solara's ``main.js`` calls ``voila.renderMathJax()`` once the
-#: widgets are built, and nothing loads MathJax. Not the app's.
+#: renders. Not the app's: no app code (gui/, deforestation_alerts/, tools/)
+#: references MathJax, and nothing loads it. Where the bare reference comes
+#: from is unidentified: the default ``solara.html.j2`` loads
+#: ``main-vuetify.js``, not the ``main.js`` that calls
+#: ``voila.renderMathJax()``, and solara's Markdown guards its MathJax use with
+#: ``window.MathJax &&``.
 AMBIENT_PAGE_ERRORS = ("MathJax is not defined",)
 
 
