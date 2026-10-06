@@ -29,7 +29,10 @@ off-thread work -- there are no Solara hooks at all.
 The alert token (``AnalysisState.alert_token``) runs through everything here:
 a rebuild blocks on ``getMapId`` and the tile server, so one that lands after
 the reviewer has moved on must drop its image rather than draw the previous
-alert's pane over the new one.
+alert's pane over the new one. Beside it, each lane carries its own request
+generation (``wire_panes``), because two picks in the SAME lane for the same
+alert share the token: without it a slow first rebuild landing after the
+second one draws the scene the timeline no longer says is chosen.
 """
 
 import logging
@@ -159,18 +162,40 @@ def rebuild_image(source, keys, geom):
 # ------------------------------------------------------------------ the panes
 
 
-def _gated(map_element, analysis, token):
-    """``map_element``'s layer adds, each run only while ``token`` is current
-    (``LockedMap.gated``); a plain map (tests) adds as before."""
+def _wanted(analysis, token, fresh) -> bool:
+    """Whether a rebuild is still the one its pane is waiting for.
+
+    Two questions, and the alert token answers only the first: the alert has
+    not changed since the pick (``token``), AND this lane has not been picked
+    again since (``fresh``, the lane's request generation from
+    ``wire_panes``). Two picks in the same lane for the same alert share the
+    token, so without the second question a slow first rebuild landing after
+    the second one stores its image and redraws the pane -- the map then shows
+    one scene while the timeline, the readout and the review's metadata say
+    the other.
+    """
+    return analysis.is_current(token) and (fresh is None or bool(fresh()))
+
+
+def _gated(map_element, analysis, token, fresh=None):
+    """``map_element``'s layer adds, each run only while this rebuild is still
+    the one its pane waits for (``LockedMap.gated``, ``_wanted``); a plain map
+    (tests) adds as before."""
     gated = getattr(map_element, "gated", None)
     if gated is None:
         return nullcontext()
-    return gated(lambda add: analysis.apply_if_current(token, add))
+
+    def _add_if_wanted(add):
+        analysis.apply_if_current(
+            token, lambda: add() if (fresh is None or fresh()) else None
+        )
+
+    return gated(_add_if_wanted)
 
 
 def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
-    token=None,
+    token=None, fresh=None,
 ):
     """Draw the chosen image's True/False-colour + original-alert layers.
 
@@ -182,11 +207,13 @@ def image_slider_map_callback(
     before, 1 = after).
 
     ``token`` is the alert the pick was published for
-    (``AnalysisState.alert_token``): once another alert is current, nothing is
-    stored or drawn. Blocking throughout (the rebuild's ``getMapId``, the tile
-    server), so it belongs on a worker -- ``wire_panes`` puts it there.
+    (``AnalysisState.alert_token``) and ``fresh`` is the lane's request
+    generation (``wire_panes``): once another alert is current, or this lane
+    has been picked again, nothing is stored or drawn (``_wanted``). Blocking
+    throughout (the rebuild's ``getMapId``, the tile server), so it belongs on
+    a worker -- ``wire_panes`` puts it there.
     """
-    if not analysis.is_current(token):
+    if not _wanted(analysis, token, fresh):
         return
     geom = widgets.actual_alert_grid
     img_source = selected_item["source"]
@@ -198,28 +225,40 @@ def image_slider_map_callback(
         return
 
     target = {0: analysis.before_image, 1: analysis.after_image}.get(model_att)
-    stored = analysis.apply_if_current(token, (lambda: target.set(img)) if target is not None else (lambda: None))
+    stored = []
+
+    def _store():
+        # Under ``_alert_lock``, and re-asking both questions there: the
+        # publish is what the panes, a Run and an export all read.
+        if not _wanted(analysis, token, fresh):
+            return
+        if target is not None:
+            target.set(img)
+        stored.append(True)
+
+    analysis.apply_if_current(token, _store)
     if not stored:
-        # Routine, not a failure: the reviewer moved on while this was
-        # rebuilding, and the next alert's own pick is already on its way. It
-        # stays at INFO (so it reaches no destination in production) precisely
-        # so that the only thing that does surface from this worker is a
-        # *failed* rebuild -- which ``wire_panes`` logs at ERROR and toasts.
-        logger.info("Analysis imagery: dropped an image chosen for a previous alert")
+        # Routine, not a failure: the reviewer moved on, or picked again in
+        # this lane, while this was rebuilding -- and that pick's own rebuild
+        # is already on its way. It stays at INFO (so it reaches no
+        # destination in production) precisely so that the only thing that
+        # does surface from this worker is a *failed* rebuild -- which
+        # ``wire_panes`` logs at ERROR and toasts.
+        logger.info("Analysis imagery: dropped an image the pane no longer waits for")
         return
 
     # Each add blocks (getMapId, the tile server) and then lands only while
     # this alert is still current: an alert change meanwhile has cleared the
     # maps for the next one (``vis_sync.clear_alert_layers``, after
     # ``reset_alert``), which must not get this alert's layers.
-    with _gated(map_element, analysis, token):
+    with _gated(map_element, analysis, token, fresh):
         map_element.addLayer(img, vis1, "True Color", True)
         map_element.addLayer(img, vis2, "False Color", False)
         # "Original Alert": the set's combined raster, band 3 (display), through
         # localtileserver (spec §10). Starting the tile server blocks and can fail;
         # a failure must not take the pane's own layers with it.
         combined = getattr(selected_alerts_model, "combined_path", None)
-        if combined is not None and combined.exists() and analysis.is_current(token):
+        if combined is not None and combined.exists() and _wanted(analysis, token, fresh):
             try:
                 raster_map.add_raster_layer(
                     map_element, combined, key="original-alert", name="Original Alert",
@@ -256,12 +295,31 @@ def wire_panes(widgets, analysis, selected_alerts_model):
     """
 
     def _wire(pane, info_reactive, keys_reactive, map_element):
+        # This lane's request generation: bumped here, on the publishing
+        # thread, for every pick. The alert token cannot stand in for it --
+        # two picks in the same lane for the same alert share it (``_wanted``).
+        picks = {"n": 0}
+        image_reactive = {0: analysis.before_image, 1: analysis.after_image}[pane]
+
         def _on_pick(*_):
             info = info_reactive.value
             if not info:
                 return  # an alert change: ``reset_alert`` clears the info
             item = {"source": info[0], "keys": list(keys_reactive.value or ())}
             token = analysis.alert_token.value
+            picks["n"] += 1
+            mine = picks["n"]
+
+            def fresh():
+                return picks["n"] == mine
+
+            # The lane is pending from here until its rebuild lands: the info
+            # above is already this pick's, so leaving the previous pick's
+            # ee.Image in place is a pair whose metadata and pixels are of
+            # different scenes, which a Run would stage as one composite
+            # (``edit_tools._images_ready`` / ``export._images_picked`` refuse
+            # while it is None).
+            image_reactive.set(None)
 
             def _work():
                 # The guard is HERE, at the thread boundary, because that is
@@ -277,7 +335,7 @@ def wire_panes(widgets, analysis, selected_alerts_model):
                 # failed visualization layer.
                 try:
                     image_slider_map_callback(item, map_element, pane, widgets, analysis,
-                                              selected_alerts_model, token)
+                                              selected_alerts_model, token, fresh=fresh)
                 except Exception as exc:  # noqa: BLE001 - a dead pane must not be silent
                     logger.exception("Analysis imagery: the %s image could not be drawn",
                                      _SIDE[pane])

@@ -116,6 +116,39 @@ def _as_date(julian):
         return None
 
 
+def _invalidate_alert_view(widgets, analysis) -> None:
+    """Forget the alert that was under review, without a new one to show.
+
+    What ``view_actual_alert`` does for an alert change, less the part that
+    needs an alert: the per-alert review state (``reset_alert``, whose token
+    bump also makes every worker in flight drop its result and takes the
+    export section back to "available after save"), the imagery context the
+    shared timeline draws from, the drawn-polygon controls, the alert layers
+    on both maps, and the ee bbox and covering grid an export is built from.
+
+    The visualization layers stay, as they do on an ordinary alert change
+    (spec §10, ``vis_sync``). Everything after the state is best-effort: a
+    map stand-in without layers must not cost the invalidation itself.
+    """
+    analysis.reset_alert()
+    try:
+        ctx = getattr(widgets, "imagery_ctx", None)
+        if ctx is not None:
+            ctx.value = None
+        for name in ("draw_before", "draw_after"):
+            control = getattr(widgets, name, None)
+            if control is not None:
+                control.hide()
+        for name in ("map_before", "map_after"):
+            a_map = getattr(widgets, name, None)
+            if a_map is not None:
+                vis_sync.clear_alert_layers(a_map)
+        widgets.actual_bb = None
+        widgets.actual_alert_grid = None
+    except Exception:
+        logger.exception("Analysis: clearing the alert view failed")
+
+
 def view_actual_alert(
     widgets, app_state, analysis, app_tile_model, id_field
 ):
@@ -133,31 +166,38 @@ def view_actual_alert(
     set's than the active one (``context.facts_of`` applies the same guard to
     the facts grid), or the id is out of range — so it is safe at smoke time
     (no EE/imagery work runs) and idempotent under the render_fixed
-    double-mount. The heavy imagery loading + slide-group rebuilds are
+    double-mount. Early, but not silently: each of those cases means there is
+    no alert under review, and ``_invalidate_alert_view`` says so to the
+    state, the maps and the timeline. The heavy imagery loading + slide-group rebuilds are
     deferred to Task 9.2 (AlertImagery).
     """
-    # Both guards below return BEFORE the jump field and the verdict are
-    # touched, so between a set switch and the moment the new set's rows are
-    # published the panel still shows the previous alert's number and the
-    # previous alert's stored answer. Deliberate and the same shape as block
-    # A's facts grid (``context.facts_of`` returns None and the grid keeps its
-    # values; there is a test for it): the alternative is a panel that blanks
-    # and re-fills on every set switch. The window is new in KIND for the
-    # verdict, though — it is now SEEDED from the row rather than only ever
-    # reviewer-entered — so for those milliseconds the verdict buttons show
-    # another alert's answer. Harmless to the store: a Save captures
-    # ``analysis.verdict`` with the alert's token (``capture_alert``) and
-    # ``_save_attributes`` refuses a row of another set
-    # (``export_labels.save_other_set``), so the stale answer cannot be
-    # written onto the new set's alert. If that window ever has to close, the
-    # fix is to clear the verdict here rather than to leave the guards.
+    # Both guards below leave the panel's NUMBERS alone — the jump field and
+    # block A's facts grid keep what they show, the same shape as
+    # ``context.facts_of`` returning None (there is a test for it) — rather
+    # than blanking and re-filling on every set switch. What they no longer
+    # leave alone is the alert-scoped STATE: an earlier round of this branch
+    # returned here outright, and that kept the previous alert's token
+    # current, so a CNN run or an export still in flight passed
+    # ``is_current`` and applied onto a panel whose alert was gone; the
+    # imagery context still described that alert, and the ee bbox and
+    # covering grid an export builds from were still its own.
+    # ``_invalidate_alert_view`` is what an alert change does minus the
+    # arrival of a new alert, so the window shrinks to "the panel's numbers",
+    # which the next publish replaces.
     gdf = app_state.alerts_gdf.value
     s = active_set(app_state.project.value)
     if s is not None and not set_store.alerts_belong_to(gdf, s):
-        return None  # another set's alerts, until the new set's are published
+        # Another set's alerts, until the new set's are published.
+        _invalidate_alert_view(widgets, analysis)
+        return None
     alert_id = app_state.actual_alert_id.value
 
     if gdf is None or alert_id is None or alert_id < 0 or alert_id >= len(gdf):
+        # No valid selection at all: a project switched or closed (both drop
+        # the alerts and select nothing, ``AppState._install``), a context
+        # with no alerts, or the moment before ``select_start_alert`` picks
+        # one.
+        _invalidate_alert_view(widgets, analysis)
         return
 
     alerta = gdf.iloc[alert_id]

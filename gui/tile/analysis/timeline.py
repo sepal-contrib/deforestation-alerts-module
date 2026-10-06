@@ -37,6 +37,7 @@ from deforestation_alerts.scripts.scene_index import (
     SceneTables,
 )
 from gui.i18n import format_date, t
+from gui.tile.analysis.state import imagery_changed
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -515,9 +516,25 @@ def build_timeline(app_state, analysis, widgets):
         # Enter, so the next arrow carries on from what is selected
         (focus_before if lane == "b" else focus_after).set(rid)
 
+    def _picked(lane, rid, sel):
+        """Assign a pick the REVIEWER made, and record what it costs the review.
+
+        The auto-pick in ``render`` calls ``_assign`` directly: it is the
+        alert's default pair, not a change, and must not open the alert with
+        "Unsaved changes" or drop a prediction nobody replaced. Keyed on the
+        published id actually changing, so a click on the stripe that is
+        already selected — or one ``_assign`` refuses because the row is gone
+        — costs nothing.
+        """
+        chosen = before_id if lane == "b" else after_id
+        was = chosen.value
+        _assign(lane, rid, sel)
+        if chosen.value != was:
+            imagery_changed(analysis)
+
     def _on_pick(lane, rid):
         sel, _ = _selection()
-        _assign(lane, rid, sel)
+        _picked(lane, rid, sel)
         render()
 
     def _cursor(lane):
@@ -561,7 +578,7 @@ def build_timeline(app_state, analysis, widgets):
         target = _cursor(lane)
         if sel is None or target is None:
             return
-        _assign(lane, target, sel)
+        _picked(lane, target, sel)
         render()
 
     def _on_key(lane, data):

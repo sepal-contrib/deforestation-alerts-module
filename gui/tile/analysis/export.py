@@ -72,8 +72,9 @@ Source-of-truth adaptation (Task 9): OLD read/wrote
 lives in ``app_state.alerts_gdf.value`` (the active set's, published by the shell's
 set loader or by Integrate), and the alert
 index is ``app_state.actual_alert_id.value``. ``save_attributes_to_gdf`` mutates that
-gdf in place via ``.at[id, col] = ...`` (faithful to OLD), then stamps
-``analysis.last_save_time``. Everything guards on the gdf being present
+gdf in place via ``.at[id, col] = ...`` (faithful to OLD); the save runner
+stamps ``analysis.last_save_time`` once the write landed, for the alert it
+saved. Everything guards on the gdf being present
 and the id in range, so it is smoke-safe (nothing runs at mount;
 ``dependencies=None``).
 
@@ -245,13 +246,18 @@ def review_status(confirmation) -> str:
 def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
 
-    Mutates ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
-    (faithful to OLD), does the blocking GEE admin lookup, persists
-    ``alert_db.parquet``, and stamps ``last_save_time``. Returns ``True`` on success.
+    Prepares every field of the review, persists ``alert_db.parquet`` from a
+    private copy of the table, and only then writes the row of
+    ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
+    (faithful to OLD: that object is what Overview and the map layers read).
+    A refusal or a failure therefore leaves the live table exactly as it was.
+    Returns ``True`` on success (the caller stamps ``last_save_time``: see
+    ``make_save_runner``).
     Guards on the gdf being present + the id in range (smoke-safe). Raises
     ``SaveRefused`` for the OLD "False Positive but a polygon is drawn" guard
-    (``false_positive_drawn``), a missing answer, and alerts of another set
-    than the one it writes for.
+    (``false_positive_drawn``), a missing answer, a drawing the reviewer has
+    not applied (``unapplied_drawing``), and alerts of another set than the one
+    it writes for.
 
     The store it writes is the active set's AS THE SAVE STARTS: the admin
     lookups below block for seconds, and the live ``SetContext`` (ruling #84)
@@ -278,7 +284,22 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     _refuse_unless_current(alertas_gdf, app_tile_model, target)
     status = review_status(alert.status)
 
-    alertas_gdf.at[actual_alert_id, "status"] = status
+    # A drawing with changes *Apply* has not written yet: ``defo_layer`` is the
+    # polygon from BEFORE them, so this save would store that one over work the
+    # reviewer can still see on the maps -- and Save & next would navigate it
+    # away. OLD disabled the review Save for the whole edit session
+    # (``start_edition_function``); this is the same guard, as a message that
+    # names what to do. Captured at the click like everything else here.
+    if getattr(alert, "drawing_unapplied", False):
+        raise SaveRefused(key="analysis_tile.edition_labels.unapplied_drawing")
+
+    # Every field this save writes, prepared BEFORE the live table is touched:
+    # the refusals below and the admin lookups come between, and a row already
+    # half-written by a save that is then refused (or that fails) is a review
+    # the reviewer was told was rejected, sitting in the table Overview counts
+    # from and the next save persists whole. Applied in one pass at the end,
+    # once the store write has landed.
+    updates = {"status": status}
 
     # description (loss-driver combobox): the drivers' codes, never labels
     # (``loss_drivers``); an export translates them.
@@ -293,7 +314,7 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # ``""`` is what ``drivers.encode`` itself returns for an empty selection
     # and reads back to no codes through ``codes`` / ``selection`` / ``label``
     # / ``with_labels``.
-    alertas_gdf.at[actual_alert_id, "description"] = (
+    updates["description"] = (
         "" if status == "False Positive" else drivers.encode(alert.drivers)
     )
 
@@ -310,18 +331,10 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # (``reset_alert``), or the next alert's drawn polygon replaces it, and
     # neither belongs to the alert this Save writes.
     defo_layer = alert.defo_layer
-    if before_info is None:
-        alertas_gdf.at[actual_alert_id, "before_img"] = None
-        alertas_gdf.at[actual_alert_id, "before_img_info"] = None
-    else:
-        alertas_gdf.at[actual_alert_id, "before_img"] = before_info[3]
-        alertas_gdf.at[actual_alert_id, "before_img_info"] = before_info[1]
-    if after_info is None:
-        alertas_gdf.at[actual_alert_id, "after_img"] = None
-        alertas_gdf.at[actual_alert_id, "after_img_info"] = None
-    else:
-        alertas_gdf.at[actual_alert_id, "after_img"] = after_info[3]
-        alertas_gdf.at[actual_alert_id, "after_img_info"] = after_info[1]
+    updates["before_img"] = None if before_info is None else before_info[3]
+    updates["before_img_info"] = None if before_info is None else before_info[1]
+    updates["after_img"] = None if after_info is None else after_info[3]
+    updates["after_img_info"] = None if after_info is None else after_info[1]
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
@@ -349,12 +362,13 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
         ee.String(""),
     )
 
-    alertas_gdf.at[actual_alert_id, "admin1"] = st1.getInfo()[:-1]
-    alertas_gdf.at[actual_alert_id, "admin2"] = st2.getInfo()[:-1]
-    alertas_gdf.at[actual_alert_id, "admin3"] = st3.getInfo()[:-1]
+    updates["admin1"] = st1.getInfo()[:-1]
+    updates["admin2"] = st2.getInfo()[:-1]
+    updates["admin3"] = st3.getInfo()[:-1]
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
-    # A refusal: the store is not written (the admin names above stay in memory).
+    # A refusal: nothing is written at all -- not the store, and not the row
+    # (the admin names above are in ``updates``, which is dropped with it).
     if (
         status == "False Positive"
         and defo_layer is not None
@@ -365,18 +379,36 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # drawn, area_ha keeps the alert's own area, which Integrate stored: the
     # store feeds the exports, the map tiles and the report.
     if defo_layer is None:
-        alertas_gdf.at[actual_alert_id, "alert_polygon"] = None
+        updates["alert_polygon"] = None
     else:
-        alertas_gdf.at[actual_alert_id, "alert_polygon"] = (
-            defo_layer["geometry"].union_all()
-        )
-        alertas_gdf.at[actual_alert_id, "area_ha"] = calculate_total_area(defo_layer)
+        updates["alert_polygon"] = defo_layer["geometry"].union_all()
+        updates["area_ha"] = calculate_total_area(defo_layer)
 
-    # Persist the alert DB (OLD save_alerts_to_gdf) where the save started.
-    # Skip if there is no folder.
-    _save_alerts_to_gdf(alertas_gdf, app_tile_model, folder=folder, target=target)
+    # Persist the alert DB (OLD save_alerts_to_gdf) where the save started,
+    # from a private copy carrying this review. Skip if there is no folder.
+    #
+    # The copy is what makes a FAILED write (a full disk, a set deleted
+    # mid-write) leave the app as it was: the live table is published only
+    # below, once the parquet has landed, so the app never shows a review as
+    # stored that is not on disk. ``_default_apply`` re-publishes a copy of
+    # the live table after every save anyway, so this is the same order of
+    # cost.
+    staged = alertas_gdf.copy()
+    for column, value in updates.items():
+        staged.at[actual_alert_id, column] = value
+    _save_alerts_to_gdf(staged, app_tile_model, folder=folder, target=target)
 
-    analysis.last_save_time.set(datetime.today().timestamp())
+    # Published to the live table (in place, faithful to OLD: Overview and the
+    # map layers read this very object, and the save runner re-publishes it).
+    for column, value in updates.items():
+        alertas_gdf.at[actual_alert_id, column] = value
+    # With the store generation the write stamped on the copy
+    # (``set_store.stamp_generation``): the alerts on hand ARE what is on disk
+    # now, and without the stamp the live table still claims the generation
+    # from before this write -- which the next Save of the same alerts reads
+    # as "the store changed under us" and refuses.
+    alertas_gdf.attrs.update(staged.attrs)
+
     return True
 
 
@@ -424,8 +456,18 @@ def _alert_selected(alert) -> bool:
 
 
 def _images_picked(alert) -> bool:
-    """A before and an after image are selected for the alert under review."""
-    return alert.before_info is not None and alert.after_info is not None
+    """A before and an after image are selected for the alert under review
+    AND each pane has rebuilt the one it was given.
+
+    The infos alone are not enough: the timeline publishes them at the click
+    and the ee.Image of that pick lands when its rebuild does
+    (``imagery.wire_panes``, which clears the lane's image at the pick). In
+    between, a build would name the composite after the new pick
+    (``paths.alert_image_name`` reads the infos) and export the previous
+    pick's pixels -- or fail inside geedim on a ``None`` image.
+    """
+    return all(v is not None for v in (alert.before_info, alert.after_info,
+                                       alert.before_image, alert.after_image))
 
 
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None):
@@ -561,6 +603,11 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
     ``apply_save`` is the post-save UI step (the export section's download
     button + the ``alerts_gdf`` rebind); the default rebinds alone, so the
     runner is usable before the export section is built.
+
+    One save runs at a time, whichever button starts it: ``run_save.guard``
+    registers the buttons that share the runner (the verdict block's two), so
+    they are all held for the duration and none of them can start a second
+    writer over the same store and row.
     """
 
     def _default_apply():
@@ -570,7 +617,50 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
 
     apply = apply_save or _default_apply
 
+    # One writer at a time: the buttons that share this runner, and whether a
+    # save of theirs is in flight. Both halves matter -- the buttons so the
+    # reviewer is not offered a second save, the flag because a click can
+    # still arrive (another code path, a disabled button's queued event).
+    guarded = []
+    saving = {"on": False}
+
+    def _guard(*buttons):
+        """Register buttons that must be held while any save of this runner
+        runs. Called once by the block that owns them (``review_panel``)."""
+        guarded.extend(b for b in buttons if b not in guarded)
+
+    def _hold(state):
+        for btn in guarded:
+            btn.disabled = state
+
+    def _mark_saved(alert):
+        """This alert's review is on disk: nothing unsaved left, and the
+        save-state line shows when. Short on purpose: an alert change waits
+        for it (``apply_if_current`` holds ``_alert_lock``).
+
+        ``dirty`` is cleared only if the reviewer has not changed anything
+        since the click: what was written is the review ``capture_alert``
+        read then, so a later verdict or driver is still unsaved and saying
+        otherwise loses it silently. The stamp is written either way -- a save
+        of this alert did land -- and the unsaved line takes precedence over
+        it in the verdict block.
+        """
+        analysis.last_save_time.set(datetime.today().timestamp())
+        if analysis.edit_rev.value == getattr(alert, "edit_rev", None):
+            analysis.dirty.set(False)
+            return True
+        return False
+
     def run_save(button=None, then=None):
+        if saving["on"]:
+            # A save of this runner is already writing the store and the row:
+            # a second one would race it, and the row values of whichever
+            # finished last would win. The buttons are held below, so this is
+            # the backstop, not the message.
+            logger.info("Analysis: a save is already running, ignoring the click")
+            return
+        saving["on"] = True
+        _hold(True)
         if button is not None:
             button.loading = True
             button.disabled = True
@@ -578,6 +668,8 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         # worker writes them whatever is shown by the time the lookups end.
         alert = capture_alert(analysis, widgets, app_state)
         token = alert.token  # the alert this save is for
+
+        outpaced = []  # the reviewer changed this alert while the save ran
 
         def _worker():
             # No ``total_steps`` — the save is a single opaque phase (GEE admin
@@ -645,7 +737,23 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                     # ``reset_alert`` has already cleared the flag for the alert
                     # now on screen, which may carry edits of its own that this
                     # save did not write.
-                    analysis.apply_if_current(token, lambda: analysis.dirty.set(False))
+                    #
+                    # The save stamp goes with it, and under the same guard:
+                    # it is per-alert UI (``reset_alert`` clears it so an
+                    # alert nobody saved shows no time at all), so a save that
+                    # lands after the reviewer navigated must not stamp the
+                    # alert they went to as saved.
+                    analysis.apply_if_current(
+                        token, lambda: outpaced.append(not _mark_saved(alert))
+                    )
+                    # Said, not left to the state line alone: after *Save &
+                    # next* the reviewer is watching for the next alert, and
+                    # the one thing on screen would be a save they pressed
+                    # that did not advance.
+                    if any(outpaced):
+                        reason = t("analysis_tile.export_labels.save_outpaced")
+                        notifier.warning(reason)
+                        logger.info("Analysis: %s", reason)
                     # Only now — Save & next must not move off an alert whose
                     # review was refused. And only for the alert this save was
                     # for: ``then`` is ``go_next``, so a save that lands after
@@ -658,18 +766,38 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                     # that must not run under ``_alert_lock``.
                     # Guarded: a failing ``then`` is a log line, not a lost
                     # success toast.
-                    if then is not None and analysis.is_current(token):
+                    #
+                    # And not off a change this save did not write: ``then``
+                    # is ``go_next``, so advancing would leave the reviewer's
+                    # later verdict or driver behind on an alert they can no
+                    # longer see is unsaved.
+                    if then is not None and analysis.is_current(token) and not any(outpaced):
                         try:
                             then()
                         except Exception:
                             logger.exception("Analysis: after-save step failed")
             finally:
+                # The runner is free again and every button it shares comes
+                # back, whichever one started this save.
+                saving["on"] = False
+                _hold(False)
                 if button is not None:
                     button.loading = False
                     button.disabled = False
 
-        spawn_in_context(_worker)
+        try:
+            spawn_in_context(_worker)
+        except Exception:
+            # The worker's ``finally`` is what releases the runner, so a spawn
+            # that never got there would lock saving out for the session.
+            logger.exception("Analysis: the save worker could not be started")
+            saving["on"] = False
+            _hold(False)
+            if button is not None:
+                button.loading = False
+                button.disabled = False
 
+    run_save.guard = _guard
     return run_save
 
 
@@ -742,7 +870,35 @@ def build_export(
     # ``disabled``, which is ALSO true while a build runs (the click handler
     # spins it) and would make the badge say "available after save" over a
     # build in progress. Reset by every alert change.
-    built = {"saved": False, "files": 0}
+    built = {"saved": False, "files": 0, "rev": 0}
+
+    def _invalidate_built_files():
+        """Stop offering what the last build left ready.
+
+        The zip and the report are a snapshot: of the review as the save
+        wrote it, of the imagery pair they were exported from and of the
+        report template they were rendered with. Once any of those changes the
+        files on disk are the previous answer, and the two links plus the
+        "N files ready" badge would hand the reviewer that answer for the
+        state in front of them. Nothing is deleted -- the files stay in the
+        set folder; they are simply not this review's any more, and the
+        section goes back to offering the rebuild.
+
+        The links are cleared, not only hidden: ``set_url()`` with no path
+        points both at the sandbox file route's own "#" (nothing of this
+        project's), disables them and drops their ``download`` attribute, so
+        anything that reveals the toolbar again cannot resurrect them.
+
+        ``rev`` is the revision a build carries from its click
+        (``_on_download``): one that started before the change cannot restore
+        a readiness that is already stale. The caller refreshes the badge --
+        ``_forget_previous_alert`` has more to change before it reads.
+        """
+        ns["files_dwn_btn"].set_url()
+        ns["report_dwn_btn"].set_url()
+        ns["toolbar_downloads"].hide()
+        built["files"] = 0
+        built["rev"] += 1
 
     # ------------------------------------------------------------------
     # The section's summary badge: what this section can offer right now,
@@ -765,6 +921,15 @@ def build_export(
         else:
             _badge(t("analysis_tile.sections.export_build"))
 
+    def _invalidate_and_badge(*_):
+        """``_invalidate_built_files`` + the badge, for the subscribers whose
+        only job is the invalidation."""
+        try:
+            _invalidate_built_files()
+            _show_badge_for_state()
+        except Exception:
+            logger.exception("Analysis: invalidating the built files failed")
+
     # ------------------------------------------------------------------
     # An alert change takes the section back to its empty state. What it can
     # offer belongs to ONE alert: the build button was enabled by a save of
@@ -780,22 +945,37 @@ def build_export(
     # ------------------------------------------------------------------
     def _forget_previous_alert(*_):
         ns["download_alert_data_btn"].disabled = True
-        ns["toolbar_downloads"].hide()
-        # The links, not only the toolbar that hides them: hiding leaves the two
-        # hrefs pointing at the previous alert's zip and report, and anything
-        # that reveals the toolbar again (a build of the new alert that is still
-        # running when this fires) would offer them for the alert on screen.
-        # ``set_url()`` with no path points both at the sandbox file route's
-        # own "#" (nothing of this project's), disables them and drops their
-        # ``download`` attribute.
-        ns["files_dwn_btn"].set_url()
-        ns["report_dwn_btn"].set_url()
-        built.update(saved=False, files=0)
+        _invalidate_built_files()
+        built["saved"] = False
         _show_badge_for_state()
 
     # Registered once (the builder runs once per session); the unsubscriber is
     # deliberately discarded, as everywhere else under analysis/.
     analysis.alert_token.subscribe(_forget_previous_alert)
+
+    # The other two inputs of a build, invalidated for the alert ON screen.
+    #
+    # The imagery pair: the composite in the zip and the figures in the report
+    # are of the pair they were exported from, so another pick (which is also
+    # an unsaved change to the review, ``state.imagery_changed``) leaves them
+    # describing imagery the reviewer is no longer looking at. Both infos,
+    # because either side alone changes the composite.
+    analysis.before_info.subscribe(lambda *_: _invalidate_and_badge())
+    analysis.after_info.subscribe(lambda *_: _invalidate_and_badge())
+
+    # The report template: the reviewer's own ``.docx``, picked in this very
+    # section. It is a project value, so what the picker writes arrives as a
+    # publish of ``app_state.project``; only a CHANGE of the template
+    # invalidates, or every autosave of the project would drop the links.
+    template_seen = {"value": aux_model.custom_report_template}
+
+    def _on_project(*_):
+        value = aux_model.custom_report_template
+        if value != template_seen["value"]:
+            template_seen["value"] = value
+            _invalidate_and_badge()
+
+    app_state.project.subscribe(_on_project)
 
     # ------------------------------------------------------------------
     # Post-save apply (OLD save effect, success path) — enable the download button
@@ -807,6 +987,10 @@ def build_export(
     def _apply_save():
         ns["download_alert_data_btn"].disabled = False
         built["saved"] = True
+        # The review just written is not the one the last build captured, so
+        # its zip and report are the previous answer: the links go, and the
+        # section offers the rebuild that was enabled a line above.
+        _invalidate_built_files()
         # Right after the enable, not at the end: the rebind below can raise
         # (a gdf that refuses to copy), and a badge still reading "available
         # after save" over an enabled build button would be a lie the error
@@ -827,7 +1011,18 @@ def build_export(
     # at the END of the download worker's tracked block (a failure here still
     # fails the task). The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
-    def _apply_download(result):
+    def _apply_download(result, rev):
+        """Offer this build's files. Returns whether they were offered.
+
+        ``rev`` is the revision the build started on: an input that changed
+        meanwhile (a later save of this alert, another imagery pick, another
+        template) has already invalidated what this build was for, and
+        revealing it now would restore a readiness that is stale -- links to
+        files built from a review the reviewer has since replaced. The caller
+        says so, like the stale-alert case.
+        """
+        if rev != built["rev"]:
+            return False
         # The zip/report live in the set folder, so the buttons get
         # $HOME-relative paths: ``set_url`` -> ``su.create_download_link`` builds
         # ``.../jupyter/files/<path relative to $HOME>``.
@@ -842,6 +1037,7 @@ def build_export(
             [p for p in (result.get("zip_path"), result.get("report_path")) if p]
         )
         _show_badge_for_state()
+        return True
 
     # ------------------------------------------------------------------
     # Save: the shared runner (``make_save_runner``), with this section's own
@@ -863,6 +1059,7 @@ def build_export(
         ns["download_alert_data_btn"].disabled = True
         alert = capture_alert(analysis, widgets, app_state)  # as in _on_save
         token = alert.token  # the alert this build is for
+        rev = built["rev"]  # ...and the inputs it is built from
 
         def _worker():
             # Same tracked_job shape as _on_save above; the report/zip build is
@@ -921,15 +1118,20 @@ def build_export(
                         # stale one would hand the reviewer the previous alert's
                         # GeoPackage and report under a badge counting them as
                         # the current alert's.
-                        applied = analysis.apply_if_current(
-                            token, lambda: _apply_download(result)
+                        offered = {"ok": False}
+                        analysis.apply_if_current(
+                            token,
+                            lambda: offered.update(ok=_apply_download(result, rev)),
                         )
+                        applied = offered["ok"]
                         if not applied:
                             # Said, not swallowed: the files exist (they were
                             # written into the set's folder) but nothing on
                             # screen offers them, and the reviewer waited for
-                            # them. Recorded on the task before the toast, as
-                            # the model runs do with ``dl_stale``.
+                            # them -- because they moved on, or because what
+                            # this build was for has changed since. Recorded on
+                            # the task before the toast, as the model runs do
+                            # with ``dl_stale``.
                             reason = t("analysis_tile.export_labels.download_stale")
                             task.fail(reason)
                             notifier.warning(reason)

@@ -161,7 +161,8 @@
     "edition_labels": {
       "start_edit_button": "Commencer à dessiner",
       "apply_edit_button": "Appliquer",
-      "stop_edit_button": "Arrêter de dessiner"
+      "stop_edit_button": "Arrêter de dessiner",
+      "unapplied_drawing": "Appliquez les modifications du polygone avant d'enregistrer cette révision"
     },
     "model_labels": {
       "dl_button1": "Modèle plus petit et rapide",
@@ -179,7 +180,8 @@
       "dl_task_title": "Exécution du modèle d'apprentissage profond",
       "dl_step_run": "Téléchargement des images et exécution du modèle…",
       "dl_done": "Prédiction du modèle prête.",
-      "dl_stale": "Le modèle a terminé après votre passage à une autre alerte : sa prédiction n'a pas été ajoutée."
+      "dl_stale": "Le modèle a terminé après votre passage à une autre alerte : sa prédiction n'a pas été ajoutée.",
+      "dl_no_images": "Les images avant et après de cette alerte ne sont pas toutes les deux prêtes : le modèle n'a rien sur quoi s'exécuter. Choisissez une image avant et une image après, puis laissez les deux volets finir de les afficher."
     },
     "export_labels": {
       "save_btn": "Sauvegarder",
@@ -189,13 +191,14 @@
       "save_task_title": "Enregistrement des attributs de l'alerte",
       "save_step": "Écriture de la base d'alertes…",
       "save_done": "Attributs de l'alerte enregistrés.",
+      "save_outpaced": "Enregistré, mais vous avez modifié cette alerte pendant l'enregistrement : enregistrez à nouveau pour conserver ces modifications",
       "download_task_title": "Préparation du téléchargement de l'alerte",
       "download_step": "Génération des fichiers et du rapport…",
       "download_done": "Téléchargement de l'alerte prêt.",
       "download_stale": "Les fichiers de l'alerte ont fini d'être générés après votre passage à une autre alerte : ils n'ont pas été proposés au téléchargement ici.",
       "download_no_recipe": "Aucun jeu d'alertes n'est actif : il n'y a donc nulle part où enregistrer les fichiers de l'alerte dans le projet. Lancez d'abord Intégrer et vectoriser.",
       "download_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à télécharger.",
-      "download_no_images": "Aucune image avant et après n'est sélectionnée pour cette alerte : ses fichiers ne peuvent donc pas être générés. Choisissez d'abord une image avant et une image après.",
+      "download_no_images": "Les images avant et après de cette alerte ne sont pas toutes les deux prêtes : ses fichiers ne peuvent pas être générés. Choisissez une image avant et une image après, puis laissez les deux volets finir de les afficher.",
       "save_no_alert": "Aucune alerte n'est sélectionnée, il n'y a donc rien à enregistrer.",
       "save_other_set": "Ces alertes appartiennent à un autre jeu d'alertes que le jeu actif : elles n'y ont donc pas été enregistrées.",
       "save_set_changed": "Le jeu d'alertes actif a changé pendant l'enregistrement : cette révision n'a donc pas été enregistrée.",

@@ -1164,6 +1164,46 @@ def test_an_in_window_image_is_offered_by_hand_even_though_nothing_picks_it():
     assert analysis.before_keys.value  # and its granules are published with it
 
 
+def test_a_pick_of_other_imagery_is_an_unsaved_change_that_drops_the_predictions():
+    """The reviewer's own pick costs the review something; the auto-pick does not.
+
+    The store keeps the pair a save was made with (``before_img`` /
+    ``after_img``), so choosing other imagery is a change to save -- and a CNN
+    prediction is a function of the composite it ran on, so what a run of the
+    previous pair found is not about what is on screen any more. The auto-pick
+    in ``render`` is this alert's default, not a change: an alert nobody
+    touched must not open claiming unsaved work.
+    """
+    state = _fake_state(rows=[(S2, "2026-04-10", 8.0), (S2, "2026-04-24", 8.0),
+                              (LS, "2026-08-27", 3.0)])
+    analysis = _fake_analysis()
+    widgets = _fake_widgets()
+    ctx = dict(_ctx())
+    ctx["token"] = analysis.alert_token.value
+    widgets.imagery_ctx.set(ctx)
+    card = timeline.build_timeline(state, analysis, widgets)
+
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.dirty.value is False, "the auto-pick is not the reviewer's change"
+
+    # a CNN run on that pair
+    analysis.prediction_files.set({1: "/f/alert_0_s_240426_l_270826.tif"})
+    analysis.prediction_shapes.set({1: (2, 3.9)})
+
+    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 4, 10)))
+
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-10 "
+    assert analysis.dirty.value is True
+    assert analysis.prediction_files.value == {}
+    assert analysis.prediction_shapes.value == {}
+
+    # Clicking the stripe that is already picked publishes nothing new, so it
+    # is not an unsaved change either.
+    analysis.dirty.set(False)
+    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 4, 10)))
+    assert analysis.dirty.value is False
+
+
 def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
     """A single-day alert window with one scene on it: ``default_pick`` legally
     returns the same id twice. Both panes then draw the identical image, which

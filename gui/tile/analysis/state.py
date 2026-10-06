@@ -54,10 +54,25 @@ class AnalysisState:
     #: since the last save of THIS alert. Cleared by ``reset_alert`` (an alert
     #: change forgets it) and by a save that wrote.
     dirty: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: whether the drawing on the maps holds changes *Apply* has not written to
+    #: ``defo_layer`` yet. The review Save refuses while it is True
+    #: (``export._save_attributes``): what it would store is the polygon
+    #: BEFORE those changes, and Save & next would navigate the drawing away.
+    #: Set by every drawing change, cleared by *Apply*, by opening or stopping
+    #: the drawing session (both put the two back in step) and by
+    #: ``reset_alert``.
+    drawing_unapplied: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     #: what each CNN run found, by model number: ``{1: (n_patches, area_ha)}``.
     #: Derived from the prediction the worker vectorises, beside the ``.tif``
     #: paths in ``prediction_files``.
     prediction_shapes: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
+    #: how many changes the reviewer has made to THIS alert: bumped by every
+    #: ``touch``. A save captures it with the alert at the click and clears
+    #: ``dirty`` only if it is unchanged when the write lands -- a verdict or
+    #: driver changed while the admin lookups blocked is NOT in what was
+    #: written (``make_save_runner``). Reset by ``reset_alert``, like
+    #: ``dirty`` itself.
+    edit_rev: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
     #: time.time() of the last review Save
     last_save_time: solara.Reactive = field(default_factory=lambda: solara.reactive(0.0))
     #: which alert the values above belong to: bumped by every ``reset_alert``.
@@ -81,6 +96,8 @@ class AnalysisState:
             self.prediction_files.set({})
             self.verdict.set(None)
             self.dirty.set(False)
+            self.edit_rev.set(0)
+            self.drawing_unapplied.set(False)
             self.prediction_shapes.set({})
             # The stamp belongs to the alert that was saved, not to the
             # session: an untouched alert must show no time at all, never the
@@ -135,6 +152,9 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
             "bb": getattr(widgets, "actual_bb", None),
             "status": analysis.verdict.value,
             "drivers": list(drivers) if isinstance(drivers, (list, tuple)) else drivers,
+            "drawing_unapplied": analysis.drawing_unapplied.value,
+            # What a save compares against when it lands: see ``touch``.
+            "edit_rev": analysis.edit_rev.value,
         }
 
     return analysis.capture(_read)
@@ -142,5 +162,45 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
 
 def touch(analysis: AnalysisState) -> None:
     """Mark the current alert as changed since its last save (the save-state
-    line in the verdict block reads it)."""
+    line in the verdict block reads it).
+
+    ``edit_rev`` counts the changes as well as flagging them, because a save
+    in flight has to tell "still the review I captured" from "changed since":
+    ``dirty`` alone is cleared by that save either way, and the reviewer's
+    later change would be reported as stored.
+    """
     analysis.dirty.set(True)
+    analysis.edit_rev.set(analysis.edit_rev.value + 1)
+
+
+def imagery_changed(analysis: AnalysisState) -> None:
+    """The reviewer picked other imagery for this alert (the timeline's lanes).
+
+    Two consequences, both per alert. The review is unsaved: the store keeps
+    the pair a save was made with (``before_img`` / ``after_img`` and their
+    info), so another pick is a change to save. And whatever a CNN run found
+    is invalidated: a prediction is a function of the composite it ran on, so
+    the "Found ..." line and its *Add to map* would otherwise offer a raster
+    of imagery the reviewer is no longer looking at (``edit_tools`` watches
+    ``prediction_files`` and puts the rows back to "nothing run").
+
+    What a prediction already put in the *drawing* is left alone: by then it is
+    the reviewer's own work, and *Remove from map* still takes it off.
+
+    Not called by the auto-pick in ``timeline.render``: that one is the alert's
+    default, and an alert nobody touched must not open claiming unsaved work.
+    """
+    analysis.prediction_files.set({})
+    analysis.prediction_shapes.set({})
+    touch(analysis)
+
+
+def drawing_changed(analysis: AnalysisState) -> None:
+    """Mark the drawing changed since the last *Apply*, and the alert unsaved.
+
+    The two go together for every change the reviewer makes on the maps: the
+    alert has unsaved work AND the review Save must refuse until *Apply*
+    writes it to ``defo_layer``, or the save stores the polygon from before the
+    change and Save & next moves off it."""
+    analysis.drawing_unapplied.set(True)
+    touch(analysis)

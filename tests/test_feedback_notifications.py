@@ -793,14 +793,83 @@ def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
     assert save_btn.loading is False and save_btn.disabled is False
 
 
+def test_a_save_that_lands_after_the_reviewer_moved_on_stamps_nobody(
+    monkeypatch, data_root
+):
+    """The save stamp belongs to the alert that was saved (spec §4.4).
+
+    ``last_save_time`` is per-alert UI: ``reset_alert`` clears it so an alert
+    nobody saved shows no time at all. A save whose store write lands after
+    the reviewer navigated by hand lands after that reset too, so the stamp
+    has to be written under the same token guard as ``dirty`` -- written from
+    inside ``_save_attributes`` it stamps whatever alert is on screen by then,
+    and the new one claims a save nobody made for it.
+    """
+    import gui.tile.analysis.export as export
+
+    app_state = AppState()
+    analysis = AnalysisState()
+    card = _export_layout(
+        export,
+        widgets=None,
+        app_state=app_state,
+        aux_model=_set_context_fake(),
+        analysis=analysis,
+        app_tile_model=_set_context_fake(),
+    )
+    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
+
+    # A save of the alert on screen stamps it.
+    feedback = _record_feedback(monkeypatch, export)
+    monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
+    save_btn.fire_event("click", None)
+    feedback.join()
+    assert analysis.last_save_time.value > 0
+
+    # ... and the next alert starts with no stamp of its own.
+    analysis.reset_alert()
+    assert analysis.last_save_time.value == 0.0
+
+    feedback = _record_feedback(monkeypatch, export)
+
+    def _navigate_mid_save(*_a, **_k):
+        analysis.reset_alert()  # the reviewer clicks the next alert meanwhile
+        return True
+
+    monkeypatch.setattr(export, "_save_attributes", _navigate_mid_save)
+    save_btn.fire_event("click", None)
+    feedback.join()
+
+    assert analysis.last_save_time.value == 0.0, (
+        "an alert nobody saved was stamped as saved"
+    )
+
+
 # ---------------------------------------------------------------------------
 # analysis/edit_tools — CNN run workers under tracked_job (dl_404 mapping)
 # ---------------------------------------------------------------------------
+def _images_drawn(analysis):
+    """The precondition of every run and every build: a before/after pair
+    picked AND rebuilt by its pane.
+
+    The ee.Images are stand-ins (the rebuild and the geedim download are
+    stubbed in these tests) but they have to be there: a run or a build
+    refuses while a lane is still rebuilding, because the pair's metadata
+    would be the new pick's and its pixels the previous one's
+    (``edit_tools._images_ready``).
+    """
+    analysis.before_info.set(["Sentinel 2", 1700000000, None, "S2_before", "_010124"])
+    analysis.after_info.set(["Sentinel 2", 1700000001, None, "S2_after", "_020224"])
+    analysis.before_image.set(object())
+    analysis.after_image.set(object())
+    return analysis
+
+
 @pytest.fixture()
 def edit_tools_card():
     import gui.tile.analysis.edit_tools as edit_tools
 
-    analysis = AnalysisState()
+    analysis = _images_drawn(AnalysisState())
     card = edit_tools.build_edit_tools(
         widgets=None,  # only touched inside _run_cnn_model / the edit handlers
         app_state=AppState(),
@@ -860,6 +929,103 @@ def test_edit_tools_model_run_publishes_success(
     # and the row reports what it found, counted and measured in the language
     assert analysis.prediction_shapes.value == {model: (2, 3.9)}
     assert _slots(card)[f"dl{model}_found"].children == ["Found 2 patches \u00b7 3.9 ha"]
+
+
+def _path_to(root, target):
+    """The chain of widgets from ``root`` down to ``target``, or ``None``.
+
+    Walks ``v_slots`` like ``_widgets``: ``sw.Tooltip`` parents its target there.
+    """
+    if root is target:
+        return [root]
+    children = list(getattr(root, "children", None) or [])
+    for slot in getattr(root, "v_slots", None) or []:
+        slot_children = slot.get("children") if isinstance(slot, dict) else None
+        if slot_children is None:
+            continue
+        if isinstance(slot_children, (list, tuple)):
+            children.extend(slot_children)
+        else:
+            children.append(slot_children)
+    for child in children:
+        if not hasattr(child, "children"):
+            continue
+        found = _path_to(child, target)
+        if found is not None:
+            return [root] + found
+    return None
+
+
+def _hidden_above(root, target):
+    """Every widget on the way down to ``target`` that is hidden -- its own
+    ``viz`` included. A button whose ``viz`` is True is still off screen when a
+    container above it is the one carrying ``SepalWidget.hide()``'s ``d-none``
+    or a ``display: none``, which is exactly how an enabled *Add to map* was
+    left unreachable."""
+    path = _path_to(root, target)
+    assert path is not None, "the widget is not parented in the body at all"
+
+    def _hidden(widget):
+        return (getattr(widget, "viz", True) is False
+                or "d-none" in str(getattr(widget, "class_", "") or "")
+                or "display: none" in str(getattr(widget, "style_", "") or ""))
+
+    return [widget for widget in path if _hidden(widget)]
+
+
+@pytest.mark.parametrize("model", [1, 2])
+def test_a_finished_run_offers_its_prediction_on_screen(
+    edit_tools_card, monkeypatch, model
+):
+    """*Run* sits in the model row, outside the drawing session, so a reviewer
+    runs a model on an alert they have not started drawing on -- and the pair
+    that puts the prediction on the map has to be reachable then. OLD carried
+    *Run* inside the same toolbar as *Add to map*, so a run outside drawing
+    mode was impossible; with *Run* moved out, a pair still gated on *Start
+    Drawing* leaves a finished prediction with nowhere to go."""
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+
+    _dl_run_button(card, model).fire_event("click", None)
+    feedback.join()
+
+    slots = _slots(card)
+    add, remove = slots[f"dl{model}_add"], slots[f"dl{model}_remove"]
+    assert _hidden_above(card, add) == [], "Add to map is not on screen"
+    assert _hidden_above(card, remove) == [], "Remove from map is not on screen"
+    assert add.disabled is False
+
+
+@pytest.mark.parametrize("model", [1, 2])
+def test_a_model_run_with_a_pane_still_loading_is_refused(
+    edit_tools_card, monkeypatch, model
+):
+    """The composite is named after the picked pair (``paths.alert_image_name``)
+    and built from the two ee.Images. While one lane is still rebuilding, the
+    infos are the new pick's and its image is not there yet, so a run would
+    stage a composite named for one pick out of the other's pixels -- or fail
+    inside geedim on a ``None`` image, which reads as a broken model. It waits
+    for both panes instead, and says so.
+    """
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    # the reviewer picks another before image: that lane is pending again
+    # until its rebuild lands (``imagery.wire_panes``)
+    analysis.before_image.set(None)
+    ran = []
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(1))
+
+    _dl_run_button(card, model).fire_event("click", None)
+    feedback.join()
+
+    reason = t("analysis_tile.model_labels.dl_no_images")
+    assert ran == [], "the model ran on a pane that had not drawn its pick"
+    assert feedback.task().status == TaskStatus.FAILED
+    assert feedback.task().error_message == reason
+    assert feedback.toasts() == [("warning", reason)]
 
 
 def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
@@ -959,7 +1125,7 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
     card = edit_tools.build_edit_tools(
         widgets=None,
         app_state=app_state,
-        analysis=AnalysisState(),
+        analysis=_images_drawn(AnalysisState()),
         app_tile_model=_set_context_fake(),
     )
     feedback = _record_feedback(monkeypatch, edit_tools)
@@ -1227,6 +1393,7 @@ class _DrawFake:
     def __init__(self):
         self.data = []
         self.drawn = []
+        self.on_map = False
 
     def on_draw(self, callback):
         self.drawn.append(callback)
@@ -1235,9 +1402,15 @@ class _DrawFake:
         self.data = []
 
     def show(self):
-        pass
+        # Like the real ``CustomDrawControl``: show/hide put the control on the
+        # map and take it off, and BOTH clear what was drawn -- which is why a
+        # prediction cannot be added before the drawing session is open.
+        self.clear()
+        self.on_map = True
 
-    hide = show
+    def hide(self):
+        self.clear()
+        self.on_map = False
 
     def to_json(self):
         return {"features": [{"type": "Feature", "properties": {},
@@ -1303,6 +1476,171 @@ def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypa
         analysis.dirty.set(False)
         slots[name].fire_event("click", None)
         assert analysis.dirty.value is True, name
+
+
+def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
+    """*Run* is in the model row, outside the drawing session, so *Add to map*
+    can be the first thing the reviewer clicks. The prediction goes into the
+    draw controls and ``CustomDrawControl.show()`` clears them, so one added
+    before the session opened would be wiped by the next *Start Drawing*:
+    *Add* opens the session itself, and the panel reads as if the reviewer had
+    pressed *Start Drawing* first."""
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    # what a run left on the alert: its raster and what it found
+    analysis.prediction_files.set({1: "/tmp/pred.tif"})
+    analysis.prediction_shapes.set({1: (1, 1.0)})
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found(patches=1, area=1.0))
+    assert widgets.draw_before.on_map is False, "no drawing session was started"
+    assert slots["dl1_add"].disabled is False, "the recorded prediction is on offer"
+
+    slots["dl1_add"].fire_event("click", None)
+
+    # the session is open on both maps and carries the prediction
+    assert widgets.draw_before.on_map is True and widgets.draw_after.on_map is True
+    assert len(widgets.draw_before.data) == 1
+    assert widgets.draw_after.data == widgets.draw_before.data
+    # and the edit buttons say so
+    assert slots["start_btn"].disabled is True
+    assert slots["save_btn"].disabled is False and slots["stop_btn"].disabled is False
+    # the pair now offers the other direction
+    assert slots["dl1_add"].disabled is True and slots["dl1_remove"].disabled is False
+
+    # stopping clears the drawing, so what the run found is on offer again
+    slots["stop_btn"].fire_event("click", None)
+    assert widgets.draw_before.on_map is False
+    assert slots["dl1_add"].disabled is False and slots["dl1_remove"].disabled is True
+
+
+def test_applying_an_emptied_drawing_clears_the_review_polygon(monkeypatch):
+    """A false positive may not keep a drawn polygon and the save refuses one
+    (``questionarie.false_positive_drawn``, "delete the polygon or change the
+    answer") -- so deleting every shape and pressing *Apply* has to be able to
+    clear the stored polygon. An empty *Apply* did nothing at all before,
+    which left the reviewer told to delete a polygon they had deleted, with no
+    way to resolve it. The layer goes off both maps with it."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    removed = []
+    for a_map in (widgets.map_before, widgets.map_after):
+        a_map.remove_layer = (
+            lambda key, none_ok=False, _m=a_map: removed.append((id(_m), key)))
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    # the alert opens on its stored polygon, which went on both maps
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)],
+                                             crs="EPSG:4326"))
+    analysis.dirty.set(False)
+    # the reviewer started drawing and deleted every shape
+    slots["start_btn"].fire_event("click", None)
+    monkeypatch.setattr(widgets.draw_before, "to_json",
+                        lambda: {"type": "FeatureCollection", "features": []})
+    removed.clear()
+
+    slots["save_btn"].fire_event("click", None)
+
+    assert analysis.defo_layer.value is None, "the emptied drawing did not apply"
+    assert [key for _m, key in removed] == ["Defo Layer", "Defo Layer"], removed
+    assert len({m for m, _k in removed}) == 2, "both maps"
+    assert analysis.dirty.value is True, "clearing the polygon is a change"
+    assert analysis.drawing_unapplied.value is False, "the drawing IS the polygon now"
+
+
+def test_a_rerun_does_not_strand_the_prediction_already_in_the_drawing(monkeypatch):
+    """Run -> Add to map -> Run again. The first prediction's shapes are still
+    in the drawing while the second run goes and when it lands, so *Remove from
+    map* has to stay live for them -- hidden or dead, those shapes are stranded
+    with no button that takes them off. A rerun that finds nothing must not
+    leave the previous run's "Found ..." line under its own warning either."""
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = _images_drawn(AnalysisState())
+    widgets = _draw_widgets()
+    # what the first run left on the alert
+    analysis.prediction_files.set({1: "/tmp/pred.tif"})
+    analysis.prediction_shapes.set({1: (2, 3.9)})
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
+    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+
+    slots["dl1_add"].fire_event("click", None)
+    assert slots["dl1_remove"].disabled is False
+    drawn = list(widgets.draw_before.data)
+
+    # the reviewer runs the model again and it finds something
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    slots["dl1_run"].fire_event("click", None)
+    feedback.join()
+
+    assert widgets.draw_before.data == drawn, "the run left the drawing alone"
+    assert slots["dl1_remove"].disabled is False, "the drawn prediction is stranded"
+
+    # and again, finding nothing this time
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: ([], 0, 0.0))
+    slots["dl1_run"].fire_event("click", None)
+    feedback.join()
+
+    assert analysis.prediction_shapes.value == {}, "the previous run's numbers are gone"
+    assert slots["dl1_found"].children == [], "no stale Found line under the warning"
+    assert slots["dl1_remove"].disabled is False, "the drawn prediction is stranded"
+    assert _hidden_above(body, slots["dl1_remove"]) == [], "Remove from map is not on screen"
+
+
+def test_other_imagery_picked_after_a_run_puts_the_rows_back_to_nothing_run(monkeypatch):
+    """A prediction belongs to the composite it ran on.
+
+    Picking other imagery for the alert (``state.imagery_changed``, which the
+    timeline's lanes call) invalidates it: the "Found ..." line and *Add to
+    map* would otherwise offer a raster of imagery the reviewer is no longer
+    looking at. What a previous prediction already put in the drawing is the
+    reviewer's own work by then: it stays, and *Remove from map* stays live
+    for it.
+    """
+    import gui.tile.analysis.edit_tools as edit_tools
+    from gui.tile.analysis.state import imagery_changed
+
+    analysis = _images_drawn(AnalysisState())
+    widgets = _draw_widgets()
+    # what a run of both models left on the alert, with the first one's shapes
+    # put on the map by the reviewer
+    analysis.prediction_files.set({1: "/tmp/pred_m1.tif", 2: "/tmp/pred_m2.tif"})
+    analysis.prediction_shapes.set({1: (2, 3.9), 2: (1, 1.0)})
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
+
+    slots["dl1_add"].fire_event("click", None)
+    drawn = list(widgets.draw_before.data)
+    assert drawn, "nothing was added to the drawing"
+    assert slots["dl2_add"].disabled is False and slots["dl2_found"].children
+
+    imagery_changed(analysis)
+
+    # model 2: nothing run for this pair, so nothing on offer
+    assert slots["dl2_found"].children == [], "a Found line from the other imagery"
+    assert slots["dl2_add"].disabled is True, "a prediction of the other imagery on offer"
+    assert slots["dl2_remove"].disabled is True
+    # model 1: the drawing is untouched and still removable
+    assert slots["dl1_found"].children == [], "a Found line from the other imagery"
+    assert widgets.draw_before.data == drawn, "the reviewer's drawing was dropped"
+    assert slots["dl1_remove"].disabled is False, "the drawn prediction is stranded"
+    assert _hidden_above(body, slots["dl1_remove"]) == [], "Remove from map is not on screen"
 
 
 # ---------------------------------------------------------------------------
@@ -1441,6 +1779,8 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
         analysis.defo_layer.set("polygon of A")
     analysis.before_info.set(["S2", 1, 0, "before of A"])
     analysis.after_info.set(["S2", 2, 0, "after of A"])
+    analysis.before_image.set(object())  # drawn by its pane: a run needs both
+    analysis.after_image.set(object())
     widgets.actual_alert_grid = "grid of A"
     widgets.driver_combobox.v_model = [{"text": "Logging", "value": "logging"}]
 
@@ -1449,6 +1789,10 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
         analysis.reset_alert()
         if polygon:
             analysis.defo_layer.set("polygon of B")
+        analysis.before_info.set(["S2", 3, 0, "before of B"])
+        analysis.after_info.set(["S2", 4, 0, "after of B"])
+        analysis.before_image.set(object())
+        analysis.after_image.set(object())
         widgets.actual_alert_grid = "grid of B"
         widgets.driver_combobox.v_model = [{"text": "Mining", "value": "mining"}]
 
@@ -1663,6 +2007,80 @@ def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeyp
     # The store, not just the advance: the verdict reached the parquet.
     assert store.exists(), "the save advanced without writing the alert store"
     assert list(gpd.read_parquet(store)["status"]) == ["Confirmed"]
+
+
+def test_an_edit_made_while_the_save_runs_stays_unsaved_and_does_not_advance(
+    tmp_path, monkeypatch
+):
+    """A save writes the values captured at the click (``capture_alert``).
+
+    A verdict or driver change made while the GEE admin lookups block is not
+    in what was written, so completion must not clear "Unsaved changes" -- and
+    Save & next must not navigate off it, which loses the change with nothing
+    on screen to notice it by. The store write itself stands: it is the
+    earlier review, and it landed.
+    """
+    import geopandas as gpd
+
+    from gui.tile.analysis import export as export_mod
+    from gui.tile.analysis.state import touch
+
+    app_state, analysis, widgets, model, feedback = _save_harness(tmp_path, monkeypatch)
+    store = tmp_path / "d" / "periods" / "per" / "sets" / "glad-l" / "alert_db.parquet"
+    moved = []
+    run_save = export_mod.make_save_runner(widgets, app_state, analysis, model)
+    analysis.verdict.set("Confirmed")
+
+    real_save = export_mod._save_attributes
+
+    def _save_while_the_reviewer_edits(*a, **k):
+        wrote = real_save(*a, **k)
+        touch(analysis)  # the reviewer picks another driver meanwhile
+        return wrote
+
+    monkeypatch.setattr(export_mod, "_save_attributes", _save_while_the_reviewer_edits)
+    run_save(None, then=lambda: moved.append(1))
+
+    assert list(gpd.read_parquet(store)["status"]) == ["Confirmed"], "nothing was written"
+    assert analysis.dirty.value is True, "the later edit was reported as saved"
+    assert moved == [], "Save & next navigated off an unsaved change"
+    # ...and the reviewer is told, or the refused advance after pressing
+    # *Save & next* has nothing on screen that explains it.
+    assert ("warning", t("analysis_tile.export_labels.save_outpaced")) in feedback.toasts()
+
+
+def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
+    """One writer at a time, and both save buttons say so.
+
+    The verdict block has two buttons on the same runner, and only the clicked
+    one used to be disabled: the other could start a second writer over the
+    same store and the same row while the first was still in its admin
+    lookups, with the later writer's row values winning by luck of timing.
+    """
+    from pysepal import sepalwidgets as sw
+
+    from gui.tile.analysis import export as export_mod
+
+    app_state, analysis, widgets, model, feedback = _save_harness(tmp_path, monkeypatch)
+    held = []
+    monkeypatch.setattr(export_mod, "spawn_in_context",
+                        lambda target, args=(), **k: held.append(lambda: target(*args)))
+    run_save = export_mod.make_save_runner(widgets, app_state, analysis, model)
+    save = sw.Btn(msg="Save")
+    save_next = sw.Btn(msg="Save & next")
+    run_save.guard(save_next, save)
+    analysis.verdict.set("Confirmed")
+
+    run_save(save)
+    assert save.disabled is True
+    assert save_next.disabled is True, "the other save button stayed live"
+
+    run_save(save_next)  # ...and pressing it anyway starts nothing
+    assert len(held) == 1, "a second writer started over the first"
+
+    held.pop()()  # the first save finishes
+    assert save.disabled is False and save.loading is False
+    assert save_next.disabled is False
 
 
 def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, monkeypatch):

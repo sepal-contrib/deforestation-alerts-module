@@ -161,7 +161,8 @@
     "edition_labels": {
       "start_edit_button": "Comenzar dibujo",
       "apply_edit_button": "Aplicar",
-      "stop_edit_button": "Detener dibujo"
+      "stop_edit_button": "Detener dibujo",
+      "unapplied_drawing": "Aplica los cambios del polígono antes de guardar esta revisión"
     },
     "model_labels": {
       "dl_button1": "Modelo pequeño y rápido",
@@ -179,7 +180,8 @@
       "dl_task_title": "Ejecutando modelo de aprendizaje profundo",
       "dl_step_run": "Descargando imágenes y ejecutando el modelo…",
       "dl_done": "Predicción del modelo lista.",
-      "dl_stale": "El modelo terminó después de pasar a otra alerta: su predicción no se agregó."
+      "dl_stale": "El modelo terminó después de pasar a otra alerta: su predicción no se agregó.",
+      "dl_no_images": "Las imágenes anterior y posterior de esta alerta no están listas, así que el modelo no tiene sobre qué ejecutarse. Elige una imagen anterior y otra posterior y espera a que los dos paneles terminen de dibujarlas."
     },
     "export_labels": {
       "save_btn": "Guardar",
@@ -189,13 +191,14 @@
       "save_task_title": "Guardando atributos de la alerta",
       "save_step": "Escribiendo la base de alertas…",
       "save_done": "Atributos de la alerta guardados.",
+      "save_outpaced": "Se guardó, pero cambiaste esta alerta mientras se guardaba: guarda de nuevo para almacenar esos cambios",
       "download_task_title": "Preparando la descarga de la alerta",
       "download_step": "Generando archivos e informe…",
       "download_done": "Descarga de la alerta lista.",
       "download_stale": "Los archivos de la alerta terminaron de generarse después de pasar a otra alerta: no se ofrecieron para descargar aquí.",
       "download_no_recipe": "No hay ningún conjunto de alertas activo, así que no hay dónde guardar los archivos de la alerta en el proyecto. Ejecuta primero Integrar y vectorizar.",
       "download_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que descargar.",
-      "download_no_images": "No hay imágenes de antes y después seleccionadas para esta alerta, así que no se pueden generar sus archivos. Elige primero una imagen de antes y otra de después.",
+      "download_no_images": "Las imágenes anterior y posterior de esta alerta no están listas, así que no se pueden generar sus archivos. Elige una imagen anterior y otra posterior y espera a que los dos paneles terminen de dibujarlas.",
       "save_no_alert": "No hay ninguna alerta seleccionada, así que no hay nada que guardar.",
       "save_other_set": "Estas alertas pertenecen a otro conjunto de alertas distinto del activo, así que no se han guardado en él.",
       "save_set_changed": "El conjunto de alertas activo cambió durante el guardado, así que esta revisión no se ha guardado.",

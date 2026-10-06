@@ -2,8 +2,10 @@
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports
 the OLD ``AnalysisTile`` ``card04`` interaction as ONE coherent unit, because the
-polygon draw/edit controls and the two CNN models share the draw controls and the
-DL toolbars are only shown during edit mode.
+polygon draw/edit controls and the two CNN models share the draw controls: a
+model's prediction is *added to the drawing*, so *Add to map* opens the drawing
+session itself when the reviewer ran a model without starting one
+(``_begin_edition``).
 
 WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
 Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS
@@ -26,11 +28,12 @@ Ported OLD handlers:
 * Edit (``toolBarEdition``): ``start_edition_function`` / ``save_edition_function``
   / ``stop_edition_function`` — toggle the two
   ``CustomDrawControl``s (``draw_before`` / ``draw_after`` on ``widgets``) + the
-  DL toolbars + the Alert-BB / Defo-Layer map-layer visibility, and persist the
+  Alert-BB / Defo-Layer map-layer visibility, and persist the
   user-drawn polygon to ``analysis.defo_layer``.
 * CNN (``toolBarDL1`` / ``toolBarDL2``): ``run_dl_model_1`` / ``run_dl_model_2``
   (download both images + ``cnn_worker.apply_dl_model`` with a FILE-PATH model arg),
-  ``verify_model*_output`` + ``enable_dl*`` (show/hide the add/remove/msg buttons),
+  ``verify_model*_output`` + ``enable_dl*`` (now ``_sync_dl``: the row shows
+  the add/remove pair or the "found nothing" warning, from what the run found),
   ``add_model*_prediction`` / ``remove_model*_prediction`` (mutate
   ``draw_before.data`` from the prediction raster). The OLD
   ``clear_edition_function`` and its button are gone: the button was built and
@@ -52,7 +55,7 @@ Threading (FIXED by the task contract):
   cached), runs ``apply_dl_model`` -> the prediction ``.tif`` path, and then (still on
   the worker thread, in the success path) runs the OLD ``verify_model*_output`` /
   ``enable_dl*`` apply step with that path: stores it in
-  ``analysis.prediction_files`` and shows the add/remove buttons.
+  ``analysis.prediction_files`` and makes *Add to map* live.
   The run button spins (``.loading``/``.disabled``) for the duration, the run is a
   tracked task in the notification pill (``notify_bridge.tracked_job``; the
   composite download drives its progress ring) and the outcome is a toast. Every
@@ -131,7 +134,7 @@ from gui.scripts.notify_bridge import (
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.paths import stage_alert_image
-from gui.tile.analysis.state import capture_alert, touch
+from gui.tile.analysis.state import capture_alert, drawing_changed, touch
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -183,13 +186,16 @@ def vectorise(path):
 
 def _record_prediction_shapes(analysis, model, n_patches, area_ha):
     """Remember what a run found, replacing the dict in one locked read-and-set
-    so two runs finishing together cannot drop each other's numbers. Nothing is
-    recorded for an empty prediction: the row shows the ``dl_404`` warning."""
-    if n_patches <= 0:
-        return
+    so two runs finishing together cannot drop each other's numbers. An empty
+    prediction records nothing and FORGETS what this model found before: the row
+    shows the ``dl_404`` warning, and a stale "Found ..." line under it would
+    describe a prediction that is no longer on offer."""
     with analysis._alert_lock:
         shapes = dict(analysis.prediction_shapes.value)
-        shapes[model] = (int(n_patches), float(area_ha))
+        if n_patches <= 0:
+            shapes.pop(model, None)
+        else:
+            shapes[model] = (int(n_patches), float(area_ha))
         analysis.prediction_shapes.set(shapes)
 
 
@@ -249,6 +255,18 @@ class _EditionButton(v.Btn, sw.SepalWidget):
         kwargs.setdefault("class_", "pa-1 ma-1")
         kwargs.setdefault("disabled", True)
         super().__init__(**kwargs)
+
+
+def _images_ready(alert) -> bool:
+    """Whether the alert's before/after pair is picked AND drawn.
+
+    The same guard as ``export._images_picked``, for the run that stages the
+    composite: the infos are published at the click and each pane's ee.Image
+    when its rebuild lands, so in between the pair's metadata and its pixels
+    are of different scenes (``imagery.wire_panes``).
+    """
+    return all(v is not None for v in (alert.before_info, alert.after_info,
+                                       alert.before_image, alert.after_image))
 
 
 def _run_cnn_model(
@@ -319,7 +337,17 @@ def wire_defo_layer(widgets, analysis):
     old ``.observe("defo_dl_layer")``). Returns the unsubscribe."""
 
     def _on_layer(gdf):
+        if widgets is None:
+            return  # no maps (a state-only build)
         if gdf is None:
+            # No reviewed polygon any more -- an *Apply* of an emptied drawing,
+            # or ``reset_alert``. The layer comes off both maps: left on, the
+            # polygon stays drawn over a review that no longer has one.
+            try:
+                for a_map in (widgets.map_before, widgets.map_after):
+                    a_map.remove_layer("Defo Layer", none_ok=True)
+            except Exception:
+                logger.exception("Analysis: removing the Defo Layer failed")
             return
         try:
             layer = GeoData(geo_dataframe=gdf, name="Defo Layer", style=_DEFO_LAYER_STYLE)
@@ -408,9 +436,15 @@ def build_edit_tools(
             ).hide()
             tt_msg = sw.Tooltip(ns[f"dl{n}_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)
-            ns[f"toolbar_dl{n}"] = sw.Toolbar(
-                children=[ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg]
-            ).hide()
+            # Always on screen, unlike OLD's hidden ``toolBarDL{n}``: OLD kept
+            # *Run* inside that same toolbar, so a model could not be run
+            # outside drawing mode and a gated pair could stand nobody up. With
+            # *Run* in the row, the pair is shown from the start and says what
+            # it offers through ``disabled`` alone (``_sync_dl``).
+            ns[f"dl{n}_actions"] = v.Html(
+                tag="div", class_="d-flex align-center", style_="gap: 8px;",
+                children=[ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg],
+            )
             ns[f"dl{n}_found"] = v.Html(tag="div", class_="caption text--secondary", children=[])
             ns[f"dl{n}_row"] = v.Html(tag="div", class_="mt-3", children=[
                 v.Html(tag="div", class_="d-flex align-center", style_="gap: 8px;", children=[
@@ -418,7 +452,7 @@ def build_edit_tools(
                            children=[model_name]),
                     ns[f"dl{n}_run"],
                 ]),
-                ns[f"toolbar_dl{n}"],
+                ns[f"dl{n}_actions"],
                 ns[f"dl{n}_found"],
             ])
 
@@ -427,29 +461,60 @@ def build_edit_tools(
     ns = _build_widgets()
 
     # ------------------------------------------------------------------
-    # enable_dl1 / enable_dl2 (OLD) — show/hide the add/remove/msg buttons.
+    # enable_dl1 / enable_dl2 (OLD) — one function, and one small state per
+    # model it renders the row from:
+    #
+    # * ``found``: ``None`` nothing run for this alert yet, ``True`` a
+    #   prediction with something in it, ``False`` a run that found nothing
+    #   (the warning takes the pair's place, as it did in OLD).
+    # * ``added``: whether that prediction is in the drawing right now.
+    #
+    # Seeded from ``prediction_shapes``, which outlives this build: the panel
+    # is rebuilt every time the Analysis dialog reopens, and the alert's
+    # prediction is still on offer when it comes back.
     # ------------------------------------------------------------------
-    def _enable_dl1(state):
-        if state:
-            ns["dl1_msg"].hide()
-            ns["dl1_add"].show()
-            ns["dl1_remove"].show()
-            ns["dl1_add"].disabled = False
-        else:
-            ns["dl1_msg"].show()
-            ns["dl1_add"].hide()
-            ns["dl1_remove"].hide()
+    # Whether the drawing session is open: *Add to map* has to know, because
+    # the prediction goes into the draw layer. OLD read that off the toolbar it
+    # hid; this flag replaces it.
+    editing = {"on": False}
 
-    def _enable_dl2(state):
-        if state:
-            ns["dl2_msg"].hide()
-            ns["dl2_add"].show()
-            ns["dl2_remove"].show()
-            ns["dl2_add"].disabled = False
+    dl_state = {
+        n: {"found": True if analysis.prediction_shapes.value.get(n) else None,
+            "added": False}
+        for n in (1, 2)
+    }
+
+    def _sync_dl(model):
+        state = dl_state[model]
+        add, remove = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
+        nothing_found = state["found"] is False
+        # A run that found nothing takes *Add*'s place with the warning, as in
+        # OLD.
+        if nothing_found:
+            ns[f"dl{model}_msg"].show()
+            add.hide()
         else:
-            ns["dl2_msg"].show()
-            ns["dl2_add"].hide()
-            ns["dl2_remove"].hide()
+            ns[f"dl{model}_msg"].hide()
+            add.show()
+        # *Add* is live for a prediction that is not in the drawing yet — it
+        # opens the drawing session itself if there is none.
+        add.disabled = not state["found"] or state["added"]
+        # *Remove* keeps its place whenever the drawing still holds this
+        # model's shapes, warning or not: a later run that found nothing (or
+        # found something new) must not strand the ones already drawn with no
+        # button that takes them off.
+        if state["added"] or not nothing_found:
+            remove.show()
+        else:
+            remove.hide()
+        remove.disabled = not state["added"]
+
+    def _set_found(model, found):
+        """What a finished run leaves the row offering. ``added`` is left
+        alone: a rerun does not touch the drawing, so whatever a previous one
+        put there is still in it and still removable."""
+        dl_state[model]["found"] = found
+        _sync_dl(model)
 
     # ------------------------------------------------------------------
     # verify_model*_output (OLD) — applied at the END of the worker's success
@@ -485,13 +550,12 @@ def build_edit_tools(
             return False, False
         features, n_patches, area_ha = found
         valid = n_patches > 0 and verify_raster(pred_path, _PRED_THRESHOLD)
-        enable = _enable_dl1 if model == 1 else _enable_dl2
 
         def _apply():
             _record_prediction(model, pred_path)
             features_cache[(token, model)] = features
             _record_prediction_shapes(analysis, model, n_patches, area_ha)
-            enable(valid)
+            _set_found(model, valid)
             _show_found(model)
 
         return analysis.apply_if_current(token, _apply), valid
@@ -505,13 +569,13 @@ def build_edit_tools(
     def _reset_for_new_alert(_token=None):
         try:
             features_cache.clear()
+            editing["on"] = False
             for n in (1, 2):
-                ns[f"dl{n}_msg"].hide()
-                ns[f"dl{n}_add"].show()
-                ns[f"dl{n}_remove"].show()
-                ns[f"dl{n}_add"].disabled = True
-                ns[f"dl{n}_remove"].disabled = True
-                ns[f"toolbar_dl{n}"].hide()
+                # Nothing run for THIS alert yet and nothing of the
+                # previous one's drawn: the pair back on screen and dead, the
+                # previous alert's warning gone.
+                dl_state[n].update(found=None, added=False)
+                _sync_dl(n)
                 # Set empty, not from ``found_text``: this runs on the token
                 # bump, which ``reset_alert`` does BEFORE it clears
                 # ``prediction_shapes``.
@@ -535,8 +599,14 @@ def build_edit_tools(
         path = analysis.prediction_files.value.get(model)
         if not path:
             return
-        add_btn, remove_btn = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
         try:
+            # The prediction goes INTO the drawing, and there is no drawing to
+            # put it in until the draw controls are on the maps --
+            # ``CustomDrawControl.show()`` even clears whatever ``data`` held,
+            # so a prediction added before the session opened would be wiped by
+            # it. *Add* therefore opens the session itself.
+            if not editing["on"]:
+                _begin_edition()
             # The run already vectorised it; only a panel reopened on a
             # prediction this build never saw has to do it again.
             features = features_cache.get((analysis.alert_token.value, model))
@@ -547,56 +617,72 @@ def build_edit_tools(
             widgets.draw_before.clear()
             widgets.draw_after.clear()
             widgets.set_synced_draw_data(orig_features + new_features)
-            add_btn.disabled = True
-            remove_btn.disabled = False
-            touch(analysis)  # the drawing changed (spec §4.4)
+            dl_state[model]["added"] = True
+            _sync_dl(model)
+            drawing_changed(analysis)  # unsaved, and not applied yet (spec §4.4)
         except Exception:
             logger.exception("Analysis: add prediction failed")
             notify(t("analysis_tile.model_labels.dl_404"), type_="error")
 
     def _remove_model_prediction(model, color_name):
-        add_btn, remove_btn = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
         try:
             orig_features = widgets.draw_before.data
             widgets.draw_before.clear()
             widgets.draw_after.clear()
             widgets.set_synced_draw_data(filter_features_by_color(orig_features, color_name))
-            add_btn.disabled = False
-            remove_btn.disabled = True
-            touch(analysis)  # the drawing changed (spec §4.4)
+            dl_state[model]["added"] = False
+            _sync_dl(model)
+            drawing_changed(analysis)  # unsaved, and not applied yet (spec §4.4)
         except Exception:
             logger.exception("Analysis: remove prediction failed")
 
     # ------------------------------------------------------------------
     # Edit handlers (start / save / stop / clear) — OLD *_edition_function.
     # ------------------------------------------------------------------
+    def _begin_edition():
+        """Open the drawing session: the draw controls on both maps, seeded with
+        the alert's stored polygon, and the three edit buttons set for it.
+
+        ``_start_edition``'s body, split out because *Add to map* opens the
+        session too (there is no draw layer to add a prediction to without one).
+        """
+        for m in (widgets.map_before, widgets.map_after):
+            bb = m.find_layer("Alert BB", none_ok=True)
+            if bb is not None:
+                bb.visible = False
+            defo = m.find_layer("Defo Layer", none_ok=True)
+            if defo is not None:
+                defo.visible = False
+
+        widgets.draw_before.show()
+        widgets.draw_after.show()
+        defo_layer = analysis.defo_layer.value
+        if defo_layer is not None:
+            widgets.set_synced_draw_data(
+                convertir_formato3(
+                    defo_layer.__geo_interface__["features"],
+                    "blue",
+                )
+            )
+
+        editing["on"] = True
+        # Seeded from ``defo_layer``: the drawing and the reviewed polygon say
+        # the same thing, so there is nothing to apply yet.
+        analysis.drawing_unapplied.set(False)
+        # ``show()`` cleared the draw layer, so no prediction is in it.
+        for n in (1, 2):
+            dl_state[n]["added"] = False
+            _sync_dl(n)
+
+        ns["start_btn"].disabled = True
+        ns["save_btn"].disabled = False
+        ns["stop_btn"].disabled = False
+
     def _start_edition(widget, event, data):
         widget.loading = True
         widget.disabled = True
         try:
-            for m in (widgets.map_before, widgets.map_after):
-                bb = m.find_layer("Alert BB", none_ok=True)
-                if bb is not None:
-                    bb.visible = False
-                defo = m.find_layer("Defo Layer", none_ok=True)
-                if defo is not None:
-                    defo.visible = False
-
-            widgets.draw_before.show()
-            widgets.draw_after.show()
-            defo_layer = analysis.defo_layer.value
-            if defo_layer is not None:
-                widgets.set_synced_draw_data(
-                    convertir_formato3(
-                        defo_layer.__geo_interface__["features"],
-                        "blue",
-                    )
-                )
-
-            ns["save_btn"].disabled = False
-            ns["stop_btn"].disabled = False
-            ns["toolbar_dl1"].show()
-            ns["toolbar_dl2"].show()
+            _begin_edition()
         except Exception:
             logger.exception("Analysis: start edition failed")
         finally:
@@ -612,6 +698,18 @@ def build_edit_tools(
                     widgets.draw_before.to_json()
                 ).set_crs(epsg="4326", allow_override=True, inplace=True))
                 touch(analysis)  # the reviewed polygon changed (spec §4.4)
+            elif analysis.defo_layer.value is not None:
+                # An emptied drawing applies as "no polygon at all". It applied
+                # to NOTHING before, so a reviewer who deleted every shape to
+                # correct a false positive could never clear the stored polygon
+                # the save refuses one for -- and that refusal
+                # (``questionarie.false_positive_drawn``) is what tells them to
+                # delete it. ``wire_defo_layer`` takes the layer off the maps.
+                analysis.defo_layer.set(None)
+                touch(analysis)
+            # Applied: the drawing and the reviewed polygon agree again, so the
+            # review Save stops refusing (``export._save_attributes``).
+            analysis.drawing_unapplied.set(False)
         except Exception:
             logger.exception("Analysis: save edition failed")
         finally:
@@ -633,15 +731,16 @@ def build_edit_tools(
                 if defo is not None:
                     defo.visible = True
 
-            _enable_dl1(True)
-            _enable_dl2(True)
-            ns["toolbar_dl1"].hide()
-            ns["toolbar_dl2"].hide()
-
-            ns["dl1_add"].disabled = True
-            ns["dl1_remove"].disabled = True
-            ns["dl2_add"].disabled = True
-            ns["dl2_remove"].disabled = True
+            # Stopping cleared the drawing, so nothing is added any more --
+            # but what a run found stays on offer: *Add to map* opens a new
+            # drawing session itself.
+            editing["on"] = False
+            # The drawing is gone, so nothing is waiting to be applied. What
+            # was not applied is discarded with it, as it always has been.
+            analysis.drawing_unapplied.set(False)
+            for n in (1, 2):
+                dl_state[n]["added"] = False
+                _sync_dl(n)
 
             ns["save_btn"].disabled = True
             ns["start_btn"].disabled = False
@@ -664,8 +763,11 @@ def build_edit_tools(
         return t("analysis_tile.model_labels.dl_404")
 
     def _on_dl1_run(*_):
-        ns["dl1_add"].disabled = True
-        ns["dl1_remove"].disabled = True
+        # The previous run's prediction is not what this row offers any more
+        # (``added`` is left alone: whatever it put in the drawing is still
+        # there, and *Remove* still takes it off).
+        dl_state[1]["found"] = None
+        _sync_dl(1)
         ns["dl1_run"].loading = True
         ns["dl1_run"].disabled = True
         # The alert this run is for, with its images and grid, read here on
@@ -690,7 +792,13 @@ def build_edit_tools(
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
                     applied = valid = False
-                    if analysis.is_current(token):
+                    # Nothing to run on while a pane is still rebuilding its
+                    # pick: a composite staged now would carry one pick's name
+                    # over the other's pixels (``_images_ready``). Its own
+                    # reason, so the refusal does not read as "you moved on".
+                    refused = None if _images_ready(alert) else t(
+                        "analysis_tile.model_labels.dl_no_images")
+                    if refused is None and analysis.is_current(token):
                         with writing(project):
                             pred_path = _run_cnn_model(
                                 _MODEL1_REPO, _MODEL1_FILE, "_m1",
@@ -704,9 +812,10 @@ def build_edit_tools(
                             found = vectorise(pred_path)
                         applied, valid = _apply_model(1, pred_path, token, found)
                     if not applied:
-                        # Another alert is on screen: its result is dropped.
-                        # A warning, recorded on the task before the toast.
-                        reason = t("analysis_tile.model_labels.dl_stale")
+                        # Another alert is on screen (its result is dropped),
+                        # or the pair was not ready to run on. A warning,
+                        # recorded on the task before the toast.
+                        reason = refused or t("analysis_tile.model_labels.dl_stale")
                         task.fail(reason)
                         notifier.warning(reason)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
@@ -726,8 +835,11 @@ def build_edit_tools(
         spawn_in_context(_worker)
 
     def _on_dl2_run(*_):
-        ns["dl2_add"].disabled = True
-        ns["dl2_remove"].disabled = True
+        # The previous run's prediction is not what this row offers any more
+        # (``added`` is left alone: whatever it put in the drawing is still
+        # there, and *Remove* still takes it off).
+        dl_state[2]["found"] = None
+        _sync_dl(2)
         ns["dl2_run"].loading = True
         ns["dl2_run"].disabled = True
         # The alert this run is for, with its images and grid, read here on
@@ -747,7 +859,13 @@ def build_edit_tools(
                 ) as task:
                     task.step(t("analysis_tile.model_labels.dl_step_run"))
                     applied = valid = False
-                    if analysis.is_current(token):
+                    # Nothing to run on while a pane is still rebuilding its
+                    # pick: a composite staged now would carry one pick's name
+                    # over the other's pixels (``_images_ready``). Its own
+                    # reason, so the refusal does not read as "you moved on".
+                    refused = None if _images_ready(alert) else t(
+                        "analysis_tile.model_labels.dl_no_images")
+                    if refused is None and analysis.is_current(token):
                         with writing(project):
                             pred_path = _run_cnn_model(
                                 _MODEL2_REPO, _MODEL2_FILE, "_m2",
@@ -761,9 +879,10 @@ def build_edit_tools(
                             found = vectorise(pred_path)
                         applied, valid = _apply_model(2, pred_path, token, found)
                     if not applied:
-                        # Another alert is on screen: its result is dropped.
-                        # A warning, recorded on the task before the toast.
-                        reason = t("analysis_tile.model_labels.dl_stale")
+                        # Another alert is on screen (its result is dropped),
+                        # or the pair was not ready to run on. A warning,
+                        # recorded on the task before the toast.
+                        reason = refused or t("analysis_tile.model_labels.dl_stale")
                         task.fail(reason)
                         notifier.warning(reason)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
@@ -812,10 +931,48 @@ def build_edit_tools(
         for name in ("draw_before", "draw_after"):
             on_draw = getattr(getattr(widgets, name, None), "on_draw", None)
             if on_draw is not None:
-                on_draw(lambda *_a, **_k: touch(analysis))
+                on_draw(lambda *_a, **_k: drawing_changed(analysis))
 
     _register_handlers()
+
+    # MapApp rebuilds this panel every time the Analysis dialog reopens, while
+    # the alert's prediction lives on in ``AnalysisState``: both rows are drawn
+    # from it, so a reopened panel still reports what the run found and still
+    # offers to add it (``_add_model_prediction`` re-vectorises the raster for
+    # the features this build never saw).
+    for _model in (1, 2):
+        _sync_dl(_model)
+        _show_found(_model)
+
     analysis.alert_token.subscribe(_reset_for_new_alert)
+
+    def _on_predictions(files):
+        """Follow ``prediction_files`` for a model's prediction DISAPPEARING.
+
+        An imagery change drops them (``state.imagery_changed``): a prediction
+        is a function of the composite it ran on, so once the reviewer picks
+        another pair the row must say nothing was run for this one rather than
+        keep offering a raster of imagery they are no longer looking at. The
+        run's own publish is left to ``_apply_model``, which has the numbers
+        the "Found ..." line needs.
+
+        ``added`` is deliberately untouched: what a previous prediction put in
+        the drawing is the reviewer's own work by then, and *Remove from map*
+        (which filters the drawing by colour, not by raster) still takes it
+        off. The "Found ..." line is cleared here rather than read back from
+        ``prediction_shapes``, which ``reset_alert`` clears AFTER the files.
+        """
+        try:
+            for n in (1, 2):
+                if files.get(n):
+                    continue
+                dl_state[n]["found"] = None
+                _sync_dl(n)
+                ns[f"dl{n}_found"].children = []
+        except Exception:
+            logger.exception("Analysis: syncing the model rows failed")
+
+    analysis.prediction_files.subscribe(_on_predictions)
 
     # add_defo_layer (OLD): the "Defo Layer" lands on both maps whenever a new
     # reviewed polygon is set. Subscribed once (the layout is built once).

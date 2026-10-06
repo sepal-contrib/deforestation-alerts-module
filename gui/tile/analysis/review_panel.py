@@ -126,6 +126,13 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
         run_save = make_save_runner(widgets, app_state, analysis, app_tile_model)
     save.on_event("click", lambda *_: run_save(save))
     save_next.on_event("click", lambda *_: run_save(save_next, then=app_state.go_next))
+    # Both buttons are the same save: the runner holds them together for its
+    # duration, so a save started from one cannot be raced by the other over
+    # the same store and row. ``getattr`` because a test may inject a plain
+    # callable as ``run_save``.
+    guard = getattr(run_save, "guard", None)
+    if guard is not None:
+        guard(save_next, save)
 
     def _sync_verdict(*_):
         chosen = analysis.verdict.value
@@ -136,6 +143,14 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
         note.style_ = "" if is_false else _HIDDEN
 
     def _sync_state_line(*_):
+        if analysis.drawing_unapplied.value:
+            # The save refuses an unapplied drawing
+            # (``export._save_attributes``), so the line says what to do about
+            # it rather than leaving the refusal to the click. Ahead of
+            # "Unsaved changes": applying is what clears both.
+            state_line.children = [t("analysis_tile.edition_labels.unapplied_drawing")]
+            state_line.class_ = "caption mt-2 warning--text"
+            return
         if analysis.dirty.value:
             state_line.children = [t("analysis_tile.verdict.unsaved")]
             state_line.class_ = "caption mt-2 warning--text"
@@ -152,6 +167,7 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
     # Registered once: the panel is built once per session.
     analysis.verdict.subscribe(_sync_verdict)
     analysis.dirty.subscribe(_sync_state_line)
+    analysis.drawing_unapplied.subscribe(_sync_state_line)
     analysis.last_save_time.subscribe(_sync_state_line)
     _sync_verdict()
     _sync_state_line()

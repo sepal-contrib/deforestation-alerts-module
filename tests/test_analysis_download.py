@@ -31,7 +31,7 @@ _JPEG_1PX = base64.b64decode(
 
 _BEFORE_INFO = ["Sentinel 2", 1700000000, None, "S2_before", "_010124"]
 _AFTER_INFO = ["Sentinel 2", 1700000001, None, "S2_after", "_020224"]
-_TIF_NAME = "alert_0_010124_020224.tif"
+_TIF_NAME = "alert_0_s_010124_s_020224.tif"
 
 
 @pytest.fixture()
@@ -74,6 +74,11 @@ def download_ctx(monkeypatch, data_root, tmp_path):
     analysis = AnalysisState()
     analysis.before_info.set(_BEFORE_INFO)
     analysis.after_info.set(_AFTER_INFO)
+    # ...and the panes have drawn them: the ee.Images the composite is
+    # exported from. Stand-ins, since the geedim download is stubbed, but
+    # present -- a build refuses while a lane is still rebuilding.
+    analysis.before_image.set(object())
+    analysis.after_image.set(object())
     return SimpleNamespace(
         widgets=widgets, analysis=analysis, app_state=app_state, aux_model=set_context,
         app_tile_model=set_context, folder=folder, scratch=scratch, downloads=downloads,
@@ -124,6 +129,42 @@ def test_download_reuses_the_composite_in_the_set_folder(download_ctx):
     assert len(ctx.downloads) == 1
 
 
+def test_a_pick_from_another_collection_is_another_composite(download_ctx):
+    """The cache above is keyed on the collections too, not only the dates.
+
+    Sentinel 2, Landsat and Planet all have imagery for the same day, so a
+    name built from the date suffixes alone collided: switching one side to
+    another collection resolved to the file the first pick had already
+    downloaded and ``stage_alert_image`` handed that back as a cache hit --
+    the reviewer then analysed, exported and reported imagery from the wrong
+    collection, with the right dates printed on it.
+    """
+    ctx = download_ctx
+
+    _run(ctx)
+
+    # Same day, another collection.
+    ctx.analysis.before_info.set(
+        ["Landsat", _BEFORE_INFO[1], None, "LS_before", _BEFORE_INFO[4]]
+    )
+    _run(ctx)
+
+    assert len(ctx.downloads) == 2
+    assert len({p.name for p in ctx.folder.glob("*.tif")}) == 2
+
+
+def test_the_same_pick_is_always_the_same_composite():
+    """...and the key is stable, or nothing would ever hit that cache."""
+    from gui.tile.analysis import paths
+
+    name = paths.alert_image_name("/f", 0, _BEFORE_INFO, _AFTER_INFO)
+    assert name == paths.alert_image_name("/f", 0, list(_BEFORE_INFO), list(_AFTER_INFO))
+    # The two sides are told apart, not merged: a before/after swap of the
+    # same two collections is a different composite.
+    landsat_before = ["Landsat", *_BEFORE_INFO[1:]]
+    assert paths.alert_image_name("/f", 0, landsat_before, _AFTER_INFO) != name
+
+
 def test_a_failed_composite_download_leaves_no_composite_or_part_file(download_ctx, monkeypatch):
     from gui.tile.analysis import paths
 
@@ -168,6 +209,18 @@ def test_download_uses_the_users_custom_report_template(download_ctx, data_root)
 
     assert Path(result["report_path"]).read_bytes()[:2] == b"PK"
     assert template.exists()
+
+
+def test_download_waits_for_both_panes_to_draw_their_picks(download_ctx):
+    """Same mixture from the export side: the composite is named after the
+    picked pair and built from the two ee.Images, so a lane that has not
+    finished rebuilding is a build refused, not a file named for one pick out
+    of another's pixels."""
+    ctx = download_ctx
+    ctx.analysis.before_image.set(None)  # the before pane is still rebuilding
+
+    assert _run(ctx) is None
+    assert ctx.downloads == [] and list(ctx.folder.iterdir()) == []
 
 
 def test_download_is_a_noop_without_a_recipe(download_ctx):
@@ -269,6 +322,17 @@ def _download_buttons(body):
     ]
 
 
+def _project_poke(app_state):
+    """A project object to republish ``app_state.project`` with, as
+    ``update_project`` does when the report template is picked."""
+    from datetime import datetime
+
+    from deforestation_alerts.project.models import Project
+
+    now = datetime.now()
+    return Project(name="t", created_at=now, updated_at=now)
+
+
 def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
     """``build_export``'s arguments, wired so a save and a build run inline.
 
@@ -320,6 +384,7 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
         parts=parts,
         analysis=analysis,
         app_state=app_state,
+        model=model,
         build_btn=build_btn,
         downloads=_downloads_toolbar(parts.body),
         download_btns=_download_buttons(parts.body),
@@ -402,6 +467,101 @@ def test_a_build_that_lands_after_the_alert_change_offers_nothing(tmp_path, monk
     assert seen[-1] == "available after save"
     for btn in harness.download_btns:
         assert "alert_0" not in btn.href and btn.disabled is True
+
+
+def _dead_links(harness):
+    """Whether the two download links offer nothing (no path, both disabled)."""
+    return all("alert_0" not in btn.href and btn.disabled is True
+               for btn in harness.download_btns)
+
+
+def test_a_later_save_stops_offering_the_files_the_previous_one_built(tmp_path, monkeypatch):
+    """The zip and the report are a snapshot of the review that was saved.
+
+    Save -> build -> change the answer -> Save again: the two links and the
+    "2 files ready" badge otherwise still hand the reviewer the report built
+    from the previous save, for a review that no longer says that. Only an
+    alert change used to clear them. The files are not deleted (they stay in
+    the set folder) -- they are simply not this review's answer any more, so
+    the section goes back to offering the rebuild.
+    """
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
+    )
+    harness.save()
+    harness.build()
+    assert seen[-1] == "2 files ready"
+
+    harness.save()  # the reviewer changed their answer and saved again
+
+    assert seen[-1] == "ready to build"
+    assert harness.downloads.viz is False
+    assert _dead_links(harness)
+    assert harness.build_btn.disabled is False
+
+
+def test_other_imagery_stops_offering_the_files_built_from_the_old_pair(tmp_path, monkeypatch):
+    """The report and the composite in the zip are of the pair they were built
+    from, so another before/after pick invalidates them the same way."""
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
+    )
+    harness.save()
+    harness.build()
+    assert seen[-1] == "2 files ready"
+
+    harness.analysis.before_info.set(["Landsat", 1, None, "Landsat 2026-04-10 ", "_100426"])
+
+    assert seen[-1] == "ready to build"
+    assert harness.downloads.viz is False
+    assert _dead_links(harness)
+
+
+def test_another_report_template_stops_offering_the_report_of_the_old_one(tmp_path, monkeypatch):
+    """The reviewer's own template is an input of the build too: the ``.docx``
+    on the link was written from the previous one."""
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text)
+    )
+    harness.save()
+    harness.build()
+    assert seen[-1] == "2 files ready"
+
+    # What ``ReportTemplateField`` does: write the project, which republishes
+    # it; the section reads the template off the live ``SetContext``.
+    harness.model.custom_report_template = str(tmp_path / "mine.docx")
+    harness.app_state.project.value = _project_poke(harness.app_state)
+
+    assert seen[-1] == "ready to build"
+    assert harness.downloads.viz is False
+    assert _dead_links(harness)
+
+
+def test_a_build_that_lands_after_a_later_save_offers_nothing(tmp_path, monkeypatch):
+    """The same hole from the other side: the build is in flight when the
+    inputs change, and its apply step is what reveals the links. Without a
+    revision captured at the click it restores a readiness that is already
+    stale -- the links would point at files built from the review the save has
+    just replaced."""
+    seen = []
+    harness = _export_harness(
+        tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text),
+        defer=True,
+    )
+    harness.save()
+    harness.run()
+
+    harness.build()        # the build starts here...
+    harness.save()
+    harness.held.pop()()   # ...a later save of the same alert lands...
+    harness.run()          # ...and only now does the build
+
+    assert harness.downloads.viz is False
+    assert seen[-1] == "ready to build"
+    assert _dead_links(harness)
 
 
 def test_a_save_that_lands_after_the_alert_change_offers_no_build(tmp_path, monkeypatch):

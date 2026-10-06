@@ -51,10 +51,18 @@ def _wire(s):
     return widgets
 
 
-def test_another_sets_alerts_leave_the_review_state_alone(tmp_path, monkeypatch):
+def test_another_sets_alerts_leave_the_panels_numbers_alone(tmp_path, monkeypatch):
     """Integrate records a new set before it publishes that set's alerts: until
     then ``alerts_gdf`` still holds the old set's rows, which Analysis must not
-    show as the new set's (Overview already checks ``alerts_belong_to``)."""
+    show as the new set's (Overview already checks ``alerts_belong_to``).
+
+    The panel's numbers are what stays: the jump field is not touched, so the
+    panel does not blank and re-fill on every set switch. The review STATE
+    does not stay -- the alert it belongs to is not one of the active set's
+    any more, and keeping it kept the token of an alert a CNN run or an export
+    could still be running on (see
+    ``test_analysis_state.test_alerts_of_another_set_invalidate_the_analysis_state_too``).
+    """
     s = _state(tmp_path, monkeypatch)
     old = _alerts(2)
     old["set_id"] = "old"
@@ -63,6 +71,8 @@ def test_another_sets_alerts_leave_the_review_state_alone(tmp_path, monkeypatch)
 
     analysis = AnalysisState()
     analysis.defo_layer.set("drawn")
+    token = analysis.alert_token.value
     id_field = SimpleNamespace(v_model=None)
     analysis_tile.view_actual_alert(SimpleNamespace(), s, analysis, SetContext(s), id_field)
-    assert id_field.v_model is None and analysis.defo_layer.value == "drawn"
+    assert id_field.v_model is None
+    assert analysis.defo_layer.value is None and not analysis.is_current(token)

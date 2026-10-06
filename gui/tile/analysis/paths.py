@@ -16,19 +16,49 @@ from pathlib import Path
 
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.mosaics_helper import download_both_images
+from deforestation_alerts.scripts.scene_index import SOURCE_CODE
+
+
+def _source_slug(info) -> str:
+    """A short, filename-safe tag for the collection one side was picked from.
+
+    ``SOURCE_CODE`` is the same one-letter code ``scene_query.row_id`` uses
+    (``s`` / ``l`` / ``p``). A source outside it falls back to its own letters
+    and digits instead of raising: this only has to tell the sources apart,
+    and a KeyError here would lose a CNN run or a download.
+    """
+    source = str(info[0])
+    code = SOURCE_CODE.get(source)
+    if code:
+        return code
+    return "".join(ch for ch in source.lower() if ch.isalnum()) or "x"
 
 
 def alert_image_name(recipe_folder, alert_id, before_info, after_info):
     """Build the before/after composite GeoTIFF path for one alert.
 
-    Mirrors the OLD god-class: ``<recipe>/alert_<id><before[4]><after[4]>.tif``
-    where ``*_info[4]`` is each selected image's date suffix (e.g. ``_010124``).
+    ``<recipe>/alert_<id>_<src><before[4]>_<src><after[4]>.tif``, where
+    ``*_info[4]`` is each selected image's date suffix (e.g. ``_010124``) and
+    ``<src>`` its collection's code.
+
+    The OLD god-class name carried the dates alone
+    (``alert_<id><before[4]><after[4]>.tif``), and for one alert the dates are
+    not a key: Sentinel 2, Landsat and Planet all have imagery for the same
+    day. Switching one side to another collection then resolved to the file
+    the first pick had already downloaded, which ``stage_alert_image`` hands
+    back as a cache hit -- the reviewer analysed, exported and reported the
+    wrong collection's imagery under the right dates. Source + date IS a key:
+    for a given alert they determine the granules the mosaic is built from.
     """
     return (
         recipe_folder
         + "/alert_"
         + str(alert_id)
+        + "_"
+        + _source_slug(before_info)
         + before_info[4]
+        + "_"
+        + _source_slug(after_info)
         + after_info[4]
         + ".tif"
     )

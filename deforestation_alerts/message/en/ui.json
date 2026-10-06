@@ -159,7 +159,8 @@
     "edition_labels": {
       "start_edit_button": "Start Drawing",
       "apply_edit_button": "Apply",
-      "stop_edit_button": "Stop Drawing"
+      "stop_edit_button": "Stop Drawing",
+      "unapplied_drawing": "Apply your polygon changes before saving this review"
     },
     "model_labels": {
       "dl_button1": "Smaller and faster model",
@@ -176,7 +177,8 @@
       "dl_task_title": "Running deep-learning model",
       "dl_step_run": "Downloading images and running the model…",
       "dl_done": "Model prediction ready.",
-      "dl_stale": "The model finished after you moved to another alert: its prediction was not added."
+      "dl_stale": "The model finished after you moved to another alert: its prediction was not added.",
+      "dl_no_images": "The before and after images for this alert are not both ready, so the model has nothing to run on. Pick a before and an after image, and let the two panes finish drawing them."
     },
     "export_labels": {
       "save_btn": "Save",
@@ -186,13 +188,14 @@
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
       "save_done": "Alert attributes saved.",
+      "save_outpaced": "Saved, but you changed this alert while it was saving: save again to store those changes",
       "download_task_title": "Preparing alert download",
       "download_step": "Building files and report…",
       "download_done": "Alert download ready.",
       "download_stale": "The alert files finished building after you moved to another alert: they were not offered for download here.",
       "download_no_recipe": "No alert set is active, so there is nowhere in the project to save the alert files. Run Integrate & vectorize first.",
       "download_no_alert": "No alert is selected, so there is nothing to download.",
-      "download_no_images": "No before and after images are selected for this alert, so its files cannot be built. Pick a before and an after image first.",
+      "download_no_images": "The before and after images for this alert are not both ready, so its files cannot be built. Pick a before and an after image, and let the two panes finish drawing them.",
       "save_no_alert": "No alert is selected, so there is nothing to save.",
       "save_other_set": "These alerts belong to another alert set than the active one, so they were not saved into it.",
       "save_set_changed": "The active alert set changed while saving, so this review was not saved.",

@@ -129,6 +129,127 @@ def test_an_alert_change_forgets_the_previous_alerts_choices(caplog):
     assert errors[0].exc_info[0] is AttributeError and "draw_before" in str(errors[0].exc_info[1])
 
 
+class _AlertLayer:
+    def __init__(self, base=False, key=""):
+        self.base, self.key = base, key
+
+
+class _AlertMap:
+    """A map with a basemap and one alert layer on it, for the clearing."""
+
+    def __init__(self):
+        self.layers = (_AlertLayer(base=True), _AlertLayer(key="Alert BB"))
+
+
+class _Draw:
+    def __init__(self):
+        self.on_map = True
+
+    def hide(self):
+        self.on_map = False
+
+    def clear(self):
+        pass
+
+
+def _view_widgets():
+    import solara
+
+    return SimpleNamespace(
+        imagery_ctx=solara.reactive({"alert_id": 0, "token": 0, "bbox": None}),
+        map_before=_AlertMap(), map_after=_AlertMap(),
+        draw_before=_Draw(), draw_after=_Draw(),
+        actual_bb=object(), actual_alert_grid=object(),
+    )
+
+
+def _reviewable_alerts():
+    alerts = _gdf()
+    alerts["status"] = ["Not reviewed"]
+    alerts["alert_sources"] = ["GLAD-L"]
+    alerts["alert_date_min"] = [2026.010]
+    alerts["alert_date_max"] = [2026.020]
+    alerts["set_id"] = ["x"]
+    alerts["bounding_box"] = alerts.geometry
+    return alerts
+
+
+def _with_work_in_flight(app_state):
+    """An Analysis state as it is while a CNN run or an export is running on
+    the alert on screen. Returns ``(state, its token)``."""
+    s = AnalysisState()
+    s.prediction_files.set({1: "/m1.tif"})
+    s.verdict.set("Confirmed")
+    s.defo_layer.set(_gdf())
+    return s, s.alert_token.value
+
+
+def test_losing_the_alert_selection_invalidates_the_analysis_state():
+    """A project switch drops the alerts and selects nothing until the new
+    ones arrive (``AppState._install``), and a context with no alerts never
+    brings any.
+
+    The guards of ``view_actual_alert`` returned before the reset, so the
+    previous alert's token stayed CURRENT: a CNN run or an export still in
+    flight passed ``is_current`` and applied its result onto a panel whose
+    alert is gone, the imagery context still described that alert (so the
+    timeline kept offering its lanes), and the ee bbox and covering grid it
+    left on ``widgets`` were still what an export would be built from.
+    """
+    from gui.store.state_manager import AppState
+    from gui.tile.analysis import analysis_tile
+
+    app_state = AppState()
+    app_state.alerts_gdf.set(_reviewable_alerts())
+    app_state.actual_alert_id.set(0)
+    s, token = _with_work_in_flight(app_state)
+    widgets = _view_widgets()
+
+    # the project is switched: its alerts go, and nothing is selected
+    app_state.alerts_gdf.set(None)
+    app_state.actual_alert_id.set(-1)
+    analysis_tile.view_actual_alert(
+        widgets, app_state, s, SimpleNamespace(), SimpleNamespace(v_model=None)
+    )
+
+    assert not s.is_current(token), "work started on the gone alert is still current"
+    assert s.prediction_files.value == {}
+    assert s.verdict.value is None and s.defo_layer.value is None
+    assert widgets.imagery_ctx.value is None, "the timeline still describes the gone alert"
+    assert widgets.actual_bb is None and widgets.actual_alert_grid is None
+    assert widgets.draw_before.on_map is False and widgets.draw_after.on_map is False
+    for a_map in (widgets.map_before, widgets.map_after):
+        assert [lyr.base for lyr in a_map.layers] == [True], "the alert's layers are still on"
+
+
+def test_alerts_of_another_set_invalidate_the_analysis_state_too(monkeypatch):
+    """Same hole on the other identity change: the active set is switched, and
+    until that set's rows are published the alerts on screen are the previous
+    set's. The panel keeping its numbers for those milliseconds is deliberate;
+    keeping the token, the geometry and the export eligibility of an alert
+    that belongs to another set is not.
+    """
+    from gui.store.state_manager import AppState
+    from gui.tile.analysis import analysis_tile
+
+    app_state = AppState()
+    app_state.alerts_gdf.set(_reviewable_alerts())
+    app_state.actual_alert_id.set(0)
+    s, token = _with_work_in_flight(app_state)
+    widgets = _view_widgets()
+
+    monkeypatch.setattr(analysis_tile, "active_set", lambda p: SimpleNamespace(id="other"))
+    monkeypatch.setattr(analysis_tile.set_store, "alerts_belong_to", lambda gdf, s_: False)
+
+    analysis_tile.view_actual_alert(
+        widgets, app_state, s, SimpleNamespace(), SimpleNamespace(v_model=None)
+    )
+
+    assert not s.is_current(token)
+    assert s.prediction_files.value == {} and s.defo_layer.value is None
+    assert widgets.imagery_ctx.value is None
+
+
 def test_an_alert_change_makes_earlier_tokens_stale():
     s = AnalysisState()
     token = s.alert_token.value
@@ -191,6 +312,84 @@ def test_an_image_chosen_for_a_previous_alert_is_not_drawn():
     assert s.before_image.value is None and drawn == []
 
 
+def test_a_replaced_pick_in_the_same_lane_draws_nothing(monkeypatch):
+    """Two picks in the same lane, for the SAME alert, share the alert token,
+    so the token cannot tell them apart: the reviewer picks A, then B before
+    A's rebuild finishes, and A -- landing last -- stored its image and
+    redrew the pane, leaving the map showing A under a readout that says B.
+    Each lane therefore carries its own request generation.
+    """
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    widgets.map_before = SimpleNamespace(side="before")
+    widgets.map_after = SimpleNamespace(side="after")
+    held, drawn = [], []
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
+
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None):
+        """``image_slider_map_callback``'s signature, with the lane's own
+        freshness gate: ``spawn_in_context`` forwards positional args only."""
+        if analysis_.is_current(token) and (fresh is None or fresh()):
+            drawn.append(item["keys"])
+
+    monkeypatch.setattr(imagery, "image_slider_map_callback", _rebuild)
+    imagery.wire_panes(widgets, s, None)
+
+    s.before_keys.set(["A"])
+    s.before_info.set(["Sentinel 2", 1, "1.00", "A ", "_010126"])
+    s.before_keys.set(["B"])
+    s.before_info.set(["Sentinel 2", 2, "1.00", "B ", "_020126"])
+    assert len(held) == 2
+
+    held[1][0](*held[1][1])  # B lands first...
+    held[0][0](*held[0][1])  # ...and A's slow rebuild only now
+
+    assert drawn == [["B"]], "the replaced pick redrew the pane over the current one"
+
+
+def test_a_pick_marks_its_lane_pending_so_nothing_captures_a_mixture(monkeypatch):
+    """A pick publishes its metadata at the click and its ee.Image only when
+    the rebuild lands. In between the lane holds the new pick's dates beside
+    the previous pick's image, and a Run or an export captures that mixture --
+    a composite named after one pick, built from the other's pixels. The lane
+    is marked pending instead, which both of those refuse.
+    """
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    widgets.map_before = SimpleNamespace(side="before")
+    widgets.map_after = SimpleNamespace(side="after")
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): None)
+    imagery.wire_panes(widgets, s, None)
+    s.before_image.set(object())  # what the previous pick drew
+
+    s.before_keys.set(["B"])
+    s.before_info.set(["Sentinel 2", 2, "1.00", "B ", "_020126"])
+
+    assert s.before_image.value is None, "the new pick's dates beside the old image"
+
+
+def test_an_image_for_a_replaced_pick_is_not_stored_or_drawn():
+    """And the gate holds inside the rebuild itself, which is where the image
+    is published and the layers are added."""
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    widgets = _fake_imagery_widgets()
+    widgets.actual_alert_grid = None
+    drawn = []
+    map_ = SimpleNamespace(addLayer=lambda *a: drawn.append(a))
+    item = {"source": "Planet NICFI", "keys": ["projects/x/nicfi"]}
+
+    imagery.image_slider_map_callback(item, map_, 0, widgets, s, None,
+                                      token=s.alert_token.value, fresh=lambda: False)
+
+    assert s.before_image.value is None and drawn == []
+
+
 def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     """``wire_panes`` reads the token on the publishing thread, at the publish,
     not inside the worker: a pick made for one alert cannot be rebuilt against
@@ -207,7 +406,7 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     held, rebuilt = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
-    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None):
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None):
         """``image_slider_map_callback``'s own signature, so the token is read
         from the position ``wire_panes`` actually passes it in --
         ``spawn_in_context`` forwards positional args only."""
