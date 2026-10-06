@@ -12,6 +12,7 @@ import rasterio
 from rasterio import features
 
 from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.project.questions import is_answer_column
 
 # Columns the assembled alerts gdf already carries (convert_to_geopandas +
 # vectorize output). Attribution columns must not silently overwrite these.
@@ -21,6 +22,12 @@ ALERT_RESERVED_COLUMNS = {
     "status", "before_img", "before_img_info", "after_img", "after_img_info",
     "alert_polygon", "description", "admin1", "admin2", "admin3",
 }
+
+#: What an attribution column named like a questionnaire answer
+#: (``questions.is_answer_column``: the ``q_`` prefix) is written as instead.
+#: The exports drop a ``q_`` column no current question owns, and a question
+#: keyed after it would overwrite it on save.
+ANSWER_PREFIX_RENAME = "attr_"
 
 
 def safe_column(name):
@@ -39,11 +46,16 @@ def display_column(text) -> str:
 
 def resolve_column_names(specs, reserved=()):
     """Return specs with each `column` made unique vs `reserved` + earlier specs
-    (suffix `_2`, `_3`, …). Falls back to the band name when `column` is blank."""
+    (suffix `_2`, `_3`, …). Falls back to the band name when `column` is blank.
+    A column in the questionnaire's ``q_`` namespace is written with
+    ``ANSWER_PREFIX_RENAME`` in front (``q_cover`` -> ``attr_q_cover``): the
+    ``q_`` prefix is the answers' own."""
     used = set(reserved)
     out = []
     for spec in specs:
         base = spec.get("column") or spec["band"]
+        if is_answer_column(base):
+            base = f"{ANSWER_PREFIX_RENAME}{base}"
         name = base
         k = 2
         while name in used:

@@ -221,3 +221,18 @@ def test_reserved_for_adds_every_other_layers_columns():
     assert ra.reserved_for([a, b], skip=1) == ra.ALERT_RESERVED_COLUMNS | {"b1"}
     assert ra.reserved_for([a, b], skip=0, reserved={"count"}) == {"count", "b1_2", "slope"}
     assert "b1" not in ra.ALERT_RESERVED_COLUMNS  # the shared set is never mutated
+
+
+def test_an_attribution_column_never_takes_the_answers_q_prefix():
+    """Final review I2: ``q_`` is the questionnaire's (``questions.column``).
+    An attribution column named so would be dropped from every export and
+    overwritten by a question keyed after it: it is written ``attr_q_…``."""
+    specs = [{"band": "b1", "stat": "majority", "column": "q_cover"},
+             {"band": "q_slope", "stat": "mean", "column": ""},       # the band name fallback
+             {"band": "b3", "stat": "max", "column": "q_cover"}]      # then de-duplicated as usual
+    out = [s["column"] for s in ra.resolve_column_names(specs)]
+    assert out == ["attr_q_cover", "attr_q_slope", "attr_q_cover_2"]
+    assert not any(c.startswith("q_") for c in out)
+    cfg = ra.build_attribute_config("/r.tif", "local",
+                                    [{"include": True, "band": "b1", "stat": "majority", "column": "Q cover"}])
+    assert cfg["bands"][0]["column"] == "attr_q_cover"

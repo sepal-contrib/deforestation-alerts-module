@@ -54,6 +54,12 @@ def test_finish_makes_the_key_and_codes_of_a_new_question():
     assert q.ask_for == ["Confirmed"]
 
 
+def test_a_new_key_avoids_an_attribution_column():
+    """Final review I2: the form gets the project's attribution columns."""
+    q = qm.finish_question(_draft(label="Cover"), default_questions(), None, {"q_cover"})
+    assert q.key == "cover_2"
+
+
 def test_an_edit_keeps_the_key_and_existing_codes_and_a_renamed_built_in_loses_its_key():
     draft = qm.draft_of(LOSS)
     draft["label"] = "Driver"

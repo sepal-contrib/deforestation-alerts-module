@@ -106,3 +106,24 @@ def test_is_answer_column_knows_the_columns_column_makes():
 def test_reserved_keys_cover_the_report_placeholders_and_verdict():
     assert "verdict" in RESERVED_KEYS
     assert set(REPORT_PLACEHOLDERS) <= RESERVED_KEYS
+
+
+def test_new_key_avoids_a_column_an_attribution_layer_already_writes():
+    """Final review I2: a layer made before ``q_`` was reserved may write
+    ``q_cover``; a question labelled "Cover" must not take that column."""
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams
+    from deforestation_alerts.project.questions import attribute_columns
+
+    p = _project()
+    layer = {"source": "/r.tif", "kind": "local",
+             "bands": [{"band": "b1", "stat": "majority", "column": "q_cover"},
+                       {"band": "b2", "stat": "mean", "column": "slope"}]}
+    p.alert_sets["s"] = AlertSet(
+        id="s", period_id="x", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+        params=AlertSetParams(attribute_layers=[layer]), store_rel_path="a.parquet",
+        combined_rel_path="c.tif", footprint_rel_path="f.tif", fingerprint="abc", created_at=datetime(2026, 9, 30))
+    cols = attribute_columns(p)
+    assert cols == {"q_cover", "slope"}
+    assert new_key("Cover", p.questions, cols) == "cover_2"
+    assert new_key("Slope", p.questions, cols) == "slope"  # its column is q_slope: no clash
+    assert attribute_columns(_project()) == set()

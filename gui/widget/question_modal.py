@@ -64,9 +64,10 @@ def _kept_label(text: str, label_key: Optional[str]):
     return text.strip(), None
 
 
-def finish_question(draft: dict, questions: list, editing: Optional[Question]) -> Question:
+def finish_question(draft: dict, questions: list, editing: Optional[Question], columns=()) -> Question:
     """The ``Question`` ``draft`` describes: a new one gets its key and codes
-    made here; an edit keeps ``editing``'s key and every existing option's code."""
+    made here; an edit keeps ``editing``'s key and every existing option's code.
+    ``columns``: the alert-store columns a new key's column avoids (``new_key``)."""
     others = [q for q in questions if editing is None or q.key != editing.key]
     # A new code avoids every code still in the draft and every code the question
     # had before this edit: a removed option's code is never reused, or the answers
@@ -81,7 +82,7 @@ def finish_question(draft: dict, questions: list, editing: Optional[Question]) -
         options.append(QuestionOption(code=code, label=label, label_key=label_key))
     label, label_key = _kept_label(draft["label"], editing.label_key if editing else None)
     return Question(
-        key=editing.key if editing else new_key(draft["label"], others),
+        key=editing.key if editing else new_key(draft["label"], others, columns),
         label=label, label_key=label_key, multiple=draft["multiple"], options=options,
         allow_typed=draft["allow_typed"], required=draft["required"],
         ask_for=[v for v in VERDICTS if v in draft["ask_for"]],
@@ -89,7 +90,7 @@ def finish_question(draft: dict, questions: list, editing: Optional[Question]) -
 
 
 @solara.component
-def _QuestionFields(open_, questions, editing, on_save):
+def _QuestionFields(open_, questions, editing, on_save, columns=()):
     """The form's card. Mounted only while the form is open, so every opening
     starts from the question being edited (or an empty draft)."""
     draft, set_draft = solara.use_state(draft_of(editing) if editing else empty_draft())
@@ -113,7 +114,7 @@ def _QuestionFields(open_, questions, editing, on_save):
     def _save():
         if question_error(draft):
             return
-        q = finish_question(draft, questions, editing)
+        q = finish_question(draft, questions, editing, columns)
         on_save(q, editing.key if editing else None)
         open_.set(False)
 
@@ -167,19 +168,20 @@ def _QuestionFields(open_, questions, editing, on_save):
                             on_v_model=lambda on, verdict=verdict: _set(ask_for=[
                                 x for x in VERDICTS
                                 if (x == verdict and on) or (x != verdict and x in draft["ask_for"])]))
-        key = editing.key if editing else (new_key(draft["label"], questions) if draft["label"].strip() else "…")
+        key = editing.key if editing else (new_key(draft["label"], questions, columns) if draft["label"].strip() else "…")
         solara.Text(t("steps.questionnaire.placeholder_line", placeholder="{" + key + "}"),
                     style=MUTED + "font-size:0.8rem;")
 
 
 @solara.component
-def QuestionModal(open_, questions, editing, on_save):
+def QuestionModal(open_, questions, editing, on_save, columns=()):
     """``editing``: the ``Question`` being edited, or None to add one.
-    ``on_save(question, previous_key)``; the form closes itself after."""
+    ``on_save(question, previous_key)``; the form closes itself after.
+    ``columns``: the project's attribution columns (``questions.attribute_columns``)."""
     with use_form_dialog(open_, max_width="420px"):
         if open_.value:
             # Keyed by what is edited: opening for another question (or a new one)
             # remounts the form, whatever order the caller set ``editing`` and
             # ``open_`` in, so a draft is never carried over to another question.
             _QuestionFields(open_=open_, questions=questions, editing=editing,
-                            on_save=on_save).key(editing.key if editing else "__new__")
+                            on_save=on_save, columns=columns).key(editing.key if editing else "__new__")

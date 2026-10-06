@@ -42,9 +42,20 @@ def _unique(base: str, taken: set, fallback: str) -> str:
     return f"{base}_{n}"
 
 
-def new_key(label: str, questions: list) -> str:
-    """The key a new question labelled ``label`` gets in a project that has ``questions``."""
-    return _unique(slug(label), set(RESERVED_KEYS) | {q.key for q in questions}, "question")
+def new_key(label: str, questions: list, columns=()) -> str:
+    """The key a new question labelled ``label`` gets in a project that has
+    ``questions``. ``columns``: other alert-store columns its column must not
+    take (``attribute_columns``: a layer made before attribution reserved the
+    ``q_`` prefix may have written one)."""
+    taken = set(RESERVED_KEYS) | {q.key for q in questions}
+    taken |= {c[len("q_"):] for c in columns if isinstance(c, str) and c.startswith("q_")}
+    return _unique(slug(label), taken, "question")
+
+
+def attribute_columns(project) -> set:
+    """Every column the project's alert sets' attribute layers write."""
+    return {b.get("column") for s in project.alert_sets.values() for layer in s.params.attribute_list()
+            for b in (layer or {}).get("bands", []) if b.get("column")}
 
 
 def new_code(label: str, options: list) -> str:

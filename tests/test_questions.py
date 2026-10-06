@@ -164,3 +164,11 @@ def test_selection_is_items_and_free_text():
     set_locale("fr")
     assert qs.selection(LOSS, "Logging, Roads") == [{"text": "Exploitation forestière", "value": "logging"}, "Roads"]
     assert qs.selection(LOSS, None) == []
+
+
+def test_with_labels_keeps_a_column_no_question_could_have_made():
+    """Final review I2: only the ``q_`` columns (and ``description``) are
+    answers; an attribution column, even ``attr_q_cover``, is kept."""
+    gdf = pd.DataFrame({"q_road_access": ["yes"], "attr_q_cover": [3], "cover": [4]})
+    out = qs.with_labels(gdf, [ROAD])
+    assert out.loc[0, "attr_q_cover"] == 3 and out.loc[0, "cover"] == 4

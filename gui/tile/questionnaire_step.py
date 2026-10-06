@@ -5,7 +5,7 @@ the placeholders it can use."""
 import reacton.ipyvuetify as rv
 import solara
 
-from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, column
+from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
 from gui.i18n import t, tn
 from gui.scripts import questions as qs
 from gui.scripts.notify_bridge import current_notifier
@@ -152,7 +152,8 @@ def QuestionnaireStep(app_state):
             ReportTemplateField(app_state=app_state)
             _Placeholders(questions=p.questions)
 
-    QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save)
+    QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
+                  columns=attribute_columns(p))
     ConfirmDialog(
         open=doomed is not None,
         on_cancel=lambda: set_pending_delete(None),
