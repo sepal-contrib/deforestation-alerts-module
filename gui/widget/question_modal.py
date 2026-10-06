@@ -139,9 +139,12 @@ def _QuestionFields(open_, questions, editing, on_save):
                 rv.Radio(label=t("steps.questionnaire.answer_several"), value="several")
         with field_group(t("steps.questionnaire.options_label")):
             for i, o in enumerate(draft["options"]):
-                with rv.Html(tag="div", style_="display:flex;align-items:center;gap:2px;"):
+                # Outlined, with room between the rows: the underlined fields' floated
+                # labels ran into the row above (seen in the browser walk).
+                with rv.Html(tag="div", style_="display:flex;align-items:center;gap:2px;margin:4px 0 8px;"):
                     rv.TextField(label=t("steps.questionnaire.field_option", n=i + 1), v_model=o["label"],
-                                 on_v_model=lambda x, i=i: _set_option(i, x), dense=True, hide_details=True)
+                                 on_v_model=lambda x, i=i: _set_option(i, x), dense=True, outlined=True,
+                                 hide_details=True)
                     solara.Button("", icon_name="mdi-arrow-up", icon=True, x_small=True, disabled=i == 0,
                                   on_click=lambda i=i: _move(i, -1))
                     solara.Button("", icon_name="mdi-arrow-down", icon=True, x_small=True,

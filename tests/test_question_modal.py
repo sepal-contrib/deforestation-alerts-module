@@ -102,6 +102,19 @@ def test_adding_a_question_saves_it_and_closes():
         rc.close()
 
 
+def test_option_fields_are_outlined_so_floated_labels_do_not_collide():
+    """Underlined dense fields stacked with no gap let an option's floated label
+    run into the row above it (seen in the browser walk)."""
+    _open, _saved, rc = _render(default_questions())
+    try:
+        _button(rc, t("steps.questionnaire.add_option")).fire_event("click", None)
+        _button(rc, t("steps.questionnaire.add_option")).fire_event("click", None)
+        fields = [rc.find(v.TextField, label=t("steps.questionnaire.field_option", n=n)).widget for n in (1, 2)]
+        assert all(f.outlined for f in fields)
+    finally:
+        rc.close()
+
+
 def test_an_invalid_form_shows_why_and_disables_the_primary_button():
     open_, saved, rc = _render(default_questions())
     try:
