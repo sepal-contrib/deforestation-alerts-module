@@ -211,7 +211,7 @@
       "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made.",
       "gif_btn": "Export GIF",
       "gif_dwn_btn": "GIF",
-      "gif_hint": "Save this alert as a true alert, with a before and an after image, to export its GIF.",
+      "gif_hint": "Save this alert as a true alert, with the before and after images on screen, to export its GIF.",
       "gif_task_title": "Exporting the alert GIF",
       "gif_step": "Rendering {count} images…",
       "gif_done": "Alert GIF ready.",

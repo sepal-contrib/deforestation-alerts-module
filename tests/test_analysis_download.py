@@ -659,12 +659,18 @@ def _gif_link(body):
     return [w for w in _in(body) if isinstance(w, sw.DownloadBtn)][2]
 
 
-def _gif_harness(tmp_path, monkeypatch, **kw):
+def _gif_harness(tmp_path, monkeypatch, status=None, **kw):
+    """``_export_harness`` with the GIF stubbed and the pair picked.
+
+    ``status`` writes the row's verdict and saved pair BEFORE the picks land,
+    as for an alert reopened on its saved pair (no save in this session)."""
     from gui.tile.analysis import gif as gif_mod
 
     harness = _export_harness(tmp_path, monkeypatch, **kw)
     monkeypatch.setattr(gif_mod, "capture_gif", lambda *a, **k: _gif_job())
     monkeypatch.setattr(gif_mod, "build_gif", _fake_build_gif)
+    if status is not None:
+        _status(harness, status)
     harness.analysis.before_info.set(_BEFORE_INFO)
     harness.analysis.after_info.set(_AFTER_INFO)
     harness.gif_btn = _gif_button(harness.parts.body)
@@ -855,3 +861,135 @@ def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
     assert harness.gif_link.disabled
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
+
+
+class _Toasts:
+    """A notifier that keeps the warnings and errors it is given."""
+
+    def __new__(cls):
+        from pysepal.solara.notifications import NoopNotifier
+
+        class _Notifier(NoopNotifier):
+            def __init__(self):
+                self.warnings, self.errors = [], []
+
+            def warning(self, message, *, timeout=None):
+                self.warnings.append(message)
+
+            def error(self, message, *, timeout=None):
+                self.errors.append(message)
+
+        return _Notifier()
+
+
+def test_a_reopened_true_alert_offers_its_gif_without_a_new_save(tmp_path, monkeypatch):
+    """Spec D9 (amended): the gate reads the row, not this session's saves. An
+    alert saved Confirmed on its pair, reopened on that pair, offers Export
+    GIF at once; the badge counts the GIF it makes."""
+    seen = []
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed",
+                           set_badge=lambda text, color=None: seen.append(text))
+    assert not harness.gif_btn.disabled
+    assert harness.build_btn.disabled  # "Download alert data" keeps its own rule
+    harness.make_gif()
+    assert not harness.gif_link.disabled
+    assert harness.gif_link.attributes["download"] == _GIF_NAME
+    assert seen[-1] == "1 file ready"
+
+
+def test_a_reopened_alert_not_saved_confirmed_offers_no_gif(tmp_path, monkeypatch):
+    harness = _gif_harness(tmp_path, monkeypatch, status="Need revision")
+    assert harness.gif_btn.disabled
+
+
+def test_a_gif_capture_that_crashes_is_said_and_releases_the_button(tmp_path, monkeypatch):
+    """A capture failing with something other than ``GifRefused`` at the
+    click: a failed task with an error toast, the button released and gated
+    again -- not a click that silently does nothing."""
+    from gui.tile.analysis import gif as gif_mod
+
+    notifier = _Toasts()
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
+    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
+
+    def _crash(*a, **k):
+        raise RuntimeError("scene index is malformed")
+
+    monkeypatch.setattr(gif_mod, "capture_gif", _crash)
+    harness.make_gif()
+    assert notifier.errors and "scene index is malformed" in notifier.errors[0]
+    assert not harness.gif_btn.loading
+    assert not harness.gif_btn.disabled  # the gate decided again: still a true alert
+    assert harness.gif_link.disabled
+
+
+def test_a_template_change_leaves_the_gif_alone(tmp_path, monkeypatch):
+    """Spec D9: the GIF does not depend on the report template."""
+    seen = []
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed",
+                           set_badge=lambda text, color=None: seen.append(text))
+    harness.make_gif()
+    harness.model.custom_report_template = str(tmp_path / "mine.docx")
+    harness.app_state.project.value = _project_poke(harness.app_state)
+    assert not harness.gif_link.disabled and harness.gif_link.attributes["download"] == _GIF_NAME
+    assert seen[-1] == "1 file ready"
+
+
+def test_a_template_change_does_not_drop_a_gif_still_rendering(tmp_path, monkeypatch):
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed", defer=True)
+    harness.make_gif()  # the GIF starts rendering...
+    harness.model.custom_report_template = str(tmp_path / "mine.docx")
+    harness.app_state.project.value = _project_poke(harness.app_state)  # ...the template changes...
+    harness.run()  # ...and the GIF lands
+    assert not harness.gif_link.disabled
+    assert not harness.gif_btn.disabled and not harness.gif_btn.loading
+
+
+def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp_path, monkeypatch):
+    """Spec D9: the zip follows the button's rule. A Confirmed row whose pair
+    on screen is not the saved pair gets no GIF capture, and one warning."""
+    notifier = _Toasts()
+    harness = _gif_harness(tmp_path, monkeypatch)
+    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
+    passed = {}
+
+    def _download(*a, **k):
+        passed["gif"] = k.get("gif")
+        return {"zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")}
+
+    monkeypatch.setattr(export_mod, "_download_data", _download)
+    _status(harness, "Confirmed")
+    harness.save()
+    harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])  # not saved
+    harness.build()
+    assert passed["gif"] is None
+    assert notifier.warnings == [
+        "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
+    assert harness.gif_link.disabled
+
+
+def test_a_gif_that_lands_after_another_pick_offers_nothing(tmp_path, monkeypatch):
+    """Stale by revision, not by alert: the pair changed while it rendered."""
+    notifier = _Toasts()
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed", defer=True)
+    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
+    harness.make_gif()  # the GIF starts rendering...
+    harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])  # ...another pick...
+    harness.run()  # ...and only now does it land
+    assert harness.gif_link.disabled
+    assert notifier.warnings == [export_mod.t("analysis_tile.export_labels.gif_stale")]
+    assert not harness.gif_btn.loading
+    assert harness.gif_btn.disabled  # the new pair is not the saved one
+    harness.analysis.before_info.set(_BEFORE_INFO)  # the saved pair back
+    assert not harness.gif_btn.disabled
+
+
+def test_the_gif_hint_says_the_pair_on_screen_is_the_one_saved(tmp_path, monkeypatch):
+    """Spec D9: the GIF animates the saved pair, so the hint on the disabled
+    button says the images on screen are what has to be saved."""
+    harness = _gif_harness(tmp_path, monkeypatch)
+    hints = [w.attributes["title"] for w in _in(harness.parts.body)
+             if (getattr(w, "attributes", None) or {}).get("title")
+             and harness.gif_btn in (getattr(w, "children", None) or [])]
+    assert hints == ["Save this alert as a true alert, with the before and after images on screen, "
+                     "to export its GIF."]

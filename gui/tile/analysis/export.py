@@ -476,6 +476,10 @@ def _images_picked(alert) -> bool:
                                        alert.before_image, alert.after_image))
 
 
+#: The stored status of a true alert: the verdict a GIF is made for (spec D9).
+CONFIRMED = "Confirmed"
+
+
 def _saved_status(alerts, alert_id) -> Optional[str]:
     """The verdict the alert's row holds: what its last save wrote, or None."""
     if alerts is None or alert_id is None or not 0 <= alert_id < len(alerts) or "status" not in alerts.columns:
@@ -498,6 +502,14 @@ def _picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
     if not all(isinstance(value, str) for value in saved):
         return False
     return [before_info[3], after_info[3]] == saved
+
+
+def _gif_allowed(alerts, alert_id, before_info, after_info) -> bool:
+    """A GIF is made for a true alert on its reviewed pair (spec D9): the
+    row's stored status is Confirmed and both picks are the pair it was saved
+    with. The Export GIF button and the zip build share this rule."""
+    return (_saved_status(alerts, alert_id) == CONFIRMED
+            and _picks_are_saved(alerts, alert_id, before_info, after_info))
 
 
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
@@ -609,7 +621,7 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
         # A failure costs the GIF, not the build: the reviewer still gets the
         # files and is told the zip has no GIF.
         gif_local, gif_warning = None, False
-        if gif is not None and _saved_status(alertas_gdf, actual_alert_id) == "Confirmed":
+        if gif is not None and _saved_status(alertas_gdf, actual_alert_id) == CONFIRMED:
             try:
                 gif_local = gif_mod.build_gif(
                     gif, Path(alert_gif_name(str(folder), actual_alert_id, gif.before_info, gif.after_info)))
@@ -951,12 +963,15 @@ def build_export(
     # build left ready. Kept here rather than read back off the build button's
     # ``disabled``, which is ALSO true while a build runs (the click handler
     # spins it) and would make the badge say "available after save" over a
-    # build in progress. Reset by every alert change.
-    built = {"saved": False, "files": 0, "rev": 0, "gif": 0}
+    # build in progress. Reset by every alert change. ``rev`` / ``gif_rev``:
+    # the revisions of the inputs of the zip build and of the GIF, which a
+    # worker compares with the one it started on (a template change bumps
+    # ``rev`` alone: the GIF is not made from it).
+    built = {"saved": False, "files": 0, "rev": 0, "gif": 0, "gif_rev": 0}
     # A GIF of this section is rendering: the gate holds the button disabled.
     gif_running = {"on": False}
 
-    def _invalidate_built_files():
+    def _invalidate_built_files(gif=True):
         """Stop offering what the last build left ready.
 
         The zip and the report are a snapshot: of the review as the save
@@ -977,16 +992,22 @@ def build_export(
         (``_on_download``): one that started before the change cannot restore
         a readiness that is already stale. The caller refreshes the badge --
         ``_forget_previous_alert`` has more to change before it reads.
+
+        The GIF is of the same review and the same pair (spec D9), but not of
+        the report template: ``gif=False`` (a template change) leaves its link
+        and its own revision, ``gif_rev``, alone, so a GIF still rendering
+        lands.
         """
         ns["files_dwn_btn"].set_url()
         ns["report_dwn_btn"].set_url()
         ns["toolbar_downloads"].hide()
         built["files"] = 0
-        # The GIF is of the same review and the same pair (spec D9).
-        ns["gif_dwn_btn"].set_url()
-        ns["toolbar_gif"].hide()
-        built["gif"] = 0
         built["rev"] += 1
+        if gif:
+            ns["gif_dwn_btn"].set_url()
+            ns["toolbar_gif"].hide()
+            built["gif"] = 0
+            built["gif_rev"] += 1
 
     # ------------------------------------------------------------------
     # The section's summary badge: what this section can offer right now,
@@ -1003,35 +1024,37 @@ def build_export(
         revealed = getattr(ns["toolbar_downloads"], "viz", True)
         files = (built["files"] if revealed else 0) + (
             built["gif"] if getattr(ns["toolbar_gif"], "viz", True) else 0)
-        if not built["saved"]:
-            _badge(t("analysis_tile.sections.export_after_save"))
-        elif files:
+        # Files first: the GIF can be offered without a save in this session
+        # (its gate reads the row, spec D9), and a live link under "available
+        # after save" would contradict it.
+        if files:
             _badge(tn("analysis_tile.sections.export_files", files), color="primary")
-        else:
+        elif built["saved"]:
             _badge(t("analysis_tile.sections.export_build"))
+        else:
+            _badge(t("analysis_tile.sections.export_after_save"))
 
-    def _invalidate_and_badge(*_):
+    def _invalidate_and_badge(*_, gif=True):
         """``_invalidate_built_files`` + the badge, for the subscribers whose
         only job is the invalidation."""
         try:
-            _invalidate_built_files()
+            _invalidate_built_files(gif=gif)
             _show_badge_for_state()
         except Exception:
             logger.exception("Analysis: invalidating the built files failed")
 
     def _refresh_gif_gate(*_):
-        """Export GIF is offered for a true alert (spec D9): a save of it landed
-        with the verdict Confirmed, and the pair on screen is the pair that
-        save wrote -- another pick disables it, picking the saved pair back
-        enables it. Held disabled while a GIF of this section renders."""
+        """Export GIF is offered for a true alert (spec D9): the row's stored
+        status is Confirmed and the pair on screen (both sides picked) is the
+        pair the row was saved with -- another pick disables it, picking the
+        saved pair back enables it. The row, not this session's saves: a true
+        alert reopened on its saved pair offers it at once. Held disabled
+        while a GIF of this section renders."""
         if gif_running["on"]:
             return
         alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
-        ns["gif_btn"].disabled = not (
-            built["saved"]
-            and _saved_status(alerts, alert_id) == "Confirmed"
-            and _picks_are_saved(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
-        )
+        ns["gif_btn"].disabled = not _gif_allowed(
+            alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
 
     # ------------------------------------------------------------------
     # An alert change takes the section back to its empty state. What it can
@@ -1048,10 +1071,14 @@ def build_export(
     # ------------------------------------------------------------------
     def _forget_previous_alert(*_):
         ns["download_alert_data_btn"].disabled = True
+        # Off, without asking the gate: at the token bump the picks are still
+        # the previous alert's while the row may already be the next one's,
+        # and comparing the two could enable it. ``reset_alert`` clears the
+        # picks right after, and each pick that lands runs the gate.
+        ns["gif_btn"].disabled = True
         _invalidate_built_files()
         built["saved"] = False
         _show_badge_for_state()
-        _refresh_gif_gate()
 
     # Registered once (the builder runs once per session); the unsubscriber is
     # deliberately discarded, as everywhere else under analysis/.
@@ -1071,13 +1098,14 @@ def build_export(
     # section. It is a project value, so what the picker writes arrives as a
     # publish of ``app_state.project``; only a CHANGE of the template
     # invalidates, or every autosave of the project would drop the links.
+    # The zip and the report only: the GIF is not made from the template.
     template_seen = {"value": aux_model.custom_report_template}
 
     def _on_project(*_):
         value = aux_model.custom_report_template
         if value != template_seen["value"]:
             template_seen["value"] = value
-            _invalidate_and_badge()
+            _invalidate_and_badge(gif=False)
 
     app_state.project.subscribe(_on_project)
 
@@ -1157,8 +1185,9 @@ def build_export(
         _show_badge_for_state()
 
     def _apply_gif(path, rev):
-        """Offer this GIF, unless what it was made from has changed since (``rev``)."""
-        if rev != built["rev"]:
+        """Offer this GIF, unless what it was made from has changed since
+        (``rev``: the ``gif_rev`` at its click)."""
+        if rev != built["gif_rev"]:
             return False
         _offer_gif(path)
         return True
@@ -1185,12 +1214,17 @@ def build_export(
         token = alert.token  # the alert this build is for
         rev = built["rev"]  # ...and the inputs it is built from
         # A true alert's zip carries its GIF (spec D9), captured with the rest
-        # of the alert at the click. Nothing to animate is said after the build.
+        # of the alert at the click -- by the button's rule: Confirmed, on the
+        # saved pair. A Confirmed alert whose pair on screen is not the saved
+        # one gets no GIF, and is told so after the build, like nothing to
+        # animate.
         gif_job, gif_skipped = None, False
         # A capture that fails for any other reason costs the GIF too, never
         # the build: escaping here would leave the build button spinning with
         # no worker started.
-        if _saved_status(alert.alerts, alert.alert_id) == "Confirmed":
+        if not _gif_allowed(alert.alerts, alert.alert_id, alert.before_info, alert.after_info):
+            gif_skipped = _saved_status(alert.alerts, alert.alert_id) == CONFIRMED
+        else:
             try:
                 gif_job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
             except gif_mod.GifRefused:
@@ -1309,14 +1343,21 @@ def build_export(
     # ------------------------------------------------------------------
     def _on_gif(*_):
         alert = capture_alert(analysis, widgets, app_state)
-        token, rev = alert.token, built["rev"]
+        token, rev = alert.token, built["gif_rev"]
         folder = app_tile_model.recipe_folder_path
+        # ``crashed``: a capture that failed for any other reason. Raised again
+        # inside the worker's ``tracked_job``, so the click is a FAILED task
+        # with one error toast and its traceback in the log, and the button
+        # is released -- never a click that silently does nothing.
+        crashed = None
         try:
             if not folder:
                 raise gif_mod.GifRefused(key="analysis_tile.export_labels.download_no_recipe")
             job, refused = gif_mod.capture_gif(app_state, widgets, analysis, alert), None
         except gif_mod.GifRefused as exc:
             job, refused = None, exc
+        except Exception as exc:  # noqa: BLE001 - reported by the worker's tracked_job
+            job, refused, crashed = None, None, exc
         dest = None if job is None else Path(
             alert_gif_name(str(folder), alert.alert_id, alert.before_info, alert.after_info))
         gif_running["on"] = True
@@ -1328,6 +1369,8 @@ def build_export(
             applied = False
             try:
                 with tracked_job(notifier, t("analysis_tile.export_labels.gif_task_title")) as task:
+                    if crashed is not None:
+                        raise crashed
                     reason = None if refused is None else error_text(refused)
                     path = None
                     if reason is None:
@@ -1361,13 +1404,14 @@ def build_export(
                 ns["gif_btn"].loading = False
                 gif_running["on"] = False
                 # The gate decides, for whichever alert is on screen now: it
-                # reads only that alert's state (``built["saved"]`` is reset by
-                # every alert change), so the button comes back for the alert
-                # this GIF was made for, stays off for one that is not saved
-                # Confirmed, and is not left held for one that was saved while
-                # this GIF rendered (the gate skipped it then). Under the alert
-                # lock (``token=None``: any alert), so an alert change cannot
-                # land between the gate's read and its write.
+                # reads that alert's row (its stored status and saved pair)
+                # and the picks on screen, so the button comes back for a true
+                # alert still on its saved pair, stays off for one whose row is
+                # not Confirmed or whose pair has changed, and is not left held
+                # for one saved Confirmed while this GIF rendered (the gate
+                # skipped it then). Under the alert lock (``token=None``: any
+                # alert), so an alert change cannot land between the gate's
+                # read and its write.
                 analysis.apply_if_current(None, _refresh_gif_gate)
 
         try:

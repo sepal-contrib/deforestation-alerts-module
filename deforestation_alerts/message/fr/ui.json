@@ -214,7 +214,7 @@
       "gif_too_few": "Moins de deux images ont pu être rendues pour cette alerte : aucun GIF n'a été créé.",
       "gif_btn": "Exporter le GIF",
       "gif_dwn_btn": "GIF",
-      "gif_hint": "Enregistrez cette alerte comme alerte réelle, avec une image avant et une image après, pour exporter son GIF.",
+      "gif_hint": "Enregistrez cette alerte comme alerte réelle, avec les images avant et après affichées, pour exporter son GIF.",
       "gif_task_title": "Export du GIF de l'alerte",
       "gif_step": "Rendu de {count} images…",
       "gif_done": "GIF de l'alerte prêt.",
