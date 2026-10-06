@@ -26,7 +26,12 @@ import ipyvuetify as v
 
 from gui.i18n import t
 
-FOOTER_STYLE = ("position: sticky; bottom: 0; z-index: 3; padding: 8px 8px 10px; margin-top: 8px; "
+# ``margin-bottom: -32px`` cancels the Workflow panel's own bottom space (its
+# 16px padding and the 16px under each section): a sticky element stays inside
+# its parent, so without it the footer rose 32px off the panel's bottom edge
+# once the content was scrolled to its end.
+FOOTER_STYLE = ("position: sticky; bottom: 0; z-index: 3; padding: 8px 8px 10px; "
+                "margin-top: 8px; margin-bottom: -32px; "
                 "background-color: var(--v-background-base, #ffffff); "
                 "border-top: 1px solid rgba(128, 128, 128, 0.25); box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);")
 _SLOTS = "_defo_footer_slots"

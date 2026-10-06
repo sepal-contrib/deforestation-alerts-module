@@ -71,6 +71,11 @@ def test_the_footer_is_the_panels_last_child_and_sticks(panel):
     controls = panel.controls
     footer = controls.children[-1]
     assert "position: sticky" in footer.style_ and "bottom: 0" in footer.style_
+    # The Workflow panel pads its content (16px) and spaces its sections (16px):
+    # a sticky element stays inside its parent, so without this negative
+    # margin the footer stops 32px above the panel's bottom edge once the
+    # content is scrolled to its end (seen in the browser walk).
+    assert "margin-bottom: -32px" in footer.style_
     sections = analysis_tile.panel_sections(controls)
     assert footer is sections.footer.root
     assert footer.children[0] is sections.export.root
