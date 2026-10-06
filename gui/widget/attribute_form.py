@@ -35,6 +35,7 @@ from deforestation_alerts.scripts.raster_attribute import (
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.widget.raster_input import RasterInput, absolute
+from gui.widget.text_style import MUTED
 
 _STATS = ["majority", "mean", "min", "max", "median"]
 _ROW = "display:flex;gap:8px;align-items:center;"
@@ -132,7 +133,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
         if error:  # a load failure, next to the field it is about (the modal's inline validation)
             solara.Text(error, classes=["error--text"])
         if loaded and rows:
-            solara.Text(t("steps.integrate.attr_loaded", source=loaded[0]), classes=["text--secondary"])
+            solara.Text(t("steps.integrate.attr_loaded", source=loaded[0]), style=MUTED)
         for i, r in enumerate(rows):
             with rv.Html(tag="div", style_=_ROW):
                 rv.Checkbox(v_model=r["include"], on_v_model=lambda v, i=i: _edit(i, include=v),

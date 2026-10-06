@@ -28,6 +28,7 @@ from gui.scripts import vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.text_style import MUTED
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 _HEX = re.compile(r"[0-9a-fA-F]{6}|[0-9a-fA-F]{3}")
@@ -275,7 +276,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
                         asset_types=("IMAGE",), disabled=busy, show_origin=False)
             if bands_task.pending:
-                solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+                solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
             elif bands_task.error:
                 solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                             classes=["error--text"])
@@ -303,6 +304,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                          persistent_hint=True)
             if region is not None:
                 solara.Text(t("steps.layers.region", region=vis_layers.region_label(region)),
-                            classes=["text--secondary"])
+                            style=MUTED)
         rv.Checkbox(label=t("steps.layers.field_show_in_analysis"), v_model=show, on_v_model=set_show, dense=True,
                     hide_details=True, disabled=busy)

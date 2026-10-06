@@ -27,6 +27,7 @@ from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.text_style import MUTED
 
 FORMATS = ("radd", "ccdc", "date_only")
 ENCODINGS = ("yymm", "yyddd", "yyyyddd", "decimal_year")
@@ -287,9 +288,9 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                           on_v_model=set_key, dense=True, outlined=True, hint=t("steps.alerts.predefined_hint"),
                           persistent_hint=True)
                 if key == "RADD":
-                    solara.Text(t("coverage.radd_note"), classes=["text--secondary"])
+                    solara.Text(t("coverage.radd_note"), style=MUTED)
             else:
-                solara.Text(t("steps.alerts.all_added"), classes=["text--secondary"])
+                solara.Text(t("steps.alerts.all_added"), style=MUTED)
         else:
             rv.TextField(label=t("steps.alerts.name_label"), v_model=name, on_v_model=set_name, dense=True,
                          outlined=True, disabled=src0 is not None or busy, hint=t("steps.alerts.name_hint"),
@@ -297,9 +298,9 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
                         disabled=busy)
             if asset_type == "IMAGE_COLLECTION":
-                solara.Text(t("steps.alerts.collection_help"), classes=["text--secondary"])
+                solara.Text(t("steps.alerts.collection_help"), style=MUTED)
             if bands_task.pending:
-                solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+                solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
             elif bands_task.error:
                 solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                             classes=["error--text"])

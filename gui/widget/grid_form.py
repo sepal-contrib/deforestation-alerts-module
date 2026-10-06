@@ -12,6 +12,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine import grid as gridmod
 from gui.i18n import format_number, t
 from gui.store.project_writers import is_writing
+from gui.widget.text_style import MUTED
 
 LARGE_BYTES = 2e9  # spec §7.1: warn (not block) above 2 GB per source
 
@@ -112,11 +113,11 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
         # rv.use_event is a hook: called unconditionally (spec §11)
         rv.use_event(epsg_field, "click:append", lambda *_: None if locked else _auto())
         if preview is not None:
-            solara.Text(grid_size_text(preview), classes=["text--secondary"])
+            solara.Text(grid_size_text(preview), style=MUTED)
             if gridmod.estimate_bytes(preview) > LARGE_BYTES:
                 solara.Text(t("steps.prepare.grid_large"), classes=["warning--text"])
         if locked:
-            solara.Text(t("steps.prepare.grid_locked"), classes=["text--secondary"])
+            solara.Text(t("steps.prepare.grid_locked"), style=MUTED)
         else:
             solara.Button(t("steps.prepare.grid_save"), color="primary", small=True, disabled=bool(err),
                           on_click=_save)

@@ -54,6 +54,7 @@ from gui.widget.attribute_modal import AttributeModal
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
+from gui.widget.text_style import MUTED
 
 SORTINGS = [1, 2, 3, 4]
 
@@ -246,7 +247,7 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
             solara.Text(t(f"steps.integrate.set_{active_status}", set=active_label), classes=["warning--text"])
         if sid:
             solara.Text(t("steps.integrate.will_create", period=period.id, sources=" + ".join(chosen)),
-                        classes=["text--secondary"])
+                        style=MUTED)
         solara.Button(t("steps.integrate.run"), color="primary", small=True, icon_name="mdi-vector-union",
                       disabled=busy or not chosen, loading=busy, on_click=_on_run)
         if has_set:

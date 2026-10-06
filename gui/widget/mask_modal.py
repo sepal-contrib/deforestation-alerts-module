@@ -28,6 +28,7 @@ from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.text_style import MUTED
 
 
 async def validate_mask(gee_interface, project, *, name, origin, ref, asset_type, band, editing=None) -> dict:
@@ -183,7 +184,7 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
         RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
                     disabled=busy)
         if bands_task.pending:
-            solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+            solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
         elif bands_task.error:
             solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                         classes=["error--text"])
@@ -195,4 +196,4 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
                                    disabled=busy):
                     rv.Radio(label=t("steps.prepare.mask_mode_keep"), value="keep")
                     rv.Radio(label=t("steps.prepare.mask_mode_exclude"), value="exclude")
-        solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"])
+        solara.Text(t("steps.prepare.masks_note"), style=MUTED)

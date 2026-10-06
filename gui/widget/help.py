@@ -14,6 +14,7 @@ import reacton.ipyvuetify as rv
 import solara
 
 from gui.i18n import t
+from gui.widget.text_style import MUTED
 
 
 @solara.component
@@ -65,5 +66,5 @@ def StepIntro(description: str, title: str, markdown: str):
     an info button with the longer explanation. Rendered once per step, right
     under the step's title, at the component's top level (see InfoButton)."""
     with solara.Row(style="gap:4px;align-items:center;flex-wrap:nowrap;"):
-        solara.Text(description, classes=["text--secondary"], style="flex:1 1 auto;")
+        solara.Text(description, style=MUTED + "flex:1 1 auto;")
         InfoButton(title, markdown)

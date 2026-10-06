@@ -29,6 +29,7 @@ from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.mask_modal import MaskModal
 from gui.widget.product_table import ProductTable, status_text
+from gui.widget.text_style import MUTED
 
 MASK_ACTIONS = 5  # an Earth Engine mask's: download, re-download, map, edit, delete
 
@@ -268,7 +269,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
                       on_click=_open_add)
         ProductTable(title=t("steps.prepare.masks_title"), columns=mask_columns(), rows=table_rows,
                      empty_text=t("steps.prepare.masks_empty"))
-        solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"], style="font-size:0.78rem;")
+        solara.Text(t("steps.prepare.masks_note"), style=MUTED + "font-size:0.78rem;")
     MaskModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_add=_add, on_save=_save,
               editing=editing)
     used = len(sets_using_mask(p, pending_delete)) if pending_delete else 0
