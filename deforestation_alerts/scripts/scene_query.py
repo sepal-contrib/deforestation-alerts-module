@@ -9,12 +9,20 @@ the rules here is what makes them testable without a live session.
 """
 
 import calendar
-from datetime import date, timedelta
+import re
+from datetime import date, datetime, timedelta
 from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
-from deforestation_alerts.scripts.scene_index import INDEX_VERSION, SOURCE_CODE, SOURCE_PLANET, row_id
+from deforestation_alerts.scripts.scene_index import (
+    INDEX_VERSION,
+    SOURCE_CODE,
+    SOURCE_LANDSAT,
+    SOURCE_PLANET,
+    SOURCE_S2,
+    row_id,
+)
 
 TTL_HOURS = 24
 TAIL_DAYS = 10
@@ -345,3 +353,80 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
         return str(row["id"])
 
     return (_nearest(before_all, newest=True), _nearest(after_all, newest=False))
+
+
+# ------------------------------------------------- saved picks and the GIF
+
+_CODE_SOURCE = {code: source for source, code in SOURCE_CODE.items()}
+#: ``info[3]`` as ``export`` stores it: ``"<source> <YYYY-MM-DD> "``.
+_SAVED = re.compile(r"^\s*(.+?) (\d{4}-\d{2}-\d{2})\s*$")
+#: the order of two collections on one date, in the GIF as on the strip
+_RANK = {SOURCE_S2: 0, SOURCE_LANDSAT: 1, SOURCE_PLANET: 2}
+
+
+def parse_row_id(rid) -> tuple[str, date]:
+    """``(source, date)`` of a timeline row id: ``row_id`` read backwards."""
+    try:
+        return _CODE_SOURCE[rid[0]], datetime.strptime(rid[1:], "%Y%m%d").date()
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ValueError(f"not a timeline row id: {rid!r}") from exc
+
+
+def saved_pick_id(value) -> Optional[str]:
+    """The row id of a saved ``before_img`` / ``after_img``, or ``None``.
+
+    ``None`` for anything that is not ``"<source> <YYYY-MM-DD> "`` with a
+    source the index knows: an alert never saved (NaN), a value the old
+    per-pane selector wrote, a store edited by hand. Such a side opens on the
+    automatic pick (spec D5); nothing is migrated.
+    """
+    if not isinstance(value, str):
+        return None
+    m = _SAVED.match(value)
+    if m is None or m.group(1) not in SOURCE_CODE:
+        return None
+    try:
+        return row_id(m.group(1), date.fromisoformat(m.group(2)))
+    except ValueError:
+        return None
+
+
+def granule_keys(tables, bbox, source: str, day) -> list[str]:
+    """Every granule key of ``source`` on ``day`` whose footprint meets ``bbox``.
+
+    What the chosen (collection, date) mosaics for one alert. A key with no
+    tile is an AOI-wide mosaic (a Planet basemap) and always counts.
+    """
+    tiles = overlapping_tiles(tables.tiles, bbox)
+    rows = tables.scenes
+    same = rows[(rows["source"] == source) & (rows["date"] == pd.Timestamp(day))]
+    return sorted(same[same["tile"].isin(tiles) | (same["tile"] == "")]["key"])
+
+
+def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:
+    """The GIF's rows, oldest first, with a ``role`` column (spec D6).
+
+    The two picks (``role`` "before" / "after"), plus up to ``n`` rows before
+    the earlier pick and ``n`` after the later one. A neighbour is never
+    hidden by the cloud limit, never a Planet basemap (a monthly mosaic is not
+    a dated look, the rule ``default_pick`` follows) and never between the
+    picks. The picks themselves are frames whatever they are. On one date
+    Sentinel-2 comes before Landsat. Empty when either pick is not in ``rows``.
+    """
+    empty = rows.iloc[0:0].assign(role=pd.Series(dtype=object))
+    ids = set(rows["id"]) if len(rows) else set()
+    if not before_id or not after_id or before_id not in ids or after_id not in ids:
+        return empty
+    ordered = (rows.assign(_rank=rows["source"].map(_RANK).fillna(len(_RANK)))
+               .sort_values(["date", "_rank"], kind="stable").reset_index(drop=True))
+    where = {rid: i for i, rid in enumerate(ordered["id"])}
+    lo, hi = sorted((where[before_id], where[after_id]))
+    pool = (~ordered["hidden"].astype(bool)) & (ordered["source"] != SOURCE_PLANET)
+    earlier = [i for i in range(lo) if pool[i]][-n:] if n else []
+    later = [i for i in range(hi + 1, len(ordered)) if pool[i]][:n]
+    chosen = earlier + sorted({lo, hi}) + later
+    out = ordered.loc[chosen].drop(columns="_rank").reset_index(drop=True)
+    out["role"] = ""
+    out.loc[out["id"] == before_id, "role"] = "before"
+    out.loc[out["id"] == after_id, "role"] = "after"
+    return out

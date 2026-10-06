@@ -456,3 +456,108 @@ def test_a_single_day_window_with_scenes_only_on_either_side():
         scene_index.row_id(S2, date(2026, 6, 10)),
         scene_index.row_id(S2, date(2026, 6, 20)),
     )
+
+
+# ------------------------------------------------- saved picks and the GIF
+
+S2, LS, PL = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOURCE_PLANET
+
+
+def _rows(spec):
+    """Timeline rows (``SELECTION_COLUMNS``) from ``(source, "YYYY-MM-DD", hidden)``."""
+    out = pd.DataFrame(
+        [(scene_index.row_id(src, date.fromisoformat(d)), src, pd.Timestamp(d), 1.0, 1, hidden)
+         for src, d, hidden in spec],
+        columns=list(scene_query.SELECTION_COLUMNS),
+    )
+    return out.sort_values(["date", "source"], kind="stable").reset_index(drop=True)
+
+
+def _rid(src, d):
+    return scene_index.row_id(src, date.fromisoformat(d))
+
+
+def test_a_row_id_reads_back_into_its_source_and_date():
+    assert scene_query.parse_row_id("s20260424") == (S2, date(2026, 4, 24))
+    assert scene_query.parse_row_id("l20260827") == (LS, date(2026, 8, 27))
+    assert scene_query.parse_row_id("p20260401") == (PL, date(2026, 4, 1))
+    for bad in ("", "x20260424", "s2026-04-24", None, "s20261340"):
+        with pytest.raises(ValueError):
+            scene_query.parse_row_id(bad)
+
+
+def test_a_saved_pick_is_the_row_id_of_its_source_and_date():
+    assert scene_query.saved_pick_id("Sentinel 2 2026-04-24 ") == "s20260424"
+    assert scene_query.saved_pick_id("Landsat 2026-08-27 ") == "l20260827"
+    assert scene_query.saved_pick_id("Planet NICFI 2026-04-01 ") == "p20260401"
+    # the trailing space is the contract, but a store trimmed by hand still reads
+    assert scene_query.saved_pick_id("Landsat 2026-08-27") == "l20260827"
+
+
+def test_what_is_not_a_saved_pick_is_none():
+    for value in (None, float("nan"), "", "S2_before", "Sentinel-2 2026-04-24 ",
+                  "Sentinel 2 2026-13-01 ", "MODIS 2026-04-24 ", 1776988800000):
+        assert scene_query.saved_pick_id(value) is None, value
+
+
+def test_the_granule_keys_are_those_of_the_date_and_collection_over_the_alert():
+    tiles = gpd.GeoDataFrame({"tile": ["A", "B"]},
+                             geometry=gpd.GeoSeries([box(0, 0, 1, 1), box(5, 5, 6, 6)], crs=scene_index.WGS84),
+                             crs=scene_index.WGS84)
+    scenes = pd.DataFrame([
+        (S2, pd.Timestamp("2026-04-24"), 1.0, "A", "kA"),
+        (S2, pd.Timestamp("2026-04-24"), 1.0, "B", "kB"),   # another tile: not over the alert
+        (LS, pd.Timestamp("2026-04-24"), 1.0, "A", "kL"),   # another collection
+        (S2, pd.Timestamp("2026-04-25"), 1.0, "A", "kD"),   # another date
+        (PL, pd.Timestamp("2026-04-01"), None, "", "kP"),   # AOI-wide mosaic
+    ], columns=list(scene_index.SCENE_COLUMNS))
+    tables = scene_index.SceneTables(scenes=scenes, tiles=tiles)
+    alert = box(0.2, 0.2, 0.4, 0.4)
+    assert scene_query.granule_keys(tables, alert, S2, date(2026, 4, 24)) == ["kA"]
+    assert scene_query.granule_keys(tables, alert, S2, pd.Timestamp("2026-04-24")) == ["kA"]
+    assert scene_query.granule_keys(tables, alert, PL, date(2026, 4, 1)) == ["kP"]
+    assert scene_query.granule_keys(tables, alert, LS, date(2026, 8, 1)) == []
+
+
+def test_the_gif_takes_two_images_either_side_of_the_picks():
+    rows = _rows([(S2, "2026-01-05", False), (S2, "2026-02-05", False), (S2, "2026-03-05", False),
+                  (S2, "2026-04-05", False), (LS, "2026-06-01", False), (S2, "2026-09-05", False),
+                  (S2, "2026-10-05", False), (S2, "2026-11-05", False), (S2, "2026-12-05", False)])
+    got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
+    assert list(got["id"]) == [_rid(S2, "2026-02-05"), _rid(S2, "2026-03-05"), _rid(S2, "2026-04-05"),
+                               _rid(S2, "2026-09-05"), _rid(S2, "2026-10-05"), _rid(S2, "2026-11-05")]
+    assert list(got["role"]) == ["", "", "before", "after", "", ""]
+
+
+def test_a_side_with_fewer_neighbours_gives_what_it_has():
+    rows = _rows([(S2, "2026-03-05", False), (S2, "2026-04-05", False), (S2, "2026-09-05", False)])
+    got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
+    assert list(got["id"]) == [_rid(S2, "2026-03-05"), _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05")]
+
+
+def test_neighbours_skip_planet_hidden_rows_and_anything_between_the_picks():
+    rows = _rows([(S2, "2026-02-05", False), (S2, "2026-03-05", True), (PL, "2026-03-01", False),
+                  (S2, "2026-04-05", False), (S2, "2026-06-05", False), (S2, "2026-09-05", False),
+                  (PL, "2026-10-01", False), (S2, "2026-11-05", True), (S2, "2026-12-05", False)])
+    got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
+    assert list(got["id"]) == [_rid(S2, "2026-02-05"), _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"),
+                               _rid(S2, "2026-12-05")]
+
+
+def test_a_picked_planet_or_hidden_image_is_still_a_frame():
+    rows = _rows([(PL, "2026-03-01", False), (S2, "2026-09-05", True)])
+    got = scene_query.gif_frames(rows, _rid(PL, "2026-03-01"), _rid(S2, "2026-09-05"))
+    assert list(got["role"]) == ["before", "after"]
+
+
+def test_on_one_date_sentinel2_comes_before_landsat():
+    rows = _rows([(LS, "2026-03-05", False), (S2, "2026-03-05", False), (S2, "2026-04-05", False),
+                  (S2, "2026-09-05", False)])
+    got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
+    assert list(got["id"])[:2] == [_rid(S2, "2026-03-05"), _rid(LS, "2026-03-05")]
+
+
+def test_a_pick_the_rows_do_not_hold_gives_no_frames():
+    rows = _rows([(S2, "2026-04-05", False)])
+    assert scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05")).empty
+    assert scene_query.gif_frames(rows, None, _rid(S2, "2026-04-05")).empty
