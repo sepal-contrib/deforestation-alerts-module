@@ -93,3 +93,21 @@ def test_a_select_action_is_a_radio():
         assert radios == [("primary", ["mdi-radiobox-marked"]), ("grey darken-1", ["mdi-radiobox-blank"])]
     finally:
         rc.close()
+
+
+def test_a_chip_clips_its_text_with_an_ellipsis_and_shows_it_whole_on_hover():
+    # A coverage chip sits in a 140 px column; a long translation must end in
+    # an ellipsis there, not be cut mid-letter, and stay readable on hover.
+    text = "vérification de la couverture d'une très longue zone…"
+    rows = [{"key": "a", "cells": [{"value": "GLAD-L"}, {"type": "chip", "value": text}], "actions": []}]
+    _box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}, {"label": "cov", "width": "140px"}],
+                                           rows=rows, empty_text="-"))
+    try:
+        (chip,) = rc.find(v.Chip).widgets
+        assert chip.attributes.get("title") == text
+        assert "max-width:100%" in (chip.style_ or "")
+        (span,) = [c for c in chip.children if isinstance(c, v.Html)]
+        assert span.children == [text]
+        assert all(rule in span.style_ for rule in ("overflow:hidden", "text-overflow:ellipsis", "white-space:nowrap"))
+    finally:
+        rc.close()

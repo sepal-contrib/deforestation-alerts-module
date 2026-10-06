@@ -8,6 +8,7 @@ sets with Go, the Replace list and deleting the latest period.
 import argparse
 import json
 import re
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -98,7 +99,7 @@ def b_second_period(page, rec, *, out):
     end.fill(JULY.split("_")[1])
     page.wait_for_timeout(800)
     t0 = w.now_ms(page)
-    ph.modal_button(page, "Save").click()
+    ph.primary_button(page).click()  # "Add period": the form's Enter default
     ph.wait_toast(page, t0, "Period created")
     w.wait_for(lambda: not ph.dialog_open(page), 15, "the period modal closed")
     panel = w.panel_text(page)
@@ -108,12 +109,11 @@ def b_second_period(page, rec, *, out):
     rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
     assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
     w.goto_step(page, "prepare", 2000)
-    mask_row = ph.row(page, "south")
     rec["july_mask_row"] = ph.row_text(page, "south")
-    assert mask_row.locator(".v-input--switch.v-input--is-label-active").count() and "Keep" in rec["july_mask_row"], \
-        rec["july_mask_row"]
+    rec["july_mask_mode"] = ph.row_mode_value(page, "south")
+    assert rec["july_mask_mode"] == "Keep", rec["july_mask_row"]
     t1 = w.now_ms(page)
-    ph.row_switch(page, "south")  # off in August only
+    ph.row_mode(page, "south", ph.MODE_OFF)  # off in August only
     ph.wait_toast(page, t1, "This period's sources are out of date")
     w.wait_for(lambda: not ph.manifest(DATA, PROJECT)["periods"][JULY]["masks"]["south"]["on"], 30,
                "the switch saved")
@@ -268,7 +268,8 @@ def f_replace_list(page, rec, *, out):
     page.wait_for_timeout(1000)
     rec["replace_dialog"] = ph.modal_text(page)
     w.shot(page, out, "replace_dialog")
-    assert "1 reviewed alert(s) in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
+    # A plural node since 734b8cb: "1 reviewed alert", no "(s)".
+    assert "1 reviewed alert in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
     # each listed alert on a line of its own (ConfirmDialog's details are blocks)
     assert re.search(r"^#\d+ · Reviewed: confirmed · [\d.]+ ha$", rec["replace_dialog"], re.M), rec["replace_dialog"]
     ph.modal_button(page, "Cancel").click()
@@ -312,6 +313,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8985)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice5_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     south_mask_tif(USER / "south.tif", AMAZON)
     seed(PROJECT, AMAZON, sources=("GLAD-L",), period=tuple(JUNE.split("_")), look_back=30, root=DATA)

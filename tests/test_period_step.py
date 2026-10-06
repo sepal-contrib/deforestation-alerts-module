@@ -31,6 +31,7 @@ from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.tile import period_step
 from gui.widget import period_modal
+from gui.widget.enter_key import ENTER_DEFAULT
 
 JAN_ID, FEB_ID = "2026-01-01_2026-01-31", "2026-02-01_2026-02-28"
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
@@ -146,6 +147,7 @@ def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
     ]
     assert feb["cells"][1]["value"] == "0" and t("steps.period.note_frozen") not in [n["text"] for n in feb["notes"]]
     assert [a["kind"] for a in feb["actions"]] == ["select", "edit", "delete"]
+    assert len(feb["actions"]) == period_step.PERIOD_ACTIONS
     assert feb["actions"][0]["is_on"] and not jan["actions"][0]["is_on"]
 
 
@@ -378,10 +380,10 @@ def test_the_modal_is_prefilled_from_the_latest_period_and_checks_the_order(env)
         assert fields[t("steps.period.start")].v_model == "2026-03-01"
         assert fields[t("steps.period.end")].v_model == "2026-09-30"
         fields[t("steps.period.end")].v_model = "2026-02-15"
-        assert _button(rc, t("steps.period.save")).disabled
+        assert _button(rc, t("steps.period.add")).disabled
         assert _fields(rc)[t("steps.period.end")].error_messages == [t("steps.period.error_order")]
         _fields(rc)[t("steps.period.end")].v_model = "2026-03-31"
-        _button(rc, t("steps.period.save")).fire_event("click", None)
+        _button(rc, t("steps.period.add")).fire_event("click", None)
         assert submitted == [("2026-03-01", "2026-03-31")] and open_.value is False
     finally:
         rc.close()
@@ -396,6 +398,27 @@ def test_the_modal_shows_a_refusal_inline_and_stays_open(env):
         assert _fields(rc)[t("steps.period.start")].v_model == "2026-02-01"  # an edit starts from its dates
         _button(rc, t("steps.period.save")).fire_event("click", None)
         assert open_.value is True
-        assert any(w.children == [t("steps.period.error_exists")] for w in rc.find(v.Html).widgets)
+        # rc.find(v.Html) stops at the frame's outer div: look for the error's own span
+        assert rc.find(v.Html, tag="span", children=[t("steps.period.error_exists")]).widgets
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("editing, label, icon", [
+    (None, "steps.period.add", "mdi-plus"), (FEB_ID, "steps.period.save", "mdi-content-save-outline")])
+def test_the_period_form_sits_on_the_form_frame(env, editing, label, icon):
+    state = _state(_project(env.pdir))
+    open_ = solara.reactive(True)
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, on_submit=lambda a, b: None,
+                                         editing=editing), handle_error=False)
+    try:
+        dialog = rc.find(v.Dialog).widget
+        assert (dialog.max_width, dialog.persistent, dialog.eager) == ("420px", True, True)
+        # Enter presses it, from a date field too (gui/widget/enter_key)
+        [primary] = [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
+        assert t(label) in primary.children
+        assert [c.children[0] for c in primary.children if isinstance(c, v.Icon)] == [icon]
+        dialog.fire_event("keydown.esc", None)
+        assert open_.value is False
     finally:
         rc.close()

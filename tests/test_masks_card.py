@@ -37,6 +37,8 @@ from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.tile import masks_card
 from gui.widget import mask_modal
+from gui.widget.product_table import status_text
+from gui.widget.enter_key import ENTER_DEFAULT
 
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
 MAR = Period(id="2026-03-01_2026-03-31", start=date(2026, 3, 1), end=date(2026, 3, 31))
@@ -78,12 +80,13 @@ def test_a_keep_mask_covering_none_of_the_aoi_warns_on_its_row():
     # an exclude mask covering nothing removes nothing: no warning
     out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "exclude",
                          stats={"on_pixels": 0})])
-    assert out["forest"]["notes"] == []
+    assert out["forest"]["notes"][1:] == []  # the origin line only
 
 
 def test_a_geotiff_mask_has_no_download_status_nor_redownload():
     out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "exclude")])
-    assert out["tif"]["cells"][4]["value"] == "—"
+    assert out["tif"]["cells"][2] == {"type": "status", "status": "missing", "compact": True,
+                                      "title": f"{t('steps.prepare.col_align')}: {status_text('missing')}"}
     kinds = [a["kind"] for a in out["tif"]["actions"]]
     assert "redownload" not in kinds and next(a for a in out["tif"]["actions"]
                                               if a["kind"] == "map_toggle")["disabled"]
@@ -95,11 +98,15 @@ def test_a_geotiff_mask_has_no_download_status_nor_redownload():
 def test_an_earth_engine_mask_row_reads_both_stages_and_can_be_shown_before_alignment():
     out = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")])["forest"]
     assert out["cells"][0] == {"value": "forest"}
-    assert out["cells"][1]["value"] == t("steps.prepare.mask_origin_gee")
-    assert out["cells"][4] == {"type": "status", "status": "missing"}
-    assert out["cells"][5] == {"type": "status", "status": "missing"}
+    assert out["cells"][1]["type"] == "render"  # the Mode select
+    missing = status_text("missing")
+    assert out["cells"][2] == {"type": "status", "status": "missing", "compact": True,
+                               "title": f"{t('steps.prepare.col_download')}: {missing} · "
+                                        f"{t('steps.prepare.col_align')}: {missing}"}
+    assert out["notes"][0] == {"text": t("steps.prepare.mask_origin_gee"), "tone": None}  # no size yet
     kinds = [a["kind"] for a in out["actions"]]
     assert kinds == ["download", "redownload", "map_toggle", "edit", "delete"]
+    assert len(kinds) == masks_card.MASK_ACTIONS  # the budget's count is the most a row has
     assert not next(a for a in out["actions"] if a["kind"] == "map_toggle")["disabled"]
 
 
@@ -108,7 +115,8 @@ def test_a_mask_whichever_periods_job_claimed_it_reads_running():
 
     out = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")],
                 running={mask_inflight_key("mc", "forest")})["forest"]
-    assert out["cells"][4]["status"] == "running" and out["cells"][5]["status"] == "running"
+    assert out["cells"][2]["status"] == "running"
+    assert out["cells"][2]["title"].count(status_text("running")) == 2  # both stages
     run, redo = out["actions"][0], out["actions"][1]
     assert run["disabled"] and run["loading"] and redo["disabled"]
 
@@ -129,8 +137,39 @@ def test_a_rows_actions_call_back_with_its_name_and_its_error_is_keyed():
 
 def test_a_geotiff_mask_whose_file_is_gone_says_so_and_cannot_run():
     out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "keep", file_missing="/x/tif.tif")])["tif"]
-    assert out["notes"] == [{"text": t("steps.prepare.file_missing", path="/x/tif.tif"), "tone": "error"}]
+    assert out["notes"][1:] == [{"text": t("steps.prepare.file_missing", path="/x/tif.tif"), "tone": "error"}]
     assert out["actions"][0]["disabled"]
+
+
+@pytest.mark.parametrize("raw, aligned, shown", [
+    (Status.STALE, Status.CURRENT, "stale"),  # the download, when it is not current
+    (Status.MISSING, Status.STALE, "missing"),
+    (Status.CURRENT, Status.STALE, "stale"),  # else the alignment
+    (Status.CURRENT, Status.CURRENT, "ready"),
+    (None, Status.MISSING, "missing"),  # a GeoTIFF: the alignment only
+])
+def test_the_compact_status_shows_the_first_stage_that_is_not_current(raw, aligned, shown):
+    origin = "gee" if raw is not None else "file"
+    out = _rows([MaskRow("forest", origin, raw, aligned, True, "keep")])["forest"]
+    assert out["cells"][2]["status"] == shown
+
+
+def test_the_mode_select_reads_off_for_a_mask_that_is_off():
+    out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, False, "exclude")])["forest"]
+
+    @reacton.component
+    def Cell():
+        with rv.Html(tag="div") as main:
+            out["cells"][1]["fn"]()
+        return main
+
+    _box, rc = reacton.render(Cell(), handle_error=False)
+    try:
+        select = rc.find(v.Select).widget
+        assert select.v_model == "off"
+        assert [i["value"] for i in select.items] == ["off", "keep", "exclude"]
+    finally:
+        rc.close()
 
 
 def test_the_size_sums_the_masks_download_and_aligned_file():
@@ -143,7 +182,8 @@ def test_the_size_sums_the_masks_download_and_aligned_file():
         p, "/tmp/x", FEB, [MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")],
         running=set(), errors={}, on=set(), building=set(), run=None, rerun=None, toggle=None, edit=None,
         delete=None, switch=None)
-    assert row["cells"][6]["value"] == "5.0 MB"
+    assert row["notes"][0] == {"text": f"{t('steps.prepare.mask_origin_gee')} · "
+                                       f"{t('steps.prepare.size_note', size='5.0 MB')}", "tone": None}
 
 
 def test_a_switch_only_edits_the_project():
@@ -414,21 +454,21 @@ def test_a_switch_from_the_row_edits_the_period_and_says_a_run_reharmonizes(monk
         try:
             bus = get_current_bus()
             row = next(r for r in seen["rows"] if r["key"] == "forest")
-            assert [c["type"] for c in row["cells"][2:4]] == ["render", "render"]
+            assert row["cells"][1]["type"] == "render"
 
             @reacton.component
-            def Cells():  # the switch and mode cells, as ProductTable renders them
+            def Cells():  # the Mode cell, as ProductTable renders it
                 with rv.Html(tag="div") as main:
-                    for cell in row["cells"][2:4]:
-                        cell["fn"]()
+                    row["cells"][1]["fn"]()
                 return main
 
             box, cells = reacton.render(Cells(), handle_error=False)
             try:
-                assert cells.find(v.Switch).widgets[0].v_model is True
-                cells.find(v.Select).widgets[0].v_model = "exclude"
+                select = cells.find(v.Select).widget
+                assert select.v_model == "keep"
+                select.v_model = "exclude"
                 assert state.project.value.periods[FEB.id].masks["forest"] == PeriodMask(on=True, mode="exclude")
-                cells.find(v.Switch).widgets[0].v_model = False
+                select.v_model = "off"  # off keeps the mode for when it is on again
                 assert state.project.value.periods[FEB.id].masks["forest"] == PeriodMask(on=False, mode="exclude")
             finally:
                 cells.close()
@@ -577,7 +617,8 @@ def test_the_card_lists_the_rows_with_the_note_and_opens_add(monkeypatch):
     async def main():
         rc, seen, modal, _ = _card(monkeypatch, state)
         try:
-            assert seen["title"] == t("steps.prepare.masks_title") and len(seen["columns"]) == 7
+            assert seen["title"] == t("steps.prepare.masks_title")
+            assert seen["columns"] == masks_card.mask_columns() and len(seen["columns"]) == 3
             assert rc.find(v.Html).widgets  # rendered
             texts = [w for w in rc.find(v.Html).widgets if t("steps.prepare.masks_note") in str(w.children)]
             assert texts
@@ -634,6 +675,15 @@ def _dialog_cancel(rc):
 
 def _shown(rc, text):
     return [w for w in rc.find(v.Html).widgets if text in str(w.children)]
+
+
+def _defaults(rc):
+    """The buttons Enter would press (gui/widget/enter_key)."""
+    return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
+
+
+def _icons(btn):
+    return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
 
 
 def test_a_geotiff_mask_is_validated_added_inside_the_task_and_the_modal_closes(tmp_path, monkeypatch):
@@ -781,6 +831,7 @@ def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
             assert _name_field(rc).disabled is True and _StubRasterInput.seen.disabled is True
             assert rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0].disabled is True
             assert rc.find(v.RadioGroup, v_model="keep").widgets[0].disabled is True
+            assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
             else:
@@ -883,6 +934,44 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
     asyncio.run(main())
 
 
+def test_the_mask_form_sits_on_the_form_frame(monkeypatch):
+    monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        try:
+            dialog = rc.find(v.Dialog).widget
+            assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
+            assert (_name_field(rc).hint, _name_field(rc).persistent_hint) == (
+                t("steps.prepare.mask_name_hint"), True)
+            fieldset = rc.find(v.Html, tag="fieldset").widget
+            assert fieldset.children[0].children == [t("steps.prepare.mask_mode_label")]
+            assert rc.find(v.RadioGroup, v_model="keep").widget in fieldset.children
+            add = _submit_btn(rc)
+            assert _defaults(rc) == [add] and _icons(add) == ["mdi-plus"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_mask_edit_has_a_save_button_and_no_mode_fieldset(monkeypatch):
+    monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        _box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
+        try:
+            save = _submit_btn(rc, t("steps.alerts.save"))
+            assert _defaults(rc) == [save] and _icons(save) == ["mdi-content-save-outline"]
+            assert not rc.find(v.Html, tag="fieldset").widgets
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_the_card_renders_nothing_once_the_project_is_closed(monkeypatch):
     """The card subscribes to the project: closing it re-renders the card
     (maybe before its step unmounts it), which must not fail."""
@@ -899,7 +988,7 @@ def test_the_card_renders_nothing_once_the_project_is_closed(monkeypatch):
     asyncio.run(main())
 
 
-@pytest.mark.parametrize("flip", ["switch", "mode"])
+@pytest.mark.parametrize("flip", ["off", "exclude"])
 def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
     """When the switch is refused (the project changed meanwhile) the props
     are unchanged, so nothing was pushed back and the cell kept the user's
@@ -922,11 +1011,8 @@ def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
     async def main():
         box, rc = reacton.render(Page(), handle_error=False)
         try:
-            widget, held = ((rc.find(v.Switch).widget, True) if flip == "switch"
-                            else (rc.find(v.Select).widget, "keep"))
-            widget.v_model = False if flip == "switch" else "exclude"  # the user's flip, refused
-            again = rc.find(v.Switch).widget if flip == "switch" else rc.find(v.Select).widget
-            assert again.v_model == held
+            rc.find(v.Select).widget.v_model = flip  # the user's choice, refused
+            assert rc.find(v.Select).widget.v_model == "keep"
         finally:
             rc.close()
 

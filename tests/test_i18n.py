@@ -79,13 +79,13 @@ PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", 
 #: "Source" or "Total", Spanish "Total"). Add a key only when the word is the
 #: same in that language, never to silence the test.
 SAME_IN = {
-    "es-ES": {"steps.layers.region_asia", "overview_tile.table_total"},
+    "es-ES": {"steps.layers.region_asia", "overview_tile.table_total", "steps.integrate.attr_col_raster"},
     "fr": {
         # "images", "source" and "verdict" are the same words in French.
         "analysis.timeline.images", "analysis_tile.facts.source",
         "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
-        "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
+        "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
         "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",
         "steps.project.count_sources.other", "workflow.count_sources.one", "workflow.count_sources.many",
@@ -337,7 +337,7 @@ def test_a_rows_pixel_count_is_counted_in_the_language(locale, many, one):
 
 
 def test_counted_labels_agree_with_their_count():
-    from gui.tile.prepare_step import size_text
+    from gui.i18n import size_text
 
     assert i18n.tn("steps.prepare.run_all", 1) == "Run 1 pending"
     assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")

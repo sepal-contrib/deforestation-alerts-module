@@ -54,6 +54,17 @@ def resolve_column_names(specs, reserved=()):
     return out
 
 
+def reserved_for(layers, skip=None, reserved=ALERT_RESERVED_COLUMNS) -> set:
+    """The columns a layer's bands must not take (spec D3): ``reserved`` (the
+    alert columns) and every column of the other ``layers``. ``skip`` is the
+    index of the layer being edited: its own columns stay its own."""
+    out = set(reserved)
+    for i, layer in enumerate(layers or []):
+        if i != skip:
+            out.update(b["column"] for b in (layer or {}).get("bands", []))
+    return out
+
+
 def band_names(raster_path):
     """List band names from a raster's descriptions, falling back to band_N."""
     with rasterio.open(raster_path) as src:

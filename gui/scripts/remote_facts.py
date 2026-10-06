@@ -124,6 +124,16 @@ def RemoteFactsLoader(app_state, gee_interface):
         info = await gee_interface.get_info_async(catalogue.meta_request("GLAD-L"))
         app_state.catalogue_meta.set({**app_state.catalogue_meta.value, "GLAD-L": info})
 
+    # This task and the two below take plain dependencies: safe only because
+    # they move on the event loop alone. Whether a project is open, its name,
+    # its AOI digest and origin, the sources still needing coverage and the
+    # retry change in handlers and loop tasks (the Project dialog, the AOI
+    # and Alerts steps, the source modal, these tasks' own results), never in
+    # a worker publish (tests/test_shell_thread_publish.py renders this
+    # loader under the workers' publishes). Should a worker ever publish one of them, wrap
+    # the list in ``use_loop_dependencies`` (gui/scripts/solara_threads.py),
+    # or the task starts in the worker's render and raises "no running event
+    # loop".
     meta_task = solara.lab.use_task(_meta, dependencies=[p is not None, retry], prefer_threaded=False,
                                     raise_error=False)
 
@@ -151,6 +161,7 @@ def RemoteFactsLoader(app_state, gee_interface):
             app_state.coverage_refreshed.set(app_state.coverage_refreshed.value | {(digest, k) for k in pre})
             app_state.coverage_error.set(None)
 
+    # Loop-only dependencies (see ``meta_task``).
     cov_task = solara.lab.use_task(_coverage, dependencies=[name, digest, pre, custom, origin, retry],
                                    prefer_threaded=False, raise_error=False)
 
@@ -182,7 +193,8 @@ def RemoteFactsLoader(app_state, gee_interface):
         finally:
             staged.unlink(missing_ok=True)
 
-    # ``retry``: "Check again" also fetches a sidecar whose fetch failed
+    # ``retry``: "Check again" also fetches a sidecar whose fetch failed.
+    # Loop-only dependencies (see ``meta_task``).
     side_task = solara.lab.use_task(_sidecar, dependencies=[name, digest, need_sidecar, origin, retry],
                                     prefer_threaded=False, raise_error=False)
 

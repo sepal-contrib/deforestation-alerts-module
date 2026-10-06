@@ -17,7 +17,7 @@
     "chip_partial": "cubre el {pct}% de la AOI",
     "chip_none": "no cubre la AOI",
     "chip_unchecked": "cobertura sin comprobar",
-    "chip_checking": "comprobando cobertura…",
+    "chip_checking": "comprobando…",
     "radd_note": "RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.",
     "dates": "{first} → {last}",
     "dates_region": "{region}: {first} → {last}",

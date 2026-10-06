@@ -95,7 +95,7 @@ def validate_name(name, project, current: Optional[str] = None) -> Optional[str]
 
 
 def vis_layers_summary(layer) -> str:
-    """The layer's Details cell: its bands or band and colormap and its range,
+    """The layer's details note: its bands or band and colormap and its range,
     or the NICFI month."""
     if layer.kind == "nicfi":
         return layer.month or t("steps.layers.nicfi_period_month")

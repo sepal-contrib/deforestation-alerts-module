@@ -54,8 +54,13 @@ _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 ANALYSIS_VIEW = "analysis_tile"
 
 
-def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, attribute_config):
-    """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``."""
+def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, attribute_layers):
+    """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``.
+
+    ``attribute_layers``: the attribute-layer configs in order (None: none). A
+    new set writes them as ``attribute_layers``, never as the legacy
+    ``attribute_config`` (spec D3).
+    """
     try:
         ha = float(str(min_size).strip())
     except (TypeError, ValueError):
@@ -76,7 +81,8 @@ def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, at
         area_geojson=drawn_geojson if area_mode == "drawn" else None,
         sorting=int(sorting),
         max_alerts=cap,
-        attribute_config=attribute_config,
+        attribute_config=None,
+        attribute_layers=list(attribute_layers or []),
     ), None
 
 

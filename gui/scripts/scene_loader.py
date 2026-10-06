@@ -51,7 +51,7 @@ from deforestation_alerts.scripts import scene_index, scene_query
 from gui.i18n import t
 from gui.scripts import aoi_io, remote_facts, scene_cache, vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
-from gui.scripts.solara_threads import to_thread_in_context
+from gui.scripts.solara_threads import to_thread_in_context, use_loop_dependencies
 
 #: Under ``SEPALUI.deforestation_alerts`` so a failure reaches the server log
 #: (``notify_bridge.install_server_log_handler`` takes WARNING+ there). The
@@ -480,6 +480,14 @@ def SceneIndexLoader(app_state, gee_interface):
             # that renders the flag, not here.
             _publish(app_state.scene_index_pending, False)
 
+    # Plain dependencies, unlike the widener's below: safe only because they
+    # move on the event loop alone. The project's name, its AOI digest, the
+    # active period (``fg``), the AOI origin and the retry change in the
+    # Project dialog's, the AOI step's and the Period step's handlers, never
+    # in a worker publish (tests/test_solara_threads.py guards the active
+    # period). Should a worker ever publish one of them, wrap the list in
+    # ``use_loop_dependencies`` (gui/scripts/solara_threads.py), or the task
+    # starts in the worker's render and raises "no running event loop".
     load = solara.lab.use_task(_load, dependencies=[name, digest, fg, origin, retry],
                                prefer_threaded=False, raise_error=False)
 
@@ -518,6 +526,9 @@ def SceneIndexLoader(app_state, gee_interface):
     # worker publishes: they move once per ``_load`` run, so ``_widen`` is
     # re-run once per load rather than looping. ``app_state.scene_manifest``,
     # which ``_fetch`` does publish, is deliberately **not** a dependency.
-    solara.lab.use_task(_widen, dependencies=[name, digest, fg, bg, origin, retry,
-                                              load.pending, load.finished],
+    # The status moves on the loop, but a worker's publish (the active-set
+    # loader's alerts) can render this leaf in the worker thread while it
+    # does; there the task cannot start, so the dependencies wait for the loop.
+    solara.lab.use_task(_widen, dependencies=use_loop_dependencies([name, digest, fg, bg, origin, retry,
+                                                                    load.pending, load.finished]),
                         prefer_threaded=False, raise_error=False)

@@ -9,8 +9,14 @@ import time
 import traceback
 from pathlib import Path
 
-from tools.walk.walklib import (close_dialog, dialog_text, dialog_visible, goto_step, log, now_ms,
-                                panel_text, shot, toasts_since, wait_for)
+from tools.walk.walklib import (ENTER_BUTTON, MODAL, close_dialog, dialog_text, dialog_visible, en, goto_step,
+                                log, now_ms, panel_text, shot, toasts_since, wait_for)
+
+#: Form labels as the app shows them (the English catalogue).
+SOURCE_TYPE = en("steps.alerts.mode_label")
+RASTER_SOURCE = en("steps.raster_input.origin_label")
+ORIGIN = {"gee": en("steps.raster_input.origin_gee"), "file": en("steps.raster_input.origin_file")}
+MODE_OFF = en("steps.prepare.mask_mode_off")
 
 
 def manifest(data_dir, project):
@@ -95,11 +101,22 @@ def download_btn(page):
                         'button:has-text("Download"):visible').first
 
 
+def compact_stages(titles, label) -> int:
+    """How many stages read ``label`` in compact status tooltips: a Masks row
+    shows one icon whose title is ``"Download: ready · Aligned: ready"``
+    (``masks_card.mask_status``), one stage per ``Column: status``."""
+    return sum(len(re.findall(rf": {re.escape(label)}(?= ·|$)", t or "")) for t in titles)
+
+
 def prepare_state(page):
-    return {
-        "ready": page.locator('.right-panel :text-is("ready")').count(),
-        "running": page.locator('.right-panel :text-is("running")').count(),
-    }
+    """The "ready" / "running" stages on the panel: a source row's status
+    cells (their label), and a Masks row's compact status (its tooltip)."""
+    titles = page.locator(".right-panel [title]").evaluate_all("es => es.map(e => e.getAttribute('title'))")
+    out = {}
+    for state in ("ready", "running"):
+        label = en(f"widgets.product_table.status_{state}")
+        out[state] = page.locator(f'.right-panel :text-is("{label}")').count() + compact_stages(titles, label)
+    return out
 
 
 def save_grid(page, *, resolution="30"):
@@ -206,22 +223,33 @@ def review_and_save(page, rec, *, out):
     assert not download_btn(page).is_disabled(), "Download still disabled after the Save"
 
 
+def _lane_options(page, lane):
+    """The pickable stripes of one timeline lane (``"before"`` / ``"after"``):
+    ``role=option`` buttons, disabled while the cloud limit hides them. Planet
+    is left out: a NICFI pick depends on the account's access."""
+    host = page.locator(f'.analysis-timeline:visible [role="listbox"][aria-label^="{en(f"analysis.timeline.lane_{lane}")}"]')
+    return host.locator('button[role="option"]:not([disabled]):not([aria-label^="Planet"])')
+
+
 def pick_images(page, rec, *, out):
-    tabs = page.locator('.v-tab:has-text("Sentinel-2"):visible')
-    for i in range(tabs.count()):
-        tabs.nth(i).click()
-        page.wait_for_timeout(3000)
-    wait_for(lambda: page.locator(".v-slide-group button:visible").count() >= 2, 240, "image buttons")
-    groups = page.locator(".v-slide-group:visible")
+    """The shared image timeline (``gui/tile/analysis/timeline.py``): one click
+    on a stripe of the upper lane sets the before image, of the lower lane the
+    after image. Picks the earliest before and the latest after stripe drawn,
+    as the retired per-pane selectors' first and last buttons did."""
+    before, after = _lane_options(page, "before"), _lane_options(page, "after")
+    wait_for(lambda: before.count() and after.count(), 240, "image stripes in both timeline lanes")
     picked = []
-    for g in range(groups.count()):
-        b = groups.nth(g).locator("button")
-        if b.count():
-            k = b.count() - 1 if g else 0
-            picked.append(b.nth(k).inner_text())
-            b.nth(k).click()
-            page.wait_for_timeout(4000)
+    for opts, k in ((before, 0), (after, -1)):
+        btn = opts.nth(k if k >= 0 else opts.count() - 1)
+        picked.append(btn.get_attribute("aria-label"))
+        # Stripes are a few px apart and overlap their neighbours' hit areas:
+        # the click goes to this one, not to the point under its centre.
+        btn.dispatch_event("click")
+        page.wait_for_timeout(4000)
     rec["picked"] = picked
+    unset = en("analysis.timeline.unset")
+    readout = page.locator(".analysis-timeline:visible").first
+    wait_for(lambda: readout.inner_text().count(f": {unset}") == 0, 30, "both images set in the readout")
     shot(page, out, "images_picked")
     assert len(picked) >= 2, picked
 
@@ -251,15 +279,24 @@ def open_overview(page, wait=5000):
 
 
 def show_alerts(page, on=True, label="Show these alerts on the map"):
-    """Flip Integrate & vectorize's alert switch -- what draws the active set
-    on the shared map now that the Overview dashboard draws nothing. The layer
-    stays on while the user moves to another step (MapLayers ruling #10)."""
+    """Flip the active set's alert switch, which draws the set on the shared
+    map. The layer stays on while the user moves to another step (MapLayers
+    ruling #10). Integrate & vectorize's switch is used when that step is open.
+    With every source out of date, the step is locked and shows no form, so
+    the walk uses the Overview dialog's copy of the switch instead: the same
+    boolean, and turning it ON closes the dialog."""
     goto_step(page, "integrate", 2000)
     row = page.locator(f'.right-panel .v-input--switch:has(label:text-is("{label}"))').first
-    wait_for(lambda: row.count(), 30, f'the "{label}" switch')
+    locked = page.locator(f'.right-panel :text-is("{en("workflow.lock_integrate")}")')
+    wait_for(lambda: row.count() or locked.count(), 30, f'the "{label}" switch or the Integrate lock')
+    if not row.count():
+        open_overview(page, wait=2000)
+        row = page.locator(f'.dialog-card .v-input--switch:has(label:text-is("{label}"))').first
+        wait_for(lambda: row.count(), 60, f'the Overview\'s "{label}" switch')
     if row.locator("input").first.is_checked() != on:
         row.locator(".v-input--selection-controls__input").first.click()
         page.wait_for_timeout(2000)
+    close_dialog(page)
 
 
 def overview_reviewed(page, rec, *, out, n=1):
@@ -288,21 +325,25 @@ def overview_export_csv(page, rec, *, out, folder):
 
 
 # ------------------------------------------------- forms, tables and the legend (gates of slices 3-6)
-# A step's modal is a Vuetify dialog (`.v-dialog--active`); a ProductTable row is
-# a CSS-grid div whose first cell holds the row's name, its under-row notes
-# inside it; pysepal's AssetSelectComponent is a combobox labelled "Select an
-# asset", its FileInputComponent a `.pysepal-file-input-btn` opening a file menu
-# rooted at $HOME that closes itself when a file is picked; the floating map
-# legend is LegendComponent's `div.sepal-legend` (z-index 150), its dropdown a
-# native <select> shown with two legends or more. Never press Escape inside a
-# step modal: ESC is its cancel.
+# A step's modal is a Vuetify dialog (`MODAL`) on the form frame: an outside
+# click nudges it, ESC cancels it, Enter presses its one `ENTER_BUTTON`
+# (`primary_button`); its raster origin is a select labelled RASTER_SOURCE
+# (`choose_origin`). A ProductTable row is a CSS-grid div whose first cell
+# holds the row's name, its under-row notes inside it; a Masks card row has
+# one Mode select (Off / Keep / Exclude) for its old switch and mode.
+# pysepal's AssetSelectComponent is a combobox labelled "Select an asset", its
+# FileInputComponent a `.pysepal-file-input-btn` opening a file menu rooted at
+# $HOME that closes itself when a file is picked; the floating map legend is
+# LegendComponent's `div.sepal-legend` (z-index 150), its dropdown a native
+# <select> shown with two legends or more. Never press Escape inside a step
+# modal unless the walk means to cancel it.
 
 def dialog_open(page) -> bool:
-    return page.locator(".v-dialog--active").count() > 0
+    return page.locator(MODAL).count() > 0
 
 
 def modal(page):
-    return page.locator(".v-dialog--active").last
+    return page.locator(MODAL).last
 
 
 def modal_text(page) -> str:
@@ -313,16 +354,22 @@ def modal_button(page, text):
     return modal(page).locator(f'button:has-text("{text}"):visible').last
 
 
+def primary_button(page):
+    """The open form's primary button ("Add …" or "Save", whatever the
+    label): its one Enter default. Absent while the form's check runs."""
+    return modal(page).locator(f"{ENTER_BUTTON}:visible").last
+
+
 def modal_field(page, label):
     return modal(page).locator(f'.v-input:has(label:text-is("{label}")) input').first
 
 
-def radio(page, label, scope=".v-dialog--active"):
+def radio(page, label, scope=MODAL):
     page.locator(f'{scope} .v-radio:has(label:has-text("{label}"))').last.click()
     page.wait_for_timeout(500)
 
 
-def radio_checked(page, label, scope=".v-dialog--active") -> bool:
+def radio_checked(page, label, scope=MODAL) -> bool:
     return page.locator(f'{scope} .v-radio.v-item--active:has(label:has-text("{label}"))').count() > 0
 
 
@@ -331,7 +378,7 @@ def _open_select(page, label, scope):
     page.wait_for_timeout(600)
 
 
-def menu_items(page, label, scope=".v-dialog--active") -> list:
+def menu_items(page, label, scope=MODAL) -> list:
     """Open the select labelled ``label`` and read its items (text, disabled); the menu is closed again."""
     _open_select(page, label, scope)
     items = page.evaluate("""() => [...document.querySelectorAll('.menuable__content__active .v-list-item')]
@@ -342,14 +389,19 @@ def menu_items(page, label, scope=".v-dialog--active") -> list:
     return items
 
 
-def choose(page, label, option, scope=".v-dialog--active"):
+def choose(page, label, option, scope=MODAL):
     """Pick ``option`` (substring of an item's text) in the select labelled ``label``."""
     _open_select(page, label, scope)
     page.locator(f'.menuable__content__active .v-list-item:has-text("{option}")').first.click()
     page.wait_for_timeout(600)
 
 
-def type_asset(page, asset_id, scope=".v-dialog--active"):
+def choose_origin(page, origin, scope=MODAL):
+    """RasterInput's origin select: ``"gee"`` (an Earth Engine asset) or ``"file"`` (a GeoTIFF)."""
+    choose(page, RASTER_SOURCE, ORIGIN[origin], scope)
+
+
+def type_asset(page, asset_id, scope=MODAL):
     """AssetSelectComponent: type an asset id, commit it (Enter, then Tab)."""
     field = page.locator(f'{scope} .v-input:has(label:has-text("Select an asset")) input:not([type="hidden"])').last
     field.click()
@@ -389,18 +441,36 @@ def row_button(page, name, icon, scope=".right-panel"):
     return row(page, name, scope).locator(f"button:has(.{icon})").first
 
 
-def row_switch(page, name):
-    """Flip the "on in this period" switch of a Masks card row."""
-    row(page, name).locator(".v-input--switch .v-input--selection-controls__input").first.click()
-    page.wait_for_timeout(1200)
-
-
 def row_mode(page, name, mode):
-    """Set a Masks card row's keep / exclude select ("Keep" or "Exclude")."""
+    """Set a Masks card row's Mode select: ``MODE_OFF`` (off in this period),
+    "Keep" or "Exclude" (on, in that mode)."""
     row(page, name).locator(".v-select .v-select__slot").first.click()
     page.wait_for_timeout(600)
     page.locator(f'.menuable__content__active .v-list-item:has-text("{mode}")').first.click()
     page.wait_for_timeout(1200)
+
+
+def row_mode_value(page, name) -> str:
+    """What a Masks card row's Mode select reads ("Off", "Keep" or "Exclude"); '' without the row."""
+    sel = row(page, name).locator(".v-select .v-select__selection").first
+    return sel.inner_text().strip() if sel.count() else ""
+
+
+_FIT_JS = """r => {
+    const box = e => { const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right)]; };
+    return {panel: box(r.closest('.right-panel')), row: box(r),
+            name_px: Math.round(r.firstElementChild.getBoundingClientRect().width),
+            overflow_px: r.scrollWidth - r.clientWidth,
+            buttons: [...r.querySelectorAll('button')].map(box)};
+}"""
+
+
+def table_fit(page, name, scope=".right-panel"):
+    """How the ProductTable row ``name`` sits in the Workflow panel (spec D4):
+    ``{"panel": [left, right], "row": [...], "name_px", "overflow_px",
+    "buttons": [[left, right], ...]}``; None without the row."""
+    loc = row(page, name, scope)
+    return loc.evaluate(_FIT_JS) if loc.count() else None
 
 
 def wait_toast(page, t0_ms, text, timeout=60, kind=None):
@@ -415,12 +485,11 @@ def add_mask(page, rec, *, name, origin, ref, band, mode="Keep", out):
     visible_btn(page, "Add mask", ".right-panel").click()
     wait_for(lambda: dialog_open(page), 15, "the mask modal")
     modal_field(page, "Name").fill(name)
+    choose_origin(page, origin)
     if origin == "gee":
-        radio(page, "Earth Engine asset")
         type_asset(page, ref)
     else:
-        radio(page, "GeoTIFF in my SEPAL folder")
-        pick_file(page, "GeoTIFF", ref, scope=".v-dialog--active")
+        pick_file(page, "GeoTIFF", ref, scope=MODAL)
     wait_for(lambda: "Reading the bands" not in modal_text(page) and "Could not read" not in modal_text(page), 120,
              f"the bands of {ref}")
     choose(page, "Band", str(band))

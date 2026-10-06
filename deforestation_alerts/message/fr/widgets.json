@@ -31,10 +31,6 @@
       "status_no_data": "aucune donnée",
       "status_not_covered": "non couverte",
       "status_unchecked": "non vérifiée"
-    },
-    "creation_dialog": {
-      "replace_title": "Remplacer l'existant ?",
-      "replace_message": "'{key}' existe déjà et sera remplacé. Continuer ?"
     }
   },
   "workflow": {

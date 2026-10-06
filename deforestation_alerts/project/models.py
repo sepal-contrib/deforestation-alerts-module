@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, Optional, Union
 
 from affine import Affine
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.scripts.naming import safe_token
@@ -216,7 +216,30 @@ class AlertSetParams(BaseModel):
     area_geojson: Optional[dict] = None
     sorting: int = 1  # the Filter step's numeric codes (1..4)
     max_alerts: int = 0  # 0 = keep all
+    # A set made before attribute_layers: its one attribute raster. Read
+    # through attribute_list(); a new run leaves it None.
     attribute_config: Optional[dict] = None
+    #: The attribute layers, in the order they attribute the alerts (spec D3):
+    #: each one raster's ``{"source", "kind", "bands"}``, as
+    #: ``raster_attribute.build_attribute_config`` builds it.
+    attribute_layers: list[dict] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _without_empty_layers(self, handler):
+        """Leave ``attribute_layers`` out while it is empty. A set's
+        fingerprint hashes this dump (``fingerprint.set_inputs``), so every
+        set made before the list keeps its own, byte for byte."""
+        data = handler(self)
+        if not data.get("attribute_layers"):
+            data.pop("attribute_layers", None)
+        return data
+
+    def attribute_list(self) -> list[dict]:
+        """The layers that attribute the alerts: ``attribute_layers``, else a
+        legacy set's ``attribute_config`` as its one layer, else none."""
+        if self.attribute_layers:
+            return list(self.attribute_layers)
+        return [self.attribute_config] if self.attribute_config else []
 
 
 class AlertSet(BaseModel):

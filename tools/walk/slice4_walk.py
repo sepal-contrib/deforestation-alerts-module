@@ -11,6 +11,7 @@ import argparse
 import glob
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -68,9 +69,10 @@ def a_switch(page, rec, *, out):
     before = raw_files()
     rec["raw_files"] = sorted(before)
     assert before, "no raw source file recorded"
+    # One Mode select per mask row: Exclude, then Off, then on again (Exclude).
     for label, act in (("exclude", lambda: ph.row_mode(page, "hansen", "Exclude")),
-                       ("off", lambda: ph.row_switch(page, "hansen")),
-                       ("on", lambda: ph.row_switch(page, "hansen"))):
+                       ("off", lambda: ph.row_mode(page, "hansen", ph.MODE_OFF)),
+                       ("on", lambda: ph.row_mode(page, "hansen", "Exclude"))):
         w.goto_step(page, "prepare", 2000)
         t0 = w.now_ms(page)
         act()
@@ -156,7 +158,7 @@ def d_legends(page, rec, *, out):
     for mode, text in (("Keep", "Kept area"), ("Exclude", "Excluded area")):
         ph.row_mode(page, "hansen", mode)
         w.wait_for(lambda: text in ph.legend_text(page), 30, f"the mask legend reads {text}")
-    ph.row_switch(page, "hansen")  # off in this period
+    ph.row_mode(page, "hansen", ph.MODE_OFF)  # off in this period
     w.wait_for(lambda: "Not used in this period" in ph.legend_text(page), 30, "the mask legend reads off")
     ph.row_button(page, "hansen", "mdi-map-minus").click()
     w.wait_for(lambda: "Mask hansen" not in [o["text"] for o in ph.legend_options(page)]
@@ -166,8 +168,9 @@ def d_legends(page, rec, *, out):
     assert ph.legend_text(page) == "", ph.legend_text(page)  # hidden while Analysis shows
     w.goto_step(page, "prepare", 2000)
     w.wait_for(lambda: ph.legend_text(page), 15, "the legend back")
-    # The set's own layer: switched on in Integrate & vectorize (the Overview
-    # dashboard draws nothing), and it keeps its legend across a step change.
+    # The set's own layer keeps its legend across a step change. With hansen
+    # off, both sources are out of date and Integrate is locked, so
+    # show_alerts uses the Overview's copy of the switch.
     ph.show_alerts(page)
     w.wait_for(lambda: all(s in ph.legend_text(page) for s in STATUSES), 120, "the set's four status chips")
     rec["set_legend"] = ph.legend_text(page)
@@ -191,7 +194,7 @@ def add_layer(page, rec, *, kind, name, fill, out) -> bool:
     fill()
     _modal_check(page, "Show in Analysis")
     w.shot(page, out, f"layer_modal_{name}")
-    ph.modal_button(page, "Save").click()
+    ph.primary_button(page).click()  # "Add layer": the form's Enter default
     w.wait_for(lambda: not ph.dialog_open(page) or "has no access to Planet NICFI" in ph.modal_text(page), 180,
                f"{name} saved or refused")
     if ph.dialog_open(page):
@@ -231,7 +234,7 @@ def e_vis_layers(page, rec, *, out, s2):
         ph.modal_field(page, "Max").fill("3000")
 
     def tif():
-        ph.pick_file(page, "GeoTIFF", USER / "slope.tif", scope=".v-dialog--active")
+        ph.pick_file(page, "GeoTIFF", USER / "slope.tif", scope=ph.MODAL)
         w.wait_for(lambda: "Reading the bands" not in ph.modal_text(page), 60, "the file's bands")
         ph.choose(page, "Band", "slope")
         ph.choose(page, "Colormap", "viridis")
@@ -265,6 +268,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8984)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice4_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     make_rasters.probability_tif(USER / "probability.tif", AMAZON)
     make_rasters.far_mask_tif(USER / "far.tif")

@@ -79,6 +79,7 @@ from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
+from gui.widget.enter_key import EnterKeyListener
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
@@ -550,6 +551,9 @@ def Page():
     # publishes --sepal-notification-right-offset so the pill tracks the
     # right panel.
     NotificationProvider()
+    # Enter presses the open dialog's default button (gui/widget/enter_key):
+    # one listener on document, so where it sits in the tree does not matter.
+    EnterKeyListener()
     _AppShell()
 
 
@@ -829,7 +833,10 @@ def _AppShell():
         repo_url="https://github.com/sepal-contrib/deforestation-alerts-module",
         main_map=[map_],
         steps_data=steps_data,
-        initial_step=1,  # auto-open About at startup (rail step id 1)
+        # Open the Project dialog at startup (rail step id 2): work starts by
+        # creating, opening or managing a project (spec A4). About stays one
+        # rail click away.
+        initial_step=2,
         theme_state=theme_state,
         model=nav_model,
         right_panel_config=WORKFLOW_PANEL_CONFIG,

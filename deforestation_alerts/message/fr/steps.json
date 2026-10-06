@@ -1,8 +1,7 @@
 {
   "steps": {
     "project": {
-      "title": "Projet",
-      "none_open": "Aucun projet n'est ouvert. Créez-en un, ouvrez-en un, ou choisissez une zone d'intérêt dans la première étape pour en démarrer un automatiquement.",
+      "none_open": "Créez-en un, ouvrez-en un enregistré, ou choisissez une zone d'intérêt dans la première étape pour en démarrer un automatiquement.",
       "new": "Nouveau projet",
       "duplicate": "Dupliquer",
       "name_label": "Nom du projet",
@@ -46,22 +45,33 @@
         "other": "il y a {count} jours"
       },
       "save_failed": "Échec de l'enregistrement : {error}",
-      "list_title": "Projets",
       "list_empty": "Aucun projet enregistré pour l'instant.",
-      "col_name": "Nom",
-      "col_counts": "Sources / périodes / jeux",
-      "col_updated": "Mis à jour",
       "opened": "{name} ouvert",
       "open_failed": "Impossible d'ouvrir {name} : {error}",
       "set_load_failed": "Impossible de charger les alertes du jeu actif : {error}",
       "set_missing": "Les fichiers du jeu d'alertes actif sont manquants ({path}). Relancez Intégrer et vectoriser pour le reconstruire.",
       "delete_title": "Supprimer {name} ?",
-      "delete_message": "Cela supprime le dossier du projet et tous ses fichiers. Saisissez le nom du projet pour confirmer.",
       "delete_busy": "Une tâche écrit encore dans ce projet. Attendez qu'elle se termine, puis supprimez.",
       "delete_failed": "Impossible de supprimer {name} : {error}",
       "deleted": "{name} supprimé",
       "duplicate_title": "Dupliquer {name}",
-      "duplicate_hint": "La copie conserve l'AOI, les sources et la grille, sans périodes ni jeux d'alertes."
+      "duplicate_hint": "La copie conserve l'AOI, les sources et la grille, sans périodes ni jeux d'alertes.",
+      "manage_title": "Gérer les projets",
+      "chip_open": "ouvert",
+      "modified": "modifié {time_ago}",
+      "open_selected": "Ouvrir",
+      "delete_type_label": "Saisissez {name} pour confirmer",
+      "delete_open_warning": "Ce projet est ouvert : il sera d'abord fermé.",
+      "size_counting": "Cela supprime le dossier du projet et tout son contenu (calcul de sa taille…).",
+      "delete_size": "Cela supprime le dossier du projet et tout son contenu ({size}).",
+      "empty_heading": "Aucun projet ouvert",
+      "manage": "Gérer",
+      "manage_count": "Gérer les projets ({count})",
+      "chip_saved": "enregistré",
+      "chip_save_failed": "échec de l'enregistrement",
+      "open_instead": "Ouvrir {name} à la place",
+      "name_hint": "Lettres, chiffres, espaces, « - » et « _ ».",
+      "duplicate_failed": "Impossible de dupliquer {name} : {error}"
     },
     "aoi": {
       "title": "Zone d'intérêt",
@@ -81,9 +91,7 @@
       "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement. Un projet contient au plus 3 sources prédéfinies et 6 personnalisées. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, supprimez-la et ajoutez-en une nouvelle.",
       "list_title": "Sources",
       "col_source": "Source",
-      "col_kind": "Type",
       "col_coverage": "Couverture",
-      "col_dates": "Dates ici",
       "empty": "Aucune source d'alertes pour l'instant. Ajoutez-en au moins une.",
       "add": "Ajouter une source",
       "add_title": "Ajouter une source d'alertes",
@@ -145,7 +153,12 @@
       "kind_custom": "personnalisée · {format}",
       "file_preview_after_harmonize": "Une source GeoTIFF s'affiche une fois harmonisée.",
       "err_aoi_not_ready": "La géométrie de l'AOI n'est pas encore prête ; réessayez dans un instant.",
-      "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau."
+      "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau.",
+      "mode_label": "Type de source",
+      "mode_hint": "Une source du catalogue, ou votre propre asset Earth Engine ou GeoTIFF.",
+      "predefined_hint": "Chaque source indique quelle part de l'AOI elle couvre.",
+      "name_hint": "24 caractères au plus ; il nomme aussi les fichiers de la source.",
+      "format_label": "Format des alertes"
     },
     "layers": {
       "title": "Couches facultatives",
@@ -154,8 +167,6 @@
       "info_md": "Les couches de visualisation aident à lire la carte ; elles ne modifient jamais les alertes.\n\n- **Image Earth Engine :** une bande affichée avec une palette, ou trois bandes en composite RGB, entre un minimum et un maximum.\n- **GeoTIFF** dans votre dossier SEPAL : une bande affichée avec une rampe de couleurs. L'application écrit un fichier de pyramides à côté, donc son dossier doit être accessible en écriture.\n- **Planet NICFI :** la mosaïque tropicale mensuelle via Earth Engine, pour le mois choisi ou le dernier mois de la période active. Votre compte Earth Engine a besoin d'un accès à NICFI.\n\nAffichez une couche sur cette carte avec le bouton carte de sa ligne ; sa légende apparaît avec elle. Cochez **Afficher dans Analyse** pour l'ajouter, désactivée, aux deux cartes d'Analyse.",
       "list_title": "Couches de visualisation",
       "col_name": "Nom",
-      "col_kind": "Type",
-      "col_details": "Détails",
       "empty": "Aucune couche de visualisation.",
       "add": "Ajouter une couche",
       "in_analysis": "dans Analyse",
@@ -206,7 +217,9 @@
       "origin_file": "GeoTIFF dans mon dossier SEPAL",
       "file": "GeoTIFF",
       "bands_loading": "Lecture des bandes…",
-      "bands_failed": "Impossible de lire les bandes : {error}"
+      "bands_failed": "Impossible de lire les bandes : {error}",
+      "origin_label": "Source du raster",
+      "origin_hint": "Où lire le raster"
     },
     "period": {
       "title": "Périodes",
@@ -266,7 +279,8 @@
       "error_exists": "Une période avec ces dates existe déjà.",
       "error_locked": "Cette période a des jeux d'alertes ; ses dates ne peuvent pas changer.",
       "error_not_latest": "Cette période a des jeux d'alertes et une période ultérieure existe : la supprimer changerait l'empreinte à partir de laquelle ces jeux ultérieurs ont été construits. Supprimez d'abord les périodes ultérieures.",
-      "error_bad_look_back": "La rétrospection doit être un nombre entier de jours, 0 ou plus."
+      "error_bad_look_back": "La rétrospection doit être un nombre entier de jours, 0 ou plus.",
+      "add": "Ajouter une période"
     },
     "prepare": {
       "title": "Télécharger et harmoniser",
@@ -291,7 +305,6 @@
       "col_source": "Source",
       "col_download": "Téléchargement",
       "col_harmonize": "Harmonisation",
-      "col_size": "Taille",
       "empty": "Ajoutez d'abord des sources d'alertes.",
       "run_all": {
         "one": "Exécuter {n} en attente",
@@ -356,16 +369,18 @@
       "mask_delete_busy": "Une tâche écrit dans ce projet ; supprimez le masque une fois celle-ci terminée.",
       "mask_edit_busy": "Une tâche écrit dans ce projet ; modifiez le masque une fois celle-ci terminée.",
       "col_mask": "Masque",
-      "col_origin": "Origine",
-      "col_on": "Activé",
       "col_mode": "Mode",
-      "col_align": "Aligné"
+      "col_align": "Aligné",
+      "mask_name_hint": "24 caractères au plus ; il nomme aussi les fichiers du masque.",
+      "mask_mode_label": "Mode dans la période active",
+      "mask_mode_off": "Inactif",
+      "size_note": "{size} sur le disque"
     },
     "integrate": {
       "title": "Intégrer et vectoriser",
       "description": "Combine les sources téléchargées, ignore les pixels qu'une période antérieure a déjà signalés, et transforme les groupes en alertes.",
       "info_header": "À propos d'Intégrer et vectoriser",
-      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les alertes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque alerte se souvient des sources qui l'ont détectée.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels voisins deviennent des alertes. Les alertes plus petites que la **taille minimale** sont écartées ; vous pouvez ne conserver qu'une zone dessinée et limiter le nombre d'alertes, triées comme vous le choisissez.\n4. Un **raster d'attributs** optionnel (Earth Engine ou GeoTIFF) ajoute une statistique de ses bandes à chaque alerte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les alertes examinées qu'elle écarterait. À la fin de l'exécution, Analyse s'ouvre sur le nouveau jeu.",
+      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les alertes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque alerte se souvient des sources qui l'ont détectée.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels voisins deviennent des alertes. Les alertes plus petites que la **taille minimale** sont écartées ; vous pouvez ne conserver qu'une zone dessinée et limiter le nombre d'alertes, triées comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque alerte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les alertes examinées qu'elle écarterait. À la fin de l'exécution, Analyse s'ouvre sur le nouveau jeu.",
       "sources": "Sources à combiner",
       "min_size": "Taille minimale d'alerte",
       "min_size_hint": "Les groupes plus petits que cela ({px} pixels sur la grille) sont écartés.",
@@ -379,10 +394,7 @@
       "sorting_4": "Alertes les plus anciennes en premier",
       "max_alerts": "Nombre maximal d'alertes",
       "max_alerts_hint": "0 conserve toutes les alertes.",
-      "attributes": "Raster d'attributs (optionnel)",
-      "attributes_named": "Raster d'attributs : {name}",
       "attr_load": "Charger les bandes",
-      "attr_clear": "Retirer",
       "attr_no_source": "Choisissez d'abord une image ou un GeoTIFF.",
       "attr_loaded": "Bandes de {source}",
       "attr_written_as": "écrit sous {column}",
@@ -440,7 +452,16 @@
       "popup": "Alerte {id} · {status} · {area} ha",
       "show_earlier": "Afficher les jeux antérieurs",
       "earlier_missing": "La base d'alertes de {set} est manquante ; relancez Intégrer et vectoriser pour cette période.",
-      "show_alerts": "Afficher ces alertes sur la carte"
+      "show_alerts": "Afficher ces alertes sur la carte",
+      "attr_add": "Ajouter une couche d'attributs",
+      "attr_add_title": "Ajouter une couche d'attributs",
+      "attr_edit_title": "Modifier la couche d'attributs {name}",
+      "attr_err_no_bands": "Conservez au moins une bande.",
+      "attr_err_duplicate": "Une autre couche d'attributs lit déjà ce raster.",
+      "attr_list_title": "Couches d'attributs",
+      "attr_empty": "Aucune couche d'attributs. Chacune ajoute des statistiques de ses bandes à chaque alerte.",
+      "attr_col_raster": "Raster",
+      "attr_columns": "Colonnes : {columns}"
     },
     "overview": {
       "stale": "Ce jeu a été construit à partir d'entrées qui ont changé depuis. Relancez Intégrer et vectoriser pour le reconstruire (cela écarte ses examens).",

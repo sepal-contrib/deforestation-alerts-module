@@ -1,12 +1,20 @@
-"""The Project rail dialog (spec §4.1): the open project, New, Open, Duplicate
-and Delete. Auto-save means there is no Save button (D11).
+"""The Project rail dialog (spec D5, spatial_risk's ``ProjectPanel``): the open
+project's status, New, Manage projects and Duplicate. Auto-save means there is
+no Save button (D11): the status shows a "saved" chip, or "save failed".
+
+Three dialogs hang off it, all rendered at its top level:
+
+- the name form of New and Duplicate (``_NameForm``), on the form frame
+  (``gui/widget/form_dialog.py``). The name is checked as it is typed against
+  the folders on disk read when the form opened, and against the disk again
+  when Create is pressed: a project created in another tab since must never be
+  overwritten.
+- Manage projects (``gui/widget/manage_projects.py``): search, open, delete.
+- the delete confirmation, which shows the folder's size, counted off-thread.
 
 The list is read again whenever the open project is saved, installed or
-closed, so its counts and times follow the session. A new name is checked
-against the folders on disk when Create is clicked, not against that list: a
-project created in another tab since must never be overwritten.
-
-The list is read on a worker started from an effect, never in a
+closed, after a delete and when Manage opens, so its counts and times follow
+the session. It is read on a worker started from an effect, never in a
 ``prefer_threaded=False`` task that depends on the save: the auto-save sets
 ``last_saved`` in the thread that published the project, and a Prepare row,
 an Integrate and a review Save publish from worker threads with no event
@@ -14,15 +22,15 @@ loop, where solara starts such a task with a bare ``asyncio.create_task``
 (the ``_ActiveSetLoader`` pattern in the shell).
 
 A new, opened or duplicated project starts the workflow at its AOI and closes
-the dialog (``dismiss``, from the shell). Deleting the open project closes it
-first, so no auto-save can write its manifest back while the folder goes.
-
-The list can be searched by name, and the open project's line reads 'saved X
-ago', brought up to date by ``_SavedAgo``'s ticker.
+the dialog (``dismiss``, from the shell). Opening the project already open
+only closes the dialogs: it is not read again over its in-memory state. Deleting the open project closes it
+first, so no auto-save can write its manifest back while the folder goes; a
+failed delete opens it again as it now reads.
 """
 
 import asyncio
 import logging
+import os
 import shutil
 import threading
 from datetime import datetime
@@ -39,8 +47,14 @@ from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import is_writing
-from gui.widget.creation_dialog import CreationDialog
-from gui.widget.product_table import ProductTable
+from gui.widget.enter_key import ENTER_DEFAULT
+from gui.widget.form_dialog import form_card, use_form_dialog
+from gui.widget.manage_projects import (
+    ConfirmDeleteDialog,
+    ManageProjectsDialog,
+    relative_time,
+)
+from gui.widget.text_style import MUTED
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -54,13 +68,25 @@ def create_project(name: str) -> Project:
 
 
 def duplicate_with_sidecar(p: Project, new_name: str, root: Optional[Path] = None) -> Project:
+    """The copy, with its AOI sidecar copied into its new folder.
+
+    Raises ``OSError`` when the sidecar cannot be copied. A folder this call
+    made is removed again first, so the name stays free for a retry (the name
+    form checks the disk for every folder)."""
     q = io.duplicate_project(p, new_name.strip())
     if p.aoi and p.aoi.geometry_file:
         src = paths.project_dir(p.name, root) / p.aoi.geometry_file
         if src.exists():
-            dst = paths.project_dir(q.name, root) / p.aoi.geometry_file
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            folder = paths.project_dir(q.name, root)
+            fresh = not folder.exists()
+            dst = folder / p.aoi.geometry_file
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+            except OSError:
+                if fresh:
+                    shutil.rmtree(folder, ignore_errors=True)
+                raise
     return q
 
 
@@ -80,47 +106,111 @@ def names_on_disk(root: Optional[Path] = None) -> list[str]:
         return []
 
 
+def folder_size(name: str, root: Optional[Path] = None) -> int:
+    """The bytes of the regular files in a project's folder, for the delete
+    confirmation. A symlink is never followed (it may point at a file outside
+    the project), and what cannot be read is skipped: the figure is shown, not
+    relied on. A folder that is not there is 0."""
+    total = 0
+    stack = [paths.project_dir(name, root)]
+    while stack:
+        try:
+            with os.scandir(stack.pop()) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total
+
+
 @solara.component
-def _NameForm(title, create_label, open_, on_create, hint=None):
+def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current):
+    """The name form's card. Mounted only while the form is open, so every
+    opening starts with an empty name and reads the folders again.
+    ``current``: the open project's name, taken but never offered to open."""
     name, set_name = solara.use_state("")
+    error, set_error = solara.use_state(None)
+    # Enter and a click can both press Create before the form closes.
+    launched = solara.use_ref(False)
+    # The live check's folders, read once when the form opens. Create reads
+    # the disk again: another tab may make the folder in between (Review Focus 4).
+    existing = solara.use_memo(names_on_disk, [])
+    live = io.validate_project_name(name, existing)
+    typed = name.strip()
+    # A listed project of that name (folders without a manifest are not listed,
+    # so nothing to open there): offered instead of a name that cannot be used.
+    # Not the open project: it is open already, and opening it again would
+    # read it back from disk over what is only in memory.
+    match = next((i.name for i in infos if typed and i.name.casefold() == typed.casefold()
+                  and i.name != current), None)
 
-    def validate():
+    def _type(value):
+        set_name(value or "")
+        set_error(None)
+
+    def _create():
+        if launched.current:
+            return
         err = io.validate_project_name(name, names_on_disk())
-        return t(_NAME_ERRORS[err]) if err else None
+        if err:
+            set_error(t(_NAME_ERRORS[err]))
+            return
+        launched.current = True
+        if not on_create(typed):
+            launched.current = False  # failed (the caller toasted): Create works again
+            return
+        open_.set(False)
 
-    CreationDialog(
-        open_=open_, title=title, create_label=create_label, validate=validate,
-        will_replace=lambda: None, launch=lambda: on_create(name.strip()),
-        on_close=lambda: set_name(""),
-        children=[
-            rv.TextField(label=t("steps.project.name_label"), v_model=name, on_v_model=set_name,
-                         dense=True, outlined=True, hint=hint or "", persistent_hint=bool(hint)),
-        ],
-    )
+    def _actions():
+        solara.Button(t("common.create"), icon_name="mdi-plus", color="primary", small=True,
+                      disabled=live is not None, classes=[ENTER_DEFAULT], on_click=_create)
+
+    with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
+        rv.TextField(label=t("steps.project.name_label"), v_model=name, on_v_model=_type, dense=True,
+                     outlined=True, autofocus=True, hint=hint or t("steps.project.name_hint"),
+                     persistent_hint=True,
+                     # Live, but not before anything is typed: an empty form is not wrong yet.
+                     error_messages=[t(_NAME_ERRORS[live])] if name and live else [])
+        if match:
+            with rv.Html(tag="div"):
+                solara.Button(t("steps.project.open_instead", name=match), icon_name="mdi-folder-open-outline",
+                              color="primary", text=True, small=True, on_click=lambda: on_open_existing(match))
+
+
+@solara.component
+def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, current=None):
+    """New and Duplicate's name form (420px, on the form frame).
+
+    ``on_create(name)`` installs the project and returns whether it did; the
+    form closes itself after, or stays open on the name when it did not.
+    ``on_open_existing(name)`` opens the listed project the typed name matches.
+    """
+    with use_form_dialog(open_, max_width="420px"):
+        if open_.value:
+            _NameFields(title=title, open_=open_, on_create=on_create, on_open_existing=on_open_existing,
+                        infos=infos, hint=hint, current=current)
 
 
 #: How often the open project's "saved X ago" line is brought up to date.
 TICK_SECONDS = 30.0
 
 
-def relative_time(when: datetime, now: datetime) -> str:
-    """'just now', 'N minutes ago', 'N hours ago', 'N days ago' (spatial_risk's
-    ``format_relative``). A time a little ahead of ``now`` reads 'just now'."""
-    seconds = max(0, int((now - when).total_seconds()))
-    if seconds < 60:
-        return t("steps.project.ago_now")
-    if seconds < 3600:
-        return t("steps.project.ago_minutes", count=seconds // 60)
-    if seconds < 86400:
-        return t("steps.project.ago_hours", count=seconds // 3600)
-    return t("steps.project.ago_days", count=seconds // 86400)
-
-
-def filter_infos(infos: list, query) -> list:
-    """The projects whose name contains ``query``, ignoring case; every project
-    for a blank query (spatial_risk's ``filter_project_infos``). Order kept."""
-    needle = (query or "").strip().lower()
-    return list(infos) if not needle else [i for i in infos if needle in i.name.lower()]
+@solara.component
+def _SaveChip(app_state):
+    """spatial_risk's saved chip, after the auto-save (D11): "saved" once the
+    project is on disk, "save failed" while the last save failed."""
+    if app_state.save_error.value:
+        rv.Chip(children=[t("steps.project.chip_save_failed")], color="error", text_color="white", x_small=True)
+    elif app_state.last_saved.value:
+        rv.Chip(children=[t("steps.project.chip_saved")], color="primary", text_color="white", x_small=True)
 
 
 @solara.component
@@ -153,7 +243,7 @@ def _SavedAgo(app_state):
     elif app_state.last_saved.value:
         solara.Text(t("steps.project.saved_ago",
                       time_ago=relative_time(app_state.last_saved.value, datetime.now())),
-                    classes=["text--secondary"])
+                    style=MUTED + "font-size:12px;")
 
 
 def _reopen(name: str) -> Optional[Project]:
@@ -172,9 +262,12 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     refresh, set_refresh = solara.use_state(0)
     new_open = solara.use_reactive(False)
     dup_open = solara.use_reactive(False)
+    manage_open = solara.use_reactive(False)
+    # A reactive, not state: Open reads it when pressed, right after the row
+    # click that set it, before the dialog has re-rendered.
+    selected = solara.use_reactive(None)
     pending_delete, set_pending_delete = solara.use_state(None)
-    typed, set_typed = solara.use_state("")
-    query, set_query = solara.use_state("")
+    size, set_size = solara.use_state(None)
 
     infos, set_infos = solara.use_state([])
     # The number of the last read started: a read overtaken by a newer one
@@ -182,8 +275,8 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     reads = solara.use_ref(0)
 
     # Read again on every save (counts and time of the open project), every
-    # install or close, and after a delete. On a worker, from an effect: see
-    # the module docstring.
+    # install or close, after a delete and when Manage opens. On a worker,
+    # from an effect: see the module docstring.
     def _start_read():
         reads.current += 1
         run = reads.current
@@ -201,6 +294,28 @@ def ProjectDialog(app_state, dismiss=lambda: None):
 
     solara.use_effect(_start_read, [refresh, app_state.project_loaded_signal.value, app_state.last_saved.value])
 
+    # The size of the folder to delete, counted on a worker: a project of
+    # several GB takes seconds on SEPAL's disk. None reads "measuring" until
+    # then; a count overtaken by another target is dropped.
+    counts = solara.use_ref(0)
+
+    def _start_count():
+        counts.current += 1
+        run = counts.current
+        set_size(None)
+        if pending_delete is None:
+            return
+        name = pending_delete
+
+        def _count():
+            total = folder_size(name)
+            if counts.current == run:
+                set_size(total)
+
+        spawn_in_context(_count)
+
+    solara.use_effect(_start_count, [pending_delete])
+
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it
         # moves the workflow, which it does not when AOI is already showing.
@@ -214,29 +329,62 @@ def ProjectDialog(app_state, dismiss=lambda: None):
             notifications.error(t("steps.project.open_failed", name=name, error=error_text(exc)))
             return
         app_state.load_project_state(loaded)
+        manage_open.set(False)
         _show_workflow()
         notifications.success(t("steps.project.opened", name=name))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
 
     def _open(name):
+        if not name:
+            return
+        open_now = app_state.project.peek()
+        if open_now is not None and open_now.name == name:
+            # Manage opens on the open project, with Open as Enter's default.
+            # It is not read again: after a failed auto-save the disk is behind
+            # what is in memory, and a reload would silently drop that.
+            manage_open.set(False)
+            dismiss()
+            return
         load_task(name)
 
+    def _open_manage():
+        selected.set(p.name if p is not None else None)
+        set_refresh(lambda n: n + 1)  # another tab may have made or removed a project
+        manage_open.set(True)
+
+    def _open_instead(name):
+        new_open.set(False)
+        dup_open.set(False)
+        _open(name)
+
     def _ask_delete(name):
-        set_typed("")
+        if delete_task.pending:
+            return  # one delete at a time: the confirmation is its only view
         set_pending_delete(name)
 
     def _create(name):
         app_state.new_project_state(create_project(name))
         _show_workflow()
+        return True
 
     def _duplicate(name):
+        if p is None:  # closed (a delete) while the form was open
+            return True  # nothing to copy: the form just closes
+        try:
+            copy = duplicate_with_sidecar(p, name)
+        except OSError as exc:  # the sidecar's folder or copy (disk full, permissions)
+            notifications.error(t("steps.project.duplicate_failed", name=p.name, error=error_text(exc)))
+            return False
         # The copy is where another area gets monitored (spec D10): start at its AOI.
-        app_state.new_project_state(duplicate_with_sidecar(p, name))
+        app_state.new_project_state(copy)
         _show_workflow()
+        return True
 
     async def _delete():
         name = pending_delete
+        # The confirmation's gate is a render behind: a writer may have started
+        # since. Checked again here, on the kernel thread.
         blocked = delete_blocked(name)
         if blocked:
             notifications.warning(t(blocked))
@@ -261,79 +409,73 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                     app_state.load_project_state(reopened)
             notifications.error(t("steps.project.delete_failed", name=name, error=error_text(exc)))
             return
-        set_pending_delete(None)
-        set_typed("")
-        set_refresh(refresh + 1)
+        if selected.peek() == name:
+            selected.set(None)
+        set_pending_delete(None)  # closes the confirmation; Manage stays open
+        set_refresh(lambda n: n + 1)
         notifications.success(t("steps.project.deleted", name=name))
 
     delete_task = solara.lab.use_task(_delete, dependencies=None, prefer_threaded=False, raise_error=False)
 
-    with solara.Column(style="gap:16px;padding:8px;"):
-        solara.Markdown(f"### {t('steps.project.title')}")
+    def _confirm_delete():
+        # Never call a running delete again: that would cancel its
+        # continuation, not the removal of the folder.
+        if not delete_task.pending:
+            delete_task()
+
+    with solara.Column(style="gap:8px;padding:8px;"):
         if p is None:
-            solara.Text(t("steps.project.none_open"), classes=["text--secondary"])
+            rv.Icon(children=["mdi-folder-plus-outline"], style_="font-size:40px;opacity:0.5;")
+            solara.Text(t("steps.project.empty_heading"), style="font-weight:600;")
+            solara.Text(t("steps.project.none_open"), style=MUTED)
+            solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
+                          on_click=lambda: new_open.set(True))
+            solara.Button(t("steps.project.manage_count", count=len(infos)),
+                          icon_name="mdi-folder-multiple-outline", color="primary", outlined=True, small=True,
+                          block=True, disabled=not infos, on_click=_open_manage)
         else:
-            solara.Text(p.name, style="font-weight:600;font-size:1.1rem;")
+            with solara.Row(style="gap:8px;align-items:center;"):
+                solara.Text(p.name, style="font-weight:600;font-size:1.1rem;")
+                _SaveChip(app_state=app_state)
             solara.Text(t(
                 "steps.project.summary",
                 aoi=p.aoi.name if p.aoi else t("steps.project.no_aoi"),
                 sources=t("steps.project.count_sources", count=len(p.sources)),
                 periods=t("steps.project.count_periods", count=len(p.periods)),
                 sets=t("steps.project.count_sets", count=len(p.alert_sets)),
-            ))
+            ), style=MUTED + "font-size:12px;")
             _SavedAgo(app_state=app_state)
-        with solara.Row(style="gap:8px;"):
-            solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True,
-                          on_click=lambda: new_open.set(True))
-            solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", small=True,
-                          outlined=True, disabled=p is None, on_click=lambda: dup_open.set(True))
-        rows = [
-            {
-                "key": i.name,
-                "cells": [
-                    {"value": i.name},
-                    {"value": f"{i.n_sources} / {i.n_periods} / {i.n_sets}", "muted": True},
-                    {"value": i.updated_at.strftime("%Y-%m-%d %H:%M") if i.updated_at else "", "muted": True},
-                ],
-                "actions": [
-                    {"kind": "open", "on_click": (lambda n=i.name: _open(n))},
-                    {"kind": "delete", "on_click": (lambda n=i.name: _ask_delete(n))},
-                ],
-            }
-            for i in filter_infos(infos, query)
-        ]
-        if infos:
-            rv.TextField(label=t("steps.project.search"), v_model=query, on_v_model=set_query,
-                         prepend_inner_icon="mdi-magnify", dense=True, outlined=True, clearable=True,
-                         hide_details=True)
-        needle = (query or "").strip()
-        ProductTable(
-            title=t("steps.project.list_title"),
-            columns=[{"label": t("steps.project.col_name")},
-                     {"label": t("steps.project.col_counts"), "width": "140px"},
-                     {"label": t("steps.project.col_updated"), "width": "130px"}],
-            rows=rows,
-            empty_text=t("steps.project.no_match", query=needle) if infos and needle else t("steps.project.list_empty"),
-        )
+            with solara.Row(style="gap:8px;flex-wrap:wrap;"):
+                solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", outlined=True,
+                              small=True, on_click=lambda: new_open.set(True))
+                solara.Button(t("steps.project.manage"), icon_name="mdi-folder-multiple-outline", color="primary",
+                              outlined=True, small=True, on_click=_open_manage)
+                solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", color="primary",
+                              outlined=True, small=True, on_click=lambda: dup_open.set(True))
 
-    _NameForm(t("steps.project.new"), t("common.create"), new_open, _create)
-    if p is not None:
-        _NameForm(t("steps.project.duplicate_title", name=p.name), t("common.create"), dup_open,
-                  _duplicate, hint=t("steps.project.duplicate_hint"))
+    # Every dialog below is always mounted, the Duplicate form too: one that
+    # came and went with the open project would shift the ones after it, and
+    # reacton would remount them (the delete confirmation would lose its
+    # typed name when the open project is closed for its delete).
+    current = p.name if p is not None else None
+    _NameForm(title=t("steps.project.new"), open_=new_open, on_create=_create, on_open_existing=_open_instead,
+              infos=infos, current=current)
+    _NameForm(title=t("steps.project.duplicate_title", name=p.name) if p is not None else "", open_=dup_open,
+              on_create=_duplicate, on_open_existing=_open_instead, infos=infos,
+              hint=t("steps.project.duplicate_hint"), current=current)
 
-    with rv.Dialog(v_model=pending_delete is not None,
-                   on_v_model=lambda v: None if v else set_pending_delete(None),
-                   max_width="420px", eager=True):
-        with rv.Card():
-            with rv.CardTitle():
-                solara.Text(t("steps.project.delete_title", name=pending_delete or ""))
-            with rv.CardText():
-                solara.Text(t("steps.project.delete_message"))
-                rv.TextField(v_model=typed, on_v_model=set_typed, dense=True, outlined=True)
-            with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
-                solara.Button(t("common.cancel"), text=True, small=True,
-                              on_click=lambda: set_pending_delete(None))
-                solara.Button(t("common.delete"), color="error", small=True,
-                              disabled=typed != (pending_delete or "") or delete_task.pending,
-                              loading=delete_task.pending,
-                              on_click=lambda: delete_task())
+    ManageProjectsDialog(
+        open=manage_open.value, infos=infos, selected=selected.value, on_select=selected.set,
+        on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
+        current=current, busy=load_task.pending or delete_task.pending,
+        covered=pending_delete is not None,
+    )
+    ConfirmDeleteDialog(
+        open=pending_delete is not None, name=pending_delete or "", size_bytes=size,
+        on_cancel=lambda: set_pending_delete(None), on_confirm=_confirm_delete,
+        is_open_project=p is not None and p.name == pending_delete,
+        # Read only while a delete is asked for: the writers change on every
+        # Prepare row, and the dialog need not re-render for them otherwise.
+        writer_active=pending_delete is not None and is_writing(pending_delete),
+        busy=delete_task.pending,
+    )

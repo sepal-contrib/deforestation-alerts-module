@@ -28,6 +28,7 @@ from gui.store.state_manager import AppState
 from gui.store.workflow_steps import STEPS, StepStatus, step_states
 from gui.tile import layers_step
 from gui.widget import vis_layer_modal as vlm
+from gui.widget.enter_key import ENTER_DEFAULT
 
 
 def _p():
@@ -376,8 +377,19 @@ def _field(rc, key, cls=v.TextField):
 
 
 def _save_btn(rc):
-    [btn] = [b for b in rc.find(v.Btn).widgets if t("common.save") in b.children]
+    """The primary button: "Add layer" when adding, "Save" when editing."""
+    [btn] = [b for b in rc.find(v.Btn).widgets
+             if t("steps.layers.add") in b.children or t("common.save") in b.children]
     return btn
+
+
+def _defaults(rc):
+    """The buttons Enter would press (gui/widget/enter_key)."""
+    return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
+
+
+def _icons(btn):
+    return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
 
 
 def _texts(rc):
@@ -536,6 +548,7 @@ def test_closing_the_dialog_during_a_check_saves_nothing(monkeypatch, close):
             assert await _settle(lambda: len(asked) == 1)
             assert _field(rc, "steps.layers.field_name").disabled is True  # frozen while checked
             assert _field(rc, "steps.layers.field_kind", v.Select).disabled is True
+            assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
             else:
@@ -566,6 +579,27 @@ def test_an_aoi_change_during_the_check_refuses_inline(monkeypatch):
             release.set()
             assert await _settle(lambda: t("steps.layers.err_changed") in _texts(rc))
             assert saved == [] and open_.value is True
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize("editing, label, icon", [
+    (None, "steps.layers.add", "mdi-plus"), ("ndvi", "common.save", "mdi-content-save-outline")])
+def test_the_layer_form_sits_on_the_form_frame(monkeypatch, editing, label, icon):
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+    p = _with_aoi()
+    p.vis_layers = {"ndvi": GeeVisLayer(name="ndvi", asset="users/x/img", bands=["NDVI"], min=0, max=1)}
+    state, open_, saved = _state(p), solara.reactive(True), []
+
+    async def main():
+        _box, rc = reacton.render(_modal(state, open_, saved, editing=editing), handle_error=False)
+        try:
+            dialog = rc.find(v.Dialog).widget
+            assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
+            [primary] = _defaults(rc)
+            assert t(label) in primary.children and _icons(primary) == [icon]
         finally:
             rc.close()
 
@@ -617,19 +651,22 @@ def test_the_step_is_locked_without_an_aoi(monkeypatch):
         rc.close()
 
 
-def test_rows_show_kind_details_and_the_analysis_chip(monkeypatch):
+def test_rows_show_the_kind_and_analysis_chips_and_the_details_note(monkeypatch):
     seen, _, _ = _stub_children(monkeypatch)
     state = _state(_layers_project())
     box, rc = _render_step(state, _FakeMap(), MapLayers(_FakeMap()))
     try:
+        assert seen["columns"] == layers_step.layer_columns()
         assert [r["key"] for r in seen["rows"]] == ["height", "planet", "S2"]  # by name, case-folded
         s2 = next(r for r in seen["rows"] if r["key"] == "S2")
-        assert [c.get("value") for c in s2["cells"]] == ["S2", t("steps.layers.kind_gee"), "B4, B3, B2 · 0–3000",
-                                                         t("steps.layers.in_analysis")]
+        assert s2["cells"] == [{"value": "S2", "chips": [
+            {"value": t("steps.layers.kind_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
+        assert s2["notes"] == [{"text": "B4, B3, B2 · 0–3000", "tone": None}]
         assert [a["kind"] for a in s2["actions"]] == ["map_toggle", "edit", "delete"]
+        assert len(s2["actions"]) == layers_step.LAYER_ACTIONS
         planet = next(r for r in seen["rows"] if r["key"] == "planet")
-        assert planet["cells"][2]["value"] == t("steps.layers.nicfi_period_month") and planet["cells"][3] == {
-            "value": ""}
+        assert planet["cells"][0]["chips"] == [{"value": t("steps.layers.kind_nicfi")}]  # not in Analysis: no chip
+        assert planet["notes"] == [{"text": t("steps.layers.nicfi_period_month"), "tone": None}]
     finally:
         rc.close()
 

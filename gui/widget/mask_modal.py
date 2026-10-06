@@ -3,20 +3,21 @@ GeoTIFF, one band, and the mode for the active period. Validated like a
 custom source (§6.2) without a coverage share: a mask that misses the AOI
 shows up as zero on-pixels after its alignment.
 
-It follows ``source_modal``'s rules (Task 17): the Add/Save is a
-``TaskButtonComponent`` over a ``use_task``; ``on_add``/``on_save`` (which
-call ``update_project``) run inside that task, on the loop, never in its
-completion effect; closing the dialog cancels a check still running; the
-fields are frozen while their values are checked; a project, AOI or period
-change during the check refuses inline. What ``on_add``/``on_save`` raise is
-shown inline, so they raise translated text.
+It follows ``source_modal``'s rules (Task 17), on the same form frame
+(``gui/widget/form_dialog``): the Add/Save is a ``SubmitTaskButton`` over a
+``use_task``; ``on_add``/``on_save`` (which call ``update_project``) run
+inside that task, on the loop, never in its completion effect; closing the
+dialog cancels a check still running; the fields are frozen while their
+values are checked; a project, AOI or period change during the check refuses
+inline. What ``on_add``/``on_save`` raise is shown inline, so they raise
+translated text.
 """
 
 import asyncio
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
+from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine.user_raster import (
     UserRasterError, check_discovery, check_file, discovery_request, file_native, native_from_discovery,
@@ -25,6 +26,7 @@ from deforestation_alerts.engine.user_raster import (
 from deforestation_alerts.project.names import validate_mask_name
 from gui.i18n import t
 from gui.scripts.error_text import error_text
+from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 
 
@@ -62,10 +64,9 @@ async def validate_mask(gee_interface, project, *, name, origin, ref, asset_type
 
 @solara.component
 def MaskModal(open_, app_state, gee_interface, on_add, on_save, editing=None):
-    dialog = rv.Dialog(v_model=open_.value, on_v_model=open_.set, max_width="520px", eager=True, persistent=True)
-    # persistent blocks ESC too; restore it as a plain cancel. A hook: unconditional.
-    rv.use_event(dialog, "keydown.esc", lambda *_: open_.set(False))
-    with dialog:
+    # The form frame (gui/widget/form_dialog), 560px like every form that picks
+    # a raster: persistent, an outside click nudges it, ESC closes it.
+    with use_form_dialog(open_, "560px"):
         if open_.value:  # mounted per opening: a clean form, and no asset listing while closed
             _MaskForm(open_=open_, app_state=app_state, gee_interface=gee_interface, on_add=on_add,
                       on_save=on_save, editing=editing)
@@ -165,35 +166,33 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
 
     name_error = validate_mask_name(name, p, current=editing) if name and p is not None else None
     title = t("steps.prepare.mask_edit_title", name=editing) if m0 is not None else t("steps.prepare.mask_add_title")
-    with rv.Card():
-        with rv.CardTitle():
-            solara.Text(title)
-        with rv.CardText():
-            rv.TextField(label=t("steps.prepare.mask_name"), v_model=name, on_v_model=set_name, dense=True,
-                         outlined=True, disabled=m0 is not None or busy,
-                         error_messages=[t(name_error)] if name_error else [])
-            RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
-                        disabled=busy)
-            if bands_task.pending:
-                solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
-            elif bands_task.error:
-                solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                            classes=["error--text"])
-            rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band, on_v_model=set_band, dense=True,
-                      outlined=True, loading=bands_task.pending, disabled=busy)
-            if m0 is None:  # an edit changes the definition; each period keeps its own mode
+    button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
+
+    def _actions():
+        # spec §11: an async button is a task button. While the check runs it
+        # reads Cancel and stops the check, and it carries no Enter class.
+        SubmitTaskButton(label=t("steps.alerts.save") if m0 is not None else t("steps.prepare.mask_add"),
+                         icon="mdi-content-save-outline" if m0 is not None else "mdi-plus",
+                         external_busy=bool(name_error), **button)
+
+    # a validation error stays inline in the form (spec §11; form_card shows it)
+    with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
+        rv.TextField(label=t("steps.prepare.mask_name"), v_model=name, on_v_model=set_name, dense=True,
+                     outlined=True, disabled=m0 is not None or busy, hint=t("steps.prepare.mask_name_hint"),
+                     persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
+        RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
+                    disabled=busy)
+        if bands_task.pending:
+            solara.Text(t("steps.raster_input.bands_loading"), classes=["text--secondary"])
+        elif bands_task.error:
+            solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
+                        classes=["error--text"])
+        rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band, on_v_model=set_band, dense=True,
+                  outlined=True, loading=bands_task.pending, disabled=busy)
+        if m0 is None:  # an edit changes the definition; each period keeps its own mode
+            with field_group(t("steps.prepare.mask_mode_label")):
                 with rv.RadioGroup(v_model=mode, on_v_model=set_mode, row=True, dense=True, hide_details=True,
                                    disabled=busy):
                     rv.Radio(label=t("steps.prepare.mask_mode_keep"), value="keep")
                     rv.Radio(label=t("steps.prepare.mask_mode_exclude"), value="exclude")
-            solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"])
-            if error:  # validation errors stay inline in the modal (spec §11)
-                solara.Text(error, classes=["error--text"])
-        with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
-            solara.Button(t("common.cancel"), text=True, small=True, on_click=lambda: open_.set(False))
-            # spec §11: an async button is a TaskButtonComponent (while the check
-            # runs it reads Cancel and stops it)
-            TaskButtonComponent(label=t("steps.alerts.save") if m0 is not None else t("steps.prepare.mask_add"),
-                                cancel_label=t("common.cancel"), small=True,
-                                icon="" if m0 is not None else "mdi-plus", external_busy=bool(name_error),
-                                **use_task_button(validation, on_start=_submit))
+        solara.Text(t("steps.prepare.masks_note"), classes=["text--secondary"])

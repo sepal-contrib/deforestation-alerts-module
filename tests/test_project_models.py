@@ -182,3 +182,69 @@ def test_remove_source_drops_a_custom_coverage_record_only():
 def test_set_ids_use_the_shared_slug():
     assert sources_slug(["RADD", "GLAD-L"]) == "glad-l-radd"
     assert set_id("2026-01-01_2026-01-31", ["RADD", "GLAD-L"]) == "2026-01-01_2026-01-31__glad-l-radd"
+
+
+# ---------------------------------------------------------------------------
+# Attribute layers (spec D3): review focus 2
+# ---------------------------------------------------------------------------
+LEGACY_CFG = {"source": "/home/u/lc.tif", "kind": "local",
+              "bands": [{"band": "lc", "stat": "majority", "column": "lc"}]}
+DEM_CFG = {"source": "users/me/dem", "kind": "gee",
+           "bands": [{"band": "elevation", "stat": "mean", "column": "elevation", "crs": "EPSG:4326",
+                      "scale": 30.0}]}
+#: A set's params as saved before attribute_layers existed (the compact JSON
+#: ``model_dump_json`` writes).
+LEGACY_JSON = ('{"min_size_ha":1.0,"area_mode":"aoi","area_geojson":null,"sorting":3,"max_alerts":25,'
+               '"attribute_config":{"source":"/home/u/lc.tif","kind":"local",'
+               '"bands":[{"band":"lc","stat":"majority","column":"lc"}]}}')
+
+
+def test_a_params_dump_without_layers_is_byte_for_byte_what_it_was():
+    """Review focus 2: a set's fingerprint hashes ``params.model_dump(mode="json")``.
+    The two hashes were taken before ``attribute_layers`` existed."""
+    from deforestation_alerts.engine.fingerprint import fingerprint
+
+    plain = AlertSetParams()
+    assert list(plain.model_dump(mode="json")) == [
+        "min_size_ha", "area_mode", "area_geojson", "sorting", "max_alerts", "attribute_config"]
+    assert fingerprint({"params": plain.model_dump(mode="json")}) == (
+        "0f7722196cb1889763d8ec9ae112a22eaacf78f9ff779e43651fe0820ffdde30")
+    legacy = AlertSetParams.model_validate_json(LEGACY_JSON)
+    assert legacy.model_dump_json() == LEGACY_JSON
+    assert fingerprint({"params": legacy.model_dump(mode="json")}) == (
+        "956ffac4e57e05a029b503f55831063d40abe106f1919ce97420c4c98be78148")
+    assert "attribute_layers" not in AlertSetParams(attribute_layers=[]).model_dump_json()
+
+
+def test_attribute_layers_are_dumped_last_and_round_trip():
+    params = AlertSetParams(attribute_layers=[LEGACY_CFG, DEM_CFG])
+    dump = params.model_dump(mode="json")
+    assert list(dump)[-1] == "attribute_layers" and dump["attribute_layers"] == [LEGACY_CFG, DEM_CFG]
+    assert dump["attribute_config"] is None
+    assert AlertSetParams.model_validate_json(params.model_dump_json()) == params
+    p = _project()
+    p.alert_sets["s"] = AlertSet(id="s", period_id="x", sources=["GLAD-L"], digit_map={0: "GLAD-L"}, params=params,
+                                 store_rel_path="a", combined_rel_path="c", footprint_rel_path="f",
+                                 fingerprint="f", created_at=datetime(2026, 9, 30))
+    back = Project.model_validate_json(p.model_dump_json())
+    assert back.alert_sets["s"].params.attribute_layers == [LEGACY_CFG, DEM_CFG]
+
+
+def test_attribute_list_reads_the_layers_else_a_legacy_raster():
+    assert AlertSetParams().attribute_list() == []
+    assert AlertSetParams(attribute_config=LEGACY_CFG).attribute_list() == [LEGACY_CFG]
+    assert AlertSetParams(attribute_layers=[DEM_CFG, LEGACY_CFG]).attribute_list() == [DEM_CFG, LEGACY_CFG]
+    # the layers win: a new run never writes both, but the list is the newer field
+    assert AlertSetParams(attribute_config=LEGACY_CFG, attribute_layers=[DEM_CFG]).attribute_list() == [DEM_CFG]
+
+
+def test_a_project_saved_before_attribute_layers_loads_its_raster_as_one_layer():
+    p = _project()
+    p.alert_sets["s"] = AlertSet(id="s", period_id="x", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams.model_validate_json(LEGACY_JSON), store_rel_path="a",
+                                 combined_rel_path="c", footprint_rel_path="f", fingerprint="f",
+                                 created_at=datetime(2026, 9, 30))
+    text = p.model_dump_json()
+    assert "attribute_layers" not in text  # what an older manifest holds
+    params = Project.model_validate_json(text).alert_sets["s"].params
+    assert params.attribute_layers == [] and params.attribute_list() == [LEGACY_CFG]

@@ -39,6 +39,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
+from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS
 from gui.i18n import t, tn
 from gui.scripts import integrate_jobs
 from gui.scripts.alert_layers import EARLIER_PREFIX, SET_LAYER_KEY
@@ -81,8 +82,19 @@ def test_params_from_form_refuses_bad_numbers(min_size, max_alerts, key):
 
 
 def test_params_from_form_keeps_the_drawing_only_for_a_drawn_area():
-    params, _ = integrate_jobs.params_from_form("0", "aoi", FC, 2, "", {"source": "x"})
-    assert params.area_geojson is None and params.max_alerts == 0 and params.attribute_config == {"source": "x"}
+    params, _ = integrate_jobs.params_from_form("0", "aoi", FC, 2, "", [{"source": "x"}])
+    assert params.area_geojson is None and params.max_alerts == 0
+    assert params.attribute_layers == [{"source": "x"}] and params.attribute_config is None
+
+
+def test_params_from_form_writes_the_layers_never_the_legacy_raster():
+    """Spec D3: a new run writes ``attribute_layers`` and leaves
+    ``attribute_config`` None; without layers the dump is the old one."""
+    a, b = {"source": "a.tif", "kind": "local", "bands": []}, {"source": "users/me/b", "kind": "gee", "bands": []}
+    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", (a, b))
+    assert params.attribute_layers == [a, b] and params.attribute_config is None
+    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", None)
+    assert params.attribute_layers == [] and "attribute_layers" not in params.model_dump(mode="json")
 
 
 def _set(sid, reviewed, sources=("GLAD-L",), params=None):
@@ -523,7 +535,7 @@ def _render(state, layers=None):
 @pytest.fixture
 def step(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], attribute=[],
+    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], modal=[], tables={},
                          draws=[])
     monkeypatch.setattr(integrate_step, "integrate_choices", lambda p, pdir, period: [
         {"source": s, "label": s, "enabled": True, "note": ""} for s in ns.ready] + [
@@ -537,11 +549,21 @@ def step(monkeypatch, tmp_path):
 
     monkeypatch.setattr(integrate_step, "run_integration_job", _run_job)
 
+    # The attribute modal is a recorder (its tests: tests/test_attribute_modal.py).
+    # The table is the real one; its rows are recorded by title.
     @solara.component
-    def _RecorderAttributeForm(gee_interface, value, on_value):
-        ns.attribute.append((value, on_value))
+    def _RecorderAttributeModal(open_, gee_interface, layers, editing, on_save):
+        ns.modal.append(SimpleNamespace(open_=open_, layers=layers, editing=editing, on_save=on_save))
 
-    monkeypatch.setattr(integrate_step, "AttributeForm", _RecorderAttributeForm)
+    monkeypatch.setattr(integrate_step, "AttributeModal", _RecorderAttributeModal)
+    real_table = integrate_step.ProductTable
+
+    @solara.component
+    def _RecorderProductTable(title, columns, rows, empty_text):
+        ns.tables[title] = rows
+        real_table(title=title, columns=columns, rows=rows, empty_text=empty_text)
+
+    monkeypatch.setattr(integrate_step, "ProductTable", _RecorderProductTable)
 
     class _Draw(DrawControl):
         def __init__(self, m, **kwargs):
@@ -589,6 +611,11 @@ def _button(rc, label):
 
 def _checkbox(rc, label):
     return next(w for w in rc.find(v.Checkbox).widgets if w.label == label)
+
+
+def _origin(rc):
+    """RasterInput's origin Select (Earth Engine / GeoTIFF)."""
+    return rc.find(v.Select, label=t("steps.raster_input.origin_label")).widget
 
 
 def _strings(widget):
@@ -864,33 +891,87 @@ def test_the_step_names_an_active_set_that_is_out_of_date_or_missing(step, tmp_p
         rc.close()
 
 
-def test_the_attribute_raster_form_mounts_when_opened_and_reaches_the_job(step):
-    """Mounting it lists the user's Earth Engine assets, so it waits for the
-    panel to open, then stays mounted."""
+ATTR_LC = {"source": "/home/u/rasters/landcover.tif", "kind": "local",
+           "bands": [{"band": "lc", "stat": "majority", "column": "lc"}]}
+ATTR_DEM = {"source": "users/me/dem", "kind": "gee",
+            "bands": [{"band": "elevation", "stat": "mean", "column": "elevation", "crs": "EPSG:4326",
+                       "scale": 30.0},
+                      {"band": "slope", "stat": "max", "column": "slope", "crs": "EPSG:4326", "scale": 30.0}]}
+
+
+def _attr_rows(step):
+    return step.tables[t("steps.integrate.attr_list_title")]
+
+
+def test_attribute_rows_name_the_raster_list_its_columns_and_offer_edit_and_delete():
+    edits, deletes = [], []
+    rows = integrate_step.attribute_rows([ATTR_LC, ATTR_DEM], edit=edits.append, delete=deletes.append)
+    assert [r["key"] for r in rows] == ["0:/home/u/rasters/landcover.tif", "1:users/me/dem"]
+    assert [r["cells"] for r in rows] == [[{"value": "landcover.tif"}], [{"value": "users/me/dem"}]]
+    assert rows[1]["notes"] == [{"text": t("steps.integrate.attr_columns", columns="elevation, slope"),
+                                 "tone": None}]
+    assert [[a["kind"] for a in r["actions"]] for r in rows] == [["edit", "delete"]] * 2
+    assert max(len(r["actions"]) for r in rows) == integrate_step.ATTRIBUTE_ACTIONS
+    rows[1]["actions"][0]["on_click"]()
+    rows[0]["actions"][1]["on_click"]()
+    assert edits == [1] and deletes == [0]
+    assert integrate_step.attribute_columns() == [{"label": t("steps.integrate.attr_col_raster")}]
+
+
+def test_attribute_layers_are_added_edited_and_deleted_and_reach_the_job(step):
+    """Spec D3: the list is the form's state until Run, which writes it as
+    ``attribute_layers``. The modal is mounted while closed (it mounts its
+    form, which lists the user's Earth Engine assets, only when opened)."""
     step.ready = ["GLAD-L"]
     map_, rc = _render(_state(_project("d", "GLAD-L")))
     try:
-        assert step.attribute == []
-        panels = rc.find(v.ExpansionPanels).widget
-        # ipyvue binds the browser's v-model only when the widget's v_model is
-        # not its "!!disabled!!" default: unbound, a click on the header opens
-        # the panel in the browser but never reaches Python, so the form never
-        # mounts (setting v_model below is what the bound frontend does).
-        assert panels.v_model is None
-        panels.v_model = 0
-        value, on_value = step.attribute[-1]
-        assert value is None
-        assert panels.v_model == 0  # the re-render that mounted the form kept the panel open
-        cfg = {"source": "users/me/landcover", "kind": "gee",
-               "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]}
-        on_value(cfg)
-        assert step.attribute[-1][0] == cfg
-        panels.v_model = None  # closed again: the form keeps its state
-        assert step.attribute[-1][0] == cfg
+        assert _attr_rows(step) == [] and t("steps.integrate.attr_empty") in _texts(rc)
+        assert step.modal[-1].open_.value is False and step.modal[-1].layers == []
+        add = _button(rc, t("steps.integrate.attr_add"))
+        assert add.outlined and add.block
+        add.fire_event("click", None)
+        assert step.modal[-1].open_.value is True and step.modal[-1].editing is None
+        step.modal[-1].on_save(None, ATTR_LC)
+        step.modal[-1].on_save(None, ATTR_DEM)
+        assert [r["cells"][0]["value"] for r in _attr_rows(step)] == ["landcover.tif", "users/me/dem"]
+        assert f"{t('steps.integrate.attr_list_title')} (2)" in _texts(rc)
+        assert step.modal[-1].layers == [ATTR_LC, ATTR_DEM]
+
+        _attr_rows(step)[0]["actions"][0]["on_click"]()  # edit the first
+        assert step.modal[-1].editing == 0 and step.modal[-1].open_.value is True
+        edited = {**ATTR_LC, "bands": [{"band": "lc", "stat": "mean", "column": "lc"}]}
+        step.modal[-1].on_save(0, edited)
+        _attr_rows(step)[1]["actions"][1]["on_click"]()  # delete the second
+        assert step.modal[-1].layers == [edited]
 
         _run(rc)
         step.run_jobs()
-        assert step.runs[0].params.attribute_config == cfg
+        params = step.runs[0].params
+        assert params.attribute_layers == [edited] and params.attribute_config is None
+    finally:
+        rc.close()
+
+
+def test_a_set_made_before_attribute_layers_reopens_as_one_layer(step):
+    """Review focus 2: a set with the legacy ``attribute_config`` lists its
+    raster as one layer, and a re-run writes it as ``attribute_layers``."""
+    step.ready = ["GLAD-L"]
+    last = AlertSetParams(attribute_config=ATTR_LC)
+    state = _state(_project("d", "GLAD-L", sets=[_set("x", 0, params=last)]))
+    map_, rc = _render(state)
+    try:
+        [row] = _attr_rows(step)
+        assert row["cells"] == [{"value": "landcover.tif"}]
+        assert row["notes"] == [{"text": t("steps.integrate.attr_columns", columns="lc"), "tone": None}]
+        assert step.modal[-1].layers == [ATTR_LC]
+        _run(rc)
+        step.run_jobs()
+        params = step.runs[0].params
+        assert params.attribute_layers == [ATTR_LC] and params.attribute_config is None
+        assert params.model_dump(mode="json")["attribute_layers"] == [ATTR_LC]
+
+        state.new_project_state(_project("e", "GLAD-L"))  # another project starts with none
+        assert _attr_rows(step) == []
     finally:
         rc.close()
 
@@ -920,36 +1001,6 @@ def test_the_lock_stays_while_only_left_out_sources_exist(step):
     map_, rc = _render(_state(_project("d", "RADD")))
     try:
         assert [w.children for w in rc.find(v.Alert).widgets] == [[t("workflow.lock_integrate")]]
-    finally:
-        rc.close()
-
-
-def _panel_header(rc):
-    return rc.find(v.ExpansionPanelHeader).widget.children
-
-
-def test_the_attribute_panel_header_names_the_raster(step):
-    """The collapsed header says which raster the set uses (slice-1 deferral):
-    from the active set before the panel is ever opened, then as edited."""
-    cfg = {"source": "/home/u/rasters/landcover.tif", "kind": "local",
-           "bands": [{"band": "lc", "stat": "majority", "column": "lc"}]}
-    step.ready = ["GLAD-L"]
-    state = _state(_project("d", "GLAD-L", sets=[_set("x", 0, params=AlertSetParams(attribute_config=cfg))]))
-    map_, rc = _render(state)
-    try:
-        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="landcover.tif")]
-        rc.find(v.ExpansionPanels).widget.v_model = 0
-        _, on_value = step.attribute[-1]
-        on_value({"source": "users/me/lc_2020", "kind": "gee",
-                  "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]})
-        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="users/me/lc_2020")]
-        on_value({"source": "projects/x/assets/radd.v2", "kind": "gee",  # a dot is not a file suffix
-                  "bands": [{"band": "b1", "stat": "majority", "column": "b1"}]})
-        assert _panel_header(rc) == [t("steps.integrate.attributes_named", name="projects/x/assets/radd.v2")]
-        on_value({"source": "users/me/lc_2020", "kind": "gee", "bands": []})  # every band unticked
-        assert _panel_header(rc) == [t("steps.integrate.attributes")]
-        on_value(None)
-        assert _panel_header(rc) == [t("steps.integrate.attributes")]
     finally:
         rc.close()
 
@@ -1000,7 +1051,7 @@ def pickers(monkeypatch):
 
 
 @solara.component
-def _AttrHarness(gee_interface, initial, seen):
+def _AttrHarness(gee_interface, initial, seen, reserved=ALERT_RESERVED_COLUMNS, on_busy=None):
     NotificationProvider()
     value, set_value = solara.use_state(initial)
 
@@ -1008,7 +1059,8 @@ def _AttrHarness(gee_interface, initial, seen):
         seen.append(new)
         set_value(new)
 
-    attribute_form.AttributeForm(gee_interface=gee_interface, value=value, on_value=on_value)
+    attribute_form.AttributeForm(gee_interface=gee_interface, value=value, on_value=on_value, reserved=reserved,
+                                 on_busy=on_busy)
 
 
 async def _settle(done, tries=200):
@@ -1034,7 +1086,7 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             load = _button(rc, t("steps.integrate.attr_load"))
             load.fire_event("click", None)
             await _settle(lambda: t("steps.integrate.attr_no_source") in _texts(rc))
@@ -1057,10 +1109,73 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
             pickers.path.set(str(tmp_path / "other.tif"))  # picked, not loaded yet
             _checkbox(rc, "lc").v_model = True
             assert seen[-1]["source"] == str(tif)  # the rows still describe the loaded raster
-
-            _button(rc, t("steps.integrate.attr_clear")).fire_event("click", None)
-            assert seen[-1] is None and not rc.find(v.Checkbox).widgets
         finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_attribute_form_reports_its_load_as_busy(pickers, tmp_path):
+    """The real form's ``on_busy`` (the attribute modal takes Save off Enter
+    while it is busy; tests/test_attribute_modal.py fakes the form): idle at
+    mount, busy while Load reads the bands, idle once they are read."""
+    tif = _geotiff(tmp_path / "landcover.tif", ["lc"])
+    seen, seen_busy = [], []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen,
+                                               on_busy=seen_busy.append), handle_error=False)
+        try:
+            assert seen_busy == [False]
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tif))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen and seen_busy[-1] is False)
+            assert seen[-1]["source"] == str(tif)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+    assert seen_busy == [False, True, False]
+
+
+def test_closing_the_form_during_a_load_stops_it(pickers, monkeypatch, tmp_path):
+    """ESC or Cancel unmounts the form mid-load, and use_task does not cancel
+    on unmount: the load must stop there, or it writes the bands it read into
+    a form the user closed (as the source, mask and vis modals stop theirs)."""
+    import threading
+
+    reading, release, read = threading.Event(), threading.Event(), []
+
+    def slow_band_names(src):
+        reading.set()
+        release.wait(5)
+        read.append(src)
+        return ["lc"]
+
+    monkeypatch.setattr(attribute_form, "band_names", slow_band_names)
+    shown, seen = solara.reactive(True), []
+
+    @solara.component
+    def _Host():
+        NotificationProvider()
+        if shown.value:
+            attribute_form.AttributeForm(gee_interface=None, value=None, on_value=seen.append)
+
+    async def main():
+        _box, rc = reacton.render(_Host(), handle_error=False)
+        try:
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tmp_path / "lc.tif"))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(reading.is_set)
+            shown.set(False)  # the modal closed: the form unmounts
+            release.set()
+            await _settle(lambda: read)  # the read itself ran to its end...
+            await asyncio.sleep(0.1)
+            assert seen == []  # ...and nothing was handed back
+        finally:
+            release.set()
             rc.close()
 
     asyncio.run(main())
@@ -1072,7 +1187,7 @@ def test_attribute_form_shows_a_load_failure_next_to_the_field(pickers, tmp_path
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             pickers.path.set(str(tmp_path / "missing.tif"))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
             await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
@@ -1088,9 +1203,9 @@ def test_attribute_form_restores_a_saved_config(pickers):
            "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=[]), handle_error=False)
     try:
-        assert rc.find(v.RadioGroup).widget.v_model == "file" and pickers.path.value == "/home/u/lc.tif"
+        assert _origin(rc).v_model == "file" and pickers.path.value == "/home/u/lc.tif"
         assert _checkbox(rc, "lc").v_model is True
-        assert [w.v_model for w in rc.find(v.Select).widgets] == ["median"]
+        assert [w.v_model for w in rc.find(v.Select).widgets if w is not _origin(rc)] == ["median"]
     finally:
         rc.close()
 
@@ -1104,7 +1219,7 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
     async def main():
         box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
         try:
-            rc.find(v.RadioGroup).widget.v_model = "file"
+            _origin(rc).v_model = "file"
             pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
             await _settle(lambda: seen)
@@ -1124,19 +1239,29 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
     asyncio.run(main())
 
 
-def test_attribute_form_remove_drops_a_stale_error(pickers, tmp_path):
-    cfg = {"source": "/home/u/lc.tif", "kind": "local",
-           "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
+def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, tmp_path):
+    """Review focus 3: another layer writes ``b1`` already, so this raster's
+    ``b1`` is written ``b1_2``, and ``count`` (an alert column) ``count_2``;
+    each field's hint says so."""
+    from deforestation_alerts.scripts.raster_attribute import reserved_for
+
+    tif = _geotiff(tmp_path / "other.tif", ["b1", "count"])
+    other = {"source": "/home/u/lc.tif", "kind": "local", "bands": [{"band": "b1", "stat": "mean", "column": "b1"}]}
     seen = []
 
     async def main():
-        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen,
+                                               reserved=reserved_for([other])), handle_error=False)
         try:
-            pickers.path.set(str(tmp_path / "missing.tif"))
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
-            await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
-            _button(rc, t("steps.integrate.attr_clear")).fire_event("click", None)
-            assert seen == [None] and not any("missing.tif" in s for s in _texts(rc))
+            await _settle(lambda: seen)
+            assert [b["column"] for b in seen[-1]["bands"]] == ["b1_2", "count_2"]
+            b1, count = rc.find(v.TextField).widgets
+            assert b1.v_model == "b1" and b1.persistent_hint
+            assert b1.hint == t("steps.integrate.attr_written_as", column="b1_2")
+            assert count.hint == t("steps.integrate.attr_written_as", column="count_2")
         finally:
             rc.close()
 
@@ -1151,9 +1276,9 @@ def test_attribute_form_keeps_a_saved_bands_projection_on_edit(pickers):
     seen = []
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
     try:
-        assert rc.find(v.RadioGroup).widget.v_model == "gee"
+        assert _origin(rc).v_model == "gee"
         assert pickers.asset.value["asset_id"] == "users/me/lc"
-        rc.find(v.Select).widget.v_model = "mean"
+        rc.find(v.Select, v_model="majority").widget.v_model = "mean"
         assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "b1", "crs": "EPSG:32721",
                                       "scale": 30.0}]
     finally:

@@ -6,11 +6,16 @@ screenshots under its ``--out`` folder, and always calls ``stop_server``.
 Selectors are the ones the slice-1 walks proved: ``[data-step-id=N]`` for
 rail items, ``[data-step-key=KEY]`` for the pipeline header, ``.right-panel``
 for the workflow panel, ``.dialog-card`` for rail dialogs and
-``.toast-alert``/``.toast-message`` for pysepal toasts. Never match text
+``.toast-alert``/``.toast-message`` for pysepal toasts. Every other dialog (a
+step's form, Manage projects, a confirmation) is ``MODAL``: the rail dialog is
+an active ``v-dialog`` too, so a bare ``.v-dialog--active`` can land on it.
+The app starts on the Project rail dialog; ``open_app`` closes it. Labels come
+from the English catalogue (``en``), not copies of it. Never match text
 page-wide: detached tiles leave hidden duplicates in the DOM; scope to a
 visible container or add ``:visible``.
 """
 
+import json
 import math
 import os
 import re
@@ -24,6 +29,18 @@ REPO = Path(__file__).resolve().parents[2]
 # The app environment's bin folder (run_ui.sh's jupyter and voila):
 # $DEFO_ALERTS_ENV_BIN, else the micromamba env the runbook creates.
 ENV_BIN = Path(os.environ.get("DEFO_ALERTS_ENV_BIN") or Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin")
+MESSAGES_EN = REPO / "deforestation_alerts" / "message" / "en"
+
+#: Every open dialog but MapApp's rail dialog (its v-dialog has the content
+#: class ``dialog-container``): a step's form, Manage projects, a confirmation.
+MODAL = ".v-dialog--active:not(.dialog-container)"
+#: The rail dialog's card (About, Project, Overview).
+RAIL_DIALOG = ".dialog-card"
+#: The Project dialog's Manage projects button (both of its states show it).
+MANAGE_BUTTON = "button:has(.mdi-folder-multiple-outline)"
+#: The open form's Enter default (``gui.widget.enter_key.ENTER_DEFAULT``):
+#: one per form, none while the form's check runs.
+ENTER_BUTTON = "button.da-enter-default"
 
 TOAST_SPY = """
 (() => {
@@ -46,6 +63,19 @@ TOAST_SPY = """
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def en(dotted: str) -> str:
+    """The English text of the catalogue key ``dotted`` (a ``gui.i18n.t``
+    key such as ``steps.alerts.add``): a walk clicks the label the app shows,
+    so a reworded label does not break it. A plural node is not a text."""
+    for path in sorted(MESSAGES_EN.glob("*.json")):
+        node = json.loads(path.read_text(encoding="utf-8"))
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if isinstance(node, str):
+            return node
+    raise KeyError(dotted)
 
 
 def app_url(port: int) -> str:
@@ -95,6 +125,22 @@ def new_page(playwright, report: dict):
     page.on("response", lambda r: report["bad_responses"].append((r.status, r.url[:160]))
             if r.status >= 400 else None)
     return browser, page
+
+
+#: Page errors the walks' environment raises on every load, before the app
+#: renders. Not the app's: no app code (gui/, deforestation_alerts/, tools/)
+#: references MathJax, and nothing loads it. Where the bare reference comes
+#: from is unidentified: the default ``solara.html.j2`` loads
+#: ``main-vuetify.js``, not the ``main.js`` that calls
+#: ``voila.renderMathJax()``, and solara's Markdown guards its MathJax use with
+#: ``window.MathJax &&``.
+AMBIENT_PAGE_ERRORS = ("MathJax is not defined",)
+
+
+def app_page_errors(report: dict) -> list:
+    """The page errors ``new_page`` recorded, less the ambient ones: a walk
+    that gates on page errors gates on these."""
+    return [e for e in report.get("page_errors", []) if e.strip() not in AMBIENT_PAGE_ERRORS]
 
 
 def wait_for(fn, timeout, what, poll=0.5):
@@ -174,22 +220,47 @@ def close_dialog(page):
 
 
 def open_app(page, port):
+    """Load the app. It starts on the Project rail dialog (rail step 2): wait
+    for its Manage projects button, then close the dialog."""
     page.goto(app_url(port), wait_until="load", timeout=180000)
-    wait_for(lambda: dialog_visible(page), 300, "About dialog")
+    manage = page.locator(f"{RAIL_DIALOG} {MANAGE_BUTTON}:visible").first
+    wait_for(lambda: dialog_visible(page) and manage.count(), 300, "the Project dialog")
     page.wait_for_timeout(2500)
-    assert close_dialog(page), "the About dialog did not close"
+    assert close_dialog(page), "the Project dialog did not close"
+
+
+def open_manage(page):
+    """Open Manage projects from the Project rail dialog, opening that first.
+    Another rail dialog disables the rail, so it is closed before the click."""
+    manage = page.locator(f"{RAIL_DIALOG} {MANAGE_BUTTON}:visible").first
+    if not manage.count():
+        close_dialog(page)
+        page.locator('[data-step-id="2"]').first.click()
+        wait_for(lambda: manage.count(), 30, "the Project dialog")
+    manage.click()
+    wait_for(lambda: page.locator(MODAL).count(), 15, "Manage projects")
+    page.wait_for_timeout(800)
+
+
+def manage_item(page, name):
+    """The Manage projects row of ``name``: its title is the name, then an
+    "open" chip on the open project (``north_s6`` must not match ``north_s6_b``)."""
+    title = page.locator(".v-list-item__title", has_text=re.compile(rf"^\s*{re.escape(name)}(\s|$)"))
+    return page.locator(f"{MODAL} .v-list-item").filter(has=title).first
 
 
 def open_project(page, name):
-    page.locator('[data-step-id="2"]').first.click()
-    page.wait_for_timeout(1500)
-    # ``has_text`` alone also matches every ancestor wrapper (the dialog body,
-    # the table, the row) down to the bare name cell; in DOM (preorder) order
-    # that cell is last and has no buttons. Scope to a container that also
-    # has the open button, so ``.last`` lands on the row, not the name cell.
-    row = page.locator(".dialog-card div:visible", has_text=name).filter(
-        has=page.locator("button:has(.mdi-table-eye)")).last
-    row.locator("button:has(.mdi-table-eye)").first.click()
+    """Project → Manage projects → select ``name`` → Open (the Enter default).
+    The app then names the project in its title and closes the dialog."""
+    open_manage(page)
+    item = manage_item(page, name)
+    wait_for(lambda: item.count() and item.is_visible(), 30, f"{name} listed in Manage projects")
+    # The open project is selected already: a click would unselect it.
+    if "v-list-item--active" not in (item.get_attribute("class") or ""):
+        item.locator(".v-list-item__title").first.click()
+    open_ = page.locator(f"{MODAL} {ENTER_BUTTON}:visible").last
+    wait_for(lambda: open_.count() and open_.is_enabled(), 15, f"Open enabled for {name}")
+    open_.click()
     wait_for(lambda: title(page).endswith(f"· {name}"), 60, f"title {name}")
     page.wait_for_timeout(1500)
     if dialog_visible(page):

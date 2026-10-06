@@ -12,7 +12,6 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
 from deforestation_alerts.project import io, paths
-from deforestation_alerts.project.io import ProjectInfo
 from deforestation_alerts.project.models import AoiRecord, add_predefined_source
 from gui.i18n import t
 from gui.store.autosave import install_autosave
@@ -20,6 +19,7 @@ from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import step_index
 from gui.tile import project_dialog as pd
+from gui.widget.enter_key import ENTER_DEFAULT
 
 
 def test_create_project_is_empty_and_named():
@@ -53,8 +53,23 @@ def test_names_on_disk_counts_every_folder(tmp_path):
     assert pd.names_on_disk(tmp_path / "missing") == []
 
 
+def test_folder_size_counts_the_files_and_never_follows_a_link(tmp_path):
+    folder = tmp_path / "a"
+    (folder / "sub").mkdir(parents=True)
+    (folder / "x.bin").write_bytes(b"0" * 10)
+    (folder / "sub" / "y.bin").write_bytes(b"0" * 5)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "z.bin").write_bytes(b"0" * 1000)
+    (folder / "file_link").symlink_to(elsewhere / "z.bin")
+    (folder / "dir_link").symlink_to(elsewhere, target_is_directory=True)
+    assert pd.folder_size("a", tmp_path) == 15
+    assert pd.folder_size("missing", tmp_path) == 0
+
+
 # ---------------------------------------------------------------------------
-# The dialog, rendered: the list, name checks, open/new/duplicate, delete.
+# The dialog, rendered: the status block, the list, the name form, open /
+# new / duplicate, delete.
 # ---------------------------------------------------------------------------
 @solara.component
 def _Harness(app_state, dismiss):
@@ -64,17 +79,21 @@ def _Harness(app_state, dismiss):
 
 @pytest.fixture
 def dialog(monkeypatch, tmp_path):
-    """A real AppState with the auto-save hook; the projects table is swapped
-    for a recorder so the test calls the row actions the dialog wires up."""
+    """A real AppState with the auto-save hook; Manage projects is swapped for
+    a recorder, so the test calls the callbacks the dialog wires into it (the
+    dialog itself is tested in tests/test_manage_projects.py). The delete
+    confirmation is the real one."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(rows=[], empty=[], dismissed=0, root=tmp_path, state=AppState())
+    ns = SimpleNamespace(manage=[], dismissed=0, root=tmp_path, state=AppState())
 
     @solara.component
-    def _RecorderTable(title, columns, rows, empty_text):
-        ns.rows.append(rows)
-        ns.empty.append(empty_text)
+    def _RecorderManage(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
+                        busy=False, covered=False):
+        ns.manage.append(dict(open=open, infos=infos, selected=selected, on_select=on_select, on_open=on_open,
+                              on_delete=on_delete, on_cancel=on_cancel, current=current, busy=busy,
+                              covered=covered))
 
-    monkeypatch.setattr(pd, "ProductTable", _RecorderTable)
+    monkeypatch.setattr(pd, "ManageProjectsDialog", _RecorderManage)
     unsubscribe = install_autosave(ns.state)
 
     def _dismiss():
@@ -103,13 +122,16 @@ async def _settle(done, what, timeout=SETTLE_SECONDS):
 
 
 def _listed(ns):
-    """{name: "sources / periods / sets"} as the table shows it now."""
-    return {row["key"]: row["cells"][1]["value"] for row in ns.rows[-1]} if ns.rows else None
+    """{name: "sources / periods / sets"} as the dialog hands the list to Manage now."""
+    if not ns.manage:
+        return None
+    return {i.name: f"{i.n_sources} / {i.n_periods} / {i.n_sets}" for i in ns.manage[-1]["infos"]}
 
 
-def _row_action(ns, name, kind):
-    row = next(r for r in ns.rows[-1] if r["key"] == name)
-    return next(a["on_click"] for a in row["actions"] if a["kind"] == kind)
+def _open_from_manage(ns, name):
+    """A row click, then the footer's Open."""
+    ns.manage[-1]["on_select"](name)
+    ns.manage[-1]["on_open"]()
 
 
 def _button(finder, label):
@@ -117,26 +139,89 @@ def _button(finder, label):
 
 
 def _open_form(rc):
-    """The name form that is open now (New or Duplicate)."""
+    """The dialog that is open now: the name form (New or Duplicate) or the
+    delete confirmation (Manage is a recorder here)."""
     return rc.find(v.Dialog, v_model=True)
+
+
+def _name_field(rc):
+    return _open_form(rc).find(v.TextField, label=t("steps.project.name_label")).widget
 
 
 async def _submit_name(rc, name):
     await _settle(lambda: _open_form(rc).widgets, "the name form opened")
-    form = _open_form(rc)
-    form.find(v.TextField, label=t("steps.project.name_label")).widget.v_model = name
-    _button(form, t("common.create")).fire_event("click", None)
+    _name_field(rc).v_model = name
+    _button(_open_form(rc), t("common.create")).fire_event("click", None)
 
 
 def _toasts(kind):
     return [toast.message for toast in get_current_bus().toasts.value if toast.type.value == kind]
 
 
+def _texts(widget):
+    out = []
+    if isinstance(widget, str):
+        return [widget]
+    for child in getattr(widget, "children", None) or []:
+        out += _texts(child)
+    return out
+
+
+def test_with_no_project_open_the_dialog_offers_new_and_manage(dialog):
+    async def main():
+        box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {}, "the empty list read")
+            texts = _texts(box)
+            assert t("steps.project.empty_heading") in texts and t("steps.project.none_open") in texts
+            new = _button(rc, t("steps.project.new"))
+            assert new.block and new.color == "primary" and not new.outlined
+            manage = _button(rc, t("steps.project.manage_count", count=0))
+            assert manage.block and manage.outlined and manage.disabled  # nothing saved yet
+        finally:
+            rc.close()
+        io.save_project(pd.create_project("a"))
+        box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed")
+            assert not _button(rc, t("steps.project.manage_count", count=1)).disabled
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_open_project_shows_its_save_state_and_manage_selects_it(dialog):
+    async def main():
+        box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("b"))
+            await _settle(lambda: t("steps.project.chip_saved") in _texts(box), "the saved chip")
+            chip = next(c for c in rc.find(v.Chip).widgets if c.children == [t("steps.project.chip_saved")])
+            assert chip.color == "primary"
+            for label in (t("steps.project.new"), t("steps.project.manage"), t("steps.project.duplicate")):
+                button = _button(rc, label)
+                assert button.outlined and button.small and not button.block, label
+            dialog.state.save_error.set("disk full")
+            await _settle(lambda: t("steps.project.chip_save_failed") in _texts(box), "the failed chip")
+            chip = next(c for c in rc.find(v.Chip).widgets if c.children == [t("steps.project.chip_save_failed")])
+            assert chip.color == "error" and t("steps.project.chip_saved") not in _texts(box)
+            _button(rc, t("steps.project.manage")).fire_event("click", None)
+            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+            assert dialog.manage[-1]["selected"] == "b" and dialog.manage[-1]["current"] == "b"
+            dialog.manage[-1]["on_cancel"]()
+            await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_the_list_follows_the_open_projects_saves(dialog):
     """The counts and time of the open project are read again on every save,
     not only when a project is installed or closed."""
     async def main():
-        box, rc = dialog.render()
+        _box, rc = dialog.render()
         try:
             dialog.state.new_project_state(pd.create_project("a"))
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
@@ -150,30 +235,93 @@ def test_the_list_follows_the_open_projects_saves(dialog):
     asyncio.run(main())
 
 
-def test_a_name_taken_on_disk_since_the_list_was_read_is_refused(dialog):
-    """Another tab created "b" after this dialog read the list: Create must
-    check the disk, or the auto-save of a new "b" overwrites that project."""
+def test_the_name_is_checked_as_it_is_typed(dialog):
     async def main():
-        # A sentinel project: the settle below waits for the mount's read to
-        # land, not for the first render's empty list (a late read would list "b").
+        io.save_project(pd.create_project("north"))
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read")
+            _button(rc, t("steps.project.new")).fire_event("click", None)
+            await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+            frame = _open_form(rc).widget
+            assert frame.max_width == "420px" and frame.persistent
+            field = _name_field(rc)
+            assert field.autofocus and field.hint == t("steps.project.name_hint") and field.persistent_hint
+
+            def create():
+                return _button(_open_form(rc), t("common.create"))
+
+            assert ENTER_DEFAULT in create().class_.split()
+            assert not field.error_messages and create().disabled  # nothing typed: no message, no Create
+            field.v_model = "bad/name"
+            assert field.error_messages == [t("steps.project.name_chars")] and create().disabled
+            field.v_model = "NORTH"
+            assert field.error_messages == [t("steps.project.name_exists")] and create().disabled
+            field.v_model = "south"
+            assert not field.error_messages and not create().disabled
+            _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+            assert not _open_form(rc).widgets and dialog.state.project.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_listed_name_offers_to_open_that_project_instead(dialog):
+    async def main():
+        io.save_project(pd.create_project("north"))
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read")
+            _button(rc, t("steps.project.new")).fire_event("click", None)
+            await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+            label = t("steps.project.open_instead", name="north")
+            assert not any(label in w.children for w in _open_form(rc).find(v.Btn).widgets)
+            _name_field(rc).v_model = "North "
+            instead = _button(_open_form(rc), label)
+            assert ENTER_DEFAULT not in (instead.class_ or "").split()  # Create stays the one default
+            instead.fire_event("click", None)
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "north", "north opened")
+            await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
+            assert not _open_form(rc).widgets
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_name_taken_on_disk_after_the_form_opened_is_refused(dialog):
+    """Review Focus 4. The live check uses the folders read when the form
+    opened; another tab creates "b" after that. Create must check the disk
+    again, or the auto-save of a new "b" overwrites that project."""
+    async def main():
         io.save_project(pd.create_project("a"))
-        box, rc = dialog.render()
+        _box, rc = dialog.render()
         try:
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            _button(rc, t("steps.project.new")).fire_event("click", None)
+            await _settle(lambda: _open_form(rc).widgets, "the name form opened")
             other = pd.create_project("b")
             other.look_back_days = 99
             io.save_project(other)  # the other tab
             manifest = dialog.root / "b" / paths.MANIFEST
             before = manifest.read_text()
 
-            _button(rc, t("steps.project.new")).fire_event("click", None)
-            await _submit_name(rc, "b")
+            field = _name_field(rc)
+            field.v_model = "b"
+            assert not field.error_messages  # the live check read the disk before "b" existed
+            create = _button(_open_form(rc), t("common.create"))
+            assert not create.disabled
+            create.fire_event("click", None)
 
-            assert _listed(dialog) == {"a": "0 / 0 / 0"}  # the list on screen did not know "b"
             await _settle(lambda: _open_form(rc).find(v.Alert).widgets, "the name refused")
-            errors = [w.children for w in _open_form(rc).find(v.Alert).widgets]
-            assert errors == [[t("steps.project.name_exists")]]
+            alerts = _open_form(rc).find(v.Alert).widgets
+            assert [_texts(a) for a in alerts] == [[t("steps.project.name_exists")]]
+            assert alerts[0].type == "error"
             assert dialog.state.project.value is None and manifest.read_text() == before
+            assert dialog.dismissed == 0
+            field.v_model = "c"  # typing again clears the refusal
+            assert not _open_form(rc).find(v.Alert).widgets
         finally:
             rc.close()
 
@@ -186,13 +334,17 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
     dialog (it did from any other step): the dialog closes itself."""
     async def main():
         io.save_project(pd.create_project("a"))
-        box, rc = dialog.render()
+        _box, rc = dialog.render()
         try:
             dialog.state.current_page_view.value = "aoi_tile"  # AOI is showing
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed")
             if how in ("open", "duplicate"):
-                _row_action(dialog, "a", "open")()
+                _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
+                await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+                assert dialog.manage[-1]["selected"] is None  # no project open to preselect
+                _open_from_manage(dialog, "a")
                 await _settle(lambda: dialog.state.project.value is not None, "the project opened")
+                await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed on the load")
             if how == "new":
                 _button(rc, t("steps.project.new")).fire_event("click", None)
                 await _submit_name(rc, "n")
@@ -201,6 +353,8 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
                 await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets),
                               "the Duplicate button")
                 _button(rc, label).fire_event("click", None)
+                await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+                assert _name_field(rc).hint == t("steps.project.duplicate_hint")
                 await _submit_name(rc, "c")
             expected = {"open": "a", "new": "n", "duplicate": "c"}[how]
             await _settle(lambda: getattr(dialog.state.project.value, "name", None) == expected,
@@ -209,6 +363,7 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
             assert dialog.state.current_page_view.value == "aoi_tile"
             await _settle(lambda: dialog.dismissed >= (2 if how == "duplicate" else 1), "the dialog closed")
             assert dialog.dismissed == (2 if how == "duplicate" else 1)
+            assert not _open_form(rc).widgets  # the name form closed too
         finally:
             rc.close()
 
@@ -216,11 +371,53 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
 
 
 async def _delete(rc, dialog, name):
-    _row_action(dialog, name, "delete")()
-    await _settle(lambda: rc.find(v.Dialog, v_model=True).widgets, "the confirm dialog opened")
-    confirm = rc.find(v.Dialog, v_model=True)
+    dialog.manage[-1]["on_delete"](name)  # the row's trash button
+    await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+    confirm = _open_form(rc)
     confirm.find(v.TextField).widget.v_model = name
     _button(confirm, t("common.delete")).fire_event("click", None)
+
+
+def test_the_confirmation_shows_the_folder_size_counted_off_thread(dialog):
+    async def main():
+        io.save_project(pd.create_project("a"))
+        (dialog.root / "a" / "data.bin").write_bytes(b"0" * 5_400_000)
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            dialog.manage[-1]["on_delete"]("a")
+            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+            await _settle(lambda: t("steps.project.delete_size", size="5.4 MB") in _texts(_open_form(rc).widget),
+                          "the size counted")
+            assert not _open_form(rc).find(v.Alert).widgets  # not open, no writer
+            _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+            await _settle(lambda: not _open_form(rc).widgets, "the confirm dialog closed")
+            assert (dialog.root / "a").exists()
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_manage_is_covered_while_the_delete_confirmation_is_open(dialog):
+    # Manage releases its focus trap under the confirmation (see
+    # test_manage_projects), so the confirmation's name field keeps the focus.
+    async def main():
+        io.save_project(pd.create_project("a"))
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            assert dialog.manage[-1]["covered"] is False
+            dialog.manage[-1]["on_delete"]("a")
+            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+            assert dialog.manage[-1]["covered"] is True
+            _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+            await _settle(lambda: not _open_form(rc).widgets, "the confirm dialog closed")
+            assert dialog.manage[-1]["covered"] is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
 
 
 def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monkeypatch):
@@ -236,18 +433,24 @@ def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monk
     monkeypatch.setattr(io, "delete_project", spy)
 
     async def main():
-        box, rc = dialog.render()
+        _box, rc = dialog.render()
         try:
             dialog.state.new_project_state(pd.create_project("a"))
             dialog.state.active_step.set(step_index("period"))
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
-            await _delete(rc, dialog, "a")
+            dialog.manage[-1]["on_delete"]("a")
+            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+            alerts = _open_form(rc).find(v.Alert).widgets
+            assert [(a.type, _texts(a)) for a in alerts] == [("warning", [t("steps.project.delete_open_warning")])]
+            _open_form(rc).find(v.TextField).widget.v_model = "a"
+            _button(_open_form(rc), t("common.delete")).fire_event("click", None)
             await _settle(lambda: _toasts("success"), "the delete finished")
             assert seen == [None]
             assert not (dialog.root / "a").exists()
             assert dialog.state.project.value is None and dialog.state.active_step.value == 0
             assert _toasts("success") == [t("steps.project.deleted", name="a")] and dialog.dismissed == 0
             await _settle(lambda: _listed(dialog) == {}, "the list emptied")
+            assert not _open_form(rc).widgets  # the confirmation closed
         finally:
             rc.close()
 
@@ -261,7 +464,7 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
     monkeypatch.setattr(io, "delete_project", denied)
 
     async def main():
-        box, rc = dialog.render()
+        _box, rc = dialog.render()
         try:
             p = pd.create_project("a")
             add_predefined_source(p, "RADD")
@@ -272,7 +475,35 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
             assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
             live = dialog.state.project.value
             assert live is not None and live.name == "a" and list(live.sources) == ["RADD"]
-            assert rc.find(v.Dialog, v_model=True).find(v.TextField).widget.v_model == "a"  # still asking
+            assert _open_form(rc).find(v.TextField).widget.v_model == "a"  # still asking
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_project_being_written_cannot_be_deleted(dialog):
+    """Review Focus 5: while a task writes into the folder, the confirmation
+    shows the busy error, no name field and a disabled Delete; they come back
+    once the writer is done."""
+    async def main():
+        io.save_project(pd.create_project("a"))
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            with writing("a"):
+                dialog.manage[-1]["on_delete"]("a")
+                await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+                confirm = _open_form(rc)
+                alerts = confirm.find(v.Alert).widgets
+                assert [(a.type, _texts(a)) for a in alerts] == [("error", [t("steps.project.delete_busy")])]
+                assert not confirm.find(v.TextField).widgets
+                delete = _button(confirm, t("common.delete"))
+                assert delete.disabled
+                delete.fire_event("click", None)
+            await _settle(lambda: _open_form(rc).find(v.TextField).widgets, "the name field back")
+            assert not _open_form(rc).find(v.Alert).widgets
+            assert (dialog.root / "a").exists() and not _toasts("success")
         finally:
             rc.close()
 
@@ -296,7 +527,7 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
     monkeypatch.setattr(detached, "_report", lambda name, text, notify: reports.append(text))
 
     async def main():
-        container, rc = render_detached(lambda: _Harness(app_state=dialog.state, dismiss=lambda: None), "Project")
+        _container, rc = render_detached(lambda: _Harness(app_state=dialog.state, dismiss=lambda: None), "Project")
         try:
             dialog.state.new_project_state(pd.create_project("a"))
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
@@ -325,59 +556,6 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
                 await _settle(lambda: _listed(dialog) == {"a": f"{n} / 0 / 0"}, f"save {n} listed")
             assert reports == []
             assert dialog.state.last_saved.value is not None and dialog.state.save_error.value is None
-        finally:
-            rc.close()
-
-    asyncio.run(main())
-
-
-def _texts(widget):
-    out = []
-    if isinstance(widget, str):
-        return [widget]
-    for child in getattr(widget, "children", None) or []:
-        out += _texts(child)
-    return out
-
-
-def test_relative_time():
-    now = datetime(2026, 10, 1, 12, 0, 0)
-    assert pd.relative_time(now - timedelta(seconds=59), now) == "just now"
-    assert pd.relative_time(now + timedelta(seconds=5), now) == "just now"  # a clock a little ahead
-    assert pd.relative_time(now - timedelta(minutes=1), now) == "1 minute ago"
-    assert pd.relative_time(now - timedelta(minutes=59, seconds=59), now) == "59 minutes ago"
-    assert pd.relative_time(now - timedelta(hours=1), now) == "1 hour ago"
-    assert pd.relative_time(now - timedelta(hours=23), now) == "23 hours ago"
-    assert pd.relative_time(now - timedelta(days=3, hours=5), now) == "3 days ago"
-
-
-def test_filter_infos():
-    infos = [ProjectInfo(name=n, n_sources=0, n_periods=0, n_sets=0, updated_at=None)
-             for n in ("North", "north_2", "South")]
-    assert [i.name for i in pd.filter_infos(infos, " NOR ")] == ["North", "north_2"]
-    assert pd.filter_infos(infos, "") == infos and pd.filter_infos(infos, None) == infos
-    assert pd.filter_infos(infos, "zz") == []
-
-
-def test_the_search_filters_the_list(dialog):
-    async def main():
-        for name in ("north", "north_2", "south"):
-            io.save_project(pd.create_project(name))
-        box, rc = dialog.render()
-        try:
-            await _settle(lambda: _listed(dialog) and len(_listed(dialog)) == 3, "three projects listed")
-            # The recorder sees the rows when the table renders; the search
-            # field is shown once that render (on the read's worker) is committed.
-            await _settle(lambda: rc.find(v.TextField, label=t("steps.project.search")).widgets, "the search field")
-            search = rc.find(v.TextField, label=t("steps.project.search")).widget
-            search.v_model = "NOR"
-            await _settle(lambda: set(_listed(dialog)) == {"north", "north_2"}, "the list filtered")
-            search.v_model = "zz"
-            await _settle(lambda: _listed(dialog) == {}, "no project matched")
-            assert dialog.empty[-1] == t("steps.project.no_match", query="zz")
-            search.v_model = None  # the field's clear button
-            await _settle(lambda: len(_listed(dialog)) == 3, "the filter cleared")
-            assert dialog.empty[-1] == t("steps.project.list_empty")
         finally:
             rc.close()
 
@@ -419,6 +597,104 @@ def test_saved_ago_moves_on_while_the_dialog_stays_open(dialog, monkeypatch):
             assert t("steps.project.saved_ago", time_ago="just now") in _texts(box)
             await _settle(lambda: t("steps.project.saved_ago", time_ago="1 minute ago") in _texts(box),
                           "a tick re-rendered the line")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_duplicate_toasts_and_leaves_create_working(dialog, monkeypatch):
+    """Copying the AOI sidecar can fail on disk trouble: a toast, the form
+    stays open on the name, nothing is installed, no half-made folder blocks
+    the name, and Create works again."""
+    real_copy = pd.shutil.copy2
+    failures = [OSError("disk full")]
+
+    def flaky_copy(src, dst, *args, **kwargs):
+        if failures:
+            raise failures.pop()
+        return real_copy(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(pd.shutil, "copy2", flaky_copy)
+
+    async def main():
+        p = pd.create_project("a")
+        p.aoi = AoiRecord(spec={}, name="x", method="DRAW", digest="d", bounds=(0, 0, 1, 1),
+                          geometry_file=paths.AOI_SIDECAR)
+        io.save_project(p)
+        (dialog.root / "a" / paths.AOI_SIDECAR).write_text('{"type": "FeatureCollection", "features": []}')
+        _box, rc = dialog.render()
+        try:
+            dialog.state.load_project_state(io.load_project("a"))
+            label = t("steps.project.duplicate")
+            await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets), "the Duplicate button")
+            _button(rc, label).fire_event("click", None)
+            await _submit_name(rc, "c")
+            await _settle(lambda: _toasts("error"), "the failure toasted")
+            assert _toasts("error") == [t("steps.project.duplicate_failed", name="a", error="disk full")]
+            assert dialog.state.project.value.name == "a" and dialog.dismissed == 0
+            assert not (dialog.root / "c").exists()  # the half-made folder is gone
+            assert _name_field(rc).v_model == "c"  # the form stays open on the name
+            create = _button(_open_form(rc), t("common.create"))
+            assert not create.disabled
+            create.fire_event("click", None)  # the retry
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c", "c installed")
+            assert (dialog.root / "c" / paths.AOI_SIDECAR).exists()
+            await _settle(lambda: not _open_form(rc).widgets, "the name form closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_opening_the_open_project_closes_the_dialogs_and_keeps_it_as_it_is(dialog, monkeypatch):
+    """Manage opens on the open project with Open as Enter's default. Open
+    there must not read it again from disk: after a failed auto-save that
+    would silently drop what is only in memory."""
+    loads = []
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+            live = dialog.state.project.value
+            dialog.state.current_page_view.value = "period_tile"  # wherever the user was
+            monkeypatch.setattr(dialog.state, "load_project_state", lambda p: loads.append(p))
+            _button(rc, t("steps.project.manage")).fire_event("click", None)
+            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+            assert dialog.manage[-1]["selected"] == "a"
+            dialog.manage[-1]["on_open"]()  # Enter, or a click on Open
+            await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
+            await asyncio.sleep(0.05)
+            assert loads == [] and dialog.state.project.value is live
+            assert dialog.dismissed == 1 and dialog.state.current_page_view.value == "period_tile"
+            assert not _toasts("success")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
+    async def main():
+        io.save_project(pd.create_project("north"))
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(pd.create_project("a"))
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "north": "0 / 0 / 0"}, "the list read")
+            for form in (t("steps.project.new"), t("steps.project.duplicate")):
+                _button(rc, form).fire_event("click", None)
+                await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+                field = _name_field(rc)
+                field.v_model = "A"
+                assert field.error_messages == [t("steps.project.name_exists")], form
+                labels = [w.children for w in _open_form(rc).find(v.Btn).widgets]
+                assert not any(t("steps.project.open_instead", name="a") in c for c in labels), form
+                field.v_model = "north"  # another listed project is still offered
+                _button(_open_form(rc), t("steps.project.open_instead", name="north"))
+                _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
+                await _settle(lambda: not _open_form(rc).widgets, "the name form closed")
         finally:
             rc.close()
 

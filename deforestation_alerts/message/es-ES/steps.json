@@ -1,8 +1,7 @@
 {
   "steps": {
     "project": {
-      "title": "Proyecto",
-      "none_open": "No hay ningún proyecto abierto. Crea uno, abre uno o elige un área de interés en el primer paso para empezar uno automáticamente.",
+      "none_open": "Crea uno, abre uno guardado o elige un área de interés en el primer paso para empezar uno automáticamente.",
       "new": "Nuevo proyecto",
       "duplicate": "Duplicar",
       "name_label": "Nombre del proyecto",
@@ -46,22 +45,33 @@
         "other": "hace {count} días"
       },
       "save_failed": "Error al guardar: {error}",
-      "list_title": "Proyectos",
       "list_empty": "Todavía no hay proyectos guardados.",
-      "col_name": "Nombre",
-      "col_counts": "Fuentes / períodos / conjuntos",
-      "col_updated": "Actualizado",
       "opened": "{name} abierto",
       "open_failed": "No se pudo abrir {name}: {error}",
       "set_load_failed": "No se pudieron cargar las alertas del conjunto activo: {error}",
       "set_missing": "Faltan los archivos del conjunto de alertas activo ({path}). Vuelve a ejecutar Integrar y vectorizar para reconstruirlo.",
       "delete_title": "¿Eliminar {name}?",
-      "delete_message": "Esto elimina la carpeta del proyecto y todos sus archivos. Escribe el nombre del proyecto para confirmar.",
       "delete_busy": "Una tarea todavía está escribiendo en este proyecto. Espera a que termine y luego elimínalo.",
       "delete_failed": "No se pudo eliminar {name}: {error}",
       "deleted": "{name} eliminado",
       "duplicate_title": "Duplicar {name}",
-      "duplicate_hint": "La copia conserva la AOI, las fuentes y la cuadrícula, sin períodos ni conjuntos de alertas."
+      "duplicate_hint": "La copia conserva la AOI, las fuentes y la cuadrícula, sin períodos ni conjuntos de alertas.",
+      "manage_title": "Gestionar proyectos",
+      "chip_open": "abierto",
+      "modified": "modificado {time_ago}",
+      "open_selected": "Abrir",
+      "delete_type_label": "Escribe {name} para confirmar",
+      "delete_open_warning": "Este proyecto está abierto: se cerrará primero.",
+      "size_counting": "Esto elimina la carpeta del proyecto y todo su contenido (calculando su tamaño…).",
+      "delete_size": "Esto elimina la carpeta del proyecto y todo su contenido ({size}).",
+      "empty_heading": "Ningún proyecto abierto",
+      "manage": "Gestionar",
+      "manage_count": "Gestionar proyectos ({count})",
+      "chip_saved": "guardado",
+      "chip_save_failed": "error al guardar",
+      "open_instead": "Abrir {name} en su lugar",
+      "name_hint": "Letras, dígitos, espacios, '-' y '_'.",
+      "duplicate_failed": "No se pudo duplicar {name}: {error}"
     },
     "aoi": {
       "title": "Área de interés",
@@ -81,9 +91,7 @@
       "info_md": "Una fuente de alertas es un conjunto de datos de alertas de pérdida forestal. Cada píxel de alerta es **confirmado** (confianza alta) o **probable** (confianza baja) y lleva el día en que se detectó por primera vez.\n\n- **Predefinidas:** GLAD-L (Landsat, unos 30 m), GLAD-S2 (Sentinel-2, 10 m) y RADD (Sentinel-1, 10 m). RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.\n- **Personalizadas:** una imagen o colección de imágenes de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL, leído mediante un preajuste de formato: *RADD* (banda de alerta 2 probable, 3 confirmada; fecha `yyddd`), *alertas CCDC de SEPAL* (1–2 detecciones probable, 3 o más confirmada; fecha de primera detección en años decimales) o *solo fecha* (una banda de fecha en la codificación que elijas; todo píxel con fecha está confirmado).\n\nEl chip de cada fila es la **cobertura** de la fuente: la parte de la AOI dentro de su huella. Una fuente que no cubra nada de la AOI no se puede añadir; una cobertura parcial es un aviso. Un proyecto tiene como máximo 3 fuentes predefinidas y 6 personalizadas. Una fuente personalizada se puede editar hasta que un conjunto de alertas la use; después, elimínala y añade una nueva.",
       "list_title": "Fuentes",
       "col_source": "Fuente",
-      "col_kind": "Tipo",
       "col_coverage": "Cobertura",
-      "col_dates": "Fechas aquí",
       "empty": "Todavía no hay ninguna fuente de alertas. Añade al menos una.",
       "add": "Añadir fuente",
       "add_title": "Añadir una fuente de alertas",
@@ -145,7 +153,12 @@
       "kind_custom": "personalizada · {format}",
       "file_preview_after_harmonize": "Una fuente GeoTIFF se muestra una vez armonizada.",
       "err_aoi_not_ready": "La geometría de la AOI todavía no está lista; inténtalo de nuevo en un momento.",
-      "err_aoi_changed": "La AOI cambió durante la comprobación; añade la fuente de nuevo."
+      "err_aoi_changed": "La AOI cambió durante la comprobación; añade la fuente de nuevo.",
+      "mode_label": "Tipo de fuente",
+      "mode_hint": "Una fuente del catálogo, o tu propio recurso de Earth Engine o GeoTIFF.",
+      "predefined_hint": "Cada fuente indica qué parte de la AOI cubre.",
+      "name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la fuente.",
+      "format_label": "Formato de las alertas"
     },
     "layers": {
       "title": "Capas opcionales",
@@ -154,8 +167,6 @@
       "info_md": "Las capas de visualización ayudan a leer el mapa; nunca cambian las alertas.\n\n- **Imagen de Earth Engine:** una banda dibujada con una paleta, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- **GeoTIFF** en tu carpeta de SEPAL: una banda dibujada con un mapa de color. La aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
       "list_title": "Capas de visualización",
       "col_name": "Nombre",
-      "col_kind": "Tipo",
-      "col_details": "Detalles",
       "empty": "No hay capas de visualización.",
       "add": "Añadir capa",
       "in_analysis": "en Análisis",
@@ -206,7 +217,9 @@
       "origin_file": "GeoTIFF en mi carpeta de SEPAL",
       "file": "GeoTIFF",
       "bands_loading": "Leyendo las bandas…",
-      "bands_failed": "No se pudieron leer las bandas: {error}"
+      "bands_failed": "No se pudieron leer las bandas: {error}",
+      "origin_label": "Origen del raster",
+      "origin_hint": "Dónde leer el raster"
     },
     "period": {
       "title": "Períodos",
@@ -266,7 +279,8 @@
       "error_exists": "Ya existe un período con estas fechas.",
       "error_locked": "Este período tiene conjuntos de alertas; sus fechas no se pueden cambiar.",
       "error_not_latest": "Este período tiene conjuntos de alertas y existe un período posterior: eliminarlo cambiaría la huella a partir de la cual se generaron esos conjuntos posteriores. Elimina primero los períodos posteriores.",
-      "error_bad_look_back": "La retrospección debe ser un número entero de días, 0 o más."
+      "error_bad_look_back": "La retrospección debe ser un número entero de días, 0 o más.",
+      "add": "Añadir período"
     },
     "prepare": {
       "title": "Descargar y armonizar",
@@ -291,7 +305,6 @@
       "col_source": "Fuente",
       "col_download": "Descarga",
       "col_harmonize": "Armonizar",
-      "col_size": "Tamaño",
       "empty": "Añade primero fuentes de alertas.",
       "run_all": {
         "one": "Ejecutar {n} pendiente",
@@ -356,16 +369,18 @@
       "mask_delete_busy": "Un trabajo está escribiendo en este proyecto; elimina la máscara cuando termine.",
       "mask_edit_busy": "Un trabajo está escribiendo en este proyecto; edita la máscara cuando termine.",
       "col_mask": "Máscara",
-      "col_origin": "Origen",
-      "col_on": "Activada",
       "col_mode": "Modo",
-      "col_align": "Alineada"
+      "col_align": "Alineada",
+      "mask_name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la máscara.",
+      "mask_mode_label": "Modo en el período activo",
+      "mask_mode_off": "Inactiva",
+      "size_note": "{size} en disco"
     },
     "integrate": {
       "title": "Integrar y vectorizar",
       "description": "Combina las fuentes descargadas, omite los píxeles que un período anterior ya reportó y convierte los grupos en alertas.",
       "info_header": "Acerca de Integrar y vectorizar",
-      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes conservar solo un área dibujada y limitar el número de alertas, ordenadas como elijas.\n4. Un **raster de atributos** opcional (Earth Engine o GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, Análisis se abre en el nuevo conjunto.",
+      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes conservar solo un área dibujada y limitar el número de alertas, ordenadas como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, Análisis se abre en el nuevo conjunto.",
       "sources": "Fuentes a combinar",
       "min_size": "Tamaño mínimo de alerta",
       "min_size_hint": "Se descartan los grupos más pequeños que esto ({px} píxeles en la cuadrícula).",
@@ -379,10 +394,7 @@
       "sorting_4": "Alertas más antiguas primero",
       "max_alerts": "Número máximo de alertas",
       "max_alerts_hint": "0 conserva todas las alertas.",
-      "attributes": "Raster de atributos (opcional)",
-      "attributes_named": "Raster de atributos: {name}",
       "attr_load": "Cargar bandas",
-      "attr_clear": "Quitar",
       "attr_no_source": "Elige primero una imagen o un GeoTIFF.",
       "attr_loaded": "Bandas de {source}",
       "attr_written_as": "escrito como {column}",
@@ -440,7 +452,16 @@
       "popup": "Alerta {id} · {status} · {area} ha",
       "show_earlier": "Mostrar conjuntos anteriores",
       "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período.",
-      "show_alerts": "Mostrar estas alertas en el mapa"
+      "show_alerts": "Mostrar estas alertas en el mapa",
+      "attr_add": "Añadir capa de atributos",
+      "attr_add_title": "Añadir una capa de atributos",
+      "attr_edit_title": "Editar capa de atributos {name}",
+      "attr_err_no_bands": "Conserva al menos una banda.",
+      "attr_err_duplicate": "Otra capa de atributos ya lee este raster.",
+      "attr_list_title": "Capas de atributos",
+      "attr_empty": "Ninguna capa de atributos. Cada una añade estadísticas de sus bandas a cada alerta.",
+      "attr_col_raster": "Raster",
+      "attr_columns": "Columnas: {columns}"
     },
     "overview": {
       "stale": "Este conjunto se generó a partir de entradas que han cambiado desde entonces. Vuelve a ejecutar Integrar y vectorizar para reconstruirlo (eso descarta sus revisiones).",

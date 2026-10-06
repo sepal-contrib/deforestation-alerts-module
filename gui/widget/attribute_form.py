@@ -1,22 +1,25 @@
-"""Attribute raster controls (spec §7.4 form), on the shared raster input.
+"""One attribute layer's controls (spec §7.4 form, D3), on the shared raster input.
 
 Pick an Earth Engine image or a GeoTIFF (``RasterInput``), load its bands,
 then choose per band whether to include it, which statistic, and the output
 column. Emits the config dict ``raster_attribute.build_attribute_config``
-builds, or ``None`` once removed. An Earth Engine band keeps its ``crs`` and
-``scale`` (metres, ``nominalScale``): Integrate's free-space gate estimates
-the band's download from them.
+builds. ``gui/widget/attribute_modal`` hosts the form, and Integrate lists the
+layers. An Earth Engine band keeps its ``crs`` and ``scale`` (metres,
+``nominalScale``): Integrate's free-space gate estimates the band's download
+from them.
 
 The rows describe the raster their bands were loaded from, not whatever the
 pickers show now: picking another source changes nothing until its bands are
 loaded, so the config never pairs one raster with another's bands.
 
-The column field shows the sanitised name being written; when the
-de-duplication against the alert columns and earlier bands changes it, its
-hint says what is written instead.
+The column field shows the sanitised name being written. When the
+de-duplication changes it, its hint says what is written instead. The
+de-duplication is against ``reserved`` (the alert columns and the other
+layers' columns, ``raster_attribute.reserved_for``) and the earlier bands.
 """
 
 import asyncio
+from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
@@ -24,6 +27,7 @@ from pysepal.solara.components.task_button import TaskButtonComponent, use_task_
 
 from deforestation_alerts.engine import user_raster
 from deforestation_alerts.scripts.raster_attribute import (
+    ALERT_RESERVED_COLUMNS,
     band_names,
     build_attribute_config,
     display_column,
@@ -39,8 +43,16 @@ _ORIGIN = {"gee": "gee", "local": "file"}
 _KIND = {origin: kind for kind, origin in _ORIGIN.items()}
 
 
+def layer_label(cfg) -> str:
+    """A layer by its raster: a GeoTIFF by its file name, an Earth Engine
+    asset id (dots included) as is."""
+    cfg = cfg or {}
+    src = str(cfg.get("source") or "")
+    return Path(src).name if cfg.get("kind") == "local" else src
+
+
 @solara.component
-def AttributeForm(gee_interface, value, on_value):
+def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMNS, on_busy=None):
     cfg = value or {}
     gee_src = cfg.get("source") if cfg.get("kind") == "gee" else None
     local_src = cfg.get("source") if cfg.get("kind") == "local" else None
@@ -82,20 +94,31 @@ def AttributeForm(gee_interface, value, on_value):
         set_error(None)
         set_rows(new_rows)
         set_loaded((src, src_kind))
-        on_value(build_attribute_config(src, src_kind, new_rows))
+        on_value(build_attribute_config(src, src_kind, new_rows, reserved=reserved))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
 
-    def _clear():
-        set_error(None)
-        set_rows([])
-        set_loaded(None)
-        on_value(None)
+    def _cancel_on_unmount():
+        def cleanup():
+            # closing the modal (ESC, Cancel) unmounts this form, and use_task
+            # does not cancel on unmount: stop a load still running, or it
+            # would hand the bands it read to a form the user closed
+            if load_task.pending:
+                try:
+                    load_task.cancel()
+                except RuntimeError:
+                    pass
+
+        return cleanup
+
+    solara.use_effect(_cancel_on_unmount, [])
+    # the host's Save must not fire on the config held before this load
+    solara.use_effect(lambda: on_busy(load_task.pending) if on_busy else None, [load_task.pending])
 
     def _edit(i, **changes):
         new_rows = [dict(r, **changes) if j == i else r for j, r in enumerate(rows)]
         set_rows(new_rows)
-        on_value(build_attribute_config(loaded[0], loaded[1], new_rows))
+        on_value(build_attribute_config(loaded[0], loaded[1], new_rows, reserved=reserved))
 
     # what each included band is written as, after the de-duplication
     resolved = {b["band"]: b["column"] for b in (value or {}).get("bands", [])}
@@ -106,9 +129,7 @@ def AttributeForm(gee_interface, value, on_value):
         with rv.Html(tag="div", style_=_ROW):
             TaskButtonComponent(label=t("steps.integrate.attr_load"), cancel_label=t("common.cancel"), small=True,
                                 **use_task_button(load_task, on_start=lambda: load_task()))
-            if value:
-                solara.Button(t("steps.integrate.attr_clear"), small=True, text=True, on_click=_clear)
-        if error:  # field validation, next to the field (the CreationDialog exception)
+        if error:  # a load failure, next to the field it is about (the modal's inline validation)
             solara.Text(error, classes=["error--text"])
         if loaded and rows:
             solara.Text(t("steps.integrate.attr_loaded", source=loaded[0]), classes=["text--secondary"])

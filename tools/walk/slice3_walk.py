@@ -1,12 +1,15 @@
 """Slice 3 gate walk (spec §14 row 3): (a) custom Earth Engine and GeoTIFF
 sources beside GLAD-L in one set, (b) a date-only Earth Engine source in yymm,
-(c) coverage that blocks and explains, (d) a window without data, (f) the
-attribute raster from Earth Engine and from a GeoTIFF. (e) is Step 1's tests.
+(c) coverage that blocks and explains, (d) a window without data, (f) two
+attribute layers in one set, one from Earth Engine and one from a GeoTIFF.
+(e) is Step 1's tests.
 
     python -m tools.walk.slice3_walk --port 8983 --out /tmp/slice3_walk
 """
 
 import argparse
+import re
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -27,7 +30,7 @@ USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a use
 AMAZON = (-55.10, -10.10, -55.00, -10.00)
 CANINDEYU = (-55.5, -24.5, -55.4, -24.4)
 MONTH_STARTS = {date(2026, m, 1).timetuple().tm_yday for m in range(1, 13)}
-OPEN_PANEL = ".right-panel .v-expansion-panel--active"
+ATTR_ADD = w.en("steps.integrate.attr_add")  # the card's Add button and the modal's primary
 
 
 def _ee():
@@ -78,14 +81,13 @@ def add_custom(page, rec, *, name, origin, ref, preset, encoding=None, out):
     w.goto_step(page, "alerts", 2000)
     ph.visible_btn(page, "Add source", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the source modal")
-    ph.modal_button(page, "Custom").click()
+    ph.choose(page, ph.SOURCE_TYPE, "Custom")
     ph.modal_field(page, "Name").fill(name)
+    ph.choose_origin(page, origin)
     if origin == "gee":
-        ph.radio(page, "Earth Engine asset")
         ph.type_asset(page, ref)
     else:
-        ph.radio(page, "GeoTIFF in my SEPAL folder")
-        ph.pick_file(page, "GeoTIFF", ref, scope=".v-dialog--active")
+        ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
     w.wait_for(lambda: ph.radio_checked(page, preset), 180, f"{ref}: bands listed and the {preset} preset suggested")
     if encoding:
         ph.choose(page, "Date encoding", encoding)
@@ -130,29 +132,13 @@ def a_mixed(page, rec, *, out, folder):
     assert "radd sa" in joined and "ccdc tif" in joined, joined[:300]
 
 
-def _attribute_header(page):
-    return page.locator('.right-panel .v-expansion-panel-header:has-text("Attribute raster")').first
-
-
-def _load_attribute(page, *, origin, ref):
-    header = _attribute_header(page)
-    if not page.locator(OPEN_PANEL).count():
-        header.click()
-        page.wait_for_timeout(800)
-    if origin == "gee":
-        ph.radio(page, "Earth Engine asset", scope=OPEN_PANEL)
-        ph.type_asset(page, ref, scope=OPEN_PANEL)
-    else:
-        ph.radio(page, "GeoTIFF in my SEPAL folder", scope=OPEN_PANEL)
-        ph.pick_file(page, "GeoTIFF", ref, scope=OPEN_PANEL)
-    ph.visible_btn(page, "Load bands", OPEN_PANEL).click()
-    # the rows of a raster loaded before stay until the new bands are in: wait for this one's
-    w.wait_for(lambda: f"Bands of {ref}" in page.locator(OPEN_PANEL).inner_text()
-               and page.locator(f"{OPEN_PANEL} .v-input--checkbox").count(), 120, f"the band list of {ref}")
+def _attribute_card(page):
+    """Integrate's "Attribute layers" card: the innermost card holding its Add button."""
+    return page.locator(f'.right-panel .v-card--outlined:has(button:has-text("{ATTR_ADD}")):visible').last
 
 
 def _include_only(page, band):
-    boxes = page.locator(f"{OPEN_PANEL} .v-input--checkbox")
+    boxes = page.locator(f"{ph.MODAL} .v-input--checkbox")
     for i in range(boxes.count()):
         box = boxes.nth(i)
         checked = "v-input--is-label-active" in (box.get_attribute("class") or "")
@@ -161,26 +147,43 @@ def _include_only(page, band):
             page.wait_for_timeout(150)
 
 
+def _add_attribute_layer(page, *, origin, ref, band, out):
+    """Integrate → Add attribute layer → the modal: the raster, its bands
+    loaded, ``band`` alone kept, added to the card's list (spec D3)."""
+    w.goto_step(page, "integrate", 2000)
+    ph.visible_btn(page, ATTR_ADD, ".right-panel").click()
+    w.wait_for(lambda: ph.dialog_open(page), 15, "the attribute modal")
+    ph.choose_origin(page, origin)
+    if origin == "gee":
+        ph.type_asset(page, ref)
+    else:
+        ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
+    ph.modal_button(page, w.en("steps.integrate.attr_load")).click()
+    loaded = w.en("steps.integrate.attr_loaded").format(source=ref)
+    w.wait_for(lambda: loaded in ph.modal_text(page) and ph.modal(page).locator(".v-input--checkbox").count(), 120,
+               f"the band list of {ref}")
+    _include_only(page, band)
+    add = ph.primary_button(page)
+    w.wait_for(lambda: add.count() and add.is_enabled(), 15, f"{band}: the layer can be added")
+    w.shot(page, out, f"attribute_modal_{band}")
+    add.click()
+    w.wait_for(lambda: not ph.dialog_open(page), 30, f"the {band} layer added (modal: {ph.modal_text(page)[:200]})")
+
+
 def f_attribute(page, rec, *, out):
-    w.goto_step(page, "integrate", 2000)
-    _load_attribute(page, origin="gee", ref=s2_image(AMAZON))
-    _include_only(page, "B11")
-    _attribute_header(page).click()  # collapsed, the header names the raster
-    page.wait_for_timeout(800)
-    rec["header"] = _attribute_header(page).inner_text()
-    assert rec["header"].startswith("Attribute raster:"), rec["header"]
-    ph.integrate_and_land(page, rec, out=out, replace=True)
-    alerts, _ = store("s3a")
-    assert "b11" in alerts.columns and alerts["b11"].notna().any(), list(alerts.columns)
-    rec["b11_alerts"] = f'{int(alerts["b11"].notna().sum())} of {len(alerts)}'
-    w.goto_step(page, "integrate", 2000)
-    _load_attribute(page, origin="file", ref=USER / "slope.tif")
-    _include_only(page, "slope")
-    ph.integrate_and_land(page, rec, out=out)  # the set just rebuilt has no review: no Replace dialog
+    _add_attribute_layer(page, origin="gee", ref=s2_image(AMAZON), band="B11", out=out)
+    _add_attribute_layer(page, origin="file", ref=USER / "slope.tif", band="slope", out=out)
+    rows = _attribute_card(page).locator('div[style*="grid-template-columns"]:not(.text--secondary)')
+    w.wait_for(lambda: rows.count() == 2, 30, "two attribute layers listed")
+    rec["attribute_card"] = re.sub(r"\s+", " ", _attribute_card(page).inner_text())
+    w.shot(page, out, "attribute_layers")
+    assert "b11" in rec["attribute_card"] and "slope" in rec["attribute_card"], rec["attribute_card"]
+    ph.integrate_and_land(page, rec, out=out, replace=True)  # a_mixed's set has a review
     alerts, _ = store("s3a")
     rec["columns"] = list(alerts.columns)
-    assert "slope" in alerts.columns and alerts["slope"].notna().any(), rec["columns"]
-    rec["slope_alerts"] = f'{int(alerts["slope"].notna().sum())} of {len(alerts)}'
+    for column in ("b11", "slope"):  # both layers attributed the same alerts
+        assert column in alerts.columns and alerts[column].notna().any(), rec["columns"]
+        rec[f"{column}_alerts"] = f'{int(alerts[column].notna().sum())} of {len(alerts)}'
 
 
 def b_date_only(page, rec, *, out, asset):
@@ -248,6 +251,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8983)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice3_walk"))
     args = ap.parse_args(argv)
+    # The walk's own data dir, rebuilt: files a previous run left (a set's
+    # downloads) would hide what this run writes.
+    shutil.rmtree(DATA, ignore_errors=True)
     USER.mkdir(parents=True, exist_ok=True)
     make_rasters.ccdc_tif(USER / "ccdc.tif", AMAZON, when=date(2026, 3, 14))
     make_rasters.slope_tif(USER / "slope.tif", AMAZON)
