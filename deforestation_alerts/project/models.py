@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, Optional, Union
 
 from affine import Affine
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.scripts.naming import safe_token
@@ -260,6 +260,75 @@ class AlertSet(BaseModel):
     created_at: datetime
 
 
+#: The stored review statuses a question can be asked for (the alert store's
+#: ``status`` values; ``gui.tile.analysis.review_panel.REVIEW_CHOICES`` labels them).
+VERDICTS = ("Confirmed", "False Positive", "Need revision")
+
+#: The default question's key; its answers keep the store's ``description``
+#: column (``questions.column``).
+LOSS_DRIVER_KEY = "loss_driver"
+
+#: Loss driver's built-in options: code, then the key of its label.
+DRIVER_OPTIONS = (
+    ("agriculture_expansion", "analysis_tile.questionarie.loss_driver1"),
+    ("livestock_grazing", "analysis_tile.questionarie.loss_driver2"),
+    ("logging", "analysis_tile.questionarie.loss_driver3"),
+    ("urban_expansion", "analysis_tile.questionarie.loss_driver4"),
+    ("shifting_cultivation", "analysis_tile.questionarie.loss_driver5"),
+    ("mining", "analysis_tile.questionarie.loss_driver6"),
+    ("forest_fires", "analysis_tile.questionarie.loss_driver7"),
+    ("hurricanes", "analysis_tile.questionarie.loss_driver8"),
+    ("other", "analysis_tile.questionarie.loss_driver9"),
+)
+
+
+class QuestionOption(BaseModel):
+    """One answer a question offers. ``code`` is what the store holds and
+    never changes; ``label`` is the user's text, or "" for a built-in option
+    whose ``label_key`` is shown in the current language."""
+
+    code: str
+    label: str = ""
+    label_key: Optional[str] = None
+
+
+class Question(BaseModel):
+    """One question of the review (spec D1). ``key`` is fixed at creation: it
+    names the report placeholder ``{key}`` and the store column
+    (``questions.column``)."""
+
+    key: str
+    label: str = ""
+    label_key: Optional[str] = None
+    multiple: bool = False
+    options: list[QuestionOption] = []
+    allow_typed: bool = False
+    required: bool = False
+    ask_for: list[str] = Field(default_factory=lambda: list(VERDICTS))
+
+    @field_validator("ask_for")
+    @classmethod
+    def _known_verdicts(cls, value):
+        kept = [v for v in VERDICTS if v in value]
+        if not kept:
+            raise ValueError("a question is asked for at least one verdict")
+        return kept
+
+
+def default_questions() -> list[Question]:
+    """A new project's questionnaire: Loss driver, as the review asked it
+    before questions were configurable (several answers, typed ones too, not
+    asked for a false positive)."""
+    return [Question(
+        key=LOSS_DRIVER_KEY,
+        label_key="analysis_tile.questionarie.loss_driver_label",
+        multiple=True,
+        allow_typed=True,
+        ask_for=["Confirmed", "Need revision"],
+        options=[QuestionOption(code=c, label_key=k) for c, k in DRIVER_OPTIONS],
+    )]
+
+
 class Project(BaseModel):
     schema_version: int = SCHEMA_VERSION
     name: str
@@ -278,6 +347,7 @@ class Project(BaseModel):
     alert_sets: dict[str, AlertSet] = {}
     active_set: Optional[str] = None
     report_template: Optional[str] = None
+    questions: list[Question] = Field(default_factory=default_questions)
 
     @property
     def locked(self) -> bool:
