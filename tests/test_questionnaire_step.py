@@ -145,3 +145,22 @@ def test_the_step_needs_a_project_not_an_aoi(tmp_path, monkeypatch):
         assert "Open a project first." in _strings(rc.container)
     finally:
         rc.close()
+
+
+def test_a_hand_edited_manifest_with_clashing_keys_still_renders(tmp_path, monkeypatch):
+    """Final review M1: two questions sharing a key, one keyed ``verdict`` and
+    one keyed after a report placeholder must not crash the step (reacton
+    refuses duplicate element keys); each placeholder is offered once."""
+    from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS
+    from gui.widget.copy_chip import CopyChipWidget
+    clash = [ROAD, ROAD.model_copy(update={"label": "Road again"}),
+             Question(key="verdict", label="Verdict?", options=[QuestionOption(code="y", label="Y")]),
+             Question(key=REPORT_PLACEHOLDERS[0], label="Admin", options=[QuestionOption(code="y", label="Y")])]
+    s = _state(tmp_path, monkeypatch, questions=clash)
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        texts = [w.text for w in rc.find(CopyChipWidget).widgets]
+        assert len(texts) == len(set(texts))
+        assert "{road_access}" in texts and "{verdict}" in texts
+    finally:
+        rc.close()

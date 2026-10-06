@@ -70,8 +70,12 @@ def _Placeholders(questions):
     with rv.Html(tag="div", style_="display:flex;flex-wrap:wrap;"):
         for name in REPORT_PLACEHOLDERS:
             _chip(name, False)
-        for name in ["verdict", *(q.key for q in questions)]:
-            _chip(name, True)
+        # Each name once (a chip is keyed by its text): a hand-edited
+        # project.json may repeat a key, or key a question ``verdict`` or after
+        # a report placeholder, and reacton refuses a duplicate key.
+        for name in dict.fromkeys(["verdict", *(q.key for q in questions)]):
+            if name not in REPORT_PLACEHOLDERS:
+                _chip(name, True)
     solara.Text(t("steps.questionnaire.placeholders_review"), style=MUTED + "font-size:0.75rem;")
 
 
