@@ -140,6 +140,9 @@
       "unsaved": "Modifications non enregistrées sur cette alerte",
       "saved_at": "Enregistrée à {time}"
     },
+    "questions": {
+      "required_missing": "Répondez à « {question} » avant d'enregistrer."
+    },
     "sections": {
       "export": "Exporter cette alerte",
       "export_after_save": "disponible après l'enregistrement",

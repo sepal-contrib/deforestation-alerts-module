@@ -7,21 +7,22 @@ driver disappears for a false positive (none is stored for one), and **Save &
 next** is the panel's one primary button: it saves and advances only if the
 save wrote (spec §4).
 
-Nothing is stashed on ``widgets`` any more except ``driver_combobox``, which
-``state.capture_alert`` reads for the drivers at the click (the save then
-writes the captured value — and writes none at all for a false positive, which
-is why hiding the field here is not a lie).
+Nothing is stashed on ``widgets`` any more except ``driver_combobox`` (kept
+for tests until the Questions section replaces it, Task 6). The combobox reads
+and writes ``analysis.answers["loss_driver"]``, which ``state.capture_alert``
+takes at the click (the save then writes the captured value — and writes none
+at all for a false positive, which is why hiding the field here is not a lie).
 
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets + scratch; the driver combobox is stashed here for
-    ``state.capture_alert`` / ``export._save_attributes`` to read.
+    Shared heavy widgets + scratch; the driver combobox is stashed here
+    (transitional, Task 6), but a Save reads ``analysis.answers``.
 app_state : AppState
     Navigation + alerts source of truth; **Save & next** advances it.
 analysis : AnalysisState
-    The per-alert ``verdict`` / ``dirty`` / ``last_save_time`` this block reads
-    and writes.
+    The per-alert ``verdict`` / ``answers`` / ``dirty`` / ``last_save_time``
+    this block reads and writes.
 app_tile_model : SetContext
     The active set's folder, for the save runner this block builds.
 run_save : callable or None
@@ -38,8 +39,9 @@ from datetime import datetime
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
+from deforestation_alerts.project.models import default_questions
 from gui.i18n import t
-from gui.scripts import loss_drivers as drivers
+from gui.scripts import questions
 from gui.tile.analysis.export import make_save_runner
 from gui.tile.analysis.state import touch
 
@@ -96,16 +98,29 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
     # Codes as values, labels as text: the store gets the codes whatever the
     # language the widgets were built in. Objects in and out, as Vuetify 2's
     # combobox draws a chip from the selected value itself.
+    #
+    # Transitional until the Questions section replaces it (Task 6): the
+    # combobox is a view of ``analysis.answers["loss_driver"]``, which a Save
+    # reads (``capture_alert``). It opens empty (spec U13: no default).
+    _loss = default_questions()[0]
     driver_combobox = sw.Combobox(
-        items=drivers.items(),
-        v_model=drivers.selection(drivers.DEFAULT),
+        items=questions.items(_loss),
+        v_model=questions.as_items(_loss, analysis.answers.value.get(_loss.key, [])),
         return_object=True,
         label=t("analysis_tile.questionarie.loss_driver_hint"),
         multiple=True,
         clearable=True,
         chips=True,
     )
-    driver_combobox.on_event("change", lambda *_: touch(analysis))
+
+    def _driver_change(*_):
+        analysis.answers.set({**analysis.answers.value,
+                              _loss.key: questions.codes(_loss, questions.encode(_loss, driver_combobox.v_model))})
+        touch(analysis)
+
+    driver_combobox.on_event("change", _driver_change)
+    analysis.answers.subscribe(lambda *_: setattr(
+        driver_combobox, "v_model", questions.as_items(_loss, analysis.answers.value.get(_loss.key, []))))
     widgets.driver_combobox = driver_combobox
 
     driver_box = v.Html(tag="div", class_="mt-3", children=[

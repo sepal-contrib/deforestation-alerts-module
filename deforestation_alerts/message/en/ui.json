@@ -140,6 +140,9 @@
       "unsaved": "Unsaved changes on this alert",
       "saved_at": "Saved {time}"
     },
+    "questions": {
+      "required_missing": "Answer “{question}” before saving."
+    },
     "sections": {
       "export": "Export this alert",
       "export_after_save": "available after save",

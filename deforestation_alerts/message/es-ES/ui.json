@@ -140,6 +140,9 @@
       "unsaved": "Cambios sin guardar en esta alerta",
       "saved_at": "Guardada a las {time}"
     },
+    "questions": {
+      "required_missing": "Responda «{question}» antes de guardar."
+    },
     "sections": {
       "export": "Exportar esta alerta",
       "export_after_save": "disponible después de guardar",

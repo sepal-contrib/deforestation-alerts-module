@@ -70,6 +70,7 @@ from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -83,7 +84,7 @@ from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
-from gui.scripts import loss_drivers as drivers
+from gui.scripts import questions
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
@@ -202,14 +203,6 @@ def view_actual_alert(
 
     alerta = gdf.iloc[alert_id]
 
-    # --- a reviewed alert shows its stored loss drivers, in this language
-    # (the codes, read back; a re-save stores them again as codes); an
-    # unreviewed one starts from the default, not the last alert's drivers ---
-    combobox = getattr(widgets, "driver_combobox", None)
-    if combobox is not None:
-        combobox.v_model = (drivers.selection(alerta.get("description"))
-                            or drivers.selection(drivers.DEFAULT))
-
     # --- sync the jump field with the 1-based number the queue counter shows
     # (block A's ``_build_nav`` converts it back on the way out) ---
     id_field.v_model = alert_id + 1
@@ -224,6 +217,15 @@ def view_actual_alert(
     # clears it; the seeding is not a change, so ``dirty`` stays False. ---
     stored = alerta.get("status")
     analysis.verdict.set(stored if isinstance(stored, str) and stored != "Not reviewed" else None)
+    # --- a reviewed alert opens on its stored answers (codes, read back; a
+    # re-save stores them again as codes), an unreviewed one on none (spec
+    # U13: no default, so "required" means something). A store without a
+    # question's column -- one added after the set was made -- reads as no
+    # answer (``alerta.get`` gives None, ``codes`` of None is []). ---
+    p = app_state.project.value
+    reviewed = analysis.verdict.value is not None
+    analysis.answers.set({q.key: questions.codes(q, alerta.get(column(q))) for q in p.questions}
+                         if reviewed and p is not None else {})
     analysis.dirty.set(False)
 
     # --- remember the position on the alert set (auto-saved with the project) ---

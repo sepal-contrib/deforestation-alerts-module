@@ -75,8 +75,10 @@ def test_a_false_positive_hides_the_driver_but_keeps_it_in_the_tree(tmp_path, mo
 
 def test_a_driver_change_marks_the_alert_dirty(tmp_path, monkeypatch):
     card, widgets, analysis, _ = _panel(monkeypatch, tmp_path)
+    widgets.driver_combobox.v_model = ["mining"]
     widgets.driver_combobox.fire_event("change", ["mining"])
     assert analysis.dirty.value is True
+    assert analysis.answers.value == {"loss_driver": ["mining"]}
 
 
 def test_the_state_line_reads_unsaved_then_saved(tmp_path, monkeypatch):
@@ -192,7 +194,7 @@ def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     app_state.new_project_state(p)
     analysis = AnalysisState()
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    widgets = SimpleNamespace()
     id_field = SimpleNamespace(v_model=None)
 
     gdf = gpd.GeoDataFrame(
@@ -278,6 +280,9 @@ def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
 
     monkeypatch.setattr(export, "ee", _AdminLookups())
     app_state = AppState()
+    # A project with the default questionnaire (Loss driver): the questions a
+    # Save writes come with the answers (``capture_alert``).
+    app_state.project.set(Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
     app_state.alerts_gdf.value = gdf
     app_state.actual_alert_id.value = 0
     analysis = AnalysisState()
@@ -286,8 +291,8 @@ def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
     analysis.after_info.set(["Sentinel 2", 1700000001, None, "S2_after", "_020224"])
     if drawn is not None:
         analysis.defo_layer.set(drawn)
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=["mining"]),
-                              actual_bb=SimpleNamespace(geometry=lambda: None))
+    analysis.answers.set({"loss_driver": ["mining"]})
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     model = SimpleNamespace(recipe_folder_path="")  # nowhere to write: no store
     return export, app_state, analysis, widgets, model, capture_alert(analysis, widgets, app_state)
 

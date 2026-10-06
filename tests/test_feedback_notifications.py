@@ -516,10 +516,7 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
     analysis = AnalysisState()
     analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 0.001, 0.001)], crs="EPSG:4326"))
     analysis.verdict.set("False Positive")
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=[]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     ctx = SetContext(app_state)
     card = _export_layout(export, widgets=widgets, app_state=app_state, aux_model=ctx,
                           analysis=analysis, app_tile_model=ctx)
@@ -1423,8 +1420,7 @@ def _draw_widgets():
     maps = [SimpleNamespace(add_layer=lambda layer: None,
                             find_layer=lambda name, none_ok=False: None) for _ in range(2)]
     w = SimpleNamespace(map_before=maps[0], map_after=maps[1],
-                        draw_before=_DrawFake(), draw_after=_DrawFake(),
-                        driver_combobox=SimpleNamespace(v_model=None))
+                        draw_before=_DrawFake(), draw_after=_DrawFake())
 
     def _set_synced_draw_data(features):
         w.draw_before.data = list(features)
@@ -1783,7 +1779,7 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
     analysis.before_image.set(object())  # drawn by its pane: a run needs both
     analysis.after_image.set(object())
     widgets.actual_alert_grid = "grid of A"
-    widgets.driver_combobox.v_model = [{"text": "Logging", "value": "logging"}]
+    analysis.answers.set({"loss_driver": ["logging"]})
 
     def _move_to_b():
         app_state.actual_alert_id.value = 1
@@ -1795,7 +1791,7 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
         analysis.before_image.set(object())
         analysis.after_image.set(object())
         widgets.actual_alert_grid = "grid of B"
-        widgets.driver_combobox.v_model = [{"text": "Mining", "value": "mining"}]
+        analysis.answers.set({"loss_driver": ["mining"]})
 
     return _move_to_b
 
@@ -1815,7 +1811,7 @@ def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root,
     import gui.tile.analysis.export as export
 
     app_state, analysis = AppState(), AnalysisState()
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    widgets = SimpleNamespace()
     card = _export_layout(export, widgets=widgets, app_state=app_state,
                           aux_model=_set_context_fake(), analysis=analysis,
                           app_tile_model=_set_context_fake())
@@ -1833,14 +1829,14 @@ def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root,
     alert = seen[0]
     assert alert is not None and alert.alert_id == 0 and alert.grid == "grid of A"
     assert alert.defo_layer == "polygon of A" and alert.before_info[3] == "before of A"
-    assert export.drivers.encode(alert.drivers) == "logging" and alert.status == "Yes"
+    assert alert.answers == {"loss_driver": ["logging"]} and alert.status == "Yes"
 
 
 def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
     import gui.tile.analysis.edit_tools as edit_tools
 
     app_state, analysis = AppState(), AnalysisState()
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    widgets = SimpleNamespace()
     card = edit_tools.build_edit_tools(widgets=widgets, app_state=app_state, analysis=analysis,
                                        app_tile_model=_set_context_fake())
     move_to_b = _alert_a_then_b(app_state, analysis, widgets, polygon=False)
@@ -1875,7 +1871,7 @@ def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
     import gui.tile.analysis.export as export
 
     app_state, analysis = AppState(), AnalysisState()
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=None))
+    widgets = SimpleNamespace()
     card = _export_layout(export, widgets=widgets, app_state=app_state,
                           aux_model=_set_context_fake(), analysis=analysis,
                           app_tile_model=_set_context_fake())
@@ -1961,10 +1957,7 @@ def _save_harness(tmp_path, monkeypatch):
     app_state.alerts_gdf.value = alerts
     app_state.actual_alert_id.value = 0
 
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=[]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     feedback = _record_feedback(monkeypatch, export)
     # The worker on the calling thread: the assertions below follow the save
     # it started, not a thread that may not have run yet.

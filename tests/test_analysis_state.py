@@ -569,10 +569,10 @@ def test_capture_alert_takes_the_verdict_from_the_state():
     app_state = AppState()
     analysis = AnalysisState()
     analysis.verdict.set("False Positive")
-    widgets = SimpleNamespace(driver_combobox=SimpleNamespace(v_model=["mining"]))
-    alert = capture_alert(analysis, widgets, app_state)
+    analysis.answers.set({"loss_driver": ["mining"]})
+    alert = capture_alert(analysis, SimpleNamespace(), app_state)
     assert alert.status == "False Positive"
-    assert alert.drivers == ["mining"]
+    assert alert.answers == {"loss_driver": ["mining"]}
 
 
 def test_touch_marks_the_alert_dirty():

@@ -29,7 +29,8 @@ def test_a_review_made_in_another_language_stores_codes(locale, code):
     build_review_panel(widgets, None, AnalysisState(), None)
     combobox = widgets.driver_combobox
     assert combobox.return_object  # Vuetify 2 draws a chip from the value itself
-    assert combobox.v_model == [{"text": loss_drivers.label("other"), "value": "other"}]
+    assert combobox.v_model == []  # spec U13: no default driver
+    combobox.v_model = [{"text": loss_drivers.label("other"), "value": "other"}]
     assert loss_drivers.encode(combobox.v_model) == "other"
     values = [item["value"] for item in combobox.items]
     assert values == [c for c, _ in loss_drivers.DRIVERS]
@@ -83,9 +84,11 @@ def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypa
 
     locale(code)
     s = _state(tmp_path, monkeypatch)
-    widgets = _wire(s)
-    build_review_panel(widgets, None, AnalysisState(), None)
+    analysis = AnalysisState()
+    widgets = _wire(s, analysis)
+    build_review_panel(widgets, None, analysis, None)
     gdf = _alerts(2)
+    gdf["status"] = ["Confirmed", "Not reviewed"]  # only a reviewed alert opens on its answers
     gdf["description"] = ["logging, Roads", None]
     s.alerts_gdf.set(gdf)  # alert 0 is selected and drawn
 
@@ -102,17 +105,22 @@ def test_selection_is_items_and_free_text(locale):
     assert loss_drivers.selection(None) == []
 
 
-def test_an_unreviewed_alert_shows_the_default_driver_not_the_last_ones(tmp_path, monkeypatch, locale):
+def test_an_unreviewed_alert_shows_no_driver_not_the_last_ones(tmp_path, monkeypatch, locale):
     """Moving from a reviewed alert to an unreviewed one must not carry the
-    first alert's drivers over: a Save there would store them as its own."""
+    first alert's drivers over: a Save there would store them as its own.
+    Nor does it start on a default driver (spec U13: an unreviewed alert opens
+    on no answers, so "required" means something)."""
     from tests.test_analysis_alert_info import _alerts, _state, _wire
 
     s = _state(tmp_path, monkeypatch)
-    widgets = _wire(s)
-    build_review_panel(widgets, None, AnalysisState(), None)
+    analysis = AnalysisState()
+    widgets = _wire(s, analysis)
+    build_review_panel(widgets, None, analysis, None)
     gdf = _alerts(2)
+    gdf["status"] = ["Confirmed", "Not reviewed"]
     gdf["description"] = ["logging, Roads", None]
     s.alerts_gdf.set(gdf)  # alert 0, reviewed
     assert loss_drivers.encode(widgets.driver_combobox.v_model) == "logging, Roads"
     s.actual_alert_id.value = 1
-    assert loss_drivers.encode(widgets.driver_combobox.v_model) == loss_drivers.DEFAULT
+    assert widgets.driver_combobox.v_model == []  # U13
+    assert analysis.answers.value == {}

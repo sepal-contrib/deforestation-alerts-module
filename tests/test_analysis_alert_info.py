@@ -41,13 +41,14 @@ def _alerts(n):
         geometry=[box(i, 0, i + 1, 1) for i in range(n)], crs="EPSG:4326")
 
 
-def _wire(s):
+def _wire(s, analysis=None):
     """A tile wired to one state, as ``build_analysis_layout`` wires it.
-    tests/test_loss_drivers.py drives the review panel through this.
+    tests/test_loss_drivers.py drives the review panel through this, sharing
+    ``analysis`` with the panel as the layout does.
     """
     widgets = SimpleNamespace()
-    analysis_tile.wire_alert_navigation(widgets, s, AnalysisState(), SetContext(s),
-                                        SimpleNamespace(v_model=None))
+    analysis_tile.wire_alert_navigation(widgets, s, analysis if analysis is not None else AnalysisState(),
+                                        SetContext(s), SimpleNamespace(v_model=None))
     return widgets
 
 

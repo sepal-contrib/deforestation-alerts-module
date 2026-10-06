@@ -50,7 +50,13 @@ class AnalysisState:
     #: counts all read these exact strings, so the verdict IS the stored value
     #: and never a label. None is refused by the Save (``confirmation_missing``).
     verdict: solara.Reactive = field(default_factory=_plain)
-    #: whether the reviewer changed the verdict, the drivers or the polygon
+    #: the reviewer's answers for this alert, by question key: a list of option
+    #: codes and typed entries (``gui.scripts.questions``). ``{}`` until the
+    #: alert is loaded; a reviewed alert opens on what it stored, an
+    #: unreviewed one on nothing (spec U13). The Questions section writes it,
+    #: a Save reads it at the click (``capture_alert``).
+    answers: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
+    #: whether the reviewer changed the verdict, an answer or the polygon
     #: since the last save of THIS alert. Cleared by ``reset_alert`` (an alert
     #: change forgets it) and by a save that wrote.
     dirty: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
@@ -69,7 +75,7 @@ class AnalysisState:
     #: how many changes the reviewer has made to THIS alert: bumped by every
     #: ``touch``. A save captures it with the alert at the click and clears
     #: ``dirty`` only if it is unchanged when the write lands -- a verdict or
-    #: driver changed while the admin lookups blocked is NOT in what was
+    #: answer changed while the admin lookups blocked is NOT in what was
     #: written (``make_save_runner``). Reset by ``reset_alert``, like
     #: ``dirty`` itself.
     edit_rev: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
@@ -95,6 +101,7 @@ class AnalysisState:
             self.after_keys.set([])
             self.prediction_files.set({})
             self.verdict.set(None)
+            self.answers.set({})
             self.dirty.set(False)
             self.edit_rev.set(0)
             self.drawing_unapplied.set(False)
@@ -140,18 +147,21 @@ class AnalysisState:
 
 
 def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespace:
-    """``analysis.capture`` with the alert's row and the review widgets: what a
-    Save, a Download or a CNN run uses, read at the click (UI thread)."""
+    """``analysis.capture`` with the alert's row, the review widgets, the
+    answers and the questions they answer: what a Save, a Download or a CNN
+    run uses, read at the click (UI thread). The answers are copied, so an
+    edit after the click is not in what the Save writes."""
 
     def _read():
-        drivers = getattr(getattr(widgets, "driver_combobox", None), "v_model", None)
+        p = app_state.project.value
         return {
             "alerts": app_state.alerts_gdf.value,
             "alert_id": app_state.actual_alert_id.value,
             "grid": getattr(widgets, "actual_alert_grid", None),
             "bb": getattr(widgets, "actual_bb", None),
             "status": analysis.verdict.value,
-            "drivers": list(drivers) if isinstance(drivers, (list, tuple)) else drivers,
+            "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
+            "questions": list(p.questions) if p is not None else [],
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,

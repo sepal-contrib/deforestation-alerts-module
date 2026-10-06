@@ -350,7 +350,7 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
     app_state.alerts_gdf.value = _alerts_gdf()
     app_state.actual_alert_id.value = 0
     analysis = AnalysisState()
-    widgets = SimpleNamespace(actual_alert_grid=None, driver_combobox=None)
+    widgets = SimpleNamespace(actual_alert_grid=None)
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None)
 
     held = []

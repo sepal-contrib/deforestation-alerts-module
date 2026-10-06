@@ -240,12 +240,10 @@ def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     from gui.tile.analysis import export
 
     monkeypatch.setattr(export, "ee", lookups or _AdminLookups())
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
+    analysis.answers.set({"loss_driver": ["Agriculture"]})
     analysis.before_info.set(["Planet NICFI", 1, None, "before", "_b"])
     analysis.after_info.set(["Planet NICFI", 2, None, "after", "_a"])
     s.actual_alert_id.set(alert_id)
@@ -454,14 +452,12 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
 
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     monkeypatch.setattr(export, "ee", _AdminLookups())
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
+    analysis.answers.set({"loss_driver": ["Agriculture"]})
 
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
@@ -666,13 +662,11 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     alerts["area_ha"] = [3.87, 1.25]
     s.alerts_gdf.set(alerts)
     monkeypatch.setattr(export, "ee", _AdminLookups())
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=["Agriculture"]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
+    analysis.answers.set({"loss_driver": ["Agriculture"]})
     analysis.defo_layer.set(drawn)
     s.actual_alert_id.set(0)
     assert export._save_attributes(widgets, s, analysis, ctx) is True
@@ -707,10 +701,7 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
         analysis.defo_layer.set(drawn_b)
 
     monkeypatch.setattr(export, "ee", _AdminLookups(during=_move_to_the_next_alert))
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=[]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
@@ -727,13 +718,11 @@ def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
     monkeypatch.setattr(export, "ee", _AdminLookups())
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=["logging", "Minería"]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
+    analysis.answers.set({"loss_driver": ["logging", "Minería"]})
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["description"])
@@ -746,8 +735,9 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     (the combobox starts on ``DEFAULT``, so every false positive stored
     ``"other"``).
 
-    The widget itself is NOT cleared: switching the answer back to Confirmed
-    still has the driver the reviewer picked, and saves it.
+    The draft itself (``analysis.answers``) is NOT cleared: switching the
+    answer back to Confirmed still has the driver the reviewer picked, and
+    saves it.
     """
     from gui.tile.analysis import export
 
@@ -755,12 +745,10 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
     monkeypatch.setattr(export, "ee", _AdminLookups())
-    widgets = SimpleNamespace(
-        driver_combobox=SimpleNamespace(v_model=["logging", "Minería"]),
-        actual_bb=SimpleNamespace(geometry=lambda: None),
-    )
+    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
+    analysis.answers.set({"loss_driver": ["logging", "Minería"]})
 
     analysis.verdict.set("False Positive")
     assert export._save_attributes(widgets, s, analysis, ctx) is True
@@ -768,8 +756,8 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     assert saved.loc[0, "status"] == "False Positive"
     assert saved.loc[0, "description"] == ""
     assert loss_drivers.codes(saved.loc[0, "description"]) == []
-    # the draft the reviewer picked is still in the widget
-    assert widgets.driver_combobox.v_model == ["logging", "Minería"]
+    # the draft the reviewer picked is still in the panel's state
+    assert analysis.answers.value == {"loss_driver": ["logging", "Minería"]}
 
     analysis.verdict.set("Confirmed")  # they change their mind
     assert export._save_attributes(widgets, s, analysis, ctx) is True

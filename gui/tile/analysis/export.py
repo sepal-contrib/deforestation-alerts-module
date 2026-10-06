@@ -7,7 +7,7 @@ collapsible Export section** (spec §5): the section owns the title, and the
 verdict block owns the Save, so ``build_export`` builds neither.
 
 * The OLD **Save** button (``save_btn``) ran ``save_attributes_to_gdf`` —
-  writing the user's verdict / loss-driver / image-info / GEE-admin attributes
+  writing the user's verdict / answers / image-info / GEE-admin attributes
   + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
   That flow now lives in ``make_save_runner`` (module level) and the button
   itself in the verdict block, which drives that runner; the runner's ``then``
@@ -81,10 +81,10 @@ and the id in range, so it is smoke-safe (nothing runs at mount;
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets + scratch. Read here: ``driver_combobox`` (the loss
-    drivers, stashed by AlertReviewPanel), ``actual_alert_grid``, ``actual_bb``.
-    The reviewer's verdict is NOT a widget any more: it lives in
-    ``analysis.verdict`` and reaches a Save through ``capture_alert``.
+    Shared heavy widgets + scratch. Read here: ``actual_alert_grid``,
+    ``actual_bb``. The reviewer's verdict and answers are NOT widgets: they
+    live in ``analysis.verdict`` / ``analysis.answers`` and reach a Save
+    through ``capture_alert``.
 app_state : AppState
     Navigation + alerts source of truth (``alerts_gdf`` / ``actual_alert_id``).
 aux_model : SetContext
@@ -121,6 +121,7 @@ import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.errors import KeyedError
+from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
@@ -131,6 +132,7 @@ from deforestation_alerts.scripts.report_builder import (
 )
 from gui.i18n import t, tn
 from gui.scripts import loss_drivers as drivers
+from gui.scripts import questions
 from gui.scripts import set_store
 from gui.scripts.detached import render_detached
 from gui.scripts.error_text import error_text
@@ -193,6 +195,11 @@ class SaveRefused(KeyedError):
     """A Save that must not write: nothing went wrong, it has nowhere to go.
     The worker reports it as a warning, not as an error. ``key`` names the
     reason; the worker renders it where it toasts (spec §11)."""
+
+
+#: A Save refused for a required question left unanswered (spec D5); the
+#: refusal carries the question's label (``question``) and key (``question_key``).
+REQUIRED_MISSING = "analysis_tile.questions.required_missing"
 
 
 def _store_of(target) -> Path:
@@ -293,30 +300,27 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     if getattr(alert, "drawing_unapplied", False):
         raise SaveRefused(key="analysis_tile.edition_labels.unapplied_drawing")
 
+    # One column per current question (spec D2, D5). A question not asked for
+    # this verdict stores "" -- a false positive records no loss driver -- and
+    # its draft stays in the panel, so switching the verdict back still has
+    # it. A required question is required only where it is asked. Drafts of
+    # questions deleted since are ignored: their columns are left as stored.
+    # Refused here, before the admin lookups block and before any row changes.
+    answer_updates = {}
+    for q in getattr(alert, "questions", None) or []:
+        shown = questions.visible(q, status)
+        value = questions.encode(q, (getattr(alert, "answers", None) or {}).get(q.key)) if shown else ""
+        if shown and q.required and not value:
+            raise SaveRefused(key=REQUIRED_MISSING, question=questions.question_label(q), question_key=q.key)
+        answer_updates[column(q)] = value
+
     # Every field this save writes, prepared BEFORE the live table is touched:
     # the refusals below and the admin lookups come between, and a row already
     # half-written by a save that is then refused (or that fails) is a review
     # the reviewer was told was rejected, sitting in the table Overview counts
     # from and the next save persists whole. Applied in one pass at the end,
     # once the store write has landed.
-    updates = {"status": status}
-
-    # description (loss-driver combobox): the drivers' codes, never labels
-    # (``loss_drivers``); an export translates them.
-    #
-    # A false positive stores NO driver (spec §4.2): there was no loss, so
-    # there is no cause to record, and the verdict block hides the field and
-    # says so. Decided HERE and not by clearing the widget: the combobox keeps
-    # the draft, so switching the answer back to Confirmed still has the
-    # driver the reviewer picked. Without this guard every false positive
-    # stored the combobox's own ``loss_drivers.DEFAULT`` ("other"), or an
-    # earlier pick, invisibly and unremovably.
-    # ``""`` is what ``drivers.encode`` itself returns for an empty selection
-    # and reads back to no codes through ``codes`` / ``selection`` / ``label``
-    # / ``with_labels``.
-    updates["description"] = (
-        "" if status == "False Positive" else drivers.encode(alert.drivers)
-    )
+    updates = {"status": status, **answer_updates}
 
     # before/after image name + info. Guarded (fix round 1): both are None
     # until an image is actually picked for this alert (``AnalysisState``;
@@ -394,14 +398,21 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # the live table after every save anyway, so this is the same order of
     # cost.
     staged = alertas_gdf.copy()
-    for column, value in updates.items():
-        staged.at[actual_alert_id, column] = value
+    for column_name in updates:
+        if column_name not in staged.columns:
+            staged[column_name] = ""  # a question added after this set was made
+    for column_name, value in updates.items():
+        staged.at[actual_alert_id, column_name] = value
     _save_alerts_to_gdf(staged, app_tile_model, folder=folder, target=target)
 
     # Published to the live table (in place, faithful to OLD: Overview and the
     # map layers read this very object, and the save runner re-publishes it).
-    for column, value in updates.items():
-        alertas_gdf.at[actual_alert_id, column] = value
+    # A new question's column is added first, "" on every other row, as above.
+    for column_name in updates:
+        if column_name not in alertas_gdf.columns:
+            alertas_gdf[column_name] = ""
+    for column_name, value in updates.items():
+        alertas_gdf.at[actual_alert_id, column_name] = value
     # With the store generation the write stamped on the copy
     # (``set_store.stamp_generation``): the alerts on hand ARE what is on disk
     # now, and without the stamp the live table still claims the generation
