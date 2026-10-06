@@ -116,6 +116,12 @@ def _as_date(julian):
         return None
 
 
+def _saved_pick(value):
+    """A stored ``before_img`` / ``after_img`` as text, or ``None`` (NaN, a
+    missing column): the timeline parses it (``scene_query.saved_pick_id``)."""
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def _invalidate_alert_view(widgets, analysis) -> None:
     """Forget the alert that was under review, without a new one to show.
 
@@ -302,6 +308,10 @@ def view_actual_alert(
             # strings ``fecha1``/``fecha2`` the info card shows
             "date_min": _as_date(alerta["alert_date_min"]),
             "date_max": _as_date(alerta["alert_date_max"]),
+            # the pair this alert was last saved with (spec D1): the timeline
+            # restores it instead of picking, and falls back when it is gone
+            "saved_before": _saved_pick(alerta.get("before_img")),
+            "saved_after": _saved_pick(alerta.get("after_img")),
         }
     except Exception:
         logger.exception("Analysis: view_actual_alert map update failed")

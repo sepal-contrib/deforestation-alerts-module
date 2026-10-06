@@ -86,7 +86,8 @@
       "set_after": "Fijar como imagen de después",
       "collapsed_month": "{month}, {count} imágenes, contraído. Expandir este mes.",
       "collapse_month": "{month}. Contraer este mes.",
-      "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta."
+      "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",
+      "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente"
     }
   },
   "analysis_tile": {

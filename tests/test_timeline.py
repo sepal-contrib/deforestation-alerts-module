@@ -40,6 +40,25 @@ def _sel(rows, max_cloud=40.0, start=date(2026, 3, 3), end=date(2026, 10, 23)):
     return scene_query.scenes_for(tables, box(0.5, 0.5, 1.5, 1.5), start, end, max_cloud=max_cloud)
 
 
+def _any_index(rows):
+    """A scene index holding ``rows`` whatever the view window: the restore
+    tests need rows the default window does not reach.
+
+    Not ``_index``: that name is the five-column helper further down, which
+    would shadow this one at import."""
+    scenes = pd.DataFrame(
+        [(src, pd.Timestamp(d), cloud, "W", f"k{i}") for i, (src, d, cloud) in enumerate(rows)],
+        columns=list(scene_index.SCENE_COLUMNS),
+    ).astype({"date": "datetime64[ns]"})
+    return scene_index.SceneTables(scenes=scenes, tiles=TILES)
+
+
+def _covering(start=date(2025, 1, 1), end=date(2027, 12, 31)):
+    """A manifest saying the index has answered for ``start``..``end``."""
+    return scene_index.SceneManifest(aoi_digest="d1", refreshed=datetime.now(timezone.utc),
+                                     covered=scene_index.Coverage(start=start, end=end))
+
+
 def _ctx(date_min=date(2026, 5, 3), date_max=date(2026, 8, 23)):
     return {"alert_id": 7, "token": 1, "bbox": box(0.5, 0.5, 1.5, 1.5),
             "date_min": date_min, "date_max": date_max}
@@ -1008,13 +1027,14 @@ def _fake_analysis():
     return AnalysisState()
 
 
-def _fake_widgets(bbox=None):
+def _fake_widgets(bbox=None, **ctx_extra):
     import solara
 
     ctx = dict(_ctx())
     if bbox is not None:
         ctx["bbox"] = bbox
-    return SimpleNamespace(imagery_ctx=solara.reactive(ctx))
+    ctx.update(ctx_extra)
+    return SimpleNamespace(imagery_ctx=solara.reactive(ctx), timeline_filter=solara.reactive(None))
 
 
 def _text(widget) -> str:
@@ -1465,3 +1485,168 @@ def test_a_collection_this_build_has_no_band_for_is_dropped_rather_than_raising(
     assert _count_stripes(card) == 4  # the two drawable rows, one lane each
     dropped = [r for r in caplog.records if "no band for" in r.getMessage()]
     assert dropped and "Sentinel 3" in dropped[0].getMessage()
+
+
+# ------------------------------------------------------ the saved pick (D1-D5)
+
+_FOUR = [(S2, "2026-03-20", 5.0), (S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (LS, "2026-10-01", 4.0)]
+
+
+def test_a_saved_alert_reopens_on_its_saved_pair_without_unsaved_changes():
+    analysis = _fake_analysis()
+    timeline.build_timeline(_fake_state(index=_any_index(_FOUR)), analysis,
+                            _fake_widgets(saved_before="Sentinel 2 2026-03-20 ",
+                                          saved_after="Landsat 2026-10-01 "))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    assert analysis.after_info.value[3] == "Landsat 2026-10-01 "
+    assert analysis.before_keys.value and analysis.after_keys.value
+    assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+
+
+def test_a_side_with_no_saved_value_still_gets_the_automatic_pick():
+    analysis = _fake_analysis()
+    timeline.build_timeline(_fake_state(index=_any_index(_FOUR)), analysis,
+                            _fake_widgets(saved_after="Landsat 2026-10-01 "))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "  # default_pick's nearest
+    assert analysis.after_info.value[3] == "Landsat 2026-10-01 "
+
+
+def test_a_legacy_or_empty_saved_value_opens_on_the_automatic_pick():
+    """Review Focus #2: what the old selector wrote, or nothing at all."""
+    for before, after in (("S2_before", "S2_after"), (float("nan"), None), ("", "MODIS 2026-04-24 ")):
+        analysis = _fake_analysis()
+        timeline.build_timeline(_fake_state(index=_any_index(_FOUR)), analysis,
+                                _fake_widgets(saved_before=before, saved_after=after))
+        assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+        assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+        assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+
+
+def test_a_saved_image_over_the_cloud_limit_is_restored():
+    rows = [(S2, "2026-03-20", 90.0), (S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_fake_state(index=_any_index(rows)), analysis,
+                                   _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    # drawn as the selection: full height and gold, not faded. The row's own
+    # stripe, looked up by its label: the gold alert-window band also carries
+    # "background: <gold>" and would satisfy a tree-wide search on its own.
+    hit = [w for w in _walk(_lane(card, "0"))
+           if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith(
+               f"{timeline.SRC_LABEL[S2]}, 2026-03-20")]
+    assert len(hit) == 1 and hit[0].attributes["aria-selected"] == "true"
+    bar = hit[0].children[0].style_
+    assert f"background: {timeline.SELECTED_COLOR}" in bar and "opacity" not in bar
+
+
+def test_a_saved_image_in_a_switched_off_collection_switches_it_back_on():
+    state = _fake_state(index=_any_index(_FOUR))
+    analysis = _fake_analysis()
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(state, analysis, widgets)
+    chip = next(w for w in _walk(card)
+                if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"
+                and timeline.SRC_LABEL[LS] in _text(w))
+    chip.fire_event("click", None)
+    assert LS not in widgets.timeline_filter.value[0]
+
+    # the next alert: another id, because ``_ctx``'s token 1 is also what the
+    # fresh state's first ``reset_alert`` bumps to, so (7, 1) would read as
+    # the alert already on screen
+    analysis.reset_alert()
+    nxt = dict(_ctx(), alert_id=8, saved_after="Landsat 2026-10-01 ", token=analysis.alert_token.value)
+    widgets.imagery_ctx.set(nxt)
+    assert analysis.after_info.value[3] == "Landsat 2026-10-01 "
+    assert LS in widgets.timeline_filter.value[0]
+
+
+def test_a_saved_date_outside_the_view_widens_the_view_and_asks_for_it():
+    rows = [(S2, "2025-12-10", 5.0), (S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2025-12-10 "))
+    assert analysis.before_info.value[3] == "Sentinel 2 2025-12-10 "
+    assert state.scene_window_request.value is not None
+    assert state.scene_window_request.value[0] <= date(2025, 12, 10)
+
+
+def test_extra_to_include_adds_just_enough_whole_months():
+    project = _project()
+    assert timeline.extra_to_include(_ctx(), project, (0, 0), [date(2025, 12, 10)]) == (3, 0)
+    assert timeline.extra_to_include(_ctx(), project, (0, 0), [date(2027, 1, 2)]) == (0, 3)
+    # never narrower than what the reviewer already widened
+    assert timeline.extra_to_include(_ctx(), project, (5, 1), [date(2026, 5, 1)]) == (5, 1)
+    assert timeline.extra_to_include(None, project, (0, 0), [date(2025, 1, 1)]) == (0, 0)
+
+
+def test_a_saved_image_the_index_has_not_reached_waits_then_falls_back_with_a_note():
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]  # no 2026-03-20 row
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    # not answered yet (no manifest): the before side waits, the after side is picked
+    assert analysis.before_info.value is None
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+
+    state.scene_manifest.set(_covering())  # the index has answered for that date
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert timeline.t("analysis.timeline.saved_missing") in _text(card)
+    assert analysis.dirty.value is False
+
+
+def test_a_failed_index_refresh_also_settles_the_wait():
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    state.scene_index_error.set("boom")
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+
+
+def test_a_pick_made_while_the_saved_one_waits_wins():
+    """Review Focus #1: the reviewer's click outranks a restore still pending."""
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-03-20", 5.0)]
+    state = _fake_state(index=_any_index(rows[:2]))
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    upper = [w for w in _walk(card) if (w.style_ or "").startswith(f"position: relative; height: "
+                                                                   f"{timeline.LANE_H}px")][0]
+    _click(upper, scene_index.row_id(S2, date(2026, 4, 24)))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    state.scene_index.set(_any_index(rows))  # the saved row arrives late
+    state.scene_manifest.set(_covering())
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+
+
+def test_the_timeline_publishes_its_filter():
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), widgets)
+    assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 40.0)
+    slider = next(w for w in _walk(card) if getattr(w, "label", None) == timeline.t(
+        "analysis.timeline.max_cloud"))
+    slider.fire_event("change", 10)
+    assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 10.0)
+
+
+def test_a_hand_pick_after_a_fallback_takes_the_note_away():
+    """The note says the automatic pick stood in; once the reviewer has chosen
+    that side themselves it no longer describes what is selected."""
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-03-20", 5.0)]
+    state = _fake_state(index=_any_index(rows))
+    state.scene_manifest.set(_covering())
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-02-01 "))
+    assert timeline.t("analysis.timeline.saved_missing") in _text(card)
+    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 3, 20)))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+
+
+def test_the_alert_row_publishes_its_saved_pair_as_text_or_none():
+    from gui.tile.analysis.analysis_tile import _saved_pick
+
+    assert _saved_pick("Landsat 2026-10-01 ") == "Landsat 2026-10-01 "
+    for missing in (None, float("nan"), "", "   "):
+        assert _saved_pick(missing) is None

@@ -86,7 +86,8 @@
       "set_after": "Définir comme image après",
       "collapsed_month": "{month}, {count} images, replié. Déplier ce mois.",
       "collapse_month": "{month}. Replier ce mois.",
-      "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais."
+      "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais.",
+      "saved_missing": "Image enregistrée indisponible ; choisie automatiquement"
     }
   },
   "analysis_tile": {

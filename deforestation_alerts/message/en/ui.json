@@ -86,7 +86,8 @@
       "set_after": "Set as after image",
       "collapsed_month": "{month}, {count} images, collapsed. Expand this month.",
       "collapse_month": "{month}. Collapse this month.",
-      "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it."
+      "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it.",
+      "saved_missing": "Saved image not available; picked automatically"
     }
   },
   "analysis_tile": {
