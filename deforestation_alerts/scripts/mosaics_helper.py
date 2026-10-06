@@ -310,21 +310,19 @@ def simplify_and_extract_features(
     return features
 
 
-def add_files_to_zip(zip_filename, file1, file2):
-    """Zip two LOCAL files, stored under their basenames.
+def add_files_to_zip(zip_filename, *files):
+    """Zip LOCAL files, each stored under its basename.
 
     ``arcname`` matters since the members live in a scratch folder or the set
     folder: without it zipfile stores the full path, so the user unpacking the
-    archive would get a directory tree instead of the two files they asked for.
+    archive would get a directory tree instead of the files they asked for.
     """
     import os
     import zipfile
 
-    # Open a zip file in write mode, create it if it doesn't exist
     with zipfile.ZipFile(zip_filename, "w") as zipf:
-        # Add the files to the zip
-        zipf.write(file1, arcname=os.path.basename(file1))
-        zipf.write(file2, arcname=os.path.basename(file2))
+        for path in files:
+            zipf.write(path, arcname=os.path.basename(path))
 
 
 def geojson_to_geodataframe(geojson):
