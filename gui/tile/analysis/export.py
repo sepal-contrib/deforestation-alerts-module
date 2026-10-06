@@ -484,6 +484,22 @@ def _saved_status(alerts, alert_id) -> Optional[str]:
     return value if isinstance(value, str) else None
 
 
+def _picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
+    """Whether the pair on screen is the pair the alert's row was saved with
+    (``before_img`` / ``after_img`` hold the picks' ``info[3]``). A GIF
+    animates the reviewed pair only (spec D9): a new, unsaved pick is not it.
+    A missing column or value is no match."""
+    if before_info is None or after_info is None:
+        return False
+    if alerts is None or alert_id is None or not 0 <= alert_id < len(alerts):
+        return False
+    row = alerts.iloc[alert_id]
+    saved = [row.get("before_img"), row.get("after_img")]
+    if not all(isinstance(value, str) for value in saved):
+        return False
+    return [before_info[3], after_info[3]] == saved
+
+
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
@@ -1005,15 +1021,16 @@ def build_export(
 
     def _refresh_gif_gate(*_):
         """Export GIF is offered for a true alert (spec D9): a save of it landed
-        with the verdict Confirmed, and both sides are picked. Held disabled
-        while a GIF of this section renders."""
+        with the verdict Confirmed, and the pair on screen is the pair that
+        save wrote -- another pick disables it, picking the saved pair back
+        enables it. Held disabled while a GIF of this section renders."""
         if gif_running["on"]:
             return
+        alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
         ns["gif_btn"].disabled = not (
             built["saved"]
-            and _saved_status(app_state.alerts_gdf.value, app_state.actual_alert_id.value) == "Confirmed"
-            and analysis.before_info.value is not None
-            and analysis.after_info.value is not None
+            and _saved_status(alerts, alert_id) == "Confirmed"
+            and _picks_are_saved(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
         )
 
     # ------------------------------------------------------------------
@@ -1170,10 +1187,16 @@ def build_export(
         # A true alert's zip carries its GIF (spec D9), captured with the rest
         # of the alert at the click. Nothing to animate is said after the build.
         gif_job, gif_skipped = None, False
+        # A capture that fails for any other reason costs the GIF too, never
+        # the build: escaping here would leave the build button spinning with
+        # no worker started.
         if _saved_status(alert.alerts, alert.alert_id) == "Confirmed":
             try:
                 gif_job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
             except gif_mod.GifRefused:
+                gif_skipped = True
+            except Exception:  # noqa: BLE001 - logged; the zip is built without the GIF
+                logger.exception("Analysis: the GIF for the zip could not be captured")
                 gif_skipped = True
 
         def _worker():

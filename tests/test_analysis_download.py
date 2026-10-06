@@ -674,7 +674,12 @@ def _gif_harness(tmp_path, monkeypatch, **kw):
 
 
 def _status(harness, value):
-    harness.app_state.alerts_gdf.value["status"] = value
+    """What a save of the current picks writes into the row: the verdict and
+    the saved pair (``info[3]``), which the GIF gate compares the picks with."""
+    gdf = harness.app_state.alerts_gdf.value
+    gdf["status"] = value
+    gdf["before_img"] = _BEFORE_INFO[3]
+    gdf["after_img"] = _AFTER_INFO[3]
 
 
 def test_the_gif_button_waits_for_a_confirmed_save(tmp_path, monkeypatch):
@@ -792,5 +797,61 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
     harness.build()
     assert passed["gif"] is None
     assert not harness.download_btns[0].disabled and harness.gif_link.disabled
+    assert notifier.warnings == [
+        "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
+
+
+def test_the_gif_button_follows_the_saved_pair(tmp_path, monkeypatch):
+    """Spec D9: the GIF animates the reviewed pair only. Another pick after
+    the Confirmed save disables it; picking the saved pair back enables it."""
+    harness = _gif_harness(tmp_path, monkeypatch)
+    _status(harness, "Confirmed")
+    harness.save()
+    assert not harness.gif_btn.disabled
+    harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])
+    assert harness.gif_btn.disabled
+    harness.analysis.before_info.set(_BEFORE_INFO)
+    assert not harness.gif_btn.disabled
+
+
+def test_a_row_without_a_saved_pair_offers_no_gif(tmp_path, monkeypatch):
+    """A missing or empty saved pick is no match: the gate stays off."""
+    import numpy as np
+
+    harness = _gif_harness(tmp_path, monkeypatch)
+    _status(harness, "Confirmed")
+    harness.app_state.alerts_gdf.value["after_img"] = np.nan
+    harness.save()
+    assert harness.gif_btn.disabled
+
+
+def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
+    """Spec D9: a failed GIF does not fail the build -- not even one whose
+    capture raises something other than ``GifRefused`` at the click."""
+    from pysepal.solara.notifications import NoopNotifier
+
+    from gui.tile.analysis import gif as gif_mod
+
+    class _Notifier(NoopNotifier):
+        def __init__(self):
+            self.warnings = []
+
+        def warning(self, message, *, timeout=None):
+            self.warnings.append(message)
+
+    notifier = _Notifier()
+    harness = _gif_harness(tmp_path, monkeypatch)
+    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
+
+    def _crash(*a, **k):
+        raise RuntimeError("scene index is malformed")
+
+    monkeypatch.setattr(gif_mod, "capture_gif", _crash)
+    _status(harness, "Confirmed")
+    harness.save()
+    harness.build()
+    assert not harness.download_btns[0].disabled and harness.downloads.viz is True
+    assert not harness.build_btn.disabled and not harness.build_btn.loading
+    assert harness.gif_link.disabled
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
