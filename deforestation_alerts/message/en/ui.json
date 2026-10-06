@@ -191,6 +191,7 @@
     "export_labels": {
       "save_btn": "Save",
       "build_tile": "Build alert files",
+      "save_first": "save first",
       "rebuild_tile": "Rebuild files",
       "tile_zip": "Alert data",
       "tile_zip_detail": "GeoPackage + before/after GeoTIFF",

@@ -210,6 +210,35 @@ def _build_button(body):
     raise AssertionError("no build tile in the export section body")
 
 
+def _rebuild_button(body):
+    """The small *Rebuild* text button under the file tiles (READY state)."""
+    for widget in _in(body):
+        if "defo-rebuild" in (getattr(widget, "class_", "") or "").split():
+            return widget
+    raise AssertionError("no rebuild button in the export section body")
+
+
+def _shown(root, target):
+    """Whether ``target`` is in ``root``'s tree with nothing on its path out
+    of the layout: ``display: none`` (a collapsed body, a hidden hint) or
+    ``viz=False`` (``sw.SepalWidget.hide()``)."""
+    def _path(node):
+        if node is target:
+            return [node]
+        for child in getattr(node, "children", None) or []:
+            if not isinstance(child, str):
+                found = _path(child)
+                if found:
+                    return [node, *found]
+        return None
+
+    path = _path(root)
+    if path is None:
+        raise AssertionError(f"{target!r} is not in the tree")
+    return not any("display: none" in (getattr(n, "style_", "") or "")
+                   or getattr(n, "viz", True) is False for n in path)
+
+
 def _alerts_gdf():
     """One alert row with every column a Save or a build reads."""
     import geopandas as gpd

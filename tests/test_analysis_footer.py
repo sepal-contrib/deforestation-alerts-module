@@ -117,12 +117,16 @@ def test_the_export_body_has_no_template_field_and_three_tiles(panel):
     texts = _texts(sections.export.body_box)
     for key in ("report_template_label", "report_template_hint"):
         assert t(f"analysis_tile.export_labels.{key}") not in texts
-    # The body is the build tile's row and the downloads, nothing else.
-    assert len(parts.body.children) == 2
-    downloads = parts.body.children[1]
-    assert downloads.children == parts.tiles
-    assert downloads.viz is False  # hidden until a build lands
-    assert "Build alert files" in texts
+    # Before a save: the dashed build tile (disabled, "save first") and the
+    # GIF tile, shown in every state; the zip and report tiles wait for a build.
+    from tests.conftest import _build_button, _shown
+
+    zip_tile, docx_tile, gif_tile = parts.tiles
+    build = _build_button(parts.body)
+    assert _shown(parts.body, build) and build.disabled
+    assert "Build alert files" in texts and "(save first)" in texts
+    assert _shown(parts.body, gif_tile) and gif_tile.disabled
+    assert not _shown(parts.body, zip_tile) and not _shown(parts.body, docx_tile)
 
 
 def test_the_footer_registers_both_save_buttons_with_the_runner():

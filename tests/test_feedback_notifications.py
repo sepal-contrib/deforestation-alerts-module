@@ -714,9 +714,12 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
     assert toolbar.viz is True
     assert download_btn.loading is False and download_btn.disabled is False
     # The two file tiles link this build's zip and report.
-    zip_tile, docx_tile, gif_tile = toolbar.children
+    zip_tile, docx_tile = toolbar.children
     assert zip_tile.disabled is False and zip_tile.attributes["download"] == "alert_0.zip"
     assert docx_tile.disabled is False and docx_tile.attributes["download"] == "alert_0.docx"
+    from gui.tile.analysis.file_tile import FileTile
+
+    (gif_tile,) = [w for w in _widgets(card) if isinstance(w, FileTile) and w.kind == "gif"]
     assert gif_tile.disabled is True  # TODO(timelapse): nothing builds it yet
 
 

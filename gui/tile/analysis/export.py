@@ -19,14 +19,18 @@ the Save, so ``build_export`` builds neither.
   build, then the count of files that build left ready. An alert change takes
   it back to the first state, because the build button and the two download
   links belong to the alert they were made for.
-* The dashed **Build alert files** tile (``download_alert_data_btn``, disabled
-  until a save happens; *Rebuild files* once a build left files) runs the OLD
-  ``download_data`` — building the single-alert gpkg, the before/after-image
-  GeoTIFF, the zip, and the Word report.
-* The S1 file tiles (``file_tile.FileTile``: ``files_dwn_btn`` / ``report_dwn_btn``
-  and the GIF placeholder ``gif_dwn_btn``) live in a ``toolbar_downloads`` that is
-  hidden until a build completes, then get the zip / report (``set_file``) and
-  are revealed.
+* The dashed **Build alert files** tile (``download_alert_data_btn``, in
+  ``toolbar_build``) runs the OLD ``download_data`` — building the single-alert
+  gpkg, the before/after-image GeoTIFF, the zip, and the Word report. Until a
+  save of this alert lands it is disabled and carries a muted "(save first)"
+  hint (``save_first``).
+* The S1 file tiles (``file_tile.FileTile``: ``files_dwn_btn`` / ``report_dwn_btn``)
+  live in a ``toolbar_downloads`` that is hidden until a build completes, then
+  get the zip / report (``set_file``) and are revealed. In that READY state the
+  build tile is hidden and a small right-aligned **Rebuild** text button
+  (``rebuild_btn``, in ``toolbar_rebuild``) runs the same build; anything that
+  invalidates the files (a new save, a template change) brings the build tile
+  back. The GIF placeholder ``gif_dwn_btn`` is always shown and always disabled.
 
 WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
 Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
@@ -149,6 +153,7 @@ from gui.tile.analysis.file_tile import FileTile
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.review_panel import REVIEW_CHOICES
 from gui.tile.analysis.state import capture_alert
+from gui.widget.text_style import MUTED
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -860,20 +865,37 @@ def build_export(
     """
 
     # ------------------------------------------------------------------
-    # The build tile + the file tiles (created once so the imperative
-    # .show()/.hide()/.disabled/.set_file() calls port unchanged). The file
-    # tiles start in a hidden container; the dashed build tile starts disabled
-    # (enabled by the save worker's success path). The ns keys are the OLD
-    # buttons' names, so the logic around them reads as it did.
+    # The S1 layout (spec D6, the mockup's three states), created once so the
+    # imperative .show()/.hide()/.disabled/.set_file() calls port unchanged:
+    #
+    # * BEFORE A SAVE -- the dashed build tile, disabled, "(save first)";
+    # * SAVED -- the build tile, enabled, without the hint;
+    # * READY -- the build tile gives way to the zip and report tiles and a
+    #   small *Rebuild* under them, which runs the same build.
+    #
+    # The GIF tile is shown, disabled, in every state. ``_show_badge_for_state``
+    # is what puts the body in its state. The ns keys of the build tile and
+    # the two file tiles are the OLD buttons' names, so the logic around them
+    # reads as it did.
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
 
+        ns["save_first"] = v.Html(
+            tag="span", class_="font-weight-regular ml-1", style_=MUTED,
+            children=[f"({t('analysis_tile.export_labels.save_first')})"],
+        )
         ns["download_alert_data_btn"] = v.Btn(
             outlined=True, block=True, color="primary", disabled=True, class_="defo-build-tile",
             style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
-            children=[v.Icon(left=True, small=True, children=["mdi-cog-outline"]),
-                      t("analysis_tile.export_labels.build_tile")],
+            children=[v.Icon(left=True, small=True, children=["mdi-cog"]),
+                      t("analysis_tile.export_labels.build_tile"), ns["save_first"]],
+        )
+        ns["rebuild_btn"] = v.Btn(
+            text=True, small=True, color="primary", class_="defo-rebuild",
+            style_="text-transform:none;letter-spacing:normal;",
+            children=[v.Icon(left=True, small=True, children=["mdi-refresh"]),
+                      t("analysis_tile.export_labels.rebuild_tile")],
         )
         ns["files_dwn_btn"] = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
                                        t("analysis_tile.export_labels.tile_zip_detail"))
@@ -883,9 +905,11 @@ def build_export(
         # calls set_file on this tile. Until then it is a disabled placeholder.
         ns["gif_dwn_btn"] = FileTile("gif", t("analysis_tile.export_labels.tile_gif"),
                                      t("analysis_tile.export_labels.tile_gif_detail"))
-        ns["toolbar_build"] = v.Html(tag="div", children=[ns["download_alert_data_btn"]])
+        ns["toolbar_build"] = sw.Html(tag="div", children=[ns["download_alert_data_btn"]])
         ns["toolbar_downloads"] = sw.Html(tag="div", children=[
-            ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]]).hide()
+            ns["files_dwn_btn"], ns["report_dwn_btn"]]).hide()
+        ns["toolbar_rebuild"] = sw.Html(tag="div", class_="d-flex justify-end",
+                                        children=[ns["rebuild_btn"]]).hide()
 
         return ns
 
@@ -898,6 +922,12 @@ def build_export(
     # spins it) and would make the badge say "available after save" over a
     # build in progress. Reset by every alert change.
     built = {"saved": False, "files": 0, "rev": 0}
+
+    def _set_build_enabled(flag):
+        """The build tile and *Rebuild* are one action (two faces of it, per
+        S1 state), so they are enabled and disabled together."""
+        ns["download_alert_data_btn"].disabled = not flag
+        ns["rebuild_btn"].disabled = not flag
 
     def _invalidate_built_files():
         """Stop offering what the last build left ready.
@@ -941,13 +971,16 @@ def build_export(
         # a plain widget has none, and then the toolbar counts as shown.
         revealed = getattr(ns["toolbar_downloads"], "viz", True)
         files = built["files"] if revealed else 0
-        # The build tile says what a click does: once a build has left files
-        # for this review, a second one REbuilds them (S1, spec D6).
-        ns["download_alert_data_btn"].children = [
-            ns["download_alert_data_btn"].children[0],
-            t("analysis_tile.export_labels.rebuild_tile" if files
-              else "analysis_tile.export_labels.build_tile"),
-        ]
+        # The body's S1 state (see ``_build_widgets``): the hint until a save
+        # of this alert lands, and the build tile or -- once a build has left
+        # files -- the small *Rebuild* under them.
+        ns["save_first"].style_ = MUTED if not built["saved"] else "display: none;"
+        if files:
+            ns["toolbar_build"].hide()
+            ns["toolbar_rebuild"].show()
+        else:
+            ns["toolbar_rebuild"].hide()
+            ns["toolbar_build"].show()
         if not built["saved"]:
             _badge(t("analysis_tile.sections.export_after_save"))
         elif files:
@@ -978,7 +1011,7 @@ def build_export(
     # notifies nobody.
     # ------------------------------------------------------------------
     def _forget_previous_alert(*_):
-        ns["download_alert_data_btn"].disabled = True
+        _set_build_enabled(False)
         _invalidate_built_files()
         built["saved"] = False
         _show_badge_for_state()
@@ -1019,7 +1052,7 @@ def build_export(
     # still fails the task. The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
     def _apply_save():
-        ns["download_alert_data_btn"].disabled = False
+        _set_build_enabled(True)
         built["saved"] = True
         # The review just written is not the one the last build captured, so
         # its zip and report are the previous answer: the links go, and the
@@ -1089,9 +1122,11 @@ def build_export(
     # zip/report paths; on failure tracked_job publishes the error as a toast and
     # logs its traceback.
     # ------------------------------------------------------------------
-    def _on_download(*_):
-        ns["download_alert_data_btn"].loading = True
-        ns["download_alert_data_btn"].disabled = True
+    def _on_download(clicked, *_):
+        # ``clicked`` is the build tile or *Rebuild* (both run this): it spins,
+        # and both are held so the build cannot be started twice.
+        clicked.loading = True
+        _set_build_enabled(False)
         alert = capture_alert(analysis, widgets, app_state)  # as in _on_save
         token = alert.token  # the alert this build is for
         rev = built["rev"]  # ...and the inputs it is built from
@@ -1179,7 +1214,7 @@ def build_export(
                         t("analysis_tile.export_labels.download_done")
                     )
             finally:
-                ns["download_alert_data_btn"].loading = False
+                clicked.loading = False
                 # The spinner always stops; the button only comes back for the
                 # alert this build was for. An unconditional re-enable would
                 # undo ``_forget_previous_alert``'s disable and leave a
@@ -1190,7 +1225,7 @@ def build_export(
                 # landing between them re-enables the button anyway.
                 analysis.apply_if_current(
                     token,
-                    lambda: setattr(ns["download_alert_data_btn"], "disabled", False),
+                    lambda: _set_build_enabled(True),
                 )
 
         spawn_in_context(_worker)
@@ -1201,6 +1236,7 @@ def build_export(
     # ------------------------------------------------------------------
     def _register_handlers():
         ns["download_alert_data_btn"].on_event("click", _on_download)
+        ns["rebuild_btn"].on_event("click", _on_download)
 
     _register_handlers()
 
@@ -1215,7 +1251,8 @@ def build_export(
     # The OLD inline error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
     return SimpleNamespace(
-        body=v.Html(tag="div", children=[ns["toolbar_build"], ns["toolbar_downloads"]]),
+        body=v.Html(tag="div", children=[ns["toolbar_build"], ns["toolbar_downloads"],
+                                         ns["gif_dwn_btn"], ns["toolbar_rebuild"]]),
         run_save=run_save,
         tiles=[ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]],
     )

@@ -25,11 +25,14 @@ TILE_STYLE = ("height:auto;min-height:52px;justify-content:flex-start;text-trans
 
 
 def human_size(n: int) -> str:
-    """``n`` bytes for a person: whole B and KB, one decimal from MB up."""
+    """``n`` bytes for a person: whole B and KB, one decimal from MB up. A
+    value that ROUNDS to 1024 of a unit reads in the next one ("1.0 MB", never
+    "1024 KB")."""
     size = float(n)
     for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.0f} {unit}" if unit in ("B", "KB") else f"{size:.1f} {unit}"
+        decimals = 0 if unit in ("B", "KB") else 1
+        if round(size, decimals) < 1024 or unit == "GB":
+            return f"{size:.{decimals}f} {unit}"
         size /= 1024
     return f"{n} B"  # unreachable: the loop returns at "GB"
 

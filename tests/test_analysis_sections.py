@@ -117,17 +117,16 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     of the spec's §3-§6.
     """
     from gui.tile.analysis import context, review_panel
-
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
     *head, block_a, block_b, questions, refine, footer = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
-    # What each block OWNS, named. ``facts_widgets`` / ``verdict_widgets``
-    # return tuples that are truthy whatever they hold, so ``assert <the
-    # tuple>`` only ever catches the AttributeError of the slots being absent:
-    # give either accessor a ``getattr(..., {})`` default and such a line
-    # silently stops checking anything.
+    # What each block OWNS, named. ``facts_widgets`` returns a tuple and
+    # ``verdict_widgets`` a dict, both checked by their contents below: a bare
+    # ``assert <the accessor's result>`` only ever catches the AttributeError
+    # of the slots being absent -- give either accessor a ``getattr(..., {})``
+    # default and such a line silently stops checking anything.
     source, detected, chip = context.facts_widgets(block_a)
     assert isinstance(chip, v.Chip)                       # the status chip
     assert (source.tag, detected.tag) == ("span", "span")  # the two fact values

@@ -20,7 +20,7 @@ from gui.tile.analysis.state import AnalysisState
 # ``_in`` / ``_build_button`` / ``_alerts_gdf`` live in conftest: the assembled
 # panel's tests (tests/test_analysis_sections.py) drive the same export section
 # through ``build_controls`` and need them too.
-from tests.conftest import _alerts_gdf, _build_button, _in
+from tests.conftest import _alerts_gdf, _build_button, _in, _rebuild_button, _shown
 
 # Smallest valid JPEG so python-docx's add_picture accepts the stubbed renders.
 _JPEG_1PX = base64.b64decode(
@@ -314,7 +314,8 @@ def _downloads_toolbar(body):
 
 def _download_buttons(body):
     """The two file tiles a build sets (the zip and the report), in tree order.
-    The third, the GIF tile, is a placeholder no build touches yet."""
+    The GIF tile, a placeholder no build touches yet, sits outside their
+    container: it is shown in every state."""
     from gui.tile.analysis.file_tile import FileTile
 
     tiles = [
@@ -322,8 +323,8 @@ def _download_buttons(body):
         for child in (getattr(_downloads_toolbar(body), "children", None) or [])
         if isinstance(child, FileTile)
     ]
-    assert [tile.kind for tile in tiles] == ["zip", "docx", "gif"]
-    return tiles[:2]
+    assert [tile.kind for tile in tiles] == ["zip", "docx"]
+    return tiles
 
 
 def _project_poke(app_state):
@@ -416,36 +417,97 @@ def test_the_export_badge_follows_what_is_available(tmp_path, monkeypatch):
     assert seen[-1] == "2 files ready"
 
 
-def _label(build_btn):
-    """The build tile's label: its text child after the cog icon."""
-    return [c for c in build_btn.children if isinstance(c, str)]
+def _strings(widget):
+    out = []
+    for c in getattr(widget, "children", None) or []:
+        out.extend([c] if isinstance(c, str) else _strings(c))
+    return out
 
 
-def test_a_build_fills_the_file_tiles_and_turns_the_build_tile_into_rebuild(tmp_path, monkeypatch):
-    """S1 (spec D6): the dashed tile builds; once a build has left files the
-    zip and report tiles link them, with their size, and the dashed tile
-    offers the rebuild. Anything that invalidates the files takes all of it
-    back."""
+def _state(harness):
+    """What the export body shows, per S1 state (the mockup's three rows)."""
+    body = harness.parts.body
+    zip_tile, docx_tile, gif_tile = harness.parts.tiles
+    hint = next(w for w in _in(harness.build_btn) if "(save first)" in (getattr(w, "children", None) or []))
+    rebuild = _rebuild_button(body)
+    return SimpleNamespace(
+        build=_shown(body, harness.build_btn), build_enabled=not harness.build_btn.disabled,
+        hint=_shown(body, hint) if _shown(body, harness.build_btn) else False,
+        files=_shown(body, zip_tile) and _shown(body, docx_tile),
+        gif=_shown(body, gif_tile) and gif_tile.disabled,
+        rebuild=_shown(body, rebuild) and not rebuild.disabled,
+    )
+
+
+def test_the_export_body_follows_the_s1_states(tmp_path, monkeypatch):
+    """Spec D6 / the S1 mockup: BEFORE A SAVE the dashed tile is disabled and
+    says "(save first)"; SAVED it builds; READY it gives way to the file tiles
+    and a small *Rebuild* under them. The GIF tile is there, disabled, in
+    every state."""
     (tmp_path / "alert_0.zip").write_bytes(b"z" * 3072)
     harness = _export_harness(tmp_path, monkeypatch)
-    zip_tile, docx_tile = harness.download_btns
-    assert _label(harness.build_btn) == ["Build alert files"]
+    zip_tile, docx_tile, _gif = harness.parts.tiles
+    label = [c for c in harness.build_btn.children if isinstance(c, str)]
+    assert label == ["Build alert files"]
+    assert harness.build_btn.children[0].children == ["mdi-cog"]
+    assert _strings(_rebuild_button(harness.parts.body)) == ["mdi-refresh", "Rebuild files"]
+
+    before = _state(harness)
+    assert (before.build, before.build_enabled, before.hint) == (True, False, True)
+    assert (before.files, before.gif, before.rebuild) == (False, True, False)
 
     harness.save()
-    harness.build()
+    saved = _state(harness)
+    assert (saved.build, saved.build_enabled, saved.hint) == (True, True, False)
+    assert (saved.files, saved.gif, saved.rebuild) == (False, True, False)
 
-    assert harness.downloads.viz is True
+    harness.build()
+    ready = _state(harness)
+    assert (ready.build, ready.files, ready.gif, ready.rebuild) == (False, True, True, True)
     assert zip_tile.disabled is False and zip_tile.href.endswith("alert_0.zip")
     assert docx_tile.disabled is False and docx_tile.href.endswith("alert_0.docx")
     assert zip_tile.attributes["download"] == "alert_0.zip"
     assert zip_tile.size_text == "3 KB"
     assert docx_tile.size_text == ""  # not on disk in this harness: no size, still linked
-    assert _label(harness.build_btn) == ["Rebuild files"]
 
-    harness.analysis.reset_alert()
-
-    assert _label(harness.build_btn) == ["Build alert files"]
+    harness.save()  # a new save invalidates the files: back to the build tile
+    assert _state(harness) == saved
     assert zip_tile.size_text == "" and zip_tile.disabled is True
+
+    harness.build()
+    harness.analysis.reset_alert()  # another alert: back to before a save
+    assert _state(harness) == before
+
+
+def test_rebuild_runs_the_build_again(tmp_path, monkeypatch):
+    """*Rebuild* does what the build tile did: the same build, and the
+    section stays READY with the new files."""
+    harness = _export_harness(tmp_path, monkeypatch)
+    builds = []
+    real = export_mod._download_data
+    monkeypatch.setattr(export_mod, "_download_data", lambda *a, **k: builds.append(1) or real(*a, **k))
+    harness.save()
+    harness.build()
+    rebuild = _rebuild_button(harness.parts.body)
+
+    rebuild.fire_event("click", None)
+
+    assert builds == [1, 1]
+    assert _state(harness).rebuild and _state(harness).files
+    assert rebuild.loading is False and rebuild.disabled is False
+
+
+def test_a_template_change_takes_ready_back_to_the_build_tile(tmp_path, monkeypatch):
+    harness = _export_harness(tmp_path, monkeypatch)
+    harness.save()
+    harness.build()
+    assert _state(harness).rebuild
+
+    harness.model.custom_report_template = str(tmp_path / "mine.docx")
+    harness.app_state.project.value = _project_poke(harness.app_state)
+
+    state = _state(harness)
+    assert (state.build, state.build_enabled, state.files, state.rebuild) == (True, True, False, False)
 
 
 def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, monkeypatch):

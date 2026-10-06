@@ -58,3 +58,11 @@ def test_a_path_outside_home_raises_and_offers_nothing(tmp_path, monkeypatch):
 def test_human_size():
     assert human_size(512) == "512 B" and human_size(4_400_000) == "4.2 MB"
     assert human_size(2048) == "2 KB" and human_size(0) == "0 B"
+
+
+def test_a_size_that_rounds_to_1024_reads_in_the_next_unit():
+    """Never "1024 KB" or "1024.0 MB": the next unit up, as people read it."""
+    assert human_size(1_048_575) == "1.0 MB"          # 1023.999 KB
+    assert human_size(1024 * 1024 * 1024 - 1) == "1.0 GB"  # 1023.99 MB
+    assert human_size(1023) == "1023 B" and human_size(1024) == "1 KB"
+    assert human_size(1023 * 1024) == "1023 KB"

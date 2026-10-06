@@ -194,6 +194,7 @@
     "export_labels": {
       "save_btn": "Sauvegarder",
       "build_tile": "Générer les fichiers de l'alerte",
+      "save_first": "enregistrez d'abord",
       "rebuild_tile": "Régénérer les fichiers",
       "tile_zip": "Données de l'alerte",
       "tile_zip_detail": "GeoPackage + GeoTIFF avant/après",
