@@ -29,6 +29,8 @@ ROW_EXTRA = "padding:5px 8px;border-bottom:1px solid rgba(0,0,0,0.08);"
 CELL = "display:flex;align-items:center;gap:4px;min-width:0;"
 CELL_RIGHT = "display:flex;align-items:center;justify-content:flex-end;gap:0;"
 NAME_CELL = "display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;"
+STACK_CELL = "display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden;"
+CHIP_LINE = "display:flex;flex-wrap:wrap;gap:4px;min-width:0;"
 NAME_TEXT = "min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
 # Header labels clip like data cells so a narrow column never overlaps its
 # neighbour (grid items need min-width:0 + block display for ellipsis to apply).
@@ -189,6 +191,16 @@ def _render_cell(cell: dict, first: bool):
         with rv.Html(tag="div", style_=CELL):
             for item in cell.get("items", []):
                 _render_chip(item)
+        return
+
+    if ctype == "text" and cell.get("stack"):
+        # The name on its own line, its chips wrapping under it: a row with
+        # several chips would otherwise clip the name to a few letters.
+        with rv.Html(tag="div", style_=STACK_CELL):
+            solara.Text(str(cell.get("value", "")), style=NAME_TEXT)
+            with rv.Html(tag="div", style_=CHIP_LINE):
+                for item in cell.get("chips", []):
+                    _render_chip(item)
         return
 
     # "text" (default)

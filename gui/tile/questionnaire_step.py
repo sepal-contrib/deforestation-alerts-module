@@ -127,7 +127,7 @@ def QuestionnaireStep(app_state):
 
     last = len(p.questions) - 1
     rows = [{"key": q.key,
-             "cells": [{"value": qs.question_label(q), "chips": question_tags(q)}],
+             "cells": [{"value": qs.question_label(q), "chips": question_tags(q), "stack": True}],
              "notes": [{"text": "{" + q.key + "}", "tone": None}],
              "actions": [
                  {"kind": "move_up", "disabled": i == 0, "on_click": (lambda k=q.key: _move(k, -1))},

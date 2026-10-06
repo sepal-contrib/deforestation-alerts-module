@@ -111,3 +111,28 @@ def test_a_chip_clips_its_text_with_an_ellipsis_and_shows_it_whole_on_hover():
         assert all(rule in span.style_ for rule in ("overflow:hidden", "text-overflow:ellipsis", "white-space:nowrap"))
     finally:
         rc.close()
+
+
+def test_a_stacked_cell_wraps_its_chips_under_the_name():
+    """The browser walk saw a question's name clipped to "Lo…" by five chips
+    sharing its line: a ``stack`` cell gives the chips a wrapping line of
+    their own, and the name its whole width."""
+    rows = [{"key": "a", "actions": [],
+             "cells": [{"value": "Road access", "stack": True,
+                        "chips": [{"value": "one answer"}, {"value": "required"}]}]}]
+    box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}], rows=rows, empty_text="-"),
+                             handle_error=False)
+    try:
+        def holders(w, found):
+            if isinstance(w, v.Html) and "flex-wrap:wrap" in (w.style_ or ""):
+                found.append(w)
+            for c in getattr(w, "children", []) or []:
+                if hasattr(c, "children"):
+                    holders(c, found)
+            return found
+
+        (line,) = holders(box, [])
+        assert [c.children[-1].children[0] for c in line.children] == ["one answer", "required"]
+        assert all(isinstance(c, v.Chip) for c in line.children)
+    finally:
+        rc.close()
