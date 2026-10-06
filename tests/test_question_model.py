@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from deforestation_alerts.project import io
 from deforestation_alerts.project.models import (
-    DRIVER_OPTIONS, LOSS_DRIVER_KEY, VERDICTS, Project, Question, QuestionOption, default_questions)
+    DRIVER_OPTIONS, LOSS_DRIVER_KEY, Project, Question, QuestionOption, default_questions)
 from deforestation_alerts.project.questions import (
     REPORT_PLACEHOLDERS, RESERVED_KEYS, column, is_answer_column, new_code, new_key, slug)
 
@@ -106,4 +106,3 @@ def test_is_answer_column_knows_the_columns_column_makes():
 def test_reserved_keys_cover_the_report_placeholders_and_verdict():
     assert "verdict" in RESERVED_KEYS
     assert set(REPORT_PLACEHOLDERS) <= RESERVED_KEYS
-    assert set(VERDICTS) == {"Confirmed", "False Positive", "Need revision"}

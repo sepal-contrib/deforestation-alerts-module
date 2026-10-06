@@ -92,7 +92,7 @@ def test_editing_the_questions_rebuilds_and_keeps_drafts(ctx):
 
 # ---------------------------------------------------------------------------
 # Beyond the brief: the section's own guarantees, and what the retired
-# verdict-card combobox covered (tests/test_loss_drivers.py, test_analysis_verdict.py)
+# verdict-card combobox covered (tests/test_questions.py, test_analysis_verdict.py)
 # ---------------------------------------------------------------------------
 def test_switching_the_verdict_back_restores_the_question_and_its_answer(ctx):
     """Spec D4: a hidden question keeps its draft; switching back shows it."""

@@ -173,7 +173,7 @@ def read_summary(store_path, set_id: str, *, period_start: Optional[date] = None
     import pyarrow.parquet as pq
 
     names = set(pq.read_schema(store_path).names)
-    wanted = SUMMARY_COLUMNS + [c for c in (answer_columns or {}).values() if c not in SUMMARY_COLUMNS]
+    wanted = SUMMARY_COLUMNS + list((answer_columns or {}).values())
     columns = [c for c in dict.fromkeys(wanted) if c in names]
     frame = pd.read_parquet(store_path, columns=columns) if columns else pd.DataFrame()
     return summarize_alerts(frame, set_id=set_id, period_start=period_start,

@@ -3,7 +3,7 @@ another set than the active one must change nothing on screen. The facts the
 alert-info card used to show now live in Block A, with their own guard and
 their own tests (tests/test_analysis_context.py); what is left here is the
 tile's side of it, plus the ``_state`` / ``_alerts`` / ``_wire`` helpers
-tests/test_loss_drivers.py drives the review panel with. Stand-in widgets, a
+the review-panel tests drive the panel with. Stand-in widgets, a
 real ``AppState`` and ``SetContext``, as tests/test_set_context.py drives them.
 """
 

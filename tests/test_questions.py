@@ -112,3 +112,55 @@ def test_with_labels_keeps_a_missing_answer_missing():
     out = qs.with_labels(pd.DataFrame({"q_road_access": ["yes", None, ""]}), [ROAD])
     got = out["q_road_access"].tolist()
     assert got[0] == "Yes" and pd.isna(got[1]) and got[2] == ""
+
+
+@pytest.mark.parametrize("code", ["es-ES", "fr"])
+def test_a_review_made_in_another_language_stores_codes(code):
+    """Final review B, M2: a project reviewed in Spanish and then in French
+    must not keep labels of both languages in its store."""
+    set_locale(code)
+    other = next(o for o in LOSS.options if o.code == "other")
+    assert qs.option_label(other) != "Other"  # really translated
+    assert qs.selection(LOSS, "other") == [{"text": qs.option_label(other), "value": "other"}]
+    assert qs.encode(LOSS, qs.selection(LOSS, "other")) == "other"
+    assert qs.encode(LOSS, ["logging", "mining", "other"]) == "logging, mining, other"
+
+
+@pytest.mark.parametrize("stored, expected", [
+    ("Logging, Mining and Other", ["logging", "mining", "other"]),  # English, the old join
+    ("Tala and Minería", ["logging", "mining"]),  # Spanish labels, the old join
+    ("Bûcherie", ["logging"]),  # French, a label since corrected
+    ("Exploitation forestière and Minage", ["logging", "mining"]),  # current and retired French
+    ("expansión agricola, Feux de forêt and Other", ["agriculture_expansion", "forest_fires", "other"]),
+    ("logging, mining", ["logging", "mining"]),  # already codes
+    ("Roads and dams", ["Roads and dams"]),  # free text keeps its "and"
+    ("", []),
+    (None, []),
+    (float("nan"), []),
+])
+def test_stored_loss_driver_descriptions_read_back_to_codes(stored, expected):
+    assert qs.codes(LOSS, stored) == expected
+
+
+def test_free_text_is_stored_as_typed():
+    assert qs.encode(LOSS, ["Roads", {"text": "Mining", "value": "mining"}, "Mining"]) == "Roads, mining"
+    assert qs.encode(LOSS, "Tala") == "logging"
+    assert qs.encode(LOSS, None) == "" and qs.encode(LOSS, []) == ""
+
+
+def test_an_export_shows_the_drivers_in_its_language():
+    gdf = gpd.GeoDataFrame({"description": ["logging, mining", "Logging and Other", None, "Roads"]},
+                           geometry=[box(0, 0, 1, 1)] * 4, crs="EPSG:4326")
+    set_locale("es-ES")
+    out = qs.with_labels(gdf, [LOSS])
+    got = out["description"].tolist()
+    assert got[:2] + got[3:] == ["Tala, Minería", "Tala, Otra", "Roads"] and pd.isna(got[2])
+    assert gdf["description"].tolist()[0] == "logging, mining"  # the store's frame is untouched
+    set_locale("fr")
+    assert qs.label(LOSS, "logging, other") == "Exploitation forestière, Autre"
+
+
+def test_selection_is_items_and_free_text():
+    set_locale("fr")
+    assert qs.selection(LOSS, "Logging, Roads") == [{"text": "Exploitation forestière", "value": "logging"}, "Roads"]
+    assert qs.selection(LOSS, None) == []

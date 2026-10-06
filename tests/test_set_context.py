@@ -14,8 +14,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
-from gui.scripts import loss_drivers
+from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project, default_questions
+from gui.scripts import questions
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
@@ -755,7 +755,7 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["status", "description"])
     assert saved.loc[0, "status"] == "False Positive"
     assert saved.loc[0, "description"] == ""
-    assert loss_drivers.codes(saved.loc[0, "description"]) == []
+    assert questions.codes(default_questions()[0], saved.loc[0, "description"]) == []
     # the draft the reviewer picked is still in the panel's state
     assert analysis.answers.value == {"loss_driver": ["logging", "Minería"]}
 

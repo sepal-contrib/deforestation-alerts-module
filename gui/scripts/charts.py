@@ -442,6 +442,24 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left) -> str:
     return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))))
 
 
+def _answer_label(label_of):
+    """``label_of`` for one answer code, naming the unanswered sentinel too."""
+    def label(code):
+        return t("overview_tile.answer_unknown") if code == UNKNOWN_DRIVER else label_of(code)
+
+    return label
+
+
+def question_rows(summary, key: str, *, measure: str, label_of) -> tuple:
+    """``(label, value)`` per answer of question ``key``, largest first and
+    value formatted for ``measure``: the numbers behind ``chart_question``,
+    for a card whose figure could not be drawn."""
+    label = _answer_label(label_of)
+    index = 2 if measure == MEASURE_ALERTS else 1
+    return tuple((label(row[0]), format_value(float(row[index]), measure))
+                 for row in _ranked_for(summary.breakdown(key), measure))
+
+
 def chart_question(summary, key: str, *, measure: str, theme: dict, label_of) -> str:
     """What the reviewers answered to question ``key`` (spec D9). Reviewed
     alerts only, so the bars may sum to less than the set's total -- the card
@@ -451,10 +469,7 @@ def chart_question(summary, key: str, *, measure: str, theme: dict, label_of) ->
     never imports the questionnaire. The one key it does not pass on is the
     unanswered sentinel, which is not an answer and has no option there.
     """
-    def label(code):
-        return t("overview_tile.answer_unknown") if code == UNKNOWN_DRIVER else label_of(code)
-
-    return _ranking(summary.breakdown(key), measure=measure, theme=theme, label_of=label,
+    return _ranking(summary.breakdown(key), measure=measure, theme=theme, label_of=_answer_label(label_of),
                     width=420, height=160, left=0.40)
 
 

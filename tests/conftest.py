@@ -201,8 +201,9 @@ def _in(root):
 def _build_button(body):
     """The dashed *Build alert files* tile in an export section body.
 
-    Found by its class, not its label: the label turns to *Rebuild files* once
-    a build has left files, and a test holds the button across that change.
+    Found by its class, not its label. The tile's label never changes: once
+    files are built the dashed tile hides and a separate *Rebuild* button
+    (``_rebuild_button``) appears.
     """
     for widget in _in(body):
         if "defo-build-tile" in (getattr(widget, "class_", "") or "").split():

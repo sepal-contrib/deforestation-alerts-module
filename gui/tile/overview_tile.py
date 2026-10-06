@@ -414,7 +414,10 @@ def _right_column(summary, figures, measure: str, questions):
                 if not summary.breakdown(q.key):
                     solara.Text(t("overview_tile.answers_empty"), style=_NOTE)
                 else:
-                    _figure_or_numbers(figures.get(f"q:{q.key}"), [])
+                    _figure_or_numbers(
+                        figures.get(f"q:{q.key}"),
+                        charts.question_rows(summary, q.key, measure=measure,
+                                             label_of=lambda code, q=q: questions_mod.label(q, code)))
         with _card(t("overview_tile.card_sources")):
             _figure_or_numbers(figures.get("sources"), [])
 

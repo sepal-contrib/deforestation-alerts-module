@@ -511,6 +511,28 @@ def test_each_question_gets_its_own_card_in_questionnaire_order(ov, tmp_path):
         rc.close()
 
 
+def test_a_question_chart_that_cannot_be_drawn_lists_its_answers(ov, tmp_path, monkeypatch):
+    """The card says its numbers follow, so it must show them: one row per
+    answer, labelled through the question and formatted for the measure."""
+    def _boom(*args, **kwargs):
+        raise RuntimeError("no renderer")
+
+    monkeypatch.setattr(charts, "chart_question", _boom)
+    p = _project(tmp_path)
+    p.questions.append(ROAD)
+    gdf = _answered_alerts()
+    _write_store(tmp_path, "d", p.alert_sets[p.active_set], gdf)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _texts(rc)
+        assert texts.count(t("overview_tile.chart_failed")) == 2  # both question cards
+        rows = [x for x in texts if " — " in x]
+        assert rows == ["Mining — 2.0", "Logging — 1.5", "No answer — 0.2",  # Loss driver, by area (ha)
+                        "No — 2.0", "Yes — 1.5", "No answer — 0.2"]  # Road access
+    finally:
+        rc.close()
+
+
 def test_a_project_without_questions_shows_no_answer_card(ov, tmp_path):
     """Spec D9: no questions means no cards -- and the rest of the page stands."""
     p = _project(tmp_path)
