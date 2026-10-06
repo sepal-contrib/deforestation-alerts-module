@@ -425,7 +425,9 @@ def ProjectDialog(app_state, dismiss=lambda: None):
 
     with solara.Column(style="gap:8px;padding:8px;"):
         if p is None:
-            rv.Icon(children=["mdi-folder-plus-outline"], style_="font-size:40px;opacity:0.5;")
+            # Centred, not stretched: a full-width icon's ::after overlay
+            # (Vuetify scales it 1.3x) overflows the dialog into a scrollbar.
+            rv.Icon(children=["mdi-folder-plus-outline"], style_="font-size:40px;opacity:0.5;align-self:center;")
             solara.Text(t("steps.project.empty_heading"), style="font-weight:600;")
             solara.Text(t("steps.project.none_open"), style=MUTED)
             solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
