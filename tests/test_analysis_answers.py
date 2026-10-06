@@ -149,6 +149,31 @@ def test_the_live_table_gets_the_new_column_too(tmp_path, monkeypatch):
     assert s.alerts_gdf.value["q_road_access"].tolist() == ["no", ""]
 
 
+def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
+    """Only answer columns are padded with "": under pandas' string inference a
+    padded ``area_ha`` is a str column, and the drawn area (a float) would not
+    fit in it. Other columns are left to ``.at``'s own enlargement, as before."""
+    from shapely.geometry import box as _box
+
+    s = _state(tmp_path, monkeypatch)
+    _set_questions(s, [ROAD])
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x").drop(columns=["area_ha"]))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
+    analysis.answers.set({"road_access": ["yes"]})
+    drawn = gpd.GeoDataFrame(geometry=[_box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
+    analysis.defo_layer.set(drawn)
+    s.actual_alert_id.set(0)
+    assert export._save_attributes(SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None)),
+                                   s, analysis, ctx) is True
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "q_road_access"])
+    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+    assert saved["q_road_access"].tolist() == ["yes", ""]
+    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+
+
 def test_drafts_of_deleted_questions_are_ignored(tmp_path, monkeypatch):
     """Review focus 4."""
     row = _saved(tmp_path, monkeypatch, [LOSS], "Confirmed", {"loss_driver": ["mining"], "gone": ["x"]})

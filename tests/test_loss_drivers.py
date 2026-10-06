@@ -26,14 +26,19 @@ def locale():
 def test_a_review_made_in_another_language_stores_codes(locale, code):
     locale(code)
     widgets = SimpleNamespace()
-    build_review_panel(widgets, None, AnalysisState(), None)
+    analysis = AnalysisState()
+    build_review_panel(widgets, None, analysis, None)
     combobox = widgets.driver_combobox
     assert combobox.return_object  # Vuetify 2 draws a chip from the value itself
     assert combobox.v_model == []  # spec U13: no default driver
-    combobox.v_model = [{"text": loss_drivers.label("other"), "value": "other"}]
+    # the chips and the items read in this language, the values are codes
+    analysis.answers.set({"loss_driver": ["other"]})
+    assert combobox.v_model == [{"text": loss_drivers.label("other"), "value": "other"}]
+    assert loss_drivers.label("other") != "Other"  # really translated
     assert loss_drivers.encode(combobox.v_model) == "other"
     values = [item["value"] for item in combobox.items]
     assert values == [c for c, _ in loss_drivers.DRIVERS]
+    assert [item["text"] for item in combobox.items] == [loss_drivers.label(c) for c, _ in loss_drivers.DRIVERS]
     assert loss_drivers.encode(["logging", "mining", "other"]) == "logging, mining, other"
 
 

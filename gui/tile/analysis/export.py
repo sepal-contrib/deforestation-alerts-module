@@ -398,7 +398,10 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # the live table after every save anyway, so this is the same order of
     # cost.
     staged = alertas_gdf.copy()
-    for column_name in updates:
+    # Only the answer columns are padded: under pandas' string inference a
+    # column made from "" is a str column, and a float (``area_ha``) set into
+    # it raises. Any other missing column is left to ``.at``'s enlargement.
+    for column_name in answer_updates:
         if column_name not in staged.columns:
             staged[column_name] = ""  # a question added after this set was made
     for column_name, value in updates.items():
@@ -408,7 +411,7 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # Published to the live table (in place, faithful to OLD: Overview and the
     # map layers read this very object, and the save runner re-publishes it).
     # A new question's column is added first, "" on every other row, as above.
-    for column_name in updates:
+    for column_name in answer_updates:
         if column_name not in alertas_gdf.columns:
             alertas_gdf[column_name] = ""
     for column_name, value in updates.items():
