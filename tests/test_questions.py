@@ -72,6 +72,12 @@ def test_visible_follows_ask_for_and_shows_everything_before_a_verdict():
     assert qs.visible(ROAD, "False Positive")
 
 
+@pytest.mark.parametrize("verdict", ["", "Not reviewed"])
+def test_a_value_that_is_not_a_verdict_shows_every_question(verdict):
+    """Spec D4: an unreviewed alert's status is no verdict yet."""
+    assert qs.visible(LOSS, verdict)
+
+
 def test_with_labels_translates_current_questions_and_drops_deleted_ones():
     gdf = gpd.GeoDataFrame({"description": ["logging, other"], "q_road_access": ["yes"],
                             "q_gone": ["x"], "status": ["Confirmed"]}, geometry=[box(0, 0, 1, 1)])

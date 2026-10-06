@@ -16,8 +16,8 @@ from functools import lru_cache
 
 import pandas as pd
 
-from deforestation_alerts.project.models import LOSS_DRIVER_KEY
-from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.models import LOSS_DRIVER_KEY, VERDICTS
+from deforestation_alerts.project.questions import column, is_answer_column
 from gui.i18n import MESSAGES_DIR, t
 
 SEP = ", "
@@ -140,13 +140,18 @@ def selection(q, stored) -> list:
 
 def label(q, stored) -> str:
     """A stored answer in the current language."""
+    return _labels(q, codes(q, stored))
+
+
+def _labels(q, codes_) -> str:
     by_code = {o.code: o for o in q.options}
-    return SEP.join(option_label(by_code[c]) if c in by_code else c for c in codes(q, stored))
+    return SEP.join(option_label(by_code[c]) if c in by_code else c for c in codes_)
 
 
 def visible(q, verdict) -> bool:
-    """Whether ``q`` is asked for ``verdict`` (all are, before one is picked)."""
-    return verdict is None or verdict in q.ask_for
+    """Whether ``q`` is asked for ``verdict``: all are before one is picked
+    (``None``, ``""``, ``"Not reviewed"``, anything not in ``VERDICTS``)."""
+    return verdict not in VERDICTS or verdict in q.ask_for
 
 
 def with_labels(gdf, questions):
@@ -156,10 +161,15 @@ def with_labels(gdf, questions):
     if gdf is None:
         return gdf
     current = {column(q): q for q in questions}
-    stale = [c for c in gdf.columns
-             if (c == "description" or str(c).startswith("q_")) and c not in current]
+    stale = [c for c in gdf.columns if is_answer_column(c) and c not in current]
     out = gdf.drop(columns=stale)  # a copy
     for col, q in current.items():
         if col in out.columns:
-            out[col] = [label(q, v) if codes(q, v) else v for v in out[col]]
+            out[col] = [_cell_label(q, v) for v in out[col]]
     return out
+
+
+def _cell_label(q, stored):
+    """``label`` of one store cell; an unanswered cell stays as it is."""
+    found = codes(q, stored)
+    return _labels(q, found) if found else stored

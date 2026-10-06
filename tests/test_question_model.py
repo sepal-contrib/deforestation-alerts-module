@@ -11,7 +11,7 @@ from deforestation_alerts.project import io
 from deforestation_alerts.project.models import (
     DRIVER_OPTIONS, LOSS_DRIVER_KEY, VERDICTS, Project, Question, QuestionOption, default_questions)
 from deforestation_alerts.project.questions import (
-    REPORT_PLACEHOLDERS, RESERVED_KEYS, column, new_code, new_key, slug)
+    REPORT_PLACEHOLDERS, RESERVED_KEYS, column, is_answer_column, new_code, new_key, slug)
 
 
 def _project(**kw):
@@ -94,6 +94,13 @@ def test_column_maps_loss_driver_to_description():
     assert column(LOSS_DRIVER_KEY) == "description"
     assert column(default_questions()[0]) == "description"
     assert column("road_access") == "q_road_access"
+
+
+def test_is_answer_column_knows_the_columns_column_makes():
+    assert is_answer_column("description") and is_answer_column("q_road_access")
+    assert is_answer_column(column("road_access")) and is_answer_column(column(LOSS_DRIVER_KEY))
+    assert not is_answer_column("status") and not is_answer_column("geometry")
+    assert not is_answer_column("alert_id") and not is_answer_column(3)
 
 
 def test_reserved_keys_cover_the_report_placeholders_and_verdict():

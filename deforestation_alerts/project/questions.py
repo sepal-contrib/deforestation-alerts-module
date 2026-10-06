@@ -56,3 +56,8 @@ def column(q: Union[Question, str]) -> str:
     """The alert-store column of a question (or of its key)."""
     key = q if isinstance(q, str) else q.key
     return "description" if key == LOSS_DRIVER_KEY else f"q_{key}"
+
+
+def is_answer_column(name) -> bool:
+    """Whether ``name`` is a column ``column`` makes (of any question, current or deleted)."""
+    return isinstance(name, str) and (name == column(LOSS_DRIVER_KEY) or name.startswith("q_"))
