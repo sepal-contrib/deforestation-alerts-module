@@ -66,3 +66,19 @@ def test_a_size_that_rounds_to_1024_reads_in_the_next_unit():
     assert human_size(1024 * 1024 * 1024 - 1) == "1.0 GB"  # 1023.99 MB
     assert human_size(1023) == "1023 B" and human_size(1024) == "1 KB"
     assert human_size(1023 * 1024) == "1023 KB"
+
+
+def test_the_tile_is_the_s1_row_not_a_primary_button():
+    """Mockup S1: a neutral, never-underlined row in the theme's text colour;
+    only the badge and the download icon carry the primary colour."""
+    import ipyvuetify as v
+
+    tile = FileTile("zip", "Alert data", "GeoPackage + GeoTIFF")
+    assert tile.color is None
+    assert "text-decoration:none" in tile.style_ and "border-color:rgba(128,128,128" in tile.style_
+    badge, text, icon = tile.children
+    assert "primary--text" in badge.class_ and badge.children[0].class_ == "primary"
+    assert isinstance(icon, v.Icon) and "primary--text" in icon.class_
+    title, detail = text.children
+    assert "font-weight:600" in title.style_ and "primary" not in (title.class_ or "")
+    assert "opacity:0.6" in detail.style_

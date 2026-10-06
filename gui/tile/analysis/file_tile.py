@@ -15,13 +15,21 @@ import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.scripts import local_files
-from gui.widget.text_style import MUTED
 
-_BADGE = ("width:30px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;"
-          "flex:0 0 auto;font-size:10px;font-weight:700;background:rgba(91,182,36,0.15);"
-          "color:var(--v-primary-base,#5bb624);")
+#: The format badge (mockup S1 ``.ic``): primary text on a translucent primary
+#: layer. Both come from the theme's ``primary`` / ``primary--text`` classes,
+#: not a colour here: the theme does not publish ``--v-primary-base``, so a
+#: ``var()`` fell back to the light green on the dark (gold) theme too.
+_BADGE = ("position:relative;overflow:hidden;width:30px;height:30px;border-radius:5px;display:flex;"
+          "align-items:center;justify-content:center;flex:0 0 auto;font-size:10px;font-weight:700;")
+_BADGE_LAYER = "position:absolute;top:0;right:0;bottom:0;left:0;opacity:0.15;"
+#: The tile itself (mockup S1 ``.tile``): a neutral border that reads on both
+#: themes, the theme's own text colour, never underlined (it is an ``<a>``).
 TILE_STYLE = ("height:auto;min-height:52px;justify-content:flex-start;text-transform:none;letter-spacing:normal;"
-              "padding:6px 10px;margin:0 0 6px 0;")
+              "text-decoration:none;border-color:rgba(128,128,128,0.35);border-radius:6px;"
+              "padding:8px 10px;margin:0 0 6px 0;")
+_TITLE = "font-size:13px;font-weight:600;line-height:1.3;text-decoration:none;"
+_DETAIL = "opacity:0.6;text-decoration:none;"
 
 
 def human_size(n: int) -> str:
@@ -47,17 +55,22 @@ class FileTile(sw.DownloadBtn):
         self.kind = kind
         self.size_text = ""
         self._detail = detail
-        self._meta = v.Html(tag="div", class_="caption", style_=MUTED, children=[detail])
-        super().__init__(text=title, block=True, outlined=True, color="primary", class_="defo-file-tile",
+        self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[detail])
+        # No ``color``: an outlined primary button underlined and tinted the
+        # whole row; only the badge and the download icon carry the primary.
+        super().__init__(text=title, block=True, outlined=True, color=None, class_="defo-file-tile",
                          style_=TILE_STYLE, **kwargs)
         # ``DownloadBtn`` puts its own icon + text in; the tile is the S1 row.
         self.children = [
-            v.Html(tag="div", style_=_BADGE, children=[kind.upper()]),
+            v.Html(tag="div", class_="primary--text", style_=_BADGE, children=[
+                v.Html(tag="span", class_="primary", style_=_BADGE_LAYER),
+                v.Html(tag="span", style_="position:relative;", children=[kind.upper()]),
+            ]),
             v.Html(tag="div", class_="ml-3 text-left", style_="flex:1 1 auto;min-width:0;", children=[
-                v.Html(tag="div", class_="body-2 font-weight-medium", children=[title]),
+                v.Html(tag="div", style_=_TITLE, children=[title]),
                 self._meta,
             ]),
-            v.Icon(small=True, children=["mdi-download"]),
+            v.Icon(small=True, class_="primary--text", children=["mdi-download"]),
         ]
 
     def set_file(self, path: Optional[str]) -> "FileTile":
