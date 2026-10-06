@@ -126,3 +126,64 @@ def test_editing_a_built_in_saves_in_place_and_hands_over_the_previous_key():
         assert open_.value is False
     finally:
         rc.close()
+
+
+def test_a_new_option_never_takes_a_code_the_draft_or_the_question_had():
+    # "Logging" added above the renamed "logging" option: it must not also be "logging"
+    draft = qm.draft_of(LOSS)
+    draft["options"][2]["label"] = "Selective logging"
+    draft["options"].insert(2, {"code": None, "label": "Logging", "label_key": None})
+    q = qm.finish_question(draft, default_questions(), LOSS)
+    codes = [o.code for o in q.options]
+    assert len(set(codes)) == len(codes)
+    assert q.options[2].code == "logging_2" and q.options[3].code == "logging"
+
+
+def test_a_deleted_options_code_is_not_reused():
+    draft = qm.draft_of(LOSS)
+    del draft["options"][2]  # logging
+    draft["options"].append({"code": None, "label": "Logging", "label_key": None})
+    q = qm.finish_question(draft, default_questions(), LOSS)
+    assert "logging" not in [o.code for o in q.options]
+    assert q.options[-1].code == "logging_2"
+
+
+def _host(order):
+    """A caller owning ``open_`` and ``editing`` as reactives; ``order`` names which it sets first."""
+    open_, editing = solara.reactive(False), solara.reactive(None)
+    questions = default_questions()
+
+    @solara.component
+    def Host():
+        QuestionModal = qm.QuestionModal
+        QuestionModal(open_=open_, questions=questions, editing=editing.value, on_save=lambda q, prev: None)
+
+    def reopen(question):
+        open_.set(False)
+        if order == "editing first":
+            editing.set(question)
+            open_.set(True)
+        else:
+            open_.set(True)
+            editing.set(question)
+
+    _box, rc = reacton.render(Host(), handle_error=False)
+    return reopen, rc
+
+
+@pytest.mark.parametrize("order", ["editing first", "open first"])
+def test_reopening_for_another_question_shows_that_question(order):
+    reopen, rc = _host(order)
+    try:
+        label = lambda: rc.find(v.TextField, label=t("steps.questionnaire.field_label")).widget.v_model  # noqa: E731
+        reopen(LOSS)
+        assert label() == "Loss driver"
+        other = default_questions()[0].model_copy(update={"key": "other", "label": "Other one", "label_key": None})
+        reopen(other)
+        assert label() == "Other one"
+        reopen(None)
+        assert label() == ""
+        reopen(LOSS)
+        assert label() == "Loss driver"
+    finally:
+        rc.close()

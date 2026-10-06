@@ -7,6 +7,7 @@ an edit keeps the question's key and every existing option's code, so a
 renamed question or option never orphans the answers already stored (U5).
 """
 
+from types import SimpleNamespace
 from typing import Optional
 
 import reacton.ipyvuetify as rv
@@ -67,10 +68,16 @@ def finish_question(draft: dict, questions: list, editing: Optional[Question]) -
     """The ``Question`` ``draft`` describes: a new one gets its key and codes
     made here; an edit keeps ``editing``'s key and every existing option's code."""
     others = [q for q in questions if editing is None or q.key != editing.key]
+    # A new code avoids every code still in the draft and every code the question
+    # had before this edit: a removed option's code is never reused, or the answers
+    # stored under it would silently read as the new option (U5).
+    taken = [SimpleNamespace(code=o.code) for o in (editing.options if editing else [])]
+    taken += [SimpleNamespace(code=o["code"]) for o in draft["options"] if o["code"]]
     options = []
     for o in draft["options"]:
         label, label_key = _kept_label(o["label"], o.get("label_key"))
-        code = o["code"] or new_code(label, options)
+        code = o["code"] or new_code(label, taken)
+        taken.append(SimpleNamespace(code=code))
         options.append(QuestionOption(code=code, label=label, label_key=label_key))
     label, label_key = _kept_label(draft["label"], editing.label_key if editing else None)
     return Question(
@@ -168,4 +175,8 @@ def QuestionModal(open_, questions, editing, on_save):
     ``on_save(question, previous_key)``; the form closes itself after."""
     with use_form_dialog(open_, max_width="420px"):
         if open_.value:
-            _QuestionFields(open_=open_, questions=questions, editing=editing, on_save=on_save)
+            # Keyed by what is edited: opening for another question (or a new one)
+            # remounts the form, whatever order the caller set ``editing`` and
+            # ``open_`` in, so a draft is never carried over to another question.
+            _QuestionFields(open_=open_, questions=questions, editing=editing,
+                            on_save=on_save).key(editing.key if editing else "__new__")

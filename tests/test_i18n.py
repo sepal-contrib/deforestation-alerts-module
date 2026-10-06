@@ -87,10 +87,10 @@ SAME_IN = {
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
-        "steps.prepare.col_source", "steps.questionnaire.field_label", "steps.questionnaire.field_option",
-        "steps.questionnaire.options_label", "steps.project.count_sources.one", "steps.project.count_sources.many",
-        "steps.project.count_sources.other", "workflow.count_sources.one", "workflow.count_sources.many",
-        "workflow.count_sources.other",
+        "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",
+        "steps.project.count_sources.other", "steps.questionnaire.field_label",
+        "steps.questionnaire.field_option", "steps.questionnaire.options_label",
+        "workflow.count_sources.one", "workflow.count_sources.many", "workflow.count_sources.other",
     },
 }
 
