@@ -145,28 +145,10 @@ def plot_tiff_with_overlay(
     plt.close(fig)
 
 
-def generate_deforestation_report_with_word_template(
-    image_path,
-    geodataframe_path,
-    template_path,
-    output_path,
-    scale_bar_length=200,
-):
-    """Render the Word report onto ``output_path`` and return that path.
-
-    Path contract: all paths are local; the report is built in a private
-    scratch folder and copied onto ``output_path``. The six intermediate JPEGs
-    and the ``.docx`` live in that per-call scratch folder (two concurrent
-    reports never share an ``output_image1.jpg``), which is deleted before
-    this function returns.
-    """
-    # Load Word template
-    doc = Document(template_path)
-    geodataframe = gpd.read_file(geodataframe_path)
-
-    # Extract the first row's attributes from the GeoDataFrame
-    gdf_row = geodataframe.iloc[0]  # Assuming one row of relevant data
-    attributes = {
+def row_attributes(gdf_row) -> dict:
+    """The placeholders the report fills from the alert's own row (the names
+    ``project.questions.REPORT_PLACEHOLDERS`` reserves)."""
+    return {
         "admin1": gdf_row["admin1"],
         "admin2": gdf_row["admin2"],
         "admin3": gdf_row["admin3"],
@@ -179,11 +161,47 @@ def generate_deforestation_report_with_word_template(
         "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
     }
 
-    # Replace placeholders in the Word document
+
+def _fill_placeholders(doc, attributes: dict):
+    """Replace every ``{key}`` in the body paragraphs (not tables, headers or
+    footers: spec D3 says so in the UI). Returns ``doc``."""
     for para in doc.paragraphs:
         for key, value in attributes.items():
             if f"{{{key}}}" in para.text:
                 para.text = para.text.replace(f"{{{key}}}", str(value))
+    return doc
+
+
+def generate_deforestation_report_with_word_template(
+    image_path,
+    geodataframe_path,
+    template_path,
+    output_path,
+    scale_bar_length=200,
+    extra=None,
+):
+    """Render the Word report onto ``output_path`` and return that path.
+
+    ``extra`` is ``{placeholder: value}`` for the placeholders beyond the
+    alert's own (the review's ``{verdict}`` and one ``{key}`` per question);
+    ``None`` values read as empty.
+
+    Path contract: all paths are local; the report is built in a private
+    scratch folder and copied onto ``output_path``. The six intermediate JPEGs
+    and the ``.docx`` live in that per-call scratch folder (two concurrent
+    reports never share an ``output_image1.jpg``), which is deleted before
+    this function returns.
+    """
+    # Load Word template
+    doc = Document(template_path)
+    geodataframe = gpd.read_file(geodataframe_path)
+
+    # The first row's attributes from the GeoDataFrame (one alert per file)
+    attributes = row_attributes(geodataframe.iloc[0])
+    attributes.update({k: "" if v is None else str(v) for k, v in (extra or {}).items()})
+
+    # Replace placeholders in the Word document
+    _fill_placeholders(doc, attributes)
 
     with local_files.scratch_dir() as folder_temp:
         local_doc = folder_temp / "report.docx"

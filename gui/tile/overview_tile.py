@@ -62,6 +62,7 @@ from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t
 from gui.scripts import alert_layers, charts, overview_data, set_store
 from gui.scripts import loss_drivers as drivers
+from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
 from gui.scripts.notify_bridge import current_notifier, tracked_job
@@ -85,7 +86,7 @@ _VALUE = "font-size: 1.05rem; font-weight: 600; line-height: 1.1;"
 ADMIN_LIMIT = 8
 
 
-def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project):
+def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project, questions=()):
     """Return the click handler that generates the ``fmt`` export and reveals its
     download button. ``project`` is the name of the project the set folder
     belongs to, captured when the card was built: the export marks it as
@@ -125,10 +126,12 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
                 ) as task:
                     task.step(t("overview_tile.export_step", fmt=fmt.upper()))
                     with writing(project):
-                        # the loss drivers in the export's language (the
-                        # store keeps their codes, see gui.scripts.loss_drivers)
+                        # the answers in the export's language (the store
+                        # keeps their codes, see gui.scripts.questions); the
+                        # columns of deleted questions are left out
                         path = export_alerts_gdf(
-                            drivers.with_labels(gdf), folder, fmt, sources, start, end
+                            questions_mod.with_labels(gdf, list(questions)),
+                            folder, fmt, sources, start, end,
                         )
                     url_path = local_files.home_relative(path)
             except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
@@ -149,10 +152,11 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
 EXPORT_FORMATS = ("csv", "gpkg", "geojson")
 
 
-def build_export_card(gdf, folder, sources, start, end, project):
+def build_export_card(gdf, folder, sources, start, end, project, questions=()):
     """Build the export card: one generate button per format + its hidden
     DownloadBtn, revealed when that format has been written. ``project`` is
-    the name of the project ``folder`` belongs to (see ``_bind_export``).
+    the name of the project ``folder`` belongs to (see ``_bind_export``);
+    ``questions`` are its questions, whose answer columns the export labels.
 
     A module function (not inline in the component) so the buttons a user
     actually clicks — including their enabled/hidden state — are directly
@@ -168,7 +172,7 @@ def build_export_card(gdf, folder, sources, start, end, project):
         gen_btn.on_event(
             "click",
             _bind_export(
-                gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
+                gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project, questions
             ),
         )
         gen_buttons.append(gen_btn)
@@ -520,10 +524,13 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     sources = tuple(s.sources) if s is not None else ()
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
+    # ``use_memo`` compares its dependencies by value, so the tuple of
+    # questions (pydantic models) is fine, and an edit to a question rebuilds.
+    questions = tuple(p.questions) if p is not None else ()
     export_card = solara.use_memo(
-        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name)
+        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions)
         if s is not None and has_alerts else None,
-        [gdf, folder, sources, start, end],
+        [gdf, folder, sources, start, end, questions],
     )
 
     def _relabel_export():

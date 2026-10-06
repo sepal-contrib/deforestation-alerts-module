@@ -138,7 +138,6 @@ from deforestation_alerts.scripts.report_builder import (
     generate_deforestation_report_with_word_template,
 )
 from gui.i18n import t, tn
-from gui.scripts import loss_drivers as drivers
 from gui.scripts import questions
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
@@ -487,6 +486,16 @@ def _images_picked(alert) -> bool:
                                        alert.before_image, alert.after_image))
 
 
+def review_placeholders(question_list, row, status) -> dict:
+    """``{verdict}`` and one ``{key}`` per question, as the report shows them
+    (in the current language; a question the verdict does not ask is blank)."""
+    labels = dict(REVIEW_CHOICES)
+    out = {"verdict": t(labels[status]) if status in labels else ""}
+    for q in question_list:
+        out[q.key] = questions.label(q, row.get(column(q))) if questions.visible(q, status) else ""
+    return out
+
+
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None):
     """Body of the OLD ``download_data`` (IO only, no widgets).
 
@@ -540,10 +549,11 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
 
     # Single-row GeoDataFrame for the selected alert.
     selected_element = alertas_gdf.iloc[actual_alert_id]
-    # The loss drivers in the language of the download (stored as codes).
-    selected_gdf = drivers.with_labels(gpd.GeoDataFrame(
-        [selected_element], columns=alertas_gdf.columns
-    ))
+    # The answers in the language of the download (stored as codes); the
+    # columns of deleted questions are left out.
+    selected_gdf = questions.with_labels(
+        gpd.GeoDataFrame([selected_element], columns=alertas_gdf.columns), alert.questions or []
+    )
     active = (
         "alert_polygon"
         if not selected_gdf["alert_polygon"].isnull().all()
@@ -599,7 +609,9 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
         # Word report: the project's template (a file of the user's, read
         # where it is) or the packaged default, resolved above.
         generate_deforestation_report_with_word_template(
-            str(image_local), str(gpkg_local), str(template), str(report_dest)
+            str(image_local), str(gpkg_local), str(template), str(report_dest),
+            # The stored row is what the report describes: a build follows a save.
+            extra=review_placeholders(alert.questions or [], selected_element, selected_element.get("status")),
         )
 
     return {"zip_path": str(zip_dest), "report_path": str(report_dest)}

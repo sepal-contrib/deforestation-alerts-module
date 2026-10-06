@@ -134,6 +134,27 @@ def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
     ]
 
 
+def test_the_export_labels_current_questions_and_drops_deleted_ones(data_root, feedback):
+    from deforestation_alerts.project.models import default_questions
+    from gui.scripts import questions as questions_mod
+
+    bus, errors, join = feedback
+    folder = data_root / "recipe_a"
+    gdf = _gdf()
+    gdf["description"] = "logging, roads"
+    gdf["q_gone"] = "x"
+    card = overview_tile.build_export_card(
+        gdf, str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d", tuple(default_questions())
+    )
+    card.children[1].children[1].fire_event("click", None)
+    join()
+
+    out = gpd.read_file(f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.gpkg")
+    assert out["description"][0] == questions_mod.label(default_questions()[0], "logging, roads")
+    assert "q_gone" not in out.columns
+    assert errors == []
+
+
 def test_the_export_marks_its_project_as_being_written(data_root, feedback, monkeypatch):
     """Spec §12: the export writes into the set's folder, so the Project
     dialog's delete guard must see the project's name while it runs; without

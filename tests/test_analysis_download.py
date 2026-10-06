@@ -296,6 +296,40 @@ def test_the_report_is_built_from_the_projects_template(download_ctx):
     assert "MARKER-6f1c" in text
 
 
+def test_the_download_labels_the_questions_and_fills_their_placeholders(download_ctx):
+    """The gpkg row carries current questions' columns as labels and not a
+    deleted question's; the report fills {verdict} and one {key} per question."""
+    import docx
+    import geopandas as gpd
+
+    from deforestation_alerts.project.models import default_questions
+    from gui.scripts import questions as questions_mod
+
+    ctx = download_ctx
+    template = ctx.folder.parent / "mine.docx"
+    doc = docx.Document(export_mod._DEFAULT_REPORT_TEMPLATE)
+    doc.add_paragraph("PH {verdict} / {loss_driver}")
+    doc.save(template)
+    ctx.aux_model.custom_report_template = str(template)
+    gdf = ctx.app_state.alerts_gdf.value.copy()
+    gdf["description"] = "logging, roads"
+    gdf["status"] = "Confirmed"
+    gdf["q_gone"] = "x"
+    ctx.app_state.alerts_gdf.value = gdf
+    alert = export_mod.capture_alert(ctx.analysis, ctx.widgets, ctx.app_state)
+    alert.questions = default_questions()
+
+    result = export_mod._download_data(
+        ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model, alert=alert
+    )
+
+    row = gpd.read_file(ctx.folder / "alert_0.gpkg").iloc[0]
+    assert row["description"] == questions_mod.label(default_questions()[0], "logging, roads")
+    assert "q_gone" not in gpd.read_file(ctx.folder / "alert_0.gpkg").columns
+    text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
+    assert f"PH True alert / {row['description']}" in text
+
+
 # ---------------------------------------------------------------------------
 # The export section's summary badge (Task 9)
 # ---------------------------------------------------------------------------
