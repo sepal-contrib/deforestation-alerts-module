@@ -480,6 +480,28 @@
         "many": "{n} revisadas",
         "other": "{n} revisadas"
       }
+    },
+    "questionnaire": {
+      "add_title": "Añadir una pregunta",
+      "edit_title": "Editar pregunta",
+      "add": "Añadir pregunta",
+      "field_label": "Pregunta",
+      "answer_label": "Respuesta",
+      "answer_one": "Una respuesta",
+      "answer_several": "Varias respuestas",
+      "options_label": "Opciones",
+      "field_option": "Opción {n}",
+      "add_option": "Añadir opción",
+      "allow_typed": "Permitir respuestas escritas",
+      "required": "Obligatoria",
+      "ask_for_label": "Preguntar cuando el veredicto es",
+      "placeholder_line": "Marcador del informe: {placeholder}",
+      "err_label": "Escriba la pregunta.",
+      "err_options": "Añada al menos una opción o permita respuestas escritas.",
+      "err_option_blank": "Una opción está vacía.",
+      "err_option_duplicate": "Dos opciones tienen el mismo nombre.",
+      "err_option_comma": "Una opción no puede contener una coma.",
+      "err_ask_for": "Elija al menos un veredicto."
     }
   }
 }

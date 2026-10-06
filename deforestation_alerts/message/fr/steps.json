@@ -480,6 +480,28 @@
         "many": "{n} examinées",
         "other": "{n} examinées"
       }
+    },
+    "questionnaire": {
+      "add_title": "Ajouter une question",
+      "edit_title": "Modifier la question",
+      "add": "Ajouter la question",
+      "field_label": "Question",
+      "answer_label": "Réponse",
+      "answer_one": "Une réponse",
+      "answer_several": "Plusieurs réponses",
+      "options_label": "Options",
+      "field_option": "Option {n}",
+      "add_option": "Ajouter une option",
+      "allow_typed": "Autoriser les réponses saisies",
+      "required": "Obligatoire",
+      "ask_for_label": "Demander quand le verdict est",
+      "placeholder_line": "Balise du rapport : {placeholder}",
+      "err_label": "Saisissez la question.",
+      "err_options": "Ajoutez au moins une option ou autorisez les réponses saisies.",
+      "err_option_blank": "Une option est vide.",
+      "err_option_duplicate": "Deux options portent le même nom.",
+      "err_option_comma": "Une option ne peut pas contenir de virgule.",
+      "err_ask_for": "Choisissez au moins un verdict."
     }
   }
 }

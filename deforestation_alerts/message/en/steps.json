@@ -459,6 +459,28 @@
         "one": "{n} reviewed",
         "other": "{n} reviewed"
       }
+    },
+    "questionnaire": {
+      "add_title": "Add a question",
+      "edit_title": "Edit question",
+      "add": "Add question",
+      "field_label": "Question",
+      "answer_label": "Answer",
+      "answer_one": "One answer",
+      "answer_several": "Several answers",
+      "options_label": "Options",
+      "field_option": "Option {n}",
+      "add_option": "Add option",
+      "allow_typed": "Allow typed answers",
+      "required": "Required",
+      "ask_for_label": "Ask when the verdict is",
+      "placeholder_line": "Report placeholder: {placeholder}",
+      "err_label": "Write the question.",
+      "err_options": "Add at least one option, or allow typed answers.",
+      "err_option_blank": "An option is empty.",
+      "err_option_duplicate": "Two options have the same name.",
+      "err_option_comma": "An option cannot contain a comma.",
+      "err_ask_for": "Pick at least one verdict."
     }
   }
 }
