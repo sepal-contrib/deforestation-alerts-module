@@ -1592,7 +1592,40 @@ def test_a_saved_image_the_index_has_not_reached_waits_then_falls_back_with_a_no
     state.scene_manifest.set(_covering())  # the index has answered for that date
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
     assert timeline.t("analysis.timeline.saved_missing") in _text(card)
-    assert analysis.dirty.value is False
+    assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+
+
+def test_a_saved_image_the_index_had_not_reached_is_restored_once_it_arrives():
+    """Spec D4's main path: the saved row is not in the index yet, so the side
+    waits (no automatic pick stands in); once an index holding the row is
+    published, the saved image is restored -- not an edit, and no note."""
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-03-20", 5.0)]
+    state = _fake_state(index=_any_index(rows[:2]))  # without the saved row
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    assert analysis.before_info.value is None  # waiting for its row
+
+    state.scene_index.set(_any_index(rows))  # the row arrives
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+
+    state.scene_manifest.set(_covering())  # a later answer changes nothing
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+
+
+def test_no_automatic_pick_to_stand_in_says_nothing_was_picked_automatically():
+    """A saved image that is gone, on a side with no automatic candidate (no
+    image before the alert window): nothing was picked automatically, so the
+    readout must not say so."""
+    rows = [(LS, "2026-08-27", 3.0), (LS, "2026-10-01", 4.0)]  # nothing before the alert
+    state = _fake_state(index=_any_index(rows))
+    state.scene_manifest.set(_covering())
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-02-01 "))
+    assert analysis.before_info.value is None
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
 
 
 def test_a_failed_index_refresh_also_settles_the_wait():

@@ -945,24 +945,42 @@ def build_timeline(app_state, analysis, widgets):
     def _resolve_restores(sel, a0, a1):
         """Restore each waiting saved pick whose row is here, and fall back to
         the automatic pick for one the index has answered without (spec D4).
-        Neither is an edit (spec D3): both go through ``_assign``."""
-        pending = dict(restoring.value)
-        if not pending:
+        Neither is an edit (spec D3): both go through ``_assign``.
+
+        ``render`` also runs on the scene loader's thread, so a hand pick
+        (``_picked``) can take a side out of ``restoring`` while this loop
+        runs: each side is re-checked right before it is written, and leaves
+        ``restoring`` on its own -- never by writing back a copy taken before
+        the loop, which would put the hand-picked side back on the wait."""
+        if not restoring.value:
             return
         auto = None
-        for lane, rid in list(pending.items()):
+
+        def _still_waiting(lane, rid):
+            return restoring.value.get(lane) == rid
+
+        def _done(lane):
+            restoring.set({k: rid_ for k, rid_ in restoring.value.items() if k != lane})
+
+        for lane, rid in list(restoring.value.items()):
             if _row_of(sel, rid) is not None:
+                if not _still_waiting(lane, rid):
+                    continue
+                _done(lane)
                 _assign(lane, rid, sel, restore=True)
-                del pending[lane]
             elif _settled(rid):
-                del pending[lane]
-                fell_back.set(fell_back.value | {lane})
-                if a0 is not None and a1 is not None:
-                    if auto is None:
-                        auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
-                    if auto[lane]:
-                        _assign(lane, auto[lane], sel)
-        restoring.set(pending)
+                if not _still_waiting(lane, rid):
+                    continue
+                _done(lane)
+                if a0 is None or a1 is None:
+                    continue
+                if auto is None:
+                    auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+                # The note says the automatic pick stood in, so only when one
+                # did: a side with no candidate is "not set", and says so.
+                if auto[lane]:
+                    fell_back.set(fell_back.value | {lane})
+                    _assign(lane, auto[lane], sel)
 
     def render(*_):
         ctx = widgets.imagery_ctx.value
