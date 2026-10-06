@@ -208,7 +208,10 @@
       "report_template_hint": "Todos los informes de este proyecto se generan a partir de este archivo Word. Déjalo vacío para usar la plantilla predeterminada de la aplicación.",
       "report_template_no_project": "Abre un proyecto para elegir su plantilla de informe.",
       "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
-      "report_template_missing": "La plantilla de informe {path} ha desaparecido. Vuelve a elegirla en la tarjeta de exportación, o deja el campo vacío para usar la plantilla predeterminada."
+      "report_template_missing": "La plantilla de informe {path} ha desaparecido. Vuelve a elegirla en la tarjeta de exportación, o deja el campo vacío para usar la plantilla predeterminada.",
+      "gif_no_images": "El índice de imágenes no tiene una imagen anterior y una posterior para esta alerta, así que no hay nada que animar. Elija una imagen anterior y una posterior en la línea de tiempo.",
+      "gif_same_image": "Las imágenes anterior y posterior son la misma imagen, así que el GIF no mostraría ningún cambio. Elija dos imágenes distintas en la línea de tiempo.",
+      "gif_too_few": "Se pudieron generar menos de dos imágenes para esta alerta, así que no se creó el GIF."
     }
   },
   "imagery": {

@@ -73,7 +73,7 @@ def test_the_catalogue_is_complete_in_every_locale():
 #: Names kept as they are in every language (product, format and unit names).
 PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", "SEPAL", "GeoTIFF", "GeoPackage",
                 "EPSG", "UTM", "CCDC", "Sentinel-1", "Sentinel-2", "Landsat", "Hansen", "PMTiles", "tippecanoe",
-                "Python", "PATH", "Word", ".docx", "CSV", "GPKG", "GeoJSON", "yyddd", "yymm", "yyyyddd", "Int32",
+                "Python", "PATH", "Word", ".docx", "CSV", "GPKG", "GeoJSON", "GIF", "yyddd", "yymm", "yyyyddd", "Int32",
                 "uint8", "AOI", "GB", "MB", "ha", "px", "m")
 #: Translations rightly identical to English (a cognate such as French
 #: "Source" or "Total", Spanish "Total"). Add a key only when the word is the

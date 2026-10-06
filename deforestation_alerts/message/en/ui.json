@@ -205,7 +205,10 @@
       "report_template_hint": "Every report of this project is built from this Word file. Leave it empty to use the app's default template.",
       "report_template_no_project": "Open a project to choose its report template.",
       "report_template_bad": "{path} is not a Word file (.docx) in your SEPAL folder; the report template was not changed.",
-      "report_template_missing": "The report template {path} is gone. Pick it again in the export card, or clear the field to use the default template."
+      "report_template_missing": "The report template {path} is gone. Pick it again in the export card, or clear the field to use the default template.",
+      "gif_no_images": "The image index has no before and after image for this alert, so there is nothing to animate. Pick a before and an after image on the timeline.",
+      "gif_same_image": "The before and after images are the same image, so the GIF would show no change. Pick two different images on the timeline.",
+      "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made."
     }
   },
   "imagery": {
