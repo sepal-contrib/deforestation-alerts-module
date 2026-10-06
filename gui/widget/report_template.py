@@ -1,10 +1,11 @@
-"""The report template picker of the Analysis export card (spec §10).
+"""The report template picker of the Questionnaire step (spec §10, D3).
 
 A project's reports are built from ``project.report_template`` (an absolute
 path to a ``.docx`` in the user's SEPAL folder), or from the app's default
-template when it is empty. The field is rendered into the raw export card with
-``render_detached``; it resolves its notifier when a file is picked, so it also
-renders where no ``NotificationProvider`` is mounted.
+template when it is empty. It lives in the Questionnaire step, beside the
+placeholders the template can use; Analysis's export card still renders it
+through ``render_detached``. It resolves its notifier when a file is picked, so
+it also renders where no ``NotificationProvider`` is mounted.
 """
 
 from pathlib import Path

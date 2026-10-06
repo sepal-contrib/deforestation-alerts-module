@@ -79,6 +79,7 @@ from gui.tile.overview_tile import OverviewTile
 from gui.tile.period_step import PeriodStep
 from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
+from gui.tile.questionnaire_step import QuestionnaireStep
 from gui.widget.enter_key import EnterKeyListener
 from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
@@ -685,6 +686,8 @@ def _AppShell():
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
                                                                gee_interface=gee_interface, layers=layers),
                                          t("app.drawer_item.integrate"))[0],
+            "questionnaire": render_detached(lambda: QuestionnaireStep(app_state=app_state),
+                                             t("app.drawer_item.questionnaire"))[0],
             "layers": render_detached(lambda: LayersStep(app_state=app_state, map_=map_,
                                                          gee_interface=gee_interface, layers=layers),
                                       t("app.drawer_item.layers"))[0],

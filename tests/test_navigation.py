@@ -17,7 +17,7 @@ from gui.store.navigation import (
 from gui.store.state_manager import AppState
 
 
-def test_workflow_map_covers_the_seven_steps_in_order():
+def test_workflow_map_covers_the_eight_steps_in_order():
     assert PAGE_VIEW_TO_WORKFLOW == {
         "aoi_tile": 0,
         "alerts_tile": 1,
@@ -25,7 +25,8 @@ def test_workflow_map_covers_the_seven_steps_in_order():
         "period_tile": 3,
         "prepare_tile": 4,
         "integrate_tile": 5,
-        "analysis_tile": 6,
+        "questionnaire_tile": 6,
+        "analysis_tile": 7,
     }
 
 
@@ -46,7 +47,7 @@ def test_resolve_unknown_view_returns_none():
 
 def test_resolve_workflow_and_rail_targets():
     assert resolve_navigation("integrate_tile") == ("workflow", 5)
-    assert resolve_navigation("analysis_tile") == ("workflow", 6)
+    assert resolve_navigation("analysis_tile") == ("workflow", 7)
     assert resolve_navigation("overview_tile") == ("rail", 3)
     assert resolve_navigation("project_tile") == ("rail", 2)
 
@@ -73,7 +74,7 @@ def test_apply_workflow_target_dismisses_dialog_opens_panel_and_sets_step():
     assert mapapp.step_open is False
     assert mapapp.panel_calls == ["open"]
     assert nav.current_step is None  # the Overview rail item un-highlights
-    assert state.active_step.value == 6
+    assert state.active_step.value == 7
 
 
 @pytest.mark.parametrize("view,step", [("about_tile", 1), ("project_tile", 2), ("overview_tile", 3)])

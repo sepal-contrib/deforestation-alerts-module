@@ -50,6 +50,11 @@
       "many": "{count} de couches",
       "other": "{count} couches"
     },
+    "count_questions": {
+      "one": "{count} question",
+      "many": "{count} de questions",
+      "other": "{count} questions"
+    },
     "count_periods": {
       "one": "{count} période",
       "many": "{count} de périodes",

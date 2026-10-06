@@ -21,7 +21,7 @@ def _states(p):
 
 
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "analysis"]
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire", "analysis"]
     # Every rail item is a dialog: the Overview dashboard is the widest, over
     # the map and the panel alike (spec §9.5). The Project dialog is
     # spatial_risk's status block (spec D5): Manage projects and the name form
@@ -87,3 +87,15 @@ def test_every_label_and_lock_key_exists():
             assert isinstance(resolve(s.count_key), dict)  # a plural node
     for r in RAIL_ITEMS:
         resolve(r.label_key)
+
+
+def test_questionnaire_sits_before_analysis_and_counts_questions():
+    from gui.store.workflow_steps import step_index, step_status
+    keys = [s.key for s in STEPS]
+    assert keys[-2:] == ["questionnaire", "analysis"]
+    spec = STEPS[step_index("questionnaire")]
+    assert not spec.unlocked(None)
+    p = _p()  # a new project holds the default questions
+    assert spec.unlocked(p) and spec.count(p) == len(p.questions) > 0
+    p.questions = []
+    assert step_status(spec, p) is StepStatus.EMPTY

@@ -115,6 +115,8 @@ _ACTION_ICONS = {
     "cancel": "mdi-stop-circle",
     "open": "mdi-table-eye",
     "dismiss": "mdi-close",
+    "move_up": "mdi-arrow-up",
+    "move_down": "mdi-arrow-down",
 }
 
 

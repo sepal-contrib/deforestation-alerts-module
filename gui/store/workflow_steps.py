@@ -3,8 +3,8 @@
 Two registries:
 
 * ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
-  Period → Download & harmonize → Integrate & vectorize → Analysis). Gates
-  and counts read only the Project. Order, labels, gates, lock reasons and
+  Period → Download & harmonize → Integrate & vectorize → Questionnaire →
+  Analysis). Gates and counts read only the Project. Order, labels, gates, lock reasons and
   per-step output counts derive from it; ``PipelineHeader`` and the shell
   never hand-maintain step numbers.
 * ``RAIL_ITEMS`` — the three entries on the left rail: About and Project open
@@ -103,6 +103,11 @@ STEPS: List[StepSpec] = [
              unlocked=lambda p: bool(_ready(p)), lock_reason_key="workflow.lock_integrate",
              count=lambda p: active_set(p).n_alerts if active_set(p) else 0,
              count_key="workflow.count_alerts"),
+    StepSpec(key="questionnaire", page_view="questionnaire_tile", label_key="app.drawer_item.questionnaire",
+             icon="mdi-clipboard-list-outline",
+             unlocked=lambda p: p is not None, lock_reason_key="workflow.lock_alerts",
+             count=lambda p: len(p.questions) if p is not None else 0,
+             count_key="workflow.count_questions"),
     StepSpec(key="analysis", page_view="analysis_tile", label_key="app.drawer_item.analysis", icon="mdi-image-search",
              unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
              count=lambda p: active_set(p).n_reviewed if active_set(p) else 0,

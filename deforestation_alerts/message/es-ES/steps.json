@@ -501,7 +501,30 @@
       "err_option_blank": "Una opción está vacía.",
       "err_option_duplicate": "Dos opciones tienen el mismo nombre.",
       "err_option_comma": "Una opción no puede contener una coma.",
-      "err_ask_for": "Elija al menos un veredicto."
+      "err_ask_for": "Elija al menos un veredicto.",
+      "title": "Cuestionario",
+      "description": "Elija las preguntas que se hacen para cada alerta en Análisis y la plantilla Word del informe.",
+      "info_header": "El cuestionario",
+      "info_md": "Cada pregunta aparece en la sección Preguntas de Análisis, en este orden. Sus respuestas se guardan con la alerta (una columna por pregunta), se exportan, se grafican en Resumen y el informe puede usarlas como `{{marcador}}`. Al eliminar una pregunta se conservan las respuestas guardadas, pero ya no se muestran, exportan ni grafican.",
+      "questions_title": "Preguntas",
+      "col_question": "Pregunta",
+      "empty": "Sin preguntas: Análisis solo pedirá el veredicto.",
+      "tag_one": "una respuesta",
+      "tag_several": "varias respuestas",
+      "tag_options": {
+        "one": "{count} opción",
+        "many": "{count} de opciones",
+        "other": "{count} opciones"
+      },
+      "tag_typed": "respuestas escritas",
+      "tag_required": "obligatoria",
+      "tag_all_verdicts": "todos los veredictos",
+      "delete_title": "¿Eliminar «{name}»?",
+      "delete_message": "{count} alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican.",
+      "template_title": "Plantilla del informe",
+      "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
+      "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",
+      "copied": "{placeholder} copiado"
     }
   }
 }

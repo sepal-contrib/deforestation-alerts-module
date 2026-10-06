@@ -13,6 +13,7 @@
       "prepare": "Download & harmonize",
       "integrate": "Integrate & vectorize",
       "overview": "Overview",
+      "questionnaire": "Questionnaire",
       "analysis": "Analysis"
     }
   }

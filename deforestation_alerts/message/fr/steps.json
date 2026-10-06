@@ -501,7 +501,30 @@
       "err_option_blank": "Une option est vide.",
       "err_option_duplicate": "Deux options portent le même nom.",
       "err_option_comma": "Une option ne peut pas contenir de virgule.",
-      "err_ask_for": "Choisissez au moins un verdict."
+      "err_ask_for": "Choisissez au moins un verdict.",
+      "title": "Questionnaire",
+      "description": "Choisissez les questions posées pour chaque alerte dans Analyse, et le modèle Word du rapport.",
+      "info_header": "Le questionnaire",
+      "info_md": "Chaque question apparaît dans la section Questions d'Analyse, dans cet ordre. Ses réponses sont enregistrées avec l'alerte (une colonne par question), exportées, représentées dans Aperçu et disponibles pour le rapport sous la forme `{{balise}}`. Supprimer une question conserve les réponses déjà enregistrées, mais elles ne sont plus affichées, exportées ni représentées.",
+      "questions_title": "Questions",
+      "col_question": "Question",
+      "empty": "Aucune question : Analyse ne demandera que le verdict.",
+      "tag_one": "une réponse",
+      "tag_several": "plusieurs réponses",
+      "tag_options": {
+        "one": "{count} option",
+        "many": "{count} d'options",
+        "other": "{count} options"
+      },
+      "tag_typed": "réponses saisies",
+      "tag_required": "obligatoire",
+      "tag_all_verdicts": "tous les verdicts",
+      "delete_title": "Supprimer « {name} » ?",
+      "delete_message": "{count} alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées.",
+      "template_title": "Modèle de rapport",
+      "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
+      "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",
+      "copied": "{placeholder} copié"
     }
   }
 }

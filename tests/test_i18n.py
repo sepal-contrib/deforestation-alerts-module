@@ -91,6 +91,11 @@ SAME_IN = {
         "steps.project.count_sources.other", "steps.questionnaire.field_label",
         "steps.questionnaire.field_option", "steps.questionnaire.options_label",
         "workflow.count_sources.one", "workflow.count_sources.many", "workflow.count_sources.other",
+        # "questionnaire", "question(s)" and "option(s)" are the same words in French.
+        "app.drawer_item.questionnaire", "steps.questionnaire.title", "steps.questionnaire.questions_title",
+        "steps.questionnaire.col_question", "steps.questionnaire.tag_options.one",
+        "steps.questionnaire.tag_options.other", "workflow.count_questions.one",
+        "workflow.count_questions.other",
     },
 }
 

@@ -50,6 +50,11 @@
       "many": "{count} de capas",
       "other": "{count} capas"
     },
+    "count_questions": {
+      "one": "{count} pregunta",
+      "many": "{count} de preguntas",
+      "other": "{count} preguntas"
+    },
     "count_periods": {
       "one": "{count} período",
       "many": "{count} de períodos",

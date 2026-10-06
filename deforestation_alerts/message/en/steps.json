@@ -480,7 +480,29 @@
       "err_option_blank": "An option is empty.",
       "err_option_duplicate": "Two options have the same name.",
       "err_option_comma": "An option cannot contain a comma.",
-      "err_ask_for": "Pick at least one verdict."
+      "err_ask_for": "Pick at least one verdict.",
+      "title": "Questionnaire",
+      "description": "Choose the questions asked for every alert in Analysis, and the Word template its report is built from.",
+      "info_header": "The questionnaire",
+      "info_md": "Each question appears in the Questions section of Analysis, in this order. Its answers are saved with the alert (one column per question), exported with it, charted in Overview and available to the report as `{{placeholder}}`. Deleting a question keeps the answers already saved, but they are no longer shown, exported or charted.",
+      "questions_title": "Questions",
+      "col_question": "Question",
+      "empty": "No questions: Analysis will only ask for the verdict.",
+      "tag_one": "one answer",
+      "tag_several": "several answers",
+      "tag_options": {
+        "one": "{count} option",
+        "other": "{count} options"
+      },
+      "tag_typed": "typed answers",
+      "tag_required": "required",
+      "tag_all_verdicts": "all verdicts",
+      "delete_title": "Delete \"{name}\"?",
+      "delete_message": "{count} alerts of the active set answered it. Their answers stay saved but are no longer shown, exported or charted.",
+      "template_title": "Report template",
+      "placeholders_label": "Placeholders the template can use (click to copy):",
+      "placeholders_review": "Green ones come from the review. They are replaced in the document's paragraphs, not inside tables, headers or footers.",
+      "copied": "Copied {placeholder}"
     }
   }
 }

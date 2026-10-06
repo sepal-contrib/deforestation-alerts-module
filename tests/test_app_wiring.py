@@ -242,6 +242,7 @@ STEP_FILES = {
     "period": "gui/tile/period_step.py",
     "prepare": "gui/tile/prepare_step.py",
     "integrate": "gui/tile/integrate_step.py",
+    "questionnaire": "gui/tile/questionnaire_step.py",
 }
 
 
@@ -475,7 +476,7 @@ def test_a_detached_tile_may_remount_its_root():
 
     src = _src("gui/solara_app.py")
     assert "render_fixed" not in _component_body(src, "_AppShell")
-    assert src.count("render_detached(lambda: ") == 10  # About, Project, Overview, six steps, the header
+    assert src.count("render_detached(lambda: ") == 11  # About, Project, Overview, seven steps, the header
 
 
 def test_nothing_imports_the_workspace_module():

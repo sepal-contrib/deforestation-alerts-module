@@ -47,6 +47,10 @@
       "one": "{count} layer",
       "other": "{count} layers"
     },
+    "count_questions": {
+      "one": "{count} question",
+      "other": "{count} questions"
+    },
     "count_periods": {
       "one": "{count} period",
       "other": "{count} periods"
