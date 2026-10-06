@@ -96,7 +96,7 @@ analysis : AnalysisState
     ``before/after_image`` + ``before/after_info`` the CNN downloads,
     ``prediction_files`` (the CNN rasters by model number) and
     ``prediction_shapes`` (what each run found). Every edit the reviewer makes
-    here ``touch``es it, so the verdict block's save-state line reads
+    here ``touch``es it, so the footer's save-state line reads
     *Unsaved changes on this alert*.
 app_tile_model : SetContext
     ``recipe_folder_path`` — the active set's folder the before/after composite
@@ -392,7 +392,7 @@ def build_edit_tools(
         ns = {}
 
         # --- the edit buttons (start / apply / stop) ---
-        # Labelled and 44px, like the verdict block's: an icon-only button
+        # Labelled and 44px, like the footer's Save buttons: an icon-only button
         # whose meaning lived in a hover tooltip was unreadable on a touch
         # screen, and there is room for the words in the panel.
         def _edit_button(label, **kwargs):

@@ -37,11 +37,12 @@ def visible_btn(page, text, scope=""):
 
 
 # The Analysis right panel is the review console (spec 2026-10-03): block A
-# (queue counter, navigation, facts grid + status chip), block B (the verdict,
-# Save & next) and three sections -- Questions (the loss driver and every other
-# project question, spec D4), Refine polygon, Export this alert -- whose bodies
-# are COLLAPSED (hidden with ``display``), so nothing inside them is
-# ``:visible`` until the header is clicked. The retired "Alert info" card's facts live in block A.
+# (queue counter, navigation, facts grid + status chip), block B (the verdict)
+# and three sections -- Questions (the loss driver and every other project
+# question, spec D4), Refine polygon, and Export this alert, which sits in the
+# sticky footer above Save & next / Save (spec D6) -- whose bodies are
+# COLLAPSED (hidden with ``display``), so nothing inside them is ``:visible``
+# until the header is clicked. The retired "Alert info" card's facts live in block A.
 _BLOCK_A_JS = """
     const card = [...document.querySelectorAll('.v-card')]
         .filter(e => e.getBoundingClientRect().width > 0)
@@ -81,25 +82,27 @@ def open_section(page, title):
         page.wait_for_timeout(800)
 
 
-#: Block B, by the title ``review_panel`` gives its card.
-_VERDICT_CARD = '.v-card:has-text("Verdict")'
+#: The panel's sticky footer (``gui/tile/analysis/footer.py``), by its class.
+_FOOTER = ".defo-analysis-footer"
 
 
 def save_btn(page):
-    """Block B's *Save* -- exact text, since *Save & next* also reads "Save",
-    and SCOPED to the verdict card, since three other catalogue strings render
-    exactly "Save" too (the alert-source, period and visualization modals'
-    own Save buttons). All three live inside modals today, so a document-wide
-    match is unique only by luck: a modal a preceding phase left open -- or any
-    future panel-level Save -- would be clicked instead, with no diagnostic."""
-    return page.locator(f"{_VERDICT_CARD} button:visible",
+    """The footer's *Save* -- exact text, since *Save & next* also reads
+    "Save", and SCOPED to the footer, since three other catalogue strings
+    render exactly "Save" too (the alert-source, period and visualization
+    modals' own Save buttons). All three live inside modals today, so a
+    document-wide match is unique only by luck: a modal a preceding phase left
+    open would be clicked instead, with no diagnostic. The footer's buttons
+    sit outside the collapsed Export body, so no section has to be opened."""
+    return page.locator(f"{_FOOTER} button:visible",
                         has_text=re.compile(r"^\s*Save\s*$")).first
 
 
 def download_btn(page):
-    """*Download alert data*, in the Export section's body (open it first)."""
-    return page.locator('.v-card:has-text("Export this alert") '
-                        'button:has-text("Download"):visible').first
+    """The dashed *Build alert files* tile (*Rebuild files* once a build left
+    files), in the Export section's body (open it first). By its class: its
+    label changes with the build."""
+    return page.locator('.v-card:has-text("Export this alert") .defo-build-tile:visible').first
 
 
 def compact_stages(titles, label) -> int:
@@ -223,7 +226,7 @@ def review_and_save(page, rec, *, out):
     # answer and not the button that was pressed.
     assert (rec["status_after_save"] or "").startswith("Reviewed"), rec["facts_after_save"]
     open_section(page, "Export this alert")
-    assert not download_btn(page).is_disabled(), "Download still disabled after the Save"
+    assert not download_btn(page).is_disabled(), "Build alert files still disabled after the Save"
 
 
 def _lane_options(page, lane):

@@ -193,9 +193,14 @@
     },
     "export_labels": {
       "save_btn": "Guardar",
-      "download_alert_data_btn": "Descargar",
-      "files_dwn_btn": "Archivos",
-      "report_dwn_btn": "Informe",
+      "build_tile": "Generar archivos de la alerta",
+      "rebuild_tile": "Regenerar archivos",
+      "tile_zip": "Datos de la alerta",
+      "tile_zip_detail": "GeoPackage + GeoTIFF antes/después",
+      "tile_docx": "Informe de la alerta",
+      "tile_docx_detail": "Word, con la plantilla del proyecto",
+      "tile_gif": "Secuencia temporal",
+      "tile_gif_detail": "GIF · próximamente",
       "save_task_title": "Guardando atributos de la alerta",
       "save_step": "Escribiendo la base de alertas…",
       "save_done": "Atributos de la alerta guardados.",
@@ -215,7 +220,7 @@
       "report_template_hint": "Todos los informes de este proyecto se generan a partir de este archivo Word. Déjalo vacío para usar la plantilla predeterminada de la aplicación.",
       "report_template_no_project": "Abre un proyecto para elegir su plantilla de informe.",
       "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
-      "report_template_missing": "La plantilla de informe {path} ha desaparecido. Vuelve a elegirla en la tarjeta de exportación, o deja el campo vacío para usar la plantilla predeterminada."
+      "report_template_missing": "La plantilla del informe {path} ya no existe. Elíjala de nuevo en el paso Cuestionario o vacíe el campo para usar la plantilla por defecto."
     }
   },
   "imagery": {

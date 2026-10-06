@@ -109,7 +109,7 @@ class AnalysisState:
             # The stamp belongs to the alert that was saved, not to the
             # session: an untouched alert must show no time at all, never the
             # previous alert's (spec §4.4). 0.0 is the declared default and
-            # the empty state the verdict block's save-state line reads.
+            # the empty state the footer's save-state line reads.
             self.last_save_time.set(0.0)
 
     def is_current(self, token) -> bool:
@@ -172,7 +172,7 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
 
 def touch(analysis: AnalysisState) -> None:
     """Mark the current alert as changed since its last save (the save-state
-    line in the verdict block reads it).
+    line in the panel footer reads it).
 
     ``edit_rev`` counts the changes as well as flagging them, because a save
     in flight has to tell "still the review I captured" from "changed since":

@@ -199,14 +199,15 @@ def _in(root):
 
 
 def _build_button(body):
-    """*Download alert data* in an export section body (found by its ``msg``)."""
-    from gui.i18n import t
+    """The dashed *Build alert files* tile in an export section body.
 
-    label = t("analysis_tile.export_labels.download_alert_data_btn")
+    Found by its class, not its label: the label turns to *Rebuild files* once
+    a build has left files, and a test holds the button across that change.
+    """
     for widget in _in(body):
-        if getattr(widget, "msg", None) == label:
+        if "defo-build-tile" in (getattr(widget, "class_", "") or "").split():
             return widget
-    raise AssertionError("no build button in the export section body")
+    raise AssertionError("no build tile in the export section body")
 
 
 def _alerts_gdf():

@@ -592,6 +592,13 @@ def _AppShell():
         "  background-color: var(--v-background-base, #ffffff);\n"
         "  transition: left 0.3s ease, right 0.3s ease;\n"
         "}\n"
+        # The Analysis panel's sticky footer (gui/tile/analysis/footer.py)
+        # paints its own background so the panel scrolls under it. Its inline
+        # `var(--v-background-base, #ffffff)` is the light fallback: no theme
+        # defines `background`, so on the dark theme it was a white bar. Dark:
+        # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
+        # !important since an inline style beats any stylesheet rule.
+        ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
         # The rail collapse/expand arrow sits on the stage's left edge: keep it
         # above the stage (MapApp's own value, restated here so the whole order
         # above is in one place) and below the dialogs.

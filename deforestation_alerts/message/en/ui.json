@@ -190,9 +190,14 @@
     },
     "export_labels": {
       "save_btn": "Save",
-      "download_alert_data_btn": "Download",
-      "files_dwn_btn": "Files",
-      "report_dwn_btn": "Report",
+      "build_tile": "Build alert files",
+      "rebuild_tile": "Rebuild files",
+      "tile_zip": "Alert data",
+      "tile_zip_detail": "GeoPackage + before/after GeoTIFF",
+      "tile_docx": "Alert report",
+      "tile_docx_detail": "Word, from the project's template",
+      "tile_gif": "Timelapse",
+      "tile_gif_detail": "GIF · coming soon",
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
       "save_done": "Alert attributes saved.",
@@ -212,7 +217,7 @@
       "report_template_hint": "Every report of this project is built from this Word file. Leave it empty to use the app's default template.",
       "report_template_no_project": "Open a project to choose its report template.",
       "report_template_bad": "{path} is not a Word file (.docx) in your SEPAL folder; the report template was not changed.",
-      "report_template_missing": "The report template {path} is gone. Pick it again in the export card, or clear the field to use the default template."
+      "report_template_missing": "The report template {path} is gone. Pick it again in the Questionnaire step, or clear it to use the default template."
     }
   },
   "imagery": {

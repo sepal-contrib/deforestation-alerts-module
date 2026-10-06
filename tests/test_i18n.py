@@ -96,6 +96,8 @@ SAME_IN = {
         "steps.questionnaire.col_question", "steps.questionnaire.tag_options.one",
         "steps.questionnaire.tag_options.other", "workflow.count_questions.one",
         "workflow.count_questions.other", "analysis_tile.sections.questions",
+        # "timelapse" is the word French uses (the plan's own translation).
+        "analysis_tile.export_labels.tile_gif",
     },
 }
 

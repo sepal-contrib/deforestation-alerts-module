@@ -215,6 +215,20 @@ def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_stage():
     assert 0 < stage < arrow < 6
 
 
+def test_the_analysis_footer_is_not_white_on_the_dark_theme():
+    """The footer is pinned over the scrolling panel, so it paints its own
+    background. Its inline ``var(--v-background-base, #ffffff)`` is the light
+    fallback: no theme defines ``background``, so on the dark theme it would
+    be a white bar. The shell restates it for the dark theme -- with
+    ``!important``, since an inline style beats any stylesheet rule -- on
+    pysepal's dark drawer surface (``.theme--dark.v-navigation-drawer``)."""
+    css = _shell_css()
+    rules = {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    body = rules[".theme--dark .defo-analysis-footer"]
+    colour = re.search(r"background-color:\s*(#[0-9a-fA-F]{3,6})\s*!important", body).group(1)
+    assert colour.lower() not in ("#fff", "#ffffff")
+
+
 def test_the_project_dialog_closes_itself_through_the_shell():
     shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
     assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)' in shell

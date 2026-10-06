@@ -7,7 +7,6 @@ import pytest
 from pysepal.i18n import set_locale
 
 from gui.i18n import t
-from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.review_panel import REVIEW_CHOICES, build_review_panel, verdict_widgets
@@ -28,8 +27,8 @@ def test_the_buttons_hold_statuses_and_show_labels(locale):
     set_locale(locale)
     app_state = AppState()
     analysis = AnalysisState()
-    card = build_review_panel(SimpleNamespace(), app_state, analysis, SetContext(app_state))
-    buttons, *_ = verdict_widgets(card)
+    card = build_review_panel(SimpleNamespace(), app_state, analysis)
+    buttons = verdict_widgets(card)
     assert list(buttons) == STATUSES
     labels = [b.children[1].children[0] for b in buttons.values()]
     assert labels == [t(key) for _, key in REVIEW_CHOICES]

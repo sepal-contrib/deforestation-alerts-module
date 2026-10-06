@@ -155,9 +155,15 @@ def _set_context_fake():
 
 
 def _button(root, msg):
-    """Find the ``sw.Btn`` in ``root`` whose label is ``msg``."""
+    """Find the button in ``root`` whose label is ``msg``: an ``sw.Btn`` by
+    its ``.msg``, or a plain ``v.Btn`` (the export section's build tile) by a
+    text child of its own."""
+    import ipyvuetify as v
+
     for widget in _widgets(root):
         if getattr(widget, "msg", None) == msg:
+            return widget
+        if isinstance(widget, v.Btn) and msg in (getattr(widget, "children", None) or []):
             return widget
     raise AssertionError(f"no button labelled {msg!r} in the layout")
 
@@ -257,16 +263,16 @@ def test_overview_export_failure_fails_the_task_with_one_error_toast(
 # analysis/export — raw layout + daemon workers under tracked_job
 # ---------------------------------------------------------------------------
 def _export_layout(export, **kwargs):
-    """The Export section's body plus the Save button the verdict block owns.
+    """The Export section's body plus the Save button the footer owns.
 
     ``build_export`` returns the section body and the one ``run_save`` runner;
-    the Save button itself lives in the verdict block now, wired to that
-    runner. These tests assert the feedback a real Save publishes, so they
-    drive the runner through a stand-in button whose RUNNER WIRING is exactly
-    ``review_panel``'s (``run_save(button)``), and hang it beside the body so
-    ``_button(card, ...)`` finds both. Only the wiring matches: the stand-in is
-    an ``sw.Btn(msg=...)`` because ``_button`` finds buttons by their ``.msg``,
-    while ``review_panel`` builds a ``v.Btn(children=[...])``, which has none.
+    the Save button itself lives in the panel's footer (``footer.build_footer``),
+    wired to that runner. These tests assert the feedback a real Save
+    publishes, so they drive the runner through a stand-in button whose RUNNER
+    WIRING is exactly the footer's (``run_save(button)``), and hang it beside
+    the body so ``_button(card, ...)`` finds both. Only the wiring matches: the
+    footer's buttons and the export body are covered in
+    tests/test_analysis_footer.py.
     """
     import ipyvuetify as v
     from pysepal import sepalwidgets as sw
@@ -301,7 +307,7 @@ def test_export_save_publishes_success_and_enables_the_download(
     feedback = _record_feedback(monkeypatch, export)
     monkeypatch.setattr(export, "_save_attributes", lambda *a, **k: True)
 
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     assert download_btn.disabled is True
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
@@ -351,7 +357,7 @@ def test_export_save_refusal_fails_the_task_and_says_why(
     app_state.actual_alert_id.value = alert_id
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -370,7 +376,7 @@ def test_export_save_refusal_fails_the_task_and_says_why(
     "label_key, body",
     [
         ("analysis_tile.export_labels.save_btn", "_save_attributes"),
-        ("analysis_tile.export_labels.download_alert_data_btn", "_download_data"),
+        ("analysis_tile.export_labels.build_tile", "_download_data"),
     ],
     ids=["save", "download"],
 )
@@ -455,7 +461,7 @@ def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
     feedback = _record_feedback(monkeypatch, export)
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -523,7 +529,7 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
     feedback = _record_feedback(monkeypatch, export)
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -549,7 +555,7 @@ def test_export_save_failure_fails_the_task_before_the_error_toast(
     monkeypatch.setattr(export, "_save_attributes", _boom)
 
     save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     save_btn.fire_event("click", None)
     feedback.join()
 
@@ -573,12 +579,12 @@ def _one_row_gdf():
 
 
 def _download_toolbar(card):
-    """The toolbar holding the two DownloadBtns (built hidden, shown on success)."""
-    from pysepal import sepalwidgets as sw
+    """The container of the S1 file tiles (built hidden, shown on success)."""
+    from gui.tile.analysis.file_tile import FileTile
 
     for widget in _widgets(card):
-        if isinstance(widget, sw.Toolbar) and any(
-            isinstance(child, sw.DownloadBtn)
+        if hasattr(widget, "viz") and any(
+            isinstance(child, FileTile)
             for child in (getattr(widget, "children", None) or [])
         ):
             return widget
@@ -618,7 +624,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, t("analysis_tile.export_labels.download_alert_data_btn")
+        card, t("analysis_tile.export_labels.build_tile")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -662,7 +668,7 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     app_state.actual_alert_id.value = 0
 
     toolbar = _download_toolbar(card)
-    download_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     download_btn.fire_event("click", None)
     feedback.join()
 
@@ -692,7 +698,7 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, t("analysis_tile.export_labels.download_alert_data_btn")
+        card, t("analysis_tile.export_labels.build_tile")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -707,6 +713,11 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
     ]
     assert toolbar.viz is True
     assert download_btn.loading is False and download_btn.disabled is False
+    # The two file tiles link this build's zip and report.
+    zip_tile, docx_tile, gif_tile = toolbar.children
+    assert zip_tile.disabled is False and zip_tile.attributes["download"] == "alert_0.zip"
+    assert docx_tile.disabled is False and docx_tile.attributes["download"] == "alert_0.docx"
+    assert gif_tile.disabled is True  # TODO(timelapse): nothing builds it yet
 
 
 def test_export_download_failure_fails_the_task_with_one_error_toast(
@@ -722,7 +733,7 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, t("analysis_tile.export_labels.download_alert_data_btn")
+        card, t("analysis_tile.export_labels.build_tile")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -756,7 +767,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
-        card, t("analysis_tile.export_labels.download_alert_data_btn")
+        card, t("analysis_tile.export_labels.build_tile")
     )
     download_btn.fire_event("click", None)
     feedback.join()
@@ -1432,7 +1443,7 @@ def _draw_widgets():
 
 def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypatch):
     """Ruling 24 / spec §4.4: the reviewer drawing or editing the polygon makes
-    the verdict block read "Unsaved changes on this alert" -- while
+    the footer read "Unsaved changes on this alert" -- while
     ``view_actual_alert`` *seeding* a freshly opened alert's stored polygon must
     not, which is why the flag hangs off the draw controls' own event and the
     edit handlers the reviewer operates, never off ``analysis.defo_layer``."""
@@ -1805,7 +1816,7 @@ def _deferred(monkeypatch, module):
 
 @pytest.mark.parametrize("label_key, body", [
     ("analysis_tile.export_labels.save_btn", "_save_attributes"),
-    ("analysis_tile.export_labels.download_alert_data_btn", "_download_data"),
+    ("analysis_tile.export_labels.build_tile", "_download_data"),
 ])
 def test_save_and_download_work_on_the_alert_clicked_for(monkeypatch, data_root, label_key, body):
     import gui.tile.analysis.export as export
@@ -1880,7 +1891,7 @@ def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
     held = _deferred(monkeypatch, export)
     monkeypatch.setattr(export, "_download_data", lambda *a, **k: {
         "zip_path": "/set/alert_0.zip", "report_path": "/set/alert_0.docx"})
-    build_btn = _button(card, t("analysis_tile.export_labels.download_alert_data_btn"))
+    build_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
 
     build_btn.fire_event("click", None)
     move_to_b()  # before the worker's apply: its files belong to A
@@ -1895,7 +1906,7 @@ def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# analysis/export — the review save as a runner the verdict block drives
+# analysis/export — the review save as a runner the footer drives
 # ---------------------------------------------------------------------------
 def _save_harness(tmp_path, monkeypatch):
     """One real review Save, start to finish, on the calling thread.
@@ -2046,7 +2057,7 @@ def test_an_edit_made_while_the_save_runs_stays_unsaved_and_does_not_advance(
 def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
     """One writer at a time, and both save buttons say so.
 
-    The verdict block has two buttons on the same runner, and only the clicked
+    The footer has two buttons on the same runner, and only the clicked
     one used to be disabled: the other could start a second writer over the
     same store and the same row while the first was still in its admin
     lookups, with the later writer's row values winning by luck of timing.

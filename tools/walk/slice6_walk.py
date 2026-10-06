@@ -54,19 +54,19 @@ def write_template(data: Path) -> Path:
 
 
 def pick_template(page, rec, *, out, data, template):
-    """Analysis Export section → the report template field → navigate to the file.
+    """Questionnaire step → the report template field → navigate to the file,
+    then back to Analysis for the phases that follow.
 
-    The section is opened first: the field is a child of the Export body, which
-    the review console keeps COLLAPSED (``display: none``), and ``pick_file``
-    needs its button ``:visible``. Without this the phase times out and
-    ``run_phases`` aborts every phase after it.
+    The field left the Analysis Export section for the Questionnaire step
+    (questionnaire Task 4); the Export section only builds and downloads.
     """
-    ph.open_section(page, "Export this alert")  # idempotent
+    w.goto_step(page, "questionnaire", 2000)
     ph.pick_file(page, "Report template", template)  # Task 6's FileInputComponent helper
     w.wait_for(lambda: ph.manifest(data, PROJECT).get("report_template") == str(template), 30,
                "the template saved in project.json")
     rec["report_template"] = ph.manifest(data, PROJECT)["report_template"]
     w.shot(page, out, "template_picked")
+    w.goto_step(page, "analysis", 4000)
 
 
 def report_has_marker(rec, *, folder):

@@ -3,14 +3,15 @@
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports the
 OLD ``AnalysisTile`` export card (``card06`` +
 ``label35``/``toolBarSaveExport``/``toolBarDownloads``) as the **body of the
-collapsible Export section** (spec §5): the section owns the title, and the
-verdict block owns the Save, so ``build_export`` builds neither.
+collapsible Export section** (spec §5), which sits in the panel's sticky
+footer (spec D6, ``footer``): the section owns the title, and the footer owns
+the Save, so ``build_export`` builds neither.
 
 * The OLD **Save** button (``save_btn``) ran ``save_attributes_to_gdf`` —
   writing the user's verdict / answers / image-info / GEE-admin attributes
   + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
   That flow now lives in ``make_save_runner`` (module level) and the button
-  itself in the verdict block, which drives that runner; the runner's ``then``
+  itself in the footer, which drives that runner; the runner's ``then``
   is what moves to the next alert, and only a save that wrote calls it.
   ``build_export`` returns the runner so there is ONE save for the panel.
 * The section's **summary badge** (``set_badge``) says what the section can
@@ -18,12 +19,14 @@ verdict block owns the Save, so ``build_export`` builds neither.
   build, then the count of files that build left ready. An alert change takes
   it back to the first state, because the build button and the two download
   links belong to the alert they were made for.
-* The **Download alert data** button (``download_alert_data_btn``, disabled until a
-  save happens) ran the OLD ``download_data`` — building the single-alert gpkg, the
-  before/after-image GeoTIFF, the zip, and the Word report.
-* The two ``sw.DownloadBtn`` (``files_dwn_btn`` / ``report_dwn_btn``) live in a
-  ``toolBarDownloads`` that is hidden until a download completes, then get their
-  URLs set to the zip / report and are revealed.
+* The dashed **Build alert files** tile (``download_alert_data_btn``, disabled
+  until a save happens; *Rebuild files* once a build left files) runs the OLD
+  ``download_data`` — building the single-alert gpkg, the before/after-image
+  GeoTIFF, the zip, and the Word report.
+* The S1 file tiles (``file_tile.FileTile``: ``files_dwn_btn`` / ``report_dwn_btn``
+  and the GIF placeholder ``gif_dwn_btn``) live in a ``toolbar_downloads`` that is
+  hidden until a build completes, then get the zip / report (``set_file``) and
+  are revealed.
 
 WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
 Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
@@ -46,7 +49,7 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
   download body does the gpkg/image/zip/report (IO only) and RETURNS
   ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
-  the download button, ``set_url(...)``, showing ``toolBarDownloads``) now runs at the
+  the build tile, ``set_file(...)``, showing ``toolbar_downloads``) now runs at the
   END of the corresponding worker's tracked block with that returned value (so a
   failing apply is still a FAILED task); only the success toast follows the block. A failure is a FAILED task + one error toast, both published by
   ``tracked_job``; the worker's ``except`` only logs it. A refused Save (no
@@ -55,9 +58,9 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   trait sets (and the ``alerts_gdf`` reactive rebind) from the worker thread are fine
   (recipe_tile / edit_tools do exactly this).
 * The buttons + toolbars are **built once** (the builder runs once per build) so the
-  imperative ``.show()/.hide()/.disabled``/``.set_url()`` calls port unchanged; the
-  download buttons start in a hidden ``toolBarDownloads`` and the "Download alert data"
-  button starts disabled (enabled by the save worker's success path).
+  imperative ``.show()/.hide()/.disabled``/``.set_file()`` calls port unchanged; the
+  file tiles start in a hidden ``toolbar_downloads`` and the build tile starts
+  disabled (enabled by the save worker's success path).
 
 Feedback goes through ``notify_bridge.tracked_job`` + ``current_notifier``, not the
 ``use_notifications()`` hook: this module builds raw ipyvuetify widgets and
@@ -106,7 +109,7 @@ app_tile_model : SetContext
 Every artifact this card produces — the alert store, the gpkg, the composite
 GeoTIFF, the zip and the Word report — is written straight into the set folder
 through a unique ``.part`` renamed into place (``local_files``); the
-DownloadBtns get ``$HOME``-relative URLs (``local_files.home_relative``).
+file tiles get ``$HOME``-relative URLs (``local_files.home_relative``).
 """
 
 import logging
@@ -134,7 +137,6 @@ from gui.i18n import t, tn
 from gui.scripts import loss_drivers as drivers
 from gui.scripts import questions
 from gui.scripts import set_store
-from gui.scripts.detached import render_detached
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
     current_notifier,
@@ -143,9 +145,10 @@ from gui.scripts.notify_bridge import (
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
+from gui.tile.analysis.file_tile import FileTile
 from gui.tile.analysis.paths import stage_alert_image
+from gui.tile.analysis.review_panel import REVIEW_CHOICES
 from gui.tile.analysis.state import capture_alert
-from gui.widget.report_template import ReportTemplateField
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -240,11 +243,6 @@ def review_status(confirmation) -> str:
     """The status a Save stores (spec §10): one of the three, never a label.
 
     Anything else is refused, an unhashable value (a list) included."""
-    # Imported here, not at module level: ``review_panel`` imports
-    # ``make_save_runner`` from this module, so a module-level import of its
-    # ``REVIEW_CHOICES`` would make the pair circular.
-    from gui.tile.analysis.review_panel import REVIEW_CHOICES
-
     if not isinstance(confirmation, str) or confirmation not in {status for status, _ in REVIEW_CHOICES}:
         raise SaveRefused(key="analysis_tile.questionarie.confirmation_missing")
     return confirmation
@@ -490,7 +488,7 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
     and the Word report, all in the set folder. Returns ``{"zip_path",
     "report_path"}`` — the set-folder paths for the download effect to wire onto
-    the two DownloadBtns. Guards on the gdf/id.
+    the two file tiles. Guards on the gdf/id.
 
     The gpkg and the zip are built in a private scratch folder (GDAL may leave
     sidecars, zipfile writes a named file) and copied into the set folder; the
@@ -602,8 +600,8 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
     return {"zip_path": str(zip_dest), "report_path": str(report_dest)}
 
 
-def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None):
-    """The review save, as a callable the verdict block drives.
+def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None):
+    """The review save, as a callable the footer's two buttons drive.
 
     ``run_save(button, then=None)``: spin ``button`` (optional), capture the
     alert on the UI thread, write the store on a worker, and run ``then`` only
@@ -614,12 +612,17 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
     must not advance from where they went. ``then`` runs on the worker thread,
     before the button unspins, so a slow ``then`` keeps the button spinning.
 
-    ``apply_save`` is the post-save UI step (the export section's download
-    button + the ``alerts_gdf`` rebind); the default rebinds alone, so the
+    ``apply_save`` is the post-save UI step (the export section's build
+    tile + the ``alerts_gdf`` rebind); the default rebinds alone, so the
     runner is usable before the export section is built.
 
+    ``on_refused(refusal)`` runs on the worker for a ``SaveRefused``, after
+    the warning toast that explains it: the panel opens the Questions section
+    for a required answer left empty (spec D5). A hook that raises is logged
+    and changes nothing else -- the refusal has already been reported.
+
     One save runs at a time, whichever button starts it: ``run_save.guard``
-    registers the buttons that share the runner (the verdict block's two), so
+    registers the buttons that share the runner (the footer's two), so
     they are all held for the duration and none of them can start a second
     writer over the same store and row.
     """
@@ -640,7 +643,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
 
     def _guard(*buttons):
         """Register buttons that must be held while any save of this runner
-        runs. Called once by the block that owns them (``review_panel``)."""
+        runs. Called once by the block that owns them (``footer``)."""
         guarded.extend(b for b in buttons if b not in guarded)
 
     def _hold(state):
@@ -657,7 +660,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         read then, so a later verdict or driver is still unsaved and saying
         otherwise loses it silently. The stamp is written either way -- a save
         of this alert did land -- and the unsaved line takes precedence over
-        it in the verdict block.
+        it in the footer's state line.
         """
         analysis.last_save_time.set(datetime.today().timestamp())
         if analysis.edit_rev.value == getattr(alert, "edit_rev", None):
@@ -699,6 +702,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                     # Writer tracking: register the open project while the
                     # set's alert store is written, so deleting the project
                     # refuses mid-write.
+                    refusal_obj = None
                     with writing(writer_name(app_state)):
                         try:
                             saved = _save_attributes(
@@ -710,7 +714,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                             )
                             refused = None
                         except SaveRefused as refusal:
-                            saved, refused = False, error_text(refusal)
+                            saved, refused, refusal_obj = False, error_text(refusal), refusal
                     if not saved:
                         # `_save_attributes` refused: nothing was written and the
                         # download button stays disabled, so completing the task
@@ -726,6 +730,15 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                         task.fail(reason)
                         notifier.warning(reason)
                         logger.warning("Analysis: save refused — %s", reason)
+                        # After the toast: the reviewer reads why, then sees
+                        # where (a required answer opens the Questions
+                        # section). Guarded: the refusal is already reported,
+                        # and a failing hook must not turn it into an error.
+                        if on_refused is not None and refusal_obj is not None:
+                            try:
+                                on_refused(refusal_obj)
+                            except Exception:
+                                logger.exception("Analysis: the refusal hook failed")
                     else:
                         # Inside the tracked block: if the apply step raises, the
                         # run is a FAILED task + one error toast, not a green pill.
@@ -822,15 +835,21 @@ def build_export(
     analysis,
     app_tile_model,
     set_badge=None,
+    on_refused=None,
 ):
     """Build and return the Export section's body and the review save runner.
 
-    ``SimpleNamespace(body, run_save)``: ``body`` is what the collapsible
-    Export section wraps (the report-template field, the build button and the
-    hidden downloads toolbar) — the section owns the title, and the verdict
-    block owns the Save, so neither is built here. ``run_save`` is the one
-    save runner, handed to the verdict block so both save paths run the same
-    post-save step and light up the build button below.
+    ``SimpleNamespace(body, run_save, tiles)``: ``body`` is what the
+    collapsible Export section wraps (the dashed build tile and the hidden
+    file tiles, spec D6) — the section owns the title, and the footer owns
+    the Save, so neither is built here. The report template is picked in the
+    Questionnaire step now; a change of it still invalidates the files built
+    here. ``run_save`` is the one save runner, handed to the footer so both
+    save paths run the same post-save step and light up the build tile below.
+    ``tiles`` are the three ``FileTile`` (zip, docx and the GIF placeholder).
+
+    ``on_refused`` goes to ``make_save_runner``: what the panel does with a
+    refused save once its warning is out.
 
     ``set_badge(text, color=None)`` is the section's badge setter (``None``
     before Task 10 wires one). It takes text that is ALREADY translated, so
@@ -841,38 +860,32 @@ def build_export(
     """
 
     # ------------------------------------------------------------------
-    # Buttons + toolbars (created once so the imperative
-    # .show()/.hide()/.disabled/.set_url() calls port unchanged). The download
-    # buttons start in a hidden toolBarDownloads; the "Download alert data" button
-    # starts disabled (enabled by the save worker's success path).
+    # The build tile + the file tiles (created once so the imperative
+    # .show()/.hide()/.disabled/.set_file() calls port unchanged). The file
+    # tiles start in a hidden container; the dashed build tile starts disabled
+    # (enabled by the save worker's success path). The ns keys are the OLD
+    # buttons' names, so the logic around them reads as it did.
     # ------------------------------------------------------------------
     def _build_widgets():
         ns = {}
 
-        ns["download_alert_data_btn"] = sw.Btn(
-            msg=t("analysis_tile.export_labels.download_alert_data_btn"),
-            color="primary",
-            outlined=True,
-            disabled=True,
-            class_="pa-1 ma-1",
+        ns["download_alert_data_btn"] = v.Btn(
+            outlined=True, block=True, color="primary", disabled=True, class_="defo-build-tile",
+            style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
+            children=[v.Icon(left=True, small=True, children=["mdi-cog-outline"]),
+                      t("analysis_tile.export_labels.build_tile")],
         )
-        ns["files_dwn_btn"] = sw.DownloadBtn(
-            class_="pa-1 ma-1",
-            text=t("analysis_tile.export_labels.files_dwn_btn"),
-        )
-        ns["report_dwn_btn"] = sw.DownloadBtn(
-            class_="pa-1 ma-1",
-            text=t("analysis_tile.export_labels.report_dwn_btn"),
-        )
-
-        ns["toolbar_build"] = sw.Toolbar(
-            class_="pa-1 ma-1 d-flex",
-            children=[ns["download_alert_data_btn"]],
-        )
-        ns["toolbar_downloads"] = sw.Toolbar(
-            class_="pa-1 ma-1 d-flex justify-space-between",
-            children=[ns["files_dwn_btn"], ns["report_dwn_btn"]],
-        ).hide()
+        ns["files_dwn_btn"] = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
+                                       t("analysis_tile.export_labels.tile_zip_detail"))
+        ns["report_dwn_btn"] = FileTile("docx", t("analysis_tile.export_labels.tile_docx"),
+                                        t("analysis_tile.export_labels.tile_docx_detail"))
+        # TODO(timelapse): the GIF build is separate work (feat/alert-gif); it
+        # calls set_file on this tile. Until then it is a disabled placeholder.
+        ns["gif_dwn_btn"] = FileTile("gif", t("analysis_tile.export_labels.tile_gif"),
+                                     t("analysis_tile.export_labels.tile_gif_detail"))
+        ns["toolbar_build"] = v.Html(tag="div", children=[ns["download_alert_data_btn"]])
+        ns["toolbar_downloads"] = sw.Html(tag="div", children=[
+            ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]]).hide()
 
         return ns
 
@@ -898,9 +911,9 @@ def build_export(
         set folder; they are simply not this review's any more, and the
         section goes back to offering the rebuild.
 
-        The links are cleared, not only hidden: ``set_url()`` with no path
-        points both at the sandbox file route's own "#" (nothing of this
-        project's), disables them and drops their ``download`` attribute, so
+        The links are cleared, not only hidden: ``set_file(None)`` points both
+        at the sandbox file route's own "#" (nothing of this project's),
+        disables them, drops their ``download`` attribute and their size, so
         anything that reveals the toolbar again cannot resurrect them.
 
         ``rev`` is the revision a build carries from its click
@@ -908,8 +921,8 @@ def build_export(
         a readiness that is already stale. The caller refreshes the badge --
         ``_forget_previous_alert`` has more to change before it reads.
         """
-        ns["files_dwn_btn"].set_url()
-        ns["report_dwn_btn"].set_url()
+        ns["files_dwn_btn"].set_file(None)
+        ns["report_dwn_btn"].set_file(None)
         ns["toolbar_downloads"].hide()
         built["files"] = 0
         built["rev"] += 1
@@ -928,6 +941,13 @@ def build_export(
         # a plain widget has none, and then the toolbar counts as shown.
         revealed = getattr(ns["toolbar_downloads"], "viz", True)
         files = built["files"] if revealed else 0
+        # The build tile says what a click does: once a build has left files
+        # for this review, a second one REbuilds them (S1, spec D6).
+        ns["download_alert_data_btn"].children = [
+            ns["download_alert_data_btn"].children[0],
+            t("analysis_tile.export_labels.rebuild_tile" if files
+              else "analysis_tile.export_labels.build_tile"),
+        ]
         if not built["saved"]:
             _badge(t("analysis_tile.sections.export_after_save"))
         elif files:
@@ -977,8 +997,8 @@ def build_export(
     analysis.before_info.subscribe(lambda *_: _invalidate_and_badge())
     analysis.after_info.subscribe(lambda *_: _invalidate_and_badge())
 
-    # The report template: the reviewer's own ``.docx``, picked in this very
-    # section. It is a project value, so what the picker writes arrives as a
+    # The report template: the reviewer's own ``.docx``, picked in the
+    # Questionnaire step. It is a project value, so what the picker writes arrives as a
     # publish of ``app_state.project``; only a CHANGE of the template
     # invalidates, or every autosave of the project would drop the links.
     template_seen = {"value": aux_model.custom_report_template}
@@ -1020,8 +1040,8 @@ def build_export(
             app_state.alerts_gdf.value = gdf.copy()
 
     # ------------------------------------------------------------------
-    # Post-download apply (OLD download effect, success path) — set the two
-    # DownloadBtn URLs + reveal the toolbar with the worker's computed paths. Runs
+    # Post-download apply (OLD download effect, success path) — point the two
+    # file tiles at the files + reveal them with the worker's computed paths. Runs
     # at the END of the download worker's tracked block (a failure here still
     # fails the task). The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
@@ -1037,13 +1057,13 @@ def build_export(
         """
         if rev != built["rev"]:
             return False
-        # The zip/report live in the set folder, so the buttons get
-        # $HOME-relative paths: ``set_url`` -> ``su.create_download_link`` builds
-        # ``.../jupyter/files/<path relative to $HOME>``.
-        ns["files_dwn_btn"].set_url(path=local_files.home_relative(result["zip_path"]))
-        ns["report_dwn_btn"].set_url(
-            path=local_files.home_relative(result["report_path"])
-        )
+        # The zip/report live in the set folder, so the tiles link
+        # $HOME-relative paths: ``set_file`` -> ``local_files.home_relative`` ->
+        # ``set_url`` -> ``su.create_download_link`` builds
+        # ``.../jupyter/files/<path relative to $HOME>``. A path outside $HOME
+        # raises here, inside the tracked block: a FAILED task.
+        ns["files_dwn_btn"].set_file(result["zip_path"])
+        ns["report_dwn_btn"].set_file(result["report_path"])
         ns["toolbar_downloads"].show()
         # What the badge counts: the files this build actually produced, read
         # off the result rather than assumed to be two.
@@ -1055,11 +1075,12 @@ def build_export(
 
     # ------------------------------------------------------------------
     # Save: the shared runner (``make_save_runner``), with this section's own
-    # post-save apply step. The verdict block's "Save & next" drives the SAME
-    # runner, so there is one save flow for both buttons.
+    # post-save apply step. The footer's "Save" and "Save & next" drive the
+    # SAME runner, so there is one save flow for both buttons.
     # ------------------------------------------------------------------
     run_save = make_save_runner(
-        widgets, app_state, analysis, app_tile_model, apply_save=_apply_save
+        widgets, app_state, analysis, app_tile_model, apply_save=_apply_save,
+        on_refused=on_refused,
     )
 
     # ------------------------------------------------------------------
@@ -1183,24 +1204,18 @@ def build_export(
 
     _register_handlers()
 
-    # The project's report template (spec §10), a Solara field in the raw card.
-    template_field = render_detached(lambda: ReportTemplateField(app_state=app_state),
-                                     "report template", notify=False)[0]
-
     # The badge's opening state, once everything it reads exists: a build is
     # not possible until a save of this alert has landed.
     _show_badge_for_state()
 
     # ------------------------------------------------------------------
-    # Layout: the section BODY — the report template field, the build button's
-    # row, and the (hidden) downloads toolbar. No title and no Save: the
-    # collapsible section owns the first and the verdict block the second.
+    # Layout: the section BODY — the build tile's row and the (hidden) file
+    # tiles. No title and no Save: the collapsible section owns the first and
+    # the footer the second. The report template is the Questionnaire step's.
     # The OLD inline error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
     return SimpleNamespace(
-        body=v.Html(
-            tag="div",
-            children=[template_field, ns["toolbar_build"], ns["toolbar_downloads"]],
-        ),
+        body=v.Html(tag="div", children=[ns["toolbar_build"], ns["toolbar_downloads"]]),
         run_save=run_save,
+        tiles=[ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]],
     )

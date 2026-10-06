@@ -1,8 +1,10 @@
-"""Block B: the three-button verdict, Save & next, and the save-state line.
+"""Block B: the three-button verdict, and what a review Save writes.
 
 The loss driver left this block for the Questions section (spec D4): its
 hiding for a false positive, its codes and its dirty mark are tested in
-tests/test_analysis_questions_panel.py.
+tests/test_analysis_questions_panel.py. Save & next, Save and the save-state
+line left it for the panel's sticky footer (spec D6): tested in
+tests/test_analysis_footer.py.
 """
 
 from datetime import datetime
@@ -29,23 +31,20 @@ def _english():
     set_locale("en")
 
 
-def _panel(monkeypatch, tmp_path, saves=None):
+def _panel(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     app_state.new_project_state(p)
     analysis = AnalysisState()
     widgets = SimpleNamespace()
-    if saves is not None:
-        monkeypatch.setattr(review_panel, "make_save_runner",
-                            lambda *a, **k: lambda button=None, then=None: saves(button, then))
-    card = review_panel.build_review_panel(widgets, app_state, analysis, SetContext(app_state))
+    card = review_panel.build_review_panel(widgets, app_state, analysis)
     return card, widgets, analysis, app_state
 
 
 def test_a_button_sets_the_verdict_and_marks_the_alert_dirty(tmp_path, monkeypatch):
     card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    buttons, *_ = review_panel.verdict_widgets(card)
+    buttons = review_panel.verdict_widgets(card)
     assert analysis.verdict.value is None
 
     buttons["Confirmed"].fire_event("click", None)
@@ -55,52 +54,17 @@ def test_a_button_sets_the_verdict_and_marks_the_alert_dirty(tmp_path, monkeypat
 
 def test_the_chosen_button_is_the_filled_one(tmp_path, monkeypatch):
     card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    buttons, *_ = review_panel.verdict_widgets(card)
+    buttons = review_panel.verdict_widgets(card)
     analysis.verdict.set("Need revision")
     assert buttons["Need revision"].outlined is False
     assert buttons["Confirmed"].outlined is True
-
-
-def test_the_state_line_reads_unsaved_then_saved(tmp_path, monkeypatch):
-    card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    *_, state_line = review_panel.verdict_widgets(card)
-    assert state_line.children == []
-
-    analysis.dirty.set(True)
-    assert state_line.children == [t("analysis_tile.verdict.unsaved")]
-
-    analysis.dirty.set(False)
-    analysis.last_save_time.set(datetime(2026, 10, 3, 14, 32).timestamp())
-    assert state_line.children == [t("analysis_tile.verdict.saved_at", time="14:32")]
-
-
-def test_an_alert_change_forgets_the_previous_alerts_save_time(tmp_path, monkeypatch):
-    """Spec §4.4: *Saved HH:MM* means a save landed on **this** alert in this
-    session, so an untouched alert must show the empty line and not inherit
-    the previous one's stamp.
-
-    ``reset_alert`` sets ``dirty`` to the ``False`` it already holds, which
-    notifies nobody, so only the ``last_save_time`` subscription can carry the
-    re-render — asserted on the rendered line, not on the reactive alone.
-    """
-    card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    *_, state_line = review_panel.verdict_widgets(card)
-
-    analysis.verdict.set("Confirmed")
-    analysis.dirty.set(False)  # as a save that wrote leaves it
-    analysis.last_save_time.set(datetime(2026, 10, 3, 14, 32).timestamp())
-    assert state_line.children == [t("analysis_tile.verdict.saved_at", time="14:32")]
-
-    analysis.reset_alert()  # the reviewer moves to another alert
-    assert analysis.last_save_time.value == 0.0
-    assert state_line.children == []
 
 
 def test_re_clicking_the_chosen_verdict_does_not_mark_the_alert_unsaved(tmp_path, monkeypatch):
     """``dirty`` follows a verdict *change* (spec §4.4): pressing the answer
     that is already selected after a save must not claim unsaved changes."""
     card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    buttons, *_ = review_panel.verdict_widgets(card)
+    buttons = review_panel.verdict_widgets(card)
 
     buttons["Confirmed"].fire_event("click", None)
     analysis.dirty.set(False)  # as a save that wrote leaves it
@@ -110,57 +74,6 @@ def test_re_clicking_the_chosen_verdict_does_not_mark_the_alert_unsaved(tmp_path
 
     buttons["Need revision"].fire_event("click", None)  # a real change still counts
     assert analysis.dirty.value is True
-
-
-def test_save_and_next_asks_to_advance_and_plain_save_does_not(tmp_path, monkeypatch):
-    calls = []
-    card, _, _, _ = _panel(monkeypatch, tmp_path, saves=lambda b, then: calls.append(then))
-    *_, save_next, save, _ = review_panel.verdict_widgets(card)
-
-    save.fire_event("click", None)
-    assert calls == [None]
-
-    save_next.fire_event("click", None)
-    assert calls[1] is not None
-
-
-def test_a_refused_save_and_next_stays_on_the_alert(tmp_path, monkeypatch):
-    """Review Focus: pressing **Save & next** on an alert with no verdict must
-    refuse, leave the reviewer where they are and give the button back.
-
-    The real ``make_save_runner`` runs, inline, against the real alert store —
-    only ``then``-after-a-write keeps the queue from moving, so it is pinned
-    here at the panel's own level and not merely trusted of the runner.
-    """
-    import pandas as pd
-
-    from tests.test_feedback_notifications import _save_harness
-
-    # The harness's own recorder, not a second one: ``_record_feedback`` also
-    # re-points ``spawn_in_context`` at a real thread, and the save must have
-    # finished by the time the assertions below run.
-    app_state, analysis, widgets, model, feedback = _save_harness(tmp_path, monkeypatch)
-    # Two alerts, so "stayed on this one" is a real assertion and not a clamp.
-    one = app_state.alerts_gdf.value
-    app_state.alerts_gdf.value = pd.concat([one, one], ignore_index=True)
-    app_state.actual_alert_id.value = 0
-
-    card = review_panel.build_review_panel(widgets, app_state, analysis, model)
-    *_, save_next, _, _ = review_panel.verdict_widgets(card)
-
-    save_next.fire_event("click", None)  # no verdict chosen
-    assert app_state.actual_alert_id.value == 0
-    assert app_state.alerts_gdf.value["status"].tolist() == ["Not reviewed"] * 2
-    assert save_next.loading is False and save_next.disabled is False
-    assert feedback.toasts() == [
-        ("warning", t("analysis_tile.questionarie.confirmation_missing"))
-    ]
-
-    analysis.verdict.set("Confirmed")
-    save_next.fire_event("click", None)
-    assert app_state.actual_alert_id.value == 1
-    assert app_state.alerts_gdf.value["status"].tolist() == ["Confirmed", "Not reviewed"]
-    assert save_next.loading is False and save_next.disabled is False
 
 
 def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
@@ -347,19 +260,3 @@ def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monke
     [staged] = written
     assert staged.at[0, "status"] == "Confirmed"
     assert staged.at[0, "description"] == "mining"
-
-
-def test_the_state_line_asks_for_the_apply_before_it_asks_for_a_save(tmp_path, monkeypatch):
-    """The reviewer has to see why the save will not take: the save-state line
-    reads the unapplied drawing ahead of its own "Unsaved changes", since
-    applying is what clears both."""
-    card, _, analysis, _ = _panel(monkeypatch, tmp_path)
-    *_, state_line = review_panel.verdict_widgets(card)
-
-    analysis.drawing_unapplied.set(True)
-    analysis.dirty.set(True)
-    assert state_line.children == [t("analysis_tile.edition_labels.unapplied_drawing")]
-    assert "warning--text" in state_line.class_
-
-    analysis.drawing_unapplied.set(False)
-    assert state_line.children == [t("analysis_tile.verdict.unsaved")]

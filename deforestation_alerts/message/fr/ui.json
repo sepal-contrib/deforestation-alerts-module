@@ -193,9 +193,14 @@
     },
     "export_labels": {
       "save_btn": "Sauvegarder",
-      "download_alert_data_btn": "Télécharger",
-      "files_dwn_btn": "Fichiers",
-      "report_dwn_btn": "Rapport",
+      "build_tile": "Générer les fichiers de l'alerte",
+      "rebuild_tile": "Régénérer les fichiers",
+      "tile_zip": "Données de l'alerte",
+      "tile_zip_detail": "GeoPackage + GeoTIFF avant/après",
+      "tile_docx": "Rapport de l'alerte",
+      "tile_docx_detail": "Word, depuis le modèle du projet",
+      "tile_gif": "Timelapse",
+      "tile_gif_detail": "GIF · bientôt disponible",
       "save_task_title": "Enregistrement des attributs de l'alerte",
       "save_step": "Écriture de la base d'alertes…",
       "save_done": "Attributs de l'alerte enregistrés.",
@@ -215,7 +220,7 @@
       "report_template_hint": "Chaque rapport de ce projet est généré à partir de ce fichier Word. Laissez le champ vide pour utiliser le modèle par défaut de l'application.",
       "report_template_no_project": "Ouvrez un projet pour choisir son modèle de rapport.",
       "report_template_bad": "{path} n'est pas un fichier Word (.docx) de votre dossier SEPAL ; le modèle de rapport n'a pas été changé.",
-      "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau dans la carte d'export, ou videz le champ pour utiliser le modèle par défaut."
+      "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau à l'étape Questionnaire, ou videz le champ pour utiliser le modèle par défaut."
     }
   },
   "imagery": {

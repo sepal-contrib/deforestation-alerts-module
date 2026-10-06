@@ -300,11 +300,12 @@ def test_the_report_is_built_from_the_projects_template(download_ctx):
 # The export section's summary badge (Task 9)
 # ---------------------------------------------------------------------------
 def _downloads_toolbar(body):
-    from pysepal import sepalwidgets as sw
+    """The container of the S1 file tiles (built hidden, shown by a build)."""
+    from gui.tile.analysis.file_tile import FileTile
 
     for widget in _in(body):
-        if isinstance(widget, sw.Toolbar) and any(
-            isinstance(child, sw.DownloadBtn)
+        if hasattr(widget, "viz") and any(
+            isinstance(child, FileTile)
             for child in (getattr(widget, "children", None) or [])
         ):
             return widget
@@ -312,14 +313,17 @@ def _downloads_toolbar(body):
 
 
 def _download_buttons(body):
-    """The two ``sw.DownloadBtn`` of the downloads toolbar, in tree order."""
-    from pysepal import sepalwidgets as sw
+    """The two file tiles a build sets (the zip and the report), in tree order.
+    The third, the GIF tile, is a placeholder no build touches yet."""
+    from gui.tile.analysis.file_tile import FileTile
 
-    return [
+    tiles = [
         child
         for child in (getattr(_downloads_toolbar(body), "children", None) or [])
-        if isinstance(child, sw.DownloadBtn)
+        if isinstance(child, FileTile)
     ]
+    assert [tile.kind for tile in tiles] == ["zip", "docx", "gif"]
+    return tiles[:2]
 
 
 def _project_poke(app_state):
@@ -410,6 +414,38 @@ def test_the_export_badge_follows_what_is_available(tmp_path, monkeypatch):
 
     harness.build()  # the zip and the report are there
     assert seen[-1] == "2 files ready"
+
+
+def _label(build_btn):
+    """The build tile's label: its text child after the cog icon."""
+    return [c for c in build_btn.children if isinstance(c, str)]
+
+
+def test_a_build_fills_the_file_tiles_and_turns_the_build_tile_into_rebuild(tmp_path, monkeypatch):
+    """S1 (spec D6): the dashed tile builds; once a build has left files the
+    zip and report tiles link them, with their size, and the dashed tile
+    offers the rebuild. Anything that invalidates the files takes all of it
+    back."""
+    (tmp_path / "alert_0.zip").write_bytes(b"z" * 3072)
+    harness = _export_harness(tmp_path, monkeypatch)
+    zip_tile, docx_tile = harness.download_btns
+    assert _label(harness.build_btn) == ["Build alert files"]
+
+    harness.save()
+    harness.build()
+
+    assert harness.downloads.viz is True
+    assert zip_tile.disabled is False and zip_tile.href.endswith("alert_0.zip")
+    assert docx_tile.disabled is False and docx_tile.href.endswith("alert_0.docx")
+    assert zip_tile.attributes["download"] == "alert_0.zip"
+    assert zip_tile.size_text == "3 KB"
+    assert docx_tile.size_text == ""  # not on disk in this harness: no size, still linked
+    assert _label(harness.build_btn) == ["Rebuild files"]
+
+    harness.analysis.reset_alert()
+
+    assert _label(harness.build_btn) == ["Build alert files"]
+    assert zip_tile.size_text == "" and zip_tile.disabled is True
 
 
 def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, monkeypatch):

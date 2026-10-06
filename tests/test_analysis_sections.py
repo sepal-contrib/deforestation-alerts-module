@@ -6,8 +6,9 @@ must survive a collapse, and the step container already destroys and rebuilds
 this DOM.
 
 The second half drives ``analysis_tile.build_controls`` -- the panel as the
-tile assembles it: the head, block A, block B and the three sections, with the
-export section's save runner shared with the verdict block.
+tile assembles it: the head, block A, block B, the Questions and Refine
+sections and the sticky footer (the Export section and the Save buttons, spec
+D6), whose Save runs the export section's own save runner.
 """
 
 from datetime import datetime
@@ -117,8 +118,10 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     """
     from gui.tile.analysis import context, review_panel
 
+    from gui.tile.analysis.footer import footer_widgets
+
     panel = _controls(tmp_path, monkeypatch)
-    *head, block_a, block_b, questions, refine, export = panel.controls.children
+    *head, block_a, block_b, questions, refine, footer = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
     # What each block OWNS, named. ``facts_widgets`` / ``verdict_widgets``
     # return tuples that are truthy whatever they hold, so ``assert <the
@@ -128,15 +131,18 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     source, detected, chip = context.facts_widgets(block_a)
     assert isinstance(chip, v.Chip)                       # the status chip
     assert (source.tag, detected.tag) == ("span", "span")  # the two fact values
-    buttons, save_next, save, _ = review_panel.verdict_widgets(block_b)
+    buttons = review_panel.verdict_widgets(block_b)
     # The three statuses the store, the PMTiles paint values and Overview's
     # counts all read -- the verdict IS the stored string, never a label.
     assert set(buttons) == {"Confirmed", "False Positive", "Need revision"}
-    # The literal English (the fixture pins the locale), not ``t()`` of the
-    # same key, which passes on the ``⟦key⟧`` placeholder too.
+    # The Save buttons sit in the sticky footer (spec D6), under the Export
+    # section. The literal English (the fixture pins the locale), not ``t()``
+    # of the same key, which passes on the ``⟦key⟧`` placeholder too.
+    save_next, save, _ = footer_widgets(footer)
     assert save.children == ["Save"] and save_next.children[0] == "Save & next"
-    assert [questions, refine, export] == [panel.sections.questions.root, panel.sections.refine.root,
-                                           panel.sections.export.root]
+    assert [questions, refine, footer] == [panel.sections.questions.root, panel.sections.refine.root,
+                                           panel.sections.footer.root]
+    assert footer.children[0] is panel.sections.export.root
 
 
 def test_the_questions_section_starts_collapsed_on_the_panels_answers(tmp_path, monkeypatch):
@@ -179,36 +185,40 @@ def test_each_section_got_its_own_badge_setter(tmp_path, monkeypatch):
 def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkeypatch):
     """Ruling 28: there is ONE save runner in the panel, the export section's.
 
-    Its ``apply_save`` is what enables *Download alert data* and moves the
-    export badge on; a verdict block that made a second runner would leave that
-    button dark for ever, with nothing to say why. So the Save in block B must
-    run the runner the tile passed in, and the block must not build one.
+    Its ``apply_save`` is what enables *Build alert files* and moves the
+    export badge on; a footer that made a second runner would leave that
+    button dark for ever, with nothing to say why. So the footer's Save must
+    run the runner the tile passed in, and the panel must build only that one.
     """
     from gui.tile.analysis import export as export_mod
-    from gui.tile.analysis import review_panel
+    from gui.tile.analysis.footer import footer_widgets
     from tests.conftest import _alerts_gdf, _build_button
 
     made = []
-    monkeypatch.setattr(review_panel, "make_save_runner",
-                        lambda *a, **k: made.append(1) or (lambda *b, **kw: None))
+    real_runner = export_mod.make_save_runner
+
+    def _counted(*a, **k):
+        made.append(1)
+        return real_runner(*a, **k)
+
+    monkeypatch.setattr(export_mod, "make_save_runner", _counted)
     monkeypatch.setattr(export_mod, "spawn_in_context", lambda target, *a, **k: target())
     monkeypatch.setattr(export_mod, "_save_attributes", lambda *a, **k: True)
 
     panel = _controls(tmp_path, monkeypatch)
+    assert made == [1]                     # the export section's, and no other
     panel.app_state.alerts_gdf.value = _alerts_gdf()
     panel.app_state.actual_alert_id.value = 0
     build_btn = _build_button(panel.sections.export_parts.body)
-    # Unpacked by name, as the sibling test above does: with
-    # ``children[4]`` an insertion into the head reads block A's card instead
-    # and fails with ``AttributeError: _defo_verdict_slots``, saying nothing
-    # about what moved.
-    *_, block_b, _questions, _refine, _export = panel.controls.children
-    _, save_next, save, _ = review_panel.verdict_widgets(block_b)
+    # Unpacked by name, as the sibling test above does: with an index an
+    # insertion into the panel reads another widget instead and fails with
+    # ``AttributeError: _defo_footer_slots``, saying nothing about what moved.
+    *_, footer = panel.controls.children
+    save_next, save, _ = footer_widgets(footer)
 
     assert build_btn.disabled is True
     save.fire_event("click", None)
 
-    assert made == []                      # block B built no runner of its own
     assert build_btn.disabled is False     # the export section's apply_save ran
     # The literal English, as the export badge's own tests use since Task 9's
     # round: ``t()`` of the same key on both sides passes on the ``⟦key⟧``
@@ -216,7 +226,7 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     assert panel.sections.export.badge.children == ["ready to build"]
 
     # And so does *Save & next*: BOTH buttons drive that one runner. Not
-    # ``save_next is not save`` -- ``build_review_panel`` constructs them
+    # ``save_next is not save`` -- ``build_footer`` constructs them
     # separately, so no reachable implementation makes them one object and the
     # assertion cannot fail. Driven from the section's empty state, so the two
     # effects below are this click's and not the previous one's still standing.
@@ -226,7 +236,7 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
 
     save_next.fire_event("click", None)
 
-    assert made == []
+    assert made == [1]
     assert build_btn.disabled is False
     assert panel.sections.export.badge.children == ["ready to build"]
 

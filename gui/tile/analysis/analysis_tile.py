@@ -11,7 +11,8 @@ It establishes:
     ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
     plus one immediate call so a pre-selected alert renders on first build,
   * the right-panel review console (``build_controls``: the head, block A,
-    block B and the two collapsible sections),
+    block B, the Questions and Refine sections and the sticky footer that
+    holds the Export section and the Save buttons),
   * and the sub-component builders (imagery / review / edit / export).
 
 WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
@@ -79,7 +80,8 @@ from gui.tile.analysis.context import build_context
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
-from gui.tile.analysis.export import build_export
+from gui.tile.analysis.export import REQUIRED_MISSING, build_export
+from gui.tile.analysis.footer import build_footer
 from gui.tile.analysis.imagery import wire_panes
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import build_timeline
@@ -379,30 +381,42 @@ def build_set_status_banner(app_state) -> v.Html:
     return banner
 
 
-#: The three sections and the export parts, kept on the controls div so the
-#: tests (and nothing else) can reach them without re-deriving the tree.
+#: The three sections, the export parts and the footer, kept on the controls
+#: div so the tests (and nothing else) can reach them without re-deriving the
+#: tree.
 _PANEL = "_defo_panel_sections"
 
 
 def panel_sections(controls):
-    """``SimpleNamespace(questions, refine, export, export_parts)`` of a panel
-    built by ``build_controls``: what ``build_questions_section`` returned,
-    the two ``section.build_section`` namespaces and what ``build_export``
-    returned."""
+    """``SimpleNamespace(questions, refine, export, export_parts, footer)`` of
+    a panel built by ``build_controls``: what ``build_questions_section``
+    returned, the two ``section.build_section`` namespaces, what
+    ``build_export`` returned and what ``footer.build_footer`` returned."""
     return getattr(controls, _PANEL)
 
 
-def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field) -> v.Html:
-    """The right panel: the head, the two blocks and the three sections.
+def _open_questions_for(questions):
+    """The save runner's ``on_refused``: a save refused for a required answer
+    left empty opens the Questions section, where that answer is given (spec
+    D5). Any other refusal has nothing to show there."""
+    def _on_refused(refusal):
+        if getattr(refusal, "key", "") == REQUIRED_MISSING:
+            questions.set_open(True)
+    return _on_refused
 
-    In order (spec §3-§6, D4): the help text with its info popup, the
+
+def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field) -> v.Html:
+    """The right panel: the head, the two blocks, two sections and the footer.
+
+    In order (spec §3-§6, D4, D6): the help text with its info popup, the
     alert-set selector, the set-status banner, **block A** (the queue counter,
     its progress, the navigation row and the facts grid with its status chip),
-    **block B** (the verdict buttons and *Save & next*), then the collapsible
-    *Questions* (one control per project question, the loss driver among
-    them), *Refine polygon* and *Export this alert* sections. The six
-    always-open cards of the old panel are gone with it, as is the separate
-    navigation card (block A absorbed it).
+    **block B** (the verdict buttons), the collapsible *Questions* (one
+    control per project question, the loss driver among them) and *Refine
+    polygon* sections, then the **sticky footer**: the collapsible *Export
+    this alert* section, *Save & next* / *Save* and the save-state line. The
+    six always-open cards of the old panel are gone with it, as is the
+    separate navigation card (block A absorbed it).
 
     Built once per session with the rest of the layout, so every subscription
     the sub-builders register is registered once; the section bodies are
@@ -418,19 +432,22 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     )
     refine.body_box.children = [refine_body]
 
-    # Built before the verdict block so the two share ONE save runner: a save
-    # from either button runs the export section's post-save step, which is
-    # what enables its build button and moves its badge on.
+    # Rebuilt by itself when the project's questions change; the answers it
+    # shows and writes are ``analysis.answers``. Built before the export
+    # section: a save refused for a required answer opens it.
+    questions = build_questions_section(app_state, analysis)
+
+    # Built before the footer so the footer's two Save buttons drive the
+    # export section's ONE save runner: a save from either runs its post-save
+    # step, which is what enables its build tile and moves its badge on.
     exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"))
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
+        on_refused=_open_questions_for(questions),
     )
     exports.body_box.children = [export_parts.body]
-
-    # Rebuilt by itself when the project's questions change; the answers it
-    # shows and writes are ``analysis.answers``.
-    questions = build_questions_section(app_state, analysis)
+    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis)
 
     controls = v.Html(
         tag="div",
@@ -441,16 +458,14 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             build_set_selector(app_state),
             build_set_status_banner(app_state),
             build_context(app_state, id_field),
-            build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis,
-                               app_tile_model=app_tile_model,
-                               run_save=export_parts.run_save),
+            build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis),
             questions.root,
             refine.root,
-            exports.root,
+            footer.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
-                                              export_parts=export_parts))
+                                              export_parts=export_parts, footer=footer))
     return controls
 
 
@@ -613,8 +628,9 @@ def build_analysis_layout(
     )
     strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
 
-    # RIGHT/CONTROLS: the review console -- the head, block A, block B and the
-    # two collapsible sections (``build_controls``). Rendered in MapApp's
+    # RIGHT/CONTROLS: the review console -- the head, block A, block B, the
+    # Questions and Refine sections and the sticky footer (``build_controls``).
+    # Rendered in MapApp's
     # docked right panel (a panel wrapper in the shell), NOT inside the stage
     # -- same chrome as AOI/Filter/Overview.
     controls = build_controls(

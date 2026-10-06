@@ -48,19 +48,22 @@ from datetime import datetime
 from types import SimpleNamespace
 
 #: ``(phase, sections it opens first, the Analysis texts it reaches for)``.
-#: A text is matched as a substring, so "Download" covers "Download alert data".
+#: A text is matched as a substring, so "Build alert files" covers the label
+#: of the build tile however it is decorated.
 WALK = [
     ("phases.integrate_and_land (alert_facts)", (), ("Source", "Detected", "Status")),
     ("phases.review_and_save (verdict button)", (), ("True alert",)),
     ("phases.review_and_save (loss driver)", ("Questions",), ("Loss driver",)),
-    ("phases.review_and_save (save_btn)", (), ("Verdict", "Save")),
-    ("phases.review_and_save (download_btn)", ("Export this alert",), ("Download",)),
-    ("phases.download_with_images (download_btn)", ("Export this alert",), ("Download",)),
+    # In the sticky footer, outside every section body (spec D6).
+    ("phases.review_and_save (save_btn)", (), ("Save",)),
+    ("phases.review_and_save (download_btn)", ("Export this alert",), ("Build alert files",)),
+    ("phases.download_with_images (download_btn)", ("Export this alert",), ("Build alert files",)),
     ("phases.open_section (the headers themselves)", (),
      ("Questions", "Refine polygon", "Export this alert")),
     ("phases.analysis_jump_field (after the # toggle)", (), ("Go",)),
     ("slice5.e_sets (the set selector)", (), ("Alert set",)),
-    ("slice6.pick_template (report template field)", ("Export this alert",), ("Report template",)),
+    # slice6.pick_template picks the report template in the Questionnaire
+    # step now (Task 4), outside the Analysis panel this script builds.
 ]
 
 #: Texts the panel renders only once the project has sets / the row is revealed.
@@ -126,19 +129,10 @@ def main():
     os.environ.setdefault("DEFORESTATION_ALERTS_DATA_DIR", tmp)
     controls, sections = build_panel(tmp)
 
-    from gui.i18n import t
-
     panel = _texts(controls)
     bodies = {"Questions": _texts(sections.questions.body_box),
               "Refine polygon": _texts(sections.refine.body_box),
               "Export this alert": _texts(sections.export.body_box)}
-    # The report-template field is a Solara subtree, not raw widgets, so its
-    # own catalogue strings are added by hand.
-    for key in ("report_template_label", "report_template_hint"):
-        text = t(f"analysis_tile.export_labels.{key}")
-        panel.setdefault(text, set()).add("hidden")
-        bodies["Export this alert"].setdefault(text, set()).add("hidden")
-
     problems = []
     print(f"{'phase':46} {'text':26} where")
     for phase, opens, wanted in WALK:
