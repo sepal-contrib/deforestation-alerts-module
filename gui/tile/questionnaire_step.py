@@ -46,6 +46,16 @@ def answered_count(gdf, q) -> int:
     return int(sum(1 for v in gdf[col] if isinstance(v, str) and v.strip()))
 
 
+def _delete_message(gdf, q) -> str:
+    """What deleting ``q`` does to the answers: with no alert set loaded there
+    is no count to give, only the promise that saved answers are kept."""
+    if q is None:
+        return ""
+    if gdf is None:
+        return t("steps.questionnaire.delete_message_no_set")
+    return tn("steps.questionnaire.delete_message", answered_count(gdf, q))
+
+
 @solara.component
 def _Placeholders(questions):
     def _chip(name, review):
@@ -72,7 +82,7 @@ def QuestionnaireStep(app_state):
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
     if p is None:
-        solara.Info(t("workflow.lock_alerts"))
+        solara.Info(t("workflow.lock_project"))
         return
     name = p.name
 
@@ -148,7 +158,6 @@ def QuestionnaireStep(app_state):
         on_cancel=lambda: set_pending_delete(None),
         on_confirm=_delete,
         title=t("steps.questionnaire.delete_title", name=qs.question_label(doomed) if doomed else ""),
-        message=t("steps.questionnaire.delete_message",
-                  count=answered_count(app_state.alerts_gdf.value, doomed) if doomed else 0),
+        message=_delete_message(app_state.alerts_gdf.value, doomed),
         confirm_label=t("common.delete"),
     )

@@ -520,7 +520,12 @@
       "tag_required": "obligatoria",
       "tag_all_verdicts": "todos los veredictos",
       "delete_title": "¿Eliminar «{name}»?",
-      "delete_message": "{count} alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican.",
+      "delete_message": {
+        "one": "{count} alerta del conjunto activo la respondió. Su respuesta sigue guardada, pero ya no se muestra, exporta ni grafica.",
+        "many": "{count} de alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican.",
+        "other": "{count} alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican."
+      },
+      "delete_message_no_set": "Las respuestas ya guardadas con las alertas se conservan, pero ya no se muestran, exportan ni grafican.",
       "template_title": "Plantilla del informe",
       "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
       "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",

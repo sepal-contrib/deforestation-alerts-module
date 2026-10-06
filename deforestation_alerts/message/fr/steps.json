@@ -520,7 +520,12 @@
       "tag_required": "obligatoire",
       "tag_all_verdicts": "tous les verdicts",
       "delete_title": "Supprimer « {name} » ?",
-      "delete_message": "{count} alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées.",
+      "delete_message": {
+        "one": "{count} alerte de l'ensemble actif y a répondu. Sa réponse reste enregistrée, mais n'est plus affichée, exportée ni représentée.",
+        "many": "{count} d'alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées.",
+        "other": "{count} alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées."
+      },
+      "delete_message_no_set": "Les réponses déjà enregistrées avec les alertes sont conservées, mais elles ne sont plus affichées, exportées ni représentées.",
       "template_title": "Modèle de rapport",
       "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
       "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",

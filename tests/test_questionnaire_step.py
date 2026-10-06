@@ -109,3 +109,39 @@ def test_the_table_has_move_icons_and_disables_an_action():
         assert [b.disabled for b in rc.find(v.Btn).widgets if "mdi-arrow-up" in _strings(b)] == [True]
     finally:
         rc.close()
+
+
+def _delete_dialog_text(s):
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        delete = [b for b in rc.find(v.Btn).widgets if "mdi-delete-outline" in _strings(b)]
+        delete[0].fire_event("click", None)
+        return " ".join(_strings(rc.container))
+    finally:
+        rc.close()
+
+
+def test_the_delete_confirmation_counts_answers_or_says_they_are_kept(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    first = s.project.value.questions[0]
+    col = qstep.column(first)
+    s.alerts_gdf.set(gpd.GeoDataFrame({col: ["x", "", None]}, geometry=[box(0, 0, 1, 1)] * 3))
+    text = _delete_dialog_text(s)
+    assert t("steps.questionnaire.delete_message", count=1) in text
+    assert "1 alert of" in text and "1 alerts" not in text
+    s.alerts_gdf.set(None)       # no alert set loaded: no "0 alerts", only the promise
+    text = _delete_dialog_text(s)
+    assert t("steps.questionnaire.delete_message_no_set") in text and "0 alert" not in text
+
+
+def test_the_step_needs_a_project_not_an_aoi(tmp_path, monkeypatch):
+    from gui.store.workflow_steps import STEPS, step_index
+    assert STEPS[step_index("questionnaire")].lock_reason_key == "workflow.lock_project"
+    set_locale("en")
+    assert t("workflow.lock_project") == "Open a project first."
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=AppState()), handle_error=False)
+    try:
+        assert "Open a project first." in _strings(rc.container)
+    finally:
+        rc.close()

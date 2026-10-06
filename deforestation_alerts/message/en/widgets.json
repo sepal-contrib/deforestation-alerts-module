@@ -34,6 +34,7 @@
   },
   "workflow": {
     "lock_alerts": "Select an area of interest first.",
+    "lock_project": "Open a project first.",
     "lock_layers": "Select an area of interest first.",
     "lock_period": "Add at least one alert source first.",
     "lock_prepare": "Create or select a period first.",
