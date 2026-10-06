@@ -144,7 +144,8 @@
       "badge_missing": "{answered} of {total} · required missing",
       "badge_none": "no questions",
       "none": "This project asks no questions: add some in the Questionnaire step.",
-      "typed_hint": "Pick or type answers"
+      "typed_hint": "Pick or type answers",
+      "none_for_verdict": "No questions are asked for this verdict."
     },
     "sections": {
       "export": "Export this alert",

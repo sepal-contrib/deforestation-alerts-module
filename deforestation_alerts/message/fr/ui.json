@@ -144,7 +144,8 @@
       "badge_missing": "{answered} sur {total} · réponse obligatoire manquante",
       "badge_none": "aucune question",
       "none": "Ce projet ne pose aucune question : ajoutez-en à l'étape Questionnaire.",
-      "typed_hint": "Choisissez ou saisissez des réponses"
+      "typed_hint": "Choisissez ou saisissez des réponses",
+      "none_for_verdict": "Aucune question n'est posée pour ce verdict."
     },
     "sections": {
       "export": "Exporter cette alerte",

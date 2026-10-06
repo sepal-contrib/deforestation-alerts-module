@@ -38,9 +38,10 @@ def visible_btn(page, text, scope=""):
 
 # The Analysis right panel is the review console (spec 2026-10-03): block A
 # (queue counter, navigation, facts grid + status chip), block B (the verdict,
-# the loss driver, Save & next) and two sections whose bodies are COLLAPSED
-# (hidden with ``display``), so nothing inside them is ``:visible`` until the
-# header is clicked. The retired "Alert info" card's facts live in block A.
+# Save & next) and three sections -- Questions (the loss driver and every other
+# project question, spec D4), Refine polygon, Export this alert -- whose bodies
+# are COLLAPSED (hidden with ``display``), so nothing inside them is
+# ``:visible`` until the header is clicked. The retired "Alert info" card's facts live in block A.
 _BLOCK_A_JS = """
     const card = [...document.querySelectorAll('.v-card')]
         .filter(e => e.getBoundingClientRect().width > 0)

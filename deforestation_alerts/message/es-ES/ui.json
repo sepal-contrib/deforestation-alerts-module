@@ -144,7 +144,8 @@
       "badge_missing": "{answered} de {total} · falta una obligatoria",
       "badge_none": "sin preguntas",
       "none": "Este proyecto no hace preguntas: añádalas en el paso Cuestionario.",
-      "typed_hint": "Elija o escriba respuestas"
+      "typed_hint": "Elija o escriba respuestas",
+      "none_for_verdict": "No se hacen preguntas para este veredicto."
     },
     "sections": {
       "export": "Exportar esta alerta",

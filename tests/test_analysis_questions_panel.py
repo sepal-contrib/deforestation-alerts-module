@@ -1,4 +1,3 @@
-# tests/test_analysis_questions_panel.py
 """The Questions section (spec D4): collapsed by default, one control per
 question, hidden by the verdict, a badge that counts answers, and a rebuild
 that keeps drafts when the project's questions change."""
@@ -15,6 +14,7 @@ from gui.scripts import questions as qs
 from gui.store.state_manager import AppState
 from gui.tile.analysis import questions_panel as qp
 from gui.tile.analysis.state import AnalysisState
+from gui.widget.text_style import MUTED
 
 ROAD = Question(key="road_access", label="Road access", required=True, ask_for=["Confirmed"],
                 options=[QuestionOption(code="yes", label="Yes"), QuestionOption(code="no", label="No")])
@@ -94,6 +94,55 @@ def test_editing_the_questions_rebuilds_and_keeps_drafts(ctx):
 # Beyond the brief: the section's own guarantees, and what the retired
 # verdict-card combobox covered (tests/test_loss_drivers.py, test_analysis_verdict.py)
 # ---------------------------------------------------------------------------
+def test_switching_the_verdict_back_restores_the_question_and_its_answer(ctx):
+    """Spec D4: a hidden question keeps its draft; switching back shows it."""
+    _s, a, sec = ctx
+    a.answers.set({"loss_driver": ["logging"]})
+    a.verdict.set("False Positive")
+    assert "display: none" in sec.wrappers["loss_driver"].style_
+    a.verdict.set("Confirmed")
+    assert "display: none" not in sec.wrappers["loss_driver"].style_
+    assert sec.controls["loss_driver"].v_model == [{"text": "Logging", "value": "logging"}]
+
+
+def test_a_verdict_that_asks_nothing_says_so(tmp_path, monkeypatch):
+    """The default questionnaire asks nothing of a false positive: the body
+    says why it is empty and the badge reads "no questions", not "0 of 0"."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now()))
+    a = AnalysisState()
+    sec = qp.build_questions_section(s, a)
+    *_, note = sec.body_box.children
+    assert "display: none" in note.style_
+    assert sec.badge.children == [t("analysis_tile.questions.badge", answered=0, total=1)]
+
+    a.verdict.set("False Positive")
+    assert note.children == ["No questions are asked for this verdict."]
+    assert "display: none" not in note.style_ and note.style_ == MUTED
+    assert sec.badge.children == [t("analysis_tile.questions.badge_none")]
+    assert qp.badge_text(s.project.value.questions, {}, "False Positive") == (
+        t("analysis_tile.questions.badge_none"), None)
+
+    a.verdict.set("Confirmed")
+    assert "display: none" in note.style_
+
+
+def test_a_rebuild_closes_the_old_controls_and_their_handlers_never_write(ctx):
+    s, a, sec = ctx
+    old_road, old_fire = sec.controls["road_access"], sec.controls["fire"]
+    old_wrapper = sec.wrappers["fire"]
+    s.update_project("p", lambda live: setattr(live, "questions", [ROAD]))
+    assert old_road.comm is None and old_fire.comm is None and old_wrapper.comm is None
+    assert all(chip.comm is None for chip in old_fire.children)
+    assert sec.controls["road_access"].comm is not None
+    old_road.fire_event("change", "no")
+    old_fire.fire_event("change", ["a"])
+    assert a.answers.value == {} and a.dirty.value is False
+    sec.controls["road_access"].fire_event("change", "no")
+    assert a.answers.value == {"road_access": ["no"]} and a.dirty.value is True
+
+
 def test_the_badge_and_the_live_header_follow_the_answers(ctx):
     _s, a, sec = ctx
     # No verdict yet: every question shows, none answered, Road access required.
@@ -227,6 +276,8 @@ def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypa
     assert [c["text"] if isinstance(c, dict) else c for c in selected] == chips
     loss = default_questions()[0]
     assert qs.encode(loss, selected) == "logging, Roads"  # a re-save keeps the codes
+    typed = selected + ["Dams"]  # the user types free text next to the chips
+    assert qs.encode(loss, typed) == "logging, Roads, Dams"
     assert analysis.dirty.value is False  # loading is not an edit
 
 

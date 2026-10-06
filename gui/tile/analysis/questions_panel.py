@@ -32,10 +32,12 @@ _HIDDEN = "display: none;"
 def badge_text(questions, answers, verdict):
     """``(text, colour)`` of the section's badge: the questions asked for
     ``verdict`` that have an answer, out of those asked, and ``"warning"`` when
-    one of them is required and unanswered (the save would refuse it)."""
-    if not questions:
-        return t("analysis_tile.questions.badge_none"), None
+    one of them is required and unanswered (the save would refuse it). No
+    question asked -- none in the project, or none for this verdict -- reads
+    "no questions", not "0 of 0 answered"."""
     shown = [q for q in questions if qs.visible(q, verdict)]
+    if not shown:
+        return t("analysis_tile.questions.badge_none"), None
     answered = [q for q in shown if answers.get(q.key)]
     missing = any(q.required and not answers.get(q.key) for q in shown)
     key = "analysis_tile.questions.badge_missing" if missing else "analysis_tile.questions.badge"
@@ -49,8 +51,21 @@ def _title(q):
     return v.Html(tag="div", class_="body-2 mb-1", children=children)
 
 
-def _control(q, analysis):
+def _close(widget):
+    """Close ``widget`` and every widget below it (``close`` alone leaves the
+    children's comms open)."""
+    for child in getattr(widget, "children", None) or []:
+        if not isinstance(child, str):
+            _close(child)
+    widget.close()
+
+
+def _control(q, analysis, live):
+    """``q``'s control. ``live(ctl)`` says whether it is still the section's:
+    a control replaced by a rebuild never writes again."""
     def _write(codes_):
+        if not live(ctl):
+            return
         current = analysis.answers.value or {}
         if current.get(q.key, []) == codes_:
             return  # an echo of what is shown, not an edit
@@ -93,14 +108,25 @@ def build_questions_section(app_state, analysis):
     section = build_section(t("analysis_tile.sections.questions"), v.Html(tag="div"))
     controls, wrappers = {}, {}
     current = {"questions": None}
+    # Says why the body is empty: no question in the project, or none asked
+    # for the chosen verdict.
+    note = v.Html(tag="div", class_="caption", style_=MUTED, children=[])
 
     def _sync(*_):
         questions = current["questions"] or ()
         answers = analysis.answers.value or {}
         verdict = analysis.verdict.value
+        shown = 0
         for q in questions:
-            wrappers[q.key].style_ = "" if qs.visible(q, verdict) else _HIDDEN
+            asked = qs.visible(q, verdict)
+            shown += asked
+            wrappers[q.key].style_ = "" if asked else _HIDDEN
             _show(q, controls[q.key], answers.get(q.key, []))
+        if shown:
+            note.children, note.style_ = [], _HIDDEN
+        else:
+            key = "analysis_tile.questions.none_for_verdict" if questions else "analysis_tile.questions.none"
+            note.children, note.style_ = [t(key)], MUTED
         section.set_badge(*badge_text(questions, answers, verdict))
 
     def _rebuild(*_):
@@ -109,13 +135,17 @@ def build_questions_section(app_state, analysis):
         if questions == current["questions"]:
             return
         current["questions"] = questions
+        old = list(wrappers.values())
         controls.clear()
         wrappers.clear()
         for q in questions:
-            controls[q.key] = _control(q, analysis)
+            controls[q.key] = _control(q, analysis, live=lambda ctl, key=q.key: controls.get(key) is ctl)
             wrappers[q.key] = v.Html(tag="div", class_="mb-3", children=[_title(q), controls[q.key]])
-        section.body_box.children = list(wrappers.values()) or [
-            v.Html(tag="div", class_="caption", style_=MUTED, children=[t("analysis_tile.questions.none")])]
+        section.body_box.children = [*wrappers.values(), note]
+        # Off the tree now: close their comms (each rebuild would leak a
+        # set otherwise); ``live`` already keeps their handlers from writing.
+        for wrapper in old:
+            _close(wrapper)
         _sync()
 
     # Registered once: the panel is built once per session.
