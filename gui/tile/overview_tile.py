@@ -27,11 +27,12 @@ Three rulings shape the component:
   alone, which writes the alerts the session holds.
 * **One measure for the whole page**, Area (ha) by default, which is what keeps
   every figure on a single axis.
-* **The figures are drawn once per (summary, measure, theme, language)**, in a
-  ``use_memo``: the project is committed on every auto-save, which re-renders
-  this view, and re-rendering seven matplotlib figures for a save nobody asked
-  about would be felt. A figure that raises comes back as ``None`` and that one
-  card lists its numbers instead (``_figure_or_numbers``).
+* **The figures are drawn once per (summary, measure, theme, language,
+  questions)**, in a ``use_memo``: the project is committed on every
+  auto-save, which re-renders this view, and re-rendering six matplotlib
+  figures plus one per question for a save nobody asked about would be felt.
+  A figure that raises comes back as ``None`` and that one card lists its
+  numbers instead (``_figure_or_numbers``).
 
 Feedback is hybrid. The component reports its own read failure in place -- a
 dashboard with no numbers must say why where the numbers would be, not in a
@@ -61,7 +62,6 @@ from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t
 from gui.scripts import alert_layers, charts, overview_data, set_store
-from gui.scripts import loss_drivers as drivers
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
@@ -401,18 +401,20 @@ def _left_column(summary, history, figures, measure: str, theme: dict):
                 _admin_table(summary, measure)
 
 
-def _right_column(summary, figures, measure: str):
+def _right_column(summary, figures, measure: str, questions):
     with solara.Div(style=_COLUMN):
         with _card(t("overview_tile.card_numbers")):
             _numbers_table(summary, measure)
         with _card(t("overview_tile.card_timing"), t("overview_tile.timing_note")):
             _figure_or_numbers(figures.get("timing"), [])
-        with _card(t("overview_tile.card_drivers"),
-                   _reviewed_note("overview_tile.drivers_note", summary)):
-            if not summary.by_driver:
-                solara.Text(t("overview_tile.drivers_empty"), style=_NOTE)
-            else:
-                _figure_or_numbers(figures.get("drivers"), [])
+        # One card per question, in questionnaire order (spec D9); none
+        # without questions. Reviewed alerts only, like the admin table.
+        for q in questions:
+            with _card(questions_mod.question_label(q), _reviewed_note("overview_tile.answers_note", summary)):
+                if not summary.breakdown(q.key):
+                    solara.Text(t("overview_tile.answers_empty"), style=_NOTE)
+                else:
+                    _figure_or_numbers(figures.get(f"q:{q.key}"), [])
         with _card(t("overview_tile.card_sources")):
             _figure_or_numbers(figures.get("sources"), [])
 
@@ -477,6 +479,14 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
 
     key = overview_data.summary_key(p, s)
     keys = overview_data.history_keys(p)
+    # Each answer split by its own question's codes (legacy labels read back
+    # to codes). The summary key carries the questions, so a question added or
+    # removed starts a new read with a new split.
+    qmap = {q.key: q for q in p.questions} if p is not None else {}
+
+    def _split(key, value):
+        q = qmap.get(key)
+        return questions_mod.codes(q, value) if q is not None else []
 
     def _start_read():
         if p is None or s is None:
@@ -489,8 +499,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             # per period for the trend. Only the newest read publishes, so a
             # set switched twice in a row cannot land the first read's numbers.
             try:
-                summary = overview_data.summary_of(project, alert_set, drivers_of=drivers.codes)
-                history = overview_data.history_of(project, drivers_of=drivers.codes)
+                summary = overview_data.summary_of(project, alert_set, split_of=_split)
+                history = overview_data.history_of(project, split_of=_split)
             except Exception as exc:  # noqa: BLE001 - said in place, where the numbers would be
                 logger.exception("could not read the alerts of set %s", alert_set.id)
                 if runs.current == run:
@@ -507,12 +517,17 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     fresh = summary is not None and read_key == key
     series = tuple((period_label(period), item, item.n_reviewed < item.n_alerts)
                    for period, _, item in history) if fresh else ()
-    # Seven matplotlib figures: drawn only when their inputs change, never on
-    # the project commit an auto-save makes.
+    # ``use_memo`` compares its dependencies by value, so the tuple of
+    # questions (pydantic models) is fine, and an edit to a question redraws
+    # its chart (a renamed option) and rebuilds the export card.
+    questions = tuple(p.questions) if p is not None else ()
+    # Six matplotlib figures plus one per question: drawn only when their
+    # inputs change, never on the project commit an auto-save makes.
     figures = solara.use_memo(
         lambda: (overview_data.draw_figures(summary, series, measure=measure, theme=theme,
-                                            label_of=drivers.label) if fresh else {}),
-        dependencies=[summary, series, measure, theme["surface"], locale],
+                                            label_of=lambda q, code: questions_mod.label(q, code),
+                                            questions=questions) if fresh else {}),
+        dependencies=[summary, series, measure, theme["surface"], locale, questions],
     )
 
     # The export card is built only when its inputs change, so a re-render (a
@@ -524,9 +539,6 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     sources = tuple(s.sources) if s is not None else ()
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
-    # ``use_memo`` compares its dependencies by value, so the tuple of
-    # questions (pydantic models) is fine, and an edit to a question rebuilds.
-    questions = tuple(p.questions) if p is not None else ()
     export_card = solara.use_memo(
         lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions)
         if s is not None and has_alerts else None,
@@ -604,7 +616,7 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             _kpi_strip(summary, history, figures, measure)
             with solara.Row(style="gap: 10px; align-items: stretch; flex-wrap: wrap;"):
                 _left_column(summary, history, figures, measure, theme)
-                _right_column(summary, figures, measure)
+                _right_column(summary, figures, measure, questions)
         if export_card is not None:
             # A child of a reacton element, so the raw card is part of the
             # rendered tree itself.

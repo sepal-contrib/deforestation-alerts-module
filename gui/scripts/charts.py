@@ -375,7 +375,7 @@ def chart_timing(summary, *, measure: str, theme: dict) -> str:
         (format_date(week[0], "d MMM"), format_value(value, measure)) for week, value in zip(weeks, values)))
 
 
-# --- rankings: drivers and sources ---------------------------------------
+# --- rankings: question answers and sources -----------------------------
 
 def _fold_tail(rows, limit: int = RANK_LIMIT) -> tuple:
     """``rows`` cut to ``limit``, with everything past it summed into one
@@ -398,7 +398,7 @@ def _ranked_for(rows, measure: str) -> tuple:
 
 def _merge_by_label(pairs) -> tuple:
     """Rows that read the same become one bar, and the folded row sinks to the
-    bottom. Two bars both saying "Other" -- the driver code of that name plus
+    bottom. Two bars both saying "Other" -- an answer code of that name plus
     the folded tail -- is the case that forces this, but two long names
     clipped to the same text would read just as wrongly.
     """
@@ -442,18 +442,19 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left) -> str:
     return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))))
 
 
-def chart_drivers(summary, *, measure: str, theme: dict, label_of) -> str:
-    """What the reviewers said caused the loss. Reviewed alerts only, so the
-    bars may sum to less than the set's total -- the card says so.
+def chart_question(summary, key: str, *, measure: str, theme: dict, label_of) -> str:
+    """What the reviewers answered to question ``key`` (spec D9). Reviewed
+    alerts only, so the bars may sum to less than the set's total -- the card
+    says so -- and an alert with two answers counts under each.
 
-    ``label_of`` translates one driver code; this module never imports the
-    driver table. The one key it does not pass on is the unattributed
-    sentinel, which is not a cause and has no entry there.
+    ``label_of`` translates one answer code of that question; this module
+    never imports the questionnaire. The one key it does not pass on is the
+    unanswered sentinel, which is not an answer and has no option there.
     """
-    def label(key):
-        return t("overview_tile.driver_unknown") if key == UNKNOWN_DRIVER else label_of(key)
+    def label(code):
+        return t("overview_tile.answer_unknown") if code == UNKNOWN_DRIVER else label_of(code)
 
-    return _ranking(summary.by_driver, measure=measure, theme=theme, label_of=label,
+    return _ranking(summary.breakdown(key), measure=measure, theme=theme, label_of=label,
                     width=420, height=160, left=0.40)
 
 

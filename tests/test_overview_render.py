@@ -38,11 +38,14 @@ from deforestation_alerts.project.models import (
     Artifact,
     Period,
     Project,
+    Question,
+    QuestionOption,
     add_predefined_source,
 )
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t
 from gui.scripts import alert_layers, charts, overview_data
+from gui.scripts import questions as qs
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
@@ -455,7 +458,7 @@ def test_a_figure_that_cannot_be_drawn_falls_back_to_its_own_numbers(ov, tmp_pat
         texts = _texts(rc)
         assert t("overview_tile.chart_failed") in texts
         assert f"{t('legend.status.confirmed')} — 1.5" in texts
-        assert len(_figures(rc)) >= 4  # sizes, timing, drivers, sources still drawn
+        assert len(_figures(rc)) >= 4  # sizes, timing, the Loss driver answers, sources still drawn
     finally:
         rc.close()
 
@@ -466,6 +469,89 @@ def test_an_out_of_date_set_shows_the_warning_banner(ov, tmp_path):
         assert t("steps.overview.stale") in _texts(rc)
         assert t("steps.overview.missing") not in _texts(rc)
         assert _numbers(rc)[t("overview_tile.table_total")][0] == "4"  # still summarised
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# One card per question (spec D9)
+# ---------------------------------------------------------------------------
+ROAD = Question(key="road", label="Road access",
+                options=[QuestionOption(code="yes", label="Yes"), QuestionOption(code="no", label="No")])
+
+
+def _answer_notes(rc):
+    """How many answer cards the page holds: each carries the reviewed note."""
+    note = t("overview_tile.answers_note", reviewed="3", total="4")
+    return _texts(rc).count(note)
+
+
+def _answered_alerts():
+    """``_alerts`` with a Loss driver answer and a Road access answer per alert."""
+    gdf = _alerts()
+    gdf["description"] = ["logging", "", "mining", ""]
+    gdf["q_road"] = ["yes", "", "no", "yes"]
+    return gdf
+
+
+def test_each_question_gets_its_own_card_in_questionnaire_order(ov, tmp_path):
+    p = _project(tmp_path)
+    p.questions.append(ROAD)
+    _write_store(tmp_path, "d", p.alert_sets[p.active_set], _answered_alerts())
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _texts(rc)
+        loss, road = qs.question_label(p.questions[0]), "Road access"
+        assert loss in texts and road in texts
+        assert texts.index(loss) < texts.index(road)
+        assert _answer_notes(rc) == 2
+        assert any("Yes: " in f and "No: " in f for f in _figures(rc))  # the road chart, labelled
+        assert any(t("analysis_tile.questionarie.loss_driver3") in f for f in _figures(rc))  # "Logging"
+    finally:
+        rc.close()
+
+
+def test_a_project_without_questions_shows_no_answer_card(ov, tmp_path):
+    """Spec D9: no questions means no cards -- and the rest of the page stands."""
+    p = _project(tmp_path)
+    p.questions.clear()
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        assert _answer_notes(rc) == 0
+        assert t("overview_tile.answers_empty") not in _texts(rc)
+        assert _numbers(rc)[t("overview_tile.table_total")][0] == "4"
+    finally:
+        rc.close()
+
+
+def test_a_question_nobody_has_answered_yet_says_so_in_its_card(ov, tmp_path):
+    p = _project(tmp_path)
+    p.alert_sets[p.active_set].n_reviewed = 0
+    unreviewed = _alerts()
+    unreviewed["status"] = "Not reviewed"
+    _write_store(tmp_path, "d", p.alert_sets[p.active_set], unreviewed)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        assert t("overview_tile.answers_empty") in _texts(rc)
+        assert t("overview_tile.answers_empty") == "No reviewed alert answered this yet."
+    finally:
+        rc.close()
+
+
+def test_a_question_added_to_an_old_store_shows_its_card_unanswered(ov, tmp_path):
+    """Review focus 5: the store has no ``q_road`` column yet. The card reads
+    the reviewed alerts as unanswered instead of failing the page."""
+    p = _project(tmp_path)  # _alerts(): neither description nor q_road
+    state = _state(p, None)
+    map_, layers, rc = ov.render(state)
+    try:
+        assert _answer_notes(rc) == 1
+        state.update_project("d", lambda x: x.questions.append(ROAD))
+        ov.settle()
+        assert "Road access" in _texts(rc)
+        assert _answer_notes(rc) == 2
+        assert t("overview_tile.read_failed", error="|").split("|")[0] not in " ".join(_texts(rc))
+        assert sum(t("overview_tile.answer_unknown") in f for f in _figures(rc)) == 2
     finally:
         rc.close()
 

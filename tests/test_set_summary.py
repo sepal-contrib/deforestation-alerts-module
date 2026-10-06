@@ -28,6 +28,10 @@ def _frame(**overrides):
     return pd.DataFrame(data)
 
 
+#: The default question's column, as ``project.questions.column`` maps it.
+LOSS = {"loss_driver": "description"}
+
+
 def _status(summary, name):
     code = STATUS_CODES[name]
     return next(b for b in summary.by_status if b.code == code)
@@ -38,7 +42,7 @@ def test_an_empty_frame_is_zeroed_not_none():
     assert s.set_id == "x" and s.n_alerts == 0 and s.area_ha == 0.0 and s.n_reviewed == 0
     assert [b.code for b in s.by_status] == [0, 1, 2, 3]
     assert all(b.n == 0 and b.area_ha == 0.0 and b.median_ha == 0.0 for b in s.by_status)
-    assert s.by_week == () and s.by_driver == () and s.by_source == () and s.by_admin == ()
+    assert s.by_week == () and s.by_question == () and s.by_source == () and s.by_admin == ()
     assert s.largest is None
 
 
@@ -57,9 +61,9 @@ def test_totals_and_status_breakdown_are_in_code_order():
 
 
 def test_all_unreviewed_leaves_the_review_only_rollups_empty():
-    s = ss.summarize_alerts(_frame(status=["Not reviewed"] * 4))
+    s = ss.summarize_alerts(_frame(status=["Not reviewed"] * 4), answer_columns=LOSS)
     assert s.n_reviewed == 0
-    assert s.by_driver == () and s.by_admin == ()
+    assert s.breakdown("loss_driver") == () and s.by_admin == ()
     assert s.n_alerts == 4 and _status(s, "Not reviewed").n == 4  # the set itself is still summarised
 
 
@@ -76,10 +80,10 @@ def test_an_unknown_status_falls_to_not_reviewed():
 
 def test_a_missing_column_does_not_raise():
     frame = _frame().drop(columns=["description", "admin1", "alert_sources", "alert_date_min"])
-    s = ss.summarize_alerts(frame)
+    s = ss.summarize_alerts(frame, answer_columns=LOSS)
     assert s.n_alerts == 4 and s.by_week == ()
     assert s.by_source == ((ss.UNKNOWN_SOURCE, pytest.approx(4.5), 4),)
-    assert s.by_driver == ((ss.UNKNOWN_DRIVER, pytest.approx(3.75), 3),)
+    assert s.breakdown("loss_driver") == ((ss.UNKNOWN_DRIVER, pytest.approx(3.75), 3),)
     assert s.by_admin == ((ss.UNATTRIBUTED, pytest.approx(3.75), pytest.approx(2.0), 3),)
 
 
@@ -89,32 +93,99 @@ def test_a_negative_or_null_area_counts_as_zero():
     assert _status(s, "False Positive").area_ha == 0.0
 
 
-# --- drivers -------------------------------------------------------------
+# --- one breakdown per question (spec D9) --------------------------------
 
-def test_an_alerts_full_area_counts_under_each_driver_it_names():
-    """``description`` is multi-code (loss_drivers._SEP), so the bars may sum
-    past the reviewed total -- the spec's ruling."""
-    s = ss.summarize_alerts(_frame())
-    assert dict((c, n) for c, _, n in s.by_driver) == {
+
+def test_an_alerts_full_area_counts_under_each_answer_it_names():
+    """An answer is multi-code (``gui.scripts.questions.SEP``), so the bars
+    may sum past the reviewed total -- the spec's ruling."""
+    s = ss.summarize_alerts(_frame(), answer_columns=LOSS)
+    rows = s.breakdown("loss_driver")
+    assert dict((c, n) for c, _, n in rows) == {
         "logging": 1, "mining": 1, "agriculture_expansion": 1, ss.UNKNOWN_DRIVER: 1}
-    areas = dict((c, ha) for c, ha, _ in s.by_driver)
+    areas = dict((c, ha) for c, ha, _ in rows)
     assert areas["logging"] == pytest.approx(2.0) and areas["mining"] == pytest.approx(2.0)
-    assert sum(ha for _, ha, _ in s.by_driver) > s.area_ha - 0.75  # more than the reviewed area
+    assert sum(ha for _, ha, _ in rows) > s.area_ha - 0.75  # more than the reviewed area
 
 
-def test_drivers_are_sorted_by_area_descending():
-    areas = [ha for _, ha, _ in ss.summarize_alerts(_frame()).by_driver]
+def test_answers_are_sorted_by_area_descending():
+    areas = [ha for _, ha, _ in ss.summarize_alerts(_frame(), answer_columns=LOSS).breakdown("loss_driver")]
     assert areas == sorted(areas, reverse=True)
 
 
-def test_a_reviewed_alert_with_no_driver_falls_to_unknown():
-    s = ss.summarize_alerts(_frame(status=["Confirmed"] * 4, description=[None, "", "   ", "mining"]))
-    assert dict((c, n) for c, _, n in s.by_driver) == {ss.UNKNOWN_DRIVER: 3, "mining": 1}
+def test_a_reviewed_alert_with_no_answer_falls_to_unknown():
+    s = ss.summarize_alerts(_frame(status=["Confirmed"] * 4, description=[None, "", "   ", "mining"]),
+                            answer_columns=LOSS)
+    assert dict((c, n) for c, _, n in s.breakdown("loss_driver")) == {ss.UNKNOWN_DRIVER: 3, "mining": 1}
 
 
-def test_drivers_of_is_used_when_given():
-    s = ss.summarize_alerts(_frame(), drivers_of=lambda value: ["only"])
-    assert [c for c, _, _ in s.by_driver] == ["only"]
+def test_split_of_is_used_when_given_and_told_the_question_key():
+    seen = []
+    s = ss.summarize_alerts(_frame(), answer_columns=LOSS,
+                            split_of=lambda key, value: seen.append(key) or ["only"])
+    assert [c for c, _, _ in s.breakdown("loss_driver")] == ["only"]
+    assert set(seen) == {"loss_driver"}
+
+
+def test_by_question_counts_reviewed_alerts_per_answer_for_each_question():
+    frame = pd.DataFrame({
+        "alert_id": [1, 2, 3], "status": ["Confirmed", "Need revision", "Not reviewed"],
+        "area_ha": [2.0, 1.0, 5.0], "alert_date_min": [2026.1] * 3, "alert_sources": ["GLAD-L"] * 3,
+        "admin1": ["A"] * 3, "description": ["logging, mining", "", "logging"], "q_road": ["yes", "no", "yes"],
+    })
+    s = ss.summarize_alerts(frame, answer_columns={"loss_driver": "description", "road": "q_road"})
+    assert s.breakdown("loss_driver") == (("logging", 2.0, 1), ("mining", 2.0, 1), (ss.UNKNOWN_DRIVER, 1.0, 1))
+    assert s.breakdown("road") == (("yes", 2.0, 1), ("no", 1.0, 1))
+    assert [k for k, _ in s.by_question] == ["loss_driver", "road"]
+
+
+def test_by_question_follows_the_order_asked_not_the_frames():
+    s = ss.summarize_alerts(_frame(q_road=["yes"] * 4),
+                            answer_columns={"road": "q_road", "loss_driver": "description"})
+    assert [k for k, _ in s.by_question] == ["road", "loss_driver"]
+
+
+def test_a_missing_answer_column_is_an_empty_breakdown_not_an_error():
+    """Review focus 5."""
+    frame = pd.DataFrame({"alert_id": [1], "status": ["Confirmed"], "area_ha": [1.0]})
+    s = ss.summarize_alerts(frame, answer_columns={"road": "q_road"})
+    assert s.breakdown("road") == ((ss.UNKNOWN_DRIVER, 1.0, 1),)
+
+
+def test_no_questions_means_no_breakdown():
+    """Spec D9: no questions means no cards."""
+    s = ss.summarize_alerts(_frame())
+    assert s.by_question == () and s.breakdown("loss_driver") == ()
+
+
+def test_a_key_not_asked_for_has_an_empty_breakdown():
+    assert ss.summarize_alerts(_frame(), answer_columns=LOSS).breakdown("road") == ()
+
+
+def test_read_summary_reads_the_answer_columns_it_is_asked_for(tmp_path):
+    frame = pd.DataFrame({
+        "alert_id": [1, 2, 3], "status": ["Confirmed", "Need revision", "Not reviewed"],
+        "area_ha": [2.0, 1.0, 5.0], "alert_date_min": [2026.1] * 3, "alert_sources": ["GLAD-L"] * 3,
+        "admin1": ["A"] * 3, "description": ["logging, mining", "", "logging"], "q_road": ["yes", "no", "yes"],
+    })
+    frame.to_parquet(tmp_path / "s.parquet")
+    s = ss.read_summary(tmp_path / "s.parquet", "jan", answer_columns={"road": "q_road", "fire": "q_fire"})
+    assert s.breakdown("road") == (("yes", 2.0, 1), ("no", 1.0, 1))  # projected in
+    assert s.breakdown("fire") == ((ss.UNKNOWN_DRIVER, 3.0, 2),)  # absent from the store: tolerated
+    assert [k for k, _ in s.by_question] == ["road", "fire"]
+
+
+def test_read_summary_does_not_read_an_answer_column_nobody_asked_for(tmp_path, monkeypatch):
+    import pandas
+
+    frame = _frame(q_road=["yes"] * 4)
+    frame.to_parquet(tmp_path / "s.parquet")
+    asked = []
+    real = pandas.read_parquet
+    monkeypatch.setattr(pandas, "read_parquet", lambda path, columns=None, **kw: asked.append(columns)
+                        or real(path, columns=columns, **kw))
+    ss.read_summary(tmp_path / "s.parquet", "jan", answer_columns=LOSS)
+    assert "description" in asked[0] and "q_road" not in asked[0]
 
 
 # --- sources -------------------------------------------------------------
@@ -253,7 +324,8 @@ def test_the_summary_columns_are_what_a_real_store_carries():
     from deforestation_alerts.engine.vectorize import COLUMNS
 
     assert {"area_ha", "alert_date_min"} <= set(COLUMNS)
-    assert set(ss.SUMMARY_COLUMNS) - {"alert_id", "status", "alert_sources", "description", "admin1"} <= set(COLUMNS)
+    assert "description" not in ss.SUMMARY_COLUMNS  # an answer column, read only when asked for
+    assert set(ss.SUMMARY_COLUMNS) - {"alert_id", "status", "alert_sources", "admin1"} <= set(COLUMNS)
 
 
 def test_the_module_does_not_import_gui_or_solara():

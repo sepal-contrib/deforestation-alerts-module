@@ -23,6 +23,7 @@ from collections import OrderedDict
 from typing import Optional
 
 from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts.set_summary import read_summary
 from gui.i18n import t
 from gui.scripts import charts, set_store
@@ -43,17 +44,27 @@ _MEMO: "OrderedDict" = OrderedDict()
 
 # --- reading --------------------------------------------------------------
 
+def answer_columns(project) -> dict:
+    """``{question key: store column}`` for the project's questions, in order."""
+    return {q.key: column(q) for q in project.questions} if project is not None else {}
+
+
 def summary_key(project, alert_set) -> Optional[tuple]:
     """What makes a cached summary stale, or None without a set.
 
     The set's fingerprint changes when Integrate rebuilds it, ``n_reviewed``
     when a review is saved, and the store's generation on any write at all --
-    so a key that still matches names the same numbers.
+    so a key that still matches names the same numbers. The questions are in
+    it too (spec D9): which columns are read, and each question's options,
+    which the split reads stored labels back to codes through. Both as
+    strings, because a pydantic model does not hash.
     """
     if project is None or alert_set is None:
         return None
     return (project.name, alert_set.id, alert_set.fingerprint, alert_set.n_reviewed,
-            set_store.store_generation(set_store.store_path(project, alert_set)))
+            set_store.store_generation(set_store.store_path(project, alert_set)),
+            tuple(answer_columns(project).items()),
+            tuple(q.model_dump_json(include={"options"}) for q in project.questions))
 
 
 def period_sets(project) -> tuple:
@@ -74,8 +85,10 @@ def history_keys(project) -> tuple:
     return tuple(summary_key(project, s) for _, s in period_sets(project))
 
 
-def summary_of(project, alert_set, *, drivers_of=None) -> object:
-    """``alert_set``'s summary, memoized on :func:`summary_key`.
+def summary_of(project, alert_set, *, split_of=None) -> object:
+    """``alert_set``'s summary, memoized on :func:`summary_key`: one breakdown
+    per project question, split by ``split_of(key, stored)`` (see
+    ``set_summary.summarize_alerts``).
 
     Blocking (parquet): call it from a worker thread. It raises when the store
     cannot be read -- the dashboard then says the set's files are missing
@@ -89,7 +102,8 @@ def summary_of(project, alert_set, *, drivers_of=None) -> object:
     period = project.periods.get(alert_set.period_id)
     summary = read_summary(
         set_store.store_path(project, alert_set), alert_set.id,
-        period_start=period.start if period is not None else None, drivers_of=drivers_of,
+        period_start=period.start if period is not None else None,
+        answer_columns=answer_columns(project), split_of=split_of,
     )
     _MEMO[key] = summary
     while len(_MEMO) > MEMO_LIMIT:
@@ -97,7 +111,7 @@ def summary_of(project, alert_set, *, drivers_of=None) -> object:
     return summary
 
 
-def history_of(project, *, drivers_of=None) -> tuple:
+def history_of(project, *, split_of=None) -> tuple:
     """``(period, alert_set, summary)`` per period, oldest first.
 
     A period whose store cannot be read is left out and logged: one deleted
@@ -106,7 +120,7 @@ def history_of(project, *, drivers_of=None) -> tuple:
     out = []
     for period, alert_set in period_sets(project):
         try:
-            out.append((period, alert_set, summary_of(project, alert_set, drivers_of=drivers_of)))
+            out.append((period, alert_set, summary_of(project, alert_set, split_of=split_of)))
         except Exception:  # noqa: BLE001 - one unreadable store, not the whole history
             logger.exception("the Overview history skips set %s: its store could not be read", alert_set.id)
     return tuple(out)
@@ -170,17 +184,20 @@ def table_rows(summary, measure: str) -> tuple:
 
 # --- drawing --------------------------------------------------------------
 
-#: The figures one dashboard holds. ``draw_figures`` returns this set of keys.
-FIGURES = ("spark", "status", "history", "sizes", "timing", "drivers", "sources")
+#: The fixed figures every dashboard holds. ``draw_figures`` returns these
+#: keys plus one ``"q:<key>"`` per question it is given.
+FIGURES = ("spark", "status", "history", "sizes", "timing", "sources")
 
 
-def draw_figures(summary, series, *, measure: str, theme: dict, label_of) -> dict:
+def draw_figures(summary, series, *, measure: str, theme: dict, label_of, questions=()) -> dict:
     """Every figure of one dashboard, as inline SVG, keyed by its card.
 
     ``series`` is ``chart_trend``'s ``(label, SetSummary, under_review)``,
-    oldest first. A figure that raises is ``None`` in the result and logged:
-    the card that owns it falls back to its numbers in text, and no other card
-    is affected (spec, Error handling).
+    oldest first. ``questions`` get one answer chart each, keyed
+    ``"q:<key>"``, whose bars ``label_of(question, code)`` names. A figure
+    that raises is ``None`` in the result and logged: the card that owns it
+    falls back to its numbers in text, and no other card is affected (spec,
+    Error handling).
     """
     spark = [status_value(s, CONFIRMED, measure) for _, s, _ in series]
     jobs = {
@@ -189,9 +206,11 @@ def draw_figures(summary, series, *, measure: str, theme: dict, label_of) -> dic
         "history": lambda: charts.chart_trend(series, measure=measure, theme=theme),
         "sizes": lambda: charts.chart_sizes(summary, measure=measure, theme=theme),
         "timing": lambda: charts.chart_timing(summary, measure=measure, theme=theme),
-        "drivers": lambda: charts.chart_drivers(summary, measure=measure, theme=theme, label_of=label_of),
         "sources": lambda: charts.chart_sources(summary, measure=measure, theme=theme),
     }
+    for q in questions:
+        jobs[f"q:{q.key}"] = lambda q=q: charts.chart_question(
+            summary, q.key, measure=measure, theme=theme, label_of=lambda code, q=q: label_of(q, code))
     out = {}
     for name, draw in jobs.items():
         try:

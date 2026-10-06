@@ -22,7 +22,7 @@ FORBIDDEN_HEXES = [c for _, c, _ in ALERT_CLASSES + STATUS_CLASSES] + [MASK_COLO
 
 
 def _frame(**overrides):
-    """Eight alerts spread over statuses, weeks, sizes, drivers and sources."""
+    """Eight alerts spread over statuses, weeks, sizes, loss drivers and sources."""
     data = {
         "alert_id": [10, 11, 12, 13, 14, 15, 16, 17],
         "status": ["Confirmed", "Confirmed", "False Positive", "Need revision",
@@ -43,7 +43,8 @@ def _frame(**overrides):
 @pytest.fixture
 def summary():
     from datetime import date
-    return ss.summarize_alerts(_frame(), set_id="feb", period_start=date(2026, 2, 9))
+    return ss.summarize_alerts(_frame(), set_id="feb", period_start=date(2026, 2, 9),
+                               answer_columns={"loss_driver": "description"})
 
 
 @pytest.fixture
@@ -65,12 +66,13 @@ def _builders(summary, theme, measure=charts.MEASURE_AREA):
             (("Jan", summary, False), ("Feb", summary, True)), measure=measure, theme=theme),
         "sizes": lambda: charts.chart_sizes(summary, measure=measure, theme=theme),
         "timing": lambda: charts.chart_timing(summary, measure=measure, theme=theme),
-        "drivers": lambda: charts.chart_drivers(summary, measure=measure, theme=theme, label_of=str),
+        "question": lambda: charts.chart_question(summary, "loss_driver", measure=measure, theme=theme,
+                                                  label_of=str),
         "sources": lambda: charts.chart_sources(summary, measure=measure, theme=theme),
     }
 
 
-ALL_CHARTS = ["spark", "status", "trend", "sizes", "timing", "drivers", "sources"]
+ALL_CHARTS = ["spark", "status", "trend", "sizes", "timing", "question", "sources"]
 
 
 # --- the module's own contracts -------------------------------------------
@@ -127,7 +129,7 @@ def test_dark_mode_paints_the_dark_surface(name, summary):
     assert dark["surface"] in _builders(summary, dark)[name]()
 
 
-@pytest.mark.parametrize("name", ["status", "trend", "sizes", "timing", "drivers", "sources"])
+@pytest.mark.parametrize("name", ["status", "trend", "sizes", "timing", "question", "sources"])
 def test_the_measure_changes_what_is_drawn(name, summary, theme):
     area = _builders(summary, theme, charts.MEASURE_AREA)[name]()
     count = _builders(summary, theme, charts.MEASURE_ALERTS)[name]()
@@ -201,7 +203,7 @@ def test_without_a_period_start_no_week_is_de_emphasised(theme):
     assert theme["lookback"] not in svg
 
 
-# --- drivers and sources --------------------------------------------------
+# --- question answers and sources -----------------------------------------
 
 def test_the_tail_of_a_long_ranking_folds_into_one_other_row():
     rows = tuple((f"d{i}", float(10 - i), 1) for i in range(9))
@@ -218,11 +220,24 @@ def test_a_short_ranking_is_left_alone():
     assert charts._fold_tail(rows, 5) == rows
 
 
-def test_drivers_asks_the_caller_for_every_label_but_other(summary, theme):
+def test_a_question_chart_asks_the_caller_for_every_label_but_other(summary, theme):
     seen = []
-    charts.chart_drivers(summary, measure=charts.MEASURE_AREA, theme=theme,
-                         label_of=lambda code: seen.append(code) or f"D-{code}")
+    charts.chart_question(summary, "loss_driver", measure=charts.MEASURE_AREA, theme=theme,
+                          label_of=lambda code: seen.append(code) or f"D-{code}")
     assert seen and charts.OTHER_KEY not in seen
+
+
+def test_a_question_chart_draws_its_own_breakdown_only(theme):
+    frame = _frame(q_road=["yes", "no", "", "yes", "", "", "no", ""])
+    summary = ss.summarize_alerts(frame, answer_columns={"loss_driver": "description", "road": "q_road"})
+    aria = _aria(charts.chart_question(summary, "road", measure=charts.MEASURE_ALERTS, theme=theme,
+                                       label_of=lambda code: f"R-{code}"))
+    assert "R-yes" in aria and "R-no" in aria and "R-logging" not in aria
+
+
+def test_a_question_that_was_not_summarised_draws_the_empty_chart(summary, theme):
+    svg = charts.chart_question(summary, "road", measure=charts.MEASURE_AREA, theme=theme, label_of=str)
+    assert svg.startswith("<svg") and t("overview_tile.chart_no_data") in svg
 
 
 def _aria(svg) -> str:
@@ -233,9 +248,9 @@ def test_a_category_whose_own_name_is_other_absorbs_the_folded_tail(empty, theme
     """Two bars both reading "Other" -- the driver code of that name and the
     folded tail -- would misrank the chart and read as a duplicate."""
     rows = tuple((f"d{i}", float(9 - i), 1) for i in range(8))
-    summary = replace(empty, by_driver=rows)
-    svg = charts.chart_drivers(summary, measure=charts.MEASURE_AREA, theme=theme,
-                               label_of=lambda code: "Other" if code == "d0" else code)
+    summary = replace(empty, by_question=(("loss_driver", rows),))
+    svg = charts.chart_question(summary, "loss_driver", measure=charts.MEASURE_AREA, theme=theme,
+                                label_of=lambda code: "Other" if code == "d0" else code)
     aria = _aria(svg)
     assert aria.count("Other") == 1
     assert "Other: 18" in aria  # its own 9 ha plus the 9 ha folded in
@@ -251,13 +266,14 @@ def test_the_folded_row_always_sits_last_however_big_it_is():
     assert charts._merge_by_label(pairs) == (("Logging", 2.0), ("Other", 99.0))
 
 
-def test_the_unattributed_driver_is_named_not_passed_to_the_caller(summary, theme):
-    assert any(code == ss.UNKNOWN_DRIVER for code, _, _ in summary.by_driver)
-    svg = charts.chart_drivers(summary, measure=charts.MEASURE_AREA, theme=theme,
-                               label_of=lambda code: f"D-{code}")
+def test_the_unanswered_sentinel_is_named_not_passed_to_the_caller(summary, theme):
+    assert any(code == ss.UNKNOWN_DRIVER for code, _, _ in summary.breakdown("loss_driver"))
+    svg = charts.chart_question(summary, "loss_driver", measure=charts.MEASURE_AREA, theme=theme,
+                                label_of=lambda code: f"D-{code}")
     aria = _aria(svg)
     assert f"D-{ss.UNKNOWN_DRIVER}" not in aria
-    assert t("overview_tile.driver_unknown") in aria
+    assert t("overview_tile.answer_unknown") == "No answer"
+    assert t("overview_tile.answer_unknown") in aria
 
 
 def test_the_status_bar_writes_no_text_on_a_coloured_fill(summary, theme):

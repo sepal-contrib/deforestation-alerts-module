@@ -8,15 +8,17 @@ Two details of the store shape drive this module:
 
 * ``alert_date_min`` is a **decimal year** (``year + doy/1000``, written by
   ``engine/vectorize.yyyyddd_to_decimal``), not a date.
-* ``description`` (loss drivers) and ``admin1`` are written per alert **during
-  Analysis review**, so ``by_driver`` and ``by_admin`` cover reviewed alerts
-  only. ``description`` holds several comma-joined codes, and an alert's full
-  area counts once under each code it names: splitting it between the drivers
-  would invent a number the review never recorded.
+* the answer columns (one per question, spec D9) and ``admin1`` are written
+  per alert **during Analysis review**, so ``by_question`` and ``by_admin``
+  cover reviewed alerts only. An answer holds several comma-joined codes, and
+  an alert's full area counts once under each code it names: splitting it
+  between the answers would invent a number the review never recorded.
 
-Driver codes are split by a caller-supplied ``drivers_of`` (the GUI passes
-``gui.scripts.loss_drivers.codes``, which also reads legacy label stores back to
-codes) because this package must never import from ``gui/``.
+Which columns are read is the caller's ``answer_columns`` (``{question key:
+store column}``), and answers are split by a caller-supplied ``split_of`` (the
+GUI passes ``gui.scripts.questions.codes`` of the question, which also reads
+legacy label stores back to codes) because this package must never import
+from ``gui/``. A question whose column the store lacks reads as unanswered.
 """
 
 from dataclasses import dataclass
@@ -29,13 +31,15 @@ from deforestation_alerts.scripts.report_builder import parse_formatted_string
 #: The only columns the dashboard reads. A projected parquet read of these is
 #: ~36x cheaper than loading the geometry too, which is what makes recomputing
 #: on every set switch cheaper than caching the result.
+#: The answer columns are read on top of these, as the caller asks.
 SUMMARY_COLUMNS = ["alert_id", "status", "area_ha", "alert_date_min",
-                   "alert_sources", "description", "admin1"]
+                   "alert_sources", "admin1"]
 
 #: Upper edges of the size histogram, in hectares; the last bin is open.
 SIZE_EDGES = (0.5, 1.0, 2.0, 5.0, 10.0, 25.0)
 
-#: A reviewed alert that recorded no loss driver.
+#: A reviewed alert that recorded no answer to a question (any question, not
+#: only Loss driver: the name predates the questionnaire).
 UNKNOWN_DRIVER = "unknown"
 #: A reviewed alert whose ``admin1`` was never written. Empty on purpose: the
 #: label is a translation, and this module resolves none.
@@ -45,7 +49,7 @@ UNKNOWN_SOURCE = ""
 
 _NOT_REVIEWED = STATUS_CODES["Not reviewed"]
 _CONFIRMED = STATUS_CODES["Confirmed"]
-_SEP = ", "  # gui.scripts.loss_drivers._SEP
+_SEP = ", "  # gui.scripts.questions.SEP
 
 
 @dataclass(frozen=True)
@@ -75,10 +79,16 @@ class SetSummary:
     by_status: tuple
     size_bins: tuple          # (lo, hi, n, area_ha)
     by_week: tuple            # (Monday, area_ha, n, in_period)
-    by_driver: tuple          # (code, area_ha, n), area-descending
+    by_question: tuple        # ((key, ((code, area_ha, n), ...)), ...), in question order;
+    #                           each breakdown area-descending
     by_source: tuple          # (combination, area_ha, n), area-descending
     by_admin: tuple           # (admin1, area_ha, confirmed_ha, n), confirmed-descending
     largest: Optional[tuple]  # (alert_id, area_ha, admin1, date | None)
+
+    def breakdown(self, key: str) -> tuple:
+        """The ``(code, area_ha, n)`` rows of question ``key``; ``()`` for a
+        key that was not asked for."""
+        return next((rows for k, rows in self.by_question if k == key), ())
 
 
 def decimal_year_to_date(value) -> Optional[date]:
@@ -102,28 +112,32 @@ def decimal_year_to_date(value) -> Optional[date]:
 
 
 def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = None,
-                     drivers_of: Optional[Callable] = None) -> SetSummary:
+                     answer_columns: Optional[dict] = None,
+                     split_of: Optional[Callable] = None) -> SetSummary:
     """Summarise an alert frame. Never raises on a missing column or value.
 
     Parameters
     ----------
     frame
-        The alerts, or ``None``. Only ``SUMMARY_COLUMNS`` are read; a column
-        that is absent is treated as empty.
+        The alerts, or ``None``. Only ``SUMMARY_COLUMNS`` and the answer
+        columns are read; a column that is absent is treated as empty.
     set_id
         Carried onto the summary, so a stale one is recognisable.
     period_start
         The active period's first day. Weeks before the week it falls in are
         marked ``in_period=False``: they are look-back alerts, and the chart
         de-emphasises them so they cannot read as this period's own signal.
-    drivers_of
-        ``description`` -> list of driver codes. Defaults to a plain split on
-        ``", "``; the GUI passes ``loss_drivers.codes``.
+    answer_columns
+        ``{question key: store column}``, in question order: one breakdown
+        per entry, in that order. None or empty means no breakdown.
+    split_of
+        ``(key, stored answer)`` -> list of codes. Defaults to a plain split
+        on ``", "``; the GUI passes the question's ``questions.codes``.
     """
     if frame is None or len(frame) == 0:
         return _zeroed(set_id)
 
-    split = drivers_of if drivers_of is not None else _split_drivers
+    split = split_of or (lambda _key, value: _split_answer(value))
     n = len(frame)
     area = _area(frame, n)
     code = _code(frame, n)
@@ -137,7 +151,9 @@ def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = 
         by_status=_by_status(area, code),
         size_bins=_size_bins(area),
         by_week=_by_week(_column(frame, "alert_date_min", n), area, period_start),
-        by_driver=_by_driver(_column(frame, "description", n), area, reviewed, split),
+        by_question=tuple((key, _by_answer(_column(frame, col, n), area, reviewed,
+                                           lambda v, k=key: split(k, v)))
+                          for key, col in (answer_columns or {}).items()),
         by_source=_by_source(_column(frame, "alert_sources", n), area),
         by_admin=_by_admin(_column(frame, "admin1", n), area, code, reviewed),
         largest=_largest(frame, area, n),
@@ -145,7 +161,8 @@ def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = 
 
 
 def read_summary(store_path, set_id: str, *, period_start: Optional[date] = None,
-                 drivers_of: Optional[Callable] = None) -> SetSummary:
+                 answer_columns: Optional[dict] = None,
+                 split_of: Optional[Callable] = None) -> SetSummary:
     """``summarize_alerts`` of a set's store, read column-projected.
 
     Blocking (parquet): call it from a worker thread. It raises when the store
@@ -156,9 +173,11 @@ def read_summary(store_path, set_id: str, *, period_start: Optional[date] = None
     import pyarrow.parquet as pq
 
     names = set(pq.read_schema(store_path).names)
-    columns = [c for c in SUMMARY_COLUMNS if c in names]
+    wanted = SUMMARY_COLUMNS + [c for c in (answer_columns or {}).values() if c not in SUMMARY_COLUMNS]
+    columns = [c for c in dict.fromkeys(wanted) if c in names]
     frame = pd.read_parquet(store_path, columns=columns) if columns else pd.DataFrame()
-    return summarize_alerts(frame, set_id=set_id, period_start=period_start, drivers_of=drivers_of)
+    return summarize_alerts(frame, set_id=set_id, period_start=period_start,
+                            answer_columns=answer_columns, split_of=split_of)
 
 
 # ---- internals ------------------------------------------------------------
@@ -168,7 +187,7 @@ def _zeroed(set_id: str) -> SetSummary:
     return SetSummary(set_id=set_id, n_alerts=0, area_ha=0.0, n_reviewed=0,
                       by_status=tuple(StatusBreakdown(code=c, n=0, area_ha=0.0, median_ha=0.0)
                                       for c in sorted(set(STATUS_CODES.values()))),
-                      size_bins=(), by_week=(), by_driver=(), by_source=(), by_admin=(), largest=None)
+                      size_bins=(), by_week=(), by_question=(), by_source=(), by_admin=(), largest=None)
 
 
 def _text(value) -> str:
@@ -186,7 +205,7 @@ def _text(value) -> str:
     return str(value)
 
 
-def _split_drivers(value) -> list:
+def _split_answer(value) -> list:
     return [part.strip() for part in _text(value).split(_SEP) if part.strip()]
 
 
@@ -252,11 +271,11 @@ def _ranked(table: dict) -> tuple:
     return tuple((k, ha, n) for k, (ha, n) in sorted(table.items(), key=lambda kv: (-kv[1][0], kv[0])))
 
 
-def _by_driver(descriptions: list, area: list, reviewed: list, split: Callable) -> tuple:
+def _by_answer(answers: list, area: list, reviewed: list, split: Callable) -> tuple:
     table = {}
-    for value, a, keep in zip(descriptions, area, reviewed):
+    for value, a, keep in zip(answers, area, reviewed):
         if not keep:
-            continue  # drivers are recorded by review only
+            continue  # answers are recorded by review only
         for c in (split(value) or [UNKNOWN_DRIVER]):
             ha, n = table.get(c, (0.0, 0))
             table[c] = (ha + a, n + 1)  # the alert's FULL area, once per code it names
