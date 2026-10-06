@@ -2,10 +2,11 @@
 
 A project's reports are built from ``project.report_template`` (an absolute
 path to a ``.docx`` in the user's SEPAL folder), or from the app's default
-template when it is empty. It lives in the Questionnaire step, beside the
-placeholders the template can use; Analysis's export card still renders it
-through ``render_detached``. It resolves its notifier when a file is picked, so
-it also renders where no ``NotificationProvider`` is mounted.
+template when it is empty. Only the Questionnaire step renders it, beside the
+placeholders the template can use; Analysis's export card only builds and
+downloads. The shell renders that step through ``render_detached``, so the
+field resolves its notifier when a file is picked: it also works where no
+``NotificationProvider`` is mounted.
 """
 
 from pathlib import Path
