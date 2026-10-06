@@ -6,7 +6,7 @@ must survive a collapse, and the step container already destroys and rebuilds
 this DOM.
 
 The second half drives ``analysis_tile.build_controls`` -- the panel as the
-tile assembles it: the head, block A, block B and the two sections, with the
+tile assembles it: the head, block A, block B and the three sections, with the
 export section's save runner shared with the verdict block.
 """
 
@@ -78,7 +78,7 @@ def test_set_open_drives_the_same_state():
 
 
 # ---------------------------------------------------------------------------
-# The assembled panel (Task 10): head, block A, block B, the two sections
+# The assembled panel (Task 10): head, block A, block B, the three sections
 # ---------------------------------------------------------------------------
 def _controls(tmp_path, monkeypatch):
     """``build_controls`` as the tile builds it, on stand-in models.
@@ -109,15 +109,16 @@ def _controls(tmp_path, monkeypatch):
                            sections=analysis_tile.panel_sections(controls))
 
 
-def test_the_panel_is_the_head_the_two_blocks_and_the_two_sections(tmp_path, monkeypatch):
+def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, monkeypatch):
     """The six stacked always-open cards are gone: what is left is the head
-    (help, set selector, set-status banner), block A, block B and the two
-    collapsible sections, in the order of the spec's §3-§6.
+    (help, set selector, set-status banner), block A, block B and the three
+    collapsible sections -- Questions (spec D4), Refine, Export -- in the order
+    of the spec's §3-§6.
     """
     from gui.tile.analysis import context, review_panel
 
     panel = _controls(tmp_path, monkeypatch)
-    *head, block_a, block_b, refine, export = panel.controls.children
+    *head, block_a, block_b, questions, refine, export = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
     # What each block OWNS, named. ``facts_widgets`` / ``verdict_widgets``
     # return tuples that are truthy whatever they hold, so ``assert <the
@@ -127,14 +128,26 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_two_sections(tmp_path, mon
     source, detected, chip = context.facts_widgets(block_a)
     assert isinstance(chip, v.Chip)                       # the status chip
     assert (source.tag, detected.tag) == ("span", "span")  # the two fact values
-    buttons, _, _, save_next, save, _ = review_panel.verdict_widgets(block_b)
+    buttons, save_next, save, _ = review_panel.verdict_widgets(block_b)
     # The three statuses the store, the PMTiles paint values and Overview's
     # counts all read -- the verdict IS the stored string, never a label.
     assert set(buttons) == {"Confirmed", "False Positive", "Need revision"}
     # The literal English (the fixture pins the locale), not ``t()`` of the
     # same key, which passes on the ``⟦key⟧`` placeholder too.
     assert save.children == ["Save"] and save_next.children[0] == "Save & next"
-    assert [refine, export] == [panel.sections.refine.root, panel.sections.export.root]
+    assert [questions, refine, export] == [panel.sections.questions.root, panel.sections.refine.root,
+                                           panel.sections.export.root]
+
+
+def test_the_questions_section_starts_collapsed_on_the_panels_answers(tmp_path, monkeypatch):
+    """Spec D4: closed by default, one control per project question (the
+    default questionnaire: Loss driver), showing the panel's own answers."""
+    panel = _controls(tmp_path, monkeypatch)
+    questions = panel.sections.questions
+    assert questions.is_open() is False and "display: none" in questions.body_box.style_
+    assert set(questions.controls) == {"loss_driver"}
+    panel.analysis.answers.set({"loss_driver": ["mining"]})
+    assert questions.controls["loss_driver"].v_model == [{"text": "Mining", "value": "mining"}]
 
 
 def test_both_sections_start_collapsed_with_their_bodies_built(tmp_path, monkeypatch):
@@ -189,8 +202,8 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     # ``children[4]`` an insertion into the head reads block A's card instead
     # and fails with ``AttributeError: _defo_verdict_slots``, saying nothing
     # about what moved.
-    *_, block_b, _refine, _export = panel.controls.children
-    _, _, _, save_next, save, _ = review_panel.verdict_widgets(block_b)
+    *_, block_b, _questions, _refine, _export = panel.controls.children
+    _, save_next, save, _ = review_panel.verdict_widgets(block_b)
 
     assert build_btn.disabled is True
     save.fire_event("click", None)

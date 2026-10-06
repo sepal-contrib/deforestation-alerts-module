@@ -119,7 +119,6 @@
       "confirmation_missing": "Responde en «Veredicto» antes de guardar.",
       "false_positive_drawn": "Un falso positivo no puede tener un polígono de deforestación dibujado: elimina el polígono o cambia la respuesta.",
       "loss_driver_label": "Causa de la pérdida",
-      "loss_driver_hint": "Analizar causa de la pérdida",
       "loss_driver1": "Expansión agrícola",
       "loss_driver2": "Pastoreo ganadero",
       "loss_driver3": "Tala",
@@ -135,13 +134,17 @@
       "true": "Alerta verdadera",
       "false": "Falso positivo",
       "revision": "Requiere revisión",
-      "no_driver": "En un falso positivo no se guarda ninguna causa de la pérdida.",
       "save_next": "Guardar y siguiente",
       "unsaved": "Cambios sin guardar en esta alerta",
       "saved_at": "Guardada a las {time}"
     },
     "questions": {
-      "required_missing": "Responda «{question}» antes de guardar."
+      "required_missing": "Responda «{question}» antes de guardar.",
+      "badge": "{answered} de {total} respondidas",
+      "badge_missing": "{answered} de {total} · falta una obligatoria",
+      "badge_none": "sin preguntas",
+      "none": "Este proyecto no hace preguntas: añádalas en el paso Cuestionario.",
+      "typed_hint": "Elija o escriba respuestas"
     },
     "sections": {
       "export": "Exportar esta alerta",
@@ -159,7 +162,8 @@
         "one": "{n} forma",
         "many": "{n} de formas",
         "other": "{n} formas"
-      }
+      },
+      "questions": "Preguntas"
     },
     "edition_labels": {
       "start_edit_button": "Comenzar dibujo",

@@ -76,6 +76,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     multipolygon_to_geodataframe,
 )
 from gui.tile.analysis.context import build_context
+from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
@@ -378,26 +379,28 @@ def build_set_status_banner(app_state) -> v.Html:
     return banner
 
 
-#: The two sections and the export parts, kept on the controls div so the
+#: The three sections and the export parts, kept on the controls div so the
 #: tests (and nothing else) can reach them without re-deriving the tree.
 _PANEL = "_defo_panel_sections"
 
 
 def panel_sections(controls):
-    """``SimpleNamespace(refine, export, export_parts)`` of a panel built by
-    ``build_controls``: the two ``section.build_section`` namespaces and what
-    ``build_export`` returned."""
+    """``SimpleNamespace(questions, refine, export, export_parts)`` of a panel
+    built by ``build_controls``: what ``build_questions_section`` returned,
+    the two ``section.build_section`` namespaces and what ``build_export``
+    returned."""
     return getattr(controls, _PANEL)
 
 
 def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field) -> v.Html:
-    """The right panel: the head, the two blocks and the two sections.
+    """The right panel: the head, the two blocks and the three sections.
 
-    In order (spec §3-§6): the help text with its info popup, the alert-set
-    selector, the set-status banner, **block A** (the queue counter, its
-    progress, the navigation row and the facts grid with its status chip),
-    **block B** (the verdict buttons, the loss driver and *Save & next*), then
-    the collapsible *Refine polygon* and *Export this alert* sections. The six
+    In order (spec §3-§6, D4): the help text with its info popup, the
+    alert-set selector, the set-status banner, **block A** (the queue counter,
+    its progress, the navigation row and the facts grid with its status chip),
+    **block B** (the verdict buttons and *Save & next*), then the collapsible
+    *Questions* (one control per project question, the loss driver among
+    them), *Refine polygon* and *Export this alert* sections. The six
     always-open cards of the old panel are gone with it, as is the separate
     navigation card (block A absorbed it).
 
@@ -405,6 +408,8 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     the sub-builders register is registered once; the section bodies are
     assigned into their ``body_box`` here, once, and stay in the tree for the
     session (a collapse only toggles ``display``, never a ``v-if`` rebuild).
+    The Questions body is the one exception: it holds no imperative state, and
+    it is rebuilt when the project's questions change.
     """
     refine = build_section(t("analysis_tile.sections.refine"), v.Html(tag="div"))
     refine_body = build_edit_tools(
@@ -423,6 +428,10 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     )
     exports.body_box.children = [export_parts.body]
 
+    # Rebuilt by itself when the project's questions change; the answers it
+    # shows and writes are ``analysis.answers``.
+    questions = build_questions_section(app_state, analysis)
+
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
@@ -435,11 +444,12 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis,
                                app_tile_model=app_tile_model,
                                run_save=export_parts.run_save),
+            questions.root,
             refine.root,
             exports.root,
         ],
     )
-    setattr(controls, _PANEL, SimpleNamespace(refine=refine, export=exports,
+    setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
                                               export_parts=export_parts))
     return controls
 

@@ -1,5 +1,8 @@
-"""Block B: the three-button verdict, the driver that disappears for a false
-positive, Save & next, and the save-state line.
+"""Block B: the three-button verdict, Save & next, and the save-state line.
+
+The loss driver left this block for the Questions section (spec D4): its
+hiding for a false positive, its codes and its dirty mark are tested in
+tests/test_analysis_questions_panel.py.
 """
 
 from datetime import datetime
@@ -56,29 +59,6 @@ def test_the_chosen_button_is_the_filled_one(tmp_path, monkeypatch):
     analysis.verdict.set("Need revision")
     assert buttons["Need revision"].outlined is False
     assert buttons["Confirmed"].outlined is True
-
-
-def test_a_false_positive_hides_the_driver_but_keeps_it_in_the_tree(tmp_path, monkeypatch):
-    card, widgets, analysis, _ = _panel(monkeypatch, tmp_path)
-    buttons, driver_box, note, *_ = review_panel.verdict_widgets(card)
-    assert "display: none" not in driver_box.style_
-
-    analysis.verdict.set("False Positive")
-    assert "display: none" in driver_box.style_
-    assert "display: none" not in note.style_
-    assert widgets.driver_combobox in driver_box.children
-
-    analysis.verdict.set("Confirmed")
-    assert "display: none" not in driver_box.style_
-    assert "display: none" in note.style_
-
-
-def test_a_driver_change_marks_the_alert_dirty(tmp_path, monkeypatch):
-    card, widgets, analysis, _ = _panel(monkeypatch, tmp_path)
-    widgets.driver_combobox.v_model = ["mining"]
-    widgets.driver_combobox.fire_event("change", ["mining"])
-    assert analysis.dirty.value is True
-    assert analysis.answers.value == {"loss_driver": ["mining"]}
 
 
 def test_the_state_line_reads_unsaved_then_saved(tmp_path, monkeypatch):

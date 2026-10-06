@@ -95,7 +95,7 @@ SAME_IN = {
         "app.drawer_item.questionnaire", "steps.questionnaire.title", "steps.questionnaire.questions_title",
         "steps.questionnaire.col_question", "steps.questionnaire.tag_options.one",
         "steps.questionnaire.tag_options.other", "workflow.count_questions.one",
-        "workflow.count_questions.other",
+        "workflow.count_questions.other", "analysis_tile.sections.questions",
     },
 }
 

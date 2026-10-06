@@ -70,8 +70,8 @@ def status_chip(page):
 
 
 def open_section(page, title):
-    """Open a collapsible Analysis section ("Refine polygon" / "Export this
-    alert"): its body is hidden with ``display`` until the 50px header is
+    """Open a collapsible Analysis section ("Questions" / "Refine polygon" /
+    "Export this alert"): its body is hidden with ``display`` until the 50px header is
     clicked, and the header's chevron says which way it is."""
     header = visible_btn(page, title)
     wait_for(lambda: header.count(), 30, f'the "{title}" section header')
@@ -193,13 +193,15 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
 
 
 def review_and_save(page, rec, *, out):
-    """Block B: answer the verdict question, pick a loss driver, then **Save**
+    """Block B: answer the verdict question, pick a loss driver in the
+    Questions section (collapsed by default, so opened first), then **Save**
     (not *Save & next*: the assertions below read the alert that was saved).
     There is no default answer any more -- an unanswered Save is refused -- so
     the verdict button is pressed here."""
     page.wait_for_timeout(2000)
     visible_btn(page, "True alert").click()
     page.wait_for_timeout(500)
+    open_section(page, "Questions")
     cb = page.locator('.v-card:has-text("Loss driver") .v-select__slot:visible').last
     cb.click()
     page.wait_for_timeout(700)

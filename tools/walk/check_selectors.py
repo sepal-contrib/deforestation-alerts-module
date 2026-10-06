@@ -10,8 +10,8 @@ phase after it.
 
 The commonest way for that to happen, since the Analysis panel became the
 review console (spec 2026-10-03), is a widget that now lives inside a
-COLLAPSED section body: *Refine polygon* and *Export this alert* hide their
-bodies with ``display``, so nothing inside them is ``:visible`` until
+COLLAPSED section body: *Questions*, *Refine polygon* and *Export this alert*
+hide their bodies with ``display``, so nothing inside them is ``:visible`` until
 ``phases.open_section`` clicks the header. A phase that reaches in without
 opening it first times out.
 
@@ -52,11 +52,12 @@ from types import SimpleNamespace
 WALK = [
     ("phases.integrate_and_land (alert_facts)", (), ("Source", "Detected", "Status")),
     ("phases.review_and_save (verdict button)", (), ("True alert",)),
-    ("phases.review_and_save (loss driver)", (), ("Loss driver",)),
+    ("phases.review_and_save (loss driver)", ("Questions",), ("Loss driver",)),
     ("phases.review_and_save (save_btn)", (), ("Verdict", "Save")),
     ("phases.review_and_save (download_btn)", ("Export this alert",), ("Download",)),
     ("phases.download_with_images (download_btn)", ("Export this alert",), ("Download",)),
-    ("phases.open_section (the headers themselves)", (), ("Refine polygon", "Export this alert")),
+    ("phases.open_section (the headers themselves)", (),
+     ("Questions", "Refine polygon", "Export this alert")),
     ("phases.analysis_jump_field (after the # toggle)", (), ("Go",)),
     ("slice5.e_sets (the set selector)", (), ("Alert set",)),
     ("slice6.pick_template (report template field)", ("Export this alert",), ("Report template",)),
@@ -128,7 +129,8 @@ def main():
     from gui.i18n import t
 
     panel = _texts(controls)
-    bodies = {"Refine polygon": _texts(sections.refine.body_box),
+    bodies = {"Questions": _texts(sections.questions.body_box),
+              "Refine polygon": _texts(sections.refine.body_box),
               "Export this alert": _texts(sections.export.body_box)}
     # The report-template field is a Solara subtree, not raw widgets, so its
     # own catalogue strings are added by hand.

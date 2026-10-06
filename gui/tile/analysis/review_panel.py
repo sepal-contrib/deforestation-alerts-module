@@ -2,22 +2,19 @@
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Three
 buttons write ``AnalysisState.verdict`` — the status string the store, the
-PMTiles paint values and Overview's counts all read, never a label — the loss
-driver disappears for a false positive (none is stored for one), and **Save &
-next** is the panel's one primary button: it saves and advances only if the
-save wrote (spec §4).
+PMTiles paint values and Overview's counts all read, never a label — and
+**Save & next** is the panel's one primary button: it saves and advances only
+if the save wrote (spec §4).
 
-Nothing is stashed on ``widgets`` any more except ``driver_combobox`` (kept
-for tests until the Questions section replaces it, Task 6). The combobox reads
-and writes ``analysis.answers["loss_driver"]``, which ``state.capture_alert``
-takes at the click (the save then writes the captured value — and writes none
-at all for a false positive, which is why hiding the field here is not a lie).
+The loss driver moved to the Questions section (``questions_panel``, spec D4),
+with every other question of the project: the answers are
+``analysis.answers``, which ``state.capture_alert`` takes at the click.
+Nothing is stashed on ``widgets``.
 
 Props
 -----
 widgets : AnalysisWidgets
-    Shared heavy widgets + scratch; the driver combobox is stashed here
-    (transitional, Task 6), but a Save reads ``analysis.answers``.
+    Shared heavy widgets + scratch, for the save runner this block builds.
 app_state : AppState
     Navigation + alerts source of truth; **Save & next** advances it.
 analysis : AnalysisState
@@ -37,11 +34,8 @@ unsubscribers are deliberately discarded.
 from datetime import datetime
 
 import ipyvuetify as v
-from pysepal import sepalwidgets as sw
 
-from deforestation_alerts.project.models import default_questions
 from gui.i18n import t
-from gui.scripts import questions
 from gui.tile.analysis.export import make_save_runner
 from gui.tile.analysis.state import touch
 
@@ -61,13 +55,12 @@ _ICONS = {
 }
 
 _SLOTS = "_defo_verdict_slots"
-_HIDDEN = "display: none;"
 
 
 def verdict_widgets(card):
-    """``(buttons, driver_box, note, save_next, save, state_line)``."""
+    """``(buttons, save_next, save, state_line)``."""
     s = getattr(card, _SLOTS)
-    return (s["buttons"], s["driver_box"], s["note"], s["save_next"], s["save"], s["state_line"])
+    return (s["buttons"], s["save_next"], s["save"], s["state_line"])
 
 
 def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=None):
@@ -95,41 +88,6 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
         children=list(buttons.values()),
     )
 
-    # Codes as values, labels as text: the store gets the codes whatever the
-    # language the widgets were built in. Objects in and out, as Vuetify 2's
-    # combobox draws a chip from the selected value itself.
-    #
-    # Transitional until the Questions section replaces it (Task 6): the
-    # combobox is a view of ``analysis.answers["loss_driver"]``, which a Save
-    # reads (``capture_alert``). It opens empty (spec U13: no default).
-    _loss = default_questions()[0]
-    driver_combobox = sw.Combobox(
-        items=questions.items(_loss),
-        v_model=questions.as_items(_loss, analysis.answers.value.get(_loss.key, [])),
-        return_object=True,
-        label=t("analysis_tile.questionarie.loss_driver_hint"),
-        multiple=True,
-        clearable=True,
-        chips=True,
-    )
-
-    def _driver_change(*_):
-        analysis.answers.set({**analysis.answers.value,
-                              _loss.key: questions.codes(_loss, questions.encode(_loss, driver_combobox.v_model))})
-        touch(analysis)
-
-    driver_combobox.on_event("change", _driver_change)
-    analysis.answers.subscribe(lambda *_: setattr(
-        driver_combobox, "v_model", questions.as_items(_loss, analysis.answers.value.get(_loss.key, []))))
-    widgets.driver_combobox = driver_combobox
-
-    driver_box = v.Html(tag="div", class_="mt-3", children=[
-        v.Html(tag="div", class_="body-2", children=[t("analysis_tile.questionarie.loss_driver_label")]),
-        driver_combobox,
-    ])
-    note = v.Html(tag="div", class_="mt-3 pa-2 caption text--secondary",
-                  style_=_HIDDEN, children=[t("analysis_tile.verdict.no_driver")])
-
     save_next = v.Btn(color="primary", class_="flex-grow-1", style_="height: 44px;",
                       children=[t("analysis_tile.verdict.save_next"),
                                 v.Icon(right=True, children=["mdi-arrow-right"])])
@@ -153,9 +111,6 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
         chosen = analysis.verdict.value
         for status, btn in buttons.items():
             btn.outlined = status != chosen
-        is_false = chosen == "False Positive"
-        driver_box.style_ = _HIDDEN if is_false else ""
-        note.style_ = "" if is_false else _HIDDEN
 
     def _sync_state_line(*_):
         if analysis.drawing_unapplied.value:
@@ -190,13 +145,11 @@ def build_review_panel(widgets, app_state, analysis, app_tile_model, run_save=No
     card = v.Card(class_="pa-3 ma-2", hover=True, children=[
         v.Html(tag="div", class_="subtitle-2 font-weight-bold", children=[t("analysis_tile.verdict.title")]),
         v.Html(tag="div", class_="mt-2", children=[group]),
-        driver_box,
-        note,
         v.Html(tag="div", class_="d-flex mt-3", style_="gap: 8px;", children=[save_next, save]),
         state_line,
     ])
-    setattr(card, _SLOTS, {"buttons": buttons, "driver_box": driver_box, "note": note,
-                           "save_next": save_next, "save": save, "state_line": state_line})
+    setattr(card, _SLOTS, {"buttons": buttons, "save_next": save_next, "save": save,
+                           "state_line": state_line})
     return card
 
 

@@ -43,8 +43,8 @@ def _alerts(n):
 
 def _wire(s, analysis=None):
     """A tile wired to one state, as ``build_analysis_layout`` wires it.
-    tests/test_loss_drivers.py drives the review panel through this, sharing
-    ``analysis`` with the panel as the layout does.
+    tests/test_analysis_questions_panel.py drives the Questions section through
+    this, sharing ``analysis`` with the section as the layout does.
     """
     widgets = SimpleNamespace()
     analysis_tile.wire_alert_navigation(widgets, s, analysis if analysis is not None else AnalysisState(),

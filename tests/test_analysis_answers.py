@@ -228,26 +228,3 @@ def test_an_unreviewed_alert_opens_on_no_answers(tmp_path, monkeypatch):
 def test_a_store_without_a_questions_column_loads_no_answer_for_it(tmp_path, monkeypatch):
     analysis = _viewed(tmp_path, monkeypatch, 0, with_road_column=False)
     assert analysis.answers.value == {"loss_driver": ["logging", "Roads"], "road_access": []}
-
-
-# ---------------------------------------------------------------------------
-# The review panel's Loss driver combobox, until Task 6 replaces it
-# ---------------------------------------------------------------------------
-def test_the_driver_combobox_reads_and_writes_the_answers():
-    from gui.tile.analysis.review_panel import build_review_panel
-
-    widgets, analysis = SimpleNamespace(), AnalysisState()
-    build_review_panel(widgets, None, analysis, None)
-    combobox = widgets.driver_combobox
-    assert combobox.v_model == []  # U13: no default
-
-    analysis.answers.set({"loss_driver": ["logging", "Roads"]})
-    assert combobox.v_model == [{"text": "Logging", "value": "logging"}, "Roads"]
-
-    combobox.v_model = [{"text": "Mining", "value": "mining"}, "Dams, bridges"]
-    combobox.fire_event("change", combobox.v_model)
-    assert analysis.answers.value == {"loss_driver": ["mining", "Dams; bridges"]}
-    assert analysis.dirty.value is True
-
-    analysis.reset_alert()
-    assert combobox.v_model == []

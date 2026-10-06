@@ -119,7 +119,6 @@
       "confirmation_missing": "Répondez sous « Verdict » avant d'enregistrer.",
       "false_positive_drawn": "Un faux positif ne peut pas avoir de polygone de déforestation dessiné : supprimez le polygone ou changez la réponse.",
       "loss_driver_label": "Facteur de perte",
-      "loss_driver_hint": "Analyser la cause de la déforestation",
       "loss_driver1": "Expansion agricole",
       "loss_driver2": "Pâturage du bétail",
       "loss_driver3": "Exploitation forestière",
@@ -135,13 +134,17 @@
       "true": "Alerte réelle",
       "false": "Faux positif",
       "revision": "À réexaminer",
-      "no_driver": "Aucune cause de perte n'est enregistrée pour un faux positif.",
       "save_next": "Enregistrer et suivante",
       "unsaved": "Modifications non enregistrées sur cette alerte",
       "saved_at": "Enregistrée à {time}"
     },
     "questions": {
-      "required_missing": "Répondez à « {question} » avant d'enregistrer."
+      "required_missing": "Répondez à « {question} » avant d'enregistrer.",
+      "badge": "{answered} sur {total} répondues",
+      "badge_missing": "{answered} sur {total} · réponse obligatoire manquante",
+      "badge_none": "aucune question",
+      "none": "Ce projet ne pose aucune question : ajoutez-en à l'étape Questionnaire.",
+      "typed_hint": "Choisissez ou saisissez des réponses"
     },
     "sections": {
       "export": "Exporter cette alerte",
@@ -159,7 +162,8 @@
         "one": "{n} forme",
         "many": "{n} de formes",
         "other": "{n} formes"
-      }
+      },
+      "questions": "Questions"
     },
     "edition_labels": {
       "start_edit_button": "Commencer à dessiner",

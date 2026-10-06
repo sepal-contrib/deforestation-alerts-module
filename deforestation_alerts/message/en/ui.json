@@ -119,7 +119,6 @@
       "confirmation_missing": "Answer under \"Verdict\" before saving.",
       "false_positive_drawn": "A false positive cannot have a drawn deforestation polygon: delete the polygon or change the answer.",
       "loss_driver_label": "Loss driver",
-      "loss_driver_hint": "Analyze cause of deforestation",
       "loss_driver1": "Agriculture expansion",
       "loss_driver2": "Livestock grazing",
       "loss_driver3": "Logging",
@@ -135,13 +134,17 @@
       "true": "True alert",
       "false": "False positive",
       "revision": "Needs review",
-      "no_driver": "No loss driver is stored for a false positive.",
       "save_next": "Save & next",
       "unsaved": "Unsaved changes on this alert",
       "saved_at": "Saved {time}"
     },
     "questions": {
-      "required_missing": "Answer “{question}” before saving."
+      "required_missing": "Answer “{question}” before saving.",
+      "badge": "{answered} of {total} answered",
+      "badge_missing": "{answered} of {total} · required missing",
+      "badge_none": "no questions",
+      "none": "This project asks no questions: add some in the Questionnaire step.",
+      "typed_hint": "Pick or type answers"
     },
     "sections": {
       "export": "Export this alert",
@@ -157,7 +160,8 @@
       "shapes": {
         "one": "{n} shape",
         "other": "{n} shapes"
-      }
+      },
+      "questions": "Questions"
     },
     "edition_labels": {
       "start_edit_button": "Start Drawing",
