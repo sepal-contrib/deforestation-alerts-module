@@ -99,9 +99,11 @@ def save_btn(page):
 
 
 def download_btn(page):
-    """The dashed *Build alert files* tile (*Rebuild files* once a build left
-    files), in the Export section's body (open it first). By its class: its
-    label changes with the build."""
+    """The dashed *Build alert files* tile (``.defo-build-tile``), in the
+    Export section's body (open it first). Only before a build: it hides once
+    a build left files, and *Rebuild files* is another button
+    (``.defo-rebuild``). Found by its class, not its label: "(save first)"
+    shows in the label until the alert is saved."""
     return page.locator('.v-card:has-text("Export this alert") .defo-build-tile:visible').first
 
 
