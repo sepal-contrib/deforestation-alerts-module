@@ -31,13 +31,14 @@ the Save, so ``build_export`` builds neither.
   (``rebuild_btn``, in ``toolbar_rebuild``) runs the same build; anything that
   invalidates the files (a new save, a template change) brings the build tile
   back.
-* The GIF tile (``gif_dwn_btn``, a ``FileTile``) is always shown; it is disabled
-  until a GIF of the alert exists. **Export GIF** (``gif_btn``, spec D9, in
-  ``toolbar_gif`` under it) animates a true alert's before/after pair with its
-  neighbours: enabled only while the alert's row is Confirmed on the saved
-  pair, rendered on a worker, and linked on the GIF tile. A Confirmed alert's
-  zip build makes the GIF too and puts it in the zip; the badge counts it
-  among the files ready.
+* The **Timelapse** tile (``gif_dwn_btn``, a ``FileTile``) is always shown and
+  is its own export button (spec D9). Until a GIF of the alert exists it is a
+  plain button (``set_action``) that animates a true alert's before/after
+  pair with its neighbours: clickable only while the alert's row is Confirmed
+  on the saved pair, its detail saying why not otherwise, rendered on a
+  worker. Once the GIF exists the tile is its download link. A Confirmed
+  alert's zip build makes the GIF too and puts it in the zip; the badge
+  counts it among the files ready.
 
 WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
 Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
@@ -535,7 +536,7 @@ def _picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
 def _gif_allowed(alerts, alert_id, before_info, after_info) -> bool:
     """A GIF is made for a true alert on its reviewed pair (spec D9): the
     row's stored status is Confirmed and both picks are the pair it was saved
-    with. The Export GIF button and the zip build share this rule."""
+    with. The Timelapse tile and the zip build share this rule."""
     return (_saved_status(alerts, alert_id) == CONFIRMED
             and _picks_are_saved(alerts, alert_id, before_info, after_info))
 
@@ -987,19 +988,9 @@ def build_export(
             ns["files_dwn_btn"], ns["report_dwn_btn"]]).hide()
         ns["toolbar_rebuild"] = sw.Html(tag="div", class_="d-flex justify-end",
                                         children=[ns["rebuild_btn"]]).hide()
-        # Export GIF (spec D9): a small text button under the GIF tile, like
-        # *Rebuild*. The hint sits on a wrapper, not on the button: a disabled
-        # v-btn has ``pointer-events: none``, so a title on the button itself
-        # never shows while it is disabled -- the one time the reviewer needs it.
-        ns["gif_btn"] = sw.Btn(
-            msg=t("analysis_tile.export_labels.gif_btn"), gliph="mdi-filmstrip",
-            text=True, small=True, color="primary", disabled=True, class_="defo-gif-export",
-            style_="text-transform:none;letter-spacing:normal;",
-        )
-        ns["toolbar_gif"] = sw.Html(tag="div", class_="d-flex justify-end", children=[
-            v.Html(tag="span", attributes={"title": t("analysis_tile.export_labels.gif_hint")},
-                   children=[ns["gif_btn"]]),
-        ])
+        # No file yet: the tile is the Export GIF button, locked until the gate
+        # (``_refresh_gif_gate``) opens it.
+        ns["gif_dwn_btn"].set_action(False, t("analysis_tile.export_labels.gif_hint"))
 
         return ns
 
@@ -1058,6 +1049,8 @@ def build_export(
         built["rev"] += 1
         if gif:
             ns["gif_dwn_btn"].set_file(None)
+            # Back to the locked button; the gate reopens it if it may.
+            ns["gif_dwn_btn"].set_action(False, t("analysis_tile.export_labels.gif_hint"))
             built["gif"] = 0
             built["gif_rev"] += 1
 
@@ -1106,17 +1099,19 @@ def build_export(
             logger.exception("Analysis: invalidating the built files failed")
 
     def _refresh_gif_gate(*_):
-        """Export GIF is offered for a true alert (spec D9): the row's stored
+        """The Timelapse tile makes a GIF for a true alert (spec D9): the row's stored
         status is Confirmed and the pair on screen (both sides picked) is the
         pair the row was saved with -- another pick disables it, picking the
         saved pair back enables it. The row, not this session's saves: a true
         alert reopened on its saved pair offers it at once. Held disabled
-        while a GIF of this section renders."""
-        if gif_running["on"]:
+        while a GIF of this section renders; a tile that already links its
+        GIF is left a link (anything that invalidates it clears it first)."""
+        if gif_running["on"] or ns["gif_dwn_btn"].path is not None:
             return
         alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
-        ns["gif_btn"].disabled = not _gif_allowed(
-            alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
+        allowed = _gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
+        ns["gif_dwn_btn"].set_action(allowed, t(
+            "analysis_tile.export_labels.tile_gif_make" if allowed else "analysis_tile.export_labels.gif_hint"))
 
     # ------------------------------------------------------------------
     # An alert change takes the section back to its empty state. What it can
@@ -1137,8 +1132,7 @@ def build_export(
         # the previous alert's while the row may already be the next one's,
         # and comparing the two could enable it. ``reset_alert`` clears the
         # picks right after, and each pick that lands runs the gate.
-        ns["gif_btn"].disabled = True
-        _invalidate_built_files()
+        _invalidate_built_files()  # the GIF tile goes back to locked with it
         built["saved"] = False
         _show_badge_for_state()
 
@@ -1406,6 +1400,10 @@ def build_export(
     # only while the alert and the inputs it was made from are still current.
     # ------------------------------------------------------------------
     def _on_gif(*_):
+        # The tile is also the GIF's download link: a click on it then is the
+        # browser's download, not a request for another GIF.
+        if gif_running["on"] or ns["gif_dwn_btn"].path is not None or ns["gif_dwn_btn"].disabled:
+            return
         alert = capture_alert(analysis, widgets, app_state)
         token, rev = alert.token, built["gif_rev"]
         folder = app_tile_model.recipe_folder_path
@@ -1425,8 +1423,8 @@ def build_export(
         dest = None if job is None else Path(
             alert_gif_name(str(folder), alert.alert_id, alert.before_info, alert.after_info))
         gif_running["on"] = True
-        ns["gif_btn"].loading = True
-        ns["gif_btn"].disabled = True
+        ns["gif_dwn_btn"].loading = True
+        ns["gif_dwn_btn"].disabled = True
 
         def _worker():
             notifier = current_notifier()
@@ -1465,7 +1463,7 @@ def build_export(
                 if applied:
                     notifier.success(t("analysis_tile.export_labels.gif_done"))
             finally:
-                ns["gif_btn"].loading = False
+                ns["gif_dwn_btn"].loading = False
                 gif_running["on"] = False
                 # The gate decides, for whichever alert is on screen now: it
                 # reads that alert's row (its stored status and saved pair)
@@ -1484,7 +1482,7 @@ def build_export(
             # The worker's ``finally`` is what releases the gate, so a spawn
             # that never got there would hold Export GIF off for the session.
             logger.exception("Analysis: the GIF worker could not be started")
-            ns["gif_btn"].loading = False
+            ns["gif_dwn_btn"].loading = False
             gif_running["on"] = False
             analysis.apply_if_current(None, _refresh_gif_gate)
 
@@ -1495,7 +1493,7 @@ def build_export(
     def _register_handlers():
         ns["download_alert_data_btn"].on_event("click", _on_download)
         ns["rebuild_btn"].on_event("click", _on_download)
-        ns["gif_btn"].on_event("click", _on_gif)
+        ns["gif_dwn_btn"].on_event("click", _on_gif)
 
     _register_handlers()
 
@@ -1511,7 +1509,7 @@ def build_export(
     # ------------------------------------------------------------------
     return SimpleNamespace(
         body=v.Html(tag="div", children=[ns["toolbar_build"], ns["toolbar_downloads"],
-                                         ns["gif_dwn_btn"], ns["toolbar_gif"], ns["toolbar_rebuild"]]),
+                                         ns["gif_dwn_btn"], ns["toolbar_rebuild"]]),
         run_save=run_save,
         tiles=[ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]],
     )

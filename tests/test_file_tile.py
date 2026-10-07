@@ -82,3 +82,22 @@ def test_the_tile_is_the_s1_row_not_a_primary_button():
     title, detail = text.children
     assert "font-weight:600" in title.style_ and "primary" not in (title.class_ or "")
     assert "opacity:0.6" in detail.style_
+
+
+def test_set_action_makes_a_tile_without_a_file_a_plain_button(tmp_path, monkeypatch):
+    """The GIF tile's second face: no link (a click must reach the handler,
+    not open "#"), enabled or not, its detail saying why; a file wins."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    tile = FileTile("gif", "Timelapse", "Animated GIF")
+    tile.set_action(True, "click to create it")
+    assert tile.href is None and not tile.disabled and "click to create it" in _strings(tile)
+    assert "mdi-filmstrip" in _strings(tile)
+    tile.set_action(False, "save first")
+    assert tile.disabled and "save first" in _strings(tile)
+    f = tmp_path / "alert.gif"
+    f.write_bytes(b"GIF89a")
+    tile.set_file(str(f))
+    tile.set_action(False, "save first")  # ignored: the tile links its file
+    assert not tile.disabled and tile.path == str(f) and "mdi-download" in _strings(tile)
+    tile.set_file(None)
+    assert tile.path is None and tile.disabled and "mdi-download" in _strings(tile)

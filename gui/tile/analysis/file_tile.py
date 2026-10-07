@@ -6,6 +6,9 @@ A ``sw.DownloadBtn`` underneath, so ``set_url`` keeps pysepal's URL logic
 (``su.create_download_link``: the sandbox file route of a ``$HOME``-relative
 path, the ``download`` attribute, disabled on "#"). ``set_file`` is what the
 export section calls: the set-folder path of the file, or None to clear.
+``set_action`` gives a tile with no file a second face, for the GIF tile:
+a plain button (no link) that makes the file when clicked, its detail saying
+whether it can.
 """
 
 from pathlib import Path
@@ -29,7 +32,7 @@ TILE_STYLE = ("height:auto;min-height:52px;justify-content:flex-start;text-trans
               "text-decoration:none;border-color:rgba(128,128,128,0.35);border-radius:6px;"
               "padding:8px 10px;margin:0 0 6px 0;")
 _TITLE = "font-size:13px;font-weight:600;line-height:1.3;text-decoration:none;"
-_DETAIL = "opacity:0.6;text-decoration:none;"
+_DETAIL = "opacity:0.6;text-decoration:none;white-space:normal;"
 
 
 def human_size(n: int) -> str:
@@ -54,8 +57,10 @@ class FileTile(sw.DownloadBtn):
     def __init__(self, kind: str, title: str, detail: str, **kwargs):
         self.kind = kind
         self.size_text = ""
+        self.path: Optional[str] = None
         self._detail = detail
         self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[detail])
+        self._icon = v.Icon(small=True, class_="primary--text", children=["mdi-download"])
         # No ``color``: an outlined primary button underlined and tinted the
         # whole row; only the badge and the download icon carry the primary.
         super().__init__(text=title, block=True, outlined=True, color=None, class_="defo-file-tile",
@@ -70,7 +75,7 @@ class FileTile(sw.DownloadBtn):
                 v.Html(tag="div", style_=_TITLE, children=[title]),
                 self._meta,
             ]),
-            v.Icon(small=True, class_="primary--text", children=["mdi-download"]),
+            self._icon,
         ]
 
     def set_file(self, path: Optional[str]) -> "FileTile":
@@ -82,12 +87,29 @@ class FileTile(sw.DownloadBtn):
         """
         if not path:
             self.size_text = ""
+            self.path = None
             self._meta.children = [self._detail]
+            self._icon.children = ["mdi-download"]
             return self.set_url()
         url_path = local_files.home_relative(path)
+        self.path = path
+        self._icon.children = ["mdi-download"]
         try:
             self.size_text = human_size(Path(path).stat().st_size)
         except OSError:
             self.size_text = ""
         self._meta.children = [f"{self._detail} · {self.size_text}" if self.size_text else self._detail]
         return self.set_url(path=url_path)
+
+    def set_action(self, enabled: bool, detail: str, icon: str = "mdi-filmstrip") -> "FileTile":
+        """The tile while it has no file: a button that makes one. No ``href``,
+        so the click reaches the handler instead of opening "#" in a new tab;
+        ``enabled`` says whether it can be clicked, ``detail`` why (or what a
+        click does). A tile that has a file is left as it is."""
+        if self.path is not None:
+            return self
+        self.href = None
+        self.disabled = not enabled
+        self._meta.children = [detail]
+        self._icon.children = [icon]
+        return self

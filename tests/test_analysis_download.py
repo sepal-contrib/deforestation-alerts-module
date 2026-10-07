@@ -476,8 +476,8 @@ def _state(harness):
 def test_the_export_body_follows_the_s1_states(tmp_path, monkeypatch):
     """Spec D6 / the S1 mockup: BEFORE A SAVE the dashed tile is disabled and
     says "(save first)"; SAVED it builds; READY it gives way to the file tiles
-    and a small *Rebuild* under them. The GIF tile is there, disabled, in
-    every state."""
+    and a small *Rebuild* under them. The GIF tile is there in every state,
+    locked (the alert is not saved Confirmed here)."""
     (tmp_path / "alert_0.zip").write_bytes(b"z" * 3072)
     harness = _export_harness(tmp_path, monkeypatch)
     zip_tile, docx_tile, _gif = harness.parts.tiles
@@ -778,14 +778,9 @@ def test_a_failed_gif_still_builds_the_zip_and_says_so(download_ctx, monkeypatch
         [_TIF_NAME, "alert_0.gpkg"])
 
 
-def _gif_button(body):
-    from gui.i18n import t
-
-    label = t("analysis_tile.export_labels.gif_btn")
-    return next(w for w in _in(body) if getattr(w, "msg", None) == label)
-
-
-def _gif_link(body):
+def _gif_tile(body):
+    """The Timelapse tile: the Export GIF button until the GIF exists, then
+    its download link (``path`` set)."""
     from gui.tile.analysis.file_tile import FileTile
 
     return next(w for w in _in(body) if isinstance(w, FileTile) and w.kind == "gif")
@@ -805,9 +800,8 @@ def _gif_harness(tmp_path, monkeypatch, status=None, **kw):
         _status(harness, status)
     harness.analysis.before_info.set(_BEFORE_INFO)
     harness.analysis.after_info.set(_AFTER_INFO)
-    harness.gif_btn = _gif_button(harness.parts.body)
-    harness.gif_link = _gif_link(harness.parts.body)
-    harness.make_gif = lambda: harness.gif_btn.fire_event("click", None)
+    harness.gif_tile = _gif_tile(harness.parts.body)
+    harness.make_gif = lambda: harness.gif_tile.fire_event("click", None)
     return harness
 
 
@@ -822,15 +816,15 @@ def _status(harness, value):
 
 def test_the_gif_button_waits_for_a_confirmed_save(tmp_path, monkeypatch):
     harness = _gif_harness(tmp_path, monkeypatch)
-    assert harness.gif_btn.disabled  # nothing saved yet
+    assert harness.gif_tile.disabled  # nothing saved yet
     _status(harness, "Need revision")
     harness.save()
-    assert harness.gif_btn.disabled
+    assert harness.gif_tile.disabled
     _status(harness, "Confirmed")
     harness.save()
-    assert not harness.gif_btn.disabled
+    assert not harness.gif_tile.disabled
     harness.analysis.reset_alert()  # another alert
-    assert harness.gif_btn.disabled
+    assert harness.gif_tile.disabled
 
 
 def test_the_gif_is_offered_on_its_own_link_and_counted(tmp_path, monkeypatch):
@@ -839,10 +833,10 @@ def test_the_gif_is_offered_on_its_own_link_and_counted(tmp_path, monkeypatch):
     _status(harness, "Confirmed")
     harness.save()
     harness.make_gif()
-    assert not harness.gif_link.disabled
-    assert harness.gif_link.attributes["download"] == _GIF_NAME
+    assert harness.gif_tile.path is not None
+    assert harness.gif_tile.attributes["download"] == _GIF_NAME
     assert seen[-1] == "1 file ready"
-    assert not harness.gif_btn.disabled and not harness.gif_btn.loading
+    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
 
 
 def test_a_later_false_positive_save_withdraws_the_gif(tmp_path, monkeypatch):
@@ -853,7 +847,7 @@ def test_a_later_false_positive_save_withdraws_the_gif(tmp_path, monkeypatch):
     harness.make_gif()
     _status(harness, "False Positive")
     harness.save()
-    assert harness.gif_link.disabled and harness.gif_btn.disabled
+    assert harness.gif_tile.path is None and harness.gif_tile.disabled
 
 
 def test_a_gif_that_lands_after_the_alert_change_offers_nothing(tmp_path, monkeypatch):
@@ -863,11 +857,11 @@ def test_a_gif_that_lands_after_the_alert_change_offers_nothing(tmp_path, monkey
     harness.save()
     harness.run()  # the save's worker
     harness.make_gif()
-    assert harness.gif_btn.disabled and harness.gif_btn.loading
+    assert harness.gif_tile.disabled and harness.gif_tile.loading
     harness.analysis.reset_alert()
     harness.run()  # the GIF lands for the alert that is gone
-    assert harness.gif_link.disabled
-    assert harness.gif_btn.disabled and not harness.gif_btn.loading
+    assert harness.gif_tile.path is None
+    assert harness.gif_tile.disabled and not harness.gif_tile.loading
 
 
 def test_a_gif_still_rendering_does_not_hold_the_next_alerts_button(tmp_path, monkeypatch):
@@ -884,10 +878,10 @@ def test_a_gif_still_rendering_does_not_hold_the_next_alerts_button(tmp_path, mo
     harness.analysis.after_info.set(_AFTER_INFO)
     harness.save()
     harness.held.pop()()  # ...and saves the next one as Confirmed
-    assert harness.gif_btn.disabled  # held while the old GIF renders
+    assert harness.gif_tile.disabled  # held while the old GIF renders
     harness.run()  # the old GIF lands, stale
-    assert harness.gif_link.disabled
-    assert not harness.gif_btn.disabled and not harness.gif_btn.loading
+    assert harness.gif_tile.path is None
+    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
 
 
 def test_the_zip_build_of_a_confirmed_alert_offers_its_gif_too(tmp_path, monkeypatch):
@@ -899,7 +893,7 @@ def test_the_zip_build_of_a_confirmed_alert_offers_its_gif_too(tmp_path, monkeyp
     _status(harness, "Confirmed")
     harness.save()
     harness.build()
-    assert not harness.gif_link.disabled
+    assert harness.gif_tile.path is not None
     assert seen[-1] == "3 files ready"
 
 
@@ -934,7 +928,7 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
     harness.save()
     harness.build()
     assert passed["gif"] is None
-    assert not harness.download_btns[0].disabled and harness.gif_link.disabled
+    assert not harness.download_btns[0].disabled and harness.gif_tile.path is None
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
 
@@ -945,11 +939,11 @@ def test_the_gif_button_follows_the_saved_pair(tmp_path, monkeypatch):
     harness = _gif_harness(tmp_path, monkeypatch)
     _status(harness, "Confirmed")
     harness.save()
-    assert not harness.gif_btn.disabled
+    assert not harness.gif_tile.disabled
     harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])
-    assert harness.gif_btn.disabled
+    assert harness.gif_tile.disabled
     harness.analysis.before_info.set(_BEFORE_INFO)
-    assert not harness.gif_btn.disabled
+    assert not harness.gif_tile.disabled
 
 
 def test_a_row_without_a_saved_pair_offers_no_gif(tmp_path, monkeypatch):
@@ -960,7 +954,7 @@ def test_a_row_without_a_saved_pair_offers_no_gif(tmp_path, monkeypatch):
     _status(harness, "Confirmed")
     harness.app_state.alerts_gdf.value["after_img"] = np.nan
     harness.save()
-    assert harness.gif_btn.disabled
+    assert harness.gif_tile.disabled
 
 
 def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
@@ -990,7 +984,7 @@ def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
     harness.build()
     assert not harness.download_btns[0].disabled and harness.downloads.viz is True
     assert not harness.build_btn.disabled and not harness.build_btn.loading
-    assert harness.gif_link.disabled
+    assert harness.gif_tile.path is None
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
 
@@ -1021,17 +1015,17 @@ def test_a_reopened_true_alert_offers_its_gif_without_a_new_save(tmp_path, monke
     seen = []
     harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed",
                            set_badge=lambda text, color=None: seen.append(text))
-    assert not harness.gif_btn.disabled
+    assert not harness.gif_tile.disabled
     assert harness.build_btn.disabled  # "Download alert data" keeps its own rule
     harness.make_gif()
-    assert not harness.gif_link.disabled
-    assert harness.gif_link.attributes["download"] == _GIF_NAME
+    assert harness.gif_tile.path is not None
+    assert harness.gif_tile.attributes["download"] == _GIF_NAME
     assert seen[-1] == "1 file ready"
 
 
 def test_a_reopened_alert_not_saved_confirmed_offers_no_gif(tmp_path, monkeypatch):
     harness = _gif_harness(tmp_path, monkeypatch, status="Need revision")
-    assert harness.gif_btn.disabled
+    assert harness.gif_tile.disabled
 
 
 def test_a_gif_capture_that_crashes_is_said_and_releases_the_button(tmp_path, monkeypatch):
@@ -1050,9 +1044,9 @@ def test_a_gif_capture_that_crashes_is_said_and_releases_the_button(tmp_path, mo
     monkeypatch.setattr(gif_mod, "capture_gif", _crash)
     harness.make_gif()
     assert notifier.errors and "scene index is malformed" in notifier.errors[0]
-    assert not harness.gif_btn.loading
-    assert not harness.gif_btn.disabled  # the gate decided again: still a true alert
-    assert harness.gif_link.disabled
+    assert not harness.gif_tile.loading
+    assert not harness.gif_tile.disabled  # the gate decided again: still a true alert
+    assert harness.gif_tile.path is None
 
 
 def test_a_template_change_leaves_the_gif_alone(tmp_path, monkeypatch):
@@ -1063,7 +1057,7 @@ def test_a_template_change_leaves_the_gif_alone(tmp_path, monkeypatch):
     harness.make_gif()
     harness.model.custom_report_template = str(tmp_path / "mine.docx")
     harness.app_state.project.value = _project_poke(harness.app_state)
-    assert not harness.gif_link.disabled and harness.gif_link.attributes["download"] == _GIF_NAME
+    assert harness.gif_tile.path is not None and harness.gif_tile.attributes["download"] == _GIF_NAME
     assert seen[-1] == "1 file ready"
 
 
@@ -1073,8 +1067,8 @@ def test_a_template_change_does_not_drop_a_gif_still_rendering(tmp_path, monkeyp
     harness.model.custom_report_template = str(tmp_path / "mine.docx")
     harness.app_state.project.value = _project_poke(harness.app_state)  # ...the template changes...
     harness.run()  # ...and the GIF lands
-    assert not harness.gif_link.disabled
-    assert not harness.gif_btn.disabled and not harness.gif_btn.loading
+    assert harness.gif_tile.path is not None
+    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
 
 
 def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp_path, monkeypatch):
@@ -1097,7 +1091,7 @@ def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp
     assert passed["gif"] is None
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
-    assert harness.gif_link.disabled
+    assert harness.gif_tile.path is None
 
 
 def test_a_gif_that_lands_after_another_pick_offers_nothing(tmp_path, monkeypatch):
@@ -1108,20 +1102,40 @@ def test_a_gif_that_lands_after_another_pick_offers_nothing(tmp_path, monkeypatc
     harness.make_gif()  # the GIF starts rendering...
     harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])  # ...another pick...
     harness.run()  # ...and only now does it land
-    assert harness.gif_link.disabled
+    assert harness.gif_tile.path is None
     assert notifier.warnings == [export_mod.t("analysis_tile.export_labels.gif_stale")]
-    assert not harness.gif_btn.loading
-    assert harness.gif_btn.disabled  # the new pair is not the saved one
+    assert not harness.gif_tile.loading
+    assert harness.gif_tile.disabled  # the new pair is not the saved one
     harness.analysis.before_info.set(_BEFORE_INFO)  # the saved pair back
-    assert not harness.gif_btn.disabled
+    assert not harness.gif_tile.disabled
 
 
-def test_the_gif_hint_says_the_pair_on_screen_is_the_one_saved(tmp_path, monkeypatch):
-    """Spec D9: the GIF animates the saved pair, so the hint on the disabled
-    button says the images on screen are what has to be saved."""
+def test_the_timelapse_tile_says_why_it_is_locked_and_what_a_click_does(tmp_path, monkeypatch):
+    """Spec D9: the GIF animates the saved pair, so the locked tile says the
+    images on screen are what has to be saved; an open one says a click
+    makes it; a made one is its download link, with its size."""
+    def _text(w):
+        return " ".join(c if isinstance(c, str) else _text(c) for c in (getattr(w, "children", None) or []))
+
     harness = _gif_harness(tmp_path, monkeypatch)
-    hints = [w.attributes["title"] for w in _in(harness.parts.body)
-             if (getattr(w, "attributes", None) or {}).get("title")
-             and harness.gif_btn in (getattr(w, "children", None) or [])]
-    assert hints == ["Save this alert as a true alert, with the before and after images on screen, "
-                     "to export its GIF."]
+    tile = harness.gif_tile
+    assert tile.disabled and tile.href is None
+    assert "Save as a true alert, with the images on screen, to create it" in _text(tile)
+    _status(harness, "Confirmed")
+    harness.save()
+    assert not tile.disabled and tile.href is None and "click to create it" in _text(tile)
+    harness.make_gif()
+    assert tile.path is not None and tile.href and "mdi-download" in _text(tile)
+    assert "Animated GIF · 6 B" in _text(tile)
+
+
+def test_a_click_on_the_gif_link_makes_no_new_gif(tmp_path, monkeypatch):
+    """Once made, the tile is the download link: its click is the browser's."""
+    from gui.tile.analysis import gif as gif_mod
+
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
+    harness.make_gif()
+    calls = []
+    monkeypatch.setattr(gif_mod, "capture_gif", lambda *a, **k: calls.append(a))
+    harness.make_gif()
+    assert calls == [] and harness.gif_tile.path is not None
