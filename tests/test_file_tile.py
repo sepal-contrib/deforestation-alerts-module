@@ -1,5 +1,5 @@
 """S1 file tiles (spec D6): a disabled tile until a file is set, then a
-download link with its size; the GIF tile is a placeholder."""
+download link with its size."""
 
 from gui.tile.analysis.file_tile import FileTile, human_size
 

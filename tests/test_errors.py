@@ -51,8 +51,12 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "needs a manifest"),
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to widen"),
     ("deforestation_alerts/scripts/scene_query.py", "ValueError", "nothing to fetch for mode"),
+    # parse_row_id: callers hold ids the timeline minted; a bad one is a programmer error
+    ("deforestation_alerts/scripts/scene_query.py", "ValueError", "not a timeline row id"),
     # scene_index: a server-side request-graph bug (Task 4), not reachable from the UI
     ("deforestation_alerts/scripts/scene_index.py", "ValueError", "scene arrays of different length"),
+    # assemble_gif: callers (gui/tile/analysis/gif.py) build matching lists; a mismatch is a programmer error
+    ("deforestation_alerts/scripts/alert_gif.py", "ValueError", "a GIF needs at least two labelled frames"),
 }
 
 

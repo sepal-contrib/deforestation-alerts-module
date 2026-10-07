@@ -231,13 +231,19 @@ class AnalysisWidgets:
 
         # ------------------------------------------------------------------
         # Per-alert imagery handoff. ``view_actual_alert`` publishes a context
-        # dict here -- alert_id, token, bbox, date_min, date_max, and nothing
-        # else, because a dead key sends the next reader hunting for a
-        # consumer that does not exist -- and the shared timeline renders the
-        # alert from it, against the cached scene index, so no EE call.
+        # dict here -- alert_id, token, bbox, date_min, date_max, saved_before,
+        # saved_after, and nothing else, because a dead key sends the next
+        # reader hunting for a consumer that does not exist -- and the shared
+        # timeline renders the alert from it, against the cached scene index,
+        # so no EE call.
         # ``None`` while no alert is active (dormant at smoke time).
         # ------------------------------------------------------------------
         self.imagery_ctx = solara.reactive(None)
+        # The timeline's collection toggles and cloud limit, as
+        # ``(frozenset(sources_on), max_cloud)``: the GIF export picks its
+        # neighbouring frames under the same filter the reviewer sees (spec D6).
+        # Published by ``build_timeline``; ``None`` until it is built.
+        self.timeline_filter = solara.reactive(None)
 
     def set_synced_view(self, center, zoom):
         """Python-originated view change: write BOTH maps explicitly (the

@@ -85,13 +85,14 @@
       "set_after": "Définir comme image après",
       "collapsed_month": "{month}, {count} images, replié. Déplier ce mois.",
       "collapse_month": "{month}. Replier ce mois.",
-      "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais."
+      "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais.",
+      "saved_missing": "Image enregistrée indisponible ; choisie automatiquement"
     }
   },
   "analysis_tile": {
     "description": "Passez en revue chaque alerte à l'aide de ses images avant et après : donnez un verdict, définissez la cause de la perte, puis enregistrez et passez à la suivante.",
     "info_header": "À propos de l'analyse",
-    "info_md": "Le sélecteur de jeux change de jeu d'alertes ; le compteur en dessous indique quelle alerte sur combien, combien sont examinées et combien restent, et **Précédente** / **Suivante** (ou le bouton **#**, pour aller à un numéro) permettent de se déplacer entre elles. Les deux cartes affichent les images avant et après choisies sur la frise chronologique partagée en dessous. Sous **Verdict**, répondez avec l'un des trois boutons, choisissez les facteurs de perte, puis **Enregistrer et suivante** écrit la révision dans la base d'alertes du jeu et ouvre l'alerte suivante — **Sauvegarder** vous garde sur celle-ci. **Affiner le polygone** ouvre les outils de dessin et les deux modèles de détection automatique ; **Exporter cette alerte** ouvre la section où **Télécharger** génère son GeoPackage, ses images avant/après et un rapport Word à partir du modèle de rapport du projet, choisi dans cette section.",
+    "info_md": "Le sélecteur de jeux change de jeu d'alertes ; le compteur en dessous indique quelle alerte sur combien, combien sont examinées et combien restent, et **Précédente** / **Suivante** (ou le bouton **#**, pour aller à un numéro) permettent de se déplacer entre elles. Les deux cartes affichent les images avant et après choisies sur la frise chronologique partagée en dessous. Sous **Verdict**, répondez avec l'un des trois boutons, choisissez les facteurs de perte, puis **Enregistrer et suivante** écrit la révision dans la base d'alertes du jeu et ouvre l'alerte suivante — **Sauvegarder** vous garde sur celle-ci. **Affiner le polygone** ouvre les outils de dessin et les deux modèles de détection automatique ; **Exporter cette alerte** ouvre la section où **Télécharger** génère son GeoPackage, ses images avant/après et un rapport Word à partir du modèle de rapport du projet, choisi dans cette section. Pour une alerte réelle, **Exporter le GIF** anime ses images avant et après avec les deux images de part et d'autre, et le zip de téléchargement l'inclut.",
     "img_selection": {
       "prev_image_title": "Image précédente",
       "post_image_title": "Image postérieure"
@@ -200,7 +201,7 @@
       "tile_docx": "Rapport de l'alerte",
       "tile_docx_detail": "Word, depuis le modèle du projet",
       "tile_gif": "Timelapse",
-      "tile_gif_detail": "GIF · bientôt disponible",
+      "tile_gif_detail": "GIF animé · alertes réelles",
       "save_task_title": "Enregistrement des attributs de l'alerte",
       "save_step": "Écriture de la base d'alertes…",
       "save_done": "Attributs de l'alerte enregistrés.",
@@ -220,7 +221,17 @@
       "report_template_hint": "Chaque rapport de ce projet est généré à partir de ce fichier Word. Laissez le champ vide pour utiliser le modèle par défaut de l'application.",
       "report_template_no_project": "Ouvrez un projet pour choisir son modèle de rapport.",
       "report_template_bad": "{path} n'est pas un fichier Word (.docx) de votre dossier SEPAL ; le modèle de rapport n'a pas été changé.",
-      "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau à l'étape Questionnaire, ou videz le champ pour utiliser le modèle par défaut."
+      "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau à l'étape Questionnaire, ou videz le champ pour utiliser le modèle par défaut.",
+      "gif_no_images": "L'index d'images n'a pas d'image avant et d'image après pour cette alerte : il n'y a rien à animer. Choisissez une image avant et une image après sur la frise.",
+      "gif_same_image": "Les images avant et après sont la même image : le GIF ne montrerait aucun changement. Choisissez deux images différentes sur la frise.",
+      "gif_too_few": "Moins de deux images ont pu être rendues pour cette alerte : aucun GIF n'a été créé.",
+      "gif_btn": "Exporter le GIF",
+      "gif_hint": "Enregistrez cette alerte comme alerte réelle, avec les images avant et après affichées, pour exporter son GIF.",
+      "gif_task_title": "Export du GIF de l'alerte",
+      "gif_step": "Rendu de {count} images…",
+      "gif_done": "GIF de l'alerte prêt.",
+      "gif_stale": "Le GIF s'est terminé après que vous êtes passé à une autre alerte ou avez changé ses images : il n'a pas été proposé ici.",
+      "gif_zip_skipped": "Les fichiers de l'alerte sont prêts, mais le GIF n'a pas pu être créé : le zip ne le contient pas."
     }
   },
   "imagery": {

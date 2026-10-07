@@ -85,13 +85,14 @@
       "set_after": "Set as after image",
       "collapsed_month": "{month}, {count} images, collapsed. Expand this month.",
       "collapse_month": "{month}. Collapse this month.",
-      "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it."
+      "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it.",
+      "saved_missing": "Saved image not available; picked automatically"
     }
   },
   "analysis_tile": {
     "description": "Review each alert against its before and after imagery: give a verdict, set the loss driver, then save and move on.",
     "info_header": "About analysis",
-    "info_md": "The set selector switches alert sets; the counter under it shows which alert of how many, how many are reviewed and how many are left, and **Previous** / **Next** (or the **#** button, to jump to a number) move between them. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, choose the loss drivers, then **Save & next** writes the review into the set's alert store and opens the following alert — **Save** keeps you on this one. **Refine polygon** opens the drawing tools and the two auto-detection models; **Export this alert** opens the section where **Download** builds its GeoPackage, its before/after images and a Word report from the project's report template, chosen in that section.",
+    "info_md": "The set selector switches alert sets; the counter under it shows which alert of how many, how many are reviewed and how many are left, and **Previous** / **Next** (or the **#** button, to jump to a number) move between them. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, choose the loss drivers, then **Save & next** writes the review into the set's alert store and opens the following alert — **Save** keeps you on this one. **Refine polygon** opens the drawing tools and the two auto-detection models; **Export this alert** opens the section where **Download** builds its GeoPackage, its before/after images and a Word report from the project's report template, chosen in that section. For a true alert, **Export GIF** animates its before and after images with the two images on either side, and the download zip includes it.",
     "img_selection": {
       "prev_image_title": "Before image",
       "post_image_title": "After image"
@@ -197,7 +198,7 @@
       "tile_docx": "Alert report",
       "tile_docx_detail": "Word, from the project's template",
       "tile_gif": "Timelapse",
-      "tile_gif_detail": "GIF · coming soon",
+      "tile_gif_detail": "Animated GIF · true alerts",
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
       "save_done": "Alert attributes saved.",
@@ -217,7 +218,17 @@
       "report_template_hint": "Every report of this project is built from this Word file. Leave it empty to use the app's default template.",
       "report_template_no_project": "Open a project to choose its report template.",
       "report_template_bad": "{path} is not a Word file (.docx) in your SEPAL folder; the report template was not changed.",
-      "report_template_missing": "The report template {path} is gone. Pick it again in the Questionnaire step, or clear it to use the default template."
+      "report_template_missing": "The report template {path} is gone. Pick it again in the Questionnaire step, or clear it to use the default template.",
+      "gif_no_images": "The image index has no before and after image for this alert, so there is nothing to animate. Pick a before and an after image on the timeline.",
+      "gif_same_image": "The before and after images are the same image, so the GIF would show no change. Pick two different images on the timeline.",
+      "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made.",
+      "gif_btn": "Export GIF",
+      "gif_hint": "Save this alert as a true alert, with the before and after images on screen, to export its GIF.",
+      "gif_task_title": "Exporting the alert GIF",
+      "gif_step": "Rendering {count} images…",
+      "gif_done": "Alert GIF ready.",
+      "gif_stale": "The GIF finished after you moved to another alert or changed its images, so it was not offered here.",
+      "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF."
     }
   },
   "imagery": {

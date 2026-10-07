@@ -132,6 +132,22 @@ def alert_window(ctx, project) -> tuple[Optional[date], Optional[date]]:
     return (period.start, period.end) if period is not None else (None, None)
 
 
+def extra_to_include(ctx, project, extra, days) -> tuple[int, int]:
+    """``extra`` widened by whole months until the view holds every one of
+    ``days``: a saved pick outside the default view is restored, not lost
+    (spec D2). Never narrower than ``extra``. Unchanged without a view."""
+    back, fwd = extra
+    window = view_window(ctx, project, (back, fwd))
+    if window is None or not days:
+        return (back, fwd)
+    first, last = min(days), max(days)
+    while view_window(ctx, project, (back, fwd))[0] > first and back < 240:
+        back += 1
+    while view_window(ctx, project, (back, fwd))[1] < last and fwd < 240:
+        fwd += 1
+    return (back, fwd)
+
+
 # ------------------------------------------------------- the string contracts
 
 
@@ -435,6 +451,12 @@ def build_timeline(app_state, analysis, widgets):
     #: from, while the window request is what *gets* the rows, so it has to be
     #: made for an alert whose months are not in the index yet.
     asked_alert = solara.reactive(None)
+    #: each side's saved pick still waiting for its row: ``{"b": id, "a": id}``
+    #: (spec D4). A side leaves it when restored, when the index has answered
+    #: without it, or when the reviewer picks that side by hand.
+    restoring = solara.reactive({})
+    #: the sides whose saved pick was not found, so the automatic pick stood in
+    fell_back = solara.reactive(frozenset())
 
     lane_before = v.Html(tag="div", style_=f"{_LANE_STYLE}; margin-top: 11px")
     lane_axis = v.Html(tag="div", style_=f"position: relative; height: {AXIS_H}px")
@@ -493,14 +515,14 @@ def build_timeline(app_state, analysis, widgets):
         ctx = widgets.imagery_ctx.value
         if tables is None or ctx is None or ctx.get("bbox") is None:
             return []
-        tiles = scene_query.overlapping_tiles(tables.tiles, ctx["bbox"])
-        rows = tables.scenes
-        same = rows[(rows["source"] == row["source"]) & (rows["date"] == row["date"])]
-        return list(same[same["tile"].isin(tiles) | (same["tile"] == "")]["key"])
+        return scene_query.granule_keys(tables, ctx["bbox"], row["source"], row["date"])
 
-    def _assign(lane, rid, sel):
+    def _assign(lane, rid, sel, *, restore=False):
+        """Publish ``rid`` as ``lane``'s image. A hidden row is refused unless
+        it is a saved pick being restored: the reviewer chose it when the
+        cloud limit did not hide it (spec D2)."""
         row = _row_of(sel, rid)
-        if row is None or bool(row["hidden"]):
+        if row is None or (bool(row["hidden"]) and not restore):
             # Reachable: the index can republish between the render that drew
             # the stripe and the click on it. Nothing is said to the reviewer
             # because the strip they are looking at has already been redrawn
@@ -526,6 +548,10 @@ def build_timeline(app_state, analysis, widgets):
         already selected — or one ``_assign`` refuses because the row is gone
         — costs nothing.
         """
+        # A hand pick outranks a saved one still waiting, and answers the
+        # "saved image not available" note for that side (Review Focus #1).
+        restoring.set({k: rid_ for k, rid_ in restoring.value.items() if k != lane})
+        fell_back.set(fell_back.value - {lane})
         chosen = before_id if lane == "b" else after_id
         was = chosen.value
         _assign(lane, rid, sel)
@@ -727,8 +753,14 @@ def build_timeline(app_state, analysis, widgets):
             kids.append(btn)
         lane_axis.children = kids
 
+    def _publish_filter():
+        target = getattr(widgets, "timeline_filter", None)
+        if target is not None:
+            target.set((frozenset(sources.value), float(max_cloud.value)))
+
     def _toggle(name):
         sources.set(sources.value ^ {name})
+        _publish_filter()
         render()
 
     def _render_chips(rows):
@@ -779,6 +811,9 @@ def build_timeline(app_state, analysis, widgets):
         for lane, rid in (("b", before_id.value), ("a", after_id.value)):
             tag = t("analysis.timeline.before" if lane == "b" else "analysis.timeline.after")
             kids.append(v.Html(tag="span", children=[f"{tag}: {readout(sel, rid)}"]))
+            if lane in fell_back.value:
+                kids.append(v.Html(tag="span", style_=f"color: {WARN}",
+                                   children=[t("analysis.timeline.saved_missing")]))
         # Only when both sides still resolve in this window: a note about a
         # pair whose readout says "not set" would contradict it.
         both = _row_of(sel, before_id.value) is not None and _row_of(sel, after_id.value) is not None
@@ -885,6 +920,68 @@ def build_timeline(app_state, analysis, widgets):
         blocks.children = []
         window_band.style_ = "display: none"
 
+    def _make_room_for(ids):
+        """Switch on the collections and widen the view the saved picks need
+        (spec D2), before the rows are read."""
+        parsed = [scene_query.parse_row_id(rid) for rid in ids]
+        wanted = {source for source, _ in parsed}
+        if not wanted <= sources.value:
+            sources.set(sources.value | wanted)
+            _publish_filter()
+        extra.set(extra_to_include(widgets.imagery_ctx.value, app_state.project.value,
+                                   extra.value, [day for _, day in parsed]))
+
+    def _settled(rid) -> bool:
+        """Whether the index has answered for ``rid``'s date, so a row it does
+        not hold is gone rather than not fetched yet (spec D4)."""
+        if app_state.scene_index_error.value:
+            return True
+        manifest = app_state.scene_manifest.value
+        if manifest is None or app_state.scene_index.value is None or app_state.scene_index_pending.value:
+            return False
+        _, day = scene_query.parse_row_id(rid)
+        return manifest.covered.start <= day <= manifest.covered.end
+
+    def _resolve_restores(sel, a0, a1):
+        """Restore each waiting saved pick whose row is here, and fall back to
+        the automatic pick for one the index has answered without (spec D4).
+        Neither is an edit (spec D3): both go through ``_assign``.
+
+        ``render`` also runs on the scene loader's thread, so a hand pick
+        (``_picked``) can take a side out of ``restoring`` while this loop
+        runs: each side is re-checked right before it is written, and leaves
+        ``restoring`` on its own -- never by writing back a copy taken before
+        the loop, which would put the hand-picked side back on the wait."""
+        if not restoring.value:
+            return
+        auto = None
+
+        def _still_waiting(lane, rid):
+            return restoring.value.get(lane) == rid
+
+        def _done(lane):
+            restoring.set({k: rid_ for k, rid_ in restoring.value.items() if k != lane})
+
+        for lane, rid in list(restoring.value.items()):
+            if _row_of(sel, rid) is not None:
+                if not _still_waiting(lane, rid):
+                    continue
+                _done(lane)
+                _assign(lane, rid, sel, restore=True)
+            elif _settled(rid):
+                if not _still_waiting(lane, rid):
+                    continue
+                _done(lane)
+                if a0 is None or a1 is None:
+                    continue
+                if auto is None:
+                    auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+                # The note says the automatic pick stood in, so only when one
+                # did: a side with no candidate is "not set", and says so.
+                if auto[lane]:
+                    fell_back.set(fell_back.value | {lane})
+                    _assign(lane, auto[lane], sel)
+
     def render(*_):
         ctx = widgets.imagery_ctx.value
         # ``alert_id`` is ``actual_alert_id``, an *index* into the active set's
@@ -902,6 +999,13 @@ def build_timeline(app_state, analysis, widgets):
             # (spec §4.7), and the alert that most needs its months fetched is
             # exactly the one the index has nothing for yet.
             asked_alert.set(identity)
+            saved = {lane: scene_query.saved_pick_id((ctx or {}).get(key))
+                     for lane, key in (("b", "saved_before"), ("a", "saved_after"))}
+            saved = {lane: rid for lane, rid in saved.items() if rid}
+            restoring.set(saved)
+            fell_back.set(frozenset())
+            if saved:
+                _make_room_for(saved.values())
             _ask_for_the_view()
         rows, window = _in_window()
         sel = None if rows is None or window is None else _enabled(rows)
@@ -933,16 +1037,20 @@ def build_timeline(app_state, analysis, widgets):
             seen_alert.set(identity)
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
-                b, a = scene_query.default_pick(sel, a0, a1)
-                before_id.set(b)
-                after_id.set(a)
+                auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
                 # the cursor belongs to the alert too: arrowing on the last
                 # one must not leave this one's ring on a row of its own
                 focus_before.set(None)
                 focus_after.set(None)
-                for lane, rid in (("b", b), ("a", a)):
-                    if rid:
-                        _assign(lane, rid, sel)
+                for lane in ("b", "a"):
+                    chosen = before_id if lane == "b" else after_id
+                    if lane in restoring.value:
+                        chosen.set(None)  # a saved pick is on its way (D1)
+                        continue
+                    chosen.set(auto[lane])
+                    if auto[lane]:
+                        _assign(lane, auto[lane], sel)
+        _resolve_restores(sel, a0, a1)
 
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         _render_band(segs, a0, a1)
@@ -961,6 +1069,7 @@ def build_timeline(app_state, analysis, widgets):
         if value is None:
             return
         max_cloud.set(float(value))
+        _publish_filter()
         render()
 
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True,
@@ -1019,5 +1128,6 @@ def build_timeline(app_state, analysis, widgets):
     for reactive in (app_state.scene_index, app_state.scene_manifest, app_state.scene_index_error,
                      app_state.scene_index_pending, widgets.imagery_ctx):
         reactive.subscribe(render)
+    _publish_filter()
     render()
     return card

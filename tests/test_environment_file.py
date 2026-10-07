@@ -20,6 +20,7 @@ PACKAGE = {
     "matplotlib_scalebar": "matplotlib-scalebar",
     "odc": "odc-geo",
     "osgeo": "gdal",
+    "PIL": "pillow",
 }
 
 #: Imports that a declared package brings with it (import -> that package).

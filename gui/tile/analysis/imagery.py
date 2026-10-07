@@ -78,6 +78,11 @@ _VIS_DEFAULT = (
     {"min": 0, "max": [6500, 3000, 3000], "bands": ["B8", "B4", "B3"]},
 )
 
+
+def true_colour_vis(source) -> dict:
+    """The true-colour visualization the panes draw ``source`` with."""
+    return _VIS.get(source, _VIS_DEFAULT)[0]
+
 #: per pane, its side and what a failed rebuild says. Keyed per side because
 #: a reviewer whose left pane went dead has to know *which* pane failed.
 _SIDE = {0: "before", 1: "after"}

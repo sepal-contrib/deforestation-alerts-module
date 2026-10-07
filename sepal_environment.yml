@@ -25,6 +25,7 @@ dependencies:
   # Scientific
   - matplotlib>=3.9
   - pandas>=2.2
+  - pillow>=10.1  # the alert GIF (scripts/alert_gif.py): load_default(size=) needs 10.1
   - pyarrow
   - pydantic>=2.7
   - scipy

@@ -88,3 +88,9 @@ def stage_alert_image(set_folder, alert_id, before_info, after_info,
         finally:
             tif.unlink(missing_ok=True)
     return dest
+
+
+def alert_gif_name(recipe_folder, alert_id, before_info, after_info):
+    """The alert's GIF, beside its composite and named like it (spec D10):
+    the same stem, so the two are found together in the set folder."""
+    return alert_image_name(recipe_folder, alert_id, before_info, after_info)[: -len(".tif")] + ".gif"

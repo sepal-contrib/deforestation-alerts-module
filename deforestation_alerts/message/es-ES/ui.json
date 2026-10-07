@@ -85,13 +85,14 @@
       "set_after": "Fijar como imagen de después",
       "collapsed_month": "{month}, {count} imágenes, contraído. Expandir este mes.",
       "collapse_month": "{month}. Contraer este mes.",
-      "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta."
+      "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",
+      "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente"
     }
   },
   "analysis_tile": {
     "description": "Revisa cada alerta comparando sus imágenes de antes y después: da un veredicto, define la causa de la pérdida y luego guarda y pasa a la siguiente.",
     "info_header": "Acerca del análisis",
-    "info_md": "El selector de conjuntos cambia el conjunto de alertas activo; el contador debajo muestra qué alerta de cuántas, cuántas están revisadas y cuántas quedan, y **Anterior** / **Siguiente** (o el botón **#**, para ir a un número) permiten moverte entre ellas. Los dos mapas muestran las imágenes de antes y después elegidas en la línea de tiempo compartida debajo de ellos. En **Veredicto**, responde con uno de los tres botones, elige las causas de la pérdida y luego **Guardar y siguiente** escribe la revisión en la base de alertas del conjunto y abre la siguiente alerta — **Guardar** te mantiene en esta. **Precisar el polígono** abre las herramientas de dibujo y los dos modelos de detección automática; **Exportar esta alerta** abre la sección donde **Descargar** genera su GeoPackage, sus imágenes de antes/después y un informe de Word a partir de la plantilla de informe del proyecto, elegida en esa sección.",
+    "info_md": "El selector de conjuntos cambia el conjunto de alertas activo; el contador debajo muestra qué alerta de cuántas, cuántas están revisadas y cuántas quedan, y **Anterior** / **Siguiente** (o el botón **#**, para ir a un número) permiten moverte entre ellas. Los dos mapas muestran las imágenes de antes y después elegidas en la línea de tiempo compartida debajo de ellos. En **Veredicto**, responde con uno de los tres botones, elige las causas de la pérdida y luego **Guardar y siguiente** escribe la revisión en la base de alertas del conjunto y abre la siguiente alerta — **Guardar** te mantiene en esta. **Precisar el polígono** abre las herramientas de dibujo y los dos modelos de detección automática; **Exportar esta alerta** abre la sección donde **Descargar** genera su GeoPackage, sus imágenes de antes/después y un informe de Word a partir de la plantilla de informe del proyecto, elegida en esa sección. Para una alerta verdadera, **Exportar GIF** anima sus imágenes anterior y posterior con las dos imágenes a cada lado, y el zip de descarga lo incluye.",
     "img_selection": {
       "prev_image_title": "Imagen Anterior",
       "post_image_title": "Imagen Posterior"
@@ -200,7 +201,7 @@
       "tile_docx": "Informe de la alerta",
       "tile_docx_detail": "Word, con la plantilla del proyecto",
       "tile_gif": "Secuencia temporal",
-      "tile_gif_detail": "GIF · próximamente",
+      "tile_gif_detail": "GIF animado · alertas verdaderas",
       "save_task_title": "Guardando atributos de la alerta",
       "save_step": "Escribiendo la base de alertas…",
       "save_done": "Atributos de la alerta guardados.",
@@ -220,7 +221,17 @@
       "report_template_hint": "Todos los informes de este proyecto se generan a partir de este archivo Word. Déjalo vacío para usar la plantilla predeterminada de la aplicación.",
       "report_template_no_project": "Abre un proyecto para elegir su plantilla de informe.",
       "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
-      "report_template_missing": "La plantilla del informe {path} ya no existe. Vuelve a elegirla en el paso Cuestionario o vacía el campo para usar la plantilla por defecto."
+      "report_template_missing": "La plantilla del informe {path} ya no existe. Vuelve a elegirla en el paso Cuestionario o vacía el campo para usar la plantilla por defecto.",
+      "gif_no_images": "El índice de imágenes no tiene una imagen anterior y una posterior para esta alerta, así que no hay nada que animar. Elija una imagen anterior y una posterior en la línea de tiempo.",
+      "gif_same_image": "Las imágenes anterior y posterior son la misma imagen, así que el GIF no mostraría ningún cambio. Elija dos imágenes distintas en la línea de tiempo.",
+      "gif_too_few": "Se pudieron generar menos de dos imágenes para esta alerta, así que no se creó el GIF.",
+      "gif_btn": "Exportar GIF",
+      "gif_hint": "Guarde esta alerta como alerta verdadera, con las imágenes anterior y posterior que se muestran, para exportar su GIF.",
+      "gif_task_title": "Exportando el GIF de la alerta",
+      "gif_step": "Generando {count} imágenes…",
+      "gif_done": "GIF de la alerta listo.",
+      "gif_stale": "El GIF terminó después de que pasara a otra alerta o cambiara sus imágenes, así que no se ofreció aquí.",
+      "gif_zip_skipped": "Los archivos de la alerta están listos, pero no se pudo crear el GIF, así que el zip no lo incluye."
     }
   },
   "imagery": {
