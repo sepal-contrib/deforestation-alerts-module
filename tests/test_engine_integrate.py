@@ -530,15 +530,16 @@ def test_a_second_month_catches_a_late_alert_and_repeats_no_first_month_pixel(tm
     own[20:24, 20:24] = 1  # dated in January
     dec_day, jan_day = 2025345, 2026015
     params = AlertSetParams(min_size_ha=0.01)
+    DEC_, JAN_ = p.periods[DEC.id], p.periods[JAN.id]  # the project's copies carry the 31 days
 
-    _prepare_dated(p, tmp_path, DEC, "GLAD-L", seen, np.where(seen > 0, dec_day, 0))
+    _prepare_dated(p, tmp_path, DEC_, "GLAD-L", seen, np.where(seen > 0, dec_day, 0))
     dec = _record(p, integrate.run_integration(integrate.IntegrationJob(
-        project=p.model_copy(deep=True), pdir=tmp_path, period=DEC, sources=["GLAD-L"], params=params)))
+        project=p.model_copy(deep=True), pdir=tmp_path, period=DEC_, sources=["GLAD-L"], params=params)))
 
     january = seen + late + own
-    _prepare_dated(p, tmp_path, JAN, "GLAD-L", january, np.where(own > 0, jan_day, np.where(january > 0, dec_day, 0)))
+    _prepare_dated(p, tmp_path, JAN_, "GLAD-L", january, np.where(own > 0, jan_day, np.where(january > 0, dec_day, 0)))
     res = integrate.run_integration(integrate.IntegrationJob(
-        project=p.model_copy(deep=True), pdir=tmp_path, period=JAN, sources=["GLAD-L"], params=params))
+        project=p.model_copy(deep=True), pdir=tmp_path, period=JAN_, sources=["GLAD-L"], params=params))
     jan = res.alert_set
 
     assert dec.n_alerts == 1 and jan.n_alerts == 2 and jan.footprint_from == [dec.id]
@@ -998,3 +999,14 @@ def test_run_integration_applies_the_periods_masks_to_the_carried_pixels(tmp_pat
     s = _run(p, tmp_path, p.periods[jan.id], params).alert_set
     st, _, _ = _state(tmp_path, s)
     assert st[10, 10] == 0 and st[10, 11] == integrate.STATE_TOO_SMALL  # only the masked pixel is gone
+
+
+@_LONLAT_CENTROID
+def test_run_integration_reads_the_period_from_the_project_not_the_jobs_copy(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)  # the project's look-back: 31 days
+    nxt = _blank()
+    nxt[12:14, 10:13] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    stale = jan.model_copy(update={"look_back_days": 0})
+    res = _run(p, tmp_path, stale, params)
+    assert res.alert_set.carried_from == [dec_set.id] and res.alert_set.n_alerts == 1

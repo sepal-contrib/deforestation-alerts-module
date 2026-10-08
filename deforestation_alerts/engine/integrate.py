@@ -311,7 +311,9 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     §12).
     """
     step = on_step or (lambda key: None)
-    p, pdir, period = job.project, Path(job.pdir), job.period
+    p, pdir = job.project, Path(job.pdir)
+    # the project holds the period's current choices (look-back, masks); the job's copy may be stale
+    period = p.periods.get(job.period.id, job.period)
     sources = sorted(job.sources, key=str.casefold)
     if not job.sources or len(set(job.sources)) != len(job.sources):
         raise ProjectRuleError("choose at least one source, each once", key="errors.no_sources")
