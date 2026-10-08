@@ -31,9 +31,9 @@ STATUS_CLASSES = (
 #: choropleth; stacked bars, grouped bars and lines are fine.
 STACK_ORDER = (1, 3, 2, 0)  # Confirmed, Needs revision, False positive, Not reviewed
 #: (value, colour, label key) of the combined raster's band 4 states a run cannot analyse
-#: (integrate.STATE_TOO_SMALL / STATE_OVER_CAP). Value 1 (analysable) is left out on purpose:
-#: localtileserver drops a colormap's alpha, so a transparent entry for 1 renders opaque
-#: black; the layer masks 1 (and 0) as nodata over a vmin=2..vmax=3 map instead.
+#: (integrate.STATE_TOO_SMALL / STATE_OVER_CAP). Analysable pixels (1) are not drawn: the layer
+#: reads a VRT of band 4 that maps 0 and 1 to nodata (alert_layers.states_vrt), because
+#: localtileserver drops a colormap's alpha.
 STATE_CLASSES = (
     (2, "#9e9e9e", "legend.state_too_small"),
     (3, "#fb8c00", "legend.state_over_cap"),

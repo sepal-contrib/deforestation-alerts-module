@@ -818,35 +818,73 @@ def test_an_earlier_sets_alerts_are_let_go_when_it_is_no_longer_shown(ov, tmp_pa
 # ---------------------------------------------------------------------------
 # The not-analysable pixels (combined band 4)
 # ---------------------------------------------------------------------------
-def _with_states(p, on=True):
+STRIPES = (0, 1, 2, 3)
+
+
+def _with_states(p, on=True, content_id="c1"):
+    """Record the active set's combined raster (a real 4-band file whose band 4
+    is four stripes of 0/1/2/3, nodata=0 in its header like the engine's)."""
+    import numpy as np
+
     from deforestation_alerts.engine.fingerprint import combined_key
+    from deforestation_alerts.engine.raster_io import write_grid_raster
+    from deforestation_alerts.project import paths
+    from deforestation_alerts.project.models import GridSpec
 
     s = p.alert_sets[p.active_set]
+    grid = GridSpec(epsg="EPSG:32721", resolution=30.0, xmin=500000, ymax=7300000, width=16, height=8)
+    tif = paths.resolve(paths.project_dir(p.name), s.combined_rel_path)
+    tif.parent.mkdir(parents=True, exist_ok=True)
+    with write_grid_raster(tif, grid, 4) as dst:
+        for b in (1, 2, 3):
+            dst.write(np.full((8, 16), b, np.int32), b)
+        band4 = np.zeros((8, 16), np.int32)
+        for i, v in enumerate(STRIPES):
+            band4[:, i * 4:(i + 1) * 4] = v
+        dst.write(band4, 4)
     p.artifacts[combined_key(s.id)] = Artifact(
         key=combined_key(s.id), kind="combined", rel_path=s.combined_rel_path, fingerprint="f", inputs={},
-        content_id="c1", created_at=datetime.now(), stats={"states": 1} if on else {})
+        content_id=content_id, created_at=datetime.now(), stats={"states": 1} if on else {})
     return p, s
 
 
-def test_states_build_draws_band_4_with_the_state_colormap(tmp_path, monkeypatch):
+@pytest.fixture
+def scratch(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_GDAL_TMPDIR", str(tmp_path / "scratch"))
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+
+
+def test_states_build_draws_a_band_4_vrt_with_the_state_colormap(tmp_path, monkeypatch, scratch):
     from gui.scripts import raster_map
 
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     p, s = _with_states(_project(tmp_path))
     calls = []
     monkeypatch.setattr(raster_map, "add_raster_layer", lambda *a, **kw: calls.append((a, kw)))
     assert alert_layers.states_build("MAP", project=p, alert_set=s) is True
     (args, kw), = calls
-    assert args[0] == "MAP" and str(args[1]).endswith(s.combined_rel_path)
-    assert (kw["band"], kw["vmin"], kw["vmax"], kw["nodata"]) == (4, 2, 3, 1)
+    assert args[0] == "MAP" and args[1].name == "states_c1.vrt" and args[1].parent == tmp_path / "scratch"
+    assert (kw["band"], kw["vmin"], kw["vmax"], kw["nodata"]) == (1, 2, 3, 0)
     assert kw["key"] == alert_layers.STATES_LAYER_KEY
     assert list(kw["colormap"].colors) == list(legend_specs.state_colormap().colors)
 
 
-def test_states_build_adds_nothing_for_a_legacy_set(tmp_path, monkeypatch):
+def test_the_states_vrt_masks_none_and_analysable_pixels(tmp_path, scratch):
+    import rasterio
+
+    p, s = _with_states(_project(tmp_path))
+    vrt = alert_layers.states_vrt(tmp_path / p.name / s.combined_rel_path, "c1")
+    with rasterio.open(vrt) as src:
+        data = src.read(1, masked=True)
+    for i, v in enumerate(STRIPES):
+        col = data[:, i * 4:(i + 1) * 4]
+        assert bool(col.mask.all()) == (v in (0, 1))
+        if v >= 2:
+            assert not col.mask.any() and set(col.compressed().tolist()) == {v}
+
+
+def test_states_build_adds_nothing_for_a_legacy_set(tmp_path, monkeypatch, scratch):
     from gui.scripts import raster_map
 
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     p, s = _with_states(_project(tmp_path), on=False)
     calls = []
     monkeypatch.setattr(raster_map, "add_raster_layer", lambda *a, **kw: calls.append(1))
@@ -854,29 +892,75 @@ def test_states_build_adds_nothing_for_a_legacy_set(tmp_path, monkeypatch):
     assert calls == [] and not alert_layers.has_states(p, s)
 
 
-def test_the_states_layer_follows_the_switch_and_the_legacy_set_gets_none(ov, tmp_path, monkeypatch):
+def test_the_states_tiles_are_transparent_for_none_and_analysable(tmp_path, scratch):
+    """Through the same add_raster_layer / localtileserver path the app uses."""
+    import io
+    import math
+
+    import numpy as np
+    import pyproj
+    import requests
+    from PIL import Image
+
+    from gui.scripts import raster_map
+
+    p, s = _with_states(_project(tmp_path))
+    vrt = alert_layers.states_vrt(tmp_path / p.name / s.combined_rel_path, "c1")
+    map_ = SepalMap(gee=False)
+    layer = raster_map.add_raster_layer(map_, vrt, key="k", name="n", band=1, colormap=legend_specs.state_colormap(),
+                                        vmin=2, vmax=3, nodata=0)
+    to_ll = pyproj.Transformer.from_crs("EPSG:32721", "EPSG:4326", always_xy=True)
+    z = 12
+    n = 2 ** z
+    lon_c, lat_c = to_ll.transform(500000 + 8 * 30, 7300000 - 4 * 30)
+    tx = int((lon_c + 180) / 360 * n)
+    ty = int((1 - math.asinh(math.tan(math.radians(lat_c))) / math.pi) / 2 * n)
+    im = np.array(Image.open(io.BytesIO(requests.get(layer.url.format(z=z, x=tx, y=ty, s="a")).content)).convert("RGBA"))
+
+    def _px(col):
+        lon, lat = to_ll.transform(500000 + (col + 0.5) * 30, 7300000 - 4 * 30)
+        px = ((lon + 180) / 360 * n - tx) * 256
+        py = ((1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n - ty) * 256
+        return tuple(int(c) for c in im[int(py), int(px)])
+
+    assert _px(2)[3] == 0 and _px(6)[3] == 0  # none, analysable
+    assert _px(10) == (158, 158, 158, 255) and _px(14) == (251, 140, 0, 255)  # too small, over the cap
+
+
+def _watch_shows(monkeypatch):
+    shown = []
+    real_show = MapLayers.show
+    monkeypatch.setattr(MapLayers, "show", lambda self, key, build, content_id=None, notifier=None, legend=None: (
+        shown.append((key, content_id, legend.layer_id)),
+        real_show(self, key, build, content_id=content_id, notifier=notifier, legend=legend))[1])
+    return shown
+
+
+def _fake_draw(monkeypatch):
     from gui.scripts import raster_map
 
     drawn = []
 
     def fake(map_, path, *, key, name, **kw):
-        drawn.append(key)
+        drawn.append((key, path.name))
         map_.remove_layer(key, none_ok=True)
         map_.add_layer(ipyleaflet.TileLayer(name=name), key=key)
 
     monkeypatch.setattr(raster_map, "add_raster_layer", fake)
+    return drawn
+
+
+def test_the_states_layer_follows_the_switch_and_the_legacy_set_gets_none(ov, tmp_path, monkeypatch, scratch):
+    drawn = _fake_draw(monkeypatch)
     p, _ = _with_states(_project(tmp_path))
     state = _state(p, _alerts(), alerts_on=False)
-    shown = []
-    real_show = MapLayers.show
-    monkeypatch.setattr(MapLayers, "show", lambda self, key, build, content_id=None, notifier=None, legend=None: (
-        shown.append((key, content_id, legend.layer_id)), real_show(self, key, build, content_id=content_id,
-                                                                  notifier=notifier, legend=legend)))
+    shown = _watch_shows(monkeypatch)
     map_, layers, rc = ov.render(state)
     try:
         state.show_unanalysable.set(True)
         ov.run_jobs()
-        assert drawn == [alert_layers.STATES_LAYER_KEY] and layers.is_on(alert_layers.STATES_LAYER_KEY)
+        assert drawn == [(alert_layers.STATES_LAYER_KEY, "states_c1.vrt")]
+        assert layers.is_on(alert_layers.STATES_LAYER_KEY)
         assert shown == [(alert_layers.STATES_LAYER_KEY, "c1", alert_layers.STATES_LAYER_KEY)]
         state.show_unanalysable.set(False)
         assert not layers.is_on(alert_layers.STATES_LAYER_KEY)
@@ -889,6 +973,44 @@ def test_the_states_layer_follows_the_switch_and_the_legacy_set_gets_none(ov, tm
     try:
         state.show_unanalysable.set(True)
         ov.run_jobs()
-        assert not layers.is_on(alert_layers.STATES_LAYER_KEY) and drawn == [alert_layers.STATES_LAYER_KEY]
+        assert not layers.is_on(alert_layers.STATES_LAYER_KEY) and len(drawn) == 1
+    finally:
+        rc.close()
+
+
+def test_the_states_layer_follows_the_active_set(ov, tmp_path, monkeypatch, scratch):
+    """Set A with states -> set B with states (another content id) -> a legacy set."""
+    import dataclasses  # noqa: F401
+
+    drawn = _fake_draw(monkeypatch)
+    p, a = _with_states(_project(tmp_path), content_id="cA")
+    b = a.model_copy(update={"id": "set-b", "combined_rel_path": f"{SET_DIR}/b.tif"})
+    leg = a.model_copy(update={"id": "set-legacy", "combined_rel_path": f"{SET_DIR}/l.tif"})
+    p.alert_sets.update({b.id: b, leg.id: leg})
+    p.active_set = b.id
+    _with_states(p, content_id="cB")
+    p.active_set = leg.id
+    _with_states(p, on=False, content_id="cL")
+    p.active_set = a.id
+    state = _state(p, _alerts(set_id=a.id), alerts_on=False)
+    state.show_unanalysable.set(True)
+    key = alert_layers.STATES_LAYER_KEY
+    map_, layers, rc = ov.render(state)
+    try:
+        ov.run_jobs()
+        assert drawn == [(key, "states_cA.vrt")]
+        for target, name in ((b, "states_cB.vrt"),):
+            p2 = state.project.value.model_copy()
+            p2.active_set = target.id
+            state.project.set(p2)
+            state.alerts_gdf.set(_alerts(set_id=target.id))
+            ov.run_jobs()
+            assert drawn[-1] == (key, name) and layers.is_on(key)
+        p3 = state.project.value.model_copy()
+        p3.active_set = leg.id
+        state.project.set(p3)
+        state.alerts_gdf.set(_alerts(set_id=leg.id))
+        ov.run_jobs()
+        assert not layers.is_on(key) and len(drawn) == 2
     finally:
         rc.close()

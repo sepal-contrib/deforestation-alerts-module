@@ -403,8 +403,8 @@ def _AlertLayers(app_state, layers, map_):
     solara.use_effect(_sync_layer, [show, s.id if s else None, gdf, retries])
 
     show_states = app_state.show_unanalysable.value
-    states_id = alert_layers.combined_artifact(p, s)
-    states_id = states_id.content_id if states_id is not None else None
+    combined_art = alert_layers.combined_artifact(p, s)
+    states_content = combined_art.content_id if combined_art is not None else None
 
     def _sync_states():
         if not show_states or s is None or not alert_layers.has_states(p, s):
@@ -412,10 +412,10 @@ def _AlertLayers(app_state, layers, map_):
             return
         layers.show(alert_layers.STATES_LAYER_KEY,
                     lambda: alert_layers.states_build(map_, project=p, alert_set=s),
-                    content_id=states_id, notifier=notifications,
+                    content_id=states_content, notifier=notifications,
                     legend=legend_specs.states_legend(alert_layers.STATES_LAYER_KEY))
 
-    solara.use_effect(_sync_states, [show_states, s.id if s else None, states_id])
+    solara.use_effect(_sync_states, [show_states, s.id if s else None, states_content])
 
     earlier = alert_layers.earlier_of(p, s) if p is not None else []
     earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)

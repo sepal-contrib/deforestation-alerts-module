@@ -23,9 +23,14 @@ and ``deferred_keys`` record.
 """
 
 import logging
+import os
+from pathlib import Path
+from xml.sax.saxutils import escape
 
+import rasterio
 from ipyleaflet import GeoJSON
 
+from deforestation_alerts import gdal_env
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.engine.fingerprint import combined_key
 from deforestation_alerts.errors import UserFileMissing
@@ -79,15 +84,55 @@ def has_states(project, alert_set) -> bool:
     return art is not None and bool((art.stats or {}).get("states"))
 
 
+def states_vrt(combined, content_id: str) -> Path:
+    """A one-band VRT of the combined raster's band 4 in the app's scratch dir,
+    named by the artifact's ``content_id`` so a re-run gets a new file.
+
+    The pixel states 0 (none) and 1 (analysable) map to 0, which is the VRT's
+    nodata, so a tile server leaves them transparent; 2 and 3 pass through.
+    This goes through a VRT because the combined file's own header says
+    ``nodata=0``: overriding it with ``nodata=1`` would let 0 clamp to the
+    lowest colour, and a colormap's alpha is ignored by localtileserver.
+    """
+    combined = Path(combined).resolve()
+    out = gdal_env.scratch_dir() / f"states_{content_id}.vrt"
+    if out.exists():
+        return out
+    with rasterio.open(combined) as src:
+        w, h, crs, gt = src.width, src.height, src.crs, src.transform.to_gdal()
+        dtype = {"int32": "Int32", "uint8": "Byte", "int16": "Int16", "uint16": "UInt16"}.get(src.dtypes[3], "Int32")
+    srs = f"<SRS>{escape(crs.to_wkt())}</SRS>" if crs is not None else ""
+    xml = f"""<VRTDataset rasterXSize="{w}" rasterYSize="{h}">
+  {srs}
+  <GeoTransform>{", ".join(repr(float(c)) for c in gt)}</GeoTransform>
+  <VRTRasterBand dataType="{dtype}" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">{escape(str(combined))}</SourceFilename>
+      <SourceBand>4</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
+      <DstRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
+      <LUT>0:0,1:0,2:2,3:3</LUT>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>
+"""
+    part = out.with_name(out.name + f".{os.getpid()}.part")
+    part.write_text(xml)
+    os.replace(part, out)
+    return out
+
+
 def states_build(map_, *, project, alert_set) -> bool:
-    """Draw the set's too-small / over-cap pixels (band 4 of the combined
-    raster; 1 = analysable is masked as nodata, and so is 0) under ``STATES_LAYER_KEY``. Adds
+    """Draw the set's too-small / over-cap pixels under ``STATES_LAYER_KEY``
+    from a VRT of band 4 of the combined raster (see ``states_vrt``). Adds
     nothing and returns False for a set without the band."""
     if not has_states(project, alert_set):
         return False
-    path = paths.resolve(paths.project_dir(project.name), alert_set.combined_rel_path)
-    raster_map.add_raster_layer(map_, path, key=STATES_LAYER_KEY, name=t("legend.states_title"), band=4,
-                                colormap=state_colormap(), vmin=2, vmax=3, nodata=1)
+    combined = paths.resolve(paths.project_dir(project.name), alert_set.combined_rel_path)
+    vrt = states_vrt(combined, combined_artifact(project, alert_set).content_id)
+    raster_map.add_raster_layer(map_, vrt, key=STATES_LAYER_KEY, name=t("legend.states_title"), band=1,
+                                colormap=state_colormap(), vmin=2, vmax=3, nodata=0)
     return True
 
 

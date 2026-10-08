@@ -1480,3 +1480,28 @@ def test_the_unanalysable_switch_needs_a_set_with_the_state_band(step):
         assert label not in _switches(rc)
     finally:
         rc.close()
+
+
+def test_the_unanalysable_switch_is_held_while_its_layer_is_being_built(step):
+    from deforestation_alerts.engine.fingerprint import combined_key
+    from deforestation_alerts.project.models import Artifact
+    from gui.scripts.alert_layers import STATES_LAYER_KEY
+
+    step.ready = ["GLAD-L"]
+    p = _project("d", "GLAD-L", sets=[_set("x", 0)])
+    p.artifacts[combined_key("x")] = Artifact(
+        key=combined_key("x"), kind="combined", rel_path="c.tif", fingerprint="f", inputs={},
+        content_id="c1", created_at=datetime.now(), stats={"states": 1})
+    map_ = ipyleaflet.Map()
+    layers = MapLayers(map_)
+    box_, rc = reacton.render(_Harness(app_state=_state(p), map_=map_, layers=layers), handle_error=False)
+    try:
+        label = t("steps.integrate.show_unanalysable")
+        assert _switches(rc)[label].disabled is False
+        layers.inflight.set(frozenset({STATES_LAYER_KEY}))
+        assert _switches(rc)[label].disabled is True
+        assert _switches(rc)[t("steps.integrate.show_alerts")].disabled is False
+        layers.inflight.set(frozenset())
+        assert _switches(rc)[label].disabled is False
+    finally:
+        rc.close()
