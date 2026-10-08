@@ -141,10 +141,12 @@ def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
     texts = [n["text"] for n in jan["notes"]]
     assert texts == [
         t("steps.period.window", start="2025-12-02", end="2026-01-31"),
+        t("steps.period.note_no_earlier"),
         t("steps.period.note_sources_stale", count=1),
         t("steps.period.note_sets_stale", count=1),
         t("steps.period.note_frozen"),
     ]
+    assert t("steps.period.note_no_earlier") not in [n["text"] for n in feb["notes"]]  # January's set is earlier
     assert feb["cells"][1]["value"] == "0" and t("steps.period.note_frozen") not in [n["text"] for n in feb["notes"]]
     assert [a["kind"] for a in feb["actions"]] == ["select", "edit", "delete"]
     assert len(feb["actions"]) == period_step.PERIOD_ACTIONS
@@ -155,7 +157,7 @@ def test_a_period_with_nothing_out_of_date_shows_no_badge(env):
     p = _project(env.pdir)
     p.artifacts = {}
     row = period_step.period_rows(p, env.pdir, select=None, edit=None, delete=None)[0]
-    assert row["cells"][2] == {"value": "—", "muted": True} and len(row["notes"]) == 1  # the window only
+    assert row["cells"][2] == {"value": "—", "muted": True} and len(row["notes"]) == 2  # the window and "no earlier set"
 
 
 def test_selecting_a_row_sets_the_active_period(env):
@@ -183,27 +185,34 @@ def test_a_new_period_copies_the_mask_choices_of_the_latest_period(env):
         _button(rc, t("steps.period.new")).fire_event("click", None)
         modal = env.seen["modal"]
         assert modal["open_"].value is True and modal["editing"] is None
-        assert modal["on_submit"]("2026-03-01", "2026-03-31") is None
+        assert modal["on_submit"]("2026-03-01", "2026-03-31", "90") is None
         live = state.project.value
         assert live.active_period == "2026-03-01_2026-03-31"
         assert live.periods["2026-03-01_2026-03-31"].masks == {"forest": PeriodMask(on=True, mode="exclude")}
         assert _toasts("success") == [t("steps.period.created")]
         before = state.project.value
-        assert modal["on_submit"]("2026-03-01", "2026-03-31") == "steps.period.error_exists"
+        assert modal["on_submit"]("2026-03-01", "2026-03-31", "90") == "steps.period.error_exists"
         assert state.project.value is before  # a refused change neither publishes nor saves
     finally:
         rc.close()
 
 
-def test_the_dates_of_a_period_with_sets_cannot_change(env):
+def test_a_period_with_sets_opens_the_dialog_and_a_look_back_only_save_keeps_its_files(env):
     p = _project(env.pdir)
     _add_set(p, env.pdir, JAN_ID)
     state = _state(p)
     layers, rc = _render(state)
     try:
         _action(env.seen, JAN_ID, "edit")["on_click"]()
-        assert env.seen["modal"]["open_"].value is False
-        assert _toasts("warning") == [t("steps.period.error_locked")]
+        modal = env.seen["modal"]
+        assert modal["open_"].value is True and modal["editing"] == JAN_ID
+        assert modal["on_submit"]("2026-01-01", "2026-01-31", "10") is None
+        live = state.project.value
+        assert live.periods[JAN_ID].look_back_days == 10 and live.alert_sets and live.artifacts
+        assert (env.pdir / "periods" / JAN_ID / "raw" / "raw.tif").exists()
+        assert _toasts("success") == [t("steps.period.saved")]
+        # changed dates on a period with sets are still refused
+        assert modal["on_submit"]("2026-01-02", "2026-01-31", "10") == "steps.period.error_locked"
     finally:
         rc.close()
 
@@ -217,7 +226,7 @@ def test_new_dates_give_a_new_id_and_delete_the_old_windows_files_and_layers(env
         _action(env.seen, FEB_ID, "edit")["on_click"]()
         modal = env.seen["modal"]
         assert modal["editing"] == FEB_ID and modal["open_"].value is True
-        assert modal["on_submit"]("2026-02-01", "2026-02-15") is None
+        assert modal["on_submit"]("2026-02-01", "2026-02-15", "90") is None
         live = state.project.value
         assert live.active_period == "2026-02-01_2026-02-15" and FEB_ID not in live.periods
         assert not (env.pdir / "periods" / FEB_ID).exists() and (env.pdir / "periods" / JAN_ID).exists()
@@ -302,36 +311,12 @@ def test_edit_and_delete_wait_for_the_projects_writers(env):
 # ---------------------------------------------------------------------------
 # Look-back, remounts
 # ---------------------------------------------------------------------------
-def _look_back_field(rc):
-    return next(w for w in rc.find(v.TextField).widgets if w.label == t("steps.period.look_back"))
-
-
-def test_look_back_is_checked_then_applied(env):
+def test_the_step_no_longer_renders_the_look_back_field(env):
     state = _state(_project(env.pdir))
     layers, rc = _render(state)
     try:
-        assert _button(rc, t("steps.period.apply")).disabled  # nothing changed yet
-        before = state.project.value
-        _look_back_field(rc).v_model = "-3"
-        _button(rc, t("steps.period.apply")).fire_event("click", None)
-        assert state.project.value is before
-        assert _toasts("error") == [t("steps.period.error_bad_look_back")]
-        _look_back_field(rc).v_model = "30"
-        _button(rc, t("steps.period.apply")).fire_event("click", None)
-        assert state.project.value.look_back_days == 30
-    finally:
-        rc.close()
-
-
-def test_switching_projects_remounts_the_list_and_drops_a_typed_look_back(env):
-    state = _state(_project(env.pdir, "a"))
-    layers, rc = _render(state)
-    try:
-        _look_back_field(rc).v_model = "7"
-        b = _project(env.pdir, "b")
-        b.look_back_days = 45
-        state.new_project_state(b)
-        assert _look_back_field(rc).v_model == "45"
+        assert [w for w in rc.find(v.TextField).widgets if w.label == t("steps.period.look_back")] == []
+        assert not [b for b in rc.find(v.Btn).widgets if "Apply" in b.children]
     finally:
         rc.close()
 
@@ -340,9 +325,10 @@ def test_closing_the_open_project_unmounts_the_list_without_reading_it(env):
     state = _state(_project(env.pdir))
     layers, rc = _render(state)
     try:
-        assert _look_back_field(rc)
+        assert "table" in env.seen
+        env.seen.clear()
         state.close_project_state()
-        assert rc.find(v.TextField).widgets == []
+        assert rc.find(v.Btn).widgets == [] and "table" not in env.seen
         assert state.project_loaded_signal.value == 2 and state.active_step.value == 0
     finally:
         rc.close()
@@ -374,7 +360,7 @@ def test_the_modal_is_prefilled_from_the_latest_period_and_checks_the_order(env)
     state = _state(_project(env.pdir))
     open_, submitted = solara.reactive(True), []
     _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_,
-                                         on_submit=lambda a, b: submitted.append((a, b))), handle_error=False)
+                                         on_submit=lambda a, b, c: submitted.append((a, b, c))), handle_error=False)
     try:
         fields = _fields(rc)
         assert fields[t("steps.period.start")].v_model == "2026-03-01"
@@ -384,7 +370,7 @@ def test_the_modal_is_prefilled_from_the_latest_period_and_checks_the_order(env)
         assert _fields(rc)[t("steps.period.end")].error_messages == [t("steps.period.error_order")]
         _fields(rc)[t("steps.period.end")].v_model = "2026-03-31"
         _button(rc, t("steps.period.add")).fire_event("click", None)
-        assert submitted == [("2026-03-01", "2026-03-31")] and open_.value is False
+        assert submitted == [("2026-03-01", "2026-03-31", "90")] and open_.value is False
     finally:
         rc.close()
 
@@ -393,7 +379,7 @@ def test_the_modal_shows_a_refusal_inline_and_stays_open(env):
     state = _state(_project(env.pdir))
     open_ = solara.reactive(True)
     _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, editing=FEB_ID,
-                                         on_submit=lambda a, b: "steps.period.error_exists"), handle_error=False)
+                                         on_submit=lambda a, b, c: "steps.period.error_exists"), handle_error=False)
     try:
         assert _fields(rc)[t("steps.period.start")].v_model == "2026-02-01"  # an edit starts from its dates
         _button(rc, t("steps.period.save")).fire_event("click", None)
@@ -409,7 +395,7 @@ def test_the_modal_shows_a_refusal_inline_and_stays_open(env):
 def test_the_period_form_sits_on_the_form_frame(env, editing, label, icon):
     state = _state(_project(env.pdir))
     open_ = solara.reactive(True)
-    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, on_submit=lambda a, b: None,
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, on_submit=lambda a, b, c: None,
                                          editing=editing), handle_error=False)
     try:
         dialog = rc.find(v.Dialog).widget
@@ -420,5 +406,54 @@ def test_the_period_form_sits_on_the_form_frame(env, editing, label, icon):
         assert [c.children[0] for c in primary.children if isinstance(c, v.Icon)] == [icon]
         dialog.fire_event("keydown.esc", None)
         assert open_.value is False
+    finally:
+        rc.close()
+
+
+def test_the_dialog_has_a_look_back_field_with_a_live_window(env):
+    p = _project(env.pdir)
+    p.look_back_days = 30
+    state = _state(p)
+    open_ = solara.reactive(True)
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, on_submit=lambda a, b, c: None),
+                           handle_error=False)
+    try:
+        assert _fields(rc)[t("steps.period.look_back")].v_model == "30"  # a new period starts from the project's
+        _fields(rc)[t("steps.period.look_back")].v_model = "10"
+        assert rc.find(v.Html, tag="div", children=[t("steps.period.window", start="2026-02-19", end="2026-09-30")]).widgets
+        assert not _button(rc, t("steps.period.add")).disabled
+        _fields(rc)[t("steps.period.look_back")].v_model = "-1"
+        assert _button(rc, t("steps.period.add")).disabled
+        assert _fields(rc)[t("steps.period.look_back")].error_messages == [t("steps.period.error_bad_look_back")]
+    finally:
+        rc.close()
+
+
+def test_an_edit_starts_from_the_periods_look_back_and_locks_the_dates_when_it_has_sets(env):
+    p = _project(env.pdir)
+    p.periods = {**p.periods, JAN_ID: p.periods[JAN_ID].model_copy(update={"look_back_days": 45})}
+    _add_set(p, env.pdir, JAN_ID)
+    state = _state(p)
+    open_, submitted = solara.reactive(True), []
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=open_, editing=JAN_ID,
+                                         on_submit=lambda a, b, c: submitted.append((a, b, c))), handle_error=False)
+    try:
+        fields = _fields(rc)
+        assert fields[t("steps.period.look_back")].v_model == "45"
+        assert fields[t("steps.period.start")].disabled and fields[t("steps.period.end")].disabled
+        assert not _button(rc, t("steps.period.save")).disabled
+        fields[t("steps.period.look_back")].v_model = "10"
+        _button(rc, t("steps.period.save")).fire_event("click", None)
+        assert submitted == [("2026-01-01", "2026-01-31", "10")]
+    finally:
+        rc.close()
+
+
+def test_a_period_without_sets_keeps_its_date_fields_enabled(env):
+    state = _state(_project(env.pdir))
+    _, rc = reacton.render(_ModalHarness(app_state=state, open_=solara.reactive(True), editing=FEB_ID,
+                                         on_submit=lambda a, b, c: None), handle_error=False)
+    try:
+        assert not _fields(rc)[t("steps.period.start")].disabled
     finally:
         rc.close()

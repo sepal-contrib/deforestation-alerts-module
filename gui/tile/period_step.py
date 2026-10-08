@@ -12,16 +12,16 @@ cheap.
 - **New period** opens ``PeriodModal`` pre-filled from the latest period; the
   new period copies the mask choices of the period with the latest start and
   becomes active (``periods.new_period``).
-- **Edit** changes the dates of a period without sets (a period with sets is
-  refused with a toast). New dates give it a new id; its downloads and
-  harmonized files are deleted.
+- **Edit** opens the dialog: dates and look-back of a period without sets (new
+  dates give it a new id; its downloads and harmonized files are deleted), only
+  the look-back of a period with sets (its dates are locked in the dialog).
 - **Delete** is refused for a period with sets that is not the latest;
   otherwise a confirmation names what goes, then the period, its sets, their
   records and the period's whole folder are removed.
 - Edit and delete are refused while a writer of the project runs (a download,
   Integrate, a review Save), like source and mask deletes.
-- **Look-back** is a project field edited here (Apply); it makes the raw
-  downloads out of date through their window.
+- **Look-back** is a field of each period, set in the dialog; changing it makes
+  the period's raw downloads out of date through their window.
 
 Every change is tried on a deep copy first, so a refused one neither
 publishes nor saves (slice-1 ruling #69), then applied through
@@ -30,7 +30,7 @@ the state lock, once the layers drawn from them have left the map.
 
 The step is mounted for the whole session: ``PeriodStep`` is a hook-free gate
 and the list is a child keyed by the project and its load signal, so a
-switched project never shows another project's typed look-back.
+switched project never shows another project's state.
 """
 
 import reacton.ipyvuetify as rv
@@ -72,12 +72,20 @@ def badges(p, pdir, period) -> dict:
             "missing_sets": states.count(Status.MISSING), "stale_sources": stale_sources}
 
 
+def has_earlier_set(p, period) -> bool:
+    """Whether a set of an earlier period exists to subtract from this period's look-back alerts."""
+    return any(p.periods.get(s.period_id) is not None and p.periods[s.period_id].start < period.start
+               for s in p.alert_sets.values())
+
+
 def period_rows(p, pdir, *, select, edit, delete) -> list:
     rows = []
     for period in periods.periods_newest_first(p):
         b = badges(p, pdir, period)
         ws, we = period.search_window()
         notes = [{"text": t("steps.period.window", start=ws.isoformat(), end=we.isoformat()), "tone": None}]
+        if not has_earlier_set(p, period):
+            notes.append({"text": t("steps.period.note_no_earlier"), "tone": None})
         if b["stale_sources"]:
             notes.append({"text": t("steps.period.note_sources_stale", count=b["stale_sources"]), "tone": "warning"})
         if b["stale_sets"]:
@@ -140,7 +148,6 @@ def _PeriodList(app_state, layers):
     modal_open = solara.use_reactive(False)
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
-    look_back, set_look_back = solara.use_state(str(p.look_back_days) if p is not None else "")
     if p is None:
         # Closed: this child renders once more before the gate unmounts it.
         # Every hook ran already; reading the closed project would raise.
@@ -171,9 +178,7 @@ def _PeriodList(app_state, layers):
         modal_open.set(True)
 
     def _edit(pid):
-        if periods.sets_of(p, pid):  # the live project is checked again when the edit is applied
-            notifications.warning(t("steps.period.error_locked"))
-        elif is_writing(name):
+        if is_writing(name):
             notifications.warning(t("steps.period.busy"))
         else:
             set_editing(pid)
@@ -184,9 +189,9 @@ def _PeriodList(app_state, layers):
         cleanup.delete_files(pdir, gone)
         cleanup.delete_period_dir(pdir, pid)
 
-    def _submit(start, end):
+    def _submit(start, end, look_back):
         if editing is None:
-            error, _, applied = _change(lambda q: (periods.new_period(q, start, end), []))
+            error, _, applied = _change(lambda q: (periods.new_period(q, start, end, look_back), []))
             if error:
                 return f"steps.period.error_{error}"
             if applied:
@@ -198,11 +203,12 @@ def _PeriodList(app_state, layers):
         if live is None or live.name != name:
             return None  # closed or switched meanwhile: nothing to change
         ids = dropped_content(live, cleanup.period_artifact_keys(live, pid))
-        error, gone, applied = _change(lambda q: periods.edit_period(q, pid, start, end))
+        error, gone, applied = _change(lambda q: periods.edit_period(q, pid, start, end, look_back))
         if error:
             return f"steps.period.error_{error}"
-        if applied and period_id(*periods.parse_dates(start, end)[1]) != pid:  # same dates: nothing moved
-            _remove(pid, gone, ids)
+        if applied:
+            if period_id(*periods.parse_dates(start, end)[1]) != pid:  # same dates: nothing moved
+                _remove(pid, gone, ids)
             notifications.success(t("steps.period.saved"))
         return None
 
@@ -233,32 +239,9 @@ def _PeriodList(app_state, layers):
             _remove(pid, gone, ids, set_ids)
             notifications.success(t("steps.period.deleted"))
 
-    def _apply_look_back():
-        # Temporary until the per-period dialog (Task 5): one value for every period.
-        error, days = periods.parse_look_back(look_back)
-        if not error:
-            def _set_all(q):
-                q.look_back_days = days
-                q.periods = {k: v.model_copy(update={"look_back_days": days}) for k, v in q.periods.items()}
-                return None, []
-
-            _, _, applied = _change(_set_all)
-        else:
-            applied = False
-        if error:
-            notifications.error(t(f"steps.period.error_{error}"))
-        elif applied:
-            notifications.success(t("steps.period.look_back_saved"))
-
     with solara.Column(style="gap:12px;"):
         solara.Markdown(f"### {t('steps.period.title')}")
         StepIntro(t("steps.period.description"), t("steps.period.info_header"), t("steps.period.info_md"))
-        with solara.Row(style="gap:8px;align-items:flex-start;"):
-            rv.TextField(label=t("steps.period.look_back"), type="number", v_model=look_back,
-                         on_v_model=set_look_back, dense=True, outlined=True,
-                         hint=t("steps.period.look_back_hint"), persistent_hint=True)
-            solara.Button(t("steps.period.apply"), small=True, outlined=True,
-                          disabled=str(look_back).strip() == str(p.look_back_days), on_click=_apply_look_back)
         solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       on_click=_new)
         ProductTable(
