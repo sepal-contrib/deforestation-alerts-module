@@ -15,10 +15,22 @@ import ipyvuetify as v
 
 _HIDDEN = "display: none;"
 
+#: one block of the panel: flat on the panel's own surface, with a hairline
+#: above it, like the other Workflow steps' panels -- not a raised card with
+#: its own margins and a hover lift. The line is the footer's
+#: (``footer.FOOTER_STYLE``), which reads on both themes.
+BLOCK_STYLE = "border-top: 1px solid rgba(128, 128, 128, 0.25);"
 
-def build_section(title: str, body, *, badge: str = "", open: bool = False):
+
+def panel_block(children, *, class_: str = "py-3"):
+    """A flat block of the Analysis panel (see ``BLOCK_STYLE``)."""
+    return v.Html(tag="div", class_=class_, style_=BLOCK_STYLE, children=children)
+
+
+def build_section(title: str, body, *, badge: str = "", open: bool = False, divided: bool = True):
     """A collapsed-by-default section. ``title`` and ``badge`` are already
-    translated by the caller (nothing here resolves a message)."""
+    translated by the caller (nothing here resolves a message). ``divided``
+    draws the block's hairline; the footer's section has the footer's own."""
     chevron = v.Icon(small=True, children=["mdi-chevron-right"])
     badge_chip = v.Chip(
         x_small=True,
@@ -29,7 +41,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False):
     header = v.Btn(
         text=True,
         block=True,
-        class_="px-3",
+        class_="px-1",
         style_="height: 50px; justify-content: flex-start; text-transform: none;",
         children=[
             chevron,
@@ -38,7 +50,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False):
             badge_chip,
         ],
     )
-    body_box = v.Html(tag="div", class_="px-3 pb-3", children=[body])
+    body_box = v.Html(tag="div", class_="px-1 pb-3", children=[body])
 
     state = {"open": False}
 
@@ -65,7 +77,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False):
     header.on_event("click", lambda *_: set_open(not state["open"]))
     set_open(open)
 
-    root = v.Card(class_="ma-2", hover=True, children=[header, body_box])
+    root = v.Html(tag="div", style_=BLOCK_STYLE if divided else "", children=[header, body_box])
     return SimpleNamespace(
         root=root,
         header=header,

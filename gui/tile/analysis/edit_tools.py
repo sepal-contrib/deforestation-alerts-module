@@ -110,7 +110,7 @@ import logging
 
 import ipyvuetify as v
 from ipyleaflet import GeoData
-from pysepal import color, sepalwidgets as sw
+from pysepal import sepalwidgets as sw
 from pysepal.solara.notifications import notify
 
 from deforestation_alerts import gdal_env
@@ -402,7 +402,7 @@ def build_edit_tools(
             )
 
         ns["start_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.start_edit_button"), color=color.primary)
+            t("analysis_tile.edition_labels.start_edit_button"), color="primary")
         ns["save_btn"] = _edit_button(
             t("analysis_tile.edition_labels.apply_edit_button"), outlined=True, disabled=True)
         ns["stop_btn"] = _edit_button(
@@ -417,22 +417,22 @@ def build_edit_tools(
         for n, model_name in ((1, t("analysis_tile.model_labels.dl_button1")),
                               (2, t("analysis_tile.model_labels.dl_button2"))):
             ns[f"dl{n}_run"] = v.Btn(
-                color=color.primary, small=True, style_="text-transform: none;",
+                color="primary", small=True, style_="text-transform: none;",
                 children=[t("analysis_tile.model_labels.run")],
             )
             ns[f"dl{n}_add"] = _EditionButton(
-                color=color.primary,
+                color="primary",
                 children=[t("analysis_tile.model_labels.dl_button_add")],
             )
             ns[f"dl{n}_remove"] = _EditionButton(
-                color=color.error,
+                color="error",
                 children=[t("analysis_tile.model_labels.dl_button_remove")],
             )
             # The one button that keeps its icon and its tooltip: it IS the
             # "found nothing" warning, and it carries no state of its own.
             ns[f"dl{n}_msg"] = _EditionButton(
-                color=color.error, disabled=False,
-                children=[v.Icon(color=color.bg, children=["fa-solid fa-triangle-exclamation"])],
+                color="error", disabled=False,
+                children=[v.Icon(color="white", children=["fa-solid fa-triangle-exclamation"])],
             ).hide()
             tt_msg = sw.Tooltip(ns[f"dl{n}_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)

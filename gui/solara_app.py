@@ -614,6 +614,10 @@ def _AppShell():
         # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
+        # The stage's own 16px frame: the same unthemed fallback painted it
+        # white around the dark Analysis stage. Dark: the stage's surface
+        # (``.analysis-stage--dark`` in gui/tile/analysis/analysis_tile.py).
+        ".theme--dark .defo-stage { background-color: #121212; }\n"
         # The rail collapse/expand arrow sits on the stage's left edge: keep it
         # above the stage (MapApp's own value, restated here so the whole order
         # above is in one place) and below the dialogs.

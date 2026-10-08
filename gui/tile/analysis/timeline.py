@@ -55,7 +55,12 @@ VIEW_MONTHS = 2
 #: not overlap, so two collections on one date never draw over each other and
 #: a stripe's row says which collection it is before its colour does.
 BAND = {SOURCE_S2: (0, 17), SOURCE_LANDSAT: (19, 14), SOURCE_PLANET: (35, 10)}
-SRC_COLOR = {SOURCE_S2: "#7fa8e0", SOURCE_LANDSAT: "#c9a87c", SOURCE_PLANET: "#9bd98a"}
+#: each collection's colour. CSS variables, like every colour on the strip and
+#: in the pane titles that has to follow the theme: ``THEME_CSS`` defines the
+#: light values on the stage and the dark ones on its ``analysis-stage--dark``
+#: marker. The fallback is the dark value.
+SRC_COLOR = {SOURCE_S2: "var(--dat-s2, #7fa8e0)", SOURCE_LANDSAT: "var(--dat-landsat, #c9a87c)",
+             SOURCE_PLANET: "var(--dat-planet, #9bd98a)"}
 #: display labels only. ``SOURCE_S2`` -- "Sentinel 2" with a space -- is what
 #: the saved store, ``mosaics_helper`` and ``before_info[0]`` switch on; the
 #: hyphenated form must never reach a data structure.
@@ -66,10 +71,23 @@ SELECTED_COLOR = "#bf8f2d"  # the theme's primary_contrast
 #: dark warm grey on the light one (``gui/widget/handle_strip.py`` defines
 #: both). The after side keeps the gold, which reads on either.
 BEFORE_COLOR = "var(--dah-before, #e9e1cf)"
-MUTED = "#a8a39b"
+MUTED = "var(--dat-muted, #a8a39b)"
 #: amber, for the two things the reviewer has to notice rather than read:
 #: a refresh that failed, and one image standing in for both sides.
-WARN = "#d9ab4e"
+WARN = "var(--dat-warn, #d9ab4e)"
+#: the light theme's values on ``.analysis-stage`` and the dark theme's on its
+#: ``analysis-stage--dark`` marker -- the switch the stage background follows.
+#: On the stage, not the timeline card: the pane titles above the maps read
+#: ``MUTED``, ``WARN`` and ``SRC_COLOR`` too. The light values are darker so a
+#: label keeps 4.5:1 and a stripe 3:1 on the white surface.
+THEME_CSS = (
+    ".analysis-stage { --dat-s2: #3a6db5; --dat-landsat: #9a7240; --dat-planet: #3f8f32; "
+    "--dat-muted: #6b665e; --dat-warn: #9a6400; --dat-ink: #2a2724; --dat-chip: #f4f1ec; "
+    "--dat-fold-a: #ebe6de; --dat-fold-b: #f5f2ed; --dat-edge: rgba(0, 0, 0, 0.25); } "
+    ".analysis-stage.analysis-stage--dark { --dat-s2: #7fa8e0; --dat-landsat: #c9a87c; "
+    "--dat-planet: #9bd98a; --dat-muted: #a8a39b; --dat-warn: #d9ab4e; --dat-ink: #f0ece6; "
+    "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
+)
 HIT_PX = 11
 STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
@@ -733,14 +751,15 @@ def build_timeline(app_state, analysis, widgets):
                             "aria-label": t("analysis.timeline.collapsed_month", month=label, count=n)},
                 style_=(f"pointer-events: auto; position: absolute; left: {_pct(seg.x):.3f}%; "
                         f"width: {_pct(seg.w):.3f}%; top: 0; bottom: 0; cursor: pointer; "
-                        "background: repeating-linear-gradient(135deg, #24221f, #24221f 4px, "
-                        "#1e1c1a 4px, #1e1c1a 9px); border-left: 1px dashed #44403a; "
-                        "border-right: 1px dashed #44403a; display: flex; flex-direction: column; "
+                        "background: repeating-linear-gradient(135deg, var(--dat-fold-a), var(--dat-fold-a) 4px, "
+                        "var(--dat-fold-b) 4px, var(--dat-fold-b) 9px); "
+                        "border-left: 1px dashed var(--dat-edge); "
+                        "border-right: 1px dashed var(--dat-edge); display: flex; flex-direction: column; "
                         f"align-items: center; justify-content: center; gap: 3px; color: {MUTED}"),
                 children=[
                     v.Html(tag="span", style_="font-size: 9px; letter-spacing: 0.1em; "
                                               "text-transform: uppercase", children=[label]),
-                    v.Html(tag="span", style_="font-size: 16px; font-weight: 600; color: #f0ece6; "
+                    v.Html(tag="span", style_="font-size: 16px; font-weight: 600; color: var(--dat-ink); "
                                               "line-height: 1", children=[str(n)]),
                     v.Html(tag="span", style_="font-size: 8px", children=[t("analysis.timeline.images")]),
                 ])
@@ -763,7 +782,7 @@ def build_timeline(app_state, analysis, widgets):
 
     def _render_axis(segs):
         kids = [v.Html(tag="span", style_="position: absolute; left: 0; right: 0; top: 0; height: 1px; "
-                                          "background: #44403a")]
+                                          "background: var(--dat-edge)")]
         for key, seg in sorted(segs.items()):
             if seg.collapsed:
                 continue
@@ -824,9 +843,9 @@ def build_timeline(app_state, analysis, widgets):
             chip = v.Html(tag="button", attributes=attrs,
                           style_=(f"height: 32px; padding: 0 10px; border-radius: 4px; "
                                   f"cursor: {'not-allowed' if blocked else 'pointer'}; "
-                                  f"background: #24221f; color: #f0ece6; font-size: 11.5px; "
+                                  f"background: var(--dat-chip); color: var(--dat-ink); font-size: 11.5px; "
                                   f"border: 1px solid "
-                                  f"{SRC_COLOR[name] if (on and not blocked) else '#44403a'}; "
+                                  f"{SRC_COLOR[name] if (on and not blocked) else 'var(--dat-edge)'}; "
                                   f"opacity: {'0.4' if blocked else ('1' if on else '0.5')}"),
                           children=[label])
             if not blocked:
@@ -858,7 +877,7 @@ def build_timeline(app_state, analysis, widgets):
                               attributes={"type": "button",
                                           "title": t("analysis.timeline.swap_source", source=src)},
                               style_=("font-size: 11px; font-weight: 400; line-height: 18px; padding: 0 6px; "
-                                      f"border-radius: 3px; border: 1px solid {MUTED}66; cursor: pointer; "
+                                      f"border-radius: 3px; border: 1px solid var(--dat-edge); cursor: pointer; "
                                       f"color: {SRC_COLOR[scene_query.parse_row_id(alt)[0]]}"),
                               children=[f"\u21c4 {src}"])
                 swap.on_event("click", lambda *_a, lane_=lane_, alt=alt: _pick_if_reachable(lane_, alt))
@@ -1150,7 +1169,7 @@ def build_timeline(app_state, analysis, widgets):
                         style_=(f"display: inline-flex; align-items: center; justify-content: center; "
                                 f"width: 18px; height: 18px; border-radius: 9px; cursor: pointer; "
                                 f"background: none; padding: 0; "
-                                f"border: 1px solid #44403a; color: {MUTED}; font-size: 11px"),
+                                f"border: 1px solid var(--dat-edge); color: {MUTED}; font-size: 11px"),
                         children=["?"])
 
     def _toggle_legend(*_):

@@ -16,16 +16,18 @@ import traitlets
 #: variant off the stage's ``analysis-stage--dark`` marker, the same switch the
 #: stage's own background follows.
 _HANDLES_CSS = """
-.analysis-timeline { --dah-before: #5f5a52; --dah-before-ink: #ffffff; --dah-line: rgba(0, 0, 0, 0.25); }
-.analysis-stage--dark .analysis-timeline { --dah-before: #e9e1cf; --dah-before-ink: #1b1a18; --dah-line: #44403a; }
+.analysis-timeline { --dah-before: #5f5a52; --dah-before-ink: #ffffff; --dah-line: rgba(0, 0, 0, 0.25);
+  --dah-gap: #8a6416; --dah-gap-warn: #9a6400; }
+.analysis-stage--dark .analysis-timeline { --dah-before: #e9e1cf; --dah-before-ink: #1b1a18; --dah-line: #44403a;
+  --dah-gap: #bf8f2d; --dah-gap-warn: #d9ab4e; }
 .dah-root { position: relative; user-select: none; -webkit-user-select: none; }
 .dah-base { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--dah-line); }
 .dah-tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: var(--dah-line); }
 .dah-bracket { position: absolute; border: 1px solid rgba(191, 143, 45, 0.6); border-bottom: 0;
   pointer-events: none; }
 .dah-gap { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px;
-  color: #bf8f2d; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
-.dah-gap.dah-warn { color: #d9ab4e; }
+  color: var(--dah-gap); white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
+.dah-gap.dah-warn { color: var(--dah-gap-warn); }
 .dah-wash { position: absolute; background: rgba(191, 143, 45, 0.06); pointer-events: none; z-index: 1; }
 .dah-glow { position: absolute; pointer-events: none; z-index: 3; border-radius: 2px;
   box-shadow: 0 0 0 2px rgba(227, 181, 83, 0.45), 0 0 10px 2px rgba(227, 181, 83, 0.35); }

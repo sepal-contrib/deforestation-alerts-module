@@ -33,6 +33,7 @@ from gui.i18n import format_number, t
 from gui.scripts import set_store
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
 from gui.store.workflow_steps import active_set
+from gui.tile.analysis.section import panel_block
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
 #: else) can reach them without re-deriving the tree's shape.
@@ -269,8 +270,7 @@ def build_context(app_state, id_field) -> v.Card:
 
     nav_row, nav_slots = _build_nav(app_state, id_field)
 
-    card = v.Card(class_="pa-3 ma-2", hover=True,
-                  children=[queue_line, bar, nav_row, facts_grid])
+    card = panel_block([queue_line, bar, nav_row, facts_grid])
     setattr(card, _SLOTS,
             {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots})
     return card

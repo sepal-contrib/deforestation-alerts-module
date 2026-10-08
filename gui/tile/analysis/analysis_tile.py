@@ -85,6 +85,7 @@ from gui.tile.analysis.export import REQUIRED_MISSING, build_export
 from gui.tile.analysis.footer import build_footer
 from gui.tile.analysis.imagery import wire_panes
 from gui.tile.analysis.section import build_section
+from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
 from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
@@ -459,7 +460,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Built before the footer so the footer's two Save buttons drive the
     # export section's ONE save runner: a save from either runs its post-save
     # step, which is what enables its build tile and moves its badge on.
-    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"))
+    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"), divided=False)
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
@@ -614,7 +615,9 @@ def build_analysis_layout(
             # what makes the 246px the maps give up self-enforcing.
             ".analysis-strip { width: 100%; flex: 0 0 auto; padding: 0 4px 4px 4px; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
-            "min-width: 40px; display: flex !important; align-items: center !important; }"
+            "min-width: 40px; display: flex !important; align-items: center !important; } "
+            # the timeline's and the pane titles' theme colours
+            + timeline_theme_css
         ],
     )
 

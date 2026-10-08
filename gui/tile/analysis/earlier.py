@@ -23,6 +23,7 @@ from gui.scripts import earlier_reviews
 from gui.scripts.legend_specs import status_colors
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.workflow_steps import active_set
+from gui.tile.analysis.section import panel_block
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -163,4 +164,4 @@ def build_earlier_controls(widgets, app_state, analysis) -> v.Html:
     field_.observe(_on_km, names="v_model")
     row = v.Html(tag="div", class_="d-flex align-center", style_="gap: 12px;",
                  children=[field_])
-    return v.Card(class_="pa-3 ma-2", hover=True, children=[switch, row, caption])
+    return panel_block([switch, row, caption])

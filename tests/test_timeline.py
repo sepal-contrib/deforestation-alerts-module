@@ -176,13 +176,16 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
     assert (timeline.TRACK_PX, timeline.LANE_H, timeline.AXIS_H) == (1120.0, 45, 27)
     assert timeline.VIEW_MONTHS == 2  # the default view is the alert window +/- 2 months
     assert timeline.BAND == {"Sentinel 2": (0, 17), "Landsat": (19, 14), "Planet NICFI": (35, 10)}
-    assert timeline.SRC_COLOR == {"Sentinel 2": "#7fa8e0", "Landsat": "#c9a87c",
-                                  "Planet NICFI": "#9bd98a"}
+    # theme variables: ``THEME_CSS`` holds both themes' values; the fallback
+    # is the dark one
+    assert timeline.SRC_COLOR == {"Sentinel 2": "var(--dat-s2, #7fa8e0)",
+                                  "Landsat": "var(--dat-landsat, #c9a87c)",
+                                  "Planet NICFI": "var(--dat-planet, #9bd98a)"}
     assert timeline.SELECTED_COLOR == "#bf8f2d"  # the theme's primary_contrast
     # the two greys/ambers the strip reads in: MUTED for what is secondary,
     # WARN for the two things the reviewer has to notice rather than read (a
     # failed index refresh, and one image standing in for both sides)
-    assert (timeline.MUTED, timeline.WARN) == ("#a8a39b", "#d9ab4e")
+    assert (timeline.MUTED, timeline.WARN) == ("var(--dat-muted, #a8a39b)", "var(--dat-warn, #d9ab4e)")
     assert (timeline.STRIPE_PX, timeline.SELECTED_STRIPE_PX, timeline.HIT_PX) == (2.5, 4.0, 11)
     assert (timeline.HIDDEN_SCALE, timeline.HIDDEN_OPACITY) == (0.45, 0.3)
     assert scene_query.COLLAPSED_PX == 66.0  # a collapsed month is a fixed block
@@ -1327,3 +1330,22 @@ def test_the_alert_row_publishes_its_saved_pair_as_text_or_none():
     assert _saved_pick("Landsat 2026-10-01 ") == "Landsat 2026-10-01 "
     for missing in (None, float("nan"), "", "   "):
         assert _saved_pick(missing) is None
+
+
+def test_every_colour_the_strip_draws_follows_the_theme():
+    """The light theme showed the dark theme's chips, month blocks and
+    greys: the strip's colours were literals. Every one is a variable now,
+    defined once per theme on the stage, so no dark literal may come back
+    in the module's drawing code."""
+    import re
+    from pathlib import Path
+
+    css = timeline.THEME_CSS
+    light, dark = css.split(".analysis-stage.analysis-stage--dark")
+    names = set(re.findall(r"--dat-[a-z0-9-]+", light))
+    assert names and names == set(re.findall(r"--dat-[a-z0-9-]+", dark))
+    used = set(re.findall(r"var\((--dat-[a-z0-9-]+)", Path(timeline.__file__).read_text()))
+    assert used <= names
+    src = Path(timeline.__file__).read_text().split("THEME_CSS = (", 1)[1].split("\n)\n", 1)[1]
+    for literal in ("#24221f", "#1e1c1a", "#44403a", "#f0ece6"):
+        assert literal not in src

@@ -33,6 +33,7 @@ import ipyvuetify as v
 
 from gui.i18n import t
 from gui.tile.analysis.state import touch
+from gui.tile.analysis.section import panel_block
 
 #: The review statuses a Save stores, with the key of each one's button label.
 #: The store always gets the status; the label follows the locale.
@@ -86,7 +87,7 @@ def build_review_panel(widgets, app_state, analysis):
     analysis.verdict.subscribe(_sync_verdict)
     _sync_verdict()
 
-    card = v.Card(class_="pa-3 ma-2", hover=True, children=[
+    card = panel_block([
         v.Html(tag="div", class_="subtitle-2 font-weight-bold", children=[t("analysis_tile.verdict.title")]),
         v.Html(tag="div", class_="mt-2", children=[group]),
     ])
