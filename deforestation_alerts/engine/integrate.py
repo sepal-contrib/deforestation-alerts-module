@@ -129,6 +129,8 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                     conf = np.zeros(shp, bool)
                     for old, new in remap.items():
                         v = (c // 10 ** old) % 10
+                        if new in confirmed_only:
+                            v = np.where(v == 1, v, 0)  # the new set's switch: probable pixels are dropped here too
                         moved += v * 10 ** new
                         conf |= v == 1
                     take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0) & (cd >= mind)

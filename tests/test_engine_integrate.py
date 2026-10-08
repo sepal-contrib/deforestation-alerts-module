@@ -902,3 +902,36 @@ def test_a_pixel_older_than_the_carry_sets_own_window_is_not_carried_again(tmp_p
     st, _, _ = _state(tmp_path, s)
     assert st[11, 11] == integrate.STATE_TOO_SMALL   # inside December's window: carried
     assert st[30, 30] == 0                           # older: not carried again
+
+
+def _carry_pair(tmp_path):
+    code, dates, state = _blank(), _blank(), _blank()
+    for (r, c), v in {(5, 5): 2, (6, 6): 1}.items():
+        code[r, c], dates[r, c], state[r, c] = v, 2025324, integrate.STATE_TOO_SMALL
+    car = tmp_path / "carry.tif"
+    _hand_carry(car, code, dates, state)
+    return car
+
+
+def test_a_carried_probable_pixel_honours_confirmed_only(tmp_path):
+    car = _carry_pair(tmp_path)
+    n = integrate.combine([], GRID, tmp_path / "c.tif", carry=[(car, {0: 0}, 0)], confirmed_only=frozenset({0}))
+    with rasterio.open(tmp_path / "c.tif") as src:
+        code = src.read(1)
+    assert code[5, 5] == 0 and code[6, 6] == 1 and n == 1
+
+
+@_LONLAT_CENTROID
+def test_an_all_probable_source_with_the_switch_off_ignores_earlier_small_probable_clusters(tmp_path):
+    p, dec, jan = _two_months(tmp_path)
+    add_predefined_source(p, "RADD")
+    params = AlertSetParams(min_size_ha=0.1, confirmed_only=["RADD"])
+    small = _blank()
+    small[10:14, 10:13] = 2  # 12 px probable: too small for December's 20 px, enough for January's 10
+    _prepare_dated(p, tmp_path, dec, "RADD", small, np.where(small > 0, 2025324, 0))
+    _record(p, _run(p, tmp_path, dec, AlertSetParams(min_size_ha=0.2), ("RADD",)))
+    nxt = _blank()
+    nxt[30:32, 30:32] = 2  # probable too, but dropped by the switch
+    _prepare_dated(p, tmp_path, jan, "RADD", nxt, np.where(nxt > 0, 2026010, 0))
+    res = _run(p, tmp_path, jan, params, ("RADD",))
+    assert res.alert_set.n_alerts == 0 and len(res.alerts) == 0
