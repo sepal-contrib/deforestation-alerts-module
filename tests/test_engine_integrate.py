@@ -252,12 +252,13 @@ def test_the_integrate_gate_asks_for_twice_the_compressed_staged_rasters(ready_p
     assert res.alert_set.n_alerts == 2
 
 
-def test_a_national_10m_integrate_needs_under_15_gb(ready_project, monkeypatch):
+def test_a_national_10m_integrate_asks_for_21_to_22_gb_not_the_old_297(ready_project, monkeypatch):
     """Paraguay at 10 m (88,236 x 93,387 px): the old bound, 36 B/px (three
     times a 3-band Int32 raster), asked for ~297 GB; the compressed estimate
     asks for ~21.4 GB: the final 4-band raster plus the footprint, doubled,
-    plus the temporary 3-band base. The bound still guards against the old
-    figure. The gate runs before anything is written."""
+    plus the temporary 3-band base. The 21-22 GB window pins the estimate
+    (a return to the old ~297 GB figure, or a silent drop, fails it). The
+    gate runs before anything is written."""
     p, pdir = ready_project
     rows = integrate.plan_prepare(p, pdir, JAN)  # ready on the small grid
     monkeypatch.setattr(integrate, "plan_prepare", lambda *a: rows)
