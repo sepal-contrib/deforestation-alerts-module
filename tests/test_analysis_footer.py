@@ -95,7 +95,7 @@ def test_the_panel_order_is_head_verdict_questions_refine_footer(panel):
     from gui.tile.analysis import context, review_panel
 
     sections = analysis_tile.panel_sections(panel.controls)
-    *head, block_a, block_b, questions, refine, footer = panel.controls.children
+    *head, block_a, block_b, _earlier, questions, refine, footer = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
     context.facts_widgets(block_a)              # block A owns the facts...
     assert set(review_panel.verdict_widgets(block_b)) == {
@@ -108,7 +108,7 @@ def test_the_panel_order_is_head_verdict_questions_refine_footer(panel):
 
 def test_the_verdict_card_no_longer_holds_the_save(panel):
     """The Save buttons and the state line left block B for the footer."""
-    *_, block_b, _questions, _refine, _footer = panel.controls.children
+    *_, block_b, _earlier, _questions, _refine, _footer = panel.controls.children
     texts = _texts(block_b)
     assert "Save" not in texts and "Save & next" not in texts
 

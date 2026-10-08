@@ -231,6 +231,12 @@
       "gif_done": "Alert GIF ready.",
       "gif_stale": "The GIF finished after you moved to another alert or changed its images, so it was not offered here.",
       "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF."
+    },
+    "earlier": {
+      "show": "Show reviewed alerts from earlier periods",
+      "radius": "Within",
+      "radius_error": "Between 0.1 and 50 km",
+      "none": "None within {km} km"
     }
   },
   "imagery": {

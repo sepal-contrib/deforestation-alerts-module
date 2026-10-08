@@ -120,7 +120,7 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
-    *head, block_a, block_b, questions, refine, footer = panel.controls.children
+    *head, block_a, block_b, _earlier, questions, refine, footer = panel.controls.children
     assert len(head) == 3                       # help + selector + banner
     # What each block OWNS, named. ``facts_widgets`` returns a tuple and
     # ``verdict_widgets`` a dict, both checked by their contents below: a bare

@@ -85,6 +85,12 @@ class AnalysisState:
     #: A worker (a CNN run, an imagery fetch) captures it when it starts and
     #: drops its result once another alert is current (``apply_if_current``).
     alert_token: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
+    #: the overlay of reviewed alerts from earlier periods near the current
+    #: alert (spec §9). Session state: set by the panel's switch and distance
+    #: field, kept across alert changes (the overlay follows the next alert),
+    #: never saved to the project, so ``reset_alert`` leaves them alone.
+    show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
     #: serializes ``reset_alert`` with a worker's check-and-apply
     _alert_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 

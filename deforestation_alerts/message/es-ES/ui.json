@@ -234,6 +234,12 @@
       "gif_done": "GIF de la alerta listo.",
       "gif_stale": "El GIF terminó después de que pasara a otra alerta o cambiara sus imágenes, así que no se ofreció aquí.",
       "gif_zip_skipped": "Los archivos de la alerta están listos, pero no se pudo crear el GIF, así que el zip no lo incluye."
+    },
+    "earlier": {
+      "show": "Mostrar alertas revisadas de períodos anteriores",
+      "radius": "Dentro de",
+      "radius_error": "Entre 0,1 y 50 km",
+      "none": "Ninguna a menos de {km} km"
     }
   },
   "imagery": {

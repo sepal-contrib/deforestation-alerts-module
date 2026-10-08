@@ -581,3 +581,13 @@ def test_touch_marks_the_alert_dirty():
     s = AnalysisState()
     touch(s)
     assert s.dirty.value is True
+
+
+def test_the_earlier_overlay_defaults_are_per_session_and_survive_an_alert_change():
+    a, b = AnalysisState(), AnalysisState()
+    assert a.show_earlier_reviews.value is False and a.earlier_radius_km.value == 1.0
+    a.show_earlier_reviews.set(True)
+    a.earlier_radius_km.set(5.0)
+    a.reset_alert()
+    assert a.show_earlier_reviews.value is True and a.earlier_radius_km.value == 5.0
+    assert b.show_earlier_reviews.value is False
