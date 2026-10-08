@@ -1222,6 +1222,51 @@ def test_attribute_form_restores_a_saved_config(pickers):
         rc.close()
 
 
+def test_reloading_an_edited_layers_bands_keeps_its_selection_and_statistics(pickers, tmp_path):
+    tif = _geotiff(tmp_path / "lc.tif", ["lc", "wider"])
+    cfg = {"source": str(tif), "kind": "local", "name": "LC",
+           "bands": [{"band": "lc", "stat": "median", "column": "lc_lc"}]}
+    seen = []
+
+    async def main():
+        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+        try:
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen)
+            await asyncio.sleep(0.1)
+            assert _bands_select(rc).items == ["lc", "wider"] and _bands_select(rc).v_model == ["lc"]
+            assert _name_field(rc).v_model == "LC"
+            assert seen[-1] == {"source": str(tif), "kind": "local", "name": "LC",
+                                "bands": [{"band": "lc", "stat": "median", "column": "lc_lc"}]}
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_name_typed_by_the_user_survives_loading_another_raster(pickers, tmp_path):
+    a, b = _geotiff(tmp_path / "a.tif", ["x"]), _geotiff(tmp_path / "b.tif", ["y"])
+    seen = []
+
+    async def main():
+        box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
+        try:
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(a))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen and seen[-1].get("name") == "a")
+            _name_field(rc).v_model = "Mine"
+            pickers.path.set(str(b))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen and seen[-1]["source"] == str(b))
+            await asyncio.sleep(0.1)
+            assert _name_field(rc).v_model == "Mine" and seen[-1]["name"] == "Mine"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_attribute_form_keeps_a_nameless_saved_layer_as_it_was(pickers):
     """A layer saved before layers had names: its columns stay until it is named, and
     editing a statistic neither fills a name nor renames them."""

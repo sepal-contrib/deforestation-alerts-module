@@ -1,8 +1,8 @@
 """One attribute layer's controls (spec §7.4 form, D3), on the shared raster input.
 
 Pick an Earth Engine image or a GeoTIFF (``RasterInput``), load its bands,
-then name the layer, select its bands and choose a statistic per band. Emits the config dict ``raster_attribute.build_attribute_config``
-builds. ``gui/widget/attribute_modal`` hosts the form, and Integrate lists the
+then name the layer, select its bands and choose a statistic per band. Emits
+the config dict ``raster_attribute.build_attribute_config`` builds. ``gui/widget/attribute_modal`` hosts the form, and Integrate lists the
 layers. An Earth Engine band keeps its ``crs`` and ``scale`` (metres,
 ``nominalScale``): Integrate's free-space gate estimates the band's download
 from them.
@@ -14,10 +14,11 @@ loaded, so the config never pairs one raster with another's bands.
 A layer has a name; its alert columns are ``<name>_<band>``, shown read-only
 beside each selected band. They are de-duplicated against ``reserved`` (the
 alert columns and the other layers' columns, ``raster_attribute.reserved_for``)
-and the earlier bands.
-A layer saved before layers had names keeps its columns until it is given one.
-A freshly loaded layer starts with no band selected and a name filled from its
-raster; editing keeps the saved selection and name.
+and the earlier bands. A layer saved before layers had names keeps its
+columns until it is given one. A freshly loaded layer starts with no band
+selected and a name filled from its raster; editing keeps the saved selection
+and name, and reloading the same raster keeps the selection and statistics by
+band name (new bands arrive unselected).
 """
 
 import asyncio
@@ -83,11 +84,15 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
     # the latest name, for the load: its default can land (use_default_name) before the load emits
     latest_name = solara.use_ref(cfg.get("name", ""))
 
+    # what the form holds now, for the load (its closure can predate later edits)
+    held = solara.use_ref(None)
+    held.current = (loaded, rows)
+
     def _set_name(new):
         latest_name.current = new
         set_name(new)
         if loaded:  # the columns are named after it
-            on_value(build_attribute_config(loaded[0], loaded[1], rows, reserved=reserved, name=new))
+            _emit(rows, new.strip() or None)
 
     use_default_name(loaded[0] if fresh and loaded else None, name, _set_name,
                      lambda r: suggest_name(name_from_ref(r), lambda n: True))
@@ -112,14 +117,19 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
         except Exception as exc:  # noqa: BLE001 - shown next to the field
             set_error(error_text(exc))
             return
-        new_rows = [{"include": False, "band": n, "stat": "majority", "column": n,
+        # reloading the raster the rows came from keeps their selection and statistics
+        held_loaded, held_rows = held.current
+        old = {r["band"]: r for r in held_rows} if held_loaded == (src, src_kind) else {}
+        new_rows = [{"include": old.get(n, {}).get("include", False), "band": n,
+                     "stat": old.get(n, {}).get("stat", "majority"), "column": old.get(n, {}).get("column", n),
                      **(projections.get(n) or {})} for n in names]
         set_error(None)
         set_rows(new_rows)
-        set_fresh(True)
+        if not old:  # another raster: the name follows it
+            set_fresh(True)
         set_loaded((src, src_kind))
         on_value(build_attribute_config(src, src_kind, new_rows, reserved=reserved,
-                                              name=latest_name.current.strip() or None))
+                                        name=latest_name.current.strip() or None))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
 
@@ -163,7 +173,6 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
             solara.Text(error, classes=["error--text"])
         if loaded and rows:
             solara.Text(t("steps.integrate.attr_loaded", source=loaded[0]), style=MUTED)
-        if loaded and rows:
             rv.TextField(label=t("steps.integrate.attr_name"), v_model=name,
                          on_v_model=lambda v: _set_name(v[:MAX_NAME]), dense=True, outlined=True,
                          counter=MAX_NAME, hint=t("steps.integrate.attr_name_hint"), persistent_hint=True)
