@@ -89,9 +89,14 @@ def _PeriodForm(open_, app_state, on_submit, editing, today):
                      dense=True, outlined=True, suffix=t("steps.period.days"),
                      error_messages=[t("steps.period.error_bad_look_back")] if lb_error else [],
                      hint=t("steps.period.look_back_hint"), persistent_hint=not lb_error)
+        window_start = None
         if dates is not None and days is not None:
-            a, b = dates
+            try:
+                window_start = dates[0] - timedelta(days=days)
+            except OverflowError:  # a start so early that the look-back runs before year 1
+                window_start = None
+        if window_start is not None:
             rv.Html(tag="div", style_=MUTED, children=[
-                t("steps.period.window", start=(a - timedelta(days=days)).isoformat(), end=b.isoformat())])
+                t("steps.period.window", start=window_start.isoformat(), end=dates[1].isoformat())])
         if current is None and p is not None and p.masks and p.periods:
             rv.Html(tag="div", style_=MUTED, children=[t("steps.period.masks_copied")])

@@ -198,6 +198,18 @@ def test_bad_look_back_is_refused(value):
     assert periods.parse_look_back(value)[0] == "bad_look_back"
 
 
+@pytest.mark.parametrize("value", ["3651", "99999999999999", "1" + "0" * 30])
+def test_a_look_back_over_ten_years_is_refused(value):
+    assert periods.parse_look_back(value) == ("bad_look_back", None)
+
+
+def test_the_longest_look_back_gives_a_window_start_that_cannot_overflow():
+    error, days = periods.parse_look_back("3650")
+    assert (error, days) == (None, 3650)
+    from datetime import timedelta
+    assert (date(1900, 1, 1) - timedelta(days=days)).year > 1  # the live preview subtracts exactly this
+
+
 def test_look_back_is_parsed():
     assert periods.parse_look_back(" 30 ") == (None, 30)
 

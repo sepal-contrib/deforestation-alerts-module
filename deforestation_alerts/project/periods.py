@@ -72,12 +72,16 @@ def prefill(p: Project, today: date) -> tuple[str, str]:
     return start.isoformat(), today.isoformat()
 
 
+#: the longest look-back accepted, in days (ten years)
+MAX_LOOK_BACK = 3650
+
+
 def parse_look_back(value) -> tuple[Optional[str], Optional[int]]:
     try:
         days = int(str(value).strip())
     except ValueError:
         return "bad_look_back", None
-    return ("bad_look_back", None) if days < 0 else (None, days)
+    return ("bad_look_back", None) if not 0 <= days <= MAX_LOOK_BACK else (None, days)
 
 
 def new_period(p: Project, start, end, look_back=None) -> Optional[str]:
