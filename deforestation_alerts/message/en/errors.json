@@ -11,6 +11,7 @@
     "not_a_source": "{source} is not a source of this project.",
     "not_ready": "{source} is not downloaded and harmonized for this period; run Download & harmonize first.",
     "footprint_missing": "The footprint of the earlier set {set_id} is missing; run Integrate & vectorize on that set again first.",
+    "carry_missing": "The combined raster of the earlier set {set_id} is missing; run Integrate & vectorize on that set again first.",
     "no_sources": "Choose at least one source, each once.",
     "attribute_band_missing": "The attribute raster has no band {band} (it has {bands}).",
     "band_out_of_range": "{file} has no band {band} (it has {bands}).",

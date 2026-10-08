@@ -242,6 +242,25 @@ def earlier_sets(p: Project, period: Period) -> list[AlertSet]:
     return sorted(out, key=lambda s: s.id)
 
 
+def carry_sets(p: Project, period: Period, sources) -> list:
+    """Earlier sets whose not-analysable pixels feed this period's run (spec §6):
+    their period ends on or after this window's start, their combined raster
+    carries pixel states, and they share a source with ``sources``. Each comes
+    with its digit remap ``{old_digit: new_digit}`` for the shared sources."""
+    win_start, _ = period.search_window()
+    out = []
+    for s in earlier_sets(p, period):
+        other = p.periods.get(s.period_id)
+        art = p.artifacts.get(combined_key(s.id))
+        if other is None or other.end < win_start or art is None or not (art.stats or {}).get("states"):
+            continue
+        remap = {int(d): p.sources[src].digit for d, src in s.digit_map.items()
+                 if src in sources and src in p.sources}
+        if remap:
+            out.append((s, remap))
+    return out
+
+
 def set_inputs(p: Project, period: Period, sources: list[str], params: AlertSetParams) -> Optional[dict]:
     harmonized = []
     for source in sorted(sources, key=str.casefold):
@@ -253,12 +272,16 @@ def set_inputs(p: Project, period: Period, sources: list[str], params: AlertSetP
     for s in earlier_sets(p, period):
         art = p.artifacts.get(footprint_key(s.id))
         footprints.append([s.id, art.content_id if art else None])
-    return {
+    carry = [[s.id, p.artifacts[combined_key(s.id)].content_id] for s, _ in carry_sets(p, period, sources)]
+    out = {
         "stage": "set",
         "harmonized": harmonized,
         "footprints": footprints,
         "params": params.model_dump(mode="json"),
     }
+    if carry:
+        out["carry"] = carry
+    return out
 
 
 def make_artifact(key, kind, pdir, path, inputs: dict, *, stats: Optional[dict] = None) -> Artifact:

@@ -706,3 +706,160 @@ def test_an_all_probable_source_confirmed_only_records_an_empty_set(ready_projec
     res = integrate.run_integration(integrate.IntegrationJob(
         project=p.model_copy(deep=True), pdir=pdir, period=JAN, sources=["RADD"], params=params))
     assert res.alert_set.n_alerts == 0 and len(res.alerts) == 0
+
+
+# --- Carrying not-analysable pixels into the next run (spec §6) ---------------------------------
+
+def _two_months(tmp_path):
+    p = Project(name="carry", created_at=datetime.now(), updated_at=datetime.now())
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
+    p.grid = GRID
+    add_predefined_source(p, "GLAD-L")
+    dec = DEC.model_copy(update={"look_back_days": 31})
+    jan = JAN.model_copy(update={"look_back_days": 31})
+    p.periods = {dec.id: dec, jan.id: jan}
+    return p, dec, jan
+
+
+def _run(p, pdir, period, params, sources=("GLAD-L",)):
+    return integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=pdir, period=period, sources=list(sources), params=params))
+
+
+def _december_with_small_cluster(tmp_path):
+    p, dec, jan = _two_months(tmp_path)
+    params = AlertSetParams(min_size_ha=0.1)  # 10 px
+    small = _blank()
+    small[10:12, 10:13] = 1  # 6 px, dated inside December's window and outside January's
+    _prepare_dated(p, tmp_path, dec, "GLAD-L", small, np.where(small > 0, 2025324, 0))
+    dec_set = _record(p, integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=dec, sources=["GLAD-L"], params=params)))
+    return p, dec, jan, dec_set, params
+
+
+def _state(pdir, s):
+    with rasterio.open(pdir / s.combined_rel_path) as src:
+        return src.read(4), src.read(1), src.read(2)
+
+
+@_LONLAT_CENTROID
+def test_a_too_small_cluster_joins_the_next_periods_alert(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    assert dec_set.n_alerts == 0
+    st, _, _ = _state(tmp_path, dec_set)
+    assert int((st == integrate.STATE_TOO_SMALL).sum()) == 6
+    nxt = _blank()
+    nxt[12:14, 10:13] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    res = _run(p, tmp_path, jan, params)
+    s = res.alert_set
+    assert s.carried_from == [dec_set.id] and s.n_alerts == 1
+    st, code, dates = _state(tmp_path, s)
+    assert int((st == integrate.STATE_ANALYSABLE).sum()) == 12
+    assert int(res.alerts.iloc[0]["alert_sources"] == "GLAD-L") == 1
+    assert dates[10, 10] == 2025324 and dates[12, 10] == 2026010
+    assert s.fingerprint == fp.fingerprint(fp.set_inputs(p, jan, ["GLAD-L"], params))
+    assert "carry" in fp.set_inputs(p, jan, ["GLAD-L"], params)
+
+
+@_LONLAT_CENTROID
+def test_a_carried_cluster_that_stays_small_keeps_state_2_and_is_not_reported(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    nxt = _blank()
+    nxt[20:25, 20:25] = 1  # 25 px elsewhere, not adjacent
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    res = _run(p, tmp_path, jan, params)
+    s = res.alert_set
+    assert s.carried_from == [dec_set.id] and s.n_alerts == 1
+    st, _, _ = _state(tmp_path, s)
+    assert int((st[10:12, 10:13] == integrate.STATE_TOO_SMALL).sum()) == 6
+    with rasterio.open(tmp_path / s.footprint_rel_path) as f:
+        assert not f.read(1)[10:12, 10:13].any()
+
+
+def test_a_legacy_set_without_states_is_not_carried(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", _blank(), _blank())
+    before = fp.set_inputs(p, jan, ["GLAD-L"], params)
+    assert "carry" in before
+    p.artifacts[fp.combined_key(dec_set.id)].stats = {}
+    assert fp.carry_sets(p, jan, ["GLAD-L"]) == []
+    assert "carry" not in fp.set_inputs(p, jan, ["GLAD-L"], params)
+    nxt = _blank()
+    nxt[12:14, 10:13] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    assert _run(p, tmp_path, jan, params).alert_set.carried_from == []
+
+
+def test_only_sets_sharing_a_source_are_carried(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    add_predefined_source(p, "RADD")
+    assert fp.carry_sets(p, jan, ["RADD"]) == []
+    assert [s.id for s, _ in fp.carry_sets(p, jan, ["GLAD-L", "RADD"])] == [dec_set.id]
+
+
+def test_a_period_ending_before_the_window_is_not_carried(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    p.periods[jan.id] = jan.model_copy(update={"look_back_days": 0})
+    assert fp.carry_sets(p, p.periods[jan.id], ["GLAD-L"]) == []
+
+
+def test_a_carry_is_remapped_to_the_current_digit(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    dec_set.digit_map = {3: "GLAD-L"}
+    (s, remap), = fp.carry_sets(p, jan, ["GLAD-L"])
+    assert remap == {3: p.sources["GLAD-L"].digit == 0 and 0}
+    # a hand-built carry raster: digit 3 holds an alert at a too-small pixel
+    code, dates, state = _blank(), _blank(), _blank()
+    code[5, 5], dates[5, 5], state[5, 5] = 1000, 2025324, integrate.STATE_TOO_SMALL
+    code[6, 6], state[6, 6] = 1000, integrate.STATE_ANALYSABLE  # reported: not carried
+    car = tmp_path / "carry.tif"
+    with raster_io.write_grid_raster(car, GRID, count=4) as dst:
+        for i, a in enumerate((code, dates, _blank() + 1, state), 1):
+            dst.write(a.astype("int32"), i)
+    own = _blank()
+    own[30, 30] = 1
+    n = integrate.combine([(_write(tmp_path / "o.tif", own, np.where(own > 0, 2026010, 0)), 0)],
+                          GRID, tmp_path / "c.tif", carry=[(car, remap)])
+    with rasterio.open(tmp_path / "c.tif") as src:
+        c, d, disp = src.read(1), src.read(2), src.read(3)
+    assert c[5, 5] == 1 and d[5, 5] == 2025324 and disp[5, 5] == 1
+    assert c[6, 6] == 0 and c[30, 30] == 1 and n == 2
+
+
+def test_a_carry_does_not_overwrite_a_pixel_the_sources_cover(tmp_path):
+    code, dates, state = _blank(), _blank(), _blank()
+    code[5, 5], dates[5, 5], state[5, 5] = 1, 2025324, integrate.STATE_TOO_SMALL
+    car = tmp_path / "carry.tif"
+    with raster_io.write_grid_raster(car, GRID, count=4) as dst:
+        for i, a in enumerate((code, dates, _blank() + 1, state), 1):
+            dst.write(a.astype("int32"), i)
+    own = _blank()
+    own[5, 5] = 2
+    integrate.combine([(_write(tmp_path / "o.tif", own, np.where(own > 0, 2026010, 0)), 0)],
+                      GRID, tmp_path / "c.tif", carry=[(car, {0: 0})])
+    with rasterio.open(tmp_path / "c.tif") as src:
+        assert src.read(1)[5, 5] == 2 and src.read(2)[5, 5] == 2026010
+
+
+@_LONLAT_CENTROID
+def test_a_missing_carry_raster_is_refused(tmp_path):
+    from deforestation_alerts.errors import ProjectRuleError
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    nxt = _blank()
+    nxt[12:14, 10:13] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    (tmp_path / dec_set.combined_rel_path).unlink()
+    with pytest.raises(ProjectRuleError) as e:
+        _run(p, tmp_path, jan, params)
+    assert e.value.key == "errors.carry_missing"
+
+
+@_LONLAT_CENTROID
+def test_rerunning_the_earlier_set_makes_the_next_one_stale(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", _blank(), _blank())
+    before = fp.fingerprint(fp.set_inputs(p, jan, ["GLAD-L"], params))
+    _record(p, integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=dec, sources=["GLAD-L"], params=params)))
+    assert fp.fingerprint(fp.set_inputs(p, jan, ["GLAD-L"], params)) != before

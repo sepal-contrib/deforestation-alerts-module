@@ -263,6 +263,7 @@ class AlertSet(BaseModel):
     params: AlertSetParams
     masks_used: list[dict] = []  # [{"name", "mode", "content_id"}]
     footprint_from: list[str] = []  # set ids whose pixels were removed
+    carried_from: list[str] = []  # set ids whose not-analysable pixels were carried in
     store_rel_path: str
     combined_rel_path: str
     footprint_rel_path: str

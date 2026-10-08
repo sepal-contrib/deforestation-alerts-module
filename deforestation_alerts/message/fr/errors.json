@@ -11,6 +11,7 @@
     "not_a_source": "{source} n'est pas une source de ce projet.",
     "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser.",
     "footprint_missing": "L'empreinte du jeu antérieur {set_id} est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
+    "carry_missing": "Le raster combiné du jeu antérieur {set_id} est manquant ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
     "no_sources": "Choisissez au moins une source, chacune une seule fois.",
     "attribute_band_missing": "Le raster d'attributs n'a pas la bande {band} (il a {bands}).",
     "band_out_of_range": "{file} n'a pas de bande {band} (il en a {bands}).",

@@ -32,7 +32,7 @@ from rasterio.windows import Window
 from shapely.geometry import box
 
 from deforestation_alerts.engine.fingerprint import (
-    combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, set_inputs, store_key,
+    carry_sets, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, set_inputs, store_key,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
@@ -88,14 +88,18 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     there, 2 if all are probable. Pixels set in any of the ``footprints`` (0/1
     rasters of earlier sets) are 0 in every band. ``confirmed_only`` is a set
     of digits whose probable pixels (value 2) are dropped before anything else.
-    ``carry`` is reserved (filled in a later task); it is ignored.
+    ``carry`` is ``(combined raster of an earlier set, {old_digit: new_digit})``
+    pairs: that set's too-small and over-cap pixels (band 4 is 2 or 3) not
+    already covered by this run's sources are added, digits remapped, before
+    the footprints are removed (spec §6).
     """
     # The window reads below assume every input shares the grid's pixels.
-    for path in [p for p, _ in inputs] + list(footprints):
+    for path in [p for p, _ in inputs] + [p for p, _ in carry] + list(footprints):
         check_header(path, grid)
     total = 0
     with ExitStack() as stack:
         srcs = [(stack.enter_context(rasterio.open(p)), int(d)) for p, d in inputs]
+        cars = [(stack.enter_context(rasterio.open(p)), remap) for p, remap in carry]
         fps = [stack.enter_context(rasterio.open(p)) for p in footprints]
         with write_grid_raster(Path(out_path), grid, count=3) as dst:
             for w in _windows(grid):
@@ -115,6 +119,20 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                     earlier = hit & (d > 0) & ((date == 0) | (d < date))
                     date[earlier] = d[earlier]
                     confirmed |= a == 1
+                for csrc, remap in cars:
+                    c = csrc.read(1, window=w).astype(np.int64)
+                    st = csrc.read(4, window=w)
+                    cd = csrc.read(2, window=w).astype(np.int32)
+                    moved = np.zeros(shp, np.int64)
+                    conf = np.zeros(shp, bool)
+                    for old, new in remap.items():
+                        v = (c // 10 ** old) % 10
+                        moved += v * 10 ** new
+                        conf |= v == 1
+                    take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0)
+                    code[take] = moved[take].astype(np.int32)
+                    date[take] = cd[take]
+                    confirmed |= take & conf
                 keep = code > 0
                 for f in fps:
                     keep &= f.read(1, window=w) == 0
@@ -336,13 +354,21 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             raise ProjectRuleError(f"the footprint of set {s.id} is missing; re-run that set first",
                                    key="errors.footprint_missing", set_id=s.id)
         fp_paths.append(paths.resolve(pdir, art.rel_path))
+    carries = carry_sets(p, period, sources)
+    carry_paths = []
+    for s, remap in carries:
+        art = p.artifacts.get(combined_key(s.id))
+        if art is None or not paths.resolve(pdir, art.rel_path).exists():
+            raise ProjectRuleError(f"the combined raster of set {s.id} is missing; re-run that set first",
+                                   key="errors.carry_missing", set_id=s.id)
+        carry_paths.append((paths.resolve(pdir, art.rel_path), remap))
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
         for s in sources
     ]
     digit_map = {p.sources[s].digit: s for s in sources}
     try:
-        combine(harm_paths, p.grid, base, footprints=fp_paths,
+        combine(harm_paths, p.grid, base, footprints=fp_paths, carry=carry_paths,
                 confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
@@ -378,6 +404,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             params=job.params,
             masks_used=_masks_applied(p, period, sources),
             footprint_from=[s.id for s in earlier],
+            carried_from=[s.id for s, _ in carries],
             store_rel_path=paths.rel(pdir, store),
             combined_rel_path=paths.rel(pdir, combined),
             footprint_rel_path=paths.rel(pdir, footprint),
