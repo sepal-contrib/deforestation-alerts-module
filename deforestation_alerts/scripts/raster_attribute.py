@@ -188,21 +188,29 @@ def attribute_alerts(gdf, raster_path, band_stats):
     return out
 
 
-def build_attribute_config(source, kind, band_rows, reserved=ALERT_RESERVED_COLUMNS):
+def build_attribute_config(source, kind, band_rows, reserved=ALERT_RESERVED_COLUMNS, name=None):
     """Assemble the ``attribute_raster`` config from Aux-tile rows.
 
     `band_rows`: list of ``{"include": bool, "band": str, "stat": str,
     "column": str}``, an Earth Engine band's also with its ``crs`` and
     ``scale`` (metres, ``nominalScale``), which are kept for Integrate's
     free-space estimate. Keeps only included rows, sanitizes the output column
-    (defaulting to the band name) and de-duplicates it vs `reserved` + earlier
-    included rows. Returns ``{"source", "kind", "bands": [...]}``.
+    and de-duplicates it vs `reserved` + earlier included rows.
+
+    With a layer `name`, each column is ``<name>_<band>`` (the rows' own
+    ``column`` is ignored) and the config carries ``"name"``. Without one
+    (a layer saved before layers had names) the column defaults to the band
+    name, as it always did. Returns ``{"source", "kind", "bands": [...]}``.
     """
+    name = (str(name).strip() if name else "") or None
     included = [
         {"band": r["band"], "stat": r["stat"],
-         "column": safe_column(r.get("column") or r["band"]),
+         "column": safe_column(f"{name}_{r['band']}" if name else (r.get("column") or r["band"])),
          **{k: r[k] for k in ("crs", "scale") if r.get(k) is not None}}
         for r in band_rows if r.get("include")
     ]
     included = resolve_column_names(included, reserved=reserved)
-    return {"source": source, "kind": kind, "bands": included}
+    config = {"source": source, "kind": kind, "bands": included}
+    if name:
+        config["name"] = name
+    return config

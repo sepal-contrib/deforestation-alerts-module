@@ -613,6 +613,14 @@ def _checkbox(rc, label):
     return next(w for w in rc.find(v.Checkbox).widgets if w.label == label)
 
 
+def _bands_select(rc):
+    return next(w for w in rc.find(v.Select).widgets if w.multiple)
+
+
+def _name_field(rc):
+    return next(w for w in rc.find(v.TextField).widgets if w.label == t("steps.integrate.attr_name"))
+
+
 def _origin(rc):
     """RasterInput's origin Select (Earth Engine / GeoTIFF)."""
     return rc.find(v.Select, label=t("steps.raster_input.origin_label")).widget
@@ -1094,20 +1102,23 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
 
             pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
-            await _settle(lambda: seen)
-            assert seen[-1] == {"source": str(tif), "kind": "local", "bands": [
-                {"band": "lc", "stat": "majority", "column": "lc"},
-                {"band": "band_2", "stat": "majority", "column": "band_2"}]}
+            await _settle(lambda: seen and seen[-1].get("name"))
+            # a fresh load selects no band and fills the name from the file
+            assert seen[-1] == {"source": str(tif), "kind": "local", "bands": [], "name": "landcover"}
+            assert _bands_select(rc).items == ["lc", "band_2"] and _bands_select(rc).v_model == []
             assert t("steps.integrate.attr_no_source") not in _texts(rc)
 
-            _checkbox(rc, "band_2").v_model = False
+            _bands_select(rc).v_model = ["lc", "band_2"]
+            assert [b["column"] for b in seen[-1]["bands"]] == ["landcover_lc", "landcover_band_2"]
+            _bands_select(rc).v_model = ["lc"]
             next(w for w in rc.find(v.Select).widgets if w.v_model == "majority").v_model = "mean"
-            next(w for w in rc.find(v.TextField).widgets if w.v_model == "lc").v_model = "Land cover"
-            assert seen[-1] == {"source": str(tif), "kind": "local",
-                                "bands": [{"band": "lc", "stat": "mean", "column": "land_cover"}]}
+            _name_field(rc).v_model = "Land cover"
+            assert seen[-1] == {"source": str(tif), "kind": "local", "name": "Land cover",
+                                "bands": [{"band": "lc", "stat": "mean", "column": "land_cover_lc"}]}
+            assert t("steps.integrate.attr_name_hint") in [w.hint for w in rc.find(v.TextField).widgets]
 
             pickers.path.set(str(tmp_path / "other.tif"))  # picked, not loaded yet
-            _checkbox(rc, "lc").v_model = True
+            _bands_select(rc).v_model = ["lc", "band_2"]
             assert seen[-1]["source"] == str(tif)  # the rows still describe the loaded raster
         finally:
             rc.close()
@@ -1199,20 +1210,38 @@ def test_attribute_form_shows_a_load_failure_next_to_the_field(pickers, tmp_path
 
 
 def test_attribute_form_restores_a_saved_config(pickers):
-    cfg = {"source": "/home/u/lc.tif", "kind": "local",
-           "bands": [{"band": "lc", "stat": "median", "column": "lc"}]}
+    cfg = {"source": "/home/u/lc.tif", "kind": "local", "name": "LC",
+           "bands": [{"band": "lc", "stat": "median", "column": "lc_lc"}]}
     box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=[]), handle_error=False)
     try:
         assert _origin(rc).v_model == "file" and pickers.path.value == "/home/u/lc.tif"
-        assert _checkbox(rc, "lc").v_model is True
-        assert [w.v_model for w in rc.find(v.Select).widgets if w is not _origin(rc)] == ["median"]
+        assert _bands_select(rc).v_model == ["lc"] and _name_field(rc).v_model == "LC"
+        assert [w.v_model for w in rc.find(v.Select).widgets if not w.multiple and w is not _origin(rc)] == ["median"]
+        assert "lc_lc" in _texts(rc)  # the written column, read-only
+    finally:
+        rc.close()
+
+
+def test_attribute_form_keeps_a_nameless_saved_layer_as_it_was(pickers):
+    """A layer saved before layers had names: its columns stay until it is named, and
+    editing a statistic neither fills a name nor renames them."""
+    cfg = {"source": "/home/u/lc.tif", "kind": "local",
+           "bands": [{"band": "lc", "stat": "median", "column": "mine"}]}
+    seen = []
+    box_, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+    try:
+        assert _name_field(rc).v_model == ""
+        rc.find(v.Select, v_model="median").widget.v_model = "mean"
+        assert seen[-1] == {"source": "/home/u/lc.tif", "kind": "local",
+                            "bands": [{"band": "lc", "stat": "mean", "column": "mine"}]}
+        _name_field(rc).v_model = "LC"
+        assert seen[-1]["bands"][0]["column"] == "lc_lc" and seen[-1]["name"] == "LC"
     finally:
         rc.close()
 
 
 def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
-    """Spec §7.4: the column field shows the sanitised name; a name the
-    de-duplication changed says what is written instead."""
+    """The written column is ``<name>_<band>``, shown read-only per selected band."""
     tif = _geotiff(tmp_path / "lc.tif", ["lc", "count"])
     seen = []
 
@@ -1222,17 +1251,15 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
             _origin(rc).v_model = "file"
             pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
-            await _settle(lambda: seen)
-            lc, count = rc.find(v.TextField).widgets
-            assert (lc.v_model, lc.persistent_hint) == ("lc", False)
-            # "count" is an alert column already: written as count_2
-            assert count.v_model == "count" and count.persistent_hint
-            assert count.hint == t("steps.integrate.attr_written_as", column="count_2")
+            await _settle(lambda: seen and seen[-1].get("name"))
+            assert _name_field(rc).v_model == "lc"
+            _bands_select(rc).v_model = ["lc", "count"]
+            assert [b["column"] for b in seen[-1]["bands"]] == ["lc_lc", "lc_count"]
+            assert "lc_lc" in _texts(rc) and "lc_count" in _texts(rc)
 
-            lc.v_model = "Land Cover "
-            lc, _ = rc.find(v.TextField).widgets
-            assert lc.v_model == "land_cover_"  # what is typed stays readable
-            assert seen[-1]["bands"][0]["column"] == "land_cover"
+            _name_field(rc).v_model = "Land Cover "
+            assert [b["column"] for b in seen[-1]["bands"]] == ["land_cover_lc", "land_cover_count"]
+            assert seen[-1]["name"] == "Land Cover"
         finally:
             rc.close()
 
@@ -1240,13 +1267,12 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
 
 
 def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, tmp_path):
-    """Review focus 3: another layer writes ``b1`` already, so this raster's
-    ``b1`` is written ``b1_2``, and ``count`` (an alert column) ``count_2``;
-    each field's hint says so."""
+    """Review focus 3: another layer writes ``lc_b1`` already, so this raster's
+    ``lc_b1`` is written ``lc_b1_2``; the text shows what is written."""
     from deforestation_alerts.scripts.raster_attribute import reserved_for
 
-    tif = _geotiff(tmp_path / "other.tif", ["b1", "count"])
-    other = {"source": "/home/u/lc.tif", "kind": "local", "bands": [{"band": "b1", "stat": "mean", "column": "b1"}]}
+    tif = _geotiff(tmp_path / "lc.tif", ["b1", "count"])
+    other = {"source": "/home/u/x.tif", "kind": "local", "bands": [{"band": "b1", "stat": "mean", "column": "lc_b1"}]}
     seen = []
 
     async def main():
@@ -1256,12 +1282,10 @@ def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, 
             _origin(rc).v_model = "file"
             pickers.path.set(str(tif))
             _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
-            await _settle(lambda: seen)
-            assert [b["column"] for b in seen[-1]["bands"]] == ["b1_2", "count_2"]
-            b1, count = rc.find(v.TextField).widgets
-            assert b1.v_model == "b1" and b1.persistent_hint
-            assert b1.hint == t("steps.integrate.attr_written_as", column="b1_2")
-            assert count.hint == t("steps.integrate.attr_written_as", column="count_2")
+            await _settle(lambda: seen and seen[-1].get("name"))
+            _bands_select(rc).v_model = ["b1", "count"]
+            assert [b["column"] for b in seen[-1]["bands"]] == ["lc_b1_2", "lc_count"]
+            assert "lc_b1_2" in _texts(rc)
         finally:
             rc.close()
 

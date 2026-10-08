@@ -30,6 +30,7 @@ def test_layer_label_names_a_geotiff_by_its_file_and_an_asset_by_its_id():
     assert layer_label(LC) == "landcover.tif"
     assert layer_label({"source": "projects/x/assets/radd.v2", "kind": "gee"}) == "projects/x/assets/radd.v2"
     assert layer_label(None) == ""
+    assert layer_label({**LC, "name": "Cover"}) == "Cover"
 
 
 def test_attribute_error_refuses_no_bands_and_a_raster_another_layer_reads():

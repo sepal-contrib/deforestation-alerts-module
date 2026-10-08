@@ -236,3 +236,23 @@ def test_an_attribution_column_never_takes_the_answers_q_prefix():
     cfg = ra.build_attribute_config("/r.tif", "local",
                                     [{"include": True, "band": "b1", "stat": "majority", "column": "Q cover"}])
     assert cfg["bands"][0]["column"] == "attr_q_cover"
+
+
+def test_named_layer_columns_are_name_underscore_band():
+    rows = [{"include": True, "band": "elevation", "stat": "mean"}, {"include": False, "band": "slope", "stat": "mean"},
+            {"include": True, "band": "B 2", "stat": "majority"}]
+    cfg = ra.build_attribute_config("users/a/dem", "gee", rows, name="DEM")
+    assert cfg["name"] == "DEM"
+    assert [b["column"] for b in cfg["bands"]] == ["dem_elevation", "dem_b_2"]
+
+
+def test_named_columns_are_still_unique_against_reserved_and_other_layers():
+    cfg = ra.build_attribute_config("x", "local", [{"include": True, "band": "a", "stat": "mean"}],
+                                 reserved={"l_a"}, name="L")
+    assert cfg["bands"][0]["column"] == "l_a_2"
+
+
+def test_unnamed_legacy_config_keeps_its_columns():
+    cfg = ra.build_attribute_config("x", "local", [{"include": True, "band": "a", "stat": "mean", "column": "mine"}])
+    assert cfg["bands"][0]["column"] == "mine" and "name" not in cfg
+    assert "name" not in ra.build_attribute_config("x", "local", [], name="  ")
