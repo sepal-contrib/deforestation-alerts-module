@@ -139,3 +139,11 @@ def test_an_opened_project_was_last_saved_when_its_manifest_says():
     assert s.last_saved.value == when
     s.new_project_state(Project(name="q", created_at=when, updated_at=when))
     assert s.last_saved.value is None or s.last_saved.value > when  # never saved before (the auto-save may stamp it)
+
+
+def test_show_unanalysable_is_reset_with_the_project():
+    s = AppState()
+    assert s.show_unanalysable.value is False
+    s.show_unanalysable.set(True)
+    s.new_project_state(_p())
+    assert s.show_unanalysable.value is False

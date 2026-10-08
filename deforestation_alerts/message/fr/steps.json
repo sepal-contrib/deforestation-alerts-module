@@ -475,6 +475,7 @@
       "show_earlier": "Afficher les jeux antérieurs",
       "earlier_missing": "La base d'alertes de {set} est manquante ; relancez Intégrer et vectoriser pour cette période.",
       "show_alerts": "Afficher ces alertes sur la carte",
+      "show_unanalysable": "Afficher les pixels non analysables",
       "attr_add": "Ajouter une couche d'attributs",
       "attr_add_title": "Ajouter une couche d'attributs",
       "attr_edit_title": "Modifier la couche d'attributs {name}",

@@ -30,6 +30,14 @@ STATUS_CLASSES = (
 #: separation still fails, so status is never drawn as a pie, donut, scatter or
 #: choropleth; stacked bars, grouped bars and lines are fine.
 STACK_ORDER = (1, 3, 2, 0)  # Confirmed, Needs revision, False positive, Not reviewed
+#: (value, colour, label key) of the combined raster's band 4 states a run cannot analyse
+#: (integrate.STATE_TOO_SMALL / STATE_OVER_CAP). Value 1 (analysable) is left out on purpose:
+#: localtileserver drops a colormap's alpha, so a transparent entry for 1 renders opaque
+#: black; the layer masks 1 (and 0) as nodata over a vmin=2..vmax=3 map instead.
+STATE_CLASSES = (
+    (2, "#9e9e9e", "legend.state_too_small"),
+    (3, "#fb8c00", "legend.state_over_cap"),
+)
 MASK_COLOR = "#757575"  # keep and exclude masks alike
 MASK_OPACITY = 0.5
 _GREY_RAMP = ("#000000", "#ffffff")
@@ -52,6 +60,10 @@ def alert_ee_vis() -> dict:
 
 def status_colors(faded: bool = False) -> dict:
     return {code: (lighten(c) if faded else c) for code, c, _ in STATUS_CLASSES}
+
+
+def state_colormap() -> ListedColormap:
+    return ListedColormap([c for _, c, _ in STATE_CLASSES], name="states")
 
 
 def mask_colormap() -> ListedColormap:
@@ -88,6 +100,13 @@ def status_legend(key: str, name, title: Label, faded: bool = False) -> LayerLeg
     return LayerLegend(layer_id=key, label=_label(name), spec=LegendSpec(
         kind="chips", title=title, colors=tuple(colors[code] for code, _, _ in STATUS_CLASSES),
         labels=tuple(Label(key=k) for _, _, k in STATUS_CLASSES)))
+
+
+def states_legend(key: str) -> LayerLegend:
+    """The two states drawn (analysable pixels are masked)."""
+    return LayerLegend(layer_id=key, label=Label(key="legend.states_title"), spec=LegendSpec(
+        kind="chips", title=Label(key="legend.states_title"), colors=tuple(c for _, c, _ in STATE_CLASSES),
+        labels=tuple(Label(key=k) for _, _, k in STATE_CLASSES)))
 
 
 def mask_legend(key: str, mask_name: str, choice) -> LayerLegend:

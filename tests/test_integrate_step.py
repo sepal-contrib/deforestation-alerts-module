@@ -1449,3 +1449,34 @@ def test_a_switch_is_held_while_its_own_layer_is_being_built(step):
         assert [_switches(rc)[k].disabled for k in (alerts, earlier)] == [False, False]
     finally:
         rc.close()
+
+
+def test_the_unanalysable_switch_needs_a_set_with_the_state_band(step):
+    from deforestation_alerts.engine.fingerprint import combined_key
+    from deforestation_alerts.project.models import Artifact
+
+    label = t("steps.integrate.show_unanalysable")
+
+    def _with(stats):
+        p = _project("d", "GLAD-L", sets=[_set("x", 0)])
+        p.artifacts[combined_key("x")] = Artifact(
+            key=combined_key("x"), kind="combined", rel_path="c.tif", fingerprint="f", inputs={},
+            content_id="c1", created_at=datetime.now(), stats=stats)
+        return p
+
+    step.ready = ["GLAD-L"]
+    state = _state(_with({"states": 1}))
+    map_, rc = _render(state)
+    try:
+        assert label in _switches(rc)
+        assert state.show_unanalysable.value is False
+        _switches(rc)[label].v_model = True
+        assert state.show_unanalysable.value is True
+    finally:
+        rc.close()
+
+    map_, rc = _render(_state(_with({})))
+    try:
+        assert label not in _switches(rc)
+    finally:
+        rc.close()

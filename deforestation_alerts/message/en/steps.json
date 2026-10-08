@@ -456,6 +456,7 @@
       "show_earlier": "Show earlier sets",
       "earlier_missing": "The alert store of {set} is missing; run Integrate & vectorize for that period again.",
       "show_alerts": "Show these alerts on the map",
+      "show_unanalysable": "Show not-analysable pixels",
       "attr_add": "Add attribute layer",
       "attr_add_title": "Add an attribute layer",
       "attr_edit_title": "Edit attribute layer {name}",

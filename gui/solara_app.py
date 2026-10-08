@@ -53,7 +53,7 @@ from gui.store.navigation import (
     resolve_navigation,
 )
 from gui.i18n import app_available_locales, format_number, t
-from gui.scripts import alert_layers, set_store
+from gui.scripts import alert_layers, legend_specs, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.remote_facts import RemoteFactsLoader
@@ -401,6 +401,21 @@ def _AlertLayers(app_state, layers, map_):
                     notifier=notifications, legend=set_legend(alert_layers.SET_LAYER_KEY, s))
 
     solara.use_effect(_sync_layer, [show, s.id if s else None, gdf, retries])
+
+    show_states = app_state.show_unanalysable.value
+    states_id = alert_layers.combined_artifact(p, s)
+    states_id = states_id.content_id if states_id is not None else None
+
+    def _sync_states():
+        if not show_states or s is None or not alert_layers.has_states(p, s):
+            layers.hide(alert_layers.STATES_LAYER_KEY)
+            return
+        layers.show(alert_layers.STATES_LAYER_KEY,
+                    lambda: alert_layers.states_build(map_, project=p, alert_set=s),
+                    content_id=states_id, notifier=notifications,
+                    legend=legend_specs.states_legend(alert_layers.STATES_LAYER_KEY))
+
+    solara.use_effect(_sync_states, [show_states, s.id if s else None, states_id])
 
     earlier = alert_layers.earlier_of(p, s) if p is not None else []
     earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)

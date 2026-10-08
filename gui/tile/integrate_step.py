@@ -115,7 +115,8 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight, layers=layers,
         name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
         last=active.params if active is not None else None,
-        has_set=active is not None, has_earlier=bool(alert_layers.earlier_of(p, active)),
+        has_set=active is not None, has_states=alert_layers.has_states(p, active),
+        has_earlier=bool(alert_layers.earlier_of(p, active)),
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
     ).key(f"integrate-{app_state.project_loaded_signal.value}-{p.name}-{period.id}")
@@ -123,7 +124,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 @solara.component
 def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, period, choices, resolution, last,
-                   has_set=False, has_earlier=False, active_label=None, active_status=None):
+                   has_set=False, has_states=False, has_earlier=False, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
     left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
@@ -245,6 +246,10 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
             rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
                       on_v_model=app_state.show_alerts.set, dense=True, hide_details=True,
                       disabled=alert_layers.SET_LAYER_KEY in inflight_keys)
+            if has_states:
+                rv.Switch(label=t("steps.integrate.show_unanalysable"), v_model=app_state.show_unanalysable.value,
+                          on_v_model=app_state.show_unanalysable.set, dense=True, hide_details=True,
+                          disabled=alert_layers.STATES_LAYER_KEY in inflight_keys)
             if has_earlier:
                 rv.Switch(label=t("steps.integrate.show_earlier"), v_model=app_state.show_earlier_sets.value,
                           on_v_model=app_state.show_earlier_sets.set, dense=True, hide_details=True,

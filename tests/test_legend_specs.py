@@ -88,3 +88,12 @@ def test_stack_order_is_an_order_and_carries_no_colour():
     """It reorders, it does not repaint: the map and the PMTiles paint values
     draw exactly the same colours as before."""
     assert all(isinstance(code, int) for code in ls.STACK_ORDER)
+
+
+def test_states_legend_has_the_two_visible_states():
+    from gui.i18n import t
+
+    lg = ls.states_legend("k")
+    assert [t(lb.key) for lb in lg.spec.labels] == [t("legend.state_too_small"), t("legend.state_over_cap")]
+    assert lg.spec.colors == ("#9e9e9e", "#fb8c00")
+    assert len(ls.state_colormap().colors) == 2

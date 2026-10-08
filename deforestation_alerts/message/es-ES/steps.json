@@ -475,6 +475,7 @@
       "show_earlier": "Mostrar conjuntos anteriores",
       "earlier_missing": "Falta la base de alertas de {set}; vuelve a ejecutar Integrar y vectorizar para ese período.",
       "show_alerts": "Mostrar estas alertas en el mapa",
+      "show_unanalysable": "Mostrar píxeles no analizables",
       "attr_add": "Añadir capa de atributos",
       "attr_add_title": "Añadir una capa de atributos",
       "attr_edit_title": "Editar capa de atributos {name}",

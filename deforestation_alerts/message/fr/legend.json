@@ -1,5 +1,8 @@
 {
   "legend": {
+    "state_too_small": "Trop petit",
+    "state_over_cap": "Au-delà du plafond d'alertes",
+    "states_title": "Non analysable",
     "alert": {
       "confirmed": "Confirmée (confiance élevée)",
       "probable": "Probable (confiance faible)"

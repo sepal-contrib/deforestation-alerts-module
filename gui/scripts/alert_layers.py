@@ -27,17 +27,22 @@ import logging
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
+from deforestation_alerts.engine.fingerprint import combined_key
 from deforestation_alerts.errors import UserFileMissing
+from deforestation_alerts.project import paths
 from gui.i18n import t
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
-from gui.scripts.legend_specs import status_colors
+from gui.scripts import raster_map
+from gui.scripts.legend_specs import state_colormap, status_colors
 from gui.scripts.pmtiles_map import add_set_pmtiles
 from gui.scripts.source_layers import earlier_set_name
 from gui.store.workflow_steps import active_set
 
 #: MapLayers key of the active set's tiles (or their centroid fallback)
 SET_LAYER_KEY = "alerts:set"
+#: MapLayers key of the active set's not-analysable pixels (combined band 4)
+STATES_LAYER_KEY = "alerts:states"
 #: map key of the click popup
 POPUP_KEY = "alerts:popup"
 #: MapLayers key prefix of the earlier sets' layers (spec §4.3)
@@ -58,6 +63,32 @@ class Deferred:
 
     def __init__(self, current: bool = False):
         self.current = current
+
+
+def combined_artifact(project, alert_set):
+    """The set's combined raster record, or None."""
+    if project is None or alert_set is None:
+        return None
+    return project.artifacts.get(combined_key(alert_set.id))
+
+
+def has_states(project, alert_set) -> bool:
+    """True when the set's combined raster has the pixel-state band (a set
+    integrated before band 4 existed does not)."""
+    art = combined_artifact(project, alert_set)
+    return art is not None and bool((art.stats or {}).get("states"))
+
+
+def states_build(map_, *, project, alert_set) -> bool:
+    """Draw the set's too-small / over-cap pixels (band 4 of the combined
+    raster; 1 = analysable is masked as nodata, and so is 0) under ``STATES_LAYER_KEY``. Adds
+    nothing and returns False for a set without the band."""
+    if not has_states(project, alert_set):
+        return False
+    path = paths.resolve(paths.project_dir(project.name), alert_set.combined_rel_path)
+    raster_map.add_raster_layer(map_, path, key=STATES_LAYER_KEY, name=t("legend.states_title"), band=4,
+                                colormap=state_colormap(), vmin=2, vmax=3, nodata=1)
+    return True
 
 
 def earlier_key(alert_set) -> str:

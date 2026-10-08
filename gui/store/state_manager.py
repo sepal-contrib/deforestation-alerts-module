@@ -93,6 +93,8 @@ class AppState:
         # stays on while the user moves between steps (MapLayers ruling #10).
         self.show_alerts = solara.reactive(False)
         self.show_earlier_sets = solara.reactive(False)
+        # the set's too-small / over-cap pixels (combined band 4), likewise
+        self.show_unanalysable = solara.reactive(False)
         # alert review
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
@@ -135,6 +137,7 @@ class AppState:
             self.aoi_result.set(None)
             self.show_alerts.set(False)
             self.show_earlier_sets.set(False)
+            self.show_unanalysable.set(False)
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
             self.goto_alert.set(None)
