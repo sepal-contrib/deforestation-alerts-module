@@ -77,7 +77,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     multipolygon_to_geodataframe,
 )
 from gui.tile.analysis.context import build_context
-from gui.tile.analysis.earlier import build_earlier_controls, refresh_earlier_reviews
+from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
@@ -326,7 +326,7 @@ def view_actual_alert(
     # the earlier periods' reviewed alerts near this one (a no-op while the
     # switch is off); its own guard, so a failed read never blames the maps
     try:
-        refresh_earlier_reviews(widgets, analysis, app_state)
+        refresh_in_background(widgets, analysis, app_state)
     except Exception:
         logger.exception("Analysis: the earlier-reviews overlay failed")
 

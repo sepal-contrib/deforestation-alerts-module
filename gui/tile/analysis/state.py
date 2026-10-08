@@ -91,6 +91,9 @@ class AnalysisState:
     #: never saved to the project, so ``reset_alert`` leaves them alone.
     show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
+    #: counts the overlay refreshes (``earlier.refresh_earlier_reviews``): a
+    #: load that finishes after a newer refresh started is dropped
+    earlier_seq: int = field(default=0, repr=False)
     #: serializes ``reset_alert`` with a worker's check-and-apply
     _alert_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 

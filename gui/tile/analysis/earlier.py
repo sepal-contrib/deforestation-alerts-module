@@ -12,6 +12,7 @@ layer stays a plain outline.
 """
 
 import logging
+from contextlib import nullcontext
 
 import ipyvuetify as v
 from ipyleaflet import GeoJSON
@@ -50,17 +51,9 @@ def _maps(widgets):
 
 
 def _drop(a_map) -> None:
-    with getattr(a_map, "layers_lock", None) or _Null():
+    with getattr(a_map, "layers_lock", None) or nullcontext():
         a_map.layers = tuple(lyr for lyr in a_map.layers
                              if getattr(lyr, "name", None) != EARLIER_LAYER_NAME)
-
-
-class _Null:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
 
 
 def remove_earlier_layer(widgets) -> None:
@@ -73,10 +66,14 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
     from a worker. ``on_result(n)`` gets the feature count (None when off);
     by default the caption the controls registered on ``widgets``."""
     on_result = on_result or getattr(widgets, "earlier_on_result", None)
+    with analysis._alert_lock:
+        # every refresh, the switch-off included, supersedes the ones in flight
+        analysis.earlier_seq += 1
+        seq = analysis.earlier_seq
+    if on_result:
+        on_result(None)  # the previous alert's / distance's caption is stale
     if not analysis.show_earlier_reviews.value:
         remove_earlier_layer(widgets)
-        if on_result:
-            on_result(None)
         return
     gdf = app_state.alerts_gdf.value
     alert_id = app_state.actual_alert_id.value
@@ -93,6 +90,8 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
                     name=EARLIER_LAYER_NAME)
 
     def _apply():
+        if seq != analysis.earlier_seq:
+            return  # a newer refresh (switch, distance) started meanwhile
         for a_map in _maps(widgets):
             _drop(a_map)
             a_map.add_layer(layer)
@@ -100,6 +99,15 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
             on_result(len(data["features"]))
 
     analysis.apply_if_current(token, _apply)
+
+
+def refresh_in_background(widgets, analysis, app_state) -> None:
+    """``refresh_earlier_reviews`` for a caller on the UI / navigation thread:
+    the removal (switch off) is immediate, a load goes to a worker."""
+    if analysis.show_earlier_reviews.value:
+        spawn_in_context(refresh_earlier_reviews, (widgets, analysis, app_state))
+    else:
+        refresh_earlier_reviews(widgets, analysis, app_state)
 
 
 def build_earlier_controls(widgets, app_state, analysis) -> v.Html:

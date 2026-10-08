@@ -108,7 +108,7 @@ def test_none_found_reports_zero(monkeypatch):
     analysis.show_earlier_reviews.set(True)
     got = []
     earlier.refresh_earlier_reviews(widgets, analysis, app_state, on_result=got.append)
-    assert got == [0]
+    assert got == [None, 0]
 
 
 def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
@@ -127,3 +127,102 @@ def test_the_style_colours_by_status():
     assert earlier._style({"properties": {"status": "Confirmed"}})["color"] == "#d32f2f"
     assert earlier._style({"properties": {"status": "Need revision"}})["color"] == "#f9a825"
     assert earlier._style({"properties": {"status": "Confirmed"}})["fill"] is False
+
+
+def _blocking(monkeypatch, widgets, analysis, app_state):
+    """A near_reviews whose calls wait for their own Event, in call order."""
+    import threading
+
+    gates, started = [], []
+
+    def near(p, set_id, lon, lat, radius_m, **kw):
+        gate = threading.Event()
+        gates.append(gate)
+        started.append(radius_m)
+        gate.wait(5)
+        return _fc(int(radius_m // 1000))
+
+    monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", near)
+    return gates, started
+
+
+def _run(widgets, analysis, app_state):
+    import threading
+
+    th = threading.Thread(target=earlier.refresh_earlier_reviews, args=(widgets, analysis, app_state))
+    th.start()
+    return th
+
+
+def _wait_for(cond):
+    import time
+
+    for _ in range(500):
+        if cond():
+            return
+        time.sleep(0.01)
+    raise AssertionError("timed out")
+
+
+def test_a_load_in_flight_does_not_re_add_the_layer_after_the_switch_goes_off(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    gates, started = _blocking(monkeypatch, widgets, analysis, app_state)
+    analysis.show_earlier_reviews.set(True)
+    th = _run(widgets, analysis, app_state)
+    _wait_for(lambda: gates)
+    analysis.show_earlier_reviews.set(False)
+    earlier.refresh_earlier_reviews(widgets, analysis, app_state)
+    gates[0].set()
+    th.join(5)
+    assert not _earlier(widgets.map_before) and not _earlier(widgets.map_after)
+
+
+def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    gates, started = _blocking(monkeypatch, widgets, analysis, app_state)
+    analysis.show_earlier_reviews.set(True)
+    old = _run(widgets, analysis, app_state)          # 1 km
+    _wait_for(lambda: len(gates) == 1)
+    analysis.earlier_radius_km.set(5)
+    new = _run(widgets, analysis, app_state)          # 5 km
+    _wait_for(lambda: len(gates) == 2)
+    gates[1].set()
+    new.join(5)
+    gates[0].set()                                    # the 1 km load ends last
+    old.join(5)
+    (layer,) = _earlier(widgets.map_before)
+    assert len(layer.data["features"]) == 5
+
+
+def test_the_caption_is_cleared_when_a_refresh_starts(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch, n=0)
+    got = []
+    analysis.show_earlier_reviews.set(True)
+    earlier.refresh_earlier_reviews(widgets, analysis, app_state, on_result=got.append)
+    assert got == [None, 0]
+
+
+def test_view_actual_alert_loads_off_the_calling_thread(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from gui.tile.analysis import analysis_tile
+    from tests.test_analysis_state import _reviewable_alerts
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    alerts = _reviewable_alerts()
+    alerts["point"] = alerts.geometry.centroid
+    alerts["alert_polygon"] = None
+    app_state.alerts_gdf.set(alerts)
+    app_state.project = solara.reactive(None)
+    monkeypatch.setattr(analysis_tile, "active_set", lambda p: None)
+    monkeypatch.setattr(analysis_tile.set_store, "alerts_belong_to", lambda g, s: True)
+    monkeypatch.setattr(analysis_tile, "ee", MagicMock())
+    spawned = []
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda fn, args=(): spawned.append((fn, args)))
+    widgets = MagicMock()
+    widgets.map_before.layers = widgets.map_after.layers = ()
+    analysis.show_earlier_reviews.set(True)
+    app_state.project = SimpleNamespace(value=SimpleNamespace(questions=[]))
+    analysis_tile.view_actual_alert(widgets, app_state, analysis, SimpleNamespace(),
+                                    SimpleNamespace(v_model=None))
+    assert calls == [] and len(spawned) == 1
