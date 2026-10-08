@@ -101,11 +101,21 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
     analysis.apply_if_current(token, _apply)
 
 
+def _refresh_logged(widgets, analysis, app_state, **kw) -> None:
+    """``refresh_earlier_reviews`` for a worker thread: a failure is logged
+    (as ``view_actual_alert`` does for the inline path), not left to die in
+    the thread."""
+    try:
+        refresh_earlier_reviews(widgets, analysis, app_state, **kw)
+    except Exception:
+        logger.exception("Analysis: the earlier-reviews overlay failed")
+
+
 def refresh_in_background(widgets, analysis, app_state) -> None:
     """``refresh_earlier_reviews`` for a caller on the UI / navigation thread:
     the removal (switch off) is immediate, a load goes to a worker."""
     if analysis.show_earlier_reviews.value:
-        spawn_in_context(refresh_earlier_reviews, (widgets, analysis, app_state))
+        spawn_in_context(_refresh_logged, (widgets, analysis, app_state))
     else:
         refresh_earlier_reviews(widgets, analysis, app_state)
 
@@ -130,7 +140,7 @@ def build_earlier_controls(widgets, app_state, analysis) -> v.Html:
             caption.style_ = "display: none;"
 
     def _refresh():
-        refresh_earlier_reviews(widgets, analysis, app_state, on_result=_result)
+        _refresh_logged(widgets, analysis, app_state, on_result=_result)
 
     def _on_switch(change):
         analysis.show_earlier_reviews.set(bool(change["new"]))

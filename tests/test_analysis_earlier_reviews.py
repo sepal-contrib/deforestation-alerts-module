@@ -226,3 +226,23 @@ def test_view_actual_alert_loads_off_the_calling_thread(monkeypatch):
     analysis_tile.view_actual_alert(widgets, app_state, analysis, SimpleNamespace(),
                                     SimpleNamespace(v_model=None))
     assert calls == [] and len(spawned) == 1
+
+
+def test_a_raising_read_on_the_worker_is_logged_and_leaves_the_panel_usable(monkeypatch, caplog):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
+
+    def boom(*a, **k):
+        raise RuntimeError("store unreadable")
+
+    monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", boom)
+    controls = earlier.build_earlier_controls(widgets, app_state, analysis)
+    switch = controls.children[0]
+    with caplog.at_level("ERROR", logger="SEPALUI.deforestation_alerts"):
+        switch.v_model = True  # runs the spawned refresh, which raises
+    assert any("earlier-reviews overlay failed" in r.message and r.exc_info for r in caplog.records)
+    assert _earlier(widgets.map_before) == []
+    # the next refresh still works once the read recovers
+    monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", lambda *a, **k: _fc(1))
+    earlier.refresh_earlier_reviews(widgets, analysis, app_state)
+    assert len(_earlier(widgets.map_before)) == 1
