@@ -8,7 +8,8 @@ and written once. Above ~39,000 px wide (``WINDOW_PIXELS`` / 512) the one-row
 floor wins and a window grows with the width: 512 x 88,236 px, 181 MB per Int32
 array, for Paraguay at 10 m. ``combine`` holds ten window-sized Int32 arrays
 at its peak (traced 2026-10-01 with two sources: 0.78 GB at 38,000 px wide,
-1.8 GB at 88,236 px). The vectorizer reads its own blocks (vectorize.py).
+1.8 GB at 88,236 px; the carry's arrays are Int32 too, the largest code
+222,222,222 fits, so a carry adds no 8-byte arrays). The vectorizer reads its own blocks (vectorize.py).
 Harmonize's band-by-band warp already takes 1.19 GB at 32,000 px with two
 workers and also grows with the width (align.py), so at national scale it, not
 this module, is expected to set a run's peak.
@@ -129,15 +130,15 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                     date[earlier] = d[earlier]
                     confirmed |= a == 1
                 for csrc, remap, mind in cars:
-                    c = csrc.read(1, window=w).astype(np.int64)
+                    c = csrc.read(1, window=w).astype(np.int32)
                     st = csrc.read(4, window=w)
                     cd = csrc.read(2, window=w).astype(np.int32)
-                    moved = np.zeros(shp, np.int64)
+                    moved = np.zeros(shp, np.int32)
                     conf = np.zeros(shp, bool)
                     for old, new in remap.items():
                         v = (c // 10 ** old) % 10
                         if new in confirmed_only:
-                            v = np.where(v == 1, v, 0)  # the new set's switch: probable pixels are dropped here too
+                            v = np.where(v == 1, v, 0).astype(np.int32, copy=False)  # the new set's switch: probable pixels are dropped here too
                         moved += v * 10 ** new
                         conf |= v == 1
                     take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0) & (cd >= mind)
