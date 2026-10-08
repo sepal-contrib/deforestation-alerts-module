@@ -33,7 +33,6 @@ and the list is a child keyed by the project and its load signal, so a
 switched project never shows another project's state.
 """
 
-import reacton.ipyvuetify as rv
 import solara
 from pysepal.solara.notifications import use_notifications
 
