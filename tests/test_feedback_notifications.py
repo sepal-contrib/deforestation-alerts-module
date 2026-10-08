@@ -2116,3 +2116,15 @@ def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, mon
 
     assert ("success", t("analysis_tile.export_labels.save_done")) in feedback.toasts()
     assert moved == []
+
+
+def test_model_rows_hold_run_add_remove_on_one_line(edit_tools_card):
+    _edit_tools, card, _analysis = edit_tools_card
+    slots = _slots(card)
+    for n in (1, 2):
+        first_line = slots[f"dl{n}_row"].children[0]
+        assert slots[f"dl{n}_run"] in first_line.children
+        assert slots[f"dl{n}_add"] in first_line.children
+        assert slots[f"dl{n}_remove"] in first_line.children
+    assert t("analysis_tile.model_labels.dl_button1") == "Model 1"
+    assert t("analysis_tile.edition_labels.apply_edit_button") == "Save drawing"

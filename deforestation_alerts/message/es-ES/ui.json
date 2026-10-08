@@ -168,13 +168,15 @@
     },
     "edition_labels": {
       "start_edit_button": "Comenzar dibujo",
-      "apply_edit_button": "Aplicar",
+      "apply_edit_button": "Guardar dibujo",
       "stop_edit_button": "Detener dibujo",
-      "unapplied_drawing": "Aplica los cambios del polígono antes de guardar esta revisión"
+      "unapplied_drawing": "Guarde su dibujo antes de guardar esta revisión"
     },
     "model_labels": {
-      "dl_button1": "Modelo pequeño y rápido",
-      "dl_button2": "Modelo grande pero más lento",
+      "dl_button1": "Modelo 1",
+      "dl_button2": "Modelo 2",
+      "dl_hint1": "Modelo pequeño y rápido",
+      "dl_hint2": "Modelo grande pero más lento",
       "run": "Ejecutar",
       "dl_button_add": "Agregar al mapa",
       "dl_button_remove": "Quitar del mapa",

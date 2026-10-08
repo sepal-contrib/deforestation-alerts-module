@@ -166,13 +166,15 @@
     },
     "edition_labels": {
       "start_edit_button": "Start Drawing",
-      "apply_edit_button": "Apply",
+      "apply_edit_button": "Save drawing",
       "stop_edit_button": "Stop Drawing",
-      "unapplied_drawing": "Apply your polygon changes before saving this review"
+      "unapplied_drawing": "Save your drawing before saving this review"
     },
     "model_labels": {
-      "dl_button1": "Smaller and faster model",
-      "dl_button2": "Larger but slower model",
+      "dl_button1": "Model 1",
+      "dl_button2": "Model 2",
+      "dl_hint1": "Smaller and faster model",
+      "dl_hint2": "Larger but slower model",
       "run": "Run",
       "dl_button_add": "Add to map",
       "dl_button_remove": "Remove from map",

@@ -252,7 +252,7 @@ class _EditionButton(v.Btn, sw.SepalWidget):
 
     def __init__(self, **kwargs):
         kwargs.setdefault("small", True)
-        kwargs.setdefault("class_", "pa-1 ma-1")
+        kwargs.setdefault("class_", "pa-1")
         kwargs.setdefault("disabled", True)
         super().__init__(**kwargs)
 
@@ -441,18 +441,14 @@ def build_edit_tools(
             # outside drawing mode and a gated pair could stand nobody up. With
             # *Run* in the row, the pair is shown from the start and says what
             # it offers through ``disabled`` alone (``_sync_dl``).
-            ns[f"dl{n}_actions"] = v.Html(
-                tag="div", class_="d-flex align-center", style_="gap: 8px;",
-                children=[ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg],
-            )
+            name_span = v.Html(tag="span", class_="body-2", style_="flex: 1 1 auto;", children=[model_name])
             ns[f"dl{n}_found"] = v.Html(tag="div", class_="caption text--secondary", children=[])
             ns[f"dl{n}_row"] = v.Html(tag="div", class_="mt-3", children=[
-                v.Html(tag="div", class_="d-flex align-center", style_="gap: 8px;", children=[
-                    v.Html(tag="span", class_="body-2", style_="flex: 1 1 auto;",
-                           children=[model_name]),
-                    ns[f"dl{n}_run"],
+                v.Html(tag="div", class_="d-flex align-center flex-wrap", style_="gap: 8px;", children=[
+                    sw.Tooltip(name_span, tooltip=t(f"analysis_tile.model_labels.dl_hint{n}"),
+                               top=True, open_delay=100),
+                    ns[f"dl{n}_run"], ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg,
                 ]),
-                ns[f"dl{n}_actions"],
                 ns[f"dl{n}_found"],
             ])
 

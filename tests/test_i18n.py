@@ -216,6 +216,8 @@ def _dynamic_keys():
         "steps.alerts.format_": list(FORMATS),
         "steps.alerts.format_help_": list(FORMATS),
         "steps.alerts.encoding_": list(ENCODINGS),
+        # gui.tile.analysis.edit_tools' model-name tooltips (models 1 and 2)
+        "analysis_tile.model_labels.dl_hint": ["1", "2"],
         # gui.tile.masks_card's origin chip
         "steps.prepare.mask_origin_": ["gee", "file"],
         # gui.scripts.vis_layers: the layer kinds and the NICFI regions

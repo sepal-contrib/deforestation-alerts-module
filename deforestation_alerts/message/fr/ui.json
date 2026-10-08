@@ -168,13 +168,15 @@
     },
     "edition_labels": {
       "start_edit_button": "Commencer à dessiner",
-      "apply_edit_button": "Appliquer",
+      "apply_edit_button": "Enregistrer le dessin",
       "stop_edit_button": "Arrêter de dessiner",
-      "unapplied_drawing": "Appliquez les modifications du polygone avant d'enregistrer cette révision"
+      "unapplied_drawing": "Enregistrez votre dessin avant d'enregistrer cette revue"
     },
     "model_labels": {
-      "dl_button1": "Modèle plus petit et rapide",
-      "dl_button2": "Modèle plus grand mais plus lent",
+      "dl_button1": "Modèle 1",
+      "dl_button2": "Modèle 2",
+      "dl_hint1": "Modèle plus petit et rapide",
+      "dl_hint2": "Modèle plus grand mais plus lent",
       "run": "Exécuter",
       "dl_button_add": "Ajouter à la carte",
       "dl_button_remove": "Retirer de la carte",
