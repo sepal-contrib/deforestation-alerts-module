@@ -219,6 +219,8 @@ class Artifact(BaseModel):
 
 class AlertSetParams(BaseModel):
     min_size_ha: float = 0.5
+    # area_mode/area_geojson are kept for fingerprint compatibility (spec §5);
+    # a new run always uses the whole AOI: "aoi" / None.
     area_mode: Literal["aoi", "drawn"] = "aoi"
     area_geojson: Optional[dict] = None
     sorting: int = 1  # the Filter step's numeric codes (1..4)
@@ -230,15 +232,19 @@ class AlertSetParams(BaseModel):
     #: each one raster's ``{"source", "kind", "bands"}``, as
     #: ``raster_attribute.build_attribute_config`` builds it.
     attribute_layers: list[dict] = Field(default_factory=list)
+    #: sources whose probable (unconfirmed) pixels are left out (spec §5)
+    confirmed_only: list[str] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def _without_empty_layers(self, handler):
-        """Leave ``attribute_layers`` out while it is empty. A set's
+        """Leave ``attribute_layers`` and ``confirmed_only`` out while empty. A set's
         fingerprint hashes this dump (``fingerprint.set_inputs``), so every
         set made before the list keeps its own, byte for byte."""
         data = handler(self)
         if not data.get("attribute_layers"):
             data.pop("attribute_layers", None)
+        if not data.get("confirmed_only"):
+            data.pop("confirmed_only", None)
         return data
 
     def attribute_list(self) -> list[dict]:

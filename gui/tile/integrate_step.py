@@ -4,7 +4,7 @@ The step is mounted for the whole session, so ``IntegrateStep`` is a gate
 over the project reactive and the form is a child keyed by the project load,
 the project and the active period (GridForm's pattern, ruling #18): opening,
 reopening or switching a project remounts it with that project's values, so
-one project's sources, sizes, drawing or attribute layers never run in
+one project's sources, sizes or attribute layers never run in
 another. The child gets plain values, never the project, and reads the live
 project only when Run is clicked.
 
@@ -14,12 +14,6 @@ user left neither shows as running in, nor blocks, the project open now,
 while reopening its own project still finds it running. They are claimed on
 a click and released by the worker, never from a render or an effect.
 
-The drawn-area ``DrawControl`` belongs to the form and is on the shared map
-only while this step is showing with "Drawn polygon" chosen (ruling #77).
-pysepal's ``show()`` and ``hide()`` both clear the drawing, so they run only
-when that visibility changes, and the form's unmount takes its control off
-the map.
-
 The source checklist (spec §7.4) offers every source whose raw and harmonized
 files are current, with what its harmonized file found, and shows a source of
 the period that is not covered or has no data disabled, with the reason; the
@@ -28,13 +22,13 @@ run is told which were left out, for an empty set's toast.
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.mapping.draw_control import DrawControl
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.engine.integrate import IntegrationJob, min_cluster_pixels
 from deforestation_alerts.engine.plan import plan_prepare
+from deforestation_alerts.engine.presets import has_probable
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t, tn
@@ -72,7 +66,8 @@ def integrate_choices(p, pdir, period) -> list:
     for r in plan_prepare(p, pdir, period):
         if r.ready:
             note = result_note(r.stats)
-            out.append({"source": r.source, "label": r.source, "enabled": True, "note": note["text"] if note else ""})
+            out.append({"source": r.source, "label": r.source, "enabled": True, "note": note["text"] if note else "",
+                        "probable": has_probable(p.sources[r.source])})
         elif r.coverage in (NOT_COVERED, NO_DATA):
             out.append({"source": r.source, "label": r.source, "enabled": False,
                         "note": note_text(r.notes[0]) if r.notes else ""})
@@ -113,14 +108,13 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         solara.Info(t("workflow.lock_integrate"))
         return
     active = workflow_steps.active_set(p)
-    showing = app_state.active_step.value == workflow_steps.step_index("integrate")
     # The active set's status (spec §5.3, review focus 4): "stale" or
     # "missing" shows a line that says to run again; a current set shows none.
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
         app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight, layers=layers,
         name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
-        last=active.params if active is not None else None, showing=showing,
+        last=active.params if active is not None else None,
         has_set=active is not None, has_earlier=bool(alert_layers.earlier_of(p, active)),
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
@@ -129,15 +123,13 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 @solara.component
 def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, period, choices, resolution, last,
-                   showing, has_set=False, has_earlier=False, active_label=None, active_status=None):
+                   has_set=False, has_earlier=False, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
     left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
-    draw = solara.use_memo(lambda: DrawControl(map_), [])
-    draw_shown = solara.use_ref(False)
     picked, set_picked = solara.use_state(None)  # None: every ready source
     min_size, set_min_size = solara.use_state(str(last.min_size_ha if last else 0.5))
-    area_mode, set_area_mode = solara.use_state(last.area_mode if last else "aoi")
+    probable_off, set_probable_off = solara.use_state(set(last.confirmed_only) if last else set())
     sorting, set_sorting = solara.use_state(last.sorting if last else 1)
     max_alerts, set_max_alerts = solara.use_state(str(last.max_alerts if last else 0))
     # The attribute layers (spec D3) are form state until Run, like the fields
@@ -146,15 +138,6 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
     attr_modal = solara.use_reactive(False)  # the modal mounts its form (an asset listing) only when open
     attr_editing, set_attr_editing = solara.use_state(None)  # the layer's index; None: adding
     confirm, set_confirm = solara.use_state(None)  # (params, reviewed count, their lines) awaiting Replace
-
-    def _sync_draw():
-        visible = showing and area_mode == "drawn"
-        if visible != draw_shown.current:
-            (draw.show if visible else draw.hide)()
-            draw_shown.current = visible
-
-    solara.use_effect(_sync_draw, [showing, area_mode])
-    solara.use_effect(lambda: draw.hide, [])  # unmount: this form's control leaves the map
 
     key = _inflight_key(name)
     busy = key in inflight.value
@@ -188,8 +171,8 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
         spawn_in_context(_run)
 
     def _on_run():
-        drawing = draw.to_json() if area_mode == "drawn" else None
-        params, err = params_from_form(min_size, area_mode, drawing, sorting, max_alerts, attr_layers)
+        params, err = params_from_form(min_size, sorting, max_alerts, attr_layers,
+                                       confirmed_only=sorted(x for x in probable_off if x in chosen))
         if err:
             notifications.error(t(err))
             return
@@ -225,12 +208,13 @@ def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, perio
             rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
                         disabled=not c["enabled"], dense=True, hide_details=True,
                         on_v_model=lambda v, s=s: _toggle_source(s, v))
+            if s in chosen and c["probable"]:
+                rv.Switch(label=t("steps.integrate.include_probable", source=c["label"]), v_model=s not in probable_off,
+                          on_v_model=lambda v, s=s: set_probable_off(lambda cur: (cur - {s}) if v else (cur | {s})),
+                          dense=True, hide_details=True, class_="ml-6 mt-0")
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
                      persistent_hint=True)
-        rv.Select(label=t("steps.integrate.area"), v_model=area_mode, on_v_model=set_area_mode, dense=True,
-                  outlined=True, items=[{"text": t("steps.integrate.area_aoi"), "value": "aoi"},
-                                        {"text": t("steps.integrate.area_drawn"), "value": "drawn"}])
         rv.Select(label=t("steps.integrate.sorting"), v_model=sorting, on_v_model=set_sorting, dense=True,
                   outlined=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
         rv.TextField(label=t("steps.integrate.max_alerts"), v_model=max_alerts, on_v_model=set_max_alerts,

@@ -37,6 +37,14 @@ def test_choices_list_ready_sources_and_explain_the_left_out(monkeypatch):
     assert not out["GLAD-S2"]["enabled"] and "does not cover this AOI" in out["GLAD-S2"]["note"]
 
 
+def test_has_probable_is_false_only_for_a_date_only_custom_source():
+    from types import SimpleNamespace as NS
+    from deforestation_alerts.engine.presets import has_probable
+    p = _p()
+    assert has_probable(p.sources["GLAD-L"]) and has_probable(p.sources["RADD"])
+    assert has_probable(NS(format="ccdc")) and not has_probable(NS(format="date_only"))
+
+
 def test_choices_skip_sources_that_are_neither_ready_nor_left_out(monkeypatch):
     """A covered source whose files are not built yet is not offered: it is
     the Download & harmonize step's business, not a reason to show."""
@@ -46,7 +54,7 @@ def test_choices_skip_sources_that_are_neither_ready_nor_left_out(monkeypatch):
     ]
     monkeypatch.setattr(integrate_step, "plan_prepare", lambda p, pdir, period: rows)
     assert integrate_step.integrate_choices(_p(), "/tmp/x", JAN) == [
-        {"source": "GLAD-L", "label": "GLAD-L", "enabled": True, "note": ""}]
+        {"source": "GLAD-L", "label": "GLAD-L", "enabled": True, "note": "", "probable": True}]
 
 
 def test_outcome_lines_of_an_empty_set():

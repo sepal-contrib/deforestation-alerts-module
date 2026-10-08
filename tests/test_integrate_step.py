@@ -22,7 +22,6 @@ import rasterio
 import reacton
 import solara
 from affine import Affine
-from pysepal.mapping.draw_control import DrawControl
 from pysepal.solara.notifications import NoopNotifier, NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 from shapely.geometry import box, shape
@@ -61,13 +60,12 @@ PARAGUAY = (-55.5, -24.5, -55.0, -24.0)  # UTM 21S
 # params_from_form, reviewed_in, apply_result (brief Step 1)
 # ---------------------------------------------------------------------------
 def test_params_from_form():
-    params, err = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", None)
+    params, err = integrate_jobs.params_from_form("0.5", 1, "0", None)
     assert err is None and params.min_size_ha == 0.5 and params.max_alerts == 0
-    assert integrate_jobs.params_from_form("-1", "aoi", None, 1, "0", None)[1] == "steps.integrate.error_min_size"
-    assert integrate_jobs.params_from_form("0.5", "drawn", {"type": "FeatureCollection", "features": []},
-                                           1, "0", None)[1] == "steps.integrate.error_no_drawing"
-    params, err = integrate_jobs.params_from_form("1", "drawn", FC, 3, "25", None)
-    assert err is None and params.area_geojson == FC and params.sorting == 3 and params.max_alerts == 25
+    assert params.area_mode == "aoi" and params.area_geojson is None and params.confirmed_only == []
+    assert integrate_jobs.params_from_form("-1", 1, "0", None)[1] == "steps.integrate.error_min_size"
+    params, err = integrate_jobs.params_from_form("1", 3, "25", None, confirmed_only=("RADD",))
+    assert err is None and params.sorting == 3 and params.max_alerts == 25 and params.confirmed_only == ["RADD"]
 
 
 @pytest.mark.parametrize("min_size, max_alerts, key", [
@@ -78,11 +76,11 @@ def test_params_from_form():
     ("0.5", "2.5", "steps.integrate.error_max_alerts"),
 ])
 def test_params_from_form_refuses_bad_numbers(min_size, max_alerts, key):
-    assert integrate_jobs.params_from_form(min_size, "aoi", None, 1, max_alerts, None) == (None, key)
+    assert integrate_jobs.params_from_form(min_size, 1, max_alerts, None) == (None, key)
 
 
-def test_params_from_form_keeps_the_drawing_only_for_a_drawn_area():
-    params, _ = integrate_jobs.params_from_form("0", "aoi", FC, 2, "", [{"source": "x"}])
+def test_params_from_form_takes_the_attribute_layers():
+    params, _ = integrate_jobs.params_from_form("0", 2, "", [{"source": "x"}])
     assert params.area_geojson is None and params.max_alerts == 0
     assert params.attribute_layers == [{"source": "x"}] and params.attribute_config is None
 
@@ -91,9 +89,9 @@ def test_params_from_form_writes_the_layers_never_the_legacy_raster():
     """Spec D3: a new run writes ``attribute_layers`` and leaves
     ``attribute_config`` None; without layers the dump is the old one."""
     a, b = {"source": "a.tif", "kind": "local", "bands": []}, {"source": "users/me/b", "kind": "gee", "bands": []}
-    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", (a, b))
+    params, _ = integrate_jobs.params_from_form("0.5", 1, "0", (a, b))
     assert params.attribute_layers == [a, b] and params.attribute_config is None
-    params, _ = integrate_jobs.params_from_form("0.5", "aoi", None, 1, "0", None)
+    params, _ = integrate_jobs.params_from_form("0.5", 1, "0", None)
     assert params.attribute_layers == [] and "attribute_layers" not in params.model_dump(mode="json")
 
 
@@ -535,10 +533,9 @@ def _render(state, layers=None):
 @pytest.fixture
 def step(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], modal=[], tables={},
-                         draws=[])
+    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], modal=[], tables={})
     monkeypatch.setattr(integrate_step, "integrate_choices", lambda p, pdir, period: [
-        {"source": s, "label": s, "enabled": True, "note": ""} for s in ns.ready] + [
+        {"source": s, "label": s, "enabled": True, "note": "", "probable": True} for s in ns.ready] + [
         {"source": s, "label": s, "enabled": False, "note": why} for s, why in ns.left_out.items()])
     # Jobs are queued, not started: the test runs them (``run_jobs``).
     monkeypatch.setattr(integrate_step, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
@@ -564,22 +561,6 @@ def step(monkeypatch, tmp_path):
         real_table(title=title, columns=columns, rows=rows, empty_text=empty_text)
 
     monkeypatch.setattr(integrate_step, "ProductTable", _RecorderProductTable)
-
-    class _Draw(DrawControl):
-        def __init__(self, m, **kwargs):
-            super().__init__(m, **kwargs)
-            self.calls = []
-            ns.draws.append(self)
-
-        def show(self):
-            self.calls.append("show")
-            super().show()
-
-        def hide(self):
-            self.calls.append("hide")
-            super().hide()
-
-    monkeypatch.setattr(integrate_step, "DrawControl", _Draw)
 
     def run_jobs():
         while ns.jobs:
@@ -695,6 +676,26 @@ def test_invalid_numbers_are_refused_with_a_toast(step):
         rc.close()
 
 
+def test_the_form_has_no_area_select_and_a_probable_switch_per_chosen_source(step):
+    step.ready = ["GLAD-L", "RADD"]
+    map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))
+    try:
+        assert not [w for w in rc.find(v.Select).widgets if w.label == "Area"]
+        radd, glad = (t("steps.integrate.include_probable", source=x) for x in ("RADD", "GLAD-L"))
+        assert _all_switches(rc)[radd].v_model is True and _all_switches(rc)[glad].v_model is True
+        _all_switches(rc)[radd].v_model = False
+        _checkbox(rc, "GLAD-L").v_model = False
+        assert glad not in _all_switches(rc)
+        _checkbox(rc, "GLAD-L").v_model = True
+        _run(rc)
+        step.run_jobs()
+        [job] = step.runs
+        assert job.params.confirmed_only == ["RADD"]
+        assert job.params.area_mode == "aoi" and job.params.area_geojson is None
+    finally:
+        rc.close()
+
+
 def test_no_ticked_source_disables_run(step):
     step.ready = ["GLAD-L"]
     map_, rc = _render(_state(_project("d", "GLAD-L")))
@@ -776,73 +777,11 @@ def test_reviewed_lines_are_capped_and_survive_a_missing_store(step, tmp_path):
     assert integrate_jobs.status_label(None) == t("legend.status.not_reviewed")
 
 
-def _feature(geom):
-    return {"type": "Feature", "properties": {"style": {"color": "#2196f3"}}, "geometry": geom.__geo_interface__}
-
-
-def test_a_drawn_area_needs_a_drawing_on_the_map(step):
-    step.ready = ["GLAD-L"]
-    map_, rc = _render(_state(_project("d", "GLAD-L")))
-    try:
-        _select(rc, t("steps.integrate.area")).v_model = "drawn"
-        [draw] = step.draws
-        assert draw in map_.controls
-        _run(rc)
-        assert step.jobs == [] and _toasts("error") == [t("steps.integrate.error_no_drawing")]
-
-        drawn = box(-55.3, -24.3, -55.2, -24.2)
-        draw.data = [_feature(drawn)]
-        _run(rc)
-        step.run_jobs()
-        [job] = step.runs
-        assert job.params.area_mode == "drawn"
-        [feature] = job.params.area_geojson["features"]
-        assert shape(feature["geometry"]).equals(drawn) and "style" not in feature["properties"]
-    finally:
-        rc.close()
-
-
-def test_the_draw_control_is_on_the_map_only_on_this_step_in_drawn_mode(step):
-    """Ruling #77: the DrawControl leaves the shared map with the step. pysepal's
-    show() and hide() both clear the drawing, so an unrelated re-render must
-    call neither (drift note).
-    """
-    state = _state(_project("d", "GLAD-L"), on_step=False)  # the AOI step is showing
-    map_, rc = _render(state)
-    try:
-        [draw] = step.draws
-        state.active_step.set(step_index("integrate"))
-        state.active_step.set(0)
-        assert draw.calls == []  # "Whole AOI": the control stays off the map, untouched
-        _select(rc, t("steps.integrate.area")).v_model = "drawn"
-        assert draw not in map_.controls and draw.calls == []
-        state.active_step.set(step_index("integrate"))
-        assert draw in map_.controls and draw.calls == ["show"]
-        state.active_step.set(step_index("aoi"))  # another step is showing
-        assert draw not in map_.controls
-        state.active_step.set(step_index("integrate"))
-        assert draw in map_.controls
-
-        calls = list(draw.calls)
-        _field(rc, t("steps.integrate.min_size")).v_model = "2"
-        state.update_project("d", lambda p: setattr(p, "look_back_days", 30))  # a project publish
-        assert draw.calls == calls and draw in map_.controls
-
-        _select(rc, t("steps.integrate.area")).v_model = "aoi"
-        assert draw not in map_.controls
-        _select(rc, t("steps.integrate.area")).v_model = "drawn"
-        assert draw in map_.controls
-        state.close_project_state()  # the form goes away, and its control with it
-        assert draw not in map_.controls
-    finally:
-        rc.close()
-
-
 def test_the_form_starts_from_the_active_set_and_resets_for_another_project(step):
     """The step is mounted for the whole session (ruling #18's pattern): a
     project's typed values, drawing or attribute raster never run in another.
     """
-    last = AlertSetParams(min_size_ha=2.0, sorting=3, max_alerts=25, area_mode="drawn", area_geojson=FC)
+    last = AlertSetParams(min_size_ha=2.0, sorting=3, max_alerts=25, confirmed_only=["GLAD-L"])
     state = _state(_project("d", "GLAD-L", sets=[_set("x", 0, params=last)]))
     step.ready = ["GLAD-L"]
     map_, rc = _render(state)
@@ -850,16 +789,13 @@ def test_the_form_starts_from_the_active_set_and_resets_for_another_project(step
         assert _field(rc, t("steps.integrate.min_size")).v_model == "2.0"
         assert _select(rc, t("steps.integrate.sorting")).v_model == 3
         assert _field(rc, t("steps.integrate.max_alerts")).v_model == "25"
-        assert _select(rc, t("steps.integrate.area")).v_model == "drawn"
-        [first] = step.draws
-        assert first in map_.controls
+        assert _all_switches(rc)[t("steps.integrate.include_probable", source="GLAD-L")].v_model is False
         _field(rc, t("steps.integrate.min_size")).v_model = "7"
 
         state.new_project_state(_project("e", "GLAD-L"))
         assert _field(rc, t("steps.integrate.min_size")).v_model == "0.5"
         assert _select(rc, t("steps.integrate.sorting")).v_model == 1
-        assert _select(rc, t("steps.integrate.area")).v_model == "aoi"
-        assert first not in map_.controls and not any(d in map_.controls for d in step.draws)
+        assert _all_switches(rc)[t("steps.integrate.include_probable", source="GLAD-L")].v_model is True
     finally:
         rc.close()
 
@@ -1425,8 +1361,13 @@ def _with_earlier(p):
     return p
 
 
-def _switches(rc):
+def _all_switches(rc):
     return {w.label: w for w in rc.find(v.Switch).widgets}
+
+
+def _switches(rc):
+    """The alert-layer switches, without the per-source probable ones."""
+    return {k: w for k, w in _all_switches(rc).items() if "include probable" not in k}
 
 
 def test_the_alert_switches_appear_once_a_run_has_produced_a_set(step):

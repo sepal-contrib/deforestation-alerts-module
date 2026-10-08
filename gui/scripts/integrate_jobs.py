@@ -54,12 +54,13 @@ _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 ANALYSIS_VIEW = "analysis_tile"
 
 
-def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, attribute_layers):
+def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=()):
     """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``.
 
     ``attribute_layers``: the attribute-layer configs in order (None: none). A
     new set writes them as ``attribute_layers``, never as the legacy
-    ``attribute_config`` (spec D3).
+    ``attribute_config`` (spec D3). ``confirmed_only``: sources whose probable
+    alerts are left out. The area is always the whole AOI.
     """
     try:
         ha = float(str(min_size).strip())
@@ -73,16 +74,13 @@ def params_from_form(min_size, area_mode, drawn_geojson, sorting, max_alerts, at
         return None, "steps.integrate.error_max_alerts"
     if cap < 0:
         return None, "steps.integrate.error_max_alerts"
-    if area_mode == "drawn" and not (drawn_geojson or {}).get("features"):
-        return None, "steps.integrate.error_no_drawing"
     return AlertSetParams(
         min_size_ha=ha,
-        area_mode=area_mode,
-        area_geojson=drawn_geojson if area_mode == "drawn" else None,
         sorting=int(sorting),
         max_alerts=cap,
         attribute_config=None,
         attribute_layers=list(attribute_layers or []),
+        confirmed_only=list(confirmed_only or []),
     ), None
 
 

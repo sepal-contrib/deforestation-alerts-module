@@ -85,3 +85,9 @@ def apply_preset(alert, dates, fmt: str, encoding: str, win_start: int, win_end:
         codes = alert_codes(alert, fmt)
     keep = (codes > 0) & (d > 0) & (d >= win_start) & (d <= win_end)
     return np.where(keep, codes, 0).astype(np.int32), np.where(keep, d, 0).astype(np.int32)
+
+
+def has_probable(source) -> bool:
+    """Whether the source's alerts have a probable (unconfirmed) level: False
+    only for a custom source whose format is ``date_only``."""
+    return getattr(source, "format", None) != "date_only"

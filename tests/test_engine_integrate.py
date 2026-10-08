@@ -7,7 +7,6 @@ import geopandas as gpd
 import numpy as np
 import pytest
 import rasterio
-from pyproj import Transformer
 from shapely.geometry import box
 
 from deforestation_alerts.engine import fingerprint as fp
@@ -77,17 +76,7 @@ def test_combine_digits_dates_display(tmp_path):
     assert code[5, 5] == 1 and n == int((code > 0).sum())
 
 
-def _drawn(cols, rows):
-    """The grid cells ``[c0, c1) x [r0, r1)`` as a polygon in WGS84, like the map draws it."""
-    t = Transformer.from_crs(GRID.epsg, "EPSG:4326", always_xy=True)
-    (c0, c1), (r0, r1) = cols, rows
-    x0, x1 = GRID.xmin + c0 * GRID.resolution, GRID.xmin + c1 * GRID.resolution
-    y0, y1 = GRID.ymax - r1 * GRID.resolution, GRID.ymax - r0 * GRID.resolution
-    corners = [t.transform(x, y) for x, y in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]]
-    return {"type": "Polygon", "coordinates": [corners + [corners[0]]]}
-
-
-def test_footprint_and_area_clip(tmp_path):
+def test_footprint_clip(tmp_path):
     a = _blank()
     a[0:40, 0:40] = 1
     src = _write(tmp_path / "a.tif", a, np.where(a > 0, 2026001, 0))
@@ -95,13 +84,11 @@ def test_footprint_and_area_clip(tmp_path):
     fpr[0:10, :] = 1
     with raster_io.write_grid_raster(tmp_path / "fp.tif", GRID, count=1) as dst:
         dst.write(fpr.astype("int32"), 1)
-    area = _drawn((0, 20), (0, 40))  # the left half of the grid
-    integrate.combine([(src, 0)], GRID, tmp_path / "c.tif", footprints=[tmp_path / "fp.tif"], area_geojson=area)
+    integrate.combine([(src, 0)], GRID, tmp_path / "c.tif", footprints=[tmp_path / "fp.tif"])
     with rasterio.open(tmp_path / "c.tif") as s:
         code = s.read(1)
     assert code[5, 5] == 0      # earlier footprint
-    assert code[20, 5] == 1     # inside the drawn half
-    assert code[20, 30] == 0    # outside it
+    assert code[20, 5] == 1     # outside the footprint
 
 
 @pytest.mark.parametrize("which", ["input", "footprint"])
@@ -123,7 +110,7 @@ def test_combine_refuses_a_raster_off_the_grid(tmp_path, which):
 
 def test_windows_do_not_change_the_result(tmp_path, monkeypatch):
     """The test grid is one window at the production size; 7-row windows cut
-    it into six, so every per-window offset (reads, writes, the drawn area,
+    it into six, so every per-window offset (reads, writes,
     the footprint) is exercised."""
     rng = np.random.default_rng(7)
     g = rng.integers(0, 3, (GRID.height, GRID.width))
@@ -140,8 +127,7 @@ def test_windows_do_not_change_the_result(tmp_path, monkeypatch):
 
     def run(tag):
         out = tmp_path / tag
-        n = integrate.combine(inputs, GRID, out / "c.tif", footprints=[tmp_path / "fp.tif"],
-                              area_geojson=_drawn((3, 33), (4, 31)))
+        n = integrate.combine(inputs, GRID, out / "c.tif", footprints=[tmp_path / "fp.tif"])
         integrate.rasterize_footprint(polys, GRID, out / "f.tif")
         with rasterio.open(out / "c.tif") as c, rasterio.open(out / "f.tif") as f:
             return n, c.read(), f.read()
@@ -560,12 +546,6 @@ def test_run_integration_refuses_no_or_duplicate_sources(ready_project, sources)
         integrate.run_integration(job)
 
 
-def test_drawn_mode_needs_a_drawing(ready_project):
-    p, pdir = ready_project
-    with pytest.raises(ValueError, match="drawn"):
-        integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(area_mode="drawn", area_geojson=None)))
-
-
 @_LONLAT_CENTROID
 def test_staged_leftovers_of_a_killed_run_are_swept(ready_project, monkeypatch):
     """A run overwrites its staged names anyway, so the sweep is observed where
@@ -664,3 +644,28 @@ def test_the_gate_sums_the_earth_engine_layers_and_each_layer_attributes_in_orde
     assert asked[0] == staged + sum(each)  # the scratch folder is on the project's disk here: one check
     assert regions == ["d"]
     assert applied == [(s2["source"], "REGION"), (local["source"], None), (dem["source"], "REGION")]
+
+
+def test_confirmed_only_drops_that_sources_probable_pixels(tmp_path):
+    a, b = blank(), blank()
+    a[1:3, 1:3] = 2          # probable in source 0
+    a[5:7, 5:7] = 1          # confirmed in source 0
+    b[1:3, 1:3] = 2          # probable in source 1, same place
+    d = 2026010
+    n = integrate.combine([(write(tmp_path / "a.tif", a, np.where(a > 0, d, 0)), 0),
+                           (write(tmp_path / "b.tif", b, np.where(b > 0, d, 0)), 1)],
+                          GRID, tmp_path / "c.tif", confirmed_only={0})
+    with rasterio.open(tmp_path / "c.tif") as src:
+        code = src.read(1)
+    assert code[1, 1] == 2 * 10      # source 1's probable stays, source 0's is gone
+    assert code[5, 5] == 1
+    assert n == 4 + 4
+
+
+@_LONLAT_CENTROID
+def test_an_all_probable_source_confirmed_only_records_an_empty_set(ready_project):
+    p, pdir = ready_project  # RADD's cluster is all probable (value 2)
+    params = AlertSetParams(min_size_ha=0.01, confirmed_only=["RADD"])
+    res = integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=pdir, period=JAN, sources=["RADD"], params=params))
+    assert res.alert_set.n_alerts == 0 and len(res.alerts) == 0

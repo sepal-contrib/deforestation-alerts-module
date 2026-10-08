@@ -27,11 +27,9 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 from affine import Affine
-from pyproj import Transformer
 from rasterio import features
 from rasterio.windows import Window
-from shapely.geometry import box, shape
-from shapely.ops import transform as shp_transform
+from shapely.geometry import box
 
 from deforestation_alerts.engine.fingerprint import (
     combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, set_inputs, store_key,
@@ -78,19 +76,9 @@ def min_cluster_pixels(min_size_ha: float, resolution: float) -> int:
     return max(1, math.ceil(round(float(min_size_ha) * 10_000 / float(resolution) ** 2, 9)))
 
 
-def _area_in_grid(area_geojson: dict, grid: GridSpec) -> list:
-    """A drawn GeoJSON geometry, Feature or FeatureCollection (WGS84) -> shapely geometries in the grid's CRS."""
-    geo = area_geojson.get("geometry", area_geojson)
-    if geo.get("type") == "FeatureCollection":
-        geoms = [shape(f["geometry"]) for f in geo["features"]]
-    else:
-        geoms = [shape(geo)]
-    t = Transformer.from_crs("EPSG:4326", grid.epsg, always_xy=True)
-    return [shp_transform(t.transform, g) for g in geoms]
-
-
 def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
-            footprints: Sequence[Path] = (), area_geojson: Optional[dict] = None) -> int:
+            footprints: Sequence[Path] = (), carry: Sequence = (),
+            confirmed_only: frozenset = frozenset()) -> int:
     """Write the combined 3-band raster (spec §7.4 steps 1-4); return its alert pixel count.
 
     ``inputs`` are ``(harmonized raster, digit)`` pairs on ``grid`` (checked:
@@ -98,15 +86,16 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     ``Σ alert · 10^digit``, band 2 the earliest date among the sources with an
     alert at the pixel, band 3 the display class: 1 if any source is confirmed
     there, 2 if all are probable. Pixels set in any of the ``footprints`` (0/1
-    rasters of earlier sets) or outside ``area_geojson`` (WGS84) are 0 in every band.
+    rasters of earlier sets) are 0 in every band. ``confirmed_only`` is a set
+    of digits whose probable pixels (value 2) are dropped before anything else.
+    ``carry`` is reserved (filled in a later task); it is ignored.
     """
     # The window reads below assume every input shares the grid's pixels.
     for path in [p for p, _ in inputs] + list(footprints):
         check_header(path, grid)
-    area = _area_in_grid(area_geojson, grid) if area_geojson else None
     total = 0
     with ExitStack() as stack:
-        srcs = [(stack.enter_context(rasterio.open(p)), 10 ** int(d)) for p, d in inputs]
+        srcs = [(stack.enter_context(rasterio.open(p)), int(d)) for p, d in inputs]
         fps = [stack.enter_context(rasterio.open(p)) for p in footprints]
         with write_grid_raster(Path(out_path), grid, count=3) as dst:
             for w in _windows(grid):
@@ -115,8 +104,11 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                 code = np.zeros(shp, np.int32)
                 date = np.zeros(shp, np.int32)
                 confirmed = np.zeros(shp, bool)
-                for src, mult in srcs:
+                for src, digit in srcs:
+                    mult = 10 ** digit
                     a = src.read(1, window=w).astype(np.int32, copy=False)
+                    if digit in confirmed_only:
+                        a = np.where(a == 1, a, 0).astype(np.int32, copy=False)
                     d = src.read(2, window=w).astype(np.int32, copy=False)
                     hit = a > 0
                     code += np.where(hit, a * mult, 0).astype(np.int32, copy=False)
@@ -126,10 +118,6 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                 keep = code > 0
                 for f in fps:
                     keep &= f.read(1, window=w) == 0
-                if area is not None:
-                    keep &= features.geometry_mask(
-                        area, out_shape=shp, transform=_window_transform(grid, w), invert=True
-                    )
                 code[~keep] = 0
                 date[~keep] = 0
                 display = np.where(keep, np.where(confirmed, 1, 2), 0).astype(np.int32)
@@ -245,8 +233,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     Writes the combined raster, the footprint and ``alert_db.parquet`` into the
     set's folder and returns the set and its artifacts; the caller records them.
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
-    when no source is chosen or one is chosen twice, when the drawn area mode
-    has no drawing, when a source's download or harmonized file is not current
+    when no source is chosen or one is chosen twice, when a source's download or harmonized file is not current
     for the period (its Download & harmonize row is not ready), or an earlier
     set's footprint is missing.
 
@@ -261,8 +248,6 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     sources = sorted(job.sources, key=str.casefold)
     if not job.sources or len(set(job.sources)) != len(job.sources):
         raise ProjectRuleError("choose at least one source, each once", key="errors.no_sources")
-    if job.params.area_mode == "drawn" and not job.params.area_geojson:
-        raise ProjectRuleError("the drawn area mode needs a drawn polygon", key="errors.no_drawing")
     # Both stages must be current: a harmonized file whose raw download is out
     # of date (say, for an AOI changed since) holds the old inputs' alerts.
     rows = {row.source: row for row in plan_prepare(p, pdir, period)}
@@ -320,7 +305,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     digit_map = {p.sources[s].digit: s for s in sources}
     try:
         combine(harm_paths, p.grid, staged[combined], footprints=fp_paths,
-                area_geojson=job.params.area_geojson if job.params.area_mode == "drawn" else None)
+                confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
         vgdf = vectorize_alerts(

@@ -12,7 +12,6 @@
     "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser.",
     "footprint_missing": "L'empreinte du jeu antérieur {set_id} est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
     "no_sources": "Choisissez au moins une source, chacune une seule fois.",
-    "no_drawing": "Le mode zone dessinée a besoin d'un polygone dessiné.",
     "attribute_band_missing": "Le raster d'attributs n'a pas la bande {band} (il a {bands}).",
     "band_out_of_range": "{file} n'a pas de bande {band} (il en a {bands}).",
     "attribute_no_crs": "Le raster d'attributs {path} n'a pas de système de référence de coordonnées.",

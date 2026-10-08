@@ -290,3 +290,8 @@ def test_old_manifest_keeps_every_status(tmp_path):
                      fp.raw_alert_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT
     assert fp.status(p2, tmp_path, fp.harm_key(per.id, "GLAD-L"),
                      fp.harmonized_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT
+
+
+def test_empty_confirmed_only_keeps_the_params_dump_unchanged():
+    assert "confirmed_only" not in AlertSetParams().model_dump(mode="json")
+    assert AlertSetParams(confirmed_only=["RADD"]).model_dump(mode="json")["confirmed_only"] == ["RADD"]

@@ -12,7 +12,6 @@
     "not_ready": "{source} no está descargada y armonizada para este período; ejecuta primero Descargar y armonizar.",
     "footprint_missing": "Falta la huella del conjunto anterior {set_id}; ejecuta Integrar y vectorizar en ese conjunto de nuevo primero.",
     "no_sources": "Elige al menos una fuente, cada una una sola vez.",
-    "no_drawing": "El modo de área dibujada necesita un polígono dibujado.",
     "attribute_band_missing": "El raster de atributos no tiene la banda {band} (tiene {bands}).",
     "band_out_of_range": "{file} no tiene la banda {band} (tiene {bands}).",
     "attribute_no_crs": "El raster de atributos {path} no tiene sistema de referencia de coordenadas.",
