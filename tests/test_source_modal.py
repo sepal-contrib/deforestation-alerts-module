@@ -463,7 +463,7 @@ def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
             assert await _settle(lambda: len(asked) == 1)
             # the fields are frozen while their values are checked
             assert rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0].disabled is True
-            assert rc.find(v.RadioGroup).widgets[0].disabled is True  # the format presets
+            assert rc.find(v.Select, label=t("steps.alerts.format_label")).widgets[0].disabled is True
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
             else:
@@ -617,7 +617,7 @@ def test_the_source_form_sits_on_the_form_frame():
     asyncio.run(main())
 
 
-def test_the_custom_fields_have_hints_and_the_format_presets_sit_in_a_fieldset(monkeypatch):
+def test_the_custom_fields_have_hints_and_the_format_is_a_dropdown(monkeypatch):
     monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
@@ -627,13 +627,11 @@ def test_the_custom_fields_have_hints_and_the_format_presets_sit_in_a_fieldset(m
             _go_custom(rc, "mine")
             name = rc.find(v.TextField, label=t("steps.alerts.name_label")).widget
             assert (name.hint, name.persistent_hint) == (t("steps.alerts.name_hint"), True)
-            # by tag: the finder does not descend into a match, and the frame's
-            # field column is itself an Html (a div)
-            fieldset = rc.find(v.Html, tag="fieldset").widget
-            legend, *rest = fieldset.children
-            assert legend.tag == "legend" and legend.children == [t("steps.alerts.format_label")]
-            [presets] = [c for c in rest if isinstance(c, v.RadioGroup)]
-            assert [r.value for r in presets.children] == list(sm.FORMATS)
+            fmt = rc.find(v.Select, label=t("steps.alerts.format_label")).widget
+            assert fmt.items == [{"text": t(f"steps.alerts.format_{f}"), "value": f} for f in sm.FORMATS]
+            fmt.v_model = "ccdc"
+            fmt = rc.find(v.Select, label=t("steps.alerts.format_label")).widget
+            assert fmt.hint == t("steps.alerts.format_help_ccdc") and fmt.persistent_hint
         finally:
             rc.close()
 

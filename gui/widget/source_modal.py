@@ -26,7 +26,7 @@ from gui.scripts.coverage_ui import note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
 from gui.widget.default_name import use_default_name
-from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
+from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 
@@ -308,11 +308,10 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             elif bands_task.error:
                 solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                             classes=["error--text"])
-            with field_group(t("steps.alerts.format_label")):
-                with rv.RadioGroup(v_model=fmt, on_v_model=set_fmt, dense=True, hide_details=True, disabled=busy):
-                    for f in FORMATS:
-                        rv.Radio(label=f"{t(f'steps.alerts.format_{f}')} — {t(f'steps.alerts.format_help_{f}')}",
-                                 value=f)
+            rv.Select(label=t("steps.alerts.format_label"), v_model=fmt, on_v_model=set_fmt, dense=True,
+                      outlined=True, disabled=busy,
+                      items=[{"text": t(f"steps.alerts.format_{f}"), "value": f} for f in FORMATS],
+                      hint=t(f"steps.alerts.format_help_{fmt}") if fmt else "", persistent_hint=bool(fmt))
             if fmt in ("radd", "ccdc"):
                 rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
                           on_v_model=set_alert_band, dense=True, outlined=True, disabled=busy)
