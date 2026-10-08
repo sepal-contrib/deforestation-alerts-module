@@ -293,7 +293,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _suggest(_ref):
         base = name_from_ref(ref)
         if rgb:
-            tail = f" {t(f'steps.layers.combo_{combo}')}" if combo != "custom" else "_rgb"
+            # the combination's short key, so a long image name keeps a readable base
+            tail = f"_{combo}" if combo != "custom" else "_rgb"
         else:
             tail = f"_{band_text.get(band, band)}" if band is not None else ""
         # the base is shortened, never the combination or band suffix
