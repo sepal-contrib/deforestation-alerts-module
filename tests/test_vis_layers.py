@@ -986,7 +986,8 @@ def test_the_default_name_follows_the_image_and_the_combination_until_typed_over
             want = f"mosaic {t('steps.layers.combo_true_color')}"[:24]
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_combo", v.Select).v_model = "false_color"
-            want = f"mosaic {t('steps.layers.combo_false_color')}"[:24]
+            tail = f" {t('steps.layers.combo_false_color')}"
+            want = "mosaic"[:24 - len(tail)] + tail  # the base gives way, the combination stays whole
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_name").v_model = "mine"
             _field(rc, "steps.layers.field_combo", v.Select).v_model = "swir"

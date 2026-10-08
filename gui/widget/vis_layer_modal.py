@@ -23,7 +23,7 @@ from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine.user_raster import UserRasterError, band_list_request, check_file, read_header
 from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
-from deforestation_alerts.project.names import name_from_ref, suggest_name
+from deforestation_alerts.project.names import name_from_ref, suggest_name_with_tail
 from gui.i18n import t
 from gui.scripts import vis_layers, vis_palettes
 from gui.scripts.error_text import ee_no_access, error_text
@@ -293,11 +293,13 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _suggest(_ref):
         base = name_from_ref(ref)
         if rgb:
-            text = f"{base} {t(f'steps.layers.combo_{combo}')}" if combo != "custom" else f"{base}_rgb"
+            tail = f" {t(f'steps.layers.combo_{combo}')}" if combo != "custom" else "_rgb"
         else:
-            text = f"{base}_{band_text.get(band, band)}" if band is not None else base
-        return suggest_name(text, lambda n: vis_layers.validate_name(n, app_state.project.value, current=editing) is None,
-                            vis_layers.MAX_NAME)
+            tail = f"_{band_text.get(band, band)}" if band is not None else ""
+        # the base is shortened, never the combination or band suffix
+        return suggest_name_with_tail(
+            base, tail, lambda n: vis_layers.validate_name(n, app_state.project.value, current=editing) is None,
+            vis_layers.MAX_NAME)
 
     use_default_name(f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
                      name, set_name, _suggest)

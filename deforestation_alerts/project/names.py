@@ -39,6 +39,22 @@ def suggest_name(base: str, is_ok: Callable[[str], bool], max_len: int = MAX_NAM
     return ""
 
 
+def suggest_name_with_tail(base: str, tail: str, is_ok: Callable[[str], bool], max_len: int = MAX_NAME) -> str:
+    """``<base><tail>`` where the *base* is shortened so the tail (a combination
+    or band suffix such as ``_nir_swir``) stays whole; a clash adds ``_2`` …
+    ``_99`` after the tail. A tail too long to fit leaves the whole text to
+    ``suggest_name``'s plain cut. "" when nothing is accepted."""
+    base, tail = str(base or "").strip(), str(tail or "")
+    if not tail or len(tail) >= max_len:
+        return suggest_name(base + tail, is_ok, max_len)
+    for n in range(1, 100):
+        end = tail + (f"_{n}" if n > 1 else "")
+        candidate = base[: max_len - len(end)].rstrip() + end
+        if is_ok(candidate):
+            return candidate
+    return ""
+
+
 def _key(name) -> str:
     return str(name or "").strip().casefold()
 

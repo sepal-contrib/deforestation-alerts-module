@@ -97,3 +97,18 @@ def test_suggest_name_truncates_and_suffixes_until_accepted():
 def test_suggest_name_gives_up_with_empty_string():
     assert suggest_name("x", lambda n: False) == ""
     assert suggest_name("", lambda n: True) == ""
+
+
+def test_a_long_base_is_shortened_so_the_combination_suffix_stays_whole():
+    from deforestation_alerts.project.names import suggest_name_with_tail
+
+    got = suggest_name_with_tail("a_very_long_asset_name_for_a_mosaic", "_nir_swir_red", lambda n: True)
+    assert got == "a_very_long" + "_nir_swir_red" and len(got) == MAX_NAME
+    got = suggest_name_with_tail("a_very_long_asset_name_for_a_mosaic", " false colour", lambda n: True)
+    assert got.endswith(" false colour") and len(got) == MAX_NAME
+    assert suggest_name_with_tail("short", "_rgb", lambda n: True) == "short_rgb"
+    taken = {"a_very_long" + "_nir_swir_red"}
+    got = suggest_name_with_tail("a_very_long_asset_name_for_a_mosaic", "_nir_swir_red", lambda n: n not in taken)
+    assert got.endswith("_nir_swir_red_2") and len(got) <= MAX_NAME
+    assert suggest_name_with_tail("x", "_a", lambda n: False) == ""
+    assert suggest_name_with_tail("", "", lambda n: True) == ""
