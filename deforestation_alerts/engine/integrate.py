@@ -128,23 +128,57 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     return total
 
 
+def _burn(geoms, sindex, grid: GridSpec, w: Window) -> np.ndarray:
+    """The window's pixels covered by ``geoms`` (pixel-edged polygons in the grid's CRS)."""
+    shp = (int(w.height), int(w.width))
+    t = _window_transform(grid, w)
+    if sindex is None:
+        return np.zeros(shp, bool)
+    idx = sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f))
+    if not len(idx):
+        return np.zeros(shp, bool)
+    return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
+                              dtype="uint8").astype(bool)
+
+
 def rasterize_footprint(gdf_grid: gpd.GeoDataFrame, grid: GridSpec, out_path) -> Path:
     """Burn the polygons (in the grid's CRS) into an Int32 0/1 raster on ``grid``."""
     geoms = gdf_grid.geometry
     sindex = geoms.sindex if len(geoms) else None
     with write_grid_raster(Path(out_path), grid, count=1) as dst:
         for w in _windows(grid):
-            shp = (int(w.height), int(w.width))
-            t = _window_transform(grid, w)
-            arr = np.zeros(shp, np.int32)
-            if sindex is not None:
-                idx = sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f))
-                if len(idx):
-                    arr = features.rasterize(
-                        ((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0, dtype="int32"
-                    )
-            dst.write(arr, 1, window=w)
+            dst.write(_burn(geoms, sindex, grid, w).astype(np.int32), 1, window=w)
     return Path(out_path)
+
+
+STATE_ANALYSABLE, STATE_TOO_SMALL, STATE_OVER_CAP = 1, 2, 3
+
+
+def write_states(base_path, grid: GridSpec, out_path, eligible: gpd.GeoDataFrame, kept: gpd.GeoDataFrame) -> dict:
+    """Copy the 3-band ``base_path`` into the 4-band ``out_path``; band 4 is each
+    alert pixel's state (spec §6): analysable in ``kept``, over the cap in
+    ``eligible`` but not ``kept``, else too small. Both are the vectorizer's
+    pixel-edged polygons in the grid's CRS, so the burn is exact."""
+    e_geoms, k_geoms = eligible.geometry, kept.geometry
+    e_idx = e_geoms.sindex if len(e_geoms) else None
+    k_idx = k_geoms.sindex if len(k_geoms) else None
+    counts = {"too_small_px": 0, "over_cap_px": 0}
+    with rasterio.open(base_path) as src, write_grid_raster(Path(out_path), grid, count=4) as dst:
+        for w in _windows(grid):
+            bands = [src.read(b, window=w) for b in (1, 2, 3)]
+            alert = bands[0] > 0
+            in_kept = _burn(k_geoms, k_idx, grid, w) & alert
+            in_elig = _burn(e_geoms, e_idx, grid, w) & alert
+            state = np.zeros(alert.shape, np.int32)
+            state[alert] = STATE_TOO_SMALL
+            state[in_elig] = STATE_OVER_CAP
+            state[in_kept] = STATE_ANALYSABLE
+            for i, arr in enumerate(bands, start=1):
+                dst.write(arr, i, window=w)
+            dst.write(state, 4, window=w)
+            counts["too_small_px"] += int((state == STATE_TOO_SMALL).sum())
+            counts["over_cap_px"] += int((state == STATE_OVER_CAP).sum())
+    return counts
 
 
 _SORTS = {
@@ -269,16 +303,20 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     # A run killed outright (SIGKILL) leaves its staged files behind; swept
     # before the gate so they do not count against it. The set's folder has
     # one writer (the ``integrate:{project}`` in-flight key).
-    _sweep_staged(staged)
-    # A run stages the combined raster (3 bands) and the footprint (1 band);
+    base = _staged(combined).with_name(_staged(combined).stem + ".base" + combined.suffix)
+    _sweep_staged({**staged, base: base})  # the base has no final name; it is swept like a staged file
+    # A run stages the combined raster (4 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
-    # estimate. Each Earth Engine attribute layer is downloaded into the
+    # estimate. The temporary 3-band raster the vectorizer reads sits beside
+    # them until the states are written, counted once more (Paraguay at 10 m:
+    # ~21.4 GB). Each Earth Engine attribute layer is downloaded into the
     # scratch folder (normally the system tmp), counted uncompressed: its
     # continuous bands compress far less than alerts (spec §7.4 step 0). The
     # layers' downloads are summed (spec D3). One budget when both are on one
     # disk.
-    staged_bytes = 2 * compressed_estimate(estimate_bytes(p.grid, bands=3 + 1))
+    staged_bytes = (2 * compressed_estimate(estimate_bytes(p.grid, bands=4 + 1))
+                    + compressed_estimate(estimate_bytes(p.grid, bands=3)))
     layers = job.params.attribute_list()
     attr_bytes = sum(download_estimate(layer, p.aoi.bounds) for layer in layers)
     scratch = gdal_env.scratch_dir() if attr_bytes else None
@@ -304,14 +342,16 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     ]
     digit_map = {p.sources[s].digit: s for s in sources}
     try:
-        combine(harm_paths, p.grid, staged[combined], footprints=fp_paths,
+        combine(harm_paths, p.grid, base, footprints=fp_paths,
                 confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
-        vgdf = vectorize_alerts(
-            staged[combined], min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution)
+        eligible = vectorize_alerts(
+            base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution)
         )
-        vgdf = sort_and_cut(vgdf, job.params.sorting, job.params.max_alerts)
+        vgdf = sort_and_cut(eligible, job.params.sorting, job.params.max_alerts)
+        state_counts = write_states(base, p.grid, staged[combined], eligible, vgdf)
+        base.unlink(missing_ok=True)
 
         # The alerts, attribute statistics included, are built before the
         # footprint: the attribute layers (Earth Engine exports for "gee") are
@@ -355,13 +395,15 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         for final, part in staged.items():
             os.replace(part, final)
     except BaseException:
+        base.unlink(missing_ok=True)
         for part in staged.values():
             part.unlink(missing_ok=True)
         raise
 
     # New content ids and sizes, taken from the files now in place (spec §5.3).
     artifacts = {
-        combined_key(sid): make_artifact(combined_key(sid), "combined", pdir, combined, inputs_fp),
+        combined_key(sid): make_artifact(combined_key(sid), "combined", pdir, combined, inputs_fp,
+                                           stats={"states": 1, **state_counts}),
         footprint_key(sid): make_artifact(footprint_key(sid), "footprint", pdir, footprint, inputs_fp),
         store_key(sid): make_artifact(store_key(sid), "store", pdir, store, inputs_fp),
     }

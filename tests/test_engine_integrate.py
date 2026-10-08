@@ -200,6 +200,27 @@ def test_run_integration_end_to_end(ready_project):
     assert {fp.combined_key(s.id), fp.footprint_key(s.id), fp.store_key(s.id)} <= set(res.artifacts)
 
 
+@_LONLAT_CENTROID
+def test_combined_band_4_tags_kept_too_small_and_over_cap(ready_project):
+    p, pdir = ready_project
+    arrays = _clusters()
+    arrays["GLAD-L"][35, 35:37] = 1      # a 2 px speck
+    _prepare(p, pdir, JAN, arrays, 2026015)
+    params = AlertSetParams(min_size_ha=0.1, sorting=1, max_alerts=1)  # 10 px minimum, keep 1
+    res = integrate.run_integration(_job(p, pdir, JAN, params))
+    s = res.alert_set
+    with rasterio.open(pdir / s.combined_rel_path) as src:
+        assert src.count == 4
+        state = src.read(4)
+    assert state[5, 5] == integrate.STATE_ANALYSABLE
+    assert state[21, 21] == integrate.STATE_OVER_CAP
+    assert state[35, 35] == integrate.STATE_TOO_SMALL
+    assert int((state == 1).sum()) == 64
+    art = res.artifacts[fp.combined_key(s.id)]
+    assert art.stats == {"states": 1, "too_small_px": 2, "over_cap_px": 16}
+    assert not list(pdir.rglob("*.base*"))
+
+
 def _record_space_checks(monkeypatch, *, fail=False):
     """Record every ``(folder, needed bytes)`` Integrate checks; ``fail`` makes
     the check raise instead of passing."""
@@ -216,23 +237,27 @@ def _record_space_checks(monkeypatch, *, fail=False):
 
 @_LONLAT_CENTROID
 def test_the_integrate_gate_asks_for_twice_the_compressed_staged_rasters(ready_project, monkeypatch):
-    """User decision 2026-10-01: the staged combined raster (3 bands) and
+    """User decision 2026-10-01: the staged combined raster (4 bands) and
     footprint (1 band), at 5 % of their uncompressed size, twice over (the
-    replaced set's files stay beside them until the swap)."""
+    replaced set's files stay beside them until the swap), plus the temporary
+    3-band raster once."""
     p, pdir = ready_project
     seen = _record_space_checks(monkeypatch)
     res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
-    needed = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(GRID, bands=4))
+    needed = (2 * raster_io.compressed_estimate(gridmod.estimate_bytes(GRID, bands=5))
+              + raster_io.compressed_estimate(gridmod.estimate_bytes(GRID, bands=3)))
     assert seen == [(paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]), needed)]
-    assert needed == 2 * math.ceil(GRID.width * GRID.height * 4 * 4 * 0.05)  # 2560 bytes for 40 x 40 px
+    px = GRID.width * GRID.height * 4
+    assert needed == 2 * math.ceil(px * 5 * 0.05) + math.ceil(px * 3 * 0.05)  # 3680 bytes for 40 x 40 px
     assert res.alert_set.n_alerts == 2
 
 
 def test_a_national_10m_integrate_needs_under_15_gb(ready_project, monkeypatch):
     """Paraguay at 10 m (88,236 x 93,387 px): the old bound, 36 B/px (three
-    times a 3-band Int32 raster), asked for ~297 GB; the compressed estimate of
-    the 4 staged bands asks for ~13.2 GB. The gate runs before anything is
-    written."""
+    times a 3-band Int32 raster), asked for ~297 GB; the compressed estimate
+    asks for ~21.4 GB: the final 4-band raster plus the footprint, doubled,
+    plus the temporary 3-band base. The bound still guards against the old
+    figure. The gate runs before anything is written."""
     p, pdir = ready_project
     rows = integrate.plan_prepare(p, pdir, JAN)  # ready on the small grid
     monkeypatch.setattr(integrate, "plan_prepare", lambda *a: rows)
@@ -242,8 +267,9 @@ def test_a_national_10m_integrate_needs_under_15_gb(ready_project, monkeypatch):
     with pytest.raises(raster_io.NotEnoughSpaceError):
         integrate.run_integration(_job(big, pdir, JAN, AlertSetParams()))
     [(_, needed)] = seen
-    assert needed == 2 * raster_io.compressed_estimate(88_236 * 93_387 * 4 * 4)
-    assert 13e9 < needed < 15e9
+    px = 88_236 * 93_387 * 4
+    assert needed == 2 * raster_io.compressed_estimate(px * 5) + raster_io.compressed_estimate(px * 3)
+    assert 21e9 < needed < 22e9
     assert not paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]).exists()
 
 
@@ -554,7 +580,8 @@ def test_staged_leftovers_of_a_killed_run_are_swept(ready_project, monkeypatch):
     p, pdir = ready_project
     sdir = paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"])
     sdir.mkdir(parents=True)
-    leftovers = [sdir / "alert_db.staged.parquet", sdir / "footprint.staged.tif.part",
+    leftovers = [sdir / "alert_db.staged.parquet", (lambda c: c.with_name(c.stem + ".staged.base" + c.suffix))(
+        paths.combined_path(sdir, ["GLAD-L", "RADD"], JAN.start, JAN.end)), sdir / "footprint.staged.tif.part",
                  sdir / "alert_db.staged.parquet.0123abcd.part"]
     for f in leftovers:
         f.write_bytes(b"old")
@@ -567,7 +594,7 @@ def test_staged_leftovers_of_a_killed_run_are_swept(ready_project, monkeypatch):
 
     monkeypatch.setattr(integrate, "combine", combine)
     integrate.run_integration(_job(p, pdir, JAN, AlertSetParams()))
-    assert seen == [[False, False, False]]
+    assert seen == [[False] * 4]
     assert not list(sdir.glob("*.staged.*"))
 
 
@@ -585,7 +612,8 @@ def test_the_gate_counts_an_earth_engine_attribute_download(ready_project, monke
     integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_config=cfg)))
     from deforestation_alerts.engine.raster_io import compressed_estimate
     from deforestation_alerts.scripts.attribute_source import download_estimate
-    staged = 2 * compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    staged = (2 * compressed_estimate(gridmod.estimate_bytes(p.grid, bands=5))
+              + compressed_estimate(gridmod.estimate_bytes(p.grid, bands=3)))
     # the scratch folder is on the project's disk here: one check for both
     assert asked[0] == staged + download_estimate(cfg, p.aoi.bounds)
 
@@ -610,7 +638,8 @@ def test_an_attribute_download_is_gated_on_the_scratch_disk_uncompressed(ready_p
     cfg = {"source": "COPERNICUS/S2_SR/x", "kind": "gee",
            "bands": [{"band": "B4", "stat": "mean", "column": "b4", "crs": "EPSG:32721", "scale": 10.0}]}
     integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_config=cfg)))
-    staged = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    staged = (2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=5))
+              + raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=3)))
     assert seen == [(paths.set_dir(pdir, JAN.id, ["GLAD-L", "RADD"]), staged),
                     (scratch, download_estimate(cfg, p.aoi.bounds))]
 
@@ -638,7 +667,8 @@ def test_the_gate_sums_the_earth_engine_layers_and_each_layer_attributes_in_orde
            "bands": [{"band": "elevation", "stat": "mean", "column": "elevation", "crs": "EPSG:4326",
                       "scale": 30.0}]}
     integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(attribute_layers=[s2, local, dem])))
-    staged = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=4))
+    staged = (2 * raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=5))
+              + raster_io.compressed_estimate(gridmod.estimate_bytes(p.grid, bands=3)))
     each = [download_estimate(cfg, p.aoi.bounds) for cfg in (s2, dem)]
     assert all(n > 0 for n in each)
     assert asked[0] == staged + sum(each)  # the scratch folder is on the project's disk here: one check
