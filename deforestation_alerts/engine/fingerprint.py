@@ -246,7 +246,13 @@ def carry_sets(p: Project, period: Period, sources) -> list:
     """Earlier sets whose not-analysable pixels feed this period's run (spec §6):
     their period ends on or after this window's start, their combined raster
     carries pixel states, and they share a source with ``sources``. Each comes
-    with its digit remap ``{old_digit: new_digit}`` for the shared sources."""
+    with its digit remap ``{old_digit: new_digit}`` for the shared sources.
+
+    ``set_inputs`` fingerprints a carry by the carry set's combined raster
+    content id only. The date floor (the carry set's own window start) and the
+    remap are left out on purpose: they change only when the carry set itself
+    changes (its period's look-back, its sources), and that re-runs or stales
+    the carry set first, giving its combined raster a new content id."""
     win_start, _ = period.search_window()
     out = []
     for s in earlier_sets(p, period):
