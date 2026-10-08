@@ -76,7 +76,7 @@ def period_rows(p, pdir, *, select, edit, delete) -> list:
     rows = []
     for period in periods.periods_newest_first(p):
         b = badges(p, pdir, period)
-        ws, we = period.search_window(p.look_back_days)
+        ws, we = period.search_window()
         notes = [{"text": t("steps.period.window", start=ws.isoformat(), end=we.isoformat()), "tone": None}]
         if b["stale_sources"]:
             notes.append({"text": t("steps.period.note_sources_stale", count=b["stale_sources"]), "tone": "warning"})
@@ -234,7 +234,17 @@ def _PeriodList(app_state, layers):
             notifications.success(t("steps.period.deleted"))
 
     def _apply_look_back():
-        error, _, applied = _change(lambda q: (periods.set_look_back(q, look_back), []))
+        # Temporary until the per-period dialog (Task 5): one value for every period.
+        error, days = periods.parse_look_back(look_back)
+        if not error:
+            def _set_all(q):
+                q.look_back_days = days
+                q.periods = {k: v.model_copy(update={"look_back_days": days}) for k, v in q.periods.items()}
+                return None, []
+
+            _, _, applied = _change(_set_all)
+        else:
+            applied = False
         if error:
             notifications.error(t(f"steps.period.error_{error}"))
         elif applied:

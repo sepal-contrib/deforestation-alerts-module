@@ -156,7 +156,7 @@ def main():
     p.aoi = AoiRecord(spec={}, name=a.admin, method=f"ADMIN{a.level}", digest=f"admin:{a.admin}", bounds=bounds)
     p.grid = gridmod.build_grid(bounds, gridmod.auto_utm_epsg(bounds), a.res)
     p.periods[per.id] = per
-    win_start, win_end = per.search_window(p.look_back_days)
+    win_start, win_end = per.search_window()
     print(f"output {out}")
     print(f"grid {p.grid.width} x {p.grid.height} @ {a.res} m in {p.grid.epsg}, workers {worker_threads()}")
     print(f"search window {win_start.isoformat()} .. {win_end.isoformat()} (look_back_days={p.look_back_days})")

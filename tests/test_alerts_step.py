@@ -68,7 +68,7 @@ def test_preview_window_prefers_the_active_period():
     per = Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31))
     p.periods["x"] = per
     p.active_period = "x"
-    assert catalogue_meta.preview_window(p, "RADD") == per.search_window(p.look_back_days)
+    assert catalogue_meta.preview_window(p, "RADD") == per.search_window()
 
 
 def test_preview_window_without_period_is_the_covered_span():

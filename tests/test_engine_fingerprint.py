@@ -51,8 +51,8 @@ def test_raw_status_lifecycle(proj):
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.MISSING
     _prepare(p, pdir, JAN, "GLAD-L")
     assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.CURRENT
-    p.look_back_days = 30  # the window changes
-    assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", JAN)) is fp.Status.STALE
+    short = JAN.model_copy(update={"look_back_days": 30})  # the window changes
+    assert fp.status(p, pdir, key, fp.raw_alert_inputs(p, "GLAD-L", short)) is fp.Status.STALE
 
 
 def test_aoi_change_makes_raw_stale(proj):
@@ -175,7 +175,7 @@ def test_a_look_back_change_makes_a_set_stale_before_any_rerun(proj):
     _prepare(p, pdir, JAN, "GLAD-L")
     jan = _set(p, pdir, JAN, ["GLAD-L"])
     assert fp.set_status(p, pdir, jan) is fp.Status.CURRENT
-    p.look_back_days = 30  # the search window changes: the raw download is out of date
+    p.periods[JAN.id] = JAN.model_copy(update={"look_back_days": 30})  # the search window changes: the raw download is out of date
     assert fp.set_status(p, pdir, jan) is fp.Status.STALE
 
 

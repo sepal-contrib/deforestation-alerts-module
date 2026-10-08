@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, Optional, Union
 
 from affine import Affine
-from pydantic import BaseModel, Field, field_validator, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.scripts.naming import safe_token
@@ -170,10 +170,11 @@ class Period(BaseModel):
     id: str
     start: date
     end: date
+    look_back_days: int = 90
     masks: dict[str, PeriodMask] = {}  # a project mask absent here is off in this period
 
-    def search_window(self, look_back_days: int) -> tuple[date, date]:
-        return self.start - timedelta(days=int(look_back_days)), self.end
+    def search_window(self) -> tuple[date, date]:
+        return self.start - timedelta(days=int(self.look_back_days)), self.end
 
 
 class RegionCoverage(BaseModel):
@@ -348,6 +349,20 @@ class Project(BaseModel):
     active_set: Optional[str] = None
     report_template: Optional[str] = None
     questions: list[Question] = Field(default_factory=default_questions)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _periods_inherit_look_back(cls, data):
+        """A period stored before look-back moved onto periods takes the
+        project's value, so its window (and every fingerprint) is unchanged."""
+        if isinstance(data, dict):
+            days = data.get("look_back_days", 90)
+            periods_ = data.get("periods") or {}
+            if any(isinstance(v, dict) and "look_back_days" not in v for v in periods_.values()):
+                data = {**data, "periods": {k: ({**v, "look_back_days": days}
+                                                if isinstance(v, dict) and "look_back_days" not in v else v)
+                                            for k, v in periods_.items()}}
+        return data
 
     @property
     def locked(self) -> bool:

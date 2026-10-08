@@ -74,7 +74,7 @@ def test_grid_transform_and_signature():
 def test_period_window_and_ids():
     per = Period(id=period_id(date(2026, 2, 1), date(2026, 2, 28)), start=date(2026, 2, 1), end=date(2026, 2, 28))
     assert per.id == "2026-02-01_2026-02-28"
-    assert per.search_window(90) == (date(2025, 11, 3), date(2026, 2, 28))
+    assert per.search_window() == (date(2025, 11, 3), date(2026, 2, 28))
     assert set_id(per.id, ["RADD", "GLAD-L"]) == "2026-02-01_2026-02-28__glad-l-radd"
 
 
@@ -248,3 +248,45 @@ def test_a_project_saved_before_attribute_layers_loads_its_raster_as_one_layer()
     assert "attribute_layers" not in text  # what an older manifest holds
     params = Project.model_validate_json(text).alert_sets["s"].params
     assert params.attribute_layers == [] and params.attribute_list() == [LEGACY_CFG]
+
+
+NOW = datetime(2026, 1, 1)
+
+
+def test_a_period_stored_without_look_back_takes_the_projects():
+    raw = Project(name="x", created_at=NOW, updated_at=NOW).model_dump(mode="json")
+    raw["look_back_days"] = 31
+    raw["periods"] = {"2026-01-01_2026-01-31": {"id": "2026-01-01_2026-01-31", "start": "2026-01-01",
+                                                "end": "2026-01-31", "masks": {}}}
+    p = Project.model_validate(raw)
+    period = p.periods["2026-01-01_2026-01-31"]
+    assert period.look_back_days == 31
+    assert period.search_window() == (date(2025, 12, 1), date(2026, 1, 31))
+
+
+def test_old_manifest_keeps_every_status(tmp_path):
+    """A d438e0b-era manifest (no per-period look-back) reopens with every raw
+    and harmonized artifact CURRENT as before."""
+    from deforestation_alerts.engine import fingerprint as fp
+    from deforestation_alerts.project.models import AoiRecord
+    from tests._integrate_helpers import GRID, blank, prepare
+
+    p = Project(name="old", created_at=NOW, updated_at=NOW, look_back_days=31)
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
+    p.grid = GRID
+    add_predefined_source(p, "GLAD-L")
+    per = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31), look_back_days=31)
+    p.periods[per.id] = per
+    arr = blank()
+    arr[2:10, 2:10] = 1
+    prepare(p, tmp_path, per, {"GLAD-L": arr}, 2026015)
+    raw = p.model_dump(mode="json")
+    for d in raw["periods"].values():
+        del d["look_back_days"]
+    p2 = Project.model_validate(raw)
+    per2 = p2.periods[per.id]
+    assert per2.look_back_days == 31
+    assert fp.status(p2, tmp_path, fp.raw_key(per.id, "GLAD-L"),
+                     fp.raw_alert_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT
+    assert fp.status(p2, tmp_path, fp.harm_key(per.id, "GLAD-L"),
+                     fp.harmonized_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT

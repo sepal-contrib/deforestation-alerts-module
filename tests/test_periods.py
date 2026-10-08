@@ -193,15 +193,52 @@ def test_deleting_replaces_the_shared_containers(tmp_path):
 # ---------------------------------------------------------------------------
 # Look-back, selection, ordering
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("value", ["-1", "x", "1.5", ""])
-def test_a_bad_look_back_is_refused(value):
+@pytest.mark.parametrize("value", ["", "-1", "abc", "1.5"])
+def test_bad_look_back_is_refused(value):
+    assert periods.parse_look_back(value)[0] == "bad_look_back"
+
+
+def test_look_back_is_parsed():
+    assert periods.parse_look_back(" 30 ") == (None, 30)
+
+
+def test_new_period_records_its_look_back_and_remembers_it():
     p = _p()
-    assert periods.set_look_back(p, value) == "bad_look_back" and p.look_back_days == 90
+    assert periods.new_period(p, "2026-01-01", "2026-01-31", "45") is None
+    assert p.periods["2026-01-01_2026-01-31"].look_back_days == 45 and p.look_back_days == 45
 
 
-def test_look_back_and_selection():
+def test_new_period_without_a_look_back_uses_the_projects():
+    p = _p()
+    p.look_back_days = 12
+    assert periods.new_period(p, "2026-01-01", "2026-01-31") is None
+    assert p.periods["2026-01-01_2026-01-31"].look_back_days == 12
+
+
+def test_a_bad_look_back_changes_nothing():
+    p = _p()
+    assert periods.new_period(p, "2026-01-01", "2026-01-31", "-2") == "bad_look_back"
+    assert not p.periods and p.look_back_days == 90
+
+
+def test_a_period_with_sets_can_change_only_its_look_back(tmp_path):
+    p = _periods(_p(), ("2026-01-01", "2026-01-31"))
+    _with_set(p, tmp_path, JAN_ID)
+    period = p.periods[JAN_ID]
+    err, gone = periods.edit_period(p, JAN_ID, period.start.isoformat(), period.end.isoformat(), "10")
+    assert err is None and gone == [] and p.periods[JAN_ID].look_back_days == 10 and p.look_back_days == 10
+    err, _ = periods.edit_period(p, JAN_ID, "2020-01-01", period.end.isoformat(), "10")
+    assert err == "locked"
+
+
+def test_a_moved_period_takes_the_new_look_back():
+    p = _periods(_p(), ("2026-01-01", "2026-01-31"))
+    err, _ = periods.edit_period(p, JAN_ID, "2026-01-02", "2026-01-31", "5")
+    assert err is None and p.periods["2026-01-02_2026-01-31"].look_back_days == 5
+
+
+def test_selection():
     p = _periods(_p(), ("2026-01-01", "2026-01-31"), ("2026-02-01", "2026-02-28"))
-    assert periods.set_look_back(p, " 30 ") is None and p.look_back_days == 30
     periods.select_period(p, JAN_ID)
     assert p.active_period == JAN_ID
     periods.select_period(p, "gone")

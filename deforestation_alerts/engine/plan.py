@@ -92,7 +92,7 @@ def plan_masks(p: Project, pdir, period: Optional[Period]) -> list[MaskRow]:
 
 
 def plan_prepare(p: Project, pdir, period: Period) -> list[PrepareRow]:
-    a, b = period.search_window(p.look_back_days)
+    a, b = period.search_window()
     harmonized = period_harmonized_inputs(p, period)  # the period's mask checks once, not once per source
     rows = []
     for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):

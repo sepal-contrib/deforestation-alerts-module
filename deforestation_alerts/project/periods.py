@@ -3,7 +3,10 @@
 - A new period pre-fills its start as the latest period's end plus one day and
   its end as today, needs ``end > start``, and starts with a copy of the mask
   choices of the period with the latest start (empty for the first one).
-- A period's dates cannot change once it has sets. Changing them before that
+- Each period has its own look-back (days before its start that the alert
+  search covers); ``Project.look_back_days`` is the value a new period starts
+  with, set to the last value used.
+- A period's dates cannot change once it has sets (its look-back can). Changing them before that
   gives the period a new id (its nominal dates are its id); its downloads and
   harmonized files were made for the old window, so their records are dropped.
 - A period can be deleted only when it has no sets, or when it is the latest
@@ -69,7 +72,22 @@ def prefill(p: Project, today: date) -> tuple[str, str]:
     return start.isoformat(), today.isoformat()
 
 
-def new_period(p: Project, start, end) -> Optional[str]:
+def parse_look_back(value) -> tuple[Optional[str], Optional[int]]:
+    try:
+        days = int(str(value).strip())
+    except ValueError:
+        return "bad_look_back", None
+    return ("bad_look_back", None) if days < 0 else (None, days)
+
+
+def new_period(p: Project, start, end, look_back=None) -> Optional[str]:
+    """``look_back`` None means the value a new period starts with
+    (``p.look_back_days``); the value used is remembered there."""
+    days = p.look_back_days
+    if look_back is not None:
+        error, days = parse_look_back(look_back)
+        if error:
+            return error
     error, dates = parse_dates(start, end)
     if error:
         return error
@@ -77,25 +95,42 @@ def new_period(p: Project, start, end) -> Optional[str]:
     pid = period_id(a, b)
     if pid in p.periods:
         return "exists"
-    p.periods = {**p.periods, pid: Period(id=pid, start=a, end=b, masks=latest_period_masks(p))}
+    p.periods = {**p.periods, pid: Period(id=pid, start=a, end=b, look_back_days=days,
+                                                 masks=latest_period_masks(p))}
+    p.look_back_days = days
     p.active_period = pid
     return None
 
 
-def edit_period(p: Project, pid: str, start, end) -> tuple[Optional[str], list[str]]:
-    if sets_of(p, pid):
-        return "locked", []
+def edit_period(p: Project, pid: str, start, end, look_back=None) -> tuple[Optional[str], list[str]]:
+    """A look-back-only change is allowed on a period with sets (its raw
+    downloads then read out of date through their window, spec §5.3); changed
+    dates are not."""
+    days = None
+    if look_back is not None:
+        error, days = parse_look_back(look_back)
+        if error:
+            return error, []
     error, dates = parse_dates(start, end)
     if error:
         return error, []
     a, b = dates
     new_id = period_id(a, b)
     if new_id == pid:
+        if days is not None:
+            p.periods = {**p.periods, pid: p.periods[pid].model_copy(update={"look_back_days": days})}
+            p.look_back_days = days
         return None, []
+    if sets_of(p, pid):
+        return "locked", []
     if new_id in p.periods:
         return "exists", []
     gone = drop_artifacts(p, period_artifact_keys(p, pid))
-    moved = p.periods[pid].model_copy(update={"id": new_id, "start": a, "end": b})
+    update = {"id": new_id, "start": a, "end": b}
+    if days is not None:
+        update["look_back_days"] = days
+        p.look_back_days = days
+    moved = p.periods[pid].model_copy(update=update)
     p.periods = {**{k: v for k, v in p.periods.items() if k != pid}, new_id: moved}
     if p.active_period == pid:
         p.active_period = new_id
@@ -124,19 +159,6 @@ def delete_period(p: Project, pid: str) -> tuple[Optional[str], list[str]]:
         newest = sets_newest_first(p)
         p.active_set = newest[0].id if newest else None
     return None, gone
-
-
-def set_look_back(p: Project, value) -> Optional[str]:
-    """Look-back is a project field (spec §6.4); changing it makes the raw
-    downloads out of date through their window (spec §5.3)."""
-    try:
-        days = int(str(value).strip())
-    except ValueError:
-        return "bad_look_back"
-    if days < 0:
-        return "bad_look_back"
-    p.look_back_days = days
-    return None
 
 
 def select_period(p: Project, pid: str) -> None:

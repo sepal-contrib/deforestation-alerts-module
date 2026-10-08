@@ -108,7 +108,7 @@ def aoi_raster_inputs(p: Project) -> dict:
 def raw_alert_inputs(p: Project, source: str, period: Period) -> dict:
     """The raw download is in the source's native projection, not on the grid
     (user decision 2026-09-30), so a grid change never makes it out of date."""
-    win_start, win_end = period.search_window(p.look_back_days)
+    win_start, win_end = period.search_window()
     src = p.sources[source]
     return {
         "stage": "raw_alert",

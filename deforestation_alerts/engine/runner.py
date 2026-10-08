@@ -203,7 +203,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     if p.aoi is None or p.grid is None:
         raise ProjectRuleError("the project needs an AOI and a grid before a download", key="errors.no_aoi_or_grid")
     src = p.sources[job.source]
-    win_start, win_end = period.search_window(p.look_back_days)
+    win_start, win_end = period.search_window()
     state, notes = window_coverage(record_for(p, job.source), job.source, win_start, win_end)
     if state in BLOCKED:
         raise CoverageRefused(job.source, state, notes)

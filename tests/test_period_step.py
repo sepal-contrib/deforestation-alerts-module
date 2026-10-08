@@ -132,7 +132,7 @@ def _button(rc, label):
 # ---------------------------------------------------------------------------
 def test_rows_are_newest_first_with_the_window_the_sets_and_the_badges(env):
     p = _project(env.pdir)
-    p.look_back_days = 30
+    p.periods = {k: v.model_copy(update={"look_back_days": 30}) for k, v in p.periods.items()}
     _add_set(p, env.pdir, JAN_ID)
     rows = {r["key"]: r for r in period_step.period_rows(p, env.pdir, select=None, edit=None, delete=None)}
     assert list(rows) == [FEB_ID, JAN_ID]

@@ -10,5 +10,5 @@ def preview_window(project, source) -> tuple:
     covering regions hold for this AOI; for an undated custom source, every date."""
     period = project.periods.get(project.active_period) if project.active_period else None
     if period is not None:
-        return period.search_window(project.look_back_days)
+        return period.search_window()
     return data_window(record_for(project, source)) or (date(2000, 1, 1), date.today())

@@ -15,10 +15,11 @@ from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine import integrate, raster_io
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
-    AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
+    AlertSetParams, AoiRecord, Period, Project, add_predefined_source,
 )
 
-GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
+from tests._integrate_helpers import GRID, blank, prepare, write  # noqa: E402
+
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
 
@@ -29,15 +30,7 @@ DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025,
 _LONLAT_CENTROID = pytest.mark.filterwarnings("ignore:Geometry is in a geographic CRS:UserWarning")
 
 
-def _write(path, alert, dates):
-    with raster_io.write_grid_raster(path, GRID, count=2) as dst:
-        dst.write(alert.astype("int32"), 1)
-        dst.write(dates.astype("int32"), 2)
-    return path
-
-
-def _blank():
-    return np.zeros((GRID.height, GRID.width), dtype="int64")
+_write, _blank = write, blank
 
 
 def test_min_cluster_pixels():
@@ -171,17 +164,7 @@ def test_sort_and_cut():
     assert list(integrate.sort_and_cut(gdf, 4, 0)["alert_date_min"])[0] == 2026.01
 
 
-def _prepare(p, pdir, period, arrays, day):
-    """Record raw and harmonized artifacts per source, as Download & harmonize leaves them."""
-    ws, we = period.search_window(p.look_back_days)
-    for name, arr in arrays.items():
-        dates = np.where(arr > 0, day, 0)
-        raw = _write(paths.raw_path(pdir, period.id, name, ws, we), arr, dates)
-        p.artifacts[fp.raw_key(period.id, name)] = fp.make_artifact(
-            fp.raw_key(period.id, name), "raw_alert", pdir, raw, fp.raw_alert_inputs(p, name, period))
-        harm = _write(paths.harmonized_path(pdir, period.id, name, ws, we), arr, dates)
-        p.artifacts[fp.harm_key(period.id, name)] = fp.make_artifact(
-            fp.harm_key(period.id, name), "harmonized", pdir, harm, fp.harmonized_inputs(p, name, period))
+_prepare = prepare
 
 
 def _clusters():
@@ -508,7 +491,7 @@ def test_a_failed_first_run_leaves_no_files(ready_project, monkeypatch):
 
 def _prepare_dated(p, pdir, period, name, alert, dates):
     """One source's raw and harmonized files with per-pixel dates, recorded."""
-    ws, we = period.search_window(p.look_back_days)
+    ws, we = period.search_window()
     raw = _write(paths.raw_path(pdir, period.id, name, ws, we), alert, dates)
     p.artifacts[fp.raw_key(period.id, name)] = fp.make_artifact(
         fp.raw_key(period.id, name), "raw_alert", pdir, raw, fp.raw_alert_inputs(p, name, period))
@@ -526,9 +509,8 @@ def test_a_second_month_catches_a_late_alert_and_repeats_no_first_month_pixel(tm
     p = Project(name="two", created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
     p.grid = GRID
-    p.look_back_days = 31
     add_predefined_source(p, "GLAD-L")
-    p.periods = {DEC.id: DEC, JAN.id: JAN}
+    p.periods = {k: v.model_copy(update={"look_back_days": 31}) for k, v in {DEC.id: DEC, JAN.id: JAN}.items()}
     seen, late, own = _blank(), _blank(), _blank()
     seen[2:10, 2:10] = 1   # in December's download
     late[20:24, 2:6] = 1   # dated in December, published after December's run

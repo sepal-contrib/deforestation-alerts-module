@@ -1,5 +1,6 @@
 """Download & harmonize rows for coverage and custom sources, offline."""
 
+import dataclasses
 from datetime import date, datetime
 from pathlib import Path
 
@@ -182,8 +183,8 @@ def test_a_superseded_raw_file_is_deleted(tmp_path, cover, no_ee):
     cover(p, "tif")
     runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
     old = tmp_path / p.artifacts[fp.raw_key(JAN.id, "tif")].rel_path
-    p.look_back_days = 10  # a new window, a new file name
-    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    job = dataclasses.replace(_job(p, tmp_path, "tif"), period=JAN.model_copy(update={"look_back_days": 10}))
+    runner.apply_artifacts(p, runner.run_source_row(job))  # a new window, a new file name
     new = tmp_path / p.artifacts[fp.raw_key(JAN.id, "tif")].rel_path
     assert new != old and new.exists() and not old.exists()
 
