@@ -16,7 +16,7 @@ from typing import Optional
 from deforestation_alerts.engine.raster_io import ensure_overviews
 from deforestation_alerts.errors import FolderNotWritable, UserFileMissing
 from gui.i18n import t
-from gui.scripts import legend_specs, raster_map
+from gui.scripts import legend_specs, raster_map, vis_palettes
 from gui.scripts.legend_data import format_number
 
 NICFI_COLLECTIONS = {
@@ -26,8 +26,6 @@ NICFI_COLLECTIONS = {
 }
 NICFI_VIS = {"bands": ["R", "G", "B"], "min": 0, "max": 1600}  # the Analysis maps' Planet true colour
 KINDS = ("gee", "file", "nicfi")
-#: the colormaps a GeoTIFF layer offers (matplotlib names)
-COLORMAPS = ("viridis", "magma", "Greens", "YlOrBr", "terrain", "gray")
 MAX_NAME = 24
 
 
@@ -94,15 +92,25 @@ def validate_name(name, project, current: Optional[str] = None) -> Optional[str]
     return None
 
 
+def _ramp_label(palette) -> Optional[str]:
+    """The name of the colour ramp ``palette`` is (either way round), else None."""
+    key, _inverted = vis_palettes.ramp_choice(palette)
+    return t(f"steps.layers.ramp_{key}") if key else None
+
+
 def vis_layers_summary(layer) -> str:
-    """The layer's details note: its bands or band and colormap and its range,
-    or the NICFI month."""
+    """The layer's details note: its bands, or its band and colour ramp, and
+    its range, or the NICFI month."""
     if layer.kind == "nicfi":
         return layer.month or t("steps.layers.nicfi_period_month")
     span = f"{format_number(layer.min)}–{format_number(layer.max)}"
+    if len(layer.bands) == 3:
+        return f"{t('steps.layers.summary_rgb', bands=', '.join(str(b) for b in layer.bands))} · {span}"
     if layer.kind == "gee":
-        return f"{', '.join(layer.bands)} · {span}"
-    return f"{t('steps.layers.summary_band', band=layer.band)} · {layer.colormap} · {span}"
+        return f"{_ramp_label(layer.palette) or ', '.join(layer.bands)} · {span}"
+    ramp = _ramp_label(layer.palette) or (layer.colormap if not layer.palette else None)
+    parts = [t("steps.layers.summary_band", band=layer.band), ramp, span]
+    return " · ".join(p for p in parts if p)
 
 
 def refresh_nicfi_layers(layers, map_, project, *, today: date, notifier=None) -> None:
@@ -144,8 +152,13 @@ def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
                 raise FolderNotWritable(f"the folder {folder} is not writable", key="steps.layers.err_folder",
                                         folder=folder)
             ensure_overviews(layer.path, resampling="nearest")
-            raster_map.add_raster_layer(map_, layer.path, key=key, name=layer.name, band=int(layer.band),
-                                        colormap=colormaps[layer.colormap], vmin=layer.min, vmax=layer.max,
-                                        nodata=None, visible=shown)
+            if layer.bands:  # an RGB composite: three bands, no colormap
+                band, colormap = list(layer.bands), None
+            else:  # a ramp, or the colormap name of a layer saved before the ramps
+                band = int(layer.band)
+                colormap = (vis_palettes.ramp_colormap(layer.palette, layer.name) if layer.palette
+                            else colormaps[layer.colormap])
+            raster_map.add_raster_layer(map_, layer.path, key=key, name=layer.name, band=band, colormap=colormap,
+                                        vmin=layer.min, vmax=layer.max, nodata=None, visible=shown)
 
     return build

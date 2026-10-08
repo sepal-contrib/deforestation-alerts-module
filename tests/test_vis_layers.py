@@ -22,6 +22,7 @@ from deforestation_alerts.project.models import (
 )
 from gui.i18n import t
 from gui.scripts import vis_layers as vl
+from gui.scripts import vis_palettes
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.store.state_manager import AppState
@@ -200,12 +201,68 @@ def test_earth_engine_and_nicfi_builders(gee):
 
 
 def test_the_details_cell():
-    assert vl.vis_layers_summary(GeeVisLayer(name="a", asset="x", bands=["B4", "B3", "B2"], min=0, max=3000)) == (
-        "B4, B3, B2 · 0–3000")
+    assert vl.vis_layers_summary(GeeVisLayer(name="a", asset="x", bands=["B8", "B4", "B3"], min=0, max=3000)) == (
+        "R/G/B: B8, B4, B3 · 0–3000")
+    ramp = GeeVisLayer(name="a", asset="x", bands=["NDVI"], palette=vis_palettes.ramp_palette("viridis"))
+    assert vl.vis_layers_summary(ramp) == f"{t('steps.layers.ramp_viridis')} · 0–1"
+    assert vl.vis_layers_summary(GeeVisLayer(name="a", asset="x", bands=["NDVI"], palette=["ff0000"])) == (
+        "NDVI · 0–1")  # a palette saved before the ramps: no ramp label
     assert vl.vis_layers_summary(FileVisLayer(name="t", path="/x.tif", colormap="viridis", min=0, max=45)) == (
-        "band 1 · viridis · 0–45")
+        "band 1 · viridis · 0–45")  # saved before the ramps: its colormap name
+    assert vl.vis_layers_summary(FileVisLayer(name="t", path="/x.tif", band=2, min=0, max=45,
+                                              palette=vis_palettes.ramp_palette("greens", True))) == (
+        f"band 2 · {t('steps.layers.ramp_greens')} · 0–45")
+    assert vl.vis_layers_summary(FileVisLayer(name="t", path="/x.tif", bands=[4, 3, 2], min=0, max=3000)) == (
+        "R/G/B: 4, 3, 2 · 0–3000")
     assert vl.vis_layers_summary(NicfiVisLayer(name="n", month="2025-07")) == "2025-07"
     assert vl.vis_layers_summary(NicfiVisLayer(name="n")) == t("steps.layers.nicfi_period_month")
+
+
+def test_a_geotiff_rgb_layer_is_drawn_with_three_bands_and_no_colormap(tmp_path, monkeypatch):
+    tif = _tif(tmp_path / "t.tif", count=4)
+    calls = []
+    monkeypatch.setattr(vl.raster_map, "add_raster_layer", lambda map_, path, **kw: calls.append((path, kw)))
+    layer = FileVisLayer(name="t", path=str(tif), bands=[4, 3, 2], min=0, max=3000)
+    vl.builder(_FakeMap(), layer, "vis:t", project=_with_aoi(), aoi_bounds=PARAGUAY)()
+    [(path, kw)] = calls
+    assert kw["band"] == [4, 3, 2] and kw["colormap"] is None and (kw["vmin"], kw["vmax"]) == (0, 3000)
+
+
+def test_a_geotiff_layer_with_a_palette_is_drawn_with_that_ramp_and_an_old_one_with_its_colormap(tmp_path,
+                                                                                                monkeypatch):
+    from matplotlib import colormaps
+    from matplotlib.colors import LinearSegmentedColormap
+
+    tif = _tif(tmp_path / "t.tif")
+    calls = []
+    monkeypatch.setattr(vl.raster_map, "add_raster_layer", lambda map_, path, **kw: calls.append(kw))
+    palette = vis_palettes.ramp_palette("heat", True)
+    vl.builder(_FakeMap(), FileVisLayer(name="t", path=str(tif), palette=palette), "vis:t", project=_with_aoi(),
+               aoi_bounds=PARAGUAY)()
+    vl.builder(_FakeMap(), FileVisLayer(name="t", path=str(tif), colormap="Greens"), "vis:t", project=_with_aoi(),
+               aoi_bounds=PARAGUAY)()
+    ramp_kw, legacy_kw = calls
+    assert isinstance(ramp_kw["colormap"], LinearSegmentedColormap) and ramp_kw["band"] == 1
+    assert ramp_kw["colormap"](0.0) == vis_palettes.ramp_colormap(palette)(0.0)
+    assert legacy_kw["colormap"].name == colormaps["Greens"].name == "Greens"
+
+
+def test_the_raster_map_takes_one_band_or_several(monkeypatch):
+    import sys
+    import types
+
+    from gui.scripts import raster_map
+
+    seen = []
+    fake = types.ModuleType("localtileserver")
+    fake.TileClient = lambda path: object()
+    fake.get_leaflet_tile_layer = lambda client, **kw: seen.append(kw) or "layer"
+    monkeypatch.setitem(sys.modules, "localtileserver", fake)
+    map_ = _FakeMap()
+    raster_map.add_raster_layer(map_, "/x.tif", key="a", name="a", band=[4, 3, 2], colormap="cmap")
+    raster_map.add_raster_layer(map_, "/x.tif", key="b", name="b", band=2, colormap="cmap")
+    assert seen[0]["indexes"] == [4, 3, 2] and seen[0]["colormap"] is None
+    assert seen[1]["indexes"] == [2] and seen[1]["colormap"] == "cmap"
 
 
 # ---------------------------------------------------------------- validation
@@ -229,19 +286,19 @@ def _check(gee_interface, project, **kw):
     return asyncio.run(vlm.validate_vis_layer(gee_interface, project, **kw))
 
 
-def test_an_earth_engine_image_with_one_band_and_a_palette(requests):
+def test_an_earth_engine_image_with_one_band_and_a_ramp(requests):
     gee, calls = _gee_answering(lambda obj: ["B4", "B8"])
     out = _check(gee, _with_aoi(), kind="gee", name=" ndvi ", ref="users/x/img", asset_type="IMAGE", band="B8",
-                 vmin="0", vmax="0.8", palette="#ffffff, 00ff00", show_in_analysis=True)
+                 vmin="0", vmax="0.8", ramp="viridis", invert=True, show_in_analysis=True)
     assert out["layer"] == GeeVisLayer(name="ndvi", asset="users/x/img", bands=["B8"], min=0, max=0.8,
-                                       palette=["ffffff", "00ff00"], show_in_analysis=True)
+                                       palette=vis_palettes.ramp_palette("viridis", True), show_in_analysis=True)
     assert calls == [("BANDS", "users/x/img", "IMAGE")]
 
 
 def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     gee, _ = _gee_answering(lambda obj: ["B4", "B3", "B2"])
     out = _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
-                 bands=("B4", "B3", "B2"), vmin="0", vmax="3000", palette="not used")
+                 bands=("B4", "B3", "B2"), vmin="0", vmax="3000", ramp="viridis")
     assert out["layer"].bands == ["B4", "B3", "B2"] and out["layer"].palette == []
     gee, _ = _gee_answering(lambda obj: ["B4", "B3"])
     assert _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
@@ -255,7 +312,7 @@ def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     ({"rgb": True, "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
     ({"vmin": "1", "vmax": "1"}, "steps.layers.err_range"),
     ({"vmin": "", "vmax": "1"}, "steps.layers.err_range"),
-    ({"palette": "ff0000, red"}, "steps.layers.err_palette"),
+    ({"rgb": True, "bands": ("B4", "B4", "B2")}, "steps.layers.err_incomplete"),  # three distinct bands
     ({"name": ""}, "steps.layers.name_empty"),
 ])
 def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests, over, key):
@@ -265,12 +322,45 @@ def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests
     assert _check(gee, _with_aoi(), **kw) == {"error": key} and calls == []
 
 
+def test_an_rgb_earth_engine_image_keeps_its_roles_and_combination(requests):
+    gee, _ = _gee_answering(lambda obj: ["B2", "B3", "B4", "B8"])
+    roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8"}
+    out = _check(gee, _with_aoi(), kind="gee", name="fc", ref="users/x/img", asset_type="IMAGE", rgb=True,
+                 bands=("B8", "B4", "B3"), roles=roles, combo="false_color", vmin="0", vmax="3000")
+    assert out["layer"] == GeeVisLayer(name="fc", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000,
+                                       roles=roles, combo="false_color")
+
+
+def test_an_old_palette_that_is_no_ramp_is_kept_until_a_card_is_picked(requests):
+    gee, _ = _gee_answering(lambda obj: ["B8"])
+    kw = dict(kind="gee", name="n", ref="users/x/img", asset_type="IMAGE", band="B8", vmin="0", vmax="1")
+    assert _check(gee, _with_aoi(), palette=["ff0000", "00ff00"], **kw)["layer"].palette == ["ff0000", "00ff00"]
+    picked = _check(gee, _with_aoi(), palette=["ff0000", "00ff00"], ramp="magma", **kw)["layer"]
+    assert picked.palette == vis_palettes.ramp_palette("magma")
+    assert _check(gee, _with_aoi(), **kw)["layer"].palette == vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP)
+
+
+def test_a_geotiff_rgb_layer(tmp_path, requests):
+    tif = _tif(tmp_path / "rgb.tif", size=10, count=4)
+    gee, _ = _gee_answering(lambda obj: None)
+    roles = {"red": 3, "green": 2, "blue": 1, "nir": 4}
+    out = _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 2), roles=roles,
+                 combo="false_color", vmin="0", vmax="3000")
+    assert out["layer"] == FileVisLayer(name="rgb", path=str(tif), bands=[4, 3, 2], min=0, max=3000, roles=roles,
+                                        combo="false_color")
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 5), vmin="0",
+                  vmax="1") == {"error": "steps.layers.err_bands"}
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, None), vmin="0",
+                  vmax="1") == {"error": "steps.layers.err_incomplete"}
+
+
 def test_a_geotiff_layer(tmp_path, requests):
     tif = _tif(tmp_path / "h.tif", size=10, count=2)
     gee, calls = _gee_answering(lambda obj: None)
-    out = _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=2, colormap="terrain",
+    out = _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=2, ramp="viridis", invert=True,
                  vmin="0", vmax="45")
-    assert out["layer"] == FileVisLayer(name="height", path=str(tif), band=2, colormap="terrain", min=0, max=45)
+    assert out["layer"] == FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
+                                        palette=vis_palettes.ramp_palette("viridis", True))
     assert calls == []
     assert _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=3, vmin="0", vmax="1") == {
         "error": "steps.alerts.err_missing_band"}
@@ -383,6 +473,27 @@ def _save_btn(rc):
     return btn
 
 
+def _ramp_cards(rc):
+    return [b for b in rc.find(v.Btn).widgets if "dv-ramp" in (b.class_ or "").split()]
+
+
+def _ramp_card(rc, key):
+    [card] = [b for b in _ramp_cards(rc) if t(f"steps.layers.ramp_{key}") in _flat(b)]
+    return card
+
+
+def _flat(w):
+    """All text under a widget."""
+    out = []
+    for c in getattr(w, "children", None) or []:
+        out.append(c if isinstance(c, str) else _flat(c))
+    return " ".join(out)
+
+
+def _selected_ramps(rc):
+    return [b for b in _ramp_cards(rc) if "dv-ramp--selected" in (b.class_ or "").split()]
+
+
 def _defaults(rc):
     """The buttons Enter would press (gui/widget/enter_key)."""
     return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in (b.class_ or "").split()]
@@ -411,12 +522,14 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
             _StubRasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
             _field(rc, "steps.layers.field_band", v.Select).v_model = 2
-            _field(rc, "steps.layers.field_colormap", v.Select).v_model = "terrain"
+            _ramp_card(rc, "terrain").fire_event("click", None)
+            _field(rc, "steps.layers.field_invert", v.Switch).v_model = True
             _field(rc, "steps.layers.field_max").v_model = "45"
             _field(rc, "steps.layers.field_show_in_analysis", v.Checkbox).v_model = True
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
-            assert saved == [(FileVisLayer(name="height", path=str(tif), band=2, colormap="terrain", min=0, max=45,
+            assert saved == [(FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
+                                           palette=vis_palettes.ramp_palette("terrain", True),
                                            show_in_analysis=True), None)]
         finally:
             rc.close()
@@ -461,7 +574,7 @@ def test_an_edit_opens_with_the_layers_values(monkeypatch):
                 "B4", "B3", "B2"]
             assert _field(rc, "steps.layers.field_max").v_model == "3000"
             assert _StubRasterInput.seen.asset.value["asset_id"] == "users/x/img"
-            assert not rc.find(v.TextField, label=t("steps.layers.field_palette")).widgets  # RGB: no palette
+            assert not _ramp_cards(rc)  # RGB: no colour ramp
         finally:
             rc.close()
 
@@ -661,7 +774,7 @@ def test_rows_show_the_kind_and_analysis_chips_and_the_details_note(monkeypatch)
         s2 = next(r for r in seen["rows"] if r["key"] == "S2")
         assert s2["cells"] == [{"value": "S2", "chips": [
             {"value": t("steps.layers.kind_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
-        assert s2["notes"] == [{"text": "B4, B3, B2 · 0–3000", "tone": None}]
+        assert s2["notes"] == [{"text": "R/G/B: B4, B3, B2 · 0–3000", "tone": None}]
         assert [a["kind"] for a in s2["actions"]] == ["map_toggle", "edit", "delete"]
         assert len(s2["actions"]) == layers_step.LAYER_ACTIONS
         planet = next(r for r in seen["rows"] if r["key"] == "planet")
@@ -774,3 +887,144 @@ def test_delete_hides_the_layer_and_removes_it(monkeypatch):
         assert "vis:S2" in map_.removed and confirm["open"] is False
     finally:
         rc.close()
+
+
+# ---------------------------------------------------------------- ramps, roles and combinations in the modal
+S2_BANDS = ["B2", "B3", "B4", "B8", "B11"]
+
+
+def _gee_modal(monkeypatch, bands, p=None, editing=None):
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+
+    async def get_info_async(obj):
+        return bands
+
+    monkeypatch.setattr(vlm, "band_list_request", lambda ref, kind: ref)
+    import gui.widget.raster_input as ri
+    monkeypatch.setattr(ri.user_raster, "band_list_request", lambda ref, kind: ref)
+    state, open_, saved = _state(p or _with_aoi()), solara.reactive(True), []
+    gee = SimpleNamespace(get_info_async=get_info_async)
+    return state, open_, saved, gee
+
+
+def test_the_ramp_cards_start_on_grayscale_and_an_edit_prefills_ramp_and_invert(monkeypatch):
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+    p = _with_aoi()
+    p.vis_layers = {
+        "n": GeeVisLayer(name="n", asset="users/x/img", bands=["NDVI"], palette=vis_palettes.ramp_palette("magma", True)),
+        "old": GeeVisLayer(name="old", asset="users/x/img", bands=["NDVI"], palette=["ff0000", "00ff00"]),
+    }
+
+    async def main():
+        state, open_, saved = _state(p), solara.reactive(True), []
+        _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
+        try:
+            assert [len(_ramp_cards(rc)), len(_selected_ramps(rc))] == [len(vis_palettes.RAMPS), 1]
+            assert t("steps.layers.ramp_grayscale") in _flat(_selected_ramps(rc)[0])
+        finally:
+            rc.close()
+        _box, rc = reacton.render(_modal(state, open_, saved, editing="n"), handle_error=False)
+        try:
+            assert t("steps.layers.ramp_magma") in _flat(_selected_ramps(rc)[0])
+            assert _field(rc, "steps.layers.field_invert", v.Switch).v_model is True
+        finally:
+            rc.close()
+        _box, rc = reacton.render(_modal(state, open_, saved, editing="old"), handle_error=False)
+        try:
+            assert _selected_ramps(rc) == []  # a palette that is no ramp preselects no card
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
+
+    async def main():
+        _box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                    on_save=lambda *a: saved.append(a)), handle_error=False)
+        try:
+            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
+            _StubRasterInput.seen.asset.set({"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL",
+                                             "value": None})
+            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
+            roles = {r: _field(rc, f"steps.layers.role_{r}", v.Select).v_model for r in vis_palettes.ROLES}
+            assert roles == {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
+            combo = _field(rc, "steps.layers.field_combo", v.Select)
+            assert [i["value"] for i in combo.items] == ["true_color", "false_color", "swir", "custom"]
+            combo.v_model = "swir"
+            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
+                "B11", "B8", "B4"]
+            _field(rc, "steps.layers.role_nir", v.Select).v_model = "B2"  # a role moves: the combination re-applies
+            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
+                "B11", "B2", "B4"]
+            _field(rc, "steps.layers.role_swir", v.Select).v_model = None  # swir no longer possible
+            assert _field(rc, "steps.layers.field_combo", v.Select).v_model == "custom"
+            assert [i["value"] for i in _field(rc, "steps.layers.field_combo", v.Select).items] == [
+                "true_color", "false_color", "custom"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_default_name_follows_the_image_and_the_combination_until_typed_over(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
+
+    async def main():
+        _box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                    on_save=lambda *a: saved.append(a)), handle_error=False)
+        try:
+            _StubRasterInput.seen.asset.set({"asset_id": "users/x/mosaic", "type": "IMAGE", "column": "ALL",
+                                             "value": None})
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic")
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "B8"
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
+            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
+            combo = _field(rc, "steps.layers.field_combo", v.Select)
+            want = f"mosaic {t('steps.layers.combo_true_color')}"[:24]
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
+            _field(rc, "steps.layers.field_combo", v.Select).v_model = "false_color"
+            want = f"mosaic {t('steps.layers.combo_false_color')}"[:24]
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
+            _field(rc, "steps.layers.field_name").v_model = "mine"
+            _field(rc, "steps.layers.field_combo", v.Select).v_model = "swir"
+            await asyncio.sleep(0.1)
+            assert _field(rc, "steps.layers.field_name").v_model == "mine"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp_path, monkeypatch):
+    tif = tmp_path / "rgb.tif"
+    with rasterio.open(tif, "w", driver="GTiff", width=10, height=10, count=4, dtype="uint8", crs="EPSG:4326",
+                       transform=Affine(0.0002, 0, -55.5, 0, -0.0002, -24.4)) as dst:
+        dst.write(np.zeros((4, 10, 10), "uint8"))
+        dst.descriptions = ("blue", "green", "red", "nir")
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+    state, open_, saved = _state(_with_aoi()), solara.reactive(True), []
+
+    async def main():
+        _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
+        try:
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _StubRasterInput.seen.path.set(str(tif))
+            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
+            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == 3)
+            combo = _field(rc, "steps.layers.field_combo", v.Select)
+            assert [i["value"] for i in combo.items] == ["true_color", "false_color", "custom"]
+            combo.v_model = "false_color"
+            _field(rc, "steps.layers.field_name").v_model = "fc"
+            _field(rc, "steps.layers.field_max").v_model = "3000"
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [(layer, _prev)] = saved
+            assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
+                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color")
+        finally:
+            rc.close()
+
+    asyncio.run(main())

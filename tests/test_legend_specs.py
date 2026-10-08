@@ -60,6 +60,11 @@ def test_vis_legends():
     assert grey.colors[0] == "#000000" and grey.colors[-1] == "#ffffff"
     tif = ls.vis_legend("vis:t", FileVisLayer(name="t", path="/x.tif", colormap="viridis", min=0, max=45)).spec
     assert tif.kind == "gradient" and [l.literal for l in tif.labels] == ["0", "45"]
+    ramp = ls.vis_legend("vis:r", FileVisLayer(name="r", path="/x.tif", min=0, max=9,
+                                               palette=["ff0000", "0000ff"])).spec
+    assert ramp.kind == "gradient" and ramp.colors[0] == "#ff0000" and ramp.colors[-1] == "#0000ff"
+    rgb_tif = ls.vis_legend("vis:f", FileVisLayer(name="f", path="/x.tif", bands=[4, 3, 2], min=0, max=3000)).spec
+    assert rgb_tif.kind == "note" and dict(rgb_tif.labels[0].args)["bands"] == "4, 3, 2"
     nicfi = ls.vis_legend("vis:p", NicfiVisLayer(name="p"), month="2026-03").spec
     assert nicfi.kind == "note" and dict(nicfi.labels[0].args) == {"month": "2026-03"}
 

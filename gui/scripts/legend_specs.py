@@ -11,6 +11,7 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 from gui.scripts.legend_data import Label, LegendSpec, format_number, gradient_colors
 from gui.scripts.legend_registry import LayerLegend
+from gui.scripts.vis_palettes import ramp_colormap
 
 #: (code, colour, label key): source confidence, for every source and the combined display band
 ALERT_CLASSES = ((1, "#ff9800", "legend.alert.confirmed"), (2, "#7b1fa2", "legend.alert.probable"))
@@ -107,14 +108,15 @@ def vis_legend(key: str, layer, *, month=None) -> LayerLegend:
     if layer.kind == "nicfi":
         spec = LegendSpec(kind="note", title=name,
                           labels=(Label(key="legend.vis.nicfi", args=(("month", month or ""),)),))
-    elif layer.kind == "gee" and len(layer.bands) == 3:
+    elif layer.kind in ("gee", "file") and len(layer.bands) == 3:
         spec = LegendSpec(kind="note", title=name, labels=(Label(key="legend.vis.rgb", args=(
-            ("bands", ", ".join(layer.bands)), ("min", format_number(layer.min)), ("max", format_number(layer.max)))),))
+            ("bands", ", ".join(str(b) for b in layer.bands)), ("min", format_number(layer.min)), ("max", format_number(layer.max)))),))
     elif layer.kind == "gee":
         palette = [c if c.startswith("#") else f"#{c}" for c in layer.palette] or list(_GREY_RAMP)
         cmap = LinearSegmentedColormap.from_list(layer.name or "vis", palette)
         spec = LegendSpec(kind="gradient", title=name, colors=gradient_colors(cmap), labels=_range(layer.min, layer.max))
-    else:  # a GeoTIFF: its colormap
-        spec = LegendSpec(kind="gradient", title=name, colors=gradient_colors(colormaps[layer.colormap]),
+    else:  # a GeoTIFF: its ramp, or the colormap of a layer saved before the ramps
+        cmap = ramp_colormap(layer.palette, layer.name or "vis") if layer.palette else colormaps[layer.colormap]
+        spec = LegendSpec(kind="gradient", title=name, colors=gradient_colors(cmap),
                           labels=_range(layer.min, layer.max))
     return LayerLegend(layer_id=key, label=name, spec=spec)

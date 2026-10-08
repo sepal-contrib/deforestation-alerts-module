@@ -79,7 +79,10 @@ PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", 
 #: "Source" or "Total", Spanish "Total"). Add a key only when the word is the
 #: same in that language, never to silence the test.
 SAME_IN = {
-    "es-ES": {"steps.layers.region_asia", "overview_tile.table_total", "steps.integrate.attr_col_raster"},
+    "es-ES": {"steps.layers.region_asia", "overview_tile.table_total", "steps.integrate.attr_col_raster",
+              # ramp names and band-role acronyms read the same in Spanish
+              "steps.layers.ramp_magma", "steps.layers.ramp_viridis", "steps.layers.role_nir",
+              "steps.layers.role_swir"},
     "fr": {
         # "images", "source", "verdict", "question" and "option(s)" are the same words in French.
         "analysis.timeline.images", "analysis_tile.facts.source",
@@ -87,6 +90,9 @@ SAME_IN = {
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
+        # ramp names and the SWIR acronym are the same in French
+        "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",
+        "steps.layers.ramp_viridis", "steps.layers.role_swir",
         "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",
         "steps.project.count_sources.other", "steps.questionnaire.field_label",
         "steps.questionnaire.field_option", "steps.questionnaire.options_label",
@@ -197,6 +203,7 @@ def _dynamic_keys():
     from deforestation_alerts.engine.fingerprint import Status
     from deforestation_alerts.project import periods
     from gui.scripts.vis_layers import KINDS, NICFI_COLLECTIONS
+    from gui.scripts.vis_palettes import RAMPS, RGB_COMBOS, ROLES
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
@@ -223,6 +230,10 @@ def _dynamic_keys():
         # gui.scripts.vis_layers: the layer kinds and the NICFI regions
         "steps.layers.kind_": list(KINDS),
         "steps.layers.region_": list(NICFI_COLLECTIONS),
+        # gui.widget.vis_layer_modal: the colour ramps, band roles and RGB combinations
+        "steps.layers.ramp_": list(RAMPS),
+        "steps.layers.role_": list(ROLES),
+        "steps.layers.combo_": [*RGB_COMBOS, "custom"],
         # gui.tile.overview_tile's export buttons
         "overview_tile.export_": ["csv", "gpkg", "geojson"],
     }

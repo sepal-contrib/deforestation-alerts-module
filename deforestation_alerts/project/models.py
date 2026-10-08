@@ -118,6 +118,8 @@ class GeeVisLayer(BaseModel):
     min: float = 0.0
     max: float = 1.0
     palette: list[str] = []
+    roles: dict[str, str] = {}  # RGB band roles and combination: they only prefill the dialog on edit
+    combo: Optional[str] = None
     show_in_analysis: bool = False
 
 
@@ -125,8 +127,12 @@ class FileVisLayer(BaseModel):
     kind: Literal["file"] = "file"
     name: str
     path: str
-    band: int = 1
-    colormap: str = "viridis"
+    band: int = 1  # single band: ignored when ``bands`` is set
+    colormap: str = "viridis"  # a layer saved before the colour ramps; ``palette`` wins when set
+    bands: list[int] = []  # three 1-based indexes: an RGB composite
+    palette: list[str] = []  # single band: the colour ramp, low to high
+    roles: dict[str, int] = {}
+    combo: Optional[str] = None
     min: float = 0.0
     max: float = 1.0
     show_in_analysis: bool = False
