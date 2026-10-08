@@ -92,8 +92,10 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
         chosen = [band_index(b) for b in bands] if rgb else [band_index(band)]
     else:
         chosen = [str(b) if b is not None else None for b in (bands if rgb else (band,))]
-    if len(chosen) != (3 if rgb else 1) or None in chosen or len(set(chosen)) != len(chosen):
+    if len(chosen) != (3 if rgb else 1) or None in chosen:
         return {"error": "steps.layers.err_incomplete"}
+    if len(set(chosen)) != len(chosen):
+        return {"error": "steps.layers.err_duplicate_bands"}
     if rgb:
         roles = {r: b for r, b in (roles or {}).items() if b is not None}
         combo = combo or None
@@ -206,7 +208,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     month, set_month = solara.use_state((l0.month or "") if l0 is not None and l0.kind == "nicfi" else "")
     show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
     old_colormap = file0.colormap if file0 is not None and not file0.palette and not file0.bands else None
-    saved_roles = solara.use_ref(bool(raster0 is not None and raster0.roles))  # an edit keeps its roles once
+    saved_roles = bool(raster0 is not None and raster0.roles)
+    first_load = solara.use_ref(l0 is not None)  # the first band list of an edit must not touch its bands
     error, set_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
 
@@ -250,11 +253,13 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _guess_roles():
         if not band_items:
             return
-        if saved_roles.current:  # the edit's own roles stay for the bands of its own image
-            saved_roles.current = False
-            return
         by_name = {i["text"]: i["value"] for i in band_items}
         guessed = {r: by_name[n] for r, n in vis_palettes.guess_roles(list(by_name)).items()}
+        if first_load.current:  # an edit's own bands, roles and combination stay for its own image
+            first_load.current = False
+            if not saved_roles:  # a layer saved before the roles: only fill the empty role selects
+                set_roles(guessed)
+            return
         set_roles(guessed)
         set_combo("custom")
         for setter in (set_red, set_green, set_blue):
@@ -391,7 +396,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                         style=_RAMP_CARD + (_RAMP_CARD_SELECTED if selected else ""),
                         classes=["dv-ramp"] + (["dv-ramp--selected"] if selected else []))
             rv.Switch(label=t("steps.layers.field_invert"), v_model=invert, on_v_model=set_invert, dense=True,
-                      hide_details=True, disabled=busy, class_="mt-0 mb-1")
+                      hide_details=True, disabled=busy or ramp is None, class_="mt-0 mb-1")
 
     def _actions():
         # spec §11: an async button is a task button. While the check runs it

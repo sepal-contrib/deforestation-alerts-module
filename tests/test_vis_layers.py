@@ -312,7 +312,7 @@ def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     ({"rgb": True, "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
     ({"vmin": "1", "vmax": "1"}, "steps.layers.err_range"),
     ({"vmin": "", "vmax": "1"}, "steps.layers.err_range"),
-    ({"rgb": True, "bands": ("B4", "B4", "B2")}, "steps.layers.err_incomplete"),  # three distinct bands
+    ({"rgb": True, "bands": ("B4", "B4", "B2")}, "steps.layers.err_duplicate_bands"),  # three distinct bands
     ({"name": ""}, "steps.layers.name_empty"),
 ])
 def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests, over, key):
@@ -1024,6 +1024,49 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
             [(layer, _prev)] = saved
             assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
                                          roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_editing_an_rgb_layer_saved_before_the_roles_keeps_its_bands(monkeypatch):
+    p = _with_aoi()
+    p.vis_layers = {"rgb": GeeVisLayer(name="rgb", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000)}
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS, p)
+
+    async def main():
+        _box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                    on_save=lambda *a: saved.append(a), editing="rgb"),
+                                  handle_error=False)
+        try:
+            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
+            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
+                "B8", "B4", "B3"]
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            assert saved[0][0].bands == ["B8", "B4", "B3"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_layer_saved_with_a_colormap_keeps_it_and_its_invert_switch_is_off(monkeypatch, tmp_path):
+    tif = _tif(tmp_path / "g.tif", size=10)
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+    p = _with_aoi()
+    p.vis_layers = {"g": FileVisLayer(name="g", path=str(tif), colormap="Greens", min=0, max=5)}
+    state, open_, saved = _state(p), solara.reactive(True), []
+
+    async def main():
+        _box, rc = reacton.render(_modal(state, open_, saved, editing="g"), handle_error=False)
+        try:
+            assert _selected_ramps(rc) == []
+            assert _field(rc, "steps.layers.field_invert", v.Switch).disabled is True
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            assert saved[0][0].colormap == "Greens" and saved[0][0].palette == []
         finally:
             rc.close()
 

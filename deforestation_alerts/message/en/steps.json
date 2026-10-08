@@ -177,6 +177,7 @@
       "err_wrong_type": "Pick an Earth Engine image.",
       "err_incomplete": "Pick a raster and its band or bands.",
       "err_bands": "A chosen band is not in the image.",
+      "err_duplicate_bands": "Pick three different bands for red, green and blue.",
       "err_range": "Min and Max must be numbers, Min below Max.",
       "err_month": "Enter the month as YYYY-MM, or leave it empty.",
       "err_changed": "The project or its AOI changed during the check; save the layer again.",

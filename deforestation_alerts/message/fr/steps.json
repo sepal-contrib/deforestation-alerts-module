@@ -184,6 +184,7 @@
       "err_wrong_type": "Choisissez une image Earth Engine.",
       "err_incomplete": "Choisissez un raster et sa ou ses bandes.",
       "err_bands": "Une bande choisie n'est pas dans l'image.",
+      "err_duplicate_bands": "Choisissez trois bandes différentes pour le rouge, le vert et le bleu.",
       "err_range": "Min et Max doivent être des nombres, Min inférieur à Max.",
       "err_month": "Saisissez le mois au format AAAA-MM, ou laissez-le vide.",
       "err_changed": "Le projet ou son AOI ont changé pendant la vérification ; enregistrez la couche à nouveau.",
