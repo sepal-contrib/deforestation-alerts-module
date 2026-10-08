@@ -316,7 +316,9 @@ def test_the_step_no_longer_renders_the_look_back_field(env):
     layers, rc = _render(state)
     try:
         assert [w for w in rc.find(v.TextField).widgets if w.label == t("steps.period.look_back")] == []
-        assert not [b for b in rc.find(v.Btn).widgets if "Apply" in b.children]
+        labels = [c for b in rc.find(v.Btn).widgets for c in b.children if isinstance(c, str)]
+        # the look-back "Apply" button (and its steps.period.apply key) is gone: only New period / Close remain
+        assert t("steps.period.new") in labels and not [x for x in labels if x not in (t("steps.period.new"), "Close")]
     finally:
         rc.close()
 
