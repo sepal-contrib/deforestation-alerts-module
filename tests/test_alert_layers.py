@@ -1014,3 +1014,13 @@ def test_the_states_layer_follows_the_active_set(ov, tmp_path, monkeypatch, scra
         assert not layers.is_on(key) and len(drawn) == 2
     finally:
         rc.close()
+
+
+def test_the_states_vrt_is_rewritten_when_one_already_exists(tmp_path, scratch):
+    p, s = _with_states(_project(tmp_path))
+    combined = tmp_path / p.name / s.combined_rel_path
+    stale = alert_layers.gdal_env.scratch_dir() / "states_c1.vrt"
+    stale.write_text('<VRTDataset><SourceFilename>/old/moved/folder/combined.tif</SourceFilename></VRTDataset>')
+    vrt = alert_layers.states_vrt(combined, "c1")
+    text = vrt.read_text()
+    assert "/old/moved/folder" not in text and str(combined.resolve()) in text

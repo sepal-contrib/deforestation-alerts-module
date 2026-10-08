@@ -96,8 +96,7 @@ def states_vrt(combined, content_id: str) -> Path:
     """
     combined = Path(combined).resolve()
     out = gdal_env.scratch_dir() / f"states_{content_id}.vrt"
-    if out.exists():
-        return out
+    # always rewritten: a moved project folder leaves a stale SourceFilename
     with rasterio.open(combined) as src:
         w, h, crs, gt = src.width, src.height, src.crs, src.transform.to_gdal()
         dtype = {"int32": "Int32", "uint8": "Byte", "int16": "Int16", "uint16": "UInt16"}.get(src.dtypes[3], "Int32")
