@@ -88,18 +88,20 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     there, 2 if all are probable. Pixels set in any of the ``footprints`` (0/1
     rasters of earlier sets) are 0 in every band. ``confirmed_only`` is a set
     of digits whose probable pixels (value 2) are dropped before anything else.
-    ``carry`` is ``(combined raster of an earlier set, {old_digit: new_digit})``
-    pairs: that set's too-small and over-cap pixels (band 4 is 2 or 3) not
+    ``carry`` is ``(combined raster of an earlier set, {old_digit: new_digit},
+    min_date)`` triples, ``min_date`` a ``yyyyddd`` (the start of that set's own
+    search window: older pixels were carried into it and are not carried again):
+    that set's too-small and over-cap pixels (band 4 is 2 or 3) not
     already covered by this run's sources are added, digits remapped, before
     the footprints are removed (spec §6).
     """
     # The window reads below assume every input shares the grid's pixels.
-    for path in [p for p, _ in inputs] + [p for p, _ in carry] + list(footprints):
+    for path in [p for p, _ in inputs] + [c[0] for c in carry] + list(footprints):
         check_header(path, grid)
     total = 0
     with ExitStack() as stack:
         srcs = [(stack.enter_context(rasterio.open(p)), int(d)) for p, d in inputs]
-        cars = [(stack.enter_context(rasterio.open(p)), remap) for p, remap in carry]
+        cars = [(stack.enter_context(rasterio.open(p)), remap, int(mind)) for p, remap, mind in carry]
         fps = [stack.enter_context(rasterio.open(p)) for p in footprints]
         with write_grid_raster(Path(out_path), grid, count=3) as dst:
             for w in _windows(grid):
@@ -119,7 +121,7 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                     earlier = hit & (d > 0) & ((date == 0) | (d < date))
                     date[earlier] = d[earlier]
                     confirmed |= a == 1
-                for csrc, remap in cars:
+                for csrc, remap, mind in cars:
                     c = csrc.read(1, window=w).astype(np.int64)
                     st = csrc.read(4, window=w)
                     cd = csrc.read(2, window=w).astype(np.int32)
@@ -129,7 +131,7 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                         v = (c // 10 ** old) % 10
                         moved += v * 10 ** new
                         conf |= v == 1
-                    take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0)
+                    take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0) & (cd >= mind)
                     code[take] = moved[take].astype(np.int32)
                     date[take] = cd[take]
                     confirmed |= take & conf
@@ -361,7 +363,8 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         if art is None or not paths.resolve(pdir, art.rel_path).exists():
             raise ProjectRuleError(f"the combined raster of set {s.id} is missing; re-run that set first",
                                    key="errors.carry_missing", set_id=s.id)
-        carry_paths.append((paths.resolve(pdir, art.rel_path), remap))
+        ws = p.periods[s.period_id].search_window()[0]
+        carry_paths.append((paths.resolve(pdir, art.rel_path), remap, ws.year * 1000 + ws.timetuple().tm_yday))
     harm_paths = [
         (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
         for s in sources

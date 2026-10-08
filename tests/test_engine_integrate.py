@@ -756,7 +756,9 @@ def test_a_too_small_cluster_joins_the_next_periods_alert(tmp_path):
     assert s.carried_from == [dec_set.id] and s.n_alerts == 1
     st, code, dates = _state(tmp_path, s)
     assert int((st == integrate.STATE_ANALYSABLE).sum()) == 12
-    assert int(res.alerts.iloc[0]["alert_sources"] == "GLAD-L") == 1
+    assert res.alerts.iloc[0]["alert_sources"] == "GLAD-L"
+    with rasterio.open(tmp_path / s.footprint_rel_path) as f:
+        assert int(f.read(1).sum()) == 12  # one alert of 12 px
     assert dates[10, 10] == 2025324 and dates[12, 10] == 2026010
     assert s.fingerprint == fp.fingerprint(fp.set_inputs(p, jan, ["GLAD-L"], params))
     assert "carry" in fp.set_inputs(p, jan, ["GLAD-L"], params)
@@ -808,7 +810,7 @@ def test_a_carry_is_remapped_to_the_current_digit(tmp_path):
     p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
     dec_set.digit_map = {3: "GLAD-L"}
     (s, remap), = fp.carry_sets(p, jan, ["GLAD-L"])
-    assert remap == {3: p.sources["GLAD-L"].digit == 0 and 0}
+    assert p.sources["GLAD-L"].digit == 0 and remap == {3: 0}
     # a hand-built carry raster: digit 3 holds an alert at a too-small pixel
     code, dates, state = _blank(), _blank(), _blank()
     code[5, 5], dates[5, 5], state[5, 5] = 1000, 2025324, integrate.STATE_TOO_SMALL
@@ -820,7 +822,7 @@ def test_a_carry_is_remapped_to_the_current_digit(tmp_path):
     own = _blank()
     own[30, 30] = 1
     n = integrate.combine([(_write(tmp_path / "o.tif", own, np.where(own > 0, 2026010, 0)), 0)],
-                          GRID, tmp_path / "c.tif", carry=[(car, remap)])
+                          GRID, tmp_path / "c.tif", carry=[(car, remap, 0)])
     with rasterio.open(tmp_path / "c.tif") as src:
         c, d, disp = src.read(1), src.read(2), src.read(3)
     assert c[5, 5] == 1 and d[5, 5] == 2025324 and disp[5, 5] == 1
@@ -837,7 +839,7 @@ def test_a_carry_does_not_overwrite_a_pixel_the_sources_cover(tmp_path):
     own = _blank()
     own[5, 5] = 2
     integrate.combine([(_write(tmp_path / "o.tif", own, np.where(own > 0, 2026010, 0)), 0)],
-                      GRID, tmp_path / "c.tif", carry=[(car, {0: 0})])
+                      GRID, tmp_path / "c.tif", carry=[(car, {0: 0}, 0)])
     with rasterio.open(tmp_path / "c.tif") as src:
         assert src.read(1)[5, 5] == 2 and src.read(2)[5, 5] == 2026010
 
@@ -863,3 +865,39 @@ def test_rerunning_the_earlier_set_makes_the_next_one_stale(tmp_path):
     _record(p, integrate.run_integration(integrate.IntegrationJob(
         project=p.model_copy(deep=True), pdir=tmp_path, period=dec, sources=["GLAD-L"], params=params)))
     assert fp.fingerprint(fp.set_inputs(p, jan, ["GLAD-L"], params)) != before
+
+
+def _hand_carry(path, code, dates, state, display=None):
+    with raster_io.write_grid_raster(path, GRID, count=4) as dst:
+        disp = _blank() + 1 if display is None else display
+        for i, a in enumerate((code, dates, disp, state), 1):
+            dst.write(a.astype("int32"), i)
+
+
+def test_a_carried_probable_pixel_stays_probable(tmp_path):
+    code, dates, state = _blank(), _blank(), _blank()
+    code[5, 5], dates[5, 5], state[5, 5] = 2, 2025324, integrate.STATE_TOO_SMALL
+    car = tmp_path / "carry.tif"
+    _hand_carry(car, code, dates, state)
+    integrate.combine([], GRID, tmp_path / "c.tif", carry=[(car, {0: 0}, 0)])
+    with rasterio.open(tmp_path / "c.tif") as src:
+        assert src.read(1)[5, 5] == 2 and src.read(3)[5, 5] == 2
+
+
+@_LONLAT_CENTROID
+def test_a_pixel_older_than_the_carry_sets_own_window_is_not_carried_again(tmp_path):
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)
+    # December's window starts 2025-10-31 (2025304). Add a too-small pixel dated before it,
+    # as one carried into December from an earlier month would be.
+    comb = tmp_path / dec_set.combined_rel_path
+    with rasterio.open(comb) as src:
+        bands = [src.read(i) for i in range(1, 5)]
+    bands[0][30, 30], bands[1][30, 30], bands[2][30, 30], bands[3][30, 30] = 1, 2025290, 1, integrate.STATE_TOO_SMALL
+    _hand_carry(comb, bands[0], bands[1], bands[3], bands[2])
+    nxt = _blank()
+    nxt[20:25, 20:25] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    s = _run(p, tmp_path, jan, params).alert_set
+    st, _, _ = _state(tmp_path, s)
+    assert st[11, 11] == integrate.STATE_TOO_SMALL   # inside December's window: carried
+    assert st[30, 30] == 0                           # older: not carried again
