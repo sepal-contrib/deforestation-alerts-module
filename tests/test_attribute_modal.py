@@ -57,8 +57,9 @@ def form(monkeypatch):
     calls = []
 
     @solara.component
-    def _Form(gee_interface, value, on_value, reserved, on_busy):
-        calls.append(SimpleNamespace(value=value, on_value=on_value, reserved=reserved, on_busy=on_busy))
+    def _Form(gee_interface, value, on_value, reserved, on_busy, taken_names=()):
+        calls.append(SimpleNamespace(value=value, on_value=on_value, reserved=reserved, on_busy=on_busy,
+                                     taken_names=taken_names))
 
     monkeypatch.setattr(am, "AttributeForm", _Form)
     return calls
@@ -97,6 +98,7 @@ def test_adding_a_layer_hands_over_unclashed_columns_and_closes(form):
         assert add.disabled and ENTER_DEFAULT in add.class_ and "mdi-plus" in _strings(add)
         assert _alerts(rc) == []  # a form that has read no bands yet is not wrong
         assert form[-1].value is None and form[-1].reserved == ALERT_RESERVED_COLUMNS | {"b1"}
+        assert form[-1].taken_names == set()  # LC has no name: nothing for a default to clash with
 
         form[-1].on_value(_layer("c.tif", "b1", "count"))
         add = _button(rc, t("steps.integrate.attr_add"))

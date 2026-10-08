@@ -21,7 +21,7 @@ from deforestation_alerts.scripts.raster_attribute import (
     resolve_column_names,
 )
 from gui.i18n import t
-from gui.widget.attribute_form import AttributeForm, layer_label
+from gui.widget.attribute_form import AttributeForm, layer_label, other_layer_names
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import form_card, use_form_dialog
 
@@ -77,4 +77,5 @@ def _AttributeLayerForm(open_, gee_interface, layers, editing, on_save):
     shown = t(error) if error is not None and config is not None else None
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=shown):
         AttributeForm(gee_interface=gee_interface, value=config, on_value=set_config,
-                      reserved=reserved_for(layers, skip=editing), on_busy=set_busy)
+                      reserved=reserved_for(layers, skip=editing), on_busy=set_busy,
+                      taken_names=other_layer_names(layers, editing))

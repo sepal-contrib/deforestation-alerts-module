@@ -1003,7 +1003,7 @@ def pickers(monkeypatch):
 
 
 @solara.component
-def _AttrHarness(gee_interface, initial, seen, reserved=ALERT_RESERVED_COLUMNS, on_busy=None):
+def _AttrHarness(gee_interface, initial, seen, reserved=ALERT_RESERVED_COLUMNS, on_busy=None, taken_names=()):
     NotificationProvider()
     value, set_value = solara.use_state(initial)
 
@@ -1012,7 +1012,7 @@ def _AttrHarness(gee_interface, initial, seen, reserved=ALERT_RESERVED_COLUMNS, 
         set_value(new)
 
     attribute_form.AttributeForm(gee_interface=gee_interface, value=value, on_value=on_value, reserved=reserved,
-                                 on_busy=on_busy)
+                                 on_busy=on_busy, taken_names=taken_names)
 
 
 async def _settle(done, tries=200):
@@ -1068,6 +1068,32 @@ def test_attribute_form_loads_a_geotiffs_bands_and_edits_them(pickers, tmp_path)
             rc.close()
 
     asyncio.run(main())
+
+
+def test_the_default_attribute_layer_name_is_unique_among_the_other_layers(pickers, tmp_path):
+    tif = _geotiff(tmp_path / "landcover.tif", ["lc"])
+    seen = []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen,
+                                               taken_names=attribute_form.other_layer_names(
+                                                   [{"name": "Landcover"}, {"name": "x"}])), handle_error=False)
+        try:
+            _origin(rc).v_model = "file"
+            pickers.path.set(str(tif))
+            _button(rc, t("steps.integrate.attr_load")).fire_event("click", None)
+            await _settle(lambda: seen and seen[-1].get("name"))
+            assert seen[-1]["name"] == "landcover_2"  # "Landcover" is taken (case aside)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_other_layer_names_skips_the_edited_layer_and_unnamed_ones():
+    layers = [{"name": "A"}, {"source": "s"}, {"name": " b "}]
+    assert attribute_form.other_layer_names(layers) == {"a", "b"}
+    assert attribute_form.other_layer_names(layers, skip=0) == {"b"}
 
 
 def test_attribute_form_reports_its_load_as_busy(pickers, tmp_path):

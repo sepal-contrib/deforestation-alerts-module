@@ -58,8 +58,15 @@ def layer_label(cfg) -> str:
     return Path(src).name if cfg.get("kind") == "local" else src
 
 
+def other_layer_names(layers, skip=None) -> set:
+    """The names (case-folded) of the layers other than ``skip``: a default name
+    must not repeat one (a clash gets ``_2``, spec §4)."""
+    return {str(layer["name"]).strip().casefold() for i, layer in enumerate(layers or [])
+            if i != skip and (layer or {}).get("name")}
+
+
 @solara.component
-def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMNS, on_busy=None):
+def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMNS, on_busy=None, taken_names=()):
     cfg = value or {}
     gee_src = cfg.get("source") if cfg.get("kind") == "gee" else None
     local_src = cfg.get("source") if cfg.get("kind") == "local" else None
@@ -95,7 +102,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
             _emit(rows, new.strip() or None)
 
     use_default_name(loaded[0] if fresh and loaded else None, name, _set_name,
-                     lambda r: suggest_name(name_from_ref(r), lambda n: True))
+                     lambda r: suggest_name(name_from_ref(r), lambda n: n.strip().casefold() not in taken_names))
 
     def _source():
         if kind == "gee":
