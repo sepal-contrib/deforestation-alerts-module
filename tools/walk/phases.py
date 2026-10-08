@@ -231,23 +231,31 @@ def review_and_save(page, rec, *, out):
     assert not download_btn(page).is_disabled(), "Build alert files still disabled after the Save"
 
 
-def _lane_options(page, lane):
-    """The pickable stripes of one timeline lane (``"before"`` / ``"after"``):
-    ``role=option`` buttons, disabled while the cloud limit hides them. Planet
-    is left out: a NICFI pick depends on the account's access."""
-    host = page.locator(f'.analysis-timeline:visible [role="listbox"][aria-label^="{en(f"analysis.timeline.lane_{lane}")}"]')
-    return host.locator('button[role="option"]:not([disabled]):not([aria-label^="Planet"])')
+def _lane_options(page):
+    """The pickable stripes of the timeline's one lane: buttons out of the tab
+    order (the handles are the keyboard's way along it), disabled while the
+    cloud limit hides them. Planet is left out: a NICFI pick depends on the
+    account's access."""
+    host = page.locator(".analysis-timeline:visible").first
+    return host.locator('button[tabindex="-1"]:not([disabled])'
+                        ':not([aria-label^="Planet"]):not([aria-current="true"])')
+
+
+def map_titles(page) -> list:
+    """The two map panes' titles, which name the image each one shows."""
+    return [t.inner_text() for t in page.locator(".analysis-mapbox:visible .v-card__title").all()]
 
 
 def pick_images(page, rec, *, out):
-    """The shared image timeline (``gui/tile/analysis/timeline.py``): one click
-    on a stripe of the upper lane sets the before image, of the lower lane the
-    after image. Picks the earliest before and the latest after stripe drawn,
-    as the retired per-pane selectors' first and last buttons did."""
-    before, after = _lane_options(page, "before"), _lane_options(page, "after")
-    wait_for(lambda: before.count() and after.count(), 240, "image stripes in both timeline lanes")
+    """The shared image timeline (``gui/tile/analysis/timeline.py``): a click
+    on a stripe left of the before handle moves the before handle, one right
+    of the after handle moves the after handle. Picks the earliest and the
+    latest stripe drawn, as the retired per-pane selectors' first and last
+    buttons did."""
+    opts = _lane_options(page)
+    wait_for(lambda: opts.count() >= 2, 240, "image stripes in the timeline lane")
     picked = []
-    for opts, k in ((before, 0), (after, -1)):
+    for k in (0, -1):
         btn = opts.nth(k if k >= 0 else opts.count() - 1)
         picked.append(btn.get_attribute("aria-label"))
         # Stripes are a few px apart and overlap their neighbours' hit areas:
@@ -256,8 +264,8 @@ def pick_images(page, rec, *, out):
         page.wait_for_timeout(4000)
     rec["picked"] = picked
     unset = en("analysis.timeline.unset")
-    readout = page.locator(".analysis-timeline:visible").first
-    wait_for(lambda: readout.inner_text().count(f": {unset}") == 0, 30, "both images set in the readout")
+    wait_for(lambda: len(map_titles(page)) == 2 and not any(unset in t for t in map_titles(page)),
+             30, "both images named in the map titles")
     shot(page, out, "images_picked")
     assert len(picked) >= 2, picked
 

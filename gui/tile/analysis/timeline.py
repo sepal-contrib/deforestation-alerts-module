@@ -5,8 +5,10 @@ step's content with ``v-if``, which destroys and rebuilds the DOM when the
 reviewer closes and reopens the step; a Solara-rendered subtree comes back
 blank, while a raw ipyvuetify tree is re-viewed from its widget model.
 
-Two lanes over one axis: clicking a stripe in the upper lane sets the before
-image, in the lower lane the after image. One click, no mode to be in.
+One lane over one axis, with two handles above it: the before handle and the
+after handle, which can never pass each other. A handle is dragged (the drag
+runs in the browser, see ``gui/widget/handle_strip.py``) or walked with the arrow keys, and a
+click on a stripe moves whichever handle ``side_for_click`` names.
 
 The geometry is addressed in **percentages of ``TRACK_PX``**, never in the
 pixels ``scene_query.x_for`` returns, so the strip keeps its dates when the
@@ -38,11 +40,14 @@ from deforestation_alerts.scripts.scene_index import (
 )
 from gui.i18n import format_date, t
 from gui.tile.analysis.state import imagery_changed
+from gui.widget.handle_strip import HandleStrip
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 TRACK_PX = 1120.0
 LANE_H = 45
+#: the strip above the lane the two handles and the bracket between them ride on
+RAIL_H = 28
 AXIS_H = 27
 VIEW_MONTHS = 2
 
@@ -56,6 +61,11 @@ SRC_COLOR = {SOURCE_S2: "#7fa8e0", SOURCE_LANDSAT: "#c9a87c", SOURCE_PLANET: "#9
 #: hyphenated form must never reach a data structure.
 SRC_LABEL = {SOURCE_S2: "Sentinel-2", SOURCE_LANDSAT: "Landsat", SOURCE_PLANET: "Planet"}
 SELECTED_COLOR = "#bf8f2d"  # the theme's primary_contrast
+#: the before side's selection colour. A CSS variable because it is the one
+#: colour on the strip that has to follow the theme: bone on the dark stage, a
+#: dark warm grey on the light one (``gui/widget/handle_strip.py`` defines
+#: both). The after side keeps the gold, which reads on either.
+BEFORE_COLOR = "var(--dah-before, #e9e1cf)"
 MUTED = "#a8a39b"
 #: amber, for the two things the reviewer has to notice rather than read:
 #: a refresh that failed, and one image standing in for both sides.
@@ -63,6 +73,9 @@ WARN = "#d9ab4e"
 HIT_PX = 11
 STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
+#: the order of two collections on one date: the one a drag or an arrow lands
+#: on first. The same order as the GIF's (``scene_query._RANK``).
+_RANK = {SOURCE_S2: 0, SOURCE_LANDSAT: 1, SOURCE_PLANET: 2}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
@@ -282,13 +295,15 @@ def month_bar_style(segments, d: date) -> str:
             f"top: {top}px; height: {height}px")
 
 
-def stripe_bar_style(row, *, selected: bool) -> str:
-    """The visible stripe inside the hit area."""
+def stripe_bar_style(row, *, selected: bool, side: str = "a") -> str:
+    """The visible stripe inside the hit area. A selected one takes its side's
+    colour: ``BEFORE_COLOR`` for the before image, the gold for the after."""
     _, height = BAND[row["source"]]
     hidden = bool(row["hidden"]) and not selected
     h = height * HIDDEN_SCALE if hidden else height
     width = SELECTED_STRIPE_PX if selected else STRIPE_PX
-    color = SELECTED_COLOR if selected else SRC_COLOR[row["source"]]
+    picked = BEFORE_COLOR if side == "b" else SELECTED_COLOR
+    color = picked if selected else SRC_COLOR[row["source"]]
     opacity = f"; opacity: {HIDDEN_OPACITY}" if hidden else ""
     return (f"position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; "
             f"width: {width:g}px; height: {h:g}px; border-radius: 1px; background: {color}{opacity}")
@@ -300,92 +315,124 @@ def stripe_cursor(row) -> str:
     return "default" if bool(row["hidden"]) else "pointer"
 
 
-# ------------------------------------------------- keyboard navigation
-
-#: ``KeyboardEvent.key`` to the move it asks for. "Left"/"Right" are the
-#: pre-standard names older WebKit still sends.
-_KEY_NAMES = {"ArrowLeft": "left", "Left": "left", "ArrowRight": "right", "Right": "right",
-              "Home": "home", "End": "end", "Enter": "enter"}
-#: the same moves by legacy ``keyCode``, for an event that carries no ``key``
-_KEY_CODES = {37: "left", 39: "right", 36: "home", 35: "end", 13: "enter"}
+# ------------------------------------------------------------ the handles
 
 
-def key_action(data) -> Optional[str]:
-    """Which move a lane's ``keydown`` payload asks for, or ``None``.
+def handle_x(segments, rid) -> Optional[float]:
+    """The track pixel a handle on ``rid`` points at, or ``None``.
 
-    The lanes listen on one bare ``keydown`` and read the key here rather than
-    registering ``keydown.left``, ``keydown.right`` and friends, because
-    ipyvue cannot hold more than one handler per base event: its
-    ``Events.on_event`` deletes every registration whose name is the new one's
-    base or starts with it, so five ``keydown.<key>`` calls leave only the
-    last. The front end agrees -- it compiles one Vue template per entry of
-    ``_events`` and merges the resulting ``on`` maps, where a second
-    ``keydown`` key overwrites the first -- so the modifier form is usable
-    only when a widget needs exactly one key, as the modals' ``keydown.esc``
-    does.
-
-    The cost of the bare form is that every key press on a focused lane
-    reaches the kernel; the payload is a handful of scalars and only while a
-    lane has focus, which is the price of the keys working at all.
+    A stripe's own date; for a Planet month, the middle of its bar, which is
+    what the eye takes a month-wide bar's position to be. ``None`` for no row
+    and for a row whose month is not laid out. Read from the id, not from a
+    frame row, so a selection whose collection is switched off still has a
+    place on the track for the other handle to stop at.
     """
-    if not isinstance(data, dict):
+    if not rid:
         return None
-    name = _KEY_NAMES.get(str(data.get("key") or ""))
-    if name is not None:
-        return name
-    try:
-        return _KEY_CODES.get(int(data["keyCode"]))
-    except (KeyError, TypeError, ValueError):
+    source, d = scene_query.parse_row_id(rid)
+    if segments.get((d.year, d.month)) is None:
         return None
+    if source == SOURCE_PLANET:
+        left = scene_query.x_for(segments, date(d.year, d.month, 1))
+        right = scene_query.x_for(segments, _month_end(d), end=True)
+        return (left + right) / 2
+    return scene_query.x_for(segments, d)
 
 
 def _navigable(sel, segments) -> list:
-    """The row ids a key press can reach, in date order.
+    """The row ids a handle can land on, in track order.
 
-    Hidden rows and rows inside a collapsed month are not drawn, so moving the
-    selection onto one would leave the reviewer with a selection they cannot
-    see. A click on either is ignored for the same reason. A row whose month
-    is not in ``segments`` at all is not drawn either.
+    Hidden rows and rows inside a collapsed month are not drawn, so a handle
+    on one would point at nothing. A row whose month is not in ``segments`` at
+    all is not drawn either. On one date Sentinel-2 comes first: the order is
+    the same-day preference a drag resolves its ties by.
 
-    The rows are sorted here rather than trusted to arrive sorted:
-    ``scene_query.scenes_for`` does sort by ``(date, source)`` today, but it
-    does not promise to, and a cursor walking the frame's row order would
-    jump about.
+    Sorted here rather than trusted to arrive sorted: ``scenes_for`` does sort
+    today, but does not promise to, and by ``source`` as a string, which puts
+    Landsat first.
     """
     if sel is None or len(sel) == 0:
         return []
     ids = []
-    for _, row in sel.sort_values(["date", "source"], kind="stable").iterrows():
+    for _, row in sel.iterrows():
         if bool(row["hidden"]):
             continue
         d = _as_date(row["date"])
         seg = segments.get((d.year, d.month))
         if seg is None or seg.collapsed:
             continue
-        ids.append(str(row["id"]))
-    return ids
+        ids.append((d, _RANK.get(row["source"], len(_RANK)), str(row["id"])))
+    return [rid for _, _, rid in sorted(ids)]
 
 
-def step(sel, segments, current_id, delta: int) -> Optional[str]:
-    """The row ``delta`` places from ``current_id``, clamped at the ends.
+def reachable(sel, segments, side: str, *, before_id, after_id) -> list:
+    """The rows ``side``'s handle may land on: ``_navigable`` less every row
+    on or past the other handle, so the two can never cross or meet.
 
-    From nothing selected -- or from a row that is no longer drawn -- a Right
-    takes the first row and a Left the last, so the first key press always
-    lands somewhere rather than doing nothing.
+    Compared by track position, not by date, because that is what the
+    reviewer sees: a Planet month's handle sits mid-month, and an image on
+    the 3rd is left of it however the dates compare.
     """
+    other = handle_x(segments, after_id if side == "b" else before_id)
     ids = _navigable(sel, segments)
-    if not ids:
+    if other is None:
+        return ids
+    if side == "b":
+        return [rid for rid in ids if handle_x(segments, rid) < other]
+    return [rid for rid in ids if handle_x(segments, rid) > other]
+
+
+def _same_day(rid, other) -> bool:
+    """Two scenes of one date. A Planet month has no date of its own."""
+    if not rid or not other:
+        return False
+    (src, d), (other_src, other_d) = scene_query.parse_row_id(rid), scene_query.parse_row_id(other)
+    return SOURCE_PLANET not in (src, other_src) and d == other_d
+
+
+def side_for_click(segments, rid, before_id, after_id, a0) -> Optional[str]:
+    """Which handle a click on ``rid``'s stripe moves: ``"b"``, ``"a"`` or ``None``.
+
+    - the stripe already selected on a side: nothing;
+    - the other collection of a selected day: that side, switching source;
+    - left of the before handle: before; right of the after handle: after;
+    - between the two: the alert start decides -- a scene from before it is a
+      "before" look, one on or after it an "after" look. Without an alert
+      start the nearer handle moves.
+
+    A side that is not set does not bound anything, so its handle is reached
+    through the alert-start rule.
+    """
+    if rid in (before_id, after_id):
         return None
-    if current_id not in ids:
-        return ids[0] if delta > 0 else ids[-1]
-    i = ids.index(current_id)
-    return ids[max(0, min(len(ids) - 1, i + delta))]
+    if _same_day(rid, before_id):
+        return "b"
+    if _same_day(rid, after_id):
+        return "a"
+    x = handle_x(segments, rid)
+    bx, ax = handle_x(segments, before_id), handle_x(segments, after_id)
+    if x is not None and bx is not None and x < bx:
+        return "b"
+    if x is not None and ax is not None and x > ax:
+        return "a"
+    if a0 is not None:
+        return "b" if scene_query.parse_row_id(rid)[1] < a0 else "a"
+    if bx is None or ax is None or x is None:
+        return "b" if ax is not None else "a"
+    return "b" if abs(x - bx) <= abs(x - ax) else "a"
 
 
-def edge(sel, segments, *, last: bool = False) -> Optional[str]:
-    """The first drawn row, or the last -- what Home and End jump to."""
-    ids = _navigable(sel, segments)
-    return (ids[-1] if last else ids[0]) if ids else None
+def same_day_alternative(sel, rid) -> Optional[str]:
+    """The other collection's image of ``rid``'s day, or ``None``: what the
+    map title offers to switch to. Never a hidden row (the cloud limit hides
+    it for a reason) and never a Planet month (it has no day)."""
+    if not rid or sel is None or len(sel) == 0:
+        return None
+    for _, row in sel.sort_values("source", key=lambda s: s.map(_RANK)).iterrows():
+        other = str(row["id"])
+        if other != rid and not bool(row["hidden"]) and _same_day(rid, other):
+            return other
+    return None
 
 
 # ------------------------------------------------------------ widget helpers
@@ -426,9 +473,12 @@ def _button(style, attrs, handler, child_style, cursor="pointer"):
 def build_timeline(app_state, analysis, widgets):
     """The strip, built once per session and re-rendered from the reactives.
 
-    Returns a ``v.Card`` holding the toolbar, the track and the readout. Every
-    piece of state it reads is a reactive it subscribes to, so the only thing
-    an alert change has to do is publish ``widgets.imagery_ctx``.
+    Returns a ``v.Card`` holding the toolbar and the track. What is selected
+    is named in the two map titles (``widgets.map_title_before`` /
+    ``map_title_after``, when the widgets have them), next to the image it
+    describes. Every piece of state it reads is a reactive it subscribes to,
+    so the only thing an alert change has to do is publish
+    ``widgets.imagery_ctx``.
     """
     import solara
 
@@ -438,11 +488,6 @@ def build_timeline(app_state, analysis, widgets):
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
     after_id = solara.reactive(None)
-    #: the keyboard cursor per lane -- where the arrows have walked to, which
-    #: is not a selection until Enter. ``None`` means "wherever the selection
-    #: is", and a new alert clears it along with the selection.
-    focus_before = solara.reactive(None)
-    focus_after = solara.reactive(None)
     #: the alert the collapse set and the selection belong to, so a new alert
     #: gets its own auto-collapse instead of inheriting the last one's
     seen_alert = solara.reactive(None)
@@ -458,17 +503,15 @@ def build_timeline(app_state, analysis, widgets):
     #: the sides whose saved pick was not found, so the automatic pick stood in
     fell_back = solara.reactive(frozenset())
 
-    lane_before = v.Html(tag="div", style_=f"{_LANE_STYLE}; margin-top: 11px")
+    lane = v.Html(tag="div", style_=_LANE_STYLE)
     lane_axis = v.Html(tag="div", style_=f"position: relative; height: {AXIS_H}px")
-    lane_after = v.Html(tag="div", style_=_LANE_STYLE)
-    blocks = v.Html(tag="div", style_="position: absolute; left: 0; right: 0; top: 11px; bottom: 0; "
+    blocks = v.Html(tag="div", style_=f"position: absolute; left: 0; right: 0; top: {RAIL_H}px; bottom: 0; "
                                       "pointer-events: none")
     window_band = v.Html(tag="div", style_="display: none")
+    strip = HandleStrip(on_pick=lambda side, rid: _on_drop(side, rid), rail_h=RAIL_H, lane_h=LANE_H)
     track = v.Html(tag="div", style_=_TRACK_STYLE,
-                   children=[window_band, lane_before, lane_axis, lane_after, blocks])
+                   children=[strip, window_band, lane, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
-    readout_row = v.Html(tag="div", style_="display: flex; align-items: center; gap: 13px; font-size: 12.5px",
-                         children=[])
     chips = v.Html(tag="div", style_="display: flex; align-items: center; gap: 8px", children=[])
     status = v.Html(tag="div", style_=f"font-size: 11.5px; color: {MUTED}", children=[])
 
@@ -534,9 +577,6 @@ def build_timeline(app_state, analysis, widgets):
         # when the info publish wakes it, so a half-set pair is never rebuilt.
         (analysis.before_keys if lane == "b" else analysis.after_keys).set(sorted(_keys_for(row, sel)))
         (analysis.before_info if lane == "b" else analysis.after_info).set(info_tuple(row))
-        # the cursor follows a pick, whether it came from a click or from
-        # Enter, so the next arrow carries on from what is selected
-        (focus_before if lane == "b" else focus_after).set(rid)
 
     def _picked(lane, rid, sel):
         """Assign a pick the REVIEWER made, and record what it costs the review.
@@ -558,78 +598,45 @@ def build_timeline(app_state, analysis, widgets):
         if chosen.value != was:
             imagery_changed(analysis)
 
-    def _on_pick(lane, rid):
-        sel, _ = _selection()
-        _picked(lane, rid, sel)
-        render()
-
-    def _cursor(lane):
-        """The keyboard cursor of a lane, which starts at its selection."""
-        focus = focus_before if lane == "b" else focus_after
-        if focus.value is None:
-            return (before_id if lane == "b" else after_id).value
-        return focus.value
-
     def _segments_now():
-        """``(sel, segments)`` as the lanes are currently drawn, or ``(None, None)``."""
+        """``(sel, segments)`` as the lane is currently drawn, or ``(None, None)``."""
         sel, window = _selection()
         if sel is None or window is None:
             return (None, None)
         return (sel, scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX))
 
-    def _walk_to(lane, target):
-        if target is None or target == _cursor(lane):
-            return
-        (focus_before if lane == "b" else focus_after).set(target)
-        render()
+    def _pick_if_reachable(lane_, rid):
+        """Assign ``rid`` to ``lane_`` if its handle may land there.
 
-    def _arrow(lane, move):
+        The one gate for every hand pick -- drop, click and the title's swap
+        -- so the browser's idea of the other handle's position, which can be
+        a round trip stale, is never what keeps the two from crossing."""
         sel, segs = _segments_now()
         if sel is None:
             return
-        _walk_to(lane, step(sel, segs, _cursor(lane), move))
+        if rid not in reachable(sel, segs, lane_, before_id=before_id.value, after_id=after_id.value):
+            logger.info("timeline: %s is not reachable for the %s handle, ignoring the pick", rid, lane_)
+            render()  # put the browser's handle back where the state says
+            return
+        _picked(lane_, rid, sel)
+        render()
 
-    def _jump(lane, *, last):
+    def _on_drop(lane_, rid):
+        _pick_if_reachable(lane_, rid)
+
+    def _on_stripe(rid):
+        a0, _ = alert_window(widgets.imagery_ctx.value, app_state.project.value)
         sel, segs = _segments_now()
         if sel is None:
             return
-        _walk_to(lane, edge(sel, segs, last=last))
+        side = side_for_click(segs, rid, before_id.value, after_id.value, a0)
+        if side is not None:
+            _pick_if_reachable(side, rid)
 
-    def _commit(lane):
-        """Enter: assign the row the cursor is on. This is the only key that
-        publishes ``before_info`` / ``after_info``, and so the only one that
-        costs a map redraw -- a reviewer walking ten scenes with the arrows
-        queues no Earth Engine tile request at all until they press it."""
-        sel, _ = _selection()
-        target = _cursor(lane)
-        if sel is None or target is None:
-            return
-        _picked(lane, target, sel)
-        render()
-
-    def _on_key(lane, data):
-        action = key_action(data)
-        if action in ("left", "right"):
-            _arrow(lane, -1 if action == "left" else 1)
-        elif action in ("home", "end"):
-            _jump(lane, last=action == "end")
-        elif action == "enter":
-            _commit(lane)
-
-    # One tab stop per lane, not one per stripe: Tab moves between the two
-    # lanes and the arrows walk the rows inside one, which is the listbox
-    # pattern ``aria-activedescendant`` belongs to.
-    for _host, _lane, _label in ((lane_before, "b", t("analysis.timeline.lane_before")),
-                                 (lane_after, "a", t("analysis.timeline.lane_after"))):
-        _host.attributes = {"tabindex": "0", "role": "listbox", "aria-label": _label}
-        _host.on_event("keydown", lambda w, e, d, lane=_lane: _on_key(lane, d))
-
-    def _render_lane(host, lane, sel, segs):
-        chosen = (before_id if lane == "b" else after_id).value
-        cursor = _cursor(lane)
-        set_label = t("analysis.timeline.set_before" if lane == "b"
-                      else "analysis.timeline.set_after")
-        kids, drawn = [], set()
+    def _render_lane(sel, segs):
+        before, after = before_id.value, after_id.value
+        a0, _ = alert_window(widgets.imagery_ctx.value, app_state.project.value)
+        kids = []
         for _, row in sel.iterrows():
             d = _as_date(row["date"])
             seg = segs.get((d.year, d.month))
@@ -638,46 +645,67 @@ def build_timeline(app_state, analysis, widgets):
             rid = row["id"]
             hidden = bool(row["hidden"])
             head = f"{SRC_LABEL[row['source']]}, {d.isoformat()}"
-            # A hidden row is not clickable, so its label must not offer the
-            # action: the cloud limit is what stands between it and a pick.
-            # ``_button`` marks a handler-less stripe disabled/aria-disabled,
-            # so only the label and the selected state are decided here.
-            # ``selected`` is ``rid == chosen`` and not ``not hidden and
-            # rid == chosen``: a selection the reviewer has just pushed over
-            # the cloud limit keeps its full-height gold stripe, so lowering
-            # the limit never makes their own pick disappear into the faded
-            # rows. ``aria-selected`` says the same thing the stripe does.
-            selected = rid == chosen
-            # ``role="option"`` inside the lane's ``role="listbox"``: it is
-            # what makes ``aria-selected`` legal and what lets
-            # ``aria-activedescendant`` name this element as the cursor.
-            # ``tabindex="-1"`` keeps the lane the single tab stop.
-            attrs = {"aria-label": head if hidden else f"{head}, {set_label}",
-                     "role": "option", "aria-selected": "true" if selected else "false",
-                     "tabindex": "-1", "id": f"{lane}-{rid}"}
-            if not hidden and selected:
+            # ``selected`` and not ``not hidden and selected``: a selection the
+            # reviewer has just pushed over the cloud limit keeps its
+            # full-height stripe, so lowering the limit never makes their own
+            # pick disappear into the faded rows.
+            side = "b" if rid == before else ("a" if rid == after else None)
+            if side is not None:
+                label = f"{head}, {t('analysis.timeline.before' if side == 'b' else 'analysis.timeline.after')}"
+            else:
+                # A hidden row is not clickable, so its label must not offer
+                # the action: the cloud limit is what stands between it and a
+                # pick. A clickable one says which image it would set.
+                goes = None if hidden else side_for_click(segs, rid, before, after, a0)
+                verb = t("analysis.timeline.set_before") if goes == "b" else t("analysis.timeline.set_after")
+                label = head if goes is None else f"{head}, {verb}"
+            # ``tabindex="-1"``: the two handles are the keyboard's way along
+            # the track, so Tab is two presses, not one per image.
+            attrs = {"aria-label": label, "tabindex": "-1"}
+            if side is not None:
                 attrs["aria-current"] = "true"
             hit = (month_bar_style(segs, d) if row["source"] == SOURCE_PLANET
                    else stripe_hit_style(segs, d, row["source"]))
-            if rid == cursor:
-                # the cursor is a ring, not a fill: it says where the next
-                # Enter would land without claiming to be the selection
-                hit += "; outline: 1px dashed #bf8f2daa; outline-offset: 1px"
             kids.append(_button(
                 hit, attrs,
-                None if hidden else (lambda _w, _e, _d, lane=lane, rid=rid: _on_pick(lane, rid)),
-                stripe_bar_style(row, selected=selected), stripe_cursor(row)))
-            drawn.add(rid)
-        host.children = kids
-        # The key is dropped rather than set to "": an empty
-        # ``aria-activedescendant`` is still an attribute, and the id it names
-        # must be one this render actually drew -- a cursor left on a row the
-        # cloud limit has since hidden would otherwise point at nothing.
-        lane_attrs = {k: value for k, value in (host.attributes or {}).items()
-                      if k != "aria-activedescendant"}
-        if cursor in drawn:
-            lane_attrs["aria-activedescendant"] = f"{lane}-{cursor}"
-        host.attributes = lane_attrs
+                None if hidden else (lambda _w, _e, _d, rid=rid: _on_stripe(rid)),
+                stripe_bar_style(row, selected=side is not None, side=side or "a"), stripe_cursor(row)))
+        lane.children = kids
+
+    def _flag(rid) -> str:
+        """What a handle's flag says about ``rid``: the day and the collection."""
+        source, d = scene_query.parse_row_id(rid)
+        when = format_date(d, "MMM y") if source == SOURCE_PLANET else format_date(d, "d MMM")
+        return f"{when} · {SRC_LABEL[source]}"
+
+    def _render_strip(sel, segs):
+        cands = []
+        for rid in _navigable(sel, segs):
+            source, d = scene_query.parse_row_id(rid)
+            top, height = BAND[source]
+            cand = {"id": rid, "x": round(_pct(handle_x(segs, rid)), 3), "top": top, "h": height,
+                    "flag": _flag(rid)}
+            if source == SOURCE_PLANET:
+                x0 = scene_query.x_for(segs, date(d.year, d.month, 1))
+                x1 = scene_query.x_for(segs, _month_end(d), end=True)
+                cand.update(x0=round(_pct(x0), 3), w=round(_pct(x1 - x0), 3))
+            cands.append(cand)
+
+        def _side(rid):
+            x = handle_x(segs, rid)
+            return None if x is None else {"id": rid, "x": round(_pct(x), 3), "flag": _flag(rid)}
+
+        strip.candidates = cands
+        strip.before = _side(before_id.value)
+        strip.after = _side(after_id.value)
+        # Only when both sides still resolve in this window: a gap between
+        # images one of which the strip cannot show would contradict it.
+        both = _row_of(sel, before_id.value) is not None and _row_of(sel, after_id.value) is not None
+        strip.gap = (pair_note(before_id.value, after_id.value) or "") if both else ""
+        strip.gap_warn = bool(before_id.value) and before_id.value == after_id.value
+        strip.ticks = [round(_pct(seg.x), 3) for _, seg in sorted(segs.items())][1:]
+        strip.labels = {"b": t("analysis.timeline.lane_before"), "a": t("analysis.timeline.lane_after"),
+                        "unset": t("analysis.timeline.unset")}
 
     def _expand(key):
         collapsed.set(collapsed.value - {key})
@@ -729,7 +757,7 @@ def build_timeline(app_state, analysis, widgets):
         x1 = scene_query.x_for(segs, a1, end=True)
         window_band.style_ = (f"position: absolute; left: {_pct(x0):.3f}%; "
                               f"width: {_pct(x1 - x0):.3f}%; "
-                              f"top: 11px; bottom: 0; background: {SELECTED_COLOR}0d; "
+                              f"top: {RAIL_H}px; bottom: 0; background: {SELECTED_COLOR}0d; "
                               f"border-left: 1px dashed {SELECTED_COLOR}aa; "
                               f"border-right: 1px dashed {SELECTED_COLOR}aa; pointer-events: none")
 
@@ -806,28 +834,42 @@ def build_timeline(app_state, analysis, widgets):
             kids.append(chip)
         chips.children = kids
 
-    def _render_readout(sel):
-        kids = []
-        for lane, rid in (("b", before_id.value), ("a", after_id.value)):
-            tag = t("analysis.timeline.before" if lane == "b" else "analysis.timeline.after")
-            kids.append(v.Html(tag="span", children=[f"{tag}: {readout(sel, rid)}"]))
-            if lane in fell_back.value:
-                kids.append(v.Html(tag="span", style_=f"color: {WARN}",
+    def _render_titles(sel):
+        """Name each side's image in its own map's title.
+
+        The title also carries the two things about that image the reviewer
+        acts on: the other collection's image of the same day, as a button
+        that switches to it, and the note that a saved image was not found
+        and the automatic pick stood in (amber, like every warning here).
+        The bracket on the strip says how far apart the two are.
+        """
+        for lane_, head, rid in (("b", t("analysis_tile.img_selection.prev_image_title"), before_id.value),
+                                 ("a", t("analysis_tile.img_selection.post_image_title"), after_id.value)):
+            title = getattr(widgets, "map_title_before" if lane_ == "b" else "map_title_after", None)
+            if title is None:
+                continue
+            kids = [v.Html(tag="span", children=[head]),
+                    v.Html(tag="span", style_=f"font-size: 12.5px; font-weight: 400; color: {MUTED}",
+                           children=[readout(sel, rid)])]
+            alt = same_day_alternative(sel, rid) if _row_of(sel, rid) is not None else None
+            if alt is not None:
+                src = SRC_LABEL[scene_query.parse_row_id(alt)[0]]
+                swap = v.Html(tag="button",
+                              attributes={"type": "button",
+                                          "title": t("analysis.timeline.swap_source", source=src)},
+                              style_=("font-size: 11px; font-weight: 400; line-height: 18px; padding: 0 6px; "
+                                      f"border-radius: 3px; border: 1px solid {MUTED}66; cursor: pointer; "
+                                      f"color: {SRC_COLOR[scene_query.parse_row_id(alt)[0]]}"),
+                              children=[f"\u21c4 {src}"])
+                swap.on_event("click", lambda *_a, lane_=lane_, alt=alt: _pick_if_reachable(lane_, alt))
+                kids.append(swap)
+            if lane_ in fell_back.value:
+                kids.append(v.Html(tag="span", style_=f"font-size: 12px; font-weight: 400; color: {WARN}",
                                    children=[t("analysis.timeline.saved_missing")]))
-        # Only when both sides still resolve in this window: a note about a
-        # pair whose readout says "not set" would contradict it.
-        both = _row_of(sel, before_id.value) is not None and _row_of(sel, after_id.value) is not None
-        note = pair_note(before_id.value, after_id.value) if both else None
-        if note:
-            # A single-day window can legally pick the same scene for both
-            # sides, and both panes still draw it -- an empty pane would read
-            # as a failure. So the note is the whole warning, and in MUTED it
-            # would sit in the same grey as the neutral "N days apart" tail
-            # and be read as one. Amber, like the refresh failure.
-            same = before_id.value == after_id.value
-            kids.append(v.Html(tag="span", children=[note],
-                               style_=f"margin-left: auto; color: {WARN if same else MUTED}"))
-        readout_row.children = kids
+            # the title is a wrapping flex row: the gap is what keeps the pane
+            # name and the image name two words
+            title.style_ = "column-gap: 10px; row-gap: 2px"
+            title.children = kids
 
     def _render_status():
         """The index's age and the refresh's outcome, which are two facts.
@@ -910,13 +952,11 @@ def build_timeline(app_state, analysis, widgets):
         render()
 
     def _clear_track():
-        for host in (lane_before, lane_after, lane_axis):
+        for host in (lane, lane_axis):
             host.children = []
-        # the cursor goes with the stripes: an ``aria-activedescendant`` left
-        # behind on an emptied lane names an element that is no longer there
-        for host in (lane_before, lane_after):
-            host.attributes = {k: value for k, value in (host.attributes or {}).items()
-                               if k != "aria-activedescendant"}
+        strip.candidates = []
+        strip.before = strip.after = None
+        strip.gap = ""
         blocks.children = []
         window_band.style_ = "display: none"
 
@@ -1023,7 +1063,7 @@ def build_timeline(app_state, analysis, widgets):
             message.style_ = _MESSAGE_STYLE
             _clear_track()
             _render_chips(rows)
-            _render_readout(sel)
+            _render_titles(sel)
             _render_status()
             return
         track.style_ = _TRACK_STYLE
@@ -1038,10 +1078,6 @@ def build_timeline(app_state, analysis, widgets):
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
                 auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
-                # the cursor belongs to the alert too: arrowing on the last
-                # one must not leave this one's ring on a row of its own
-                focus_before.set(None)
-                focus_after.set(None)
                 for lane in ("b", "a"):
                     chosen = before_id if lane == "b" else after_id
                     if lane in restoring.value:
@@ -1054,12 +1090,12 @@ def build_timeline(app_state, analysis, widgets):
 
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         _render_band(segs, a0, a1)
-        _render_lane(lane_before, "b", sel, segs)
-        _render_lane(lane_after, "a", sel, segs)
+        _render_lane(sel, segs)
+        _render_strip(sel, segs)
         _render_axis(segs)
         _render_blocks(segs, sel)
         _render_chips(rows)
-        _render_readout(sel)
+        _render_titles(sel)
         _render_status()
 
     def _on_cloud(widget, event, value):
@@ -1069,12 +1105,21 @@ def build_timeline(app_state, analysis, widgets):
         if value is None:
             return
         max_cloud.set(float(value))
+        slider.label = _cloud_label()
         _publish_filter()
         render()
 
+    def _cloud_label():
+        # The limit in words, always: Vuetify's thumb label shows only while
+        # the thumb is held, which left the reviewer guessing what the faded
+        # rows were faded by. In the label rather than beside the slider: the
+        # toolbar is full at the drawer-open width, and an extra element there
+        # pushed the value off the card.
+        return f"{t('analysis.timeline.max_cloud')} {max_cloud.value:.0f}%"
+
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True,
-                      thumb_label=True, style_="max-width: 160px",
-                      label=t("analysis.timeline.max_cloud"))
+                      thumb_label=True, style_="flex: 0 0 200px; max-width: 200px",
+                      label=_cloud_label())
     slider.on_event("change", _on_cloud)
 
     def _side(side, arrow):
@@ -1082,9 +1127,12 @@ def build_timeline(app_state, analysis, widgets):
         btn.on_event("click", lambda w, e, d, side=side: _widen(side))
         return btn
 
-    fold = v.Btn(small=True, text=True, children=[t("analysis.timeline.collapse_all")])
+    # sentence case, not Vuetify's spaced capitals: the toolbar is full at
+    # the drawer-open width, and the slider is what gave way
+    _compact = "text-transform: none; letter-spacing: normal"
+    fold = v.Btn(small=True, text=True, style_=_compact, children=[t("analysis.timeline.collapse_all")])
     fold.on_event("click", lambda w, e, d: _collapse_window())
-    unfold = v.Btn(small=True, text=True, children=[t("analysis.timeline.expand_all")])
+    unfold = v.Btn(small=True, text=True, style_=_compact, children=[t("analysis.timeline.expand_all")])
     unfold.on_event("click", lambda w, e, d: (collapsed.set(frozenset()), render()))
 
     # The legend is the only description of what the lanes, bands, fade and
@@ -1120,9 +1168,8 @@ def build_timeline(app_state, analysis, widgets):
         v.Html(tag="div", style_="display: flex; align-items: center; gap: 10px; padding: 0 8px 6px",
                children=[chips, help_badge, v.Spacer(), fold, unfold, slider, status]),
         legend_text,
-        v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px",
+        v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px 8px",
                children=[_side("left", "‹"), track, message, _side("right", "›")]),
-        v.Html(tag="div", style_="padding: 8px", children=[readout_row]),
     ])
 
     for reactive in (app_state.scene_index, app_state.scene_manifest, app_state.scene_index_error,
