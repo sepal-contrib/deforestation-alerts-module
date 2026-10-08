@@ -25,7 +25,6 @@ class _Entry(NamedTuple):
     metric: list           # shapely polygons in `crs`
     geoms: list            # the same polygons in EPSG:4326
     props: list            # per-feature properties
-    to_metric: Transformer  # EPSG:4326 -> crs (lon, lat order)
 
 
 _cache: "OrderedDict[tuple, _Entry]" = OrderedDict()
@@ -43,7 +42,7 @@ def _has_polygon(g) -> bool:
 
 
 def _build(p, s, gdf) -> _Entry:
-    empty = _Entry(None, [], [], [], None)
+    empty = _Entry(None, [], [], [])
     if gdf is None or len(gdf) == 0 or "alert_polygon" not in gdf.columns:
         return empty
     rows = gdf[gdf["status"].isin(REVIEWED)]
@@ -58,8 +57,7 @@ def _build(p, s, gdf) -> _Entry:
          "date_min": _num(r.alert_date_min), "date_max": _num(r.alert_date_max)}
         for r in rows.itertuples()
     ]
-    return _Entry(crs, list(metric), list(polys), props,
-                  Transformer.from_crs("EPSG:4326", crs, always_xy=True))
+    return _Entry(crs, list(metric), list(polys), props)
 
 
 def _num(v):
@@ -97,7 +95,8 @@ def near_reviews(p, set_id: str, lon: float, lat: float, radius_m: float, *,
             e = _entry(p, s, load)
             if not e.metric:
                 continue
-            x, y = e.to_metric.transform(lon, lat)
+            # a Transformer is not thread-safe: one per call, never cached
+            x, y = Transformer.from_crs("EPSG:4326", e.crs, always_xy=True).transform(lon, lat)
             pt = shapely.Point(x, y)
             near = shapely.dwithin(e.metric, pt, radius_m)
             for i in near.nonzero()[0]:
