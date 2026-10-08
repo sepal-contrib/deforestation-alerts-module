@@ -7,6 +7,7 @@ from deforestation_alerts.engine.fingerprint import Status
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.project.models import AoiRecord, Period, Project, add_predefined_source
 from deforestation_alerts.scripts.raster_attribute import build_attribute_config, display_column
+from gui.i18n import t
 from gui.scripts import integrate_jobs
 from gui.tile import integrate_step
 
@@ -64,7 +65,7 @@ def test_outcome_lines_of_an_empty_set():
          "MINE": {"alert_pixels": 0, "alert_pixels_unmasked": 7}},
         {"GLAD-S2": "GLAD-S2 does not cover this AOI"})
     assert lines == [
-        "GLAD-L: 120 alert pixels (all below the minimum size, outside the drawn area or under earlier sets' footprints)",
+        "GLAD-L: 120 alert pixels (all below the minimum size, or under earlier sets' footprints)",
         "MINE: all 7 alert pixels removed by masks",
         "RADD: 0 alerts found",
         "GLAD-S2 does not cover this AOI",
@@ -112,3 +113,11 @@ def test_publish_alerts_refuses_once_another_set_is_active():
                             alerts_gdf=SimpleNamespace(set=lambda v: None))
     result = SimpleNamespace(alert_set=SimpleNamespace(id="mine"), alerts=None)
     assert integrate_jobs._publish_alerts(state, "i", result) is False
+
+
+def test_outcome_lines_say_when_probable_alerts_were_left_out():
+    outcomes = {"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 0}, "GLAD-L": {"alert_pixels": 0, "alert_pixels_unmasked": 0}}
+    lines = integrate_jobs.outcome_lines(outcomes, {}, confirmed_only=["RADD", "OTHER"])
+    assert lines == ["GLAD-L: 0 alerts found", "RADD: 0 alerts found",
+                     t("steps.integrate.outcome_confirmed_only", source="RADD")]
+    assert "left out" in lines[-1]

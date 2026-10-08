@@ -453,10 +453,11 @@
       "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",
       "outcome_pixels": {
-        "one": "{source}: {n} píxel de alerta (por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)",
-        "many": "{source}: {n} de píxeles de alerta (todos por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)",
-        "other": "{source}: {n} píxeles de alerta (todos por debajo del tamaño mínimo, fuera del área dibujada o bajo las huellas de conjuntos anteriores)"
+        "one": "{source}: {n} píxel de alerta (por debajo del tamaño mínimo, o bajo las huellas de conjuntos anteriores)",
+        "many": "{source}: {n} de píxeles de alerta (todos por debajo del tamaño mínimo, o bajo las huellas de conjuntos anteriores)",
+        "other": "{source}: {n} píxeles de alerta (todos por debajo del tamaño mínimo, o bajo las huellas de conjuntos anteriores)"
       },
+      "outcome_confirmed_only": "{source}: se dejaron fuera las alertas probables (no confirmadas)",
       "outcome_masked": {
         "one": "{source}: el {n} píxel de alerta fue eliminado por máscaras",
         "many": "{source}: los {n} de píxeles de alerta eliminados por máscaras",

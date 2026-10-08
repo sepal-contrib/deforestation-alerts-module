@@ -436,7 +436,7 @@ def test_the_integrate_and_grid_texts_follow_the_language():
     from gui.widget import grid_form
 
     assert integrate_jobs.outcome_lines({"GLAD-L": {"alert_pixels": 1, "alert_pixels_unmasked": 1}}, {}) == [
-        "GLAD-L: 1 alert pixel (below the minimum size, outside the drawn area or under earlier sets' footprints)"]
+        "GLAD-L: 1 alert pixel (below the minimum size, or under earlier sets' footprints)"]
     assert i18n.tn("steps.integrate.done", 1) == "1 alert ready for review"
     set_locale("es-ES")
     assert integrate_jobs.outcome_lines({"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 12345}}, {}) == [

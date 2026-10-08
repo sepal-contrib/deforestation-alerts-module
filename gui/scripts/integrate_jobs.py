@@ -244,12 +244,14 @@ def _publish_alerts(app_state, name: str, result) -> bool:
         return True
 
 
-def outcome_lines(outcomes: dict, left_out: dict) -> list:
+def outcome_lines(outcomes: dict, left_out: dict, confirmed_only=()) -> list:
     """What each source gave an empty set (spec §7.4), by source name, then
     the sources left out of the run (not covered, or no data for the period).
 
     ``outcomes`` is ``IntegrationResult.outcomes``: a source's alert pixels
     with and without the masks, ``{}`` when its file was never counted.
+    A source in ``confirmed_only`` gets a further line: its probable alerts
+    were left out, which may be why nothing is left.
     """
     lines = []
     for source in sorted(outcomes, key=str.casefold):
@@ -261,6 +263,8 @@ def outcome_lines(outcomes: dict, left_out: dict) -> list:
             lines.append(tn("steps.integrate.outcome_masked", before, source=source))
         else:
             lines.append(t("steps.integrate.outcome_none", source=source))
+        if source in (confirmed_only or ()):
+            lines.append(t("steps.integrate.outcome_confirmed_only", source=source))
     lines += [_left_out_line(s, (left_out or {})[s]) for s in sorted(left_out or {}, key=str.casefold)]
     return lines
 
@@ -277,7 +281,7 @@ def _left_out_line(source: str, reason: str) -> str:
 
 
 def _empty_message(result, left_out) -> str:
-    lines = outcome_lines(result.outcomes, left_out)
+    lines = outcome_lines(result.outcomes, left_out, result.alert_set.params.confirmed_only)
     if not lines:
         return t("steps.integrate.done_empty")
     return t("steps.integrate.done_empty_detail", details="; ".join(lines))

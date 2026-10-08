@@ -24,7 +24,7 @@ import solara
 from affine import Affine
 from pysepal.solara.notifications import NoopNotifier, NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
-from shapely.geometry import box, shape
+from shapely.geometry import box
 
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.project import io
@@ -50,8 +50,6 @@ from gui.tile import integrate_step
 from gui.widget import attribute_form, raster_input
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-FC = {"type": "FeatureCollection", "features": [
-    {"type": "Feature", "properties": {}, "geometry": box(0, 0, 1, 1).__geo_interface__}]}
 SET_DIR = f"periods/{JAN.id}/sets/glad-l"
 PARAGUAY = (-55.5, -24.5, -55.0, -24.0)  # UTM 21S
 
@@ -533,9 +531,9 @@ def _render(state, layers=None):
 @pytest.fixture
 def step(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], modal=[], tables={})
+    ns = SimpleNamespace(probable={}, ready=["GLAD-L", "RADD"], left_out={}, jobs=[], runs=[], kwargs=[], modal=[], tables={})
     monkeypatch.setattr(integrate_step, "integrate_choices", lambda p, pdir, period: [
-        {"source": s, "label": s, "enabled": True, "note": "", "probable": True} for s in ns.ready] + [
+        {"source": s, "label": s, "enabled": True, "note": "", "probable": ns.probable.get(s, True)} for s in ns.ready] + [
         {"source": s, "label": s, "enabled": False, "note": why} for s, why in ns.left_out.items()])
     # Jobs are queued, not started: the test runs them (``run_jobs``).
     monkeypatch.setattr(integrate_step, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
@@ -692,6 +690,16 @@ def test_the_form_has_no_area_select_and_a_probable_switch_per_chosen_source(ste
         [job] = step.runs
         assert job.params.confirmed_only == ["RADD"]
         assert job.params.area_mode == "aoi" and job.params.area_geojson is None
+    finally:
+        rc.close()
+
+
+def test_a_date_only_source_gets_no_probable_switch(step):
+    step.ready = ["GLAD-L", "CCDC-X"]
+    step.probable = {"CCDC-X": False}
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        assert list(_all_switches(rc)) == [t("steps.integrate.include_probable", source="GLAD-L")]
     finally:
         rc.close()
 
@@ -1367,7 +1375,8 @@ def _all_switches(rc):
 
 def _switches(rc):
     """The alert-layer switches, without the per-source probable ones."""
-    return {k: w for k, w in _all_switches(rc).items() if "include probable" not in k}
+    probable = {t("steps.integrate.include_probable", source=s) for s in ("GLAD-L", "RADD", "CCDC-X")}
+    return {k: w for k, w in _all_switches(rc).items() if k not in probable}
 
 
 def test_the_alert_switches_appear_once_a_run_has_produced_a_set(step):

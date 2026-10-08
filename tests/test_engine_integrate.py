@@ -652,14 +652,21 @@ def test_confirmed_only_drops_that_sources_probable_pixels(tmp_path):
     a[5:7, 5:7] = 1          # confirmed in source 0
     b[1:3, 1:3] = 2          # probable in source 1, same place
     d = 2026010
-    n = integrate.combine([(write(tmp_path / "a.tif", a, np.where(a > 0, d, 0)), 0),
-                           (write(tmp_path / "b.tif", b, np.where(b > 0, d, 0)), 1)],
+    a[10, 10] = 2            # probable in source 0, earlier date
+    b[10, 10] = 1            # confirmed in source 1, later date
+    da, db = np.where(a > 0, d, 0), np.where(b > 0, d, 0)
+    da[10, 10], db[10, 10] = 2026005, 2026020
+    n = integrate.combine([(write(tmp_path / "a.tif", a, da), 0),
+                           (write(tmp_path / "b.tif", b, db), 1)],
                           GRID, tmp_path / "c.tif", confirmed_only={0})
     with rasterio.open(tmp_path / "c.tif") as src:
-        code = src.read(1)
+        code, date_, disp = src.read(1), src.read(2), src.read(3)
     assert code[1, 1] == 2 * 10      # source 1's probable stays, source 0's is gone
     assert code[5, 5] == 1
-    assert n == 4 + 4
+    assert code[10, 10] == 10        # only source 1 counts there
+    assert date_[10, 10] == 2026020  # source 0's earlier probable date is gone with it
+    assert disp[10, 10] == 1
+    assert n == 4 + 4 + 1
 
 
 @_LONLAT_CENTROID

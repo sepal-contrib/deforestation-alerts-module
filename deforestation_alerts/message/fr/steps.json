@@ -453,10 +453,11 @@
       "done_empty": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide.",
       "done_empty_detail": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide. {details}",
       "outcome_pixels": {
-        "one": "{source} : {n} pixel d'alerte (sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)",
-        "many": "{source} : {n} de pixels d'alerte (tous sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)",
-        "other": "{source} : {n} pixels d'alerte (tous sous la taille minimale, hors de la zone dessinée ou sous les empreintes de jeux antérieurs)"
+        "one": "{source} : {n} pixel d'alerte (sous la taille minimale, ou sous les empreintes de jeux antérieurs)",
+        "many": "{source} : {n} de pixels d'alerte (tous sous la taille minimale, ou sous les empreintes de jeux antérieurs)",
+        "other": "{source} : {n} pixels d'alerte (tous sous la taille minimale, ou sous les empreintes de jeux antérieurs)"
       },
+      "outcome_confirmed_only": "{source} : les alertes probables (non confirmées) ont été écartées",
       "outcome_masked": {
         "one": "{source} : le {n} pixel d'alerte a été supprimé par les masques",
         "many": "{source} : les {n} de pixels d'alerte supprimés par les masques",
