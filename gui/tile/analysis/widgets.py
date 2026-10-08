@@ -193,10 +193,13 @@ class AnalysisWidgets:
             class_="pa-1 ma-1",
             children=[t("analysis_tile.img_selection.post_image_title")],
         )
-        # The map *containers* (title + map). The per-pane "selected image"
-        # info line under each map is gone with the selectors: the timeline's
-        # own readout names both chosen images in one place, beside the gap
-        # between them. The ``analysis-mapbox`` class (styled in
+        # The titles are the timeline's to fill (``build_timeline``): each one
+        # names its pane's chosen image, offers the same day's other
+        # collection, and says when a saved image was not found. They start
+        # as the bare pane name until the timeline has a pick.
+        self.map_title_before = map1_title
+        self.map_title_after = map2_title
+        # The map *containers* (title + map). The ``analysis-mapbox`` class (styled in
         # analysis_tile.py) marks the map container for the full-stage
         # workspace layout (the map height is set by the
         # ``.custom-map-class2`` rule in analysis_tile.py).

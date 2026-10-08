@@ -22,6 +22,7 @@ from shapely.geometry import box
 
 from deforestation_alerts.project.models import AoiRecord, Period, Project
 from deforestation_alerts.scripts import scene_index, scene_query
+from gui.widget.handle_strip import HandleStrip
 from gui.tile.analysis import timeline
 
 S2, LS, PL = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOURCE_PLANET
@@ -310,7 +311,7 @@ def test_every_locale_has_the_timeline_keys():
     keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
             "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
             "legend", "legend_label", "lane_before", "lane_after",
-            "set_before", "set_after", "collapsed_month", "no_cloud_filter"}
+            "set_before", "set_after", "collapsed_month", "no_cloud_filter", "swap_source"}
     for locale in ("en", "es-ES", "fr"):
         data = json.loads((root / locale / "ui.json").read_text())
         assert keys <= set(data["analysis"]["timeline"]), locale
@@ -341,27 +342,6 @@ def test_reset_alert_forgets_the_granule_keys():
     analysis.after_keys.set(["k2"])
     analysis.reset_alert()
     assert analysis.before_keys.value == [] and analysis.after_keys.value == []
-
-
-def test_the_upper_lane_sets_the_before_image_and_the_lower_one_the_after():
-    state = _fake_state()
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(state, analysis, _fake_widgets())
-    lanes = [w for w in _walk(card) if (w.style_ or "").startswith(f"position: relative; height: "
-                                                                   f"{timeline.LANE_H}px")]
-    assert len(lanes) == 2
-    upper, lower = lanes
-    # the only stripe outside the alert window's collapsed months and not
-    # already chosen on that side: the Landsat one for "before"
-    target = scene_index.row_id(LS, date(2026, 8, 27))
-    was_after = analysis.after_info.value
-    _click(upper, target)
-    assert analysis.before_info.value[0] == LS
-    # the upper lane is the before side *only*: the after publish is untouched
-    assert analysis.after_info.value is was_after
-    _click(lower, scene_index.row_id(S2, date(2026, 4, 24)))
-    assert analysis.after_info.value[0] == S2
-    assert analysis.before_info.value[0] == LS
 
 
 def test_a_hidden_row_is_drawn_but_carries_no_click_handler():
@@ -448,9 +428,9 @@ def test_a_second_alert_on_the_same_index_still_gets_its_own_pick():
     assert analysis.before_info.value[0] == LS
     assert analysis.before_info.value[3] == "Landsat 2026-06-10 "
     assert analysis.before_keys.value
-    # and the readout agrees with what was published, rather than still
+    # and the map title agrees with what was published, rather than still
     # naming the previous alert's image
-    text = _text(card)
+    text = _text(widgets.map_title_before)
     assert "Landsat 2026-06-10" in text and "Sentinel-2 2026-04-24" not in text
     # the new window re-collapsed from scratch: June is a margin month now
     assert _clickable_for(card, date(2026, 6, 10))
@@ -531,11 +511,12 @@ def test_turning_a_collection_off_takes_its_stripes_off_the_track():
 
 
 def test_the_cloud_limit_hides_a_row_without_dropping_it():
-    state = _fake_state(rows=[(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 30.0)])
+    # the 30% row is not a selection: a selected row keeps its full stripe
+    state = _fake_state(rows=[(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (LS, "2026-09-04", 30.0)])
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert not [w for w in _walk(card) if "opacity: 0.3" in (getattr(w, "style_", "") or "")]
-    slider = next(w for w in _walk(card) if getattr(w, "label", None) == timeline.t(
-        "analysis.timeline.max_cloud"))
+    slider = next(w for w in _walk(card) if (getattr(w, "label", None) or "").startswith(timeline.t(
+        "analysis.timeline.max_cloud")))
     slider.fire_event("change", 10)
     faint = [w for w in _walk(card) if "opacity: 0.3" in (getattr(w, "style_", "") or "")]
     assert faint, "a row over the new limit is faded, not removed"
@@ -549,7 +530,7 @@ def test_a_collapsed_month_shows_its_visible_count_and_expands_on_click():
     assert "2" in _text(block) and timeline.t("analysis.timeline.images") in _text(block)
     stripes = _count_stripes(card)
     block.fire_event("click", None)
-    assert _count_stripes(card) == stripes + 4  # two rows, in both lanes
+    assert _count_stripes(card) == stripes + 2  # two rows, one lane
 
 
 def test_the_month_labels_are_in_the_readers_language():
@@ -611,339 +592,7 @@ def test_the_legend_is_reachable_from_the_toolbar():
         "analysis.timeline.legend") for w in _walk(card))
 
 
-# ------------------------------------------------------------ keyboard navigation
-
-VIEW = (date(2026, 3, 1), date(2026, 6, 30))
-
-
-def _segs(collapsed=()):
-    return scene_query.month_segments(VIEW[0], VIEW[1], set(collapsed), timeline.TRACK_PX)
-
-
-def test_arrowing_moves_to_the_next_visible_row():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0), (S2, "2026-03-15", 5.0)],
-               start=VIEW[0], end=VIEW[1])
-    mid = scene_index.row_id(S2, date(2026, 3, 10))
-    assert timeline.step(sel, _segs(), mid, 1) == scene_index.row_id(S2, date(2026, 3, 15))
-    assert timeline.step(sel, _segs(), mid, -1) == scene_index.row_id(S2, date(2026, 3, 5))
-
-
-def test_arrowing_past_the_end_stays_put():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)], start=VIEW[0], end=VIEW[1])
-    last = scene_index.row_id(S2, date(2026, 3, 10))
-    assert timeline.step(sel, _segs(), last, 1) == last
-    first = scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.step(sel, _segs(), first, -1) == first
-
-
-def test_arrowing_skips_a_row_the_cloud_limit_hides():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 95.0), (S2, "2026-03-15", 5.0)],
-               start=VIEW[0], end=VIEW[1])
-    first = scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.step(sel, _segs(), first, 1) == scene_index.row_id(S2, date(2026, 3, 15))
-
-
-def test_arrowing_skips_a_row_inside_a_collapsed_month():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-04-10", 5.0), (S2, "2026-05-15", 5.0)],
-               start=VIEW[0], end=VIEW[1])
-    first = scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.step(sel, _segs(collapsed=[(2026, 4)]), first, 1) == \
-        scene_index.row_id(S2, date(2026, 5, 15))
-
-
-def test_arrowing_skips_a_row_outside_the_laid_out_months():
-    """A row whose month the segments do not hold at all is not drawn either,
-    so it is not reachable: ``_navigable`` must not assume ``segments`` covers
-    every row's month."""
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-07-10", 5.0), (S2, "2026-03-20", 5.0)],
-               start=VIEW[0], end=date(2026, 7, 31))
-    assert timeline.step(sel, _segs(), scene_index.row_id(S2, date(2026, 3, 20)), 1) == \
-        scene_index.row_id(S2, date(2026, 3, 20))
-
-
-def test_arrowing_from_nothing_selected_takes_the_first_visible_row():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)], start=VIEW[0], end=VIEW[1])
-    assert timeline.step(sel, _segs(), None, 1) == scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.step(sel, _segs(), None, -1) == scene_index.row_id(S2, date(2026, 3, 10))
-
-
-def test_arrowing_walks_the_rows_in_date_order_whatever_order_they_arrive_in():
-    """``scenes_for`` happens to sort by date today, but its contract does not
-    promise it; a cursor that walked the frame's row order would jump about."""
-    sel = _sel([(S2, "2026-03-15", 5.0), (S2, "2026-03-05", 5.0), (S2, "2026-03-10", 5.0)],
-               start=VIEW[0], end=VIEW[1])
-    shuffled = sel.iloc[[2, 0, 1]].reset_index(drop=True)
-    mid = scene_index.row_id(S2, date(2026, 3, 10))
-    assert timeline.step(shuffled, _segs(), mid, 1) == scene_index.row_id(S2, date(2026, 3, 15))
-    assert timeline.step(shuffled, _segs(), mid, -1) == scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.edge(shuffled, _segs()) == scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.edge(shuffled, _segs(), last=True) == scene_index.row_id(S2, date(2026, 3, 15))
-
-
-def test_the_edges_are_the_first_and_last_visible_rows():
-    sel = _sel([(S2, "2026-03-05", 5.0), (S2, "2026-03-10", 95.0), (S2, "2026-03-15", 5.0)],
-               start=VIEW[0], end=VIEW[1])
-    assert timeline.edge(sel, _segs()) == scene_index.row_id(S2, date(2026, 3, 5))
-    assert timeline.edge(sel, _segs(), last=True) == scene_index.row_id(S2, date(2026, 3, 15))
-
-
-def test_the_edges_of_an_empty_selection_are_nothing():
-    sel = _sel([(S2, "2026-03-05", 95.0)], start=VIEW[0], end=VIEW[1])
-    assert timeline.edge(sel, _segs()) is None
-    assert timeline.step(sel, _segs(), None, 1) is None
-
-
-# ---- which key a ``keydown`` payload asks for
-
-def test_a_keydown_payload_is_read_by_its_key_name():
-    assert timeline.key_action({"key": "ArrowLeft"}) == "left"
-    assert timeline.key_action({"key": "ArrowRight"}) == "right"
-    assert timeline.key_action({"key": "Home"}) == "home"
-    assert timeline.key_action({"key": "End"}) == "end"
-    assert timeline.key_action({"key": "Enter"}) == "enter"
-
-
-def test_a_keydown_payload_falls_back_to_the_legacy_key_code():
-    """Older WebKit sends ``key`` as "Left"/"Right"; some send neither, only
-    ``keyCode``. ipyvue forwards every enumerable property of the event, so
-    both are there to read."""
-    assert timeline.key_action({"key": "Left"}) == "left"
-    assert timeline.key_action({"keyCode": 39}) == "right"
-    assert timeline.key_action({"keyCode": 13}) == "enter"
-
-
-def test_a_key_the_timeline_does_not_use_asks_for_nothing():
-    assert timeline.key_action({"key": "a", "keyCode": 65}) is None
-    assert timeline.key_action({}) is None
-    assert timeline.key_action(None) is None
-
-
-# ---- the lanes
-
-def _kb_state():
-    return _fake_state(rows=[(S2, "2026-04-05", 5.0), (S2, "2026-04-12", 5.0),
-                             (S2, "2026-04-24", 5.0), (LS, "2026-08-27", 3.0)])
-
-
-def test_the_lanes_are_the_only_elements_claiming_an_explicit_tab_stop():
-    """Not the only tab stops: the toolbar's buttons, the chips, the slider and
-    the legend button are all natively focusable and meant to be. What this
-    pins is that the two lanes are the only elements that *claim* a tab stop
-    with ``tabindex="0"``, and that no stripe claims one at all."""
-    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
-    stops = [w for w in _walk(card)
-             if (getattr(w, "attributes", None) or {}).get("tabindex") == "0"]
-    assert len(stops) == 2  # the before lane and the after lane
-    assert {(w.attributes or {}).get("role") for w in stops} == {"listbox"}
-    # and every stripe is taken out of the tab order, so Tab is two presses
-    stripes = [w for w in _walk(card) if (w.attributes or {}).get("role") == "option"]
-    assert stripes and all((w.attributes or {}).get("tabindex") == "-1" for w in stripes)
-
-
-def test_one_bare_keydown_handler_per_lane_is_the_only_shape_ipyvue_allows():
-    """``ipyvue.VueWidget.Events.on_event`` deletes every registration sharing
-    the new one's base event, so ``on_event("keydown.left", ...)`` followed by
-    ``on_event("keydown.right", ...)`` leaves only the right arrow -- and the
-    front end, which merges one compiled ``on`` map per ``_events`` entry,
-    would keep only the last one too. Five ``keydown.<key>`` handlers can
-    never all fire; one ``keydown`` reading the payload can."""
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
-    for which in ("0", "1"):
-        assert _lane(card, which)._events == ["keydown"]
-
-
-def test_the_arrows_walk_the_right_way_and_home_and_end_reach_the_right_ends():
-    """The glue between ``key_action``'s string and ``step``'s ``delta`` is two
-    lines, and it is the likeliest typo site in the widget: ``step(..., -1)``
-    is pinned as a pure function and ``key_action({"key": "ArrowLeft"})`` is
-    pinned as a lookup, but nothing tied the two together through the handler.
-    Inverting the direction left every other test passing.
-
-    ``_kb_state``'s navigable rows are, in date order: 2026-04-05, 04-12,
-    04-24 (all Sentinel 2) and 2026-08-27 (Landsat). June and July are
-    collapsed by ``auto_collapsed``, and the auto-pick starts the cursor on
-    04-24, the last row before the alert window opens.
-    """
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
-    lane = _lane(card, "0")
-    first = f"b-{scene_index.row_id(S2, date(2026, 4, 5))}"
-    second = f"b-{scene_index.row_id(S2, date(2026, 4, 12))}"
-    third = f"b-{scene_index.row_id(S2, date(2026, 4, 24))}"
-    last = f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
-    assert _cursor_id(lane) == third
-    _press(lane, "ArrowLeft")
-    assert _cursor_id(lane) == second, "Left goes to the earlier row"
-    _press(lane, "ArrowLeft")
-    assert _cursor_id(lane) == first
-    _press(lane, "ArrowLeft")
-    assert _cursor_id(lane) == first, "and stops at the first, it does not wrap"
-    _press(lane, "ArrowRight")
-    assert _cursor_id(lane) == second, "Right goes to the later row"
-    _press(lane, "ArrowRight")
-    _press(lane, "ArrowRight")
-    assert _cursor_id(lane) == last
-    _press(lane, "ArrowRight")
-    assert _cursor_id(lane) == last, "and stops at the last"
-    _press(lane, "Home")
-    assert _cursor_id(lane) == first, "Home is the first row, not the last"
-    _press(lane, "End")
-    assert _cursor_id(lane) == last, "End is the last row, not the first"
-
-
-def test_arrowing_moves_the_cursor_without_assigning_anything():
-    """Spec 4.8: arrows move, Enter assigns. If an arrow assigned, walking ten
-    scenes would queue ten map redraws."""
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
-    lane = _lane(card, "0")
-    before = analysis.before_info.value
-    start = _cursor_id(lane)
-    assert start is not None, "the cursor starts on the auto-picked row"
-    _press(lane, "ArrowRight")
-    assert analysis.before_info.value is before            # nothing published
-    assert _cursor_id(lane) is not None                    # but the cursor moved
-    assert _cursor_id(lane) != start
-
-
-def test_each_lane_has_a_cursor_of_its_own():
-    """Asserting the landed id and not merely its ``a-`` prefix: the prefix
-    comes from the lane that *rendered* the id, not from the cursor it read, so
-    one shared reactive behind both lanes would satisfy ``startswith("a-")``
-    while the after lane's own cursor had never moved. It did."""
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
-    before_lane, after_lane = _lane(card, "0"), _lane(card, "1")
-    b_pick = f"b-{scene_index.row_id(S2, date(2026, 4, 24))}"
-    a_pick = f"a-{scene_index.row_id(LS, date(2026, 8, 27))}"
-    assert (_cursor_id(before_lane), _cursor_id(after_lane)) == (b_pick, a_pick)
-
-    _press(after_lane, "Home")
-    assert _cursor_id(after_lane) == f"a-{scene_index.row_id(S2, date(2026, 4, 5))}"
-    assert _cursor_id(before_lane) == b_pick, "the before lane did not move with it"
-
-    _press(before_lane, "ArrowRight")
-    assert _cursor_id(before_lane) == f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
-    assert _cursor_id(after_lane) == f"a-{scene_index.row_id(S2, date(2026, 4, 5))}", \
-        "and the after lane stayed where its own Home put it"
-
-    # and neither walk published anything: both sides still read their auto-pick
-    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
-    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
-
-
-def test_a_key_the_lane_does_not_use_does_nothing():
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
-    lane = _lane(card, "0")
-    was, published = _cursor_id(lane), analysis.before_info.value
-    _press(lane, "a")
-    assert _cursor_id(lane) == was and analysis.before_info.value is published
-
-
-def test_enter_assigns_the_row_the_cursor_is_on():
-    """``row_id`` is ``<source letter><YYYYMMDD>`` and ``info_tuple``'s fourth
-    element carries the ISO date, so the two can be checked against each other
-    without the test knowing which scene End landed on."""
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
-    lane = _lane(card, "0")
-    _press(lane, "End")
-    cursor = _cursor_id(lane)
-    assert cursor != f"b-{scene_index.row_id(S2, date(2026, 4, 24))}", "End is not where it started"
-    _press(lane, "Enter")
-    info = analysis.before_info.value
-    assert info is not None
-    iso = info[3].strip().rsplit(" ", 1)[-1]
-    assert cursor == f"b-{scene_index.row_id(info[0], date.fromisoformat(iso))}"
-    assert _cursor_id(lane) == cursor             # Enter assigns; it does not move
-    assert analysis.before_keys.value             # and the granule keys came with it
-
-
-def test_enter_on_a_lane_whose_cursor_has_not_moved_assigns_the_selection():
-    analysis = _fake_analysis()
-    card = timeline.build_timeline(_kb_state(), analysis, _fake_widgets())
-    lane = _lane(card, "0")
-    cursor = _cursor_id(lane)
-    analysis.before_info.set(None)
-    _press(lane, "Enter")
-    assert analysis.before_info.value is not None
-    assert _cursor_id(lane) == cursor
-
-
-def test_the_focused_stripe_is_named_for_a_screen_reader():
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
-    lane = _lane(card, "0")
-    _press(lane, "Home")
-    named = _cursor_id(lane)
-    ids = {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
-    assert named in ids  # aria-activedescendant points at a stripe that exists
-    assert named == f"b-{scene_index.row_id(S2, date(2026, 4, 5))}"
-
-
-def test_the_cursor_is_drawn_as_a_ring_on_exactly_one_stripe_per_lane():
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
-    _press(_lane(card, "0"), "End")
-    ringed = [w for w in _walk(card) if "outline: 1px dashed" in (getattr(w, "style_", "") or "")]
-    assert len(ringed) == 2  # one per lane: each lane has its own cursor
-    assert {(w.attributes or {}).get("id")[0] for w in ringed} == {"b", "a"}
-
-
-def test_a_lane_names_no_cursor_when_there_is_nothing_to_point_at():
-    """``aria-activedescendant`` is dropped rather than left empty: an empty
-    attribute is still an attribute, and it must never name a missing id."""
-    state = _fake_state(rows=[(S2, "2026-04-24", 95.0)])
-    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    lane = _lane(card, "0")
-    assert "aria-activedescendant" not in (lane.attributes or {})
-    _press(lane, "End")
-    assert "aria-activedescendant" not in (lane.attributes or {})
-
-
-def test_emptying_the_track_takes_the_cursor_with_it():
-    """Turning every collection off clears the lanes; an
-    ``aria-activedescendant`` left behind would name a stripe that is gone."""
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), _fake_widgets())
-    lane = _lane(card, "0")
-    assert _cursor_id(lane) is not None
-    for chip in [w for w in _walk(card)
-                 if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"]:
-        chip.fire_event("click", None)
-    # ``sources_off``, not ``no_images``: the index holds rows, they are just
-    # all in collections this test has switched off
-    assert timeline.t("analysis.timeline.sources_off") in _text(card)
-    assert "aria-activedescendant" not in (lane.attributes or {})
-
-
-def test_dropping_the_alert_takes_the_cursor_off_the_lane():
-    """``imagery_ctx`` going to ``None`` empties the track through
-    ``_clear_track``, which is the one emptying path ``_render_lane`` never
-    runs for -- so the ``aria-activedescendant`` drop has to happen there too,
-    or the lane goes on naming a stripe that is no longer in the tree.
-
-    ``test_emptying_the_track_takes_the_cursor_with_it`` does not cover this:
-    the chips are switched off one at a time, so the last render before the
-    track empties is a ``_render_lane`` that has already dropped the key.
-    """
-    widgets = _fake_widgets()
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), widgets)
-    lane = _lane(card, "0")
-    _press(lane, "End")
-    assert _cursor_id(lane) == f"b-{scene_index.row_id(LS, date(2026, 8, 27))}"
-    widgets.imagery_ctx.set(None)
-    assert timeline.t("analysis.timeline.no_images") in _text(card)
-    assert list(lane.children) == []
-    assert "aria-activedescendant" not in (lane.attributes or {})
-
-
-def test_a_new_alert_clears_the_cursor_with_the_selection():
-    widgets = _fake_widgets()
-    card = timeline.build_timeline(_kb_state(), _fake_analysis(), widgets)
-    lane = _lane(card, "0")
-    _press(lane, "End")
-    walked = _cursor_id(lane)
-    widgets.imagery_ctx.set({**_ctx(), "alert_id": 8, "token": 2})
-    assert _cursor_id(lane) != walked  # back to wherever the new auto-pick is
-
+# ------------------------------------------------------------ the legend
 
 def test_the_legend_is_a_button_that_opens_the_explanation():
     """Review finding: the only description of the lanes, bands, fade and gold
@@ -974,20 +623,6 @@ def test_the_legend_button_is_named_by_something_short():
     # explanation is the button's own
     region = badge.attributes["aria-controls"]
     assert region in {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
-
-
-def _lane(card, which):
-    lanes = [w for w in _walk(card)
-             if (getattr(w, "attributes", None) or {}).get("role") == "listbox"]
-    return lanes[0] if which == "0" else lanes[1]
-
-
-def _cursor_id(lane):
-    return (lane.attributes or {}).get("aria-activedescendant") or None
-
-
-def _press(lane, key: str) -> None:
-    lane.fire_event("keydown", {"key": key})
 
 
 # ---- fakes: the builder reads reactives and a context dict, nothing else
@@ -1028,13 +663,16 @@ def _fake_analysis():
 
 
 def _fake_widgets(bbox=None, **ctx_extra):
+    import ipyvuetify as v
     import solara
 
     ctx = dict(_ctx())
     if bbox is not None:
         ctx["bbox"] = bbox
     ctx.update(ctx_extra)
-    return SimpleNamespace(imagery_ctx=solara.reactive(ctx), timeline_filter=solara.reactive(None))
+    return SimpleNamespace(imagery_ctx=solara.reactive(ctx), timeline_filter=solara.reactive(None),
+                           map_title_before=v.Html(tag="div", children=[]),
+                           map_title_after=v.Html(tag="div", children=[]))
 
 
 def _text(widget) -> str:
@@ -1083,10 +721,15 @@ def _bar_width(row, *, selected: bool) -> float:
 
 
 def _count_stripes(card) -> int:
-    return sum(1 for w in _walk(card)
-               if (getattr(w, "attributes", None) or {}).get("aria-label", "").endswith(
-                   (timeline.t("analysis.timeline.set_before"),
-                    timeline.t("analysis.timeline.set_after"))))
+    """The stripes in the lane: one per drawn row, whatever its label says."""
+    return sum(1 for w in _walk(_lane(card)) if getattr(w, "tag", None) == "button")
+
+
+def _lane(card):
+    """The one lane every stripe is drawn in."""
+    [lane] = [w for w in _walk(card)
+              if (getattr(w, "style_", "") or "") == f"position: relative; height: {timeline.LANE_H}px"]
+    return lane
 
 
 def _click(lane, row_id_: str) -> None:
@@ -1177,11 +820,10 @@ def test_an_in_window_image_is_offered_by_hand_even_though_nothing_picks_it():
     block.fire_event("click", None)
     assert _clickable_for(card, date(2026, 6, 10))
 
-    lanes = [w for w in _walk(card)
-             if (w.style_ or "").startswith(f"position: relative; height: {timeline.LANE_H}px")]
-    _click(lanes[0], in_window)
-    assert analysis.before_info.value[3] == "Sentinel 2 2026-06-10 "
-    assert analysis.before_keys.value  # and its granules are published with it
+    # between the handles and after the alert start: an "after" look
+    _click(_lane(card), in_window)
+    assert analysis.after_info.value[3] == "Sentinel 2 2026-06-10 "
+    assert analysis.after_keys.value  # and its granules are published with it
 
 
 def test_a_pick_of_other_imagery_is_an_unsaved_change_that_drops_the_predictions():
@@ -1210,7 +852,7 @@ def test_a_pick_of_other_imagery_is_an_unsaved_change_that_drops_the_predictions
     analysis.prediction_files.set({1: "/f/alert_0_s_240426_l_270826.tif"})
     analysis.prediction_shapes.set({1: (2, 3.9)})
 
-    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 4, 10)))
+    _click(_lane(card), scene_index.row_id(S2, date(2026, 4, 10)))
 
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-10 "
     assert analysis.dirty.value is True
@@ -1220,7 +862,7 @@ def test_a_pick_of_other_imagery_is_an_unsaved_change_that_drops_the_predictions
     # Clicking the stripe that is already picked publishes nothing new, so it
     # is not an unsaved change either.
     analysis.dirty.set(False)
-    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 4, 10)))
+    _click(_lane(card), scene_index.row_id(S2, date(2026, 4, 10)))
     assert analysis.dirty.value is False
 
 
@@ -1239,10 +881,9 @@ def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
     card = timeline.build_timeline(state, analysis, widgets)
 
     note = timeline.t("analysis.timeline.same_image")
-    assert note in _text(card)
-    [span] = [w for w in _walk(card) if note in (getattr(w, "children", None) or ())]
-    assert timeline.WARN in (span.style_ or "")
-    assert timeline.MUTED not in (span.style_ or "")
+    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+    # the bracket carries it, in the warning colour (``gap_warn``)
+    assert strip.gap == note and strip.gap_warn is True
 
 
 def test_an_alert_whose_dates_are_missing_publishes_no_window_rather_than_a_wrong_one():
@@ -1294,14 +935,15 @@ def test_the_granule_keys_are_published_before_the_info_that_wakes_the_pane():
     in a test.
     """
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
-                                      (LS, "2026-08-27", 3.0, "W", "kB")]))
+                                      (LS, "2026-04-10", 3.0, "W", "kB"),
+                                      (LS, "2026-08-27", 3.0, "W", "kC")]))
     analysis = _fake_analysis()
     card = timeline.build_timeline(state, analysis, _fake_widgets())
     assert analysis.before_keys.value == ["kA"]  # the auto-pick's own granule
     seen = []
     # exactly what the pane does: read the keys when the info lands
     analysis.before_info.subscribe(lambda _info: seen.append(list(analysis.before_keys.value)))
-    _click(_lane(card, "0"), scene_index.row_id(LS, date(2026, 8, 27)))
+    _click(_lane(card), scene_index.row_id(LS, date(2026, 4, 10)))
     assert analysis.before_info.value[0] == LS
     assert seen == [["kB"]], "the pane was woken while the keys were still the previous pick's"
 
@@ -1359,9 +1001,8 @@ def test_a_chip_counts_what_its_collection_holds_in_the_window():
     # the two Landsat scenes are no longer drawn, but the chip still says how
     # many of them turning it back on would bring back
     assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", False)]
-    # two drawn rows, and ``_count_stripes`` counts a lane each: the S2
-    # stripe and the Planet bar, before and after
-    assert _count_stripes(card) == 4
+    # two drawn rows: the S2 stripe and the Planet bar
+    assert _count_stripes(card) == 2
 
 
 def test_a_chip_still_splits_the_cloud_hidden_rows_while_its_collection_is_off():
@@ -1482,7 +1123,7 @@ def test_a_collection_this_build_has_no_band_for_is_dropped_rather_than_raising(
     with caplog.at_level(logging.WARNING, logger="SEPALUI.deforestation_alerts"):
         card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert _chips(card) == [("Planet 0", True), ("Sentinel-2 1", True), ("Landsat 1", True)]
-    assert _count_stripes(card) == 4  # the two drawable rows, one lane each
+    assert _count_stripes(card) == 2  # the two drawable rows
     dropped = [r for r in caplog.records if "no band for" in r.getMessage()]
     assert dropped and "Sentinel 3" in dropped[0].getMessage()
 
@@ -1531,12 +1172,12 @@ def test_a_saved_image_over_the_cloud_limit_is_restored():
     # drawn as the selection: full height and gold, not faded. The row's own
     # stripe, looked up by its label: the gold alert-window band also carries
     # "background: <gold>" and would satisfy a tree-wide search on its own.
-    hit = [w for w in _walk(_lane(card, "0"))
+    hit = [w for w in _walk(_lane(card))
            if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith(
                f"{timeline.SRC_LABEL[S2]}, 2026-03-20")]
-    assert len(hit) == 1 and hit[0].attributes["aria-selected"] == "true"
+    assert len(hit) == 1 and hit[0].attributes["aria-current"] == "true"
     bar = hit[0].children[0].style_
-    assert f"background: {timeline.SELECTED_COLOR}" in bar and "opacity" not in bar
+    assert f"background: {timeline.BEFORE_COLOR}" in bar and "opacity" not in bar
 
 
 def test_a_saved_image_in_a_switched_off_collection_switches_it_back_on():
@@ -1583,15 +1224,18 @@ def test_a_saved_image_the_index_has_not_reached_waits_then_falls_back_with_a_no
     rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]  # no 2026-03-20 row
     state = _fake_state(index=_any_index(rows))
     analysis = _fake_analysis()
-    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    widgets = _fake_widgets(saved_before="Sentinel 2 2026-03-20 ")
+    timeline.build_timeline(state, analysis, widgets)
     # not answered yet (no manifest): the before side waits, the after side is picked
     assert analysis.before_info.value is None
     assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
-    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_before)
 
     state.scene_manifest.set(_covering())  # the index has answered for that date
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
-    assert timeline.t("analysis.timeline.saved_missing") in _text(card)
+    # in the before pane's own title: it is that pane's image the note is about
+    assert timeline.t("analysis.timeline.saved_missing") in _text(widgets.map_title_before)
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_after)
     assert analysis.dirty.value is False and analysis.edit_rev.value == 0
 
 
@@ -1642,23 +1286,22 @@ def test_a_pick_made_while_the_saved_one_waits_wins():
     rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-03-20", 5.0)]
     state = _fake_state(index=_any_index(rows[:2]))
     analysis = _fake_analysis()
-    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
-    upper = [w for w in _walk(card) if (w.style_ or "").startswith(f"position: relative; height: "
-                                                                   f"{timeline.LANE_H}px")][0]
-    _click(upper, scene_index.row_id(S2, date(2026, 4, 24)))
+    widgets = _fake_widgets(saved_before="Sentinel 2 2026-03-20 ")
+    card = timeline.build_timeline(state, analysis, widgets)
+    _click(_lane(card), scene_index.row_id(S2, date(2026, 4, 24)))
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
     state.scene_index.set(_any_index(rows))  # the saved row arrives late
     state.scene_manifest.set(_covering())
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
-    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_before)
 
 
 def test_the_timeline_publishes_its_filter():
     widgets = _fake_widgets()
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), widgets)
     assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 40.0)
-    slider = next(w for w in _walk(card) if getattr(w, "label", None) == timeline.t(
-        "analysis.timeline.max_cloud"))
+    slider = next(w for w in _walk(card) if (getattr(w, "label", None) or "").startswith(timeline.t(
+        "analysis.timeline.max_cloud")))
     slider.fire_event("change", 10)
     assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 10.0)
 
@@ -1670,11 +1313,12 @@ def test_a_hand_pick_after_a_fallback_takes_the_note_away():
     state = _fake_state(index=_any_index(rows))
     state.scene_manifest.set(_covering())
     analysis = _fake_analysis()
-    card = timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-02-01 "))
-    assert timeline.t("analysis.timeline.saved_missing") in _text(card)
-    _click(_lane(card, "0"), scene_index.row_id(S2, date(2026, 3, 20)))
+    widgets = _fake_widgets(saved_before="Sentinel 2 2026-02-01 ")
+    card = timeline.build_timeline(state, analysis, widgets)
+    assert timeline.t("analysis.timeline.saved_missing") in _text(widgets.map_title_before)
+    _click(_lane(card), scene_index.row_id(S2, date(2026, 3, 20)))
     assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
-    assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_before)
 
 
 def test_the_alert_row_publishes_its_saved_pair_as_text_or_none():

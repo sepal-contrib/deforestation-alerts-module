@@ -61,8 +61,8 @@
     "timeline": {
       "before": "Antes",
       "after": "Después",
-      "lane_before": "Carril de la imagen de antes. Usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
-      "lane_after": "Carril de la imagen de después. Usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
+      "lane_before": "Control de la imagen de antes. Arrástralo por la línea de tiempo, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
+      "lane_after": "Control de la imagen de después. Arrástralo por la línea de tiempo, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
       "unset": "sin definir",
       "max_cloud": "Nubes máx.",
       "one_more_month": "+1 mes",
@@ -79,14 +79,15 @@
       "image_failed_after": "No se pudo mostrar la imagen de después: {error}",
       "retry": "Intentar de nuevo",
       "loading": "Cargando el índice de imágenes…",
-      "legend": "Cada colección es una franja en su propia banda: Sentinel-2 arriba, Landsat en el medio, Planet como una barra a lo largo de su mes. Una franja atenuada de media altura supera el límite de nubes. La banda dorada es la ventana de alerta, donde todas las imágenes muestran una tala parcial: se pueden elegir, pero nunca se seleccionan por ti. Haz clic en una franja del carril superior para fijar la imagen de antes y en el inferior para la de después. O coloca el foco en un carril y usa el teclado: las flechas izquierda y derecha recorren las fechas, Inicio y Fin saltan a la primera y la última imagen, y Enter elige la que tiene el anillo.",
+      "legend": "Cada colección es una franja en su propia banda: Sentinel-2 arriba, Landsat en el medio, Planet como una barra a lo largo de su mes. Una franja atenuada de media altura supera el límite de nubes. La banda dorada es la ventana de alerta, donde todas las imágenes muestran una tala parcial: se pueden elegir, pero nunca se seleccionan por ti. Los dos controles sobre la línea de tiempo eligen las imágenes: el izquierdo la imagen de antes, el derecho la de después, y el corchete entre ellos indica cuántos días las separan. Arrastra un control y suéltalo sobre la imagen que quieras; el control de antes no puede pasar al de después. Al hacer clic en una franja se mueve el control de antes si la imagen está a su izquierda, el de después si está a su derecha y, entre los dos, el de antes para una imagen anterior al inicio de la alerta y el de después en otro caso. Cuando dos colecciones tienen una imagen el mismo día, el control toma Sentinel-2; haz clic en la franja de Landsat, o en el botón del título del mapa, para usar Landsat. Con el teclado, pasa a un control con Tab, recorre las fechas con las flechas izquierda y derecha, salta a la primera y la última imagen con Inicio y Fin, y elige con Enter.",
       "legend_label": "Qué muestra esta cronología",
       "set_before": "Fijar como imagen de antes",
       "set_after": "Fijar como imagen de después",
       "collapsed_month": "{month}, {count} imágenes, contraído. Expandir este mes.",
       "collapse_month": "{month}. Contraer este mes.",
       "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",
-      "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente"
+      "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente",
+      "swap_source": "Usar la imagen de {source} del mismo día"
     }
   },
   "analysis_tile": {

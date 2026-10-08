@@ -61,8 +61,8 @@
     "timeline": {
       "before": "Avant",
       "after": "Après",
-      "lane_before": "Couloir de l'image avant. Utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
-      "lane_after": "Couloir de l'image après. Utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
+      "lane_before": "Poignée de l'image avant. Faites-la glisser le long de la frise, ou utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
+      "lane_after": "Poignée de l'image après. Faites-la glisser le long de la frise, ou utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
       "unset": "non défini",
       "max_cloud": "Nuages max.",
       "one_more_month": "+1 mois",
@@ -79,14 +79,15 @@
       "image_failed_after": "Impossible d'afficher l'image après : {error}",
       "retry": "Réessayer",
       "loading": "Chargement de l'index des images…",
-      "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Cliquez sur une barre du couloir supérieur pour définir l'image avant, sur celui du bas pour l'image après. Ou placez le focus sur un couloir et utilisez le clavier : les flèches gauche et droite parcourent les dates, Début et Fin sautent à la première et à la dernière image, et Entrée choisit celle que l'anneau entoure.",
+      "legend": "Chaque collection est une barre dans son propre couloir : Sentinel-2 en haut, Landsat au milieu, Planet sous forme de barre couvrant son mois. Une barre pâle à mi-hauteur dépasse la limite de nuages. La plage dorée est la fenêtre d'alerte, où chaque image montre une coupe partielle : sélectionnable, mais jamais choisie pour vous. Les deux poignées au-dessus de la frise choisissent les images : celle de gauche l'image avant, celle de droite l'image après, et le crochet entre elles indique combien de jours les séparent. Faites glisser une poignée et relâchez-la sur l'image voulue ; la poignée avant ne peut pas dépasser la poignée après. Un clic sur une barre déplace la poignée avant si l'image est à sa gauche, la poignée après si elle est à sa droite et, entre les deux, la poignée avant pour une image antérieure au début de l'alerte et la poignée après sinon. Quand deux collections ont une image le même jour, la poignée prend Sentinel-2 ; cliquez sur la barre Landsat, ou sur le bouton du titre de la carte, pour utiliser Landsat. Au clavier, passez à une poignée avec Tab, parcourez les dates avec les flèches gauche et droite, sautez à la première et à la dernière image avec Début et Fin, et choisissez avec Entrée.",
       "legend_label": "Ce que montre cette chronologie",
       "set_before": "Définir comme image avant",
       "set_after": "Définir comme image après",
       "collapsed_month": "{month}, {count} images, replié. Déplier ce mois.",
       "collapse_month": "{month}. Replier ce mois.",
       "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais.",
-      "saved_missing": "Image enregistrée indisponible ; choisie automatiquement"
+      "saved_missing": "Image enregistrée indisponible ; choisie automatiquement",
+      "swap_source": "Utiliser l'image {source} du même jour"
     }
   },
   "analysis_tile": {

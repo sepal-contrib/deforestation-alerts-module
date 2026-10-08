@@ -593,9 +593,10 @@ def build_analysis_layout(
             # height instead (the MapApp step container is full-viewport): tall maps
             # that fill the stage, leaving room for the per-column title plus the
             # one shared strip below both of them. Measured: ~64px of per-column
-            # chrome (the map card's title + padding) and ~206px of strip (38px
-            # source toolbar + 128px track + ~32px readout + 8px padding).
-            ".custom-map-class2 { height: calc(100vh - 270px) !important; min-height: 320px; } "
+            # chrome (the map card's title + padding) and ~146px of strip (38px
+            # source toolbar + 100px track -- 28px handle rail, 45px lane, 27px
+            # axis -- + 8px padding).
+            ".custom-map-class2 { height: calc(100vh - 210px) !important; min-height: 320px; } "
             # The strip spans both columns, so it is a row of its own under them.
             # flex: 0 0 auto, not the default 0 1 auto: the stage is a flex
             # column and ``.analysis-row`` already absorbs overflow
