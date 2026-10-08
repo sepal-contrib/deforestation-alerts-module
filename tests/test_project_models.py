@@ -280,6 +280,15 @@ def test_old_manifest_keeps_every_status(tmp_path):
     arr = blank()
     arr[2:10, 2:10] = 1
     prepare(p, tmp_path, per, {"GLAD-L": arr}, 2026015)
+    from deforestation_alerts.engine import integrate
+    from deforestation_alerts.project.models import AlertSetParams
+
+    res = integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=per, sources=["GLAD-L"],
+        params=AlertSetParams(min_size_ha=0.01)))
+    p.artifacts.update(res.artifacts)
+    p.alert_sets[res.alert_set.id] = res.alert_set
+    assert fp.set_status(p, tmp_path, res.alert_set) is fp.Status.CURRENT
     raw = p.model_dump(mode="json")
     for d in raw["periods"].values():
         del d["look_back_days"]
@@ -290,6 +299,7 @@ def test_old_manifest_keeps_every_status(tmp_path):
                      fp.raw_alert_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT
     assert fp.status(p2, tmp_path, fp.harm_key(per.id, "GLAD-L"),
                      fp.harmonized_inputs(p2, "GLAD-L", per2)) is fp.Status.CURRENT
+    assert fp.set_status(p2, tmp_path, p2.alert_sets[res.alert_set.id]) is fp.Status.CURRENT
 
 
 def test_empty_confirmed_only_keeps_the_params_dump_unchanged():

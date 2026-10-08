@@ -31,8 +31,7 @@ import rasterio
 from ipyleaflet import GeoJSON
 
 from deforestation_alerts import gdal_env
-from deforestation_alerts.engine.fingerprint import earlier_sets
-from deforestation_alerts.engine.fingerprint import combined_key
+from deforestation_alerts.engine.fingerprint import combined_key, earlier_sets
 from deforestation_alerts.errors import UserFileMissing
 from deforestation_alerts.project import paths
 from gui.i18n import t

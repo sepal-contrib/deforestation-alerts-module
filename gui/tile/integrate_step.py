@@ -112,7 +112,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
     # "missing" shows a line that says to run again; a current set shows none.
     status = set_status(p, paths.project_dir(p.name), active) if active is not None else None
     _IntegrateForm(
-        app_state=app_state, map_=map_, gee_interface=gee_interface, inflight=inflight, layers=layers,
+        app_state=app_state, gee_interface=gee_interface, inflight=inflight, layers=layers,
         name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
         last=active.params if active is not None else None,
         has_set=active is not None, has_states=alert_layers.has_states(p, active),
@@ -123,7 +123,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 
 @solara.component
-def _IntegrateForm(app_state, map_, gee_interface, inflight, layers, name, period, choices, resolution, last,
+def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, choices, resolution, last,
                    has_set=False, has_states=False, has_earlier=False, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
