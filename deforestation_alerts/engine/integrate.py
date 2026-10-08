@@ -32,7 +32,8 @@ from rasterio.windows import Window
 from shapely.geometry import box
 
 from deforestation_alerts.engine.fingerprint import (
-    carry_sets, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, set_inputs, store_key,
+    carry_sets, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, mask_key,
+    period_masks, set_inputs, store_key,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.plan import plan_prepare
@@ -40,6 +41,7 @@ from deforestation_alerts import gdal_env
 from deforestation_alerts.engine.raster_io import (
     BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, same_disk, write_grid_raster,
 )
+from deforestation_alerts.engine.runner import _require_masks_ready
 from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import paths
@@ -77,7 +79,7 @@ def min_cluster_pixels(min_size_ha: float, resolution: float) -> int:
 
 
 def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
-            footprints: Sequence[Path] = (), carry: Sequence = (),
+            footprints: Sequence[Path] = (), carry: Sequence = (), carry_masks: Sequence = (),
             confirmed_only: frozenset = frozenset()) -> int:
     """Write the combined 3-band raster (spec §7.4 steps 1-4); return its alert pixel count.
 
@@ -93,16 +95,21 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     search window: older pixels were carried into it and are not carried again):
     that set's too-small and over-cap pixels (band 4 is 2 or 3) not
     already covered by this run's sources are added, digits remapped, before
-    the footprints are removed (spec §6).
+    the footprints are removed (spec §6). ``carry_masks`` are the period's
+    ``(aligned mask raster, mode)`` pairs, applied to the carried pixels only
+    with harmonize's rule ("keep" keeps where the mask is set, "exclude" drops
+    there): the sources' pixels were masked when they were harmonized, but a
+    carried pixel comes from an earlier set built under that period's masks.
     """
     # The window reads below assume every input shares the grid's pixels.
-    for path in [p for p, _ in inputs] + [c[0] for c in carry] + list(footprints):
+    for path in [p for p, _ in inputs] + [c[0] for c in carry] + [m for m, _ in carry_masks] + list(footprints):
         check_header(path, grid)
     total = 0
     with ExitStack() as stack:
         srcs = [(stack.enter_context(rasterio.open(p)), int(d)) for p, d in inputs]
         cars = [(stack.enter_context(rasterio.open(p)), remap, int(mind)) for p, remap, mind in carry]
         fps = [stack.enter_context(rasterio.open(p)) for p in footprints]
+        cmasks = [(stack.enter_context(rasterio.open(p)), mode) for p, mode in carry_masks]
         with write_grid_raster(Path(out_path), grid, count=3) as dst:
             for w in _windows(grid):
                 shp = (int(w.height), int(w.width))
@@ -134,6 +141,10 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                         moved += v * 10 ** new
                         conf |= v == 1
                     take = (code == 0) & ((st == STATE_TOO_SMALL) | (st == STATE_OVER_CAP)) & (moved > 0) & (cd >= mind)
+                    if take.any():
+                        for msrc, mode in cmasks:
+                            on = msrc.read(1, window=w) != 0
+                            take &= on if mode == "keep" else ~on
                     code[take] = moved[take].astype(np.int32)
                     date[take] = cd[take]
                     confirmed |= take & conf
@@ -359,6 +370,15 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
                                    key="errors.footprint_missing", set_id=s.id)
         fp_paths.append(paths.resolve(pdir, art.rel_path))
     carries = carry_sets(p, period, sources)
+    carry_masks = []
+    if carries:
+        # The carried pixels get the same masks as the sources (harmonize's rule).
+        # Their content ids reach the set's fingerprint through the harmonized
+        # inputs (``harmonized_inputs`` holds each mask's content id), so
+        # ``set_inputs`` needs no term of its own.
+        _require_masks_ready(p, pdir, period, "the carried pixels")
+        carry_masks = [(paths.resolve(pdir, p.artifacts[mask_key(n)].rel_path), mode)
+                       for n, mode in period_masks(p, period)]
     carry_paths = []
     for s, remap in carries:
         art = p.artifacts.get(combined_key(s.id))
@@ -374,6 +394,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     digit_map = {p.sources[s].digit: s for s in sources}
     try:
         combine(harm_paths, p.grid, base, footprints=fp_paths, carry=carry_paths,
+                carry_masks=carry_masks,
                 confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")

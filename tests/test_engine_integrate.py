@@ -935,3 +935,66 @@ def test_an_all_probable_source_with_the_switch_off_ignores_earlier_small_probab
     _prepare_dated(p, tmp_path, jan, "RADD", nxt, np.where(nxt > 0, 2026010, 0))
     res = _run(p, tmp_path, jan, params, ("RADD",))
     assert res.alert_set.n_alerts == 0 and len(res.alerts) == 0
+
+
+def _mask(tmp_path, name, cells):
+    m = _blank()
+    for r, c in cells:
+        m[r, c] = 1
+    return write(tmp_path / name, m, _blank())
+
+
+def _combine_carry(tmp_path, masks):
+    car = _carry_pair(tmp_path)  # pixels (5, 5) and (6, 6)
+    integrate.combine([], GRID, tmp_path / "c.tif", carry=[(car, {0: 0}, 0)], carry_masks=masks)
+    with rasterio.open(tmp_path / "c.tif") as src:
+        return src.read(1)
+
+
+def test_an_exclude_mask_over_a_carried_pixel_removes_it(tmp_path):
+    code = _combine_carry(tmp_path, [(_mask(tmp_path, "m.tif", [(5, 5)]), "exclude")])
+    assert code[5, 5] == 0 and code[6, 6] == 1
+
+
+def test_a_keep_mask_that_does_not_cover_a_carried_pixel_removes_it(tmp_path):
+    code = _combine_carry(tmp_path, [(_mask(tmp_path, "m.tif", [(6, 6)]), "keep")])
+    assert code[5, 5] == 0 and code[6, 6] == 1
+
+
+def test_without_masks_every_carried_pixel_stays(tmp_path):
+    code = _combine_carry(tmp_path, [])
+    assert code[5, 5] == 2 and code[6, 6] == 1
+
+
+def test_carry_masks_leave_the_sources_pixels_alone(tmp_path):
+    a = _blank()
+    a[5, 5] = 1
+    src = write(tmp_path / "a.tif", a, np.where(a > 0, 2026010, 0))
+    car = _carry_pair(tmp_path)
+    integrate.combine([(src, 0)], GRID, tmp_path / "c.tif", carry=[(car, {0: 0}, 0)],
+                      carry_masks=[(_mask(tmp_path, "m.tif", [(5, 5)]), "exclude")])
+    with rasterio.open(tmp_path / "c.tif") as s:
+        assert s.read(1)[5, 5] == 1  # a source pixel is masked at harmonize, not here
+
+
+@_LONLAT_CENTROID
+def test_run_integration_applies_the_periods_masks_to_the_carried_pixels(tmp_path):
+    from deforestation_alerts.project.models import MaskLayer, PeriodMask
+
+    p, dec, jan, dec_set, params = _december_with_small_cluster(tmp_path)  # carried: rows 10-11, cols 10-12
+    p.masks = {"roads": MaskLayer(name="roads", origin="gee", ref="a/b")}
+    raw = write(tmp_path / "raw_roads.tif", _blank(), _blank())
+    p.artifacts[fp.mask_raw_key("roads")] = fp.make_artifact(
+        fp.mask_raw_key("roads"), "raw_mask", tmp_path, raw, fp.mask_raw_inputs(p, "roads"))
+    cover = _blank()
+    cover[10, 10] = 1
+    aligned = write(paths.mask_path(tmp_path, "roads"), cover, _blank())
+    p.artifacts[fp.mask_key("roads")] = fp.make_artifact(
+        fp.mask_key("roads"), "mask", tmp_path, aligned, fp.mask_inputs(p, "roads"))
+    p.periods[jan.id] = jan.model_copy(update={"masks": {"roads": PeriodMask(on=True, mode="exclude")}})
+    nxt = _blank()
+    nxt[30:32, 30:32] = 1
+    _prepare_dated(p, tmp_path, p.periods[jan.id], "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+    s = _run(p, tmp_path, p.periods[jan.id], params).alert_set
+    st, _, _ = _state(tmp_path, s)
+    assert st[10, 10] == 0 and st[10, 11] == integrate.STATE_TOO_SMALL  # only the masked pixel is gone
