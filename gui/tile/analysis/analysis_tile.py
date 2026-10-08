@@ -584,7 +584,12 @@ def build_analysis_layout(
             # column defaults to min-width:auto, so the image slide group stretches
             # the column and resizes the maps. With it the column holds its half and
             # the slide group scrolls inside its strip.
-            ".analysis-col { flex: 1 1 0; min-width: 0; overflow: hidden; "
+            # overflow: clip, not hidden: a hidden box is still a scroll
+            # container, so Leaflet's container.focus() on the first press
+            # scrolled the column to reveal the map and cut off the pane title
+            # for good (no scrollbar to bring it back). A clipped box cannot
+            # be scrolled, programmatically or otherwise.
+            ".analysis-col { flex: 1 1 0; min-width: 0; overflow: clip; "
             "display: flex; flex-direction: column; } "
             ".analysis-mapbox { display: flex; flex-direction: column; } "
             # The ipyleaflet map sits inside an auto-generated ipywidgets wrapper
@@ -592,16 +597,21 @@ def build_analysis_layout(
             # grown to fill the column via flex. Use a viewport-relative fixed
             # height instead (the MapApp step container is full-viewport): tall maps
             # that fill the stage, leaving room for the per-column title plus the
-            # one shared strip below both of them. Measured: ~64px of per-column
-            # chrome (the map card's title + padding) and ~146px of strip (38px
+            # one shared strip below both of them. Measured: 32px of stage
+            # padding (``.defo-stage``, 16px top + bottom), 68px of per-column
+            # chrome (the map box's 8px margin + 8px padding, the 48px title,
+            # the ipywidgets wrapper's 4px margin) and ~146px of strip (38px
             # source toolbar + 100px track -- 28px handle rail, 45px lane, 27px
-            # axis -- + 8px padding).
-            ".custom-map-class2 { height: calc(100vh - 210px) !important; min-height: 320px; } "
+            # axis -- + 8px padding). The stage also ends above MapApp's
+            # bottom reserve (narrow layouts). The old 210px left out the
+            # stage padding, so each column overflowed by ~32px.
+            ".custom-map-class2 { height: calc(100vh - var(--sepal-bottom-reserved, 0px) "
+            "- 246px) !important; min-height: 320px; } "
             # The strip spans both columns, so it is a row of its own under them.
             # flex: 0 0 auto, not the default 0 1 auto: the stage is a flex
             # column and ``.analysis-row`` already absorbs overflow
             # (flex: 1 1 auto), so the strip must not shrink too -- that is
-            # what makes the 270px the maps give up self-enforcing.
+            # what makes the 246px the maps give up self-enforcing.
             ".analysis-strip { width: 100%; flex: 0 0 auto; padding: 0 4px 4px 4px; } "
             ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
             "min-width: 40px; display: flex !important; align-items: center !important; }"
