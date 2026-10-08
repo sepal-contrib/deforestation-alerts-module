@@ -2,13 +2,41 @@
 are message keys the UI translates."""
 
 import itertools
-from typing import Optional
+from pathlib import PurePosixPath
+from typing import Callable, Optional
 
 from deforestation_alerts.project.models import PREDEFINED_KEYS, Project, sources_slug
 from deforestation_alerts.scripts.naming import safe_token
 
 MAX_NAME = 24
 _PREDEFINED_TOKENS = {safe_token(k) for k in PREDEFINED_KEYS}  # glad-l, radd, glad-s2
+
+
+def name_from_ref(ref) -> str:
+    """The default name of a raster: an Earth Engine asset id's last segment,
+    a file path's stem."""
+    text = str(ref or "").strip().rstrip("/")
+    if not text:
+        return ""
+    last = PurePosixPath(text).name
+    return PurePosixPath(last).stem if "." in last else last
+
+
+def suggest_name(base: str, is_ok: Callable[[str], bool], max_len: int = MAX_NAME) -> str:
+    """``base`` cut to ``max_len``, else ``<base>_2`` … ``<base>_99`` (the base
+    shortened so the suffix fits), the first that ``is_ok`` accepts; "" if none."""
+    base = str(base or "").strip()
+    if not base:
+        return ""
+    first = base[:max_len].rstrip()
+    if is_ok(first):
+        return first
+    for n in range(2, 100):
+        suffix = f"_{n}"
+        candidate = base[: max_len - len(suffix)].rstrip() + suffix
+        if is_ok(candidate):
+            return candidate
+    return ""
 
 
 def _key(name) -> str:

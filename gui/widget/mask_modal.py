@@ -23,9 +23,10 @@ from deforestation_alerts.engine.user_raster import (
     UserRasterError, check_discovery, check_file, discovery_request, file_native, native_from_discovery,
     read_header,
 )
-from deforestation_alerts.project.names import validate_mask_name
+from deforestation_alerts.project.names import name_from_ref, suggest_name, validate_mask_name
 from gui.i18n import t
 from gui.scripts.error_text import error_text
+from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
@@ -98,6 +99,9 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
     ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if origin == "gee" else "FILE"
     bands_task = use_band_list(gee_interface, origin, ref, asset_type)
+    use_default_name(
+        ref if m0 is None else None, name, set_name,
+        lambda r: suggest_name(name_from_ref(r), lambda n: validate_mask_name(n, app_state.project.value) is None))
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
     items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
              else [{"text": n, "value": n} for n in names])

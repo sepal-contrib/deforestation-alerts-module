@@ -71,3 +71,29 @@ def test_mask_name_rules():
     assert names.validate_mask_name("x" * 25, p) == "steps.prepare.mask_name_too_long"
     assert names.validate_mask_name("**", p) == "steps.prepare.mask_name_token_na"
     assert names.validate_mask_name("GLAD-L", p) is None  # no mask name is reserved
+
+
+from deforestation_alerts.project.names import MAX_NAME, name_from_ref, suggest_name  # noqa: E402
+
+
+def test_name_from_ref_takes_the_last_asset_segment_or_the_file_stem():
+    assert name_from_ref("projects/x/assets/alerts/radd_2024") == "radd_2024"
+    assert name_from_ref("/home/u/data/my mask.tif") == "my mask"
+    assert name_from_ref("users/a/b/") == "b"
+    assert name_from_ref("") == ""
+    assert name_from_ref(None) == ""
+
+
+def test_suggest_name_truncates_and_suffixes_until_accepted():
+    taken = {"forest_cover", "forest_cover_2"}
+    assert suggest_name("forest_cover", lambda n: n not in taken) == "forest_cover_3"
+    long = "a" * 40
+    got = suggest_name(long, lambda n: True)
+    assert got == "a" * MAX_NAME
+    got = suggest_name(long, lambda n: n != "a" * MAX_NAME)
+    assert got == "a" * (MAX_NAME - 2) + "_2" and len(got) <= MAX_NAME
+
+
+def test_suggest_name_gives_up_with_empty_string():
+    assert suggest_name("x", lambda n: False) == ""
+    assert suggest_name("", lambda n: True) == ""

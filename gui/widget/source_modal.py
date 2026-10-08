@@ -19,12 +19,13 @@ from deforestation_alerts.engine.user_raster import (
 )
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import PRESETS, BandMap, CustomSource, mapped_bands
-from deforestation_alerts.project.names import validate_source_name
+from deforestation_alerts.project.names import name_from_ref, suggest_name, validate_source_name
 from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.scripts.coverage_ui import note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.remote_facts import aoi_origin
+from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
@@ -155,6 +156,9 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
     ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if origin == "gee" else "FILE"
     bands_task = use_band_list(gee_interface, origin, ref, asset_type)
+    use_default_name(
+        ref if mode == "custom" and src0 is None else None, name, set_name,
+        lambda r: suggest_name(name_from_ref(r), lambda n: validate_source_name(n, app_state.project.value) is None))
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
     band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
                   else [{"text": n, "value": n} for n in names])
