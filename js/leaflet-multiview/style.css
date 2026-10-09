@@ -63,3 +63,9 @@
 /* --- fitBounds (src/plugins/fit-bounds) --- */
 .mv-fit-bounds { font-size: 18px; line-height: 30px; text-align: center; cursor: pointer; }
 .mv-fit-bounds-bar.mv-fit-bounds--none { display: none; }
+
+/* --- anywidget adapter (src/widget/anywidget.js) --- */
+/* The wrapper also holds the error strip when no multiview could be built,
+   outside .mv-root: it carries the strip's colours itself. */
+.mv-widget { position: relative; width: 100%; height: 100%; --mv-error-bg: #b3261e; --mv-error-fg: #fff; }
+.mv-widget > .mv-widget-views { width: 100%; height: 100%; }
