@@ -88,6 +88,11 @@
       "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",
       "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente",
       "swap_source": "Usar la imagen de {source} del mismo día"
+    },
+    "panes": {
+      "layers": "Capas",
+      "zoom_alert": "Acercar a la alerta",
+      "vertex_hint": "Clic derecho en un vértice para borrarlo"
     }
   },
   "analysis_tile": {

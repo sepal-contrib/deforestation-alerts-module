@@ -88,6 +88,11 @@
       "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais.",
       "saved_missing": "Image enregistrée indisponible ; choisie automatiquement",
       "swap_source": "Utiliser l'image {source} du même jour"
+    },
+    "panes": {
+      "layers": "Couches",
+      "zoom_alert": "Zoomer sur l'alerte",
+      "vertex_hint": "Clic droit sur un sommet pour le supprimer"
     }
   },
   "analysis_tile": {

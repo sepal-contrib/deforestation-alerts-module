@@ -88,6 +88,11 @@
       "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it.",
       "saved_missing": "Saved image not available; picked automatically",
       "swap_source": "Use the {source} image from the same day"
+    },
+    "panes": {
+      "layers": "Layers",
+      "zoom_alert": "Zoom to the alert",
+      "vertex_hint": "Right-click a vertex to delete it"
     }
   },
   "analysis_tile": {
