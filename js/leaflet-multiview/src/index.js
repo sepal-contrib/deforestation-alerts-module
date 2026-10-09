@@ -4,3 +4,5 @@
 // task appends its own line: T4 layerMenu + fitBounds, T7 draw, T13 holes,
 // T14 tileErrors.
 export {createMultiView} from "./core/multiview.js";
+export {layerMenu} from "./plugins/layer-menu/index.js";
+export {fitBounds} from "./plugins/fit-bounds/index.js";

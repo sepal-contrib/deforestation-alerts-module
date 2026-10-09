@@ -55,3 +55,11 @@
   color: var(--mv-error-fg);
   font: 12px/1.6 Roboto, sans-serif;
 }
+
+/* --- layerMenu (src/plugins/layer-menu) --- */
+.mv-layers-title { font-weight: 600; padding: 0 0 4px; }
+.mv-layer-menu.mv-layer-menu--empty { display: none; }
+
+/* --- fitBounds (src/plugins/fit-bounds) --- */
+.mv-fit-bounds { font-size: 18px; line-height: 30px; text-align: center; cursor: pointer; }
+.mv-fit-bounds-bar.mv-fit-bounds--none { display: none; }
