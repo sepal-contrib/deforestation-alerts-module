@@ -6,3 +6,4 @@
 export {createMultiView} from "./core/multiview.js";
 export {layerMenu} from "./plugins/layer-menu/index.js";
 export {fitBounds} from "./plugins/fit-bounds/index.js";
+export {draw} from "./plugins/draw/index.js";

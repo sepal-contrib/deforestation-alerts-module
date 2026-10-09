@@ -62,6 +62,8 @@ def default_state(**kw):
         "layer_menu_toggles": {},
         "fit_bounds_bounds": None,
         "fit_bounds_views": ["after"],
+        "draw": {"fc": {"type": "FeatureCollection", "features": []}, "gen": 0, "seq": 0, "origin": "host"},
+        "draw_edit_mode": False,
     }
     s.update(kw)
     return s

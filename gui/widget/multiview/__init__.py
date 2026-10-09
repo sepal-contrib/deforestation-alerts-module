@@ -4,6 +4,7 @@ A self-contained package: it imports nothing from ``gui.*`` or ``pysepal``
 (``tests/test_multiview_boundaries.py``), so it can move to its own repo.
 """
 
+from .draw_state import DrawState
 from .plugins import Draw, FitBounds, Holes, LayerMenu, PluginMixin, TileErrors, plugin_order
 from .specs import ALL, geojson_spec, set_view, tile_spec
 from .widget import MultiView
@@ -11,6 +12,7 @@ from .widget import MultiView
 __all__ = [
     "ALL",
     "Draw",
+    "DrawState",
     "FitBounds",
     "Holes",
     "LayerMenu",
