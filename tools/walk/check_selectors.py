@@ -62,6 +62,7 @@ WALK = [
      ("Questions", "Refine polygon", "Export this alert")),
     ("phases.analysis_jump_field (after the # toggle)", (), ("Go",)),
     ("slice5.e_sets (the set selector)", (), ("Alert set",)),
+    ("panes_walk.check_panes (start/stop drawing)", ("Refine polygon",), ("Start Drawing", "Stop Drawing")),
     # slice6.pick_template picks the report template in the Questionnaire
     # step now (Task 4), outside the Analysis panel this script builds.
 ]

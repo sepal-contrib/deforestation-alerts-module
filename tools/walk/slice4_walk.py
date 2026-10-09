@@ -205,21 +205,15 @@ def add_layer(page, rec, *, kind, name, fill, out) -> bool:
 
 
 def analysis_layer_controls(page) -> list:
-    """Each Analysis map's layer control (pysepal's LayersControl: a menu that
-    opens on hover over its layer-group button), as ``{layer name: ticked}``."""
-    found = []
-    buttons = page.locator(".analysis-mapbox:visible .leaflet-control button:has(.fa-layer-group)")
-    for i in range(buttons.count()):
-        buttons.nth(i).hover()
-        page.wait_for_timeout(800)
-        found.append(page.evaluate("""() => { const m = [...document.querySelectorAll('.menuable__content__active')]
-            .find(e => e.querySelector('table'));
-            if (!m) return {};
-            return Object.fromEntries([...m.querySelectorAll('tr')].filter(tr => tr.querySelector('.v-simple-checkbox'))
-                .map(tr => [tr.querySelector('td').innerText.trim(), !!tr.querySelector('.mdi-checkbox-marked')])); }"""))
-        page.mouse.move(5, 500)  # off the control: the menu closes
-        page.wait_for_timeout(600)
-    return found
+    """Each Analysis view's layer menu (``leaflet-multiview``'s ``layerMenu``,
+    one per view), as ``{layer name: ticked}``. The menu's list is in the DOM
+    while it is collapsed and its ticks follow the map, so nothing is hovered;
+    ``textContent`` because the collapsed list has no ``innerText``."""
+    return page.evaluate("""() => [...document.querySelectorAll('.analysis-views .mv-view')]
+        .filter(v => v.offsetParent)
+        .map(v => Object.fromEntries([...v.querySelectorAll(
+            '.mv-layer-menu .leaflet-control-layers-overlays label')]
+            .map(l => [l.querySelector('input + span').textContent.trim(), l.querySelector('input').checked])))""")
 
 
 def e_vis_layers(page, rec, *, out, s2):
@@ -256,7 +250,7 @@ def e_vis_layers(page, rec, *, out, s2):
         lists = analysis_layer_controls(page)
         return lists if len(lists) == 2 and all(all(n in m for n in wanted) for m in lists) else None
 
-    lists = w.wait_for(listed, 180, "the layer control of both Analysis maps listing the layers", poll=3)
+    lists = w.wait_for(listed, 180, "the layer menu of both Analysis views listing the layers", poll=3)
     rec["analysis_layer_controls"] = lists
     assert all(not m[n] for m in lists for n in wanted), lists  # added switched off
     assert ph.legend_text(page) == "", ph.legend_text(page)  # no legend on the Analysis maps (D20)
