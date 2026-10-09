@@ -1,7 +1,8 @@
 """The Analysis overlay of reviewed alerts from earlier periods (spec §9).
 
-One read-only ``GeoJSON`` layer (outline only, coloured by review status) on
-both maps, drawn from ``earlier_reviews.near_reviews``. ``refresh_earlier_reviews``
+One read-only GeoJSON layer spec (outline only, coloured by review status:
+each feature carries its colour in ``properties.style``) on every view, drawn
+from ``earlier_reviews.near_reviews``. ``refresh_earlier_reviews``
 blocks on the first read of each earlier set's store, so it runs on a worker
 (``view_actual_alert``'s, or ``spawn_in_context`` for the switch and the
 distance). Its result is applied under ``AnalysisState.apply_if_current``: an
@@ -12,10 +13,8 @@ layer stays a plain outline.
 """
 
 import logging
-from contextlib import nullcontext
 
 import ipyvuetify as v
-from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from gui.i18n import t
@@ -23,11 +22,14 @@ from gui.scripts import earlier_reviews
 from gui.scripts.legend_specs import status_colors
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.workflow_steps import active_set
+from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import panel_block
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 EARLIER_LAYER_NAME = "Earlier reviews"
+#: The overlay's spec id on the views.
+EARLIER_ID = "earlier"
 MIN_KM, MAX_KM = 0.1, 50.0
 
 
@@ -46,20 +48,11 @@ def _style(feature, **_):
     return {"color": colours[code if code in colours else 0], "weight": 2, "fill": False, "fillOpacity": 0}
 
 
-def _maps(widgets):
-    return [m for m in (getattr(widgets, "map_before", None), getattr(widgets, "map_after", None))
-            if m is not None]
-
-
-def _drop(a_map) -> None:
-    with getattr(a_map, "layers_lock", None) or nullcontext():
-        a_map.layers = tuple(lyr for lyr in a_map.layers
-                             if getattr(lyr, "name", None) != EARLIER_LAYER_NAME)
-
-
 def remove_earlier_layer(widgets) -> None:
-    for a_map in _maps(widgets):
-        _drop(a_map)
+    """Take the overlay off the views (a no-op without views or without it)."""
+    panes = getattr(widgets, "panes", None)
+    if panes is not None:
+        panes.remove(EARLIER_ID)
 
 
 def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> None:
@@ -87,15 +80,19 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
     km = analysis.earlier_radius_km.value
     point = gdf.iloc[alert_id].point
     data = earlier_reviews.near_reviews(p, s.id, point.x, point.y, km * 1000.0)
-    layer = GeoJSON(data=data, style={"weight": 2, "fill": False}, style_callback=_style,
-                    name=EARLIER_LAYER_NAME)
+    # Each feature carries its status colour in ``properties.style``, which
+    # the views merge over the layer's ``style`` (``layer_view.js``).
+    styled = {**data, "features": [
+        {**f, "properties": {**(f.get("properties") or {}), "style": _style(f)}} for f in data["features"]]}
+    spec = geojson_spec(EARLIER_ID, "all", styled, name=EARLIER_LAYER_NAME, group="earlier",
+                        style={"weight": 2, "fill": False})
 
     def _apply():
         if seq != analysis.earlier_seq:
             return  # a newer refresh (switch, distance) started meanwhile
-        for a_map in _maps(widgets):
-            _drop(a_map)
-            a_map.add_layer(layer)
+        panes = getattr(widgets, "panes", None)
+        if panes is not None:
+            panes.add(spec)  # replaces the previous overlay (same id)
         if on_result:
             on_result(len(data["features"]))
 

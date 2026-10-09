@@ -35,6 +35,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
 from gui.i18n import t
+from tests._pane_helpers import make_panes, reviewer_edits
 
 
 # ---------------------------------------------------------------------------
@@ -1397,59 +1398,26 @@ def test_the_refine_badge_cannot_break_an_alert_change(tmp_path):
     assert seen[-1] == t("analysis_tile.sections.refine_empty")
 
 
-class _DrawFake:
-    """A ``CustomDrawControl`` stand-in: the drawn data, the clear, and the
-    frontend draw event the reviewer's drawing/editing/deleting fires."""
-
-    def __init__(self):
-        self.data = []
-        self.drawn = []
-        self.on_map = False
-
-    def on_draw(self, callback):
-        self.drawn.append(callback)
-
-    def clear(self):
-        self.data = []
-
-    def show(self):
-        # Like the real ``CustomDrawControl``: show/hide put the control on the
-        # map and take it off, and BOTH clear what was drawn -- which is why a
-        # prediction cannot be added before the drawing session is open.
-        self.clear()
-        self.on_map = True
-
-    def hide(self):
-        self.clear()
-        self.on_map = False
-
-    def to_json(self):
-        return {"features": [{"type": "Feature", "properties": {},
-                              "geometry": {"type": "Polygon", "coordinates": [
-                                  [[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}]}
+_SQUARE = {"type": "Feature", "properties": {},
+           "geometry": {"type": "Polygon", "coordinates": [
+               [[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}
 
 
 def _draw_widgets():
-    """``AnalysisWidgets`` reduced to what the edit handlers touch."""
-    maps = [SimpleNamespace(add_layer=lambda layer: None,
-                            find_layer=lambda name, none_ok=False: None) for _ in range(2)]
-    w = SimpleNamespace(map_before=maps[0], map_after=maps[1],
-                        draw_before=_DrawFake(), draw_after=_DrawFake())
-
-    def _set_synced_draw_data(features):
-        w.draw_before.data = list(features)
-        w.draw_after.data = list(features)
-
-    w.set_synced_draw_data = _set_synced_draw_data
-    return w
+    """``AnalysisWidgets`` reduced to what the edit handlers touch: the views'
+    writer, on a headless ``AlertViews``. The reviewer's edits in the browser
+    are ``tests._pane_helpers.reviewer_edits``."""
+    return SimpleNamespace(panes=make_panes())
 
 
 def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypatch):
     """Ruling 24 / spec §4.4: the reviewer drawing or editing the polygon makes
     the footer read "Unsaved changes on this alert" -- while
     ``view_actual_alert`` *seeding* a freshly opened alert's stored polygon must
-    not, which is why the flag hangs off the draw controls' own event and the
-    edit handlers the reviewer operates, never off ``analysis.defo_layer``."""
+    not, which is why the flag hangs off the reviewer's own edits
+    (``PaneLayers.on_drawing_edit``) and the edit handlers the reviewer
+    operates, never off ``analysis.defo_layer`` or a Python write of the
+    drawing."""
     import geopandas as gpd
     from shapely.geometry import box as shapely_box
 
@@ -1465,14 +1433,14 @@ def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypa
     analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)],
                                              crs="EPSG:4326"))
     assert analysis.dirty.value is False, "seeding an alert's polygon is not a change"
+    # nor is Python writing the drawing (Start Drawing's seeding, Add to map)
+    widgets.panes.set_drawing([_SQUARE])
+    assert analysis.dirty.value is False, "a Python write of the drawing is not an edit"
 
-    # the reviewer draws (or edits, or deletes) a shape on either map
-    for control in (widgets.draw_before, widgets.draw_after):
-        analysis.dirty.set(False)
-        assert control.drawn, "the draw control's own event is not wired"
-        for callback in control.drawn:
-            callback(control, "created", {})
-        assert analysis.dirty.value is True
+    # the reviewer draws (or edits, or deletes) a shape on a view
+    reviewer_edits(widgets.panes, [_SQUARE])
+    assert analysis.dirty.value is True, "the reviewer's edit is not wired"
+    assert analysis.drawing_unapplied.value is True
 
     # applying the drawing is a change too
     analysis.dirty.set(False)
@@ -1491,10 +1459,10 @@ def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypa
 def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
     """*Run* is in the model row, outside the drawing session, so *Add to map*
     can be the first thing the reviewer clicks. The prediction goes into the
-    draw controls and ``CustomDrawControl.show()`` clears them, so one added
-    before the session opened would be wiped by the next *Start Drawing*:
-    *Add* opens the session itself, and the panel reads as if the reviewer had
-    pressed *Start Drawing* first."""
+    drawing, and *Start Drawing* seeds the drawing from the stored polygon, so
+    one added before the session opened would be replaced by the next *Start
+    Drawing*: *Add* opens the session itself, and the panel reads as if the
+    reviewer had pressed *Start Drawing* first."""
     import gui.tile.analysis.edit_tools as edit_tools
 
     analysis = AnalysisState()
@@ -1506,25 +1474,68 @@ def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
                                        analysis=analysis, app_tile_model=_set_context_fake())
     slots = _slots(body)
     monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found(patches=1, area=1.0))
-    assert widgets.draw_before.on_map is False, "no drawing session was started"
+    views = widgets.panes.widget
+    assert views.draw_edit_mode is False, "no drawing session was started"
     assert slots["dl1_add"].disabled is False, "the recorded prediction is on offer"
 
     slots["dl1_add"].fire_event("click", None)
 
-    # the session is open on both maps and carries the prediction
-    assert widgets.draw_before.on_map is True and widgets.draw_after.on_map is True
-    assert len(widgets.draw_before.data) == 1
-    assert widgets.draw_after.data == widgets.draw_before.data
+    # the session is open on every view and the drawing carries the prediction
+    assert views.draw_edit_mode is True
+    assert len(widgets.panes.drawing_features()) == 1
+    assert views.draw["fc"]["features"] == widgets.panes.drawing_features(), "the views got it"
     # and the edit buttons say so
     assert slots["start_btn"].disabled is True
     assert slots["save_btn"].disabled is False and slots["stop_btn"].disabled is False
     # the pair now offers the other direction
     assert slots["dl1_add"].disabled is True and slots["dl1_remove"].disabled is False
 
-    # stopping clears the drawing, so what the run found is on offer again
+    # stopping leaves edit mode and clears the drawing (the views keep a
+    # drawing on screen outside edit mode, so the clear is the app's to do),
+    # so what the run found is on offer again
     slots["stop_btn"].fire_event("click", None)
-    assert widgets.draw_before.on_map is False
+    assert views.draw_edit_mode is False
+    assert widgets.panes.drawing_features() == [] and views.draw["fc"]["features"] == []
     assert slots["dl1_add"].disabled is False and slots["dl1_remove"].disabled is True
+
+
+def test_start_drawing_seeds_the_stored_polygon_and_stop_clears_it():
+    """The views show the drawing in and out of edit mode; only the toolbar
+    follows edit mode. So *Start Drawing* both switches edit mode on and seeds
+    the drawing with the alert's stored polygon, and *Stop Drawing* both
+    switches it off and empties the drawing -- explicitly, or the polygon
+    would stay drawn over the review after the session."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    views = widgets.panes.widget
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)],
+                                             crs="EPSG:4326"))
+    assert views.draw_edit_mode is False and widgets.panes.drawing_features() == []
+
+    slots["start_btn"].fire_event("click", None)
+    assert views.draw_edit_mode is True
+    (seeded,) = widgets.panes.drawing_features()
+    assert seeded["geometry"]["type"] == "Polygon"
+    assert seeded["properties"]["style"]["color"] == "blue"
+    assert analysis.dirty.value is False, "opening the session is not an edit"
+
+    slots["stop_btn"].fire_event("click", None)
+    assert views.draw_edit_mode is False
+    assert widgets.panes.drawing_features() == []
+
+    # with no stored polygon, the session opens on an empty drawing (never a
+    # feature without a geometry, which the views would keep in every edit)
+    analysis.defo_layer.set(None)
+    slots["start_btn"].fire_event("click", None)
+    assert views.draw_edit_mode is True and widgets.panes.drawing_features() == []
 
 
 def test_applying_an_emptied_drawing_clears_the_review_polygon(monkeypatch):
@@ -1533,36 +1544,33 @@ def test_applying_an_emptied_drawing_clears_the_review_polygon(monkeypatch):
     answer") -- so deleting every shape and pressing *Apply* has to be able to
     clear the stored polygon. An empty *Apply* did nothing at all before,
     which left the reviewer told to delete a polygon they had deleted, with no
-    way to resolve it. The layer goes off both maps with it."""
+    way to resolve it. The layer goes off the views with it."""
     import geopandas as gpd
     from shapely.geometry import box as shapely_box
 
     import gui.tile.analysis.edit_tools as edit_tools
 
+    from gui.tile.analysis.edit_tools import DEFO_ID
+
     analysis = AnalysisState()
     widgets = _draw_widgets()
-    removed = []
-    for a_map in (widgets.map_before, widgets.map_after):
-        a_map.remove_layer = (
-            lambda key, none_ok=False, _m=a_map: removed.append((id(_m), key)))
     body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
                                        analysis=analysis, app_tile_model=_set_context_fake())
     slots = _slots(body)
-    # the alert opens on its stored polygon, which went on both maps
+    # the alert opens on its stored polygon, which went on the views
     analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)],
                                              crs="EPSG:4326"))
-    analysis.dirty.set(False)
+    assert widgets.panes.spec(DEFO_ID) is not None
     # the reviewer started drawing and deleted every shape
     slots["start_btn"].fire_event("click", None)
-    monkeypatch.setattr(widgets.draw_before, "to_json",
-                        lambda: {"type": "FeatureCollection", "features": []})
-    removed.clear()
+    assert len(widgets.panes.drawing_features()) == 1
+    reviewer_edits(widgets.panes, [])
+    analysis.dirty.set(False)
 
     slots["save_btn"].fire_event("click", None)
 
     assert analysis.defo_layer.value is None, "the emptied drawing did not apply"
-    assert [key for _m, key in removed] == ["Defo Layer", "Defo Layer"], removed
-    assert len({m for m, _k in removed}) == 2, "both maps"
+    assert widgets.panes.spec(DEFO_ID) is None, "the Defo Layer is still on the views"
     assert analysis.dirty.value is True, "clearing the polygon is a change"
     assert analysis.drawing_unapplied.value is False, "the drawing IS the polygon now"
 
@@ -1589,14 +1597,14 @@ def test_a_rerun_does_not_strand_the_prediction_already_in_the_drawing(monkeypat
 
     slots["dl1_add"].fire_event("click", None)
     assert slots["dl1_remove"].disabled is False
-    drawn = list(widgets.draw_before.data)
+    drawn = widgets.panes.drawing_features()
 
     # the reviewer runs the model again and it finds something
     feedback = _record_feedback(monkeypatch, edit_tools)
     slots["dl1_run"].fire_event("click", None)
     feedback.join()
 
-    assert widgets.draw_before.data == drawn, "the run left the drawing alone"
+    assert widgets.panes.drawing_features() == drawn, "the run left the drawing alone"
     assert slots["dl1_remove"].disabled is False, "the drawn prediction is stranded"
 
     # and again, finding nothing this time
@@ -1636,7 +1644,7 @@ def test_other_imagery_picked_after_a_run_puts_the_rows_back_to_nothing_run(monk
     monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
 
     slots["dl1_add"].fire_event("click", None)
-    drawn = list(widgets.draw_before.data)
+    drawn = widgets.panes.drawing_features()
     assert drawn, "nothing was added to the drawing"
     assert slots["dl2_add"].disabled is False and slots["dl2_found"].children
 
@@ -1648,7 +1656,7 @@ def test_other_imagery_picked_after_a_run_puts_the_rows_back_to_nothing_run(monk
     assert slots["dl2_remove"].disabled is True
     # model 1: the drawing is untouched and still removable
     assert slots["dl1_found"].children == [], "a Found line from the other imagery"
-    assert widgets.draw_before.data == drawn, "the reviewer's drawing was dropped"
+    assert widgets.panes.drawing_features() == drawn, "the reviewer's drawing was dropped"
     assert slots["dl1_remove"].disabled is False, "the drawn prediction is stranded"
     assert _hidden_above(body, slots["dl1_remove"]) == [], "Remove from map is not on screen"
 

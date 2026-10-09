@@ -19,6 +19,7 @@ from gui.tile.analysis import analysis_tile
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.footer import build_footer, footer_widgets
 from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
 
 
 @pytest.fixture(autouse=True)
@@ -39,11 +40,8 @@ def panel(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
-    draw = SimpleNamespace(clear=lambda: None)
-    shown_map = SimpleNamespace(add_layer=lambda *_: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw,
-                                map_before=shown_map, map_after=shown_map),
+        widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis)

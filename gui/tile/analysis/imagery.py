@@ -184,15 +184,15 @@ def _wanted(analysis, token, fresh) -> bool:
 
 def _gated(map_element, analysis, token, fresh=None):
     """``map_element``'s layer adds, each run only while this rebuild is still
-    the one its pane waits for (``LockedMap.gated``, ``_wanted``); a plain map
-    (tests) adds as before."""
+    the one its pane waits for (``PaneTarget.gated``, ``_wanted``); a plain
+    stand-in (tests) adds as before."""
     gated = getattr(map_element, "gated", None)
     if gated is None:
         return nullcontext()
 
-    def _add_if_wanted(add):
+    def _add_if_wanted(write):
         analysis.apply_if_current(
-            token, lambda: add() if (fresh is None or fresh()) else None
+            token, lambda: write() if (fresh is None or fresh()) else None
         )
 
     return gated(_add_if_wanted)
@@ -254,7 +254,7 @@ def image_slider_map_callback(
 
     # Each add blocks (getMapId, the tile server) and then lands only while
     # this alert is still current: an alert change meanwhile has cleared the
-    # maps for the next one (``vis_sync.clear_alert_layers``, after
+    # views for the next one (``PaneLayers.clear("alert")``, after
     # ``reset_alert``), which must not get this alert's layers.
     with _gated(map_element, analysis, token, fresh):
         map_element.addLayer(img, vis1, "True Color", True)
@@ -268,7 +268,7 @@ def image_slider_map_callback(
                 raster_map.add_raster_layer(
                     map_element, combined, key="original-alert", name="Original Alert",
                     band=3, opacity=0.5,
-                    visible=False,  # off by default, as before; the map's layer control shows it
+                    visible=False,  # off by default, as before; the view's layer menu shows it
                 )
             except Exception:
                 logger.exception("Analysis imagery: failed to add the Original Alert layer")
@@ -351,6 +351,6 @@ def wire_panes(widgets, analysis, selected_alerts_model):
         return info_reactive.subscribe(_on_pick)
 
     return (
-        _wire(0, analysis.before_info, analysis.before_keys, widgets.map_before),
-        _wire(1, analysis.after_info, analysis.after_keys, widgets.map_after),
+        _wire(0, analysis.before_info, analysis.before_keys, widgets.pane_before),
+        _wire(1, analysis.after_info, analysis.after_keys, widgets.pane_after),
     )

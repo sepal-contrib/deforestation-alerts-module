@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from deforestation_alerts.project.models import AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project
 from gui.store.state_manager import AppState
 from gui.tile.analysis import vis_sync
+from tests._pane_helpers import make_panes
 
 
 def _p(*layers):
@@ -35,25 +36,33 @@ def test_a_period_month_nicfi_layer_is_rebuilt_when_the_active_period_changes():
     assert vis_sync.plan(before, after) == (["vis:planet"], [])  # the fixed-month layer stays
 
 
-def _maps(removed):
-    return SimpleNamespace(
-        map_before=SimpleNamespace(name="before", remove_layer=lambda k, none_ok=False: removed.append(("before", k))),
-        map_after=SimpleNamespace(name="after", remove_layer=lambda k, none_ok=False: removed.append(("after", k))))
+def _panes(removed, asked=None):
+    """Stand-in views: ``vis_sync`` asks ``panes`` for one target (every
+    view, group ``vis``) and builds and removes on it."""
+
+    def target(view, *, group):
+        if asked is not None:
+            asked.append((view, group))
+        return SimpleNamespace(name=view,
+                               remove_layer=lambda k, none_ok=False: removed.append((view, k)))
+
+    return SimpleNamespace(panes=SimpleNamespace(target=target))
 
 
-def test_the_sync_adds_switched_off_layers_to_both_maps_and_removes_them(monkeypatch):
-    built, removed = [], []
+def test_the_sync_adds_switched_off_layers_to_every_view_and_removes_them(monkeypatch):
+    built, removed, asked = [], [], []
     monkeypatch.setattr(vis_sync, "builder", lambda map_, layer, key, **kw:
                         (lambda: built.append((map_.name, key, kw["shown"]))))
-    widgets = _maps(removed)
+    widgets = _panes(removed, asked)
     state = AppState()
     layer = GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)
     state.load_project_state(_p(layer))
     unsubscribe = vis_sync.wire(widgets, state, spawn=lambda target, args=(): target(*args))
-    assert sorted(built) == [("after", "vis:s2", False), ("before", "vis:s2", False)]
-    removed.clear()  # a build first clears its own key from each map
+    assert asked == [("all", "vis")], "one spec on every view, in the vis group"
+    assert built == [("all", "vis:s2", False)]
+    removed.clear()  # a build first clears its own key
     state.update_project("a", lambda p: setattr(p, "vis_layers", {}))
-    assert sorted(removed) == [("after", "vis:s2"), ("before", "vis:s2")]
+    assert removed == [("all", "vis:s2")]
     unsubscribe()
     built.clear()
     state.update_project("a", lambda p: setattr(p, "vis_layers", {"s2": layer}))
@@ -94,30 +103,45 @@ def test_a_failing_build_does_not_stop_the_other_layers_and_is_toasted_once(monk
     state = AppState()
     bad = FileVisLayer(name="bad", path="/nope.tif", show_in_analysis=True)
     state.load_project_state(_p(bad, GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
-    unsubscribe = vis_sync.wire(_maps(removed), state, spawn=lambda target, args=(): target(*args))
-    assert sorted(built) == [("after", "vis:s2"), ("before", "vis:s2")]
+    unsubscribe = vis_sync.wire(_panes(removed), state, spawn=lambda target, args=(): target(*args))
+    assert built == [("all", "vis:s2")]
     assert "no longer exists" in caplog.text
-    assert tried.count(("before", "vis:bad")) + tried.count(("after", "vis:bad")) == 1  # one map tried
-    assert {("before", "vis:bad"), ("after", "vis:bad")} <= set(removed)  # nothing half-built stays
+    assert tried.count(("all", "vis:bad")) == 1
+    assert ("all", "vis:bad") in removed  # nothing half-built stays
     assert errors == ["The layer bad could not be added to the Analysis maps: The file /nope.tif no longer exists."]
     assert sum(t.count for t in bus.toasts.value if t.message == errors[0]) == 1
 
     for step in range(3):  # every alert step saves the project: no retry, no second toast
         state.update_project("a", lambda p, step=step: setattr(p, "updated_at", datetime.now()))
-    assert len(errors) == 1 and len(tried) == 3
+    assert len(errors) == 1 and len(tried) == 2
 
     state.load_project_state(state.project.value.model_copy())  # opened again: one more try
-    assert len(errors) == 2 and len(tried) == 4
+    assert len(errors) == 2 and len(tried) == 3
     unsubscribe()
 
 
-def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
-    """The per-alert view clears the maps on every alert change; the vis
-    layers must stay on both (real SepalMaps: ``find_layer`` by key)."""
+def _alerts(n):
     import pandas as pd
-    from ipyleaflet import TileLayer
-    from pysepal.mapping import SepalMap
     from shapely.geometry import Point, box
+
+    rows = [(box(i, i, i + 0.01, i + 0.01), Point(i, i)) for i in range(n)]
+    return pd.DataFrame({
+        "alert_date_min": [2026.001] * n, "alert_date_max": [2026.010] * n, "alert_sources": ["GLAD-L"] * n,
+        "status": ["Not reviewed"] * n, "alert_polygon": [None] * n,
+        "bounding_box": [bb for bb, _ in rows], "point": [pt for _, pt in rows]})
+
+
+def _view_widgets():
+    import solara
+
+    return SimpleNamespace(panes=make_panes(), imagery_ctx=solara.reactive(None))
+
+
+def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
+    """The per-alert view clears the alert group on every alert change; the
+    vis layers must stay (a real ``PaneLayers`` on a headless ``AlertViews``)."""
+    from ipyleaflet import TileLayer
+    from shapely.geometry import box, shape
 
     from gui.tile.analysis import analysis_tile
     from gui.tile.analysis.state import AnalysisState
@@ -128,38 +152,33 @@ def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
 
     monkeypatch.setattr(vis_sync, "builder", builder)
     monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
-    stub = SimpleNamespace(hide=lambda: None)
-    widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
-                              draw_before=stub, draw_after=stub,
-                              set_synced_view=lambda *a: None)
+    widgets = _view_widgets()
     state = AppState()
     state.load_project_state(_p(GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)))
     unsubscribe = vis_sync.wire(widgets, state, spawn=lambda target, args=(): target(*args))
-    state.alerts_gdf.set(pd.DataFrame({
-        "alert_date_min": [2026.001] * 2, "alert_date_max": [2026.010] * 2, "alert_sources": ["GLAD-L"] * 2,
-        "status": ["Not reviewed"] * 2, "alert_polygon": [None] * 2,
-        "bounding_box": [box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01)], "point": [Point(0, 0), Point(1, 1)]}))
+    state.alerts_gdf.set(_alerts(2))
     for alert in (0, 1):
         state.actual_alert_id.set(alert)
         analysis_tile.view_actual_alert(widgets, state, AnalysisState(), SimpleNamespace(),
                                         SimpleNamespace(v_model=None))
     unsubscribe()
-    for map_ in (widgets.map_before, widgets.map_after):
-        vis = map_.find_layer("vis:s2", none_ok=True)
-        assert vis is not None and vis.visible is False
-        assert [lyr.name for lyr in map_.layers if not lyr.base].count("Alert BB") == 1  # the old alert's went
+    panes = widgets.panes
+    vis = panes.spec("vis:s2")
+    assert vis is not None and vis["visible"] is False and vis["view"] == "all"
+    assert panes.ids() == ["vis:s2", analysis_tile.ALERT_BB_ID]  # the old alert's box went
+    assert shape(panes.spec(analysis_tile.ALERT_BB_ID)["data"]).equals(box(1, 1, 1.01, 1.01))
 
 
 def test_a_removal_that_runs_after_a_later_re_add_leaves_the_layer(monkeypatch):
     """Runs may take the build lock out of order: a removal whose key a later
-    sync wants again must not take the re-added layer off the maps."""
+    sync wants again must not take the re-added layer off the views."""
     built, removed, pending = [], [], []
     monkeypatch.setattr(vis_sync, "builder", lambda map_, layer, key, **kw:
                         (lambda: built.append((map_.name, key))))
     state = AppState()
     layer = GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)
     state.load_project_state(_p(layer))
-    unsubscribe = vis_sync.wire(_maps(removed), state, spawn=lambda target, args=(): pending.append(target))
+    unsubscribe = vis_sync.wire(_panes(removed), state, spawn=lambda target, args=(): pending.append(target))
     pending.pop()()  # the first build
     state.update_project("a", lambda p: setattr(p, "vis_layers", {}))
     state.update_project("a", lambda p: setattr(p, "vis_layers", {"s2": layer}))
@@ -169,8 +188,8 @@ def test_a_removal_that_runs_after_a_later_re_add_leaves_the_layer(monkeypatch):
     removed.clear()
     pending[1]()  # the re-add runs first ...
     pending[0]()  # ... then the removal
-    assert sorted(built) == [("after", "vis:s2"), ("before", "vis:s2")]
-    assert sorted(removed) == [("after", "vis:s2"), ("before", "vis:s2")]  # only the build's own clear
+    assert built == [("all", "vis:s2")]
+    assert removed == [("all", "vis:s2")]  # only the build's own clear
 
 
 def test_quick_successive_edits_never_build_at_once(monkeypatch):
@@ -193,8 +212,7 @@ def test_quick_successive_edits_never_build_at_once(monkeypatch):
         th.start()
 
     monkeypatch.setattr(vis_sync, "builder", slow_builder)
-    maps = SimpleNamespace(map_before=SimpleNamespace(remove_layer=lambda k, none_ok=False: None),
-                           map_after=SimpleNamespace(remove_layer=lambda k, none_ok=False: None))
+    maps = _panes([])
     state = AppState()
     state.load_project_state(_p(GeeVisLayer(name="s2", asset="x", bands=["B4"], max=1, show_in_analysis=True)))
     unsubscribe = vis_sync.wire(maps, state, spawn=spawn)
@@ -207,73 +225,35 @@ def test_quick_successive_edits_never_build_at_once(monkeypatch):
     assert peaks and max(peaks) == 1  # one build at a time
 
 
-def test_the_previous_alerts_layers_are_gone_before_the_maps_move_to_the_next_alert(monkeypatch):
+def test_the_previous_alerts_layers_are_gone_before_the_views_move_to_the_next_alert(monkeypatch):
     """Slice-5 walk: deleting the active period switched the set, Analysis
-    moved its maps to the new set's alert while the old set's "Original
+    moved its views to the new set's alert while the old set's "Original
     Alert" raster layer was still on them, and the tile server answered its
     tile requests with 500s (the raster was being deleted). The previous
-    alert's layers leave the maps before the view moves."""
-    import pandas as pd
+    alert's layers leave the views before the view moves."""
     from ipyleaflet import TileLayer
-    from pysepal.mapping import SepalMap
-    from shapely.geometry import Point, box
 
     from gui.tile.analysis import analysis_tile
     from gui.tile.analysis.state import AnalysisState
 
     monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
-    stub = SimpleNamespace(hide=lambda: None)
+    widgets = _view_widgets()
+    panes = widgets.panes
+    for view in ("before", "after"):
+        panes.target(view, group="alert").add_layer(
+            TileLayer(url="http://localhost/{z}/{x}/{y}.png", name="Original Alert", visible=False),
+            key="original-alert")
     at_move = []
-    widgets = SimpleNamespace(map_before=SepalMap(gee=False), map_after=SepalMap(gee=False),
-                              draw_before=stub, draw_after=stub)
-    widgets.set_synced_view = lambda *a: at_move.append(
-        [lyr.name for m in (widgets.map_before, widgets.map_after) for lyr in m.layers if not lyr.base])
-    for map_ in (widgets.map_before, widgets.map_after):
-        map_.add_layer(TileLayer(url="http://localhost/{z}/{x}/{y}.png", name="Original Alert", visible=False),
-                       key="original-alert")
+    real_set_view = panes.set_view
+
+    def _set_view(center, zoom):
+        at_move.append(panes.ids())
+        real_set_view(center, zoom)
+
+    monkeypatch.setattr(panes, "set_view", _set_view)
     state = AppState()
     state.load_project_state(_p())
-    state.alerts_gdf.set(pd.DataFrame({
-        "alert_date_min": [2026.001], "alert_date_max": [2026.010], "alert_sources": ["GLAD-L"],
-        "status": ["Not reviewed"], "alert_polygon": [None],
-        "bounding_box": [box(0, 0, 0.01, 0.01)], "point": [Point(0, 0)]}))
+    state.alerts_gdf.set(_alerts(1))
     state.actual_alert_id.set(0)
     analysis_tile.view_actual_alert(widgets, state, AnalysisState(), SimpleNamespace(), SimpleNamespace(v_model=None))
-    assert len(at_move) == 1 and "Original Alert" not in at_move[0], at_move
-
-
-def test_a_vis_layer_added_during_an_alert_clear_is_kept():
-    """A worker's vis build that lands while the loop clears the alert layers
-    waits for the clear (the map's ``layers_lock``) instead of being dropped
-    by its write of ``layers``."""
-    import threading
-
-    from ipyleaflet import TileLayer
-
-    from gui.tile.analysis.widgets import LockedMap
-
-    map_ = LockedMap(gee=False)
-    url = "https://example.invalid/{z}/{x}/{y}.png"
-    vis = TileLayer(url=url, name="s2")
-    racer = {}
-
-    class _RacingAlertLayer(TileLayer):
-        """The alert layer: reading its key (mid-clear) starts a vis build on a worker."""
-
-        @property
-        def key(self):
-            if racer.get("armed") and "thread" not in racer:
-                racer["thread"] = threading.Thread(target=lambda: map_.add_layer(vis, key="vis:s2"), daemon=True)
-                racer["thread"].start()
-                racer["thread"].join(0.3)  # unlocked, the add completes here, inside the clear
-            return self._key
-
-        @key.setter
-        def key(self, value):
-            self._key = value
-
-    map_.add_layer(_RacingAlertLayer(url=url, name="alert"), key="alert")
-    racer["armed"] = True
-    vis_sync.clear_alert_layers(map_)
-    racer["thread"].join(5)
-    assert [getattr(lyr, "key", None) for lyr in map_.layers if not lyr.base] == ["vis:s2"]
+    assert at_move == [[]], at_move

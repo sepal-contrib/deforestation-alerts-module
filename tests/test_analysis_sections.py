@@ -24,6 +24,7 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
 
 
 @pytest.fixture(autouse=True)
@@ -86,11 +87,11 @@ def _controls(tmp_path, monkeypatch):
 
     The heavy widgets are only touched inside the edit/CNN handlers (as
     tests/test_feedback_notifications.py's ``edit_tools_card`` relies on), by
-    the refine section's alert-change reset, which clears the two maps' draw
-    controls, and by ``wire_defo_layer``, which draws a set polygon on both
-    maps -- so a namespace with those four is enough to assemble the panel and
-    to drive a drawing and an alert change through it without a
-    caught-and-logged traceback in the way.
+    the refine section's alert-change reset, which clears the views' drawing,
+    and by ``wire_defo_layer``, which draws a set polygon on the views -- so a
+    namespace with real ``panes`` (headless, ``tests/_pane_helpers``) is
+    enough to assemble the panel and to drive a drawing and an alert change
+    through it without a caught-and-logged traceback in the way.
     """
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
@@ -99,11 +100,8 @@ def _controls(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
-    draw = SimpleNamespace(clear=lambda: None)
-    shown_map = SimpleNamespace(add_layer=lambda *_: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw,
-                                map_before=shown_map, map_after=shown_map),
+        widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis,

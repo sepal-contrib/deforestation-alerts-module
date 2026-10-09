@@ -1,108 +1,55 @@
 """Shared heavy widgets + per-alert scratch state for the analysis tile.
 
 Architecture layer: view-support. This is a *plain* (non-component) class built
-ONCE by the parent ``AnalysisTile`` via ``solara.use_memo(..., dependencies=[])``.
-It holds the imperative ipyvuetify / pysepal widgets the OLD ``AnalysisTile``
-god-class kept as ``self.*`` — the two synced ``SepalMap``s, the two
-``CustomDrawControl``s and the ``AoiControl``. The two 3-tab Planet/S2/Landsat
-image-selector cards that stood here are retired: one shared timeline under
-both panes replaces them (``gui/tile/analysis/timeline.py``).
+ONCE by ``build_analysis_layout``. It holds the imperative widgets the OLD
+``AnalysisTile`` god-class kept as ``self.*``. The two synced ``SepalMap``s,
+their draw controls and the ``AoiControl`` that stood here are gone: both
+views are now ONE browser component, ``AlertViews`` (``leaflet-multiview``),
+whose sync, layer menus and polygon editing run in the browser. The two 3-tab
+Planet/S2/Landsat image-selector cards are retired too: one shared timeline
+under both views replaces them (``gui/tile/analysis/timeline.py``).
 
-Why a plain class and not Solara reactives: these are heavy ipyleaflet/ipyvuetify
-widgets that must be created once and mutated imperatively (re-creating a map on
-every Solara render would discard layers, draw state, and the data-link between
-the two maps). Reacton ``rv.*`` elements are rebuilt each render and cannot be
-imperatively mutated, so we use raw widgets — same rationale as the Filter and
-Overview tile ports.
+Why a plain class and not Solara reactives: these are heavy widgets that must
+be created once and mutated imperatively (re-creating the views on every
+Solara render would discard their layers, the drawing and the view). Reacton
+``rv.*`` elements are rebuilt each render and cannot be imperatively mutated,
+so we use raw widgets -- same rationale as the Filter and Overview tile ports.
 
-This object IS the inter-component contract: the future sub-components
-(AlertImagery, AlertReviewPanel, AlertEditTools, AlertExport — Tasks 9.2+) receive
-this ``AnalysisWidgets`` instance and read/mutate the widgets + scratch slots on
-it. The foundation only wires up the widgets and the per-alert scratch slots; the
-behavior that drives them lands in the later tasks.
+This object IS the inter-component contract: the sub-builders (imagery,
+review panel, edit tools, export) receive this ``AnalysisWidgets`` instance
+and read/mutate the widgets + scratch slots on it.
 
 Exposed attributes
 ------------------
-Heavy widgets (created once, data-linked):
-    * ``map_before``       — left SepalMap (was OLD ``map_31``)
-    * ``map_after``        — right SepalMap (was OLD ``map_32``); center/zoom
-                             two-way linked to ``map_before``
-    * ``draw_before``      — CustomDrawControl on ``map_before`` (was ``draw_alerts1``)
-    * ``draw_after``       — CustomDrawControl on ``map_after`` (was ``draw_alerts2``);
-                             ``.data`` two-way linked to ``draw_before``
-    * ``aoi_control``      — AoiControl on ``map_after``
-    * ``timeline``         — the shared image timeline card; filled in by
-                             ``build_analysis_layout``, which has the app and
-                             analysis state this object does not
-    * ``map31`` / ``map32``— the map *containers* (title + map)
+Heavy widgets (created once):
+    * ``panes_widget``  -- the ``AlertViews`` (class ``analysis-views``): the
+                           before and after views, side by side
+    * ``panes``         -- ``PaneLayers``, the only writer of ``panes_widget``:
+                           layers, view, zoom-to-alert bounds, edit mode and
+                           the drawing
+    * ``pane_before`` / ``pane_after`` -- ``PaneTarget``s (group ``"alert"``)
+                           the imagery builders add their layers to
+    * ``map_title_before`` / ``map_title_after`` -- the view titles, filled
+                           by the timeline
+    * ``head_before`` / ``head_after`` -- one header cell per view (class
+                           ``analysis-mapbox``), each holding its title
+    * ``timeline``      -- the shared image timeline card; filled in by
+                           ``build_analysis_layout``, which has the app and
+                           analysis state this object does not
 
-Mutable per-alert scratch slots (set by ``view_actual_alert`` / future sub-cpts;
-the chosen before/after images and their info lists live in ``AnalysisState``):
-    * ``actual_bb``                    — ee.Feature bbox (buffer+bounds) of the alert
-    * ``actual_alert_grid``            — ee covering-grid bounds for downloads
+Mutable per-alert scratch slots (set by ``view_actual_alert``; the chosen
+before/after images and their info lists live in ``AnalysisState``):
+    * ``actual_bb``                    -- ee.Feature bbox (buffer+bounds) of the alert
+    * ``actual_alert_grid``            -- ee covering-grid bounds for downloads
 """
-
-import threading
-from contextlib import contextmanager
 
 import ipyvuetify as v
 import solara
-from ipywidgets import jslink
 from pysepal import sepalwidgets as sw
-from pysepal.mapping import SepalMap
-from pysepal.mapping.aoi_control import AoiControl
 
 from gui.i18n import t
-from gui.widget.custom_sw import CustomDrawControl
-
-
-class LockedMap(SepalMap):
-    """A SepalMap whose layer list is rewritten under one per-map lock.
-
-    ipyleaflet's add/remove are read-modify-writes of ``layers``; on the
-    Analysis maps the visualization builds add layers on a worker while the
-    loop clears the alert layers (``vis_sync.clear_alert_layers``, which takes
-    ``layers_lock`` too), so an unlocked add landing mid-clear was dropped.
-    """
-
-    def __init__(self, *args, **kwargs):
-        # Before SepalMap's own init: it adds the basemap through add_layer.
-        self.layers_lock = threading.RLock()
-        self._gate = threading.local()
-        super().__init__(*args, **kwargs)
-
-    @contextmanager
-    def gated(self, gate):
-        """Inside the block, this thread's ``add_layer`` calls run as
-        ``gate(add)``, which may decline to run ``add``. The imagery worker
-        passes ``AnalysisState.apply_if_current``: an ``addLayer`` finishes its
-        blocking getMapId, then adds the layer only while its alert is still
-        the current one (under the lock ``reset_alert`` takes)."""
-        self._gate.fn = gate
-        try:
-            yield self
-        finally:
-            self._gate.fn = None
-
-    def add_layer(self, *args, **kwargs):
-        def _add():
-            with self.layers_lock:
-                return super(LockedMap, self).add_layer(*args, **kwargs)
-
-        gate = getattr(getattr(self, "_gate", None), "fn", None)
-        return _add() if gate is None else gate(_add)
-
-    def remove_layer(self, *args, **kwargs):
-        with self.layers_lock:
-            return super().remove_layer(*args, **kwargs)
-
-    def add(self, *args, **kwargs):
-        with self.layers_lock:
-            return super().add(*args, **kwargs)
-
-    def remove(self, *args, **kwargs):
-        with self.layers_lock:
-            return super().remove(*args, **kwargs)
+from gui.tile.analysis.pane_layers import PaneLayers
+from gui.widget.alert_views import AlertViews
 
 
 def info_button(description: str, header: str, md: str) -> v.Html:
@@ -136,98 +83,67 @@ def info_button(description: str, header: str, md: str) -> v.Html:
 class AnalysisWidgets:
     """Container for the analysis tile's shared heavy widgets + per-alert scratch.
 
-    Built once per session by ``AnalysisTile`` via ``use_memo``. See the module
-    docstring for the full attribute contract handed to the sub-components.
+    Built once per session by ``build_analysis_layout``. See the module
+    docstring for the full attribute contract handed to the sub-builders.
 
-    Two-map sync contract: ``map_before``/``map_after`` (center + zoom) and
-    ``draw_before``/``draw_after`` (data) are wired with ``ipywidgets.jslink``,
-    a browser-side (frontend) link — user pans/zooms/draws on one map mirror to
-    the other with no kernel round-trip, and the kernel still receives the
-    normal trait-change notification afterwards so Python observers keep
-    working. The cost is that jslink propagates NOTHING headless (no browser,
-    no mirroring), so any Python-originated mutation of these traits MUST go
-    through ``set_synced_view``/``set_synced_draw_data`` instead of writing a
-    single widget directly — a one-sided write would silently diverge outside
-    a live frontend.
+    Both views are ONE browser component (``AlertViews``): their sync, layer
+    menus and polygon editing run in the browser. Python writes to it only
+    through ``panes`` (``PaneLayers``); ``pane_before`` / ``pane_after`` are
+    the per-view targets the imagery builders add to.
 
     Parameters
     ----------
     gee_interface : GEEInterface
-        Session GEE interface forwarded to both SepalMaps.
+        Session GEE interface, used for the tile URLs of Earth Engine layers.
     theme_state : ThemeState, optional
-        Shared app theme state forwarded to both SepalMaps so the analysis maps
-        track the light/dark app theme exactly as the shared main map does.
+        Shared app theme state: the views follow its light/dark theme, as the
+        shared main map does.
     """
 
     def __init__(self, gee_interface=None, theme_state=None):
         # ------------------------------------------------------------------
-        # Two maps, data-linked (center + zoom), each with the SATELLITE
-        # basemap. Ports OLD ``initialize_layout`` map_31 / map_32. Both bind
-        # the shared ``theme_state`` (like the main map) so they follow the
-        # app's light/dark theme instead of defaulting to the standalone theme.
+        # The two views, one widget. ``analysis-views`` is the class the stage
+        # CSS sizes it by and the walks find it by.
         # ------------------------------------------------------------------
-        self.map_before = LockedMap(gee_interface=gee_interface, theme_state=theme_state)
-        self.map_before.add_class("custom-map-class2")
-        self.map_before.add_basemap("SATELLITE")
-
-        self.map_after = LockedMap(gee_interface=gee_interface, theme_state=theme_state)
-        self.map_after.add_class("custom-map-class2")
-        self.map_after.add_basemap("SATELLITE")
-
-        # Browser-side two-way links: user pans/zooms/draws mirror to the
-        # other map client-side, with no kernel round-trip (the old
-        # traitlets.link lagged a full browser->python->browser cycle per
-        # event). jslink propagates NOTHING headless: Python-originated
-        # mutations must use set_synced_view/set_synced_draw_data below.
-        jslink((self.map_before, "center"), (self.map_after, "center"))
-        jslink((self.map_before, "zoom"), (self.map_after, "zoom"))
+        self.panes_widget = AlertViews()
+        self.panes_widget.add_class("analysis-views")
+        self.panes = PaneLayers(self.panes_widget, gee_interface)
+        # The imagery tiles report a failed load on their view (``meta.reportErrors``).
+        self.pane_before = self.panes.target("before", group="alert", report_errors=True)
+        self.pane_after = self.panes.target("after", group="alert", report_errors=True)
+        if theme_state is not None:
+            theme_state.observe(
+                lambda change: setattr(self.panes_widget, "theme", "dark" if change["new"] else "light"),
+                "dark",
+            )
+        self.panes_widget.theme = "dark" if getattr(theme_state, "dark", False) else "light"
 
         # ------------------------------------------------------------------
-        # Map titles + selected-image info cards (mutated by Task 9.2).
+        # View titles, one header cell per view.
         # ------------------------------------------------------------------
-        map1_title = v.CardTitle(
+        # The titles are the timeline's to fill (``build_timeline``): each one
+        # names its view's chosen image, offers the same day's other
+        # collection, and says when a saved image was not found. They start
+        # as the bare view name until the timeline has a pick.
+        self.map_title_before = v.CardTitle(
             class_="pa-1 ma-1",
             children=[t("analysis_tile.img_selection.prev_image_title")],
         )
-        map2_title = v.CardTitle(
+        self.map_title_after = v.CardTitle(
             class_="pa-1 ma-1",
             children=[t("analysis_tile.img_selection.post_image_title")],
         )
-        # The titles are the timeline's to fill (``build_timeline``): each one
-        # names its pane's chosen image, offers the same day's other
-        # collection, and says when a saved image was not found. They start
-        # as the bare pane name until the timeline has a pick.
-        self.map_title_before = map1_title
-        self.map_title_after = map2_title
-        # The map *containers* (title + map). The ``analysis-mapbox`` class (styled in
-        # analysis_tile.py) marks the map container for the full-stage
-        # workspace layout (the map height is set by the
-        # ``.custom-map-class2`` rule in analysis_tile.py).
-        self.map31 = v.Container(
-            class_="pa-1 ma-1 analysis-mapbox",
-            children=[map1_title, self.map_before],
-        )
-        self.map32 = v.Container(
-            class_="pa-1 ma-1 analysis-mapbox",
-            children=[map2_title, self.map_after],
-        )
+        # One header cell per view, lined up over it. ``analysis-mapbox`` is
+        # what the walks find the titles by (``tools/walk/phases.map_titles``).
+        self.head_before = v.Html(tag="div", class_="analysis-mapbox", children=[self.map_title_before])
+        self.head_after = v.Html(tag="div", class_="analysis-mapbox", children=[self.map_title_after])
 
-        # One shared timeline under both panes replaces the two per-pane
+        # One shared timeline under both views replaces the two per-view
         # selectors; built by the tile, which has the app and analysis state.
         self.timeline = None
 
         # ------------------------------------------------------------------
-        # Draw controls (data-linked) + AOI control.
-        # ------------------------------------------------------------------
-        self.draw_before = CustomDrawControl(self.map_before)
-        self.draw_after = CustomDrawControl(self.map_after)
-        jslink((self.draw_before, "data"), (self.draw_after, "data"))
-
-        self.aoi_control = AoiControl(self.map_after)
-        self.map_after.add(self.aoi_control)
-
-        # ------------------------------------------------------------------
-        # Mutable per-alert scratch slots (set by view_actual_alert / Task 9.2+).
+        # Mutable per-alert scratch slots (set by view_actual_alert).
         # ------------------------------------------------------------------
         self.actual_bb = None
         self.actual_alert_grid = None
@@ -247,17 +163,3 @@ class AnalysisWidgets:
         # neighbouring frames under the same filter the reviewer sees (spec D6).
         # Published by ``build_timeline``; ``None`` until it is built.
         self.timeline_filter = solara.reactive(None)
-
-    def set_synced_view(self, center, zoom):
-        """Python-originated view change: write BOTH maps explicitly (the
-        jslink mirror exists only in a live frontend)."""
-        self.map_before.center = center
-        self.map_after.center = center
-        self.map_before.zoom = zoom
-        self.map_after.zoom = zoom
-
-    def set_synced_draw_data(self, features):
-        """Python-originated draw change: write BOTH controls, with distinct
-        list objects so later in-place edits can't alias."""
-        self.draw_before.data = list(features)
-        self.draw_after.data = list(features)

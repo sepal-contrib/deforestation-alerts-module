@@ -8,18 +8,16 @@ from shapely.geometry import box
 
 from deforestation_alerts.scripts import scene_index
 from deforestation_alerts.scripts.scene_index import SOURCE_S2
-from gui.tile.analysis.edit_tools import wire_defo_layer
+from gui.tile.analysis.earlier import EARLIER_ID
+from gui.tile.analysis.edit_tools import DEFO_ID, wire_defo_layer
+from gui.tile.analysis.pane_layers import geojson_spec, tile_spec
 from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-class _Map:
-    def __init__(self):
-        self.added = []
-
-    def add_layer(self, layer):
-        self.added.append(layer)
+URL = "https://example.invalid/{z}/{x}/{y}.png"
+SQUARE = {"type": "Feature", "properties": {}, "geometry": {
+    "type": "Polygon", "coordinates": [[[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}
 
 
 def _gdf():
@@ -44,19 +42,26 @@ def test_reset_alert_clears_the_per_alert_values():
     assert s.last_save_time.value == 0.0
 
 
-def test_a_drawn_layer_lands_on_both_maps_once_per_value():
+def test_the_reviewed_polygon_is_one_defo_spec_on_every_view():
     s = AnalysisState()
-    widgets = SimpleNamespace(map_before=_Map(), map_after=_Map())
-    unsubscribe = wire_defo_layer(widgets, s)
+    panes = make_panes()
+    writes = []
+    panes.widget.observe(lambda change: writes.append(change["new"]), "layers")
+    unsubscribe = wire_defo_layer(SimpleNamespace(panes=panes), s)
     g = _gdf()
     s.defo_layer.set(g)
+    spec = panes.spec(DEFO_ID)
+    assert (spec["view"], spec["name"], spec["group"]) == ("all", "Defo Layer", "alert")
+    assert spec["meta"] == {"hideWhileEditing": True}, "the drawing shows the polygon in edit mode"
+    assert spec["style"] == {"color": "orange", "fillOpacity": "0"}
+    assert spec["data"]["features"][0]["geometry"]["type"] == "Polygon"
     s.defo_layer.set(g)  # the same object again: not a change
-    s.defo_layer.set(None)  # cleared: nothing is drawn
-    assert len(widgets.map_before.added) == 1 and len(widgets.map_after.added) == 1
-    assert widgets.map_before.added[0].name == "Defo Layer"
+    assert len(writes) == 1
+    s.defo_layer.set(None)  # cleared: the layer comes off
+    assert panes.ids() == []
     unsubscribe()
     s.defo_layer.set(_gdf())
-    assert len(widgets.map_before.added) == 1
+    assert panes.ids() == []
 
 
 def test_nothing_under_analysis_imports_traitlets_or_pysepal_model():
@@ -122,45 +127,37 @@ def test_an_alert_change_forgets_the_previous_alerts_choices(caplog):
 
     assert s.before_image.value is None and s.after_info.value is None
     assert s.prediction_files.value == {}
-    # The stand-in widgets carry no maps, so the map work after the reset fails
-    # on them, and only there (not on the alert's data): one logged error.
+    # The stand-in widgets carry no views, so the view work after the reset
+    # fails on them, and only there (not on the alert's data): one logged error.
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert [r.getMessage() for r in errors] == ["Analysis: view_actual_alert map update failed"]
-    assert errors[0].exc_info[0] is AttributeError and "draw_before" in str(errors[0].exc_info[1])
-
-
-class _AlertLayer:
-    def __init__(self, base=False, key=""):
-        self.base, self.key = base, key
-
-
-class _AlertMap:
-    """A map with a basemap and one alert layer on it, for the clearing."""
-
-    def __init__(self):
-        self.layers = (_AlertLayer(base=True), _AlertLayer(key="Alert BB"))
-
-
-class _Draw:
-    def __init__(self):
-        self.on_map = True
-
-    def hide(self):
-        self.on_map = False
-
-    def clear(self):
-        pass
+    assert errors[0].exc_info[0] is AttributeError and "panes" in str(errors[0].exc_info[1])
 
 
 def _view_widgets():
+    """Views as an alert leaves them: its imagery, a visualization layer, the
+    earlier-reviews overlay, edit mode on with a drawing, and its bounds."""
     import solara
 
+    panes = make_panes()
+    panes.add(tile_spec("before:True Color", "before", URL, name="True Color", group="alert"))
+    panes.add(tile_spec("vis:s2", "all", URL, name="S2", group="vis"))
+    panes.add(geojson_spec(EARLIER_ID, "all", {"type": "FeatureCollection", "features": []},
+                           name="Earlier reviews", group="earlier"))
+    panes.set_edit_mode(True)
+    panes.set_drawing([SQUARE])
+    panes.set_focus_bounds((0, 0, 1, 1))
     return SimpleNamespace(
         imagery_ctx=solara.reactive({"alert_id": 0, "token": 0, "bbox": None}),
-        map_before=_AlertMap(), map_after=_AlertMap(),
-        draw_before=_Draw(), draw_after=_Draw(),
+        panes=panes,
         actual_bb=object(), actual_alert_grid=object(),
     )
+
+
+def _assert_views_left_for_no_alert(panes):
+    assert panes.widget.draw_edit_mode is False and panes.drawing_features() == []
+    assert panes.ids() == ["vis:s2"], "the alert's layers (or the earlier overlay) are still on"
+    assert panes.widget.fit_bounds_bounds is None, "zoom-to-alert still points at the gone alert"
 
 
 def _reviewable_alerts():
@@ -217,9 +214,7 @@ def test_losing_the_alert_selection_invalidates_the_analysis_state():
     assert s.verdict.value is None and s.defo_layer.value is None
     assert widgets.imagery_ctx.value is None, "the timeline still describes the gone alert"
     assert widgets.actual_bb is None and widgets.actual_alert_grid is None
-    assert widgets.draw_before.on_map is False and widgets.draw_after.on_map is False
-    for a_map in (widgets.map_before, widgets.map_after):
-        assert [lyr.base for lyr in a_map.layers] == [True], "the alert's layers are still on"
+    _assert_views_left_for_no_alert(widgets.panes)
 
 
 def test_alerts_of_another_set_invalidate_the_analysis_state_too(monkeypatch):
@@ -248,6 +243,7 @@ def test_alerts_of_another_set_invalidate_the_analysis_state_too(monkeypatch):
     assert not s.is_current(token)
     assert s.prediction_files.value == {} and s.defo_layer.value is None
     assert widgets.imagery_ctx.value is None
+    _assert_views_left_for_no_alert(widgets.panes)
 
 
 def test_an_alert_change_makes_earlier_tokens_stale():
@@ -265,7 +261,7 @@ def test_an_alert_change_makes_earlier_tokens_stale():
 def _fake_imagery_widgets():
     import solara
 
-    return SimpleNamespace(imagery_ctx=solara.reactive(None), map31=None, map32=None)
+    return SimpleNamespace(imagery_ctx=solara.reactive(None))
 
 
 def _selection(rows):
@@ -316,15 +312,15 @@ def test_a_replaced_pick_in_the_same_lane_draws_nothing(monkeypatch):
     """Two picks in the same lane, for the SAME alert, share the alert token,
     so the token cannot tell them apart: the reviewer picks A, then B before
     A's rebuild finishes, and A -- landing last -- stored its image and
-    redrew the pane, leaving the map showing A under a readout that says B.
+    redrew the pane, leaving the view showing A under a readout that says B.
     Each lane therefore carries its own request generation.
     """
     from gui.tile.analysis import imagery
 
     s = AnalysisState()
     widgets = _fake_imagery_widgets()
-    widgets.map_before = SimpleNamespace(side="before")
-    widgets.map_after = SimpleNamespace(side="after")
+    widgets.pane_before = SimpleNamespace(side="before")
+    widgets.pane_after = SimpleNamespace(side="after")
     held, drawn = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
@@ -360,8 +356,8 @@ def test_a_pick_marks_its_lane_pending_so_nothing_captures_a_mixture(monkeypatch
 
     s = AnalysisState()
     widgets = _fake_imagery_widgets()
-    widgets.map_before = SimpleNamespace(side="before")
-    widgets.map_after = SimpleNamespace(side="after")
+    widgets.pane_before = SimpleNamespace(side="before")
+    widgets.pane_after = SimpleNamespace(side="after")
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): None)
     imagery.wire_panes(widgets, s, None)
     s.before_image.set(object())  # what the previous pick drew
@@ -401,8 +397,8 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     widgets = _fake_imagery_widgets()
     # distinguishable, because two empty SimpleNamespaces compare EQUAL and a
     # swapped pair would then slip past the assertion at the end
-    widgets.map_before = SimpleNamespace(side="before")
-    widgets.map_after = SimpleNamespace(side="after")
+    widgets.pane_before = SimpleNamespace(side="before")
+    widgets.pane_after = SimpleNamespace(side="after")
     held, rebuilt = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
@@ -432,14 +428,14 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     assert [item["keys"] for item, _, _ in rebuilt] == [["k1"]]
 
     # ...and each lane reaches the pane it belongs to. The before lane must
-    # draw on the LEFT map and the after lane on the RIGHT one: a swapped pair
+    # draw on the LEFT view and the after lane on the RIGHT one: a swapped pair
     # puts every pick on the wrong side of the workspace, which is plainly
     # wrong on screen and which nothing else in the suite notices.
     s.after_keys.set(["k2"])
     s.after_info.set(["Landsat", 3, "1.00", "z ", "_030126"])
     fn, args = held[-1]
     fn(*args)
-    assert [m for _, _, m in rebuilt] == [widgets.map_before, widgets.map_after]
+    assert [m for _, _, m in rebuilt] == [widgets.pane_before, widgets.pane_after]
 
 
 def test_reset_alert_clears_the_selection_and_its_granule_keys():
@@ -457,33 +453,34 @@ def test_nothing_under_analysis_holds_a_retired_planet_reactive():
 
 def test_an_image_layer_drawn_after_an_alert_change_is_not_added(monkeypatch):
     """Final re-review, Minor 3: ``addLayer`` blocks on getMapId after the
-    image is stored. An alert change meanwhile clears the maps for the next
-    alert; the late layer must not land on them (``LockedMap.gated``)."""
-    from ipyleaflet import TileLayer
-
+    image is stored. An alert change meanwhile clears the views for the next
+    alert; the late layer must not land on them (``PaneTarget.gated``, the
+    gate run outside the ``LayerStore`` lock)."""
     from gui.tile.analysis import imagery
-    from gui.tile.analysis.widgets import LockedMap
 
     s = AnalysisState()
     token = s.alert_token.value
-    map_ = LockedMap(gee=False)
-    base = len(map_.layers)
+    panes = make_panes()
+    target = panes.target("before", group="alert", report_errors=True)
     monkeypatch.setattr(imagery, "ee", SimpleNamespace(Image=lambda _id: SimpleNamespace(clip=lambda g: "img")))
+    urls = []
 
-    def _add_ee_layer(img, vis, name, shown):  # getMapId blocks, the user moves on
-        if name == "False Color":
+    def _tile_url(img, vis):  # getMapId blocks; the reviewer moves on during the second
+        urls.append(img)
+        if len(urls) == 2:
             s.reset_alert()
-        map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name=name))
+        return URL
 
-    map_.addLayer = _add_ee_layer
+    monkeypatch.setattr(panes, "tile_url", _tile_url)
     widgets = _fake_imagery_widgets()
     widgets.actual_alert_grid = None
     planet = {"source": "Planet NICFI", "keys": ["projects/x/nicfi"]}
-    imagery.image_slider_map_callback(planet, map_, 0, widgets, s, None, token=token)
+    imagery.image_slider_map_callback(planet, target, 0, widgets, s, None, token=token)
 
-    assert [lyr.name for lyr in map_.layers[base:]] == ["True Color"]
-    map_.add_layer(TileLayer(url="https://example.invalid/{z}/{x}/{y}.png", name="later"))
-    assert map_.layers[-1].name == "later"  # outside the callback, adds are not gated
+    assert len(urls) == 2, "both layers were built"
+    assert panes.ids() == ["before:True Color"], "the layer built across the alert change landed"
+    target.addLayer("img", {}, "later", True)
+    assert panes.ids()[-1] == "before:later"  # outside the callback, adds are not gated
 
 
 def test_a_rebuild_that_raises_reaches_the_log_and_the_reviewer(monkeypatch, caplog):
@@ -505,8 +502,8 @@ def test_a_rebuild_that_raises_reaches_the_log_and_the_reviewer(monkeypatch, cap
 
     s = AnalysisState()
     widgets = _fake_imagery_widgets()
-    widgets.map_before = SimpleNamespace(side="before")
-    widgets.map_after = SimpleNamespace(side="after")
+    widgets.pane_before = SimpleNamespace(side="before")
+    widgets.pane_after = SimpleNamespace(side="after")
     held, toasted = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
     monkeypatch.setattr(imagery, "current_notifier",
