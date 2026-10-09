@@ -60,7 +60,13 @@ export function createMultiView(el, options = {}) {
     // Leaflet never moves a map by itself (its own resize handler fires a
     // late, debounced moveend that would look like a user gesture).
     const map = L.map(mapEl, {center: start.center, zoom: start.zoom, maxZoom: 24, trackResize: false});
-    map.createPane(BASEMAP_PANE).style.zIndex = "150";
+    // First child of the map pane, and z-index 150: a host that flattens every
+    // pane's z-index (pysepal's base.css: `.leaflet-pane {z-index: 2 !important}`)
+    // stacks panes by DOM order, and the basemap must still paint under all.
+    const mapPane = map.getPanes().mapPane;
+    const basemapPane = map.createPane(BASEMAP_PANE);
+    basemapPane.style.zIndex = "150";
+    mapPane.insertBefore(basemapPane, mapPane.firstChild);
     return {id, map, container, header};
   });
   const layerViews = new Map(views.map(v => [v.id, createLayerView(L, v.map, v.id)]));

@@ -410,6 +410,38 @@ def test_labels_theme_and_plugins_through_the_multiview(plain_page):
     assert events(plain_page, "themechange") == [{"theme": "dark"}, {"theme": "light"}]
 
 
+def test_the_basemap_stays_under_overlays_when_the_host_flattens_pane_z_indexes(plain_page):
+    # pysepal's base.css sets `.leaflet-pane { z-index: 2 !important }`: every
+    # pane then stacks by DOM order, so the basemap pane must come first.
+    # Tiles and non-interactive paths ignore the pointer; the test makes them
+    # hittable so elementFromPoint reports what is painted on top.
+    plain_page.add_style_tag(content=(
+        ".leaflet-pane, .leaflet-top, .leaflet-bottom { z-index: 2 !important; }"
+        "#host .leaflet-tile, #host .leaflet-tile-container, #host svg path { pointer-events: auto !important; }"))
+    make(plain_page, _opts(basemap={"url": TILE}))
+    mv_eval(plain_page, "(mv, specs) => mv.setLayers(specs)",
+            [_tile("imagery"), _geojson("box", features=[_square(-60.0005, -1.0005, 0.001)], style={"color": "#0000ff", "fill": True})])
+    plain_page.wait_for_timeout(500)
+    out = plain_page.evaluate("""() => window.__mv.views.map(v => {
+        const map = v.map;
+        const name = p => [...p.classList].find(c => c !== 'leaflet-pane' && c.endsWith('-pane')).slice(8, -5);
+        const order = [...map.getPanes().mapPane.children].filter(p => p.classList.contains('leaflet-pane')).map(name);
+        const rect = map.getContainer().getBoundingClientRect();
+        const pane = (x, y) => {
+          const hit = document.elementFromPoint(rect.left + x, rect.top + y);
+          const p = hit && hit.closest('.leaflet-pane:not(.leaflet-map-pane)');
+          return p ? name(p) : (hit ? hit.className : null);
+        };
+        return {order, centre: pane(rect.width / 2, rect.height / 2), corner: pane(10, rect.height - 10)};
+    })""")
+    for view in out:
+        order = view["order"]
+        assert order[0] == "mvBasemap", order
+        assert order.index("mvBasemap") < order.index("tile") < order.index("overlay"), order
+        assert view["centre"] == "overlay", "the vector overlay paints over the basemap"
+        assert view["corner"] == "tile", "the imagery paints over the basemap"
+
+
 def test_a_dark_theme_from_the_options(plain_page):
     make(plain_page, _opts(theme="dark"))
     assert plain_page.evaluate("() => document.getElementById('host').classList.contains('mv-dark')")
