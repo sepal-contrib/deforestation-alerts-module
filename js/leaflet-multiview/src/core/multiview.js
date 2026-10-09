@@ -17,6 +17,12 @@ const BASEMAP_PANE = "mvBasemap"; // under Leaflet's tile pane: overlays always 
 const VIEWCHANGE_MS = 300;
 
 const hasSize = node => node.clientWidth > 0 && node.clientHeight > 0;
+// Shown, but Leaflet's cached size (getSize) is not the container's yet.
+const unmeasured = map => {
+  const node = map.getContainer();
+  const size = map.getSize();
+  return hasSize(node) && (size.x !== node.clientWidth || size.y !== node.clientHeight);
+};
 const toCenter = c => (Array.isArray(c) ? [Number(c[0]), Number(c[1])] : [Number(c.lat), Number(c.lng)]);
 const nextFrame = fn => (typeof requestAnimationFrame === "function" ? requestAnimationFrame(fn) : setTimeout(fn, 16));
 
@@ -66,6 +72,7 @@ export function createMultiView(el, options = {}) {
   const rules = [];
   let basemapLayers = [];
   let pendingFit = null; // bounds asked for while nothing was shown
+  let fitGen = 0; // bumped by every fitBounds and setView: a deferred fit runs only while still current
 
   // --- view ---------------------------------------------------------------
   const viewchange = debounce(v => emitter.emit("viewchange", v), VIEWCHANGE_MS);
@@ -80,15 +87,19 @@ export function createMultiView(el, options = {}) {
   function setView(center, zoom) {
     viewchange.cancel();
     pendingFit = null;
+    fitGen++; // drops a fit deferred to a later frame
     sync.setCanonical({center: toCenter(center), zoom: zoom == null ? sync.canonical().zoom : Number(zoom)});
   }
 
   // A fit is a user move: the first shown view fits, the others follow, and
   // its moveend writes the canonical view and schedules "viewchange".
-  function fitNow(bounds) {
-    if (destroyed) return;
+  function fitNow(bounds, token) {
+    if (destroyed || token !== fitGen) return; // a later fitBounds or setView superseded it
+    // A map shown but not re-measured yet would fit into Leaflet's stale (often
+    // 0x0) size: re-measure first, and fit on the frame after the re-measure.
+    if (!sync.isRestoring() && views.some(v => unmeasured(v.map))) sync.restore();
     if (sync.isRestoring()) {
-      nextFrame(() => fitNow(bounds)); // runs after the frame that clears ``restoring``
+      nextFrame(() => fitNow(bounds, token)); // runs after the frame that clears ``restoring``
       return;
     }
     const leader = views.find(v => hasSize(v.map.getContainer()));
@@ -103,7 +114,7 @@ export function createMultiView(el, options = {}) {
     const b = L.latLngBounds(bounds);
     if (!b.isValid()) return;
     pendingFit = null;
-    fitNow(b);
+    fitNow(b, ++fitGen);
   }
 
   // --- size: one observer for the root and every map ----------------------
@@ -119,7 +130,7 @@ export function createMultiView(el, options = {}) {
     if (now && pendingFit) {
       const bounds = pendingFit;
       pendingFit = null;
-      fitNow(bounds);
+      fitNow(bounds, fitGen);
     }
   });
   observer.observe(el);

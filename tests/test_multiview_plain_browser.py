@@ -230,6 +230,42 @@ def test_fit_bounds_while_hidden_applies_when_shown(plain_page):
     _on_canonical(plain_page, view)
 
 
+def test_fit_bounds_right_after_show_uses_the_real_size(plain_page):
+    # Shown, but not yet re-measured: Leaflet still believes every map is 0x0.
+    # The fit must wait for the re-measure, not fit into a 0x0 map (zoom 0).
+    make(plain_page, _opts(), host_style="display:none")
+    plain_page.evaluate("""() => {
+        document.getElementById('host').setAttribute('style', '');
+        window.__mv.fitBounds([[0, 0], [0.01, 0.01]]);
+    }""")
+    plain_page.wait_for_timeout(600)
+    view = mv_eval(plain_page, "(mv) => mv.getView()")
+    assert view["zoom"] == 15
+    assert view["center"] == pytest.approx([0.005, 0.005], abs=1e-3)
+    _on_canonical(plain_page, view)
+    assert [v["zoom"] for v in events(plain_page, "viewchange")] == [15]
+
+
+def test_a_set_view_drops_a_fit_deferred_while_restoring(plain_page):
+    make(plain_page, _opts())
+    view = plain_page.evaluate("""() => new Promise(resolve => {
+        const mv = window.__mv;
+        // Created after the multiview's observer, so it runs after it in the same
+        // delivery: the multiview is restoring, and the fit is deferred a frame.
+        const ro = new ResizeObserver(() => {
+          ro.disconnect();
+          mv.fitBounds([[0, 0], [0.01, 0.01]]);
+          mv.setView([10, 20], 8);
+          setTimeout(() => resolve(mv.getView()), 600);
+        });
+        document.getElementById('host').style.width = '600px';
+        ro.observe(document.getElementById('host'));
+    })""")
+    assert view == {"center": [10, 20], "zoom": 8}, "the later setView wins over the deferred fit"
+    _on_canonical(plain_page, view)
+    assert events(plain_page, "viewchange") == []
+
+
 # --- layers --------------------------------------------------------------------
 
 
