@@ -1,0 +1,57 @@
+/* leaflet-multiview: core styles. The host page loads Leaflet's and Geoman's
+   own CSS (plain.html with <link> tags, the app bundle by importing them). */
+.mv-root {
+  --mv-gap: 8px;
+  --mv-radius: 4px;
+  --mv-header-fg: #222;
+  --mv-control-bg: #fff;
+  --mv-control-fg: #333;
+  --mv-control-border: #ccc;
+  --mv-error-bg: #b3261e;
+  --mv-error-fg: #fff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+.mv-root.mv-dark {
+  --mv-header-fg: #eee;
+  --mv-control-bg: #1e1e1e;
+  --mv-control-fg: #eee;
+  --mv-control-border: #444;
+}
+.mv-views { flex: 1 1 auto; min-height: 0; display: flex; gap: var(--mv-gap); }
+.mv-layout-grid > .mv-views { display: grid; grid-auto-rows: minmax(0, 1fr); }
+.mv-view { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.mv-header {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  color: var(--mv-header-fg);
+  font: 500 13px/1.5 Roboto, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-header:empty { display: none; }
+.mv-map { flex: 1 1 auto; min-height: 0; position: relative; border-radius: var(--mv-radius); }
+.mv-dark .leaflet-bar a,
+.mv-dark .leaflet-control-layers {
+  background: var(--mv-control-bg);
+  color: var(--mv-control-fg);
+  border-color: var(--mv-control-border);
+}
+.mv-dark .leaflet-control-layers-toggle { filter: invert(0.9); }
+.mv-error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  padding: 2px 8px;
+  background: var(--mv-error-bg);
+  color: var(--mv-error-fg);
+  font: 12px/1.6 Roboto, sans-serif;
+}
