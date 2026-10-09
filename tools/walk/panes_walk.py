@@ -10,7 +10,8 @@ Checks, each an entry in the JSON report (``phases.panes``) with a screenshot:
  2. Python's layers arrive: the alert box (``alert-bb``) and both True Color
     images (``before:True Color``, ``after:True Color``); the box is on both
     views; the layer menus carry the translated title
- 3. the zoom-to-alert button is on the after view only
+ 3. the zoom-to-alert button is on the after view only, and the alert box is
+    really visible (inside the view, a visible stroke, no pane above it)
  4. a drag on the before view moves the after view with it (to within 1.5
     pixels) and moves no view header; the zoom-to-alert button brings both
     views back over the alert box
@@ -87,6 +88,36 @@ _BB_CENTER = """() => {
   const mv = host._multiview || host.querySelector('.mv-root')._multiview;
   const c = mv.layer('after', 'alert-bb').getBounds().getCenter();
   return [c.lat, c.lng];
+}"""
+
+
+#: Whether the alert box can be seen on each view: its path lies inside the map
+#: box, has a size and a visible stroke, and no pane painted above its pane
+#: covers it (pysepal's base.css forces every ``.leaflet-pane`` to
+#: ``z-index: 2 !important``, so panes stack by DOM order). The imagery's tile
+#: pane must be above the basemap pane the same way.
+_BB_VISIBLE = """() => {
+  const host = [...document.querySelectorAll('.analysis-views')].find(e => e.offsetParent);
+  const mv = host._multiview || host.querySelector('.mv-root')._multiview;
+  const z = e => { const v = parseInt(getComputedStyle(e).zIndex, 10); return Number.isNaN(v) ? 0 : v; };
+  const above = (a, b) => z(a) !== z(b) ? z(a) > z(b)
+      : !!(b.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+  return mv.views.map(v => {
+    const box = v.container.querySelector('.mv-map').getBoundingClientRect();
+    const path = v.container.querySelector('.leaflet-overlay-pane path[stroke="yellow"]');
+    const r = path ? path.getBoundingClientRect() : null;
+    const cs = path ? getComputedStyle(path) : null;
+    const pane = c => v.container.querySelector('.leaflet-' + c + '-pane');
+    const base = pane('mvBasemap');
+    return {
+      id: v.id,
+      inside: !!r && r.width > 0 && r.height > 0 && r.right > box.left && r.left < box.right
+          && r.bottom > box.top && r.top < box.bottom,
+      stroke: cs ? [cs.stroke, cs.strokeOpacity, cs.strokeWidth, cs.display, cs.visibility] : null,
+      box_covered: !!base && above(base, pane('overlay')),
+      imagery_covered: !!base && above(base, pane('tile')),
+    };
+  });
 }"""
 
 
@@ -169,6 +200,16 @@ def check_panes(page, out, report):
 
     # 3. zoom-to-alert on the after view only
     assert s["fit_shown"] == [0, 1], s["fit_shown"]
+
+    # 3b. the alert box can be seen (not just counted), and the imagery is above the basemap
+    vis = page.evaluate(_BB_VISIBLE)
+    report["bb_visible"] = vis
+    for v in vis:
+        assert v["inside"], ("the alert box is off its view or empty", v)
+        assert v["stroke"] and v["stroke"][0] != "none" and float(v["stroke"][1]) > 0 \
+            and v["stroke"][3] != "none" and v["stroke"][4] == "visible", ("the alert box has no visible stroke", v)
+        assert not v["box_covered"], ("a pane above the overlay pane covers the alert box", v)
+        assert not v["imagery_covered"], ("the basemap pane covers the imagery's tile pane", v)
 
     # 4. a drag syncs the views and moves no header; zoom-to-alert comes back
     tops = header_tops(page)
