@@ -790,3 +790,14 @@ def test_add_raster_layer_creates_the_layer_with_its_visibility(monkeypatch):
     raster_map.add_raster_layer(map_, "c.tif", key="k", name="n", visible=False)
     raster_map.add_raster_layer(map_, "c.tif", key="k", name="n")
     assert [kw["visible"] for kw in made] == [False, True]
+
+
+def test_record_review_does_not_count_a_blank_status(monkeypatch):
+    """Spec §3: ``""`` is not a review (``review_status.is_reviewed``)."""
+    from gui.scripts.set_context import SetContext
+
+    seen = []
+    ctx = SetContext(SimpleNamespace())
+    monkeypatch.setattr(ctx, "_update_set", lambda gdf, field, value, target=None: seen.append((field, value)))
+    ctx.record_review(pd.DataFrame({"status": ["Confirmed", "", "Need revision", pd.NA]}))
+    assert seen == [("n_reviewed", 2)]

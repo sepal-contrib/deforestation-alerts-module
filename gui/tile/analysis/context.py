@@ -28,6 +28,7 @@ panel is built once per session and a language switch never rebuilds it.
 import ipyvuetify as v
 
 from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from gui.i18n import format_number, t
 from gui.scripts import set_store
@@ -53,17 +54,13 @@ _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 def review_counts(gdf) -> tuple:
     """``(total, reviewed)`` of the alerts table.
 
-    Reviewed is a row whose ``status`` is present and is not ``"Not reviewed"``
-    — the rule ``set_context.record_review`` writes into ``AlertSet.n_reviewed``.
+    Reviewed is ``review_status.is_reviewed`` — the rule
+    ``set_context.record_review`` writes into ``AlertSet.n_reviewed``.
     A table without the column (an older store) counts as nothing reviewed.
     """
     if gdf is None or len(gdf) == 0:
         return 0, 0
-    if "status" not in gdf.columns:
-        return len(gdf), 0
-    status = gdf["status"]
-    reviewed = int((status.notna() & (status != "Not reviewed") & (status != "")).sum())
-    return len(gdf), reviewed
+    return len(gdf), int(reviewed_mask(gdf).sum())
 
 
 def counter_text(index: int, total: int) -> str:

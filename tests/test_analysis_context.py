@@ -301,3 +301,10 @@ def test_another_sets_alerts_leave_the_facts_alone(tmp_path, monkeypatch):
     s.alerts_gdf.value = _alerts(["Confirmed", "Not reviewed"], set_id="old")
     assert source.children == before
     assert tally.children == ["1 reviewed · 1 left"]
+
+
+def test_review_counts_agrees_with_is_reviewed():
+    from deforestation_alerts.project.review_status import is_reviewed
+
+    statuses = ["Not reviewed", "Confirmed", "", None, np.nan, "False Positive"]
+    assert context.review_counts(_alerts(statuses)) == (6, sum(map(is_reviewed, statuses)))

@@ -21,6 +21,7 @@ from typing import Optional
 
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import AlertSet
+from deforestation_alerts.project.review_status import reviewed_mask
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 
@@ -127,6 +128,5 @@ class SetContext:
         when the Save started; without it, the active set."""
         if gdf is None or "status" not in gdf:
             return
-        status = gdf["status"]
-        n = int((status.notna() & (status != "Not reviewed")).sum())
+        n = int(reviewed_mask(gdf).sum())
         self._update_set(gdf, "n_reviewed", n, target)
