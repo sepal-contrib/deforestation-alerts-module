@@ -437,6 +437,7 @@
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
+      "replace_split": "Se descartarán el reparto entre evaluadores y sus devoluciones pendientes.",
       "job_title": "Integrar y vectorizar",
       "step_combine": "Combinando fuentes",
       "step_vectorize": "Vectorizando grupos",
@@ -556,5 +557,21 @@
       "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",
       "copied": "{placeholder} copiado"
     }
+  },
+  "evaluators": {
+    "err": {
+      "no_set": "No hay ningún conjunto de alertas activo que repartir. Crea uno primero en Integrar y vectorizar.",
+      "none_eligible": "No hay alertas que asignar.",
+      "attribute_clash": "Este conjunto tiene un atributo llamado 'evaluator'; cambia el nombre de esa capa de atributos y vuelve a ejecutar el conjunto.",
+      "store_changed": "Este conjunto de alertas se reescribió mientras se hacía el reparto, así que no se ha cambiado nada. Inténtalo de nuevo.",
+      "integrating": "Este conjunto de alertas se está volviendo a ejecutar en Integrar y vectorizar. Inténtalo de nuevo cuando termine.",
+      "duplicate_name": "«{name}» aparece dos veces.",
+      "too_many": "Como máximo {max} evaluadores.",
+      "no_names": "Escribe al menos un nombre.",
+      "bad_count": "Elige entre 1 y {max} evaluadores."
+    }
+  },
+  "review_copy": {
+    "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
   }
 }

@@ -27,8 +27,10 @@ must record it, whatever happens next:
   sources left out of the run included (spec §7.4).
 """
 
+import contextlib
 import logging
 import math
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +42,8 @@ from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.cleanup import delete_orphans
 from deforestation_alerts.project.models import AlertSetParams
+from deforestation_alerts.project.models import set_id as make_set_id
+from deforestation_alerts.project.review_status import reviewed_mask
 from gui.i18n import format_number, t, tn
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
@@ -52,6 +56,38 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts")
 _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 
 ANALYSIS_VIEW = "analysis_tile"
+
+#: ``{(project name, set id): runs}`` of the Integrate jobs running now. A
+#: split or a merge of a set refuses to write its store while one is (spec
+#: §4.4): the run swaps a new store in and records a new set, which would
+#: drop what they wrote. ``project_writers`` counts every writer of a
+#: project (a review Save too), so it cannot tell this.
+_INTEGRATING: dict = {}
+_INTEGRATING_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def integrating(project_name: str, set_id: str):
+    """Mark an Integrate job of ``set_id`` in ``project_name`` as running
+    for the duration of the block; always released."""
+    key = (project_name, set_id)
+    with _INTEGRATING_LOCK:
+        _INTEGRATING[key] = _INTEGRATING.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        with _INTEGRATING_LOCK:
+            count = _INTEGRATING.get(key, 0) - 1
+            if count > 0:
+                _INTEGRATING[key] = count
+            else:
+                _INTEGRATING.pop(key, None)
+
+
+def is_integrating(project_name: str, set_id: str) -> bool:
+    """True while an Integrate job of ``set_id`` in ``project_name`` runs."""
+    with _INTEGRATING_LOCK:
+        return _INTEGRATING.get((project_name, set_id), 0) > 0
 
 
 def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=()):
@@ -132,6 +168,26 @@ def reviewed_in(project, set_id: str) -> int:
     return s.n_reviewed if s is not None else 0
 
 
+def split_in(project, set_id: str) -> bool:
+    """Whether a re-run of ``set_id`` would discard an evaluator split."""
+    s = project.alert_sets.get(set_id)
+    return s is not None and s.split is not None
+
+
+def replace_message(project, set_id: str) -> Optional[str]:
+    """The Replace confirmation's message (spec §3): one sentence for the
+    reviewed alerts and one for the evaluator split a re-run of ``set_id``
+    would discard, each when it applies; None when nothing would be lost
+    (the run starts without asking)."""
+    parts = []
+    reviewed = reviewed_in(project, set_id)
+    if reviewed:
+        parts.append(tn("steps.integrate.replace_message", reviewed))
+    if split_in(project, set_id):
+        parts.append(t("steps.integrate.replace_split"))
+    return " ".join(parts) or None
+
+
 def status_label(status) -> str:
     """A review status in the legend's words (spec §9.4: "Reviewed: confirmed")."""
     return t(_STATUS_KEYS[STATUS_CODES.get(status, 0)])
@@ -151,7 +207,7 @@ def reviewed_lines(project, set_id: str, limit: int = 20) -> list:
     except Exception:  # noqa: BLE001 - a missing or unreadable store only loses the list
         logger.warning("could not list the reviewed alerts of set %s from %s", set_id, store, exc_info=True)
         return []
-    reviewed = df[df["status"].notna() & (df["status"] != "Not reviewed")]
+    reviewed = df[reviewed_mask(df)]
     lines = [t("steps.integrate.replace_line", id=int(row.alert_id), status=status_label(row.status),
                area=format_number(float(row.area_ha), 2))
              for row in reviewed.head(limit).itertuples(index=False)]
@@ -295,7 +351,9 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
     with the reason; an empty set's toast names them.
     """
     name = job.project.name
-    with writing(name), tracked_job(notifier, t("steps.integrate.job_title"), total_steps=5) as task:
+    sid = make_set_id(job.period.id, job.sources)
+    with writing(name), integrating(name, sid), \
+            tracked_job(notifier, t("steps.integrate.job_title"), total_steps=5) as task:
         result = run_integration(job, on_step=lambda key: task.step(t(key)))
         # The store these alerts are is on disk now: a review Save of them
         # checks it is still that store (set_store.generation_changed).

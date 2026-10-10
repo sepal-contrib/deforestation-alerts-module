@@ -107,6 +107,41 @@ def test_reviewed_in():
     assert integrate_jobs.reviewed_in(p, "x") == 4
 
 
+def _split():
+    from deforestation_alerts.project.models import EvaluatorSplit
+
+    return EvaluatorSplit(split_id="s" * 32, evaluators=["Ana", "Bo"], created_at=datetime.now())
+
+
+def test_replace_message_names_what_a_rerun_discards():
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    assert integrate_jobs.replace_message(p, "x") is None  # a new set
+    p.alert_sets["x"] = _set("x", 0)
+    assert integrate_jobs.replace_message(p, "x") is None and not integrate_jobs.split_in(p, "x")
+    p.alert_sets["x"] = _set("x", 0).model_copy(update={"split": _split()})
+    assert integrate_jobs.split_in(p, "x")
+    assert integrate_jobs.replace_message(p, "x") == t("steps.integrate.replace_split")
+    p.alert_sets["x"] = _set("x", 2).model_copy(update={"split": _split()})
+    assert integrate_jobs.replace_message(p, "x") == (
+        f"{tn('steps.integrate.replace_message', 2)} {t('steps.integrate.replace_split')}")
+    p.alert_sets["x"] = _set("x", 2)
+    assert integrate_jobs.replace_message(p, "x") == tn("steps.integrate.replace_message", 2)
+
+
+def test_integrating_marks_one_set_of_one_project_and_always_releases():
+    assert not integrate_jobs.is_integrating("d", "x")
+    with integrate_jobs.integrating("d", "x"):
+        with integrate_jobs.integrating("d", "x"):
+            assert integrate_jobs.is_integrating("d", "x")
+        assert integrate_jobs.is_integrating("d", "x")  # a count: the outer run still goes
+        assert not integrate_jobs.is_integrating("d", "y") and not integrate_jobs.is_integrating("e", "x")
+    assert not integrate_jobs.is_integrating("d", "x")
+    with pytest.raises(RuntimeError):
+        with integrate_jobs.integrating("d", "x"):
+            raise RuntimeError("boom")
+    assert not integrate_jobs.is_integrating("d", "x")
+
+
 def test_apply_result_records_the_set_and_activates_it():
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     s = _set("x", 0)
@@ -174,7 +209,7 @@ def _job(name="d", pdir=None, project=None):
     """A job as the step builds it: ``project`` is the deep copy the run used
     (name, AOI and grid are what the record is checked against)."""
     project = project or SimpleNamespace(name=name, aoi=None, grid=None)
-    return SimpleNamespace(project=project, pdir=pdir, period=JAN)
+    return SimpleNamespace(project=project, pdir=pdir, period=JAN, sources=["GLAD-L"])
 
 
 def _art(key, kind="store"):
@@ -260,6 +295,7 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
 
     def fake_run(job, on_step=None):
         busy.append(is_writing("d"))
+        busy.append(integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"])))
         for key in ("steps.integrate.step_combine", "steps.integrate.step_vectorize",
                     "steps.integrate.step_store", "steps.integrate.step_footprint"):
             on_step(key)
@@ -280,7 +316,8 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     assert picked == [-1, 0]
     assert state.current_page_view.value == "analysis_tile"
     assert notifier.toasts == [("success", tn("steps.integrate.done", 2))]
-    assert busy == [True] and not is_writing("d")
+    assert busy == [True, True] and not is_writing("d")
+    assert not integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"]))
 
 
 def test_the_published_alerts_are_stamped_with_the_store_the_run_wrote(monkeypatch, tmp_path):
@@ -494,6 +531,7 @@ def test_a_failed_run_records_nothing_and_fails_the_task(monkeypatch):
         integrate_jobs.run_integration_job(state, notifier, _job())
     assert state.project.value.alert_sets == {} and state.project.value.active_set is None
     assert built == [] and not is_writing("d")
+    assert not integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"]))
     assert notifier.toasts == [("error", "RADD is not downloaded and harmonized for this period (missing)")]
 
 
@@ -750,6 +788,38 @@ def test_a_set_without_reviews_is_replaced_without_asking(step):
         rc.close()
 
 
+def test_replacing_a_split_set_without_reviews_asks_first(step):
+    """Spec §3: the split and its pending returns would be discarded."""
+    both = make_set_id(JAN.id, ["GLAD-L", "RADD"])
+    split_set = _set(both, 0, sources=["GLAD-L", "RADD"]).model_copy(update={"split": _split()})
+    state = _state(_project("d", "GLAD-L", "RADD", sets=[split_set]))
+    map_, rc = _render(state)
+    try:
+        _run(rc)
+        dialog = rc.find(v.Dialog, v_model=True).widget
+        assert step.jobs == [] and dialog.v_model is True
+        texts = _texts(rc)
+        assert t("steps.integrate.replace_split") in texts
+        assert not any(s.startswith("#") for s in texts)  # no reviewed alerts to list
+        _button(rc, t("common.replace")).fire_event("click", None)
+        step.run_jobs()
+        assert [job.sources for job in step.runs] == [["GLAD-L", "RADD"]]
+    finally:
+        rc.close()
+
+
+def test_replacing_a_reviewed_split_set_names_both(step):
+    both = make_set_id(JAN.id, ["GLAD-L", "RADD"])
+    split_set = _set(both, 3, sources=["GLAD-L", "RADD"]).model_copy(update={"split": _split()})
+    state = _state(_project("d", "GLAD-L", "RADD", sets=[split_set]))
+    map_, rc = _render(state)
+    try:
+        _run(rc)
+        assert f"{tn('steps.integrate.replace_message', 3)} {t('steps.integrate.replace_split')}" in _texts(rc)
+    finally:
+        rc.close()
+
+
 def _store(tmp_path, statuses):
     store = tmp_path / "d" / SET_DIR / "alert_db.parquet"
     store.parent.mkdir(parents=True, exist_ok=True)
@@ -773,6 +843,13 @@ def test_the_replace_confirmation_lists_the_reviewed_alerts(step, tmp_path):
         assert not any(s.startswith("#1 ·") for s in texts)  # not reviewed: nothing lost
     finally:
         rc.close()
+
+
+def test_reviewed_lines_skip_a_blank_status(step, tmp_path):
+    """Spec §3: ``""`` is not a review (``review_status.is_reviewed``)."""
+    p = _project("d", "GLAD-L", sets=[_set("x", 1)])
+    _store(tmp_path, ["", "Confirmed", "Not reviewed"])
+    assert integrate_jobs.reviewed_lines(p, "x") == ["#1 · Reviewed: confirmed · 2.50 ha"]
 
 
 def test_reviewed_lines_are_capped_and_survive_a_missing_store(step, tmp_path):

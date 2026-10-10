@@ -437,6 +437,7 @@
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… et {n} de plus",
+      "replace_split": "La répartition entre évaluateurs et ses retours en attente seront écartés.",
       "job_title": "Intégrer et vectoriser",
       "step_combine": "Combinaison des sources",
       "step_vectorize": "Vectorisation des groupes",
@@ -556,5 +557,21 @@
       "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",
       "copied": "{placeholder} copié"
     }
+  },
+  "evaluators": {
+    "err": {
+      "no_set": "Aucun jeu d'alertes actif à répartir. Créez-en un d'abord dans Intégrer et vectoriser.",
+      "none_eligible": "Aucune alerte à attribuer.",
+      "attribute_clash": "Ce jeu a un attribut nommé 'evaluator' ; renommez cette couche d'attributs et relancez le jeu.",
+      "store_changed": "Ce jeu d'alertes a été réécrit pendant la répartition : rien n'a donc été modifié. Réessayez.",
+      "integrating": "Ce jeu d'alertes est en cours de relance dans Intégrer et vectoriser. Réessayez une fois terminé.",
+      "duplicate_name": "« {name} » figure deux fois.",
+      "too_many": "{max} évaluateurs au plus.",
+      "no_names": "Saisissez au moins un nom.",
+      "bad_count": "Choisissez entre 1 et {max} évaluateurs."
+    }
+  },
+  "review_copy": {
+    "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."
   }
 }

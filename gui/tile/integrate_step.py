@@ -31,12 +31,13 @@ from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.presets import has_probable
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
-from gui.i18n import t, tn
+from gui.i18n import t
 from gui.scripts import alert_layers
 from gui.scripts.coverage_ui import note_text, result_note
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
     params_from_form,
+    replace_message,
     reviewed_in,
     reviewed_lines,
     run_integration_job,
@@ -138,7 +139,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
     attr_layers, set_attr_layers = solara.use_state(last.attribute_list() if last else [])
     attr_modal = solara.use_reactive(False)  # the modal mounts its form (an asset listing) only when open
     attr_editing, set_attr_editing = solara.use_state(None)  # the layer's index; None: adding
-    confirm, set_confirm = solara.use_state(None)  # (params, reviewed count, their lines) awaiting Replace
+    confirm, set_confirm = solara.use_state(None)  # (params, message, reviewed lines) awaiting Replace
 
     key = _inflight_key(name)
     busy = key in inflight.value
@@ -178,9 +179,11 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             notifications.error(t(err))
             return
         live = app_state.project.value
-        reviewed = reviewed_in(live, sid) if live is not None and live.name == name else 0
-        if reviewed:
-            set_confirm((params, reviewed, reviewed_lines(live, sid)))
+        message = replace_message(live, sid) if live is not None and live.name == name else None
+        if message:
+            # The lines read the set's store: only when there are reviews to list.
+            lines = reviewed_lines(live, sid) if reviewed_in(live, sid) else []
+            set_confirm((params, message, lines))
             return
         _launch(params)
 
@@ -260,7 +263,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         on_cancel=lambda: set_confirm(None),
         on_confirm=_confirm,
         title=t("steps.integrate.replace_title"),
-        message=tn("steps.integrate.replace_message", confirm[1] if confirm else 0),
+        message=confirm[1] if confirm else None,
         confirm_label=t("common.replace"),
         confirm_color="warning",
         details=confirm[2] if confirm else None,

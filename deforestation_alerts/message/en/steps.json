@@ -421,6 +421,7 @@
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… and {n} more",
+      "replace_split": "The evaluator split and its pending returns will be discarded.",
       "job_title": "Integrate & vectorize",
       "step_combine": "Combining sources",
       "step_vectorize": "Vectorizing clusters",
@@ -533,5 +534,21 @@
       "placeholders_review": "Green ones come from the review. They are replaced in the document's paragraphs, not inside tables, headers or footers.",
       "copied": "Copied {placeholder}"
     }
+  },
+  "evaluators": {
+    "err": {
+      "no_set": "There is no active alert set to split. Create one in Integrate & vectorize first.",
+      "none_eligible": "No alerts to assign.",
+      "attribute_clash": "This set has an attribute named 'evaluator'; rename that attribute layer and re-run the set.",
+      "store_changed": "This alert set was rewritten while the split was being made, so nothing was changed. Try again.",
+      "integrating": "This alert set is being re-run in Integrate & vectorize. Try again once it has finished.",
+      "duplicate_name": "\"{name}\" is listed twice.",
+      "too_many": "At most {max} evaluators.",
+      "no_names": "Type at least one name.",
+      "bad_count": "Choose between 1 and {max} evaluators."
+    }
+  },
+  "review_copy": {
+    "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."
   }
 }
