@@ -271,6 +271,11 @@
         "other": "{n} à proximité",
         "many": "{n} à proximité"
       }
+    },
+    "filter": {
+      "col_evaluator": "Évaluateur",
+      "unassigned": "Non attribuée",
+      "empty_value": "(vide)"
     }
   },
   "imagery": {

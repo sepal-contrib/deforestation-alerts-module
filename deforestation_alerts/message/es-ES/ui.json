@@ -271,6 +271,11 @@
         "other": "{n} cercanas",
         "many": "{n} cercanas"
       }
+    },
+    "filter": {
+      "col_evaluator": "Evaluador",
+      "unassigned": "Sin asignar",
+      "empty_value": "(vacío)"
     }
   },
   "imagery": {

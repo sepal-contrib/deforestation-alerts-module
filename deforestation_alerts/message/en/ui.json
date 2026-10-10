@@ -267,6 +267,11 @@
         "one": "{n} nearby",
         "other": "{n} nearby"
       }
+    },
+    "filter": {
+      "col_evaluator": "Evaluator",
+      "unassigned": "Unassigned",
+      "empty_value": "(empty)"
     }
   },
   "imagery": {
