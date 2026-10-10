@@ -96,55 +96,61 @@ function mount({model, el, registry, always, L}) {
     if (el._multiview === mv) delete el._multiview;
   });
 
-  // Layers before plugins: the layer-menu binding re-applies the viewer's
-  // toggles, and an override for a layer the core does not have yet would be
-  // pruned by the first setLayers.
-  mv.setLayers(model.get("layers") || []);
+  try {
+    // Layers before plugins: the layer-menu binding re-applies the viewer's
+    // toggles, and an override for a layer the core does not have yet would be
+    // pruned by the first setLayers.
+    mv.setLayers(model.get("layers") || []);
 
-  listen("view", () => {
-    const v = model.get("view") || {};
-    const n = Number(v.n);
-    if (!Array.isArray(v.center) || !(n > lastN)) return; // our own write-back, or stale
-    lastN = n;
-    mv.setView(v.center, v.zoom);
-  });
-  cleanups.push(
-    mv.on("viewchange", ({center, zoom}) => {
-      model.set("view", {center: toCenter(center), zoom, n: lastN, origin: "user"});
-      model.save_changes();
-    }),
-  );
-  listen("basemap", () => mv.setBasemap(model.get("basemap") || null));
-  listen("layers", () => mv.setLayers(model.get("layers") || []));
-  listen("labels", () => mv.setLabels(model.get("labels") || {}));
-  listen("theme", () => mv.setTheme(model.get("theme") || "light"));
+    listen("view", () => {
+      const v = model.get("view") || {};
+      const n = Number(v.n);
+      if (!Array.isArray(v.center) || !(n > lastN)) return; // our own write-back, or stale
+      lastN = n;
+      mv.setView(v.center, v.zoom);
+    });
+    cleanups.push(
+      mv.on("viewchange", ({center, zoom}) => {
+        model.set("view", {center: toCenter(center), zoom, n: lastN, origin: "user"});
+        model.save_changes();
+      }),
+    );
+    listen("basemap", () => mv.setBasemap(model.get("basemap") || null));
+    listen("layers", () => mv.setLayers(model.get("layers") || []));
+    listen("labels", () => mv.setLabels(model.get("labels") || {}));
+    listen("theme", () => mv.setTheme(model.get("theme") || "light"));
 
-  for (const name of model.get("plugins") || []) {
-    const entry = registry[name];
-    if (!entry) {
-      console.warn(`leaflet-multiview: no plugin registered as ${name}`);
-      continue;
-    }
-    try {
-      const api = mv.use(entry.plugin, entry.options ? entry.options(model) : undefined);
-      if (entry.bind) {
-        const unbind = entry.bind({model, api, mv});
-        if (typeof unbind === "function") cleanups.push(unbind);
+    for (const name of model.get("plugins") || []) {
+      const entry = registry[name];
+      if (!entry) {
+        console.warn(`leaflet-multiview: no plugin registered as ${name}`);
+        continue;
       }
-    } catch (err) {
-      fail(name, err);
+      try {
+        const api = mv.use(entry.plugin, entry.options ? entry.options(model) : undefined);
+        if (entry.bind) {
+          const unbind = entry.bind({model, api, mv});
+          if (typeof unbind === "function") cleanups.push(unbind);
+        }
+      } catch (err) {
+        fail(name, err);
+      }
     }
-  }
-  for (const plugin of always) {
-    try {
-      mv.use(plugin);
-    } catch (err) {
-      fail((plugin && plugin.name) || "plugin", err);
+    for (const plugin of always) {
+      try {
+        mv.use(plugin);
+      } catch (err) {
+        fail((plugin && plugin.name) || "plugin", err);
+      }
     }
+    // The same specs again: an empty diff, but a "layerschange" that plugins
+    // installed after the first setLayers build their first state from.
+    mv.setLayers(model.get("layers") || []);
+  } catch (err) {
+    // Anything after the build (an invalid layer spec...) still hands back the
+    // cleanup, so an unmount or a rebuild removes what was registered so far.
+    fail("leaflet-multiview", err);
   }
-  // The same specs again: an empty diff, but a "layerschange" that plugins
-  // installed after the first setLayers build their first state from.
-  mv.setLayers(model.get("layers") || []);
   return cleanup;
 }
 

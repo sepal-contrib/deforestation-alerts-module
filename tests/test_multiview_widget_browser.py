@@ -291,3 +291,27 @@ def test_the_cleanup_removes_every_listener_and_the_maps(mv_page):
     assert mv_page.locator("#host .leaflet-container").count() == 0
     assert mv_page.locator("#host .mv-widget").count() == 0
     assert mv_page.evaluate("() => document.getElementById('host')._multiview") is None
+
+
+def _bad_geojson():
+    """A layer whose GeoJSON makes ``L.geoJSON`` throw inside ``setLayers``."""
+    return {"id": "bad", "view": "all", "kind": "geojson", "data": {"type": "Feature", "geometry": {"type": "Nope", "coordinates": []}},
+            "name": "bad", "visible": True, "opacity": 1.0, "z": 1, "group": "alert", "meta": {}}
+
+
+def test_a_failing_first_mount_shows_the_strip_and_still_cleans_up(mv_page):
+    mount(mv_page, layers=[_bad_geojson()])
+    assert mv_page.locator("#host .mv-error").inner_text().startswith("leaflet-multiview: ")
+    unmount(mv_page)
+    assert listeners(mv_page) == 0
+    assert mv_page.locator("#host .mv-widget").count() == 0
+
+
+def test_a_rebuild_after_a_failing_mount_leaves_one_widget(mv_page):
+    mount(mv_page, layers=[_bad_geojson()])
+    py(mv_page, "views", [{"id": "a"}, {"id": "b"}, {"id": "c"}])
+    py(mv_page, "view_layout", "grid")
+    assert mv_page.locator("#host .mv-widget").count() == 1
+    unmount(mv_page)
+    assert listeners(mv_page) == 0
+    assert mv_page.locator("#host .mv-widget").count() == 0

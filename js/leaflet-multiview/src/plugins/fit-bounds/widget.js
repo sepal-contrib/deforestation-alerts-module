@@ -10,7 +10,7 @@ export function options(model) {
 
 export function bind({model, api}) {
   const apply = () => api.setBounds(model.get("fit_bounds_bounds") ?? null);
+  apply(); // before the listener: a throw here leaves nothing to clean up
   model.on("change:fit_bounds_bounds", apply);
-  apply();
   return () => model.off("change:fit_bounds_bounds", apply);
 }
