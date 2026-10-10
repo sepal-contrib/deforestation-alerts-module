@@ -12,6 +12,11 @@ def test_alert_views_ships_the_committed_bundle():
 
 def test_alert_views_installs_its_mixins_plugins_in_order():
     widget = AlertViews()
-    assert widget.plugins == ["layerMenu", "fitBounds", "draw"]
+    assert widget.plugins == ["layerMenu", "fitBounds", "draw", "holes"]
     for trait in ("layer_menu_toggles", "fit_bounds_bounds", "fit_bounds_views", "draw", "draw_edit_mode"):
         assert trait in widget.keys, trait
+
+
+def test_alert_views_installs_holes_after_draw():
+    plugins = AlertViews().plugins
+    assert plugins.index("draw") < plugins.index("holes")

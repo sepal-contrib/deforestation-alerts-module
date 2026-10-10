@@ -81,3 +81,20 @@
 }
 .mv-dark .mv-draw-hint { background: rgba(30, 30, 30, 0.85); color: #eee; }
 .leaflet-interactive.mv-draw-selected { stroke: #ff9800; stroke-width: 5px; stroke-dasharray: 8 6; }
+
+/* --- holes (src/plugins/holes) --- */
+.mv-hole-bar a { font-size: 16px; line-height: 30px; text-align: center; cursor: pointer; }
+.mv-hole-bar a.mv-active,
+.mv-dark .mv-hole-bar a.mv-active { background: #2196f3; color: #fff; }
+.leaflet-container.mv-removing,
+.leaflet-container.mv-removing .leaflet-interactive { cursor: crosshair; }
+.mv-removing .mv-draw-hint { display: none; }
+.mv-holes-hint {
+  padding: 2px 6px;
+  border-radius: var(--mv-radius);
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+  font: 12px/1.5 Roboto, sans-serif;
+  pointer-events: none;
+}
+.mv-dark .mv-holes-hint { background: rgba(30, 30, 30, 0.85); color: #eee; }

@@ -228,3 +228,13 @@ def test_the_facade_is_the_only_writer_a_widget_needs():
                  "relabel", "target", "widget"):
         assert hasattr(panes, name), name
     assert SimpleNamespace(panes=panes).panes.widget is panes.widget
+
+
+def test_the_hole_tool_labels_are_translated():
+    labels = pane_labels()
+    assert (labels["holes.fill"], labels["holes.remove"]) == ("Fill holes", "Remove hole")
+    assert labels["holes.hint"] == "Click inside a hole to remove it · Esc to stop"
+    set_locale("es-ES")
+    assert pane_labels()["holes.fill"] == "Rellenar huecos"
+    set_locale("fr")
+    assert pane_labels()["holes.remove"] == "Supprimer un trou"

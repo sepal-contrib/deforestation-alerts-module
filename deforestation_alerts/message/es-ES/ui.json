@@ -92,7 +92,10 @@
     "panes": {
       "layers": "Capas",
       "zoom_alert": "Acercar a la alerta",
-      "vertex_hint": "Clic derecho en un vértice para borrarlo"
+      "vertex_hint": "Clic derecho en un vértice para borrarlo",
+      "fill_holes": "Rellenar huecos",
+      "remove_hole": "Quitar hueco",
+      "remove_hole_hint": "Haga clic dentro de un hueco para quitarlo · Esc para salir"
     }
   },
   "analysis_tile": {

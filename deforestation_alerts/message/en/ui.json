@@ -92,7 +92,10 @@
     "panes": {
       "layers": "Layers",
       "zoom_alert": "Zoom to the alert",
-      "vertex_hint": "Right-click a vertex to delete it"
+      "vertex_hint": "Right-click a vertex to delete it",
+      "fill_holes": "Fill holes",
+      "remove_hole": "Remove hole",
+      "remove_hole_hint": "Click inside a hole to remove it · Esc to stop"
     }
   },
   "analysis_tile": {

@@ -18,6 +18,7 @@ import {fitBounds} from "../leaflet-multiview/src/plugins/fit-bounds/index.js";
 import * as fitBoundsWidget from "../leaflet-multiview/src/plugins/fit-bounds/widget.js";
 import {draw} from "../leaflet-multiview/src/plugins/draw/index.js";
 import * as drawWidget from "../leaflet-multiview/src/plugins/draw/widget.js";
+import {holes} from "../leaflet-multiview/src/plugins/holes/index.js";
 import {resizeNudge} from "./resize_nudge.js";
 
 export default createWidget({
@@ -26,6 +27,7 @@ export default createWidget({
     layerMenu: {plugin: layerMenu, bind: layerMenuWidget.bind},
     fitBounds: {plugin: fitBounds, bind: fitBoundsWidget.bind, options: fitBoundsWidget.options},
     draw: {plugin: draw, bind: drawWidget.bind},
+    holes: {plugin: holes}, // no traits, so no widget binding
   },
   always: [resizeNudge],
 });

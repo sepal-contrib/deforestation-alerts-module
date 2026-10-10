@@ -73,6 +73,9 @@ def pane_labels() -> dict:
         "layerMenu.title": t("analysis.panes.layers"),
         "fitBounds.button": t("analysis.panes.zoom_alert"),
         "draw.hint": t("analysis.panes.vertex_hint"),
+        "holes.fill": t("analysis.panes.fill_holes"),
+        "holes.remove": t("analysis.panes.remove_hole"),
+        "holes.hint": t("analysis.panes.remove_hole_hint"),
     }
 
 

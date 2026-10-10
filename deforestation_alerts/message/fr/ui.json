@@ -92,7 +92,10 @@
     "panes": {
       "layers": "Couches",
       "zoom_alert": "Zoomer sur l'alerte",
-      "vertex_hint": "Clic droit sur un sommet pour le supprimer"
+      "vertex_hint": "Clic droit sur un sommet pour le supprimer",
+      "fill_holes": "Combler les trous",
+      "remove_hole": "Supprimer un trou",
+      "remove_hole_hint": "Cliquez dans un trou pour le supprimer · Échap pour arrêter"
     }
   },
   "analysis_tile": {
