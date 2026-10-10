@@ -236,6 +236,60 @@ def test_an_oversized_header_is_refused(tmp_path, monkeypatch):
     assert e.value.key == "share.err.bad_header"
 
 
+def _patched_header_zip(path, *, flag_bits=None, compress_type=None, deflate=False) -> Path:
+    """A package whose share.json local and central headers are patched in the raw bytes
+    (zipfile refuses to write an encrypted or unknown-compression member)."""
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, data in _package_members().items():
+            info = zipfile.ZipInfo(name)
+            info.compress_type = zipfile.ZIP_DEFLATED if deflate and name == "share.json" else zipfile.ZIP_STORED
+            zf.writestr(info, data)
+    raw = bytearray(path.read_bytes())
+    local = raw.index(b"PK\x03\x04")  # share.json is the first member
+    central = raw.index(b"PK\x01\x02")
+    for at, flag_off, comp_off in ((local, 6, 8), (central, 8, 10)):
+        if flag_bits is not None:
+            raw[at + flag_off:at + flag_off + 2] = flag_bits.to_bytes(2, "little")
+        if compress_type is not None:
+            raw[at + comp_off:at + comp_off + 2] = compress_type.to_bytes(2, "little")
+    path.write_bytes(bytes(raw))
+    return path
+
+
+def test_an_encrypted_header_is_refused_by_peek_and_by_open_checked(tmp_path):
+    path = _patched_header_zip(tmp_path / "e.zip", flag_bits=0x1)
+    with pytest.raises(ShareError) as e:
+        peek_header(path)
+    assert (e.value.key, e.value.params) == ("share.err.unsafe_member", {"member": "share.json"})
+    assert _refusal(path).key == "share.err.unsafe_member"
+
+
+def test_a_header_with_an_unsupported_compression_is_refused(tmp_path):
+    with pytest.raises(ShareError) as e:
+        peek_header(_patched_header_zip(tmp_path / "c.zip", compress_type=99))
+    assert e.value.key == "share.err.bad_header"
+
+
+def test_a_header_with_a_corrupt_deflate_stream_is_refused(tmp_path):
+    path = _patched_header_zip(tmp_path / "d.zip", deflate=True)
+    raw = bytearray(path.read_bytes())
+    start = 30 + len("share.json")  # local header + name: the deflate stream begins here
+    for i in range(start, start + 8):
+        raw[i] ^= 0xFF
+    path.write_bytes(bytes(raw))
+    with pytest.raises(ShareError) as e:
+        peek_header(path)
+    assert e.value.key == "share.err.bad_header"
+
+
+def test_a_deeply_nested_header_is_refused(tmp_path):
+    deep = "[" * 100000 + "]" * 100000
+    path = _zip(tmp_path / "n.zip", {**_package_members(), "share.json": deep})
+    with pytest.raises(ShareError) as e:
+        peek_header(path)
+    assert e.value.key == "share.err.bad_header"
+
+
 def test_a_zip_without_a_header_reads_as_no_header(tmp_path):
     with pytest.raises(ShareError) as e:
         peek_header(_zip(tmp_path / "x.zip", {"readme.txt": "hi"}))

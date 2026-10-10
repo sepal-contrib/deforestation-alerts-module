@@ -11,6 +11,7 @@ import json
 import math
 import stat
 import zipfile
+import zlib
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import PurePosixPath, PureWindowsPath
@@ -137,11 +138,15 @@ def read_header(zf) -> ShareHeader:
         info = zf.getinfo(HEADER_MEMBER)
     except KeyError:
         raise ShareError("share.err.no_header") from None
+    if _unsafe(info):  # peek_header does not go through open_checked
+        raise ShareError("share.err.unsafe_member", member=HEADER_MEMBER)
     if info.file_size > MAX_HEADER_BYTES:
         raise ShareError("share.err.bad_header")
     try:
         raw = json.loads(zf.read(info).decode("utf-8"))
-    except (ValueError, zipfile.BadZipFile) as exc:  # UnicodeDecodeError is a ValueError
+    # UnicodeDecodeError is a ValueError; RecursionError (deep JSON) is a RuntimeError;
+    # a tampered member can also raise zlib.error, NotImplementedError (unknown compression) or EOFError.
+    except (ValueError, zipfile.BadZipFile, zlib.error, NotImplementedError, RuntimeError, EOFError) as exc:
         raise ShareError("share.err.bad_header") from exc
     if not isinstance(raw, dict) or raw.get("format") != FORMAT:
         raise ShareError("share.err.wrong_format")
