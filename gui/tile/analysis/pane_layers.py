@@ -76,6 +76,7 @@ def pane_labels() -> dict:
         "holes.fill": t("analysis.panes.fill_holes"),
         "holes.remove": t("analysis.panes.remove_hole"),
         "holes.hint": t("analysis.panes.remove_hole_hint"),
+        "tileErrors.badge": t("analysis.panes.tile_error"),
     }
 
 

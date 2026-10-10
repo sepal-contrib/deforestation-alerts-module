@@ -95,7 +95,8 @@
       "vertex_hint": "Clic derecho en un vértice para borrarlo",
       "fill_holes": "Rellenar huecos",
       "remove_hole": "Quitar hueco",
-      "remove_hole_hint": "Haga clic dentro de un hueco para quitarlo · Esc para salir"
+      "remove_hole_hint": "Haga clic dentro de un hueco para quitarlo · Esc para salir",
+      "tile_error": "No se pudieron cargar las imágenes"
     }
   },
   "analysis_tile": {

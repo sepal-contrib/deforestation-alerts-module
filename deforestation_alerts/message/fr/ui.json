@@ -95,7 +95,8 @@
       "vertex_hint": "Clic droit sur un sommet pour le supprimer",
       "fill_holes": "Combler les trous",
       "remove_hole": "Supprimer un trou",
-      "remove_hole_hint": "Cliquez dans un trou pour le supprimer · Échap pour arrêter"
+      "remove_hole_hint": "Cliquez dans un trou pour le supprimer · Échap pour arrêter",
+      "tile_error": "Les images n'ont pas pu être chargées"
     }
   },
   "analysis_tile": {

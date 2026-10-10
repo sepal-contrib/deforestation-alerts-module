@@ -98,3 +98,13 @@
   pointer-events: none;
 }
 .mv-dark .mv-holes-hint { background: rgba(30, 30, 30, 0.85); color: #eee; }
+
+/* --- tileErrors (src/plugins/tile-errors) --- */
+.mv-tile-error {
+  padding: 2px 8px;
+  border-radius: var(--mv-radius);
+  background: var(--mv-error-bg);
+  color: var(--mv-error-fg);
+  font: 12px/1.6 Roboto, sans-serif;
+  pointer-events: none;
+}

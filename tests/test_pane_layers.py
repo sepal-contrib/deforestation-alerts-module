@@ -238,3 +238,11 @@ def test_the_hole_tool_labels_are_translated():
     assert pane_labels()["holes.fill"] == "Rellenar huecos"
     set_locale("fr")
     assert pane_labels()["holes.remove"] == "Supprimer un trou"
+
+
+def test_the_tile_error_badge_label_is_translated():
+    assert pane_labels()["tileErrors.badge"] == "Imagery failed to load"
+    set_locale("es-ES")
+    assert pane_labels()["tileErrors.badge"] == "No se pudieron cargar las imágenes"
+    set_locale("fr")
+    assert pane_labels()["tileErrors.badge"] == "Les images n'ont pas pu être chargées"

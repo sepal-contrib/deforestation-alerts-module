@@ -9,11 +9,11 @@ only writer.
 
 from pathlib import Path
 
-from gui.widget.multiview import Draw, FitBounds, Holes, LayerMenu, MultiView
+from gui.widget.multiview import Draw, FitBounds, Holes, LayerMenu, MultiView, TileErrors
 
 STATIC = Path(__file__).resolve().parent / "static"
 
 
-class AlertViews(MultiView, LayerMenu, FitBounds, Draw, Holes):
+class AlertViews(MultiView, LayerMenu, FitBounds, Draw, Holes, TileErrors):
     _esm = STATIC / "multiview.js"
     _css = STATIC / "multiview.css"

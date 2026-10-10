@@ -95,7 +95,8 @@
       "vertex_hint": "Right-click a vertex to delete it",
       "fill_holes": "Fill holes",
       "remove_hole": "Remove hole",
-      "remove_hole_hint": "Click inside a hole to remove it · Esc to stop"
+      "remove_hole_hint": "Click inside a hole to remove it · Esc to stop",
+      "tile_error": "Imagery failed to load"
     }
   },
   "analysis_tile": {
