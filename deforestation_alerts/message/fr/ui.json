@@ -275,7 +275,11 @@
     "filter": {
       "col_evaluator": "Évaluateur",
       "unassigned": "Non attribuée",
-      "empty_value": "(vide)"
+      "empty_value": "(vide)",
+      "no_matches": "Aucune alerte ne correspond à ce filtre",
+      "counter_outside": "– / {total}",
+      "hint": "filtrées · {total} au total",
+      "not_in_filter": "L'alerte {number} n'est pas dans le filtre actuel"
     }
   },
   "imagery": {

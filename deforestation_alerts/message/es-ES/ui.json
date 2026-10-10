@@ -275,7 +275,11 @@
     "filter": {
       "col_evaluator": "Evaluador",
       "unassigned": "Sin asignar",
-      "empty_value": "(vacío)"
+      "empty_value": "(vacío)",
+      "no_matches": "Ninguna alerta coincide con este filtro",
+      "counter_outside": "– / {total}",
+      "hint": "filtradas · {total} en total",
+      "not_in_filter": "La alerta {number} no está en el filtro actual"
     }
   },
   "imagery": {

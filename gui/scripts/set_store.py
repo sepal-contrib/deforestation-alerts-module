@@ -32,6 +32,7 @@ from shapely.geometry import Point, mapping
 
 from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.project import paths
+from gui.scripts import alert_filter
 from gui.store.project_writers import is_writing, writing
 from gui.store.workflow_steps import active_set
 
@@ -128,6 +129,11 @@ def go_to_alert(app_state, project_name: str, set_id: str, alert_id: int, positi
         if live is None or live.name != project_name or set_id not in live.alert_sets:
             return False
         if live.active_set == set_id:
+            # Spec §8.3: a Go to an alert the filter hides clears the filter,
+            # first, so the counter and the navigation count from there.
+            mask = app_state.alert_mask() if app_state.alert_filter is not None else None
+            if mask is not None and not (0 <= position < len(mask) and mask[position]):
+                app_state.clear_alert_filter()
             app_state.actual_alert_id.value = position
         else:
             app_state.goto_alert.set((set_id, int(alert_id)))
@@ -165,7 +171,9 @@ def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = Fals
 
     A Go from Overview into this set (``goto_alert``) selects that alert
     instead of the saved position. The wish is for the next set published
-    only: a publish of any set consumes it.
+    only: a publish of any set consumes it. Without a wish the start is
+    ``alert_filter.start_position``: the saved position, or under the
+    Analysis filter (``AppState.alert_filter``) its first unreviewed match.
     """
     with app_state._lock:
         live = app_state.project.value
@@ -180,8 +188,12 @@ def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = Fals
             app_state.goto_alert.set(None)  # a wish is for the next set published only
         index = position_of(gdf, wish[1]) if wish is not None and wish[0] == s.id else None
         if index is None:
-            saved = live.alert_sets[s.id].last_alert_index
-            index = min(saved, len(gdf) - 1) if gdf is not None and len(gdf) else -1
+            # The one start-position resolver (spec §8.4), as
+            # ``analysis_tile.select_start_alert``. The filter read here is the
+            # one left after the publish above: ``AppState`` clears a filter
+            # made on another set when that set's alerts arrive.
+            index = alert_filter.start_position(gdf, app_state.alert_filter,
+                                                live.alert_sets[s.id].last_alert_index, live.questions)
         app_state.actual_alert_id.set(index)
         return True
 

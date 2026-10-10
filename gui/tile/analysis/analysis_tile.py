@@ -87,6 +87,7 @@ from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
 from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
+from gui.scripts import alert_filter
 from gui.scripts import questions
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
@@ -335,8 +336,10 @@ def view_actual_alert(
 
 
 def select_start_alert(app_state, app_tile_model):
-    """Select an alert when alerts arrive with none selected: the active set's
-    saved position (``go_to`` clamps it), else the first alert.
+    """Select an alert when alerts arrive with none selected, by the one
+    start-position resolver (spec §8.4, ``alert_filter.start_position``, as
+    ``set_store.publish_set_alerts``): the active set's saved position
+    clamped, or under the Analysis filter its first unreviewed match.
 
     Starting from the saved position matters because a set load publishes its
     alerts before it reads ``last_alert_index``: going to 0 here would make
@@ -346,8 +349,29 @@ def select_start_alert(app_state, app_tile_model):
     """
     gdf = app_state.alerts_gdf.value
     if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
-        start = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
-        app_state.go_to(start)
+        saved = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
+        p = app_state.project.value
+        app_state.go_to(alert_filter.start_position(gdf, app_state.alert_filter, saved,
+                                                    p.questions if p is not None else []))
+
+
+def follow_filter(app_state, f) -> None:
+    """A filter applied while an alert is on screen moves to the filter's
+    start (spec §8.4): that alert when it matches, else the first unreviewed
+    match, else the first match; when nothing matches, the alert stays.
+    Clearing the filter moves nothing. With no alert on screen the next
+    publish applies the filter (``set_store.publish_set_alerts``)."""
+    gdf = app_state.alerts_gdf.value
+    index = app_state.actual_alert_id.value
+    if f is None or gdf is None or not len(gdf) or index < 0:
+        return
+    p = app_state.project.value
+    s = active_set(p)
+    if s is not None and not set_store.alerts_belong_to(gdf, s):
+        return  # another set's alerts, until the new set's are published
+    target = alert_filter.start_position(gdf, f, index, p.questions if p is not None else [])
+    if target != index:
+        app_state.go_to(target)
 
 
 def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field) -> None:
@@ -362,7 +386,18 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
       leaves ``actual_alert_id`` at -1, and the tile would otherwise stay empty
       until "next"), plus one immediate call. Block A subscribes for itself, so
       a review Save's rebind refreshes its facts grid without the tile's help.
+    - ``analysis.alert_filter``: bound into ``app_state``, where the
+      navigation reads it, and a new filter moves to its start
+      (``follow_filter``).
     """
+    # First: ``AppState`` drops a filter made on another set in its own
+    # ``alerts_gdf`` subscription, which must run before the start alert is
+    # chosen below.
+    app_state.bind_alert_filter(analysis.alert_filter)
+    analysis.alert_filter.subscribe(lambda f: follow_filter(app_state, f))
+    # A start filter set before this layout was wired (``apply_start_filter``
+    # on a session whose alerts were already published) is resolved now.
+    follow_filter(app_state, analysis.alert_filter.value)
 
     def _on_alert_change(*_):
         view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
@@ -474,6 +509,9 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # The queue, the navigation and the set selector go to the screen's top
     # bar (``build_screen``); built here with the card whose subscriptions
     # keep them current.
+    # Bound before block A is built, which subscribes to the bound filter
+    # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
+    app_state.bind_alert_filter(analysis.alert_filter)
     context = build_context(app_state, id_field)
     topnav = build_topnav(context, build_set_selector(app_state))
     earlier = build_earlier_controls(widgets, app_state, analysis)

@@ -39,6 +39,15 @@ import solara
 
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Project
+from gui.scripts import alert_filter as af
+
+
+def _set_id_of(gdf) -> Optional[str]:
+    """The set the alerts belong to (their ``set_id``), or None: no alerts,
+    no rows, or a store written before the column."""
+    if gdf is None or not len(gdf) or "set_id" not in gdf.columns:
+        return None
+    return str(gdf["set_id"].iloc[0])
 
 
 class AppState:
@@ -110,6 +119,13 @@ class AppState:
         # map (spec §9.4)
         self.layer_legends = solara.reactive(())
         self.selected_legend = solara.reactive("")
+        # The Analysis filter (``AnalysisState.alert_filter``), bound by the
+        # analysis layout (``bind_alert_filter``): the navigation below, the
+        # start position (``set_store.publish_set_alerts``) and Overview's Go
+        # read it. Unbound (a session without Analysis, most tests), every
+        # alert matches. ``_filter_set_id`` is the set the filter was made on.
+        self._alert_filter = None
+        self._filter_set_id = None
 
     # ---- project lifecycle ---------------------------------------------------
     @property
@@ -146,6 +162,12 @@ class AppState:
             self.show_alerts.set(False)
             self.show_earlier_sets.set(False)
             self.show_unanalysable.set(False)
+            # The filter belongs to the project it was made in. Cleared before
+            # the alerts go, and the set it was made on forgotten: the first
+            # set published after this keeps a filter set from here on (a
+            # review copy's, spec §6.2).
+            self.clear_alert_filter()
+            self._filter_set_id = None
             self.alerts_gdf.set(None)
             self.actual_alert_id.set(-1)
             self.goto_alert.set(None)
@@ -180,17 +202,83 @@ class AppState:
         # workflow must not stay parked on one ("4 / 6 ... nothing yet").
         self.active_step.set(0)
 
-    # ---- alert navigation (unchanged) ------------------------------------
+    # ---- the Analysis filter (spec §8) ------------------------------------
+    def bind_alert_filter(self, reactive) -> None:
+        """Make ``reactive`` (``AnalysisState.alert_filter``) the filter the
+        navigation follows. Binding the same reactive again does nothing."""
+        if reactive is self._alert_filter:
+            return
+        first = self._alert_filter is None
+        self._alert_filter = reactive
+        self._filter_set_id = _set_id_of(self.alerts_gdf.value)
+        if first:
+            # Once per AppState, and before the analysis layout's own
+            # ``alerts_gdf`` subscriptions (``wire_alert_navigation`` binds
+            # first): a filter left from another set is gone by the time the
+            # start alert of the new one is chosen.
+            self.alerts_gdf.subscribe(self._forget_filter_of_another_set)
+
+    @property
+    def alert_filter_reactive(self):
+        """The bound filter reactive, or None (unbound)."""
+        return self._alert_filter
+
+    @property
+    def alert_filter(self):
+        """The filter in force (an ``AlertFilter``), or None."""
+        return self._alert_filter.value if self._alert_filter is not None else None
+
+    def set_alert_filter(self, f) -> None:
+        """Filter Analysis by ``f`` (None clears it). A no-op while unbound."""
+        if self._alert_filter is not None:
+            self._alert_filter.set(f)
+
+    def clear_alert_filter(self) -> None:
+        self.set_alert_filter(None)
+
+    def alert_mask(self):
+        """One bool per alert on hand: whether it matches the filter (all
+        True without one; empty without alerts)."""
+        p = self.project.value
+        return af.match_mask(self.alerts_gdf.value, self.alert_filter, p.questions if p is not None else [])
+
+    def _forget_filter_of_another_set(self, gdf) -> None:
+        """Spec §8.1: the filter is reset when another set's alerts arrive (a
+        set switch, Overview's Go into another set, Integrate's new set). No
+        alerts in between (a project install, a deleted set) keep the set it
+        was made on, so the next publish is compared with that one."""
+        sid = _set_id_of(gdf)
+        if sid is None:
+            return
+        if self._filter_set_id is not None and sid != self._filter_set_id:
+            self.clear_alert_filter()
+        self._filter_set_id = sid
+
+    # ---- alert navigation (spec §8.3: over the filter's matches) -----------
     @property
     def max_alert_id(self):
         gdf = self.alerts_gdf.value
         return (len(gdf) - 1) if gdf is not None else -1
 
     def go_to(self, idx):
+        """Select the alert at row position ``idx``, clamped. The filter is
+        not consulted: the jump menu and Overview's Go check it first."""
         self.actual_alert_id.value = max(0, min(idx, self.max_alert_id))
 
     def go_next(self):
-        self.go_to(self.actual_alert_id.value + 1)
+        """The next alert, or under a filter the next match; at the end, stay."""
+        if self.alert_filter is None:
+            self.go_to(self.actual_alert_id.value + 1)
+            return
+        target = af.next_match(self.alert_mask(), self.actual_alert_id.value)
+        if target is not None:
+            self.go_to(target)
 
     def go_prev(self):
-        self.go_to(self.actual_alert_id.value - 1)
+        """The previous alert, or under a filter the previous match; at the start, stay."""
+        if self.alert_filter is None:
+            self.go_to(self.actual_alert_id.value - 1)
+            return
+        target = af.prev_match(self.alert_mask(), self.actual_alert_id.value)
+        if target is not None:
+            self.go_to(target)

@@ -26,12 +26,14 @@ panel is built once per session and a language switch never rebuilds it.
 """
 
 import ipyvuetify as v
+import numpy as np
 
 from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from gui.i18n import format_number, t
 from gui.scripts import set_store
+from gui.scripts.alert_filter import next_unreviewed_match
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
@@ -70,6 +72,28 @@ def counter_text(index: int, total: int) -> str:
     width = len(str(total))
     return t("analysis_tile.queue.counter",
              index=str(max(index, 0) + 1).zfill(width), total=format_number(total))
+
+
+def filtered_counter_text(mask, index: int) -> str:
+    """The counter under a filter (spec §8.3): the alert's place among the
+    matches over their number, ``– / 87`` when the alert on screen is not one
+    of them, and "No alerts match this filter" when none is."""
+    hits = np.flatnonzero(np.asarray(mask, dtype=bool))
+    matches = len(hits)
+    if matches == 0:
+        return t("analysis_tile.filter.no_matches")
+    if not (0 <= index < len(mask)) or not mask[index]:
+        return t("analysis_tile.filter.counter_outside", total=format_number(matches))
+    rank = int(np.searchsorted(hits, index))
+    return t("analysis_tile.queue.counter", index=str(rank + 1).zfill(len(str(matches))),
+             total=format_number(matches))
+
+
+def filtered_tally_text(total: int, reviewed: int, all_alerts: int) -> str:
+    """The tally of the matches, then "filtered · 530 total"."""
+    hint = t("analysis_tile.filter.hint", total=format_number(all_alerts))
+    tally = tally_text(total, reviewed)
+    return f"{tally} · {hint}" if tally else hint
 
 
 def tally_text(total: int, reviewed: int) -> str:
@@ -130,6 +154,12 @@ def nav_widgets(card):
     slots = getattr(card, _SLOTS)
     return (slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"],
             slots["unreviewed"])
+
+
+def jump_refusal(card):
+    """The jump menu's refusal line of a card built by ``build_context``
+    ("Alert 12 is not in the current filter")."""
+    return getattr(card, _SLOTS)["refusal"]
 
 
 def next_unreviewed(gdf, index):
@@ -193,11 +223,15 @@ def _build_nav(app_state, id_field, counter):
                        style_="justify-content: flex-start; " + _btn,
                        children=[t("analysis_tile.nav.next_unreviewed")])
     label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[t("analysis_tile.nav.jump")])
+    # "Alert 12 is not in the current filter": a number the filter hides is
+    # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
+    refusal = v.Html(tag="div", class_="error--text", style_="font-size: 12px; display: none;", children=[])
     body = v.Card(style_="width: 260px; padding: 12px; display: flex; flex-direction: column; gap: 10px;",
                   children=[
                       label,
                       v.Html(tag="div", style_="display: flex; gap: 8px; align-items: center;",
                              children=[id_field, go]),
+                      refusal,
                       v.Divider(),
                       unreviewed,
                   ])
@@ -205,9 +239,14 @@ def _build_nav(app_state, id_field, counter):
                   v_slots=[{"name": "activator", "variable": "menu", "children": jump}],
                   children=[body])
 
+    def _show_refusal(text):
+        refusal.children = [text] if text else []
+        refusal.style_ = "font-size: 12px;" + ("" if text else " display: none;")
+
     def _on_open(change):
         if change["new"]:
             id_field.v_model = None  # the reviewer types a number, not edits the current one
+            _show_refusal("")
 
     menu.observe(_on_open, "v_model")
 
@@ -216,6 +255,14 @@ def _build_nav(app_state, id_field, counter):
             target = int(id_field.v_model) - 1
         except (TypeError, ValueError):
             return
+        if app_state.alert_filter is not None:
+            # The number is the alert's own (its row in the whole set),
+            # clamped as ``go_to`` clamps it; one the filter hides is refused.
+            target = max(0, min(target, app_state.max_alert_id))
+            mask = app_state.alert_mask()
+            if target < len(mask) and not mask[target]:
+                _show_refusal(t("analysis_tile.filter.not_in_filter", number=format_number(target + 1)))
+                return
         app_state.go_to(target)
         menu.v_model = False
 
@@ -223,14 +270,17 @@ def _build_nav(app_state, id_field, counter):
     id_field.on_event("keydown.enter", _on_go)
 
     def _on_unreviewed(*_):
-        target = next_unreviewed(app_state.alerts_gdf.value, app_state.actual_alert_id.value)
+        # Among the filter's matches (every alert without one), wrapping.
+        target = next_unreviewed_match(app_state.alerts_gdf.value, app_state.alert_mask(),
+                                       app_state.actual_alert_id.value)
         if target is not None:
             app_state.go_to(target)
         menu.v_model = False
 
     unreviewed.on_event("click", _on_unreviewed)
 
-    return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed}
+    return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed,
+            "refusal": refusal}
 
 
 def _build_facts():
@@ -283,11 +333,26 @@ def build_context(app_state, id_field) -> v.Card:
 
     def _refresh(*_):
         gdf = app_state.alerts_gdf.value
+        index = app_state.actual_alert_id.value
         total, reviewed = review_counts(gdf)
-        counter.children = [counter_text(app_state.actual_alert_id.value, total)]
-        tally.children = [tally_text(total, reviewed)]
-        bar.value = (100.0 * reviewed / total) if total else 0.0
-        nav_slots["unreviewed"].disabled = next_unreviewed(gdf, app_state.actual_alert_id.value) is None
+        mask = app_state.alert_mask()
+        filtered = app_state.alert_filter is not None and total > 0
+        if not filtered:
+            counter.children = [counter_text(index, total)]
+            tally.children = [tally_text(total, reviewed)]
+            bar.value = (100.0 * reviewed / total) if total else 0.0
+        else:
+            # Spec §8.3: the queue line counts the matches; the whole set's
+            # size is the hint after the tally.
+            matching, done = review_counts(gdf.iloc[np.flatnonzero(mask)])
+            counter.children = [filtered_counter_text(mask, index)]
+            tally.children = [filtered_tally_text(matching, done, total)]
+            bar.value = (100.0 * done / matching) if matching else 0.0
+        # No match: Previous / Next have nowhere to go (the alert stays).
+        stuck = filtered and not mask.any()
+        nav_slots["prev"].disabled = stuck
+        nav_slots["next"].disabled = stuck
+        nav_slots["unreviewed"].disabled = next_unreviewed_match(gdf, mask, index) is None
         id_field.placeholder = f"1 – {format_number(total)}" if total else ""
 
         # The queue line refreshes before this guard returns: another set's
@@ -307,13 +372,19 @@ def build_context(app_state, id_field) -> v.Card:
 
     app_state.alerts_gdf.subscribe(_refresh)
     app_state.actual_alert_id.subscribe(_refresh)
+    # The filter, when the layout bound one (``build_controls`` binds it
+    # before it builds this block).
+    if app_state.alert_filter_reactive is not None:
+        app_state.alert_filter_reactive.subscribe(_refresh)
     _refresh()
 
     # The queue and the navigation live in the screen's top bar
     # (``build_topnav``), the facts in the panel: the card is the facts.
     card = panel_block([facts_grid], class_="pb-3")
     setattr(card, _SLOTS,
-            {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots})
+            {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots,
+             # for ``build_topnav``'s filter control
+             "app_state": app_state})
     return card
 
 

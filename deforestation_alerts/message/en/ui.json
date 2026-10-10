@@ -271,7 +271,11 @@
     "filter": {
       "col_evaluator": "Evaluator",
       "unassigned": "Unassigned",
-      "empty_value": "(empty)"
+      "empty_value": "(empty)",
+      "no_matches": "No alerts match this filter",
+      "counter_outside": "– / {total}",
+      "hint": "filtered · {total} total",
+      "not_in_filter": "Alert {number} is not in the current filter"
     }
   },
   "imagery": {
