@@ -189,3 +189,18 @@ def test_the_step_ends_with_start_analysis_gated_on_an_active_set(tmp_path, monk
         assert s.current_page_view.value == "analysis_tile"
     finally:
         rc.close()
+
+
+def test_a_switch_says_whether_analysis_shows_the_questions_expanded(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    assert s.project.value.questions_expanded is False
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        (switch,) = [w for w in rc.find(v.Switch).widgets if w.label == t("steps.questionnaire.expanded")]
+        assert switch.v_model is False
+        switch.v_model = True
+        assert s.project.value.questions_expanded is True
+        (switch,) = [w for w in rc.find(v.Switch).widgets if w.label == t("steps.questionnaire.expanded")]
+        assert switch.v_model is True
+    finally:
+        rc.close()

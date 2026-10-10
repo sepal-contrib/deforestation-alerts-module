@@ -549,6 +549,8 @@
         "other": "{count} alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican."
       },
       "delete_message_no_set": "Las respuestas ya guardadas con las alertas se conservan, pero ya no se muestran, exportan ni grafican.",
+      "expanded": "Mostrar las preguntas desplegadas en Análisis",
+      "expanded_hint": "Desactivado, la sección Preguntas empieza contraída; igual se abre cuando un veredicto necesita una respuesta obligatoria.",
       "template_title": "Plantilla del informe",
       "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
       "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",

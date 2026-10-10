@@ -549,6 +549,8 @@
         "other": "{count} alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées."
       },
       "delete_message_no_set": "Les réponses déjà enregistrées avec les alertes sont conservées, mais elles ne sont plus affichées, exportées ni représentées.",
+      "expanded": "Afficher les questions dépliées dans Analyse",
+      "expanded_hint": "Désactivé, la section Questions démarre repliée ; elle s'ouvre quand même lorsqu'un verdict exige une réponse obligatoire.",
       "template_title": "Modèle de rapport",
       "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
       "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",

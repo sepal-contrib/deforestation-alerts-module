@@ -362,6 +362,8 @@ class Project(BaseModel):
     active_set: Optional[str] = None
     report_template: Optional[str] = None
     questions: list[Question] = Field(default_factory=default_questions)
+    #: whether Analysis shows its Questions section open or collapsed
+    questions_expanded: bool = False
 
     @model_validator(mode="before")
     @classmethod

@@ -195,4 +195,5 @@ def duplicate_project(p: Project, new_name: str) -> Project:
         grid=p.grid.model_copy() if p.grid else None,
         look_back_days=p.look_back_days,
         report_template=p.report_template,
+        questions_expanded=p.questions_expanded,
     )

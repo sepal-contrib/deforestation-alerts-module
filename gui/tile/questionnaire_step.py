@@ -166,6 +166,11 @@ def QuestionnaireStep(app_state):
             ProductTable(title=t("steps.questionnaire.questions_title"),
                          columns=[{"label": t("steps.questionnaire.col_question")}], rows=rows,
                          empty_text=t("steps.questionnaire.empty"))
+            rv.Switch(label=t("steps.questionnaire.expanded"), v_model=p.questions_expanded,
+                      on_v_model=lambda on: app_state.update_project(
+                          name, lambda live: setattr(live, "questions_expanded", bool(on))),
+                      dense=True, hide_details=True, class_="mt-3")
+            solara.Text(t("steps.questionnaire.expanded_hint"), style=MUTED + "font-size:0.75rem;")
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Text(t("steps.questionnaire.template_title"), style="font-weight:600;")
             ReportTemplateField(app_state=app_state)

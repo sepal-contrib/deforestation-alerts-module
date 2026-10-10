@@ -325,3 +325,21 @@ def test_an_unreviewed_alert_opens_empty_not_on_the_last_ones_answers(tmp_path, 
     s.actual_alert_id.value = 1
     assert sec.controls["loss_driver"].v_model == []  # U13
     assert analysis.answers.value == {}
+
+
+def test_the_questionnaire_setting_opens_or_closes_the_section(tmp_path, monkeypatch):
+    """``questions_expanded`` sets the section's state when it changes (a
+    project opening included); a later publish leaves the reviewer's choice."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(),
+                                questions_expanded=True))
+    sec = qp.build_questions_section(s, AnalysisState())
+    assert sec.is_open()
+    sec.set_open(False)  # the reviewer closes it
+    s.update_project("p", lambda live: setattr(live, "questions", [ROAD]))
+    assert not sec.is_open()
+    s.update_project("p", lambda live: setattr(live, "questions_expanded", False))
+    assert not sec.is_open()
+    s.update_project("p", lambda live: setattr(live, "questions_expanded", True))
+    assert sec.is_open()

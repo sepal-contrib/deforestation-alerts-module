@@ -1,5 +1,6 @@
 """The Questions section of the Analysis panel (spec D4): every question of
-the project, in its order, in one collapsible section closed by default.
+the project, in its order, in one collapsible section, open or closed as the
+project's ``questions_expanded`` says.
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``).
 
@@ -118,7 +119,7 @@ def build_questions_section(app_state, analysis):
     dicts are updated in place by a rebuild)."""
     section = build_section(t("analysis_tile.sections.questions"), v.Html(tag="div"))
     controls, wrappers, numbers, marks = {}, {}, {}, {}
-    current = {"questions": None}
+    current = {"questions": None, "expanded": None}
     # Says why the body is empty: no question in the project, or none asked
     # for the chosen verdict.
     note = v.Html(tag="div", class_="caption", style_=MUTED, children=[])
@@ -144,6 +145,13 @@ def build_questions_section(app_state, analysis):
 
     def _rebuild(*_):
         p = app_state.project.value
+        # The Questionnaire's setting opens or closes the section when it
+        # changes (a project opening included), not on every publish: a
+        # section the reviewer opened or closed stays so from alert to alert.
+        expanded = bool(p is not None and p.questions_expanded)
+        if expanded != current["expanded"]:
+            current["expanded"] = expanded
+            section.set_open(expanded)
         questions = tuple(p.questions) if p is not None else ()
         if questions == current["questions"]:
             return
