@@ -36,6 +36,7 @@ from gui.scripts import set_store
 from gui.scripts.alert_filter import next_unreviewed_match
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
 from gui.store.workflow_steps import active_set
+from gui.tile.analysis.filter_menu import build_filter_menu
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
@@ -388,22 +389,37 @@ def build_context(app_state, id_field) -> v.Card:
     return card
 
 
+def filter_control(card):
+    """What ``filter_menu.build_filter_menu`` returned for the top bar
+    ``build_topnav`` built from ``card``, or None (no filter was bound)."""
+    return getattr(card, _SLOTS).get("filter")
+
+
 def build_topnav(card, set_selector):
     """The screen's top-bar navigation, from the widgets ``build_context``
-    built (their handlers and subscriptions stay there): the alert-set
+    built (their handlers and subscriptions stay there): the filter control
+    (``filter_menu``: the funnel button and the filter's chip), the alert-set
     selector, the review progress (tally over its bar), and Previous · the
     counter (its jump menu) · Next.
 
-    The set and its progress (then the screen's help, which ``build_screen``
-    inserts before the navigation) sit right of the title, against the
-    navigation; the navigation spans the review panel's width
-    (``.defo-topnav-nav``), Previous over its start and Next over its end."""
+    The filter, the set and its progress (then the screen's help, which
+    ``build_screen`` inserts before the navigation) sit right of the title,
+    against the navigation; the navigation spans the review panel's width
+    (``.defo-topnav-nav``), Previous over its start and Next over its end.
+    The filter control is built only when the analysis layout bound a filter
+    into ``app_state`` (``AppState.bind_alert_filter``, ``build_controls``)."""
     slots = getattr(card, _SLOTS)
+    app_state = slots.get("app_state")
+    control = None
+    if app_state is not None and app_state.alert_filter_reactive is not None:
+        control = build_filter_menu(app_state)
+    slots["filter"] = control
     progress = v.Html(tag="div", class_="defo-topnav-progress", children=[slots["tally"], slots["bar"]])
     middle = v.Html(tag="div", class_="defo-topnav-pos", children=[slots["menu"]])
     nav = v.Html(tag="div", class_="defo-topnav-nav", children=[slots["prev"], middle, slots["next"]])
     return v.Html(tag="div", class_="defo-topnav", children=[
         v.Html(tag="span", style_="flex: 1 1 auto;", children=[]),
+        *([control.root] if control is not None else []),
         v.Html(tag="div", class_="defo-topnav-set", children=[set_selector]),
         progress,
         nav,

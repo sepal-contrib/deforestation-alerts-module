@@ -275,7 +275,16 @@
       "no_matches": "No alerts match this filter",
       "counter_outside": "– / {total}",
       "hint": "filtered · {total} total",
-      "not_in_filter": "Alert {number} is not in the current filter"
+      "not_in_filter": "Alert {number} is not in the current filter",
+      "button": "Filter alerts",
+      "attribute": "Attribute",
+      "values": "Values",
+      "apply": "Apply",
+      "clear": "Clear filter",
+      "value_count": "{value} ({count})",
+      "chip": "{attribute}: {values}",
+      "more": "{values} +{count}",
+      "no_columns": "No attribute to filter by"
     }
   },
   "imagery": {

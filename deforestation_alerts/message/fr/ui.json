@@ -279,7 +279,16 @@
       "no_matches": "Aucune alerte ne correspond à ce filtre",
       "counter_outside": "– / {total}",
       "hint": "filtrées · {total} au total",
-      "not_in_filter": "L'alerte {number} n'est pas dans le filtre actuel"
+      "not_in_filter": "L'alerte {number} n'est pas dans le filtre actuel",
+      "button": "Filtrer les alertes",
+      "attribute": "Attribut",
+      "values": "Valeurs",
+      "apply": "Appliquer",
+      "clear": "Retirer le filtre",
+      "value_count": "{value} ({count})",
+      "chip": "{attribute} : {values}",
+      "more": "{values} +{count}",
+      "no_columns": "Aucun attribut pour filtrer"
     }
   },
   "imagery": {

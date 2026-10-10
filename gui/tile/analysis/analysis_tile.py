@@ -574,6 +574,13 @@ SCREEN_CSS = (
     ".defo-analysis-screen .defo-topnav-set { flex: 0 1 380px; min-width: 180px; }\n"
     ".defo-analysis-screen .defo-topnav-set .v-select { padding: 0 !important; margin: 0; }\n"
     ".defo-analysis-screen .defo-jump-btn { min-width: 0 !important; }\n"
+    # the filter's funnel and chip (``filter_menu``), left of the set
+    # selector; a long chip ends in an ellipsis rather than widen the bar
+    ".defo-analysis-screen .defo-topnav-filter { flex: 0 1 auto; min-width: 0; display: flex; align-items: center;"
+    " gap: 4px; }\n"
+    ".defo-analysis-screen .defo-filter-chip { max-width: 220px; }\n"
+    ".defo-analysis-screen .defo-filter-chip .v-chip__content { display: block; min-width: 0; overflow: hidden;"
+    " text-overflow: ellipsis; white-space: nowrap; }\n"
     ".defo-analysis-screen .defo-topnav-progress { display: flex; flex-direction: column; gap: 4px; width: 150px; margin-left: 4px; }\n"
     # Over the review panel, at its width and padding: Previous lines up with
     # the panel's start, Next with its end. The negative margin cancels the

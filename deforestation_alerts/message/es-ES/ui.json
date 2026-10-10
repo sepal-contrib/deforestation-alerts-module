@@ -279,7 +279,16 @@
       "no_matches": "Ninguna alerta coincide con este filtro",
       "counter_outside": "– / {total}",
       "hint": "filtradas · {total} en total",
-      "not_in_filter": "La alerta {number} no está en el filtro actual"
+      "not_in_filter": "La alerta {number} no está en el filtro actual",
+      "button": "Filtrar alertas",
+      "attribute": "Atributo",
+      "values": "Valores",
+      "apply": "Aplicar",
+      "clear": "Quitar filtro",
+      "value_count": "{value} ({count})",
+      "chip": "{attribute}: {values}",
+      "more": "{values} +{count}",
+      "no_columns": "No hay ningún atributo por el que filtrar"
     }
   },
   "imagery": {
