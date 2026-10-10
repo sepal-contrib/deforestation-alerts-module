@@ -17,7 +17,15 @@
       "store_missing": "Falta el archivo de alertas del conjunto {set_id}.",
       "store_changed": "Las alertas se reescribieron mientras se creaba el zip; vuelva a intentarlo.",
       "split_mismatch": "La columna de evaluador de las alertas no coincide con el reparto; elimine el reparto y vuelva a repartir.",
-      "not_a_copy": "Solo una copia de revisión devuelve revisiones."
+      "not_a_copy": "Solo una copia de revisión devuelve revisiones.",
+      "is_return": "Esta es una copia revisada; intégrela desde el proyecto del creador, paso Evaluadores.",
+      "unknown_kind": "Este zip no es un paquete de revisión.",
+      "bad_manifest": "No se puede leer el archivo de proyecto de este paquete.",
+      "payload_mismatch": "Este paquete es incoherente ({what}); pida uno nuevo al creador.",
+      "bad_aoi": "No se puede leer el AOI de este paquete.",
+      "bad_store": "No se pueden leer las alertas de este paquete.",
+      "no_free_name": "No queda ningún nombre de proyecto libre para {name}.",
+      "import_failed": "No se pudo importar el paquete: {error}"
     }
   }
 }

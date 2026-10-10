@@ -26,9 +26,10 @@ from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.errors import KeyedError
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import io as project_io
+from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
-from deforestation_alerts.project.models import AlertSet, Period, Project
+from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts import local_files, scene_index
@@ -471,3 +472,217 @@ def build_return(p: Project, pdir: Path, out_dir: Path, *, app_version: str) -> 
         name = return_filename(rc.origin_project, rc.set_id, rc.evaluator_index, rc.evaluator)
         built = _write_zip(tmp / name, {HEADER_MEMBER: header.model_dump_json(indent=2)}, {REVIEWS_MEMBER: reviews})
         return local_files.copy_into(built, Path(out_dir) / built.name)
+
+
+# ---- importing (spec §6.1, §6.5) ----------------------------------------------
+
+#: Where an imported copy keeps its report template (an importer-chosen path).
+TEMPLATE_REL = "template/report.docx"
+
+
+def _inside(folder: Path, rel: str) -> Path:
+    """``folder / rel`` resolved, refused unless it lies inside ``folder``."""
+    root = Path(folder).resolve()
+    dest = (root / rel).resolve()
+    if dest == root or not dest.is_relative_to(root):
+        raise ShareError("share.err.unsafe_member", member=rel)
+    return dest
+
+
+def _extract(zf, member: str, dest: Path) -> Path:
+    """Copy one member out to ``dest``, a path the importer chose. The
+    member's declared size bounds what is read (``zipfile`` stops there and
+    checks its CRC)."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with zf.open(member) as src, open(dest, "wb") as out:
+        shutil.copyfileobj(src, out)
+    return dest
+
+
+def _package_manifest(zf, header: ShareHeader) -> Project:
+    """``project.json``, checked against the header (spec §6.1 step 2): one
+    set, the header's, with its fingerprint and split, the header's evaluator
+    at its index, a period and sources that make the set's id (so the
+    canonical paths built from them stay plain tokens), and an AOI."""
+    try:
+        p = Project.model_validate_json(zf.read(MANIFEST_MEMBER))
+    except ValueError as exc:  # pydantic's ValidationError is a ValueError
+        raise ShareError("share.err.bad_manifest", error=str(exc)) from exc
+    if p.schema_version != SCHEMA_VERSION:
+        raise ShareError("share.err.bad_manifest", error=f"schema {p.schema_version}")
+    s = p.alert_sets.get(header.set_id)
+    if s is None or len(p.alert_sets) != 1 or s.id != header.set_id:
+        raise ShareError("share.err.payload_mismatch", what="set_id")
+    if s.fingerprint != header.set_fingerprint:
+        raise ShareError("share.err.payload_mismatch", what="set_fingerprint")
+    sp = s.split
+    if sp is None or sp.split_id != header.split_id:
+        raise ShareError("share.err.payload_mismatch", what="split_id")
+    i = header.evaluator_index
+    if not 1 <= i <= len(sp.evaluators) or sp.evaluators[i - 1] != header.evaluator:
+        raise ShareError("share.err.payload_mismatch", what="evaluator")
+    period = p.periods.get(s.period_id)
+    if (period is None or period.id != s.period_id or models.period_id(period.start, period.end) != s.period_id
+            or models.set_id(s.period_id, s.sources) != s.id):
+        raise ShareError("share.err.payload_mismatch", what="set_layout")
+    if p.aoi is None:
+        raise ShareError("share.err.payload_mismatch", what="aoi")
+    return p
+
+
+def _package_aoi(zf) -> dict:
+    try:
+        data = json.loads(zf.read(AOI_MEMBER).decode("utf-8"))
+    except ValueError as exc:
+        raise ShareError("share.err.bad_aoi") from exc
+    return _aoi_collection(data, "share.err.bad_aoi")
+
+
+def _check_store(path: Path, header: ShareHeader) -> None:
+    """The store reads, has ``alert_id`` (unique integers), ``status`` and
+    ``evaluator``, and holds the header's set only."""
+    try:
+        gdf = load_gdf_from_parquet(path)
+    except Exception as exc:  # noqa: BLE001 -- any unreadable store is refused the same way
+        raise ShareError("share.err.bad_store", error=str(exc)) from exc
+    missing = [c for c in ("alert_id", "status", split_mod.EVALUATOR_COLUMN) if c not in gdf.columns]
+    if missing:
+        raise ShareError("share.err.bad_store", error=f"missing columns {missing}")
+    ids = gdf["alert_id"]
+    if not pd.api.types.is_integer_dtype(ids) or not ids.is_unique:
+        raise ShareError("share.err.bad_store", error="alert_id is not a unique integer id")
+    if "set_id" in gdf.columns and not (gdf["set_id"] == header.set_id).all():
+        raise ShareError("share.err.bad_store", error="rows of another set")
+
+
+def _package_imagery(zf, tmp: Path) -> dict:
+    """``{member: staged file}`` of the scene index with Planet access reset
+    (spec §6.5: the evaluator's own NICFI access is checked, not the
+    creator's); ``{}`` when the package has no complete, readable index (a
+    cache miss: the copy builds its own)."""
+    names = set(zf.namelist())
+    if not all(member in names for member, _ in _IMAGERY):
+        return {}
+    staged = {member: _extract(zf, member, tmp / "imagery" / PurePosixPath(member).name) for member, _ in _IMAGERY}
+    try:
+        manifest = scene_index.SceneManifest.model_validate_json(staged[INDEX_MEMBER].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    staged[INDEX_MEMBER].write_text(
+        manifest.model_copy(update={"planet": scene_index.PlanetState()}).model_dump_json(indent=2),
+        encoding="utf-8")
+    return staged
+
+
+def _claim_folder(base: Path, header: ShareHeader) -> Path:
+    """A new folder ``<origin>__e<NN>-<evaluator>`` under ``base``, ``-2``,
+    ``-3``... when a folder of that name (any case) exists. ``mkdir`` without
+    ``exist_ok`` is the claim: two imports never share a folder."""
+    stem = f"{safe_token(header.origin_project)}__{evaluator_token(header.evaluator_index, header.evaluator)}"
+    base.mkdir(parents=True, exist_ok=True)
+    existing = [d.name for d in base.iterdir() if d.is_dir()]
+    for n in range(1, 1000):
+        name = stem if n == 1 else f"{stem}-{n}"
+        if project_io.validate_project_name(name, existing) is not None:
+            continue
+        try:
+            (base / name).mkdir(exist_ok=False)
+        except FileExistsError:
+            continue
+        return base / name
+    raise ShareError("share.err.no_free_name", name=stem)
+
+
+def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project, aoi: dict, store: Path,
+                imagery: dict, template: Optional[Path]) -> None:
+    """Every file to the destination the importer derives, then the manifest."""
+    s = manifest.alert_sets[header.set_id]
+    period = manifest.periods[s.period_id]
+    canonical = canonical_set_paths(s, period)
+    store_dest = _inside(folder, canonical["store_rel_path"])
+    store_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(store, store_dest)
+    _inside(folder, paths.AOI_SIDECAR).write_text(json.dumps(aoi), encoding="utf-8")
+    for member, where in _IMAGERY:
+        if member in imagery:
+            dest = _inside(folder, paths.rel(folder, where(folder)))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(imagery[member], dest)
+    template_dest = None
+    if template is not None:
+        template_dest = _inside(folder, TEMPLATE_REL)
+        template_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(template, template_dest)
+    copy = manifest.model_copy(update={
+        "name": folder.name,
+        "alert_sets": {s.id: s.model_copy(update=canonical)},
+        "active_set": s.id,
+        "periods": {period.id: period},
+        "active_period": period.id,
+        "artifacts": {},
+        "coverage": {},
+        "vis_layers": {k: v for k, v in manifest.vis_layers.items() if v.kind != "file"},
+        "aoi": manifest.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR}),
+        "report_template": str(template_dest) if template_dest is not None else None,
+        "review_copy": ReviewCopy(evaluator=header.evaluator, evaluator_index=header.evaluator_index,
+                                  set_id=header.set_id, split_id=header.split_id,
+                                  set_fingerprint=header.set_fingerprint, origin_project=header.origin_project,
+                                  imported_at=datetime.now()),
+    })
+    project_io.save_project(copy, base)
+
+
+def _import(zip_path, base: Path) -> str:
+    header = peek_header(zip_path)
+    if header.kind == KIND_RETURN:
+        raise ShareError("share.err.is_return")
+    if header.kind != KIND_PACKAGE:
+        raise ShareError("share.err.unknown_kind", kind=header.kind)
+    with open_checked(zip_path, PACKAGE_REQUIRED, PACKAGE_OPTIONAL) as zf, local_files.scratch_dir() as tmp:
+        # Everything is read and checked in the scratch folder before a
+        # folder is claimed: a refused package writes nothing (spec §6.1).
+        header = read_header(zf)
+        manifest = _package_manifest(zf, header)
+        aoi = _package_aoi(zf)
+        store = _extract(zf, STORE_MEMBER, tmp / "alert_db.parquet")
+        _check_store(store, header)
+        imagery = _package_imagery(zf, tmp)
+        template = _extract(zf, TEMPLATE_MEMBER, tmp / "report.docx") if TEMPLATE_MEMBER in zf.namelist() else None
+        folder = _claim_folder(base, header)
+        try:
+            _write_copy(folder, base, header, manifest, aoi, store, imagery, template)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return folder.name
+
+
+def import_package(zip_path, root: Optional[Path] = None) -> Project:
+    """Import a review package as a new review copy (spec §6.1) under
+    ``root`` (default: the data directory) and return it as saved. Nothing
+    is written for a refused package; a failure while writing removes the
+    claimed folder. Blocking: call it off the event loop. Raises
+    ``ShareError`` (``share.err.import_failed`` for anything unforeseen)."""
+    base = Path(root) if root else paths.data_dir()
+    try:
+        name = _import(Path(zip_path), base)
+    except ShareError:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- one message for the user, the detail for the log
+        raise ShareError("share.err.import_failed", error=str(exc)) from exc
+    return project_io.load_project(name, base)
+
+
+def find_existing_copy(header: ShareHeader, root: Optional[Path] = None) -> Optional[str]:
+    """The name of a project under ``root`` that is a review copy of the
+    same split for the same evaluator (spec §6.1 re-import), or None."""
+    base = Path(root) if root else paths.data_dir()
+    for info in project_io.list_projects(base):
+        try:
+            raw = json.loads((paths.project_dir(info.name, base) / paths.MANIFEST).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        rc = raw.get("review_copy") if isinstance(raw, dict) else None
+        if isinstance(rc, dict) and rc.get("split_id") == header.split_id and rc.get("evaluator") == header.evaluator:
+            return info.name
+    return None
