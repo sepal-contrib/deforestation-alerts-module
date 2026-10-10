@@ -16,20 +16,17 @@ It establishes:
     holds the Export section and the Save buttons),
   * and the sub-component builders (imagery / review / edit / export).
 
-WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
-``solara.display``): MapApp renders the Analysis step content with ``v-if``, so it
-DESTROYS the step DOM on close and REBUILDS it on reopen. A ``@solara.component``
-rendered via ``render_fixed`` + ``solara.display`` goes blank on reopen, but a raw
-ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
-``build_analysis_layout`` builds the tree once and RETURNS ``(stage, controls)``
-— the step content container and the right-panel controls — same pattern
-as the sibling builders (``context`` / ``review_panel`` / ``build_edit_tools`` /
-``build_export`` / ``build_timeline``) and ``recipe_tile.build_recipe_layout`` /
-``aux_tile.build_aux_layout``. The CSS the OLD component injected via
-``solara.Style`` (a hook) is now the first child of the returned container as a raw
-``v.Html(tag="style", ...)`` element. The two former ``use_effect``s become
-``.subscribe`` registrations on ``app_state.actual_alert_id`` /
-``app_state.alerts_gdf`` (each also invoked once immediately).
+WHY A RAW BUILDER (not a ``@solara.component``): the analysis screen is built
+once per session and stays mounted for the session's lifetime, shown and hidden
+with CSS; a raw ipyvuetify widget tree keeps its views (and ``AlertViews`` its
+Leaflet maps) across every show and hide. ``build_analysis_layout`` builds the
+tree once and RETURNS ``build_screen``'s namespace: ``screen`` (the full-height
+root, right of MapApp's rail, the shell displays as a sibling of MapApp), ``controls`` (the review
+console in its right column), ``widgets``, ``show(on)`` and ``relabel()``. The
+screen's CSS (``SCREEN_CSS``) is its first child, a raw ``v.Html(tag="style")``.
+The two former ``use_effect``s are ``.subscribe`` registrations on
+``app_state.actual_alert_id`` / ``app_state.alerts_gdf`` (each also invoked
+once immediately).
 
 Key architectural decisions (FIXED by the migration contract):
 
@@ -94,7 +91,7 @@ from gui.scripts import questions
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
-from gui.widget.set_selector import build_set_selector
+from gui.widget.set_selector import build_set_selector, set_text
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -496,6 +493,155 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     return controls
 
 
+#: The analysis screen's stylesheet (spec 2026-10-08 §2.2): a full-height flex
+#: layout right of MapApp's rail, no height computed from the viewport. The
+#: left column holds the view headers, the views (whatever height is left) and
+#: the timeline strip; the right column (the review console) is the only part
+#: that scrolls. The root keeps the ``analysis-stage`` /
+#: ``analysis-stage--dark`` classes the timeline's colours key on
+#: (``timeline.THEME_CSS``, ``handle_strip.py``).
+SCREEN_CSS = (
+    # Right of MapApp's rail, which stays usable on the screen (user,
+    # 2026-10-09): ``left`` follows the rail's live width (MapApp sets
+    # --sepal-drawer-width on :root, 60 px mini, 320 px expanded), as HEAD's
+    # stage did. ``bottom`` and ``right`` are 0: --sepal-bottom-reserved and
+    # --sepal-right-panel-width belong to the right panel, which is hidden here.
+    # z-index 4, HEAD's stage level: above MapApp's map (0); below the rail's
+    # collapse arrow (5), the rail and the right panel (6), menus (8+),
+    # pysepal's task pill (170), the dialog scrim (201), dialogs (202+) and
+    # toasts (9999).
+    ".defo-analysis-screen { position: fixed; top: 0; bottom: 0; left: var(--sepal-drawer-width, 60px); right: 0;"
+    " z-index: 4; display: flex; flex-direction: column; transition: left 0.3s ease;"
+    " background-color: #ffffff; color: rgba(0, 0, 0, 0.87); }\n"
+    ".defo-analysis-screen.theme--dark { background-color: #121212; color: #ffffff; }\n"
+    # ipyvuetify wraps a standalone display in a v-application of its own,
+    # whose wrap reserves a full viewport height.
+    ".defo-analysis-screen .v-application--wrap { min-height: 0 !important; }\n"
+    ".defo-analysis-topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 48px;"
+    " padding: 0 12px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n"
+    ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
+    ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
+    " padding: 8px; }\n"
+    # The review console, at the workflow panel's width (480 px) it was laid out at.
+    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; overflow-y: auto; padding: 8px 16px 0 16px;"
+    " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    # One header cell per view, in a row over the views: equal halves, as the
+    # views split the width (``.mv-layout-row``). min-width:0 keeps a long
+    # title from widening its half.
+    ".analysis-heads { display: flex; gap: 8px; flex: 0 0 auto; }\n"
+    ".analysis-heads > .analysis-mapbox { flex: 1 1 0; min-width: 0; }\n"
+    ".analysis-mapbox { display: flex; flex-direction: column; }\n"
+    # The views take whatever height is left. The widget sits in an
+    # ipywidgets wrapper that breaks a flex height chain, so the slot is the
+    # positioned box and the widget fills it.
+    ".analysis-panes-slot { position: relative; flex: 1 1 auto; min-height: 240px; }\n"
+    ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
+    ".analysis-strip { flex: 0 0 auto; padding: 0 4px 4px 4px; }\n"
+    # The strip's outline follows the theme. The views are not bordered: they
+    # draw their own limit with the basemap.
+    ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
+    ".defo-analysis-screen.theme--dark .analysis-timeline { border-color: rgba(255, 255, 255, 0.18); }\n"
+    ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
+    " display: flex !important; align-items: center !important; }\n"
+    # the timeline's and the view titles' theme colours
+    + timeline_theme_css
+)
+
+
+def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamespace:
+    """The analysis screen: a full-height sibling of MapApp, right of its rail
+    (spec 2026-10-08 §2.2, R30), around the analysis widgets and the review
+    console.
+
+    A top bar (*← Workflow* and the title: Analysis · project · alert set),
+    then the left column (the two view headers, ``widgets.panes_widget`` and
+    the timeline strip) beside the right column (``controls``). Built hidden
+    (``display: none``); the shell's ``_ScreenBridge`` calls ``show`` and
+    ``relabel``. ``widgets`` needs ``panes_widget``, ``panes`` (its
+    ``PaneLayers``), ``head_before``, ``head_after`` and ``timeline``.
+
+    Returns ``SimpleNamespace(screen, controls, widgets, show, relabel)``:
+
+    * ``show(on)``: on, the screen is displayed, then it gets the
+      ``defo-analysis-screen--on`` class the shell's CSS hides MapApp's main
+      map and right panel with (its rail stays). Off, in the other order: the
+      class goes first, so the main map and the panel are displayed again
+      while the screen still covers the map, and only then the screen (and
+      the views in it) is hidden. The views' hide nudge (a window resize,
+      ``js/app/resize_nudge.js``) then finds the main map displayed and
+      re-measures it; the frontend applies the two writes in this order.
+    * ``relabel()``: the back button, the title and the views' ``labels`` in
+      the current language.
+    """
+    back = v.Btn(
+        text=True,
+        class_="defo-back-to-workflow",
+        style_="text-transform: none;",
+        children=[v.Icon(left=True, children=["mdi-arrow-left"]), ""],
+    )
+    back.on_event("click", lambda *_: app_state.screen.set("workflow"))
+    title = v.Html(tag="div", class_="defo-analysis-title text-subtitle-1", children=[""])
+    topbar = v.Html(tag="div", class_="defo-analysis-topbar", children=[back, title])
+    heads = v.Html(tag="div", class_="analysis-heads", children=[widgets.head_before, widgets.head_after])
+    panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
+    strip = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
+    left = v.Html(tag="div", class_="defo-analysis-left", children=[heads, panes_slot, strip])
+    right = v.Html(tag="div", class_="defo-analysis-right", children=[controls])
+    body = v.Html(tag="div", class_="defo-analysis-body", children=[left, right])
+    screen = v.Html(
+        tag="div",
+        style_="display: none;",
+        children=[v.Html(tag="style", children=[SCREEN_CSS]), topbar, body],
+    )
+    state = {"on": False, "dark": bool(getattr(theme_state, "dark", False))}
+
+    def _apply_classes():
+        screen.class_ = (
+            "defo-analysis-screen analysis-stage"
+            + (" defo-analysis-screen--on" if state["on"] else "")
+            + (" analysis-stage--dark theme--dark" if state["dark"] else " theme--light")
+        )
+
+    def show(on):
+        if on:
+            screen.style_ = ""
+            state["on"] = True
+            _apply_classes()
+        else:
+            state["on"] = False
+            _apply_classes()
+            screen.style_ = "display: none;"
+
+    def _retitle():
+        p = app_state.project.value
+        alert_set = active_set(p)
+        parts = [
+            t("app.drawer_item.analysis"),
+            p.name if p is not None else "",
+            set_text(p, alert_set) if alert_set is not None else "",
+        ]
+        title.children = [" · ".join(part for part in parts if part)]
+
+    def relabel():
+        back.children = [back.children[0], t("app.panel_workflow_title")]
+        _retitle()
+        widgets.panes.relabel()
+
+    def _on_dark(change):
+        state["dark"] = bool(change["new"])
+        _apply_classes()
+
+    # Built once per session, like the rest of the tree: the subscription and
+    # the observer live as long as the kernel (their unsubscribers are not kept).
+    app_state.project.subscribe(lambda _project: _retitle())
+    if theme_state is not None:
+        theme_state.observe(_on_dark, "dark")
+    relabel()
+    _apply_classes()
+    return SimpleNamespace(screen=screen, controls=controls, widgets=widgets, show=show, relabel=relabel)
+
+
 def build_analysis_layout(
     aux_model,
     selected_alerts_model,
@@ -505,14 +651,13 @@ def build_analysis_layout(
     gee_interface,
     theme_state=None,
 ):
-    """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
+    """Build the analysis screen once per session (the shell memoizes it).
 
-    Returns ``(stage, controls)`` — the workspace ``v.Container`` (the view
-    headers, one ``AlertViews`` and the timeline strip) and the
-    right-panel controls ``v.Html``. The shell renders ``stage`` as the MapApp step
-    content and ``controls`` in the docked right panel (wrapper 7). Built once (no
-    re-render) so the sub-builders' handlers + subscriptions are wired exactly once
-    and the raw widget trees survive the step container's ``v-if`` rebuild.
+    Returns ``build_screen``'s ``SimpleNamespace(screen, controls, widgets,
+    show, relabel)``: the shell displays ``screen`` as a sibling of MapApp,
+    and its ``_ScreenBridge`` calls ``show`` and ``relabel``. Built once (no
+    re-render) so the sub-builders' handlers + subscriptions are wired exactly
+    once and the raw widget tree survives every show and hide.
 
     Parameters
     ----------
@@ -533,11 +678,12 @@ def build_analysis_layout(
         ``record_review`` for the reviewed count. The shell passes the same
         ``SetContext`` for all three models (spec §10).
     app_state : AppState
-        Source of truth for the alerts table + navigation.
+        Source of truth for the alerts table + navigation, and the screen's
+        title (the project and its active set).
     gee_interface : GEEInterface
         Session GEE interface, used for the views' Earth Engine tile URLs.
     theme_state : ThemeState, optional
-        Shared app theme state: the views and the stage track the app's
+        Shared app theme state: the views and the screen track the app's
         light/dark theme exactly as the shared main map does.
     """
     # Build the shared heavy widgets once.
@@ -550,70 +696,14 @@ def build_analysis_layout(
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
     # .v_model). Owned here, passed to block A's jump row (build_context,
     # through build_controls) and to the per-alert subscription, which writes
-    # the 1-based number the queue counter shows.
-    # Empty, not the 0-based index it used to seed: the field is 1-based now
-    # and ``wire_alert_navigation`` below fills it from the selected alert
-    # before the panel is built (with none selected there is no number to
-    # show, and ``_on_go`` ignores a field it cannot read).
+    # the 1-based number the queue counter shows. Empty: with no alert
+    # selected there is no number to show, and ``_on_go`` ignores a field it
+    # cannot read.
     id_field = v.TextField(
         v_model=None,
         outlined=True,
         single_line=True,
         hide_details=True,
-    )
-
-    # Full-stage analysis workspace (Option C / variant 1). The stage fills the
-    # MapApp step container: a row of two view headers, the ``AlertViews``
-    # (two equal views side by side, viewport-relative height) and the one
-    # timeline strip beneath both. Was injected via solara.Style; lives here as the stage's first
-    # child so the raw widget tree survives the step container's v-if rebuild.
-    style_el = v.Html(
-        tag="style",
-        children=[
-            ".analysis-stage { height: 100%; display: flex; flex-direction: column; } "
-            # Stage background follows the app light/dark theme. The default is the
-            # light surface; the ``analysis-stage--dark`` marker class (toggled from
-            # ``theme_state.dark`` below — the SAME trait the views follow) swaps it
-            # to the dark surface so the workspace matches the rest of the app.
-            ".analysis-stage { background-color: #ffffff; transition: background-color 0.2s; } "
-            ".analysis-stage.analysis-stage--dark { background-color: #121212; } "
-            # Outline drawing the limits of the timeline strip. The border
-            # colour tracks the theme (subtle dark line on light, subtle light line
-            # on dark) via the same ``--dark`` marker on the stage. The views are NOT
-            # bordered: a light line framing the near-black views reads as a
-            # harsh white border, so the views draw their own limit via the basemap.
-            ".analysis-stage .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); "
-            "border-radius: 4px; } "
-            ".analysis-stage.analysis-stage--dark .analysis-timeline { "
-            "border-color: rgba(255, 255, 255, 0.18); } "
-            # One header cell per view, in a row over the views: equal halves,
-            # so each title sits over its own view (the views split the width
-            # the same way, ``.mv-layout-row``). min-width:0 keeps a long title
-            # from widening its half.
-            ".analysis-heads { display: flex; gap: 8px; flex: 0 0 auto; width: 100%; } "
-            ".analysis-heads > .analysis-mapbox { flex: 1 1 0; min-width: 0; } "
-            ".analysis-mapbox { display: flex; flex-direction: column; } "
-            # The views widget sits inside an auto-generated ipywidgets wrapper
-            # (display:block) that breaks a flex height chain, so the slot is
-            # the positioned box and the widget fills it absolutely. Its
-            # height is viewport-relative (the stage overlay, ``StageHost``,
-            # is full-viewport): 32px of stage padding (``.defo-stage``, 16px
-            # top + bottom), the ~52px header row and ~146px of strip (38px
-            # source toolbar + 100px track + 8px padding), above MapApp's
-            # bottom reserve (narrow layouts).
-            ".analysis-panes-slot { position: relative; flex: 0 0 auto; width: 100%; "
-            "height: calc(100vh - var(--sepal-bottom-reserved, 0px) - 230px); min-height: 320px; } "
-            ".analysis-panes-slot .analysis-views { position: absolute; inset: 0; } "
-            # The strip spans both views, so it is a row of its own under them.
-            # flex: 0 0 auto, not the default 0 1 auto: the strip must not
-            # shrink -- the views' slot has a fixed height, so the strip keeps
-            # its own.
-            ".analysis-strip { width: 100%; flex: 0 0 auto; padding: 0 4px 4px 4px; } "
-            ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
-            "min-width: 40px; display: flex !important; align-items: center !important; } "
-            # the timeline's and the pane titles' theme colours
-            + timeline_theme_css
-        ],
     )
 
     wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field)
@@ -624,16 +714,12 @@ def build_analysis_layout(
     # tile publishing app_state.alerts_gdf. The recipe-LOAD re-discovery/merge
     # path (re-pointing previously reviewed alerts) is deferred to a later task.
 
-    # ------------------------------------------------------------------
-    # Layout: the two-view stage + right scrolling control panel (ports OLD
-    # initialize_layout left_panel / right_panel), as a raw ipyvuetify tree.
-    # ------------------------------------------------------------------
     # The one shared image timeline, under both views. Built HERE because
     # ``build_analysis_layout`` runs once per session
     # (``solara_app``'s ``solara.use_memo(..., dependencies=[])``), and
     # ``build_timeline`` registers five reactive subscriptions and discards
     # their unsubscribers: correct for a builder that lives as long as the
-    # kernel, a compounding leak anywhere that re-runs per alert or per step
+    # kernel, a compounding leak anywhere that re-runs per alert or per screen
     # entry. It needs no alert: an alert change reaches it through
     # ``widgets.imagery_ctx``.
     widgets.timeline = build_timeline(app_state, analysis, widgets)
@@ -643,18 +729,9 @@ def build_analysis_layout(
     # unsubscribers are discarded for the same reason as above).
     wire_panes(widgets, analysis, selected_alerts_model)
 
-    # STAGE: the header row (each view's title over it), the one
-    # ``AlertViews`` widget carrying both views, and the single strip below
-    # both of them.
-    heads = v.Html(tag="div", class_="analysis-heads", children=[widgets.head_before, widgets.head_after])
-    panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
-    strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
-
-    # RIGHT/CONTROLS: the review console -- the head, block A, block B, the
-    # Questions and Refine sections and the sticky footer (``build_controls``).
-    # Rendered in MapApp's
-    # docked right panel (a panel wrapper in the shell), NOT inside the stage
-    # -- same chrome as AOI/Filter/Overview.
+    # The review console -- the head, block A, block B, the Questions and
+    # Refine sections and the sticky footer (``build_controls``) -- in the
+    # screen's right column.
     controls = build_controls(
         widgets=widgets,
         app_state=app_state,
@@ -663,28 +740,4 @@ def build_analysis_layout(
         app_tile_model=app_tile_model,
         id_field=id_field,
     )
-
-    # STAGE: the two-view workspace, handed to MapApp as the step content.
-    stage = v.Container(
-        fluid=True,
-        class_="pa-0 ma-0 analysis-stage",
-        children=[style_el, heads, panes_slot, strip_row],
-    )
-
-    # Drive the stage background + outline colours off the app theme by toggling
-    # the ``analysis-stage--dark`` marker class. We observe the SAME
-    # ``theme_state.dark`` trait the views follow, so the workspace chrome and
-    # the views flip together. Built once with the rest of the raw widget tree, so
-    # the observer is wired exactly once.
-    def _sync_stage_theme(dark):
-        stage.class_ = "pa-0 ma-0 analysis-stage" + (
-            " analysis-stage--dark" if dark else ""
-        )
-
-    if theme_state is not None:
-        theme_state.observe(
-            lambda change: _sync_stage_theme(bool(change["new"])), "dark"
-        )
-    _sync_stage_theme(bool(getattr(theme_state, "dark", False)))
-
-    return stage, controls
+    return build_screen(widgets, controls, app_state, theme_state)

@@ -3,8 +3,10 @@
 Two registries:
 
 * ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
-  Period → Download & harmonize → Integrate & vectorize → Questionnaire →
-  Analysis). Gates and counts read only the Project. Order, labels, gates, lock reasons and
+  Period → Download & harmonize → Integrate & vectorize → Questionnaire).
+  Analysis is not a step: Questionnaire's *Start analysis* opens its own
+  screen (``app_state.screen``), gated by ``active_set``. Gates and counts
+  read only the Project. Order, labels, gates, lock reasons and
   per-step output counts derive from it; ``PipelineHeader`` and the shell
   never hand-maintain step numbers.
 * ``RAIL_ITEMS`` — the three entries on the left rail: About and Project open
@@ -50,7 +52,6 @@ class StepSpec:
     lock_reason_key: Optional[str] = None
     count: Callable[[Any], Union[int, str, None]] = field(default=lambda p: None)  # (project)
     count_key: Optional[str] = None  # a plural node: t(count_key, count=n)
-    full_stage: bool = False  # Analysis: stage overlay shown, shared map hidden
 
 
 @dataclass(frozen=True)
@@ -108,11 +109,6 @@ STEPS: List[StepSpec] = [
              unlocked=lambda p: p is not None, lock_reason_key="workflow.lock_project",
              count=lambda p: len(p.questions) if p is not None else 0,
              count_key="workflow.count_questions"),
-    StepSpec(key="analysis", page_view="analysis_tile", label_key="app.drawer_item.analysis", icon="mdi-image-search",
-             unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
-             count=lambda p: active_set(p).n_reviewed if active_set(p) else 0,
-             count_key="workflow.count_reviewed",
-             full_stage=True),
 ]
 
 RAIL_ITEMS: List[RailItem] = [

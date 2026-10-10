@@ -83,6 +83,11 @@ class AppState:
         # index into gui.store.workflow_steps.STEPS; owned by the shell, set by
         # the pipeline header and the navigation bridge
         self.active_step = solara.reactive(0)
+        # Which screen shows: the workflow (MapApp, the steps in its right
+        # panel) or the analysis screen, its sibling (gui.solara_app's
+        # _ScreenBridge). Entering Analysis leaves ``active_step`` alone, so
+        # "← Workflow" returns to the step it was entered from.
+        self.screen = solara.reactive("workflow")
         # mirror of pysepal ThemeState.dark, kept by an observer in Page(): the
         # header cannot read MapApp's theme from Solara's own dark mode
         self.dark = solara.reactive(False)
@@ -134,6 +139,9 @@ class AppState:
         # The auto-save skips this publish through ``_loading``; tiles tell a
         # replayed AOI from a new one by its digest, not by a flag.
         with self._lock:
+            # A project opened, created or closed shows the workflow: the
+            # analysis screen belongs to the project it was opened on.
+            self.screen.set("workflow")
             self.aoi_result.set(None)
             self.show_alerts.set(False)
             self.show_earlier_sets.set(False)

@@ -73,10 +73,6 @@
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nada todavía",
-    "count_reviewed": {
-      "one": "{count} revisada",
-      "many": "{count} revisadas",
-      "other": "{count} revisadas"
-    }
+    "start_analysis": "Iniciar análisis"
   }
 }

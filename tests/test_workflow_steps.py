@@ -21,7 +21,7 @@ def _states(p):
 
 
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire", "analysis"]
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire"]
     # Every rail item is a dialog: the Overview dashboard is the widest, over
     # the map and the panel alike (spec §9.5). The Project dialog is
     # spatial_risk's status block (spec D5): Manage projects and the name form
@@ -65,7 +65,7 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
                                  created_at=datetime.now())
     p.active_set = "x"
     s = _states(p)
-    assert s["integrate"] is StepStatus.HAS_OUTPUTS and s["analysis"] is StepStatus.HAS_OUTPUTS
+    assert s["integrate"] is StepStatus.HAS_OUTPUTS
 
 
 def test_every_label_and_lock_key_exists():
@@ -89,10 +89,11 @@ def test_every_label_and_lock_key_exists():
         resolve(r.label_key)
 
 
-def test_questionnaire_sits_before_analysis_and_counts_questions():
+def test_questionnaire_is_the_last_step_and_counts_questions():
+    """Analysis is a screen of its own now (Questionnaire's *Start analysis*)."""
     from gui.store.workflow_steps import step_index, step_status
     keys = [s.key for s in STEPS]
-    assert keys[-2:] == ["questionnaire", "analysis"]
+    assert keys[-1] == "questionnaire" and "analysis" not in keys
     spec = STEPS[step_index("questionnaire")]
     assert not spec.unlocked(None)
     p = _p()  # a new project holds the default questions

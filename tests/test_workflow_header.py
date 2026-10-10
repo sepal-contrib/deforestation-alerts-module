@@ -27,13 +27,14 @@ def _spy_on_pipeline_header(monkeypatch):
     calls = []
 
     @solara.component
-    def _Recorder(active_step, on_navigate, project, dark):
+    def _Recorder(active_step, on_navigate, project, dark, on_start_analysis=None):
         calls.append(
             {
                 "active_step": active_step,
                 "on_navigate": on_navigate,
                 "project": project,
                 "dark": dark,
+                "on_start_analysis": on_start_analysis,
             }
         )
 
@@ -95,4 +96,18 @@ def test_navigating_sets_active_step_and_re_renders(monkeypatch):
 
     assert state.active_step.value == 2
     assert calls[-1]["active_step"] == 2
+    rc.close()
+
+
+def test_start_analysis_navigates_through_current_page_view(monkeypatch):
+    """*Start analysis* writes the navigation signal, as every other way into
+    Analysis does: ``_NavBridge`` turns it into the analysis screen."""
+    calls = _spy_on_pipeline_header(monkeypatch)
+    from gui.widget.workflow_header import WorkflowHeader
+
+    state = AppState()
+    box, rc = reacton.render(WorkflowHeader(app_state=state), handle_error=False)
+    calls[-1]["on_start_analysis"]()
+    assert state.current_page_view.value == "analysis_tile"
+    assert state.screen.value == "workflow", "the bridge, not the header, switches the screen"
     rc.close()

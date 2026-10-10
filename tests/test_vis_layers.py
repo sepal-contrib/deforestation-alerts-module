@@ -80,7 +80,7 @@ def test_names_are_unique_and_short():
 
 
 def test_the_layers_step_is_third_and_counts_layers():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire", "analysis"]
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire"]
     p = _p()
     assert dict(zip([s.key for s in STEPS], step_states(p)))["layers"] is StepStatus.LOCKED
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d", bounds=(0, 0, 1, 1))

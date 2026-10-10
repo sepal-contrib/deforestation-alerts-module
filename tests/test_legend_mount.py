@@ -7,7 +7,6 @@ import solara
 from gui.scripts import legend_specs
 from gui.scripts.map_layers import MapLayers
 from gui.store.state_manager import AppState
-from gui.store.workflow_steps import step_index
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,18 +48,18 @@ class _FakeMap:
         pass
 
 
-def test_legend_props_follow_the_registry_and_hide_on_analysis():
+def test_legend_props_follow_the_registry_and_hide_on_the_analysis_screen():
     ns = _compiled("legend_props")
     state, _ = _state_with_two_legends()
     props = ns["legend_props"](state, lambda key, **kw: f"<{key}>")
     assert props["selected"] == "src:RADD" and [o["value"] for o in props["selector_options"]] == ["src:GLAD-L",
                                                                                                     "src:RADD"]
     assert props["visible"]
-    # Analysis is a full-stage step: the legend's z-index would float it over
-    # the stage. The Overview dashboard is a dialog, which covers it anyway.
-    state.active_step.set(step_index("analysis"))
+    # The legend floats at z-index 150, over the analysis screen (4). The
+    # Overview dashboard is a dialog, which covers it anyway.
+    state.screen.set("analysis")
     assert not ns["legend_props"](state, lambda key, **kw: key)["visible"]
-    state.active_step.set(step_index("integrate"))
+    state.screen.set("workflow")
     assert ns["legend_props"](state, lambda key, **kw: key)["visible"]
 
 

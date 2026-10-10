@@ -15,7 +15,7 @@ import solara
 import solara.lab
 
 from gui.i18n import t
-from gui.store.workflow_steps import STEPS, StepStatus, nav_targets, step_states
+from gui.store.workflow_steps import STEPS, StepStatus, active_set, nav_targets, step_states
 from gui.widget.text_style import MUTED
 
 # Empty / locked tones stay theme-neutral grey; the HAS_OUTPUTS fill and the
@@ -107,7 +107,7 @@ def _JumpMenuRow(
 
 
 @solara.component
-def PipelineHeader(active_step: int, on_navigate, project, dark=None):
+def PipelineHeader(active_step: int, on_navigate, project, dark=None, on_start_analysis=None):
     """Pipeline map + step navigation.
 
     Takes the ``project`` reactive (not its value — reacton's prop-equality
@@ -120,6 +120,11 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     here (it is always True, which painted the strip and badge gold even in the
     light theme) and never re-renders on a toggle. When the reactive is passed
     it wins; the Solara hook stays as the fallback for a standalone render.
+
+    ``on_start_analysis``: on the last step (Questionnaire) *Start analysis*
+    replaces *Next*. It opens the analysis screen, which is not a step, so it
+    is gated here on the old Analysis condition (an active alert set) and its
+    tooltip keeps the old lock reason.
     """
     p = project.value
     states = step_states(p)
@@ -267,11 +272,33 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                                 active=i == active_step,
                                 on_jump=_jump,
                             )
-            solara.Button(
-                icon_name="mdi-chevron-right",
-                icon=True,
-                small=True,
-                color="primary",
-                disabled=next_t is None,
-                on_click=lambda: next_t is not None and on_navigate(next_t),
-            )
+            if active_step == len(STEPS) - 1 and on_start_analysis is not None:
+                if active_set(p) is not None:
+                    solara.Button(
+                        label=t("workflow.start_analysis"),
+                        small=True,
+                        color="primary",
+                        on_click=on_start_analysis,
+                        classes=["defo-start-analysis"],
+                    )
+                else:
+                    # A disabled button takes no pointer events, so the
+                    # tooltip hangs on a span around it.
+                    with solara.Tooltip(t("workflow.lock_analysis")):
+                        with rv.Html(tag="span"):
+                            solara.Button(
+                                label=t("workflow.start_analysis"),
+                                small=True,
+                                color="primary",
+                                disabled=True,
+                                classes=["defo-start-analysis"],
+                            )
+            else:
+                solara.Button(
+                    icon_name="mdi-chevron-right",
+                    icon=True,
+                    small=True,
+                    color="primary",
+                    disabled=next_t is None,
+                    on_click=lambda: next_t is not None and on_navigate(next_t),
+                )
