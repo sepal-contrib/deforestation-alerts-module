@@ -542,7 +542,7 @@ SCREEN_CSS = (
     # draw their own limit with the basemap.
     ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
     ".defo-analysis-screen.theme--dark .analysis-timeline { border-color: rgba(255, 255, 255, 0.18); }\n"
-    ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
+    ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
     " display: flex !important; align-items: center !important; }\n"
     # the timeline's and the view titles' theme colours
     + timeline_theme_css

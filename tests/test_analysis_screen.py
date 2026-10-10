@@ -464,3 +464,14 @@ def test_the_title_names_the_project_and_the_active_set():
     assert _title(layout) == f"Analysis · demo · {set_text(p, p.alert_sets['x'])}"
     state.close_project_state()
     assert _title(layout) == "Analysis"
+
+
+def test_every_screen_css_rule_is_scoped_to_the_analysis_screen():
+    """SCREEN_CSS is injected into the whole page: an unscoped rule (the
+    text-field one was) restyles every text field of the app."""
+    for selector in _rules(SCREEN_CSS):
+        for part in selector.split(","):
+            assert part.strip().startswith(".defo-analysis") or part.strip().startswith(
+                ".analysis-"
+            ), f"unscoped selector {part.strip()!r}"
+    assert ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot" in _rules(SCREEN_CSS)
