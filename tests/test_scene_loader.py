@@ -984,9 +984,17 @@ def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
     publish, and only then lets the reply land. ``store_chunk`` compares
     digests and would take the late chunk for the newer truth, so the stored
     digest is the assertion.
+
+    The dropped run's end re-renders the loader (``use_task`` publishes its
+    own state), the render reads the new digest and starts the new AOI's
+    run -- rightly. That run's request never answers here, so what it would
+    store cannot be mistaken for the old reply; the test used to wait for
+    ``scene_index_pending`` to fall instead, and passed only when its poll
+    landed in the millisecond between the two runs.
     """
     held = asyncio.Event()
     stored = []
+    requests = []
     real = scene_cache.store_chunk
 
     def spy(pdir, tables, window, digest, **kwargs):
@@ -994,8 +1002,11 @@ def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
         return real(pdir, tables, window, digest, **kwargs)
 
     async def get_info_async(obj):
-        await held.wait()
-        return RAW
+        requests.append(obj)
+        if len(requests) == 1:
+            await held.wait()
+            return RAW
+        await asyncio.Event().wait()  # the new AOI's run: in flight until the test ends
 
     monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
     monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
@@ -1012,7 +1023,8 @@ def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
             # cancelled -- which is the whole point of the guard
             state.project.value.aoi.digest = "d2"
             held.set()
-            assert await _settle(lambda: state.scene_index_pending.value is False)
+            # the new AOI's first request: the old run has returned by then
+            assert await _settle(lambda: len(requests) == 2)
             assert stored == [], f"the replaced AOI's index was written as {stored}"
             assert state.scene_index.value is None and state.scene_manifest.value is None
             _, on_disk = scene_cache.read_index(paths.project_dir("sl"))
