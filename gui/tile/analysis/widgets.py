@@ -147,6 +147,8 @@ class AnalysisWidgets:
         # ------------------------------------------------------------------
         self.actual_bb = None
         self.actual_alert_grid = None
+        #: the alert box as GeoJSON, which ``imagery.set_image_area`` grows
+        self.actual_bb_geojson = None
 
         # ------------------------------------------------------------------
         # Per-alert imagery handoff. ``view_actual_alert`` publishes a context

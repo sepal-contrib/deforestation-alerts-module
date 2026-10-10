@@ -19,7 +19,8 @@ Checks, each an entry in the JSON report (``phases.panes``) with a screenshot:
     the alert box hidden, the stored polygon's vertices on show
  6. a polygon drawn on the before view shows on the after view too, and the
     footer asks for the drawing to be saved (Python heard the edit)
- 7. *Stop Drawing*: edit mode off, no toolbar, no hint, the drawing cleared,
+ 7. *Stop Drawing* asks before discarding the unsaved drawing; *Keep
+    drawing* keeps the session, *Discard changes* stops: edit mode off, no toolbar, no hint, the drawing cleared,
     the alert box back, and the footer says the alert has unsaved changes
 
 Then ``check_screen`` (phase ``screen``, Review Focus 5):
@@ -295,8 +296,18 @@ def check_panes(page, out, report):
                "the footer asking for the drawing to be saved")
     w.shot(page, out, "04_drawn")
 
-    # 7. Stop Drawing
+    # 7. Stop Drawing: the drawing holds an unsaved edit, so Stop asks first;
+    # *Keep drawing* leaves the session as it was, *Discard changes* stops
     page.get_by_role("button", name=w.en("analysis_tile.edition_labels.stop_edit_button")).click()
+    dialog = page.locator(".v-dialog--active", has_text=w.en("analysis_tile.edition_labels.stop_title"))
+    w.wait_for(lambda: dialog.count() and dialog.first.is_visible(), 20, "the discard-drawing confirmation")
+    w.shot(page, out, "04b_stop_confirm")
+    dialog.get_by_role("button", name=w.en("analysis_tile.edition_labels.stop_keep")).click()
+    page.wait_for_timeout(800)
+    assert panes_state(page)["edit_mode"] is True, "Keep drawing stopped the session"
+    page.get_by_role("button", name=w.en("analysis_tile.edition_labels.stop_edit_button")).click()
+    w.wait_for(lambda: dialog.count() and dialog.first.is_visible(), 20, "the confirmation again")
+    dialog.get_by_role("button", name=w.en("analysis_tile.edition_labels.stop_discard")).click()
     w.wait_for(lambda: panes_state(page)["edit_mode"] is False, 20, "edit mode off")
     page.wait_for_timeout(800)
     s = panes_state(page)

@@ -138,6 +138,7 @@ from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.state import capture_alert, drawing_changed, touch
+from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -406,15 +407,43 @@ def build_edit_tools(
                 children=[label], **kwargs,
             )
 
+        # One filled button in the section, the one that commits: *Save
+        # drawing*. *Start* and *Stop* are outlined, like the panel's other
+        # secondary actions, so the footer's *Save & next* stays the one
+        # strong green on screen when no drawing is open.
         ns["start_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.start_edit_button"), color="primary")
+            t("analysis_tile.edition_labels.start_edit_button"), color="primary", outlined=True)
         ns["save_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.apply_edit_button"), outlined=True, disabled=True)
+            t("analysis_tile.edition_labels.apply_edit_button"), color="primary", disabled=True)
         ns["stop_btn"] = _edit_button(
             t("analysis_tile.edition_labels.stop_edit_button"), outlined=True, disabled=True)
+
+        # --- the "discard the drawing?" confirmation of *Stop Drawing* ---
+        # Raw, like ``widgets.info_button``'s: the panel never renders through
+        # reacton, so the Solara ``ConfirmDialog`` cannot be used here. It
+        # sits in the edit row (a dialog draws nothing in place).
+        # The dialog is detached to the app root, outside the screen's type
+        # rules, so its buttons carry the sentence case inline.
+        _dialog_btn = "text-transform: none; letter-spacing: normal; font-size: 14px;"
+        ns["stop_keep"] = v.Btn(text=True, style_=_dialog_btn,
+                                children=[t("analysis_tile.edition_labels.stop_keep")])
+        ns["stop_save"] = v.Btn(outlined=True, color="primary", style_=_dialog_btn,
+                                children=[t("analysis_tile.edition_labels.stop_save")])
+        ns["stop_discard"] = v.Btn(color="error", depressed=True, style_=_dialog_btn,
+                                   children=[t("analysis_tile.edition_labels.stop_discard")])
+        ns["stop_dialog"] = v.Dialog(v_model=False, max_width="480px", children=[
+            v.Card(children=[
+                v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
+                            children=[t("analysis_tile.edition_labels.stop_title")]),
+                v.CardText(style_="font-size: 14px;",
+                           children=[t("analysis_tile.edition_labels.stop_message")]),
+                v.CardActions(class_="flex-wrap justify-end pa-4 pt-0",
+                              children=[ns["stop_keep"], ns["stop_save"], ns["stop_discard"]]),
+            ]),
+        ])
         ns["edit_row"] = v.Html(
             tag="div", class_="d-flex", style_="gap: 8px;",
-            children=[ns["start_btn"], ns["save_btn"], ns["stop_btn"]],
+            children=[ns["start_btn"], ns["save_btn"], ns["stop_btn"], ns["stop_dialog"]],
         )
 
         # --- one row per CNN model: its name + Run, the add/remove pair
@@ -422,15 +451,15 @@ def build_edit_tools(
         for n, model_name in ((1, t("analysis_tile.model_labels.dl_button1")),
                               (2, t("analysis_tile.model_labels.dl_button2"))):
             ns[f"dl{n}_run"] = v.Btn(
-                color="primary", small=True, style_="text-transform: none;",
+                color="primary", small=True, outlined=True,
                 children=[t("analysis_tile.model_labels.run")],
             )
             ns[f"dl{n}_add"] = _EditionButton(
-                color="primary",
+                color="primary", outlined=True,
                 children=[t("analysis_tile.model_labels.dl_button_add")],
             )
             ns[f"dl{n}_remove"] = _EditionButton(
-                color="error",
+                color="error", outlined=True,
                 children=[t("analysis_tile.model_labels.dl_button_remove")],
             )
             # The one button that keeps its icon and its tooltip: it IS the
@@ -446,8 +475,8 @@ def build_edit_tools(
             # outside drawing mode and a gated pair could stand nobody up. With
             # *Run* in the row, the pair is shown from the start and says what
             # it offers through ``disabled`` alone (``_sync_dl``).
-            name_span = v.Html(tag="span", class_="body-2", style_="flex: 1 1 auto;", children=[model_name])
-            ns[f"dl{n}_found"] = v.Html(tag="div", class_="caption text--secondary", children=[])
+            name_span = v.Html(tag="span", class_=TYPE_BODY, style_="flex: 1 1 auto;", children=[model_name])
+            ns[f"dl{n}_found"] = v.Html(tag="div", class_=TYPE_LABEL, children=[])
             ns[f"dl{n}_row"] = v.Html(tag="div", class_="mt-3", children=[
                 v.Html(tag="div", class_="d-flex align-center flex-wrap", style_="gap: 8px;", children=[
                     sw.Tooltip(name_span, tooltip=t(f"analysis_tile.model_labels.dl_hint{n}"),
@@ -679,30 +708,57 @@ def build_edit_tools(
         widget.loading = True
         widget.disabled = True
         try:
-            drawn = widgets.panes.drawing_geojson()
-            if len(drawn["features"]) > 0:
-                analysis.defo_layer.set(geojson_to_geodataframe(drawn).set_crs(
-                    epsg="4326", allow_override=True, inplace=True))
-                touch(analysis)  # the reviewed polygon changed (spec §4.4)
-            elif analysis.defo_layer.value is not None:
-                # An emptied drawing applies as "no polygon at all". It applied
-                # to NOTHING before, so a reviewer who deleted every shape to
-                # correct a false positive could never clear the stored polygon
-                # the save refuses one for -- and that refusal
-                # (``questionarie.false_positive_drawn``) is what tells them to
-                # delete it. ``wire_defo_layer`` takes the layer off the views.
-                analysis.defo_layer.set(None)
-                touch(analysis)
-            # Applied: the drawing and the reviewed polygon agree again, so the
-            # review Save stops refusing (``export._save_attributes``).
-            analysis.drawing_unapplied.set(False)
+            _apply_drawing()
         except Exception:
             logger.exception("Analysis: save edition failed")
         finally:
             widget.loading = False
             widget.disabled = False
 
+    def _apply_drawing():
+        """*Save drawing*'s write: the drawing becomes the reviewed polygon."""
+        drawn = widgets.panes.drawing_geojson()
+        if len(drawn["features"]) > 0:
+            analysis.defo_layer.set(geojson_to_geodataframe(drawn).set_crs(
+                epsg="4326", allow_override=True, inplace=True))
+            touch(analysis)  # the reviewed polygon changed (spec §4.4)
+        elif analysis.defo_layer.value is not None:
+            # An emptied drawing applies as "no polygon at all". It applied
+            # to NOTHING before, so a reviewer who deleted every shape to
+            # correct a false positive could never clear the stored polygon
+            # the save refuses one for -- and that refusal
+            # (``questionarie.false_positive_drawn``) is what tells them to
+            # delete it. ``wire_defo_layer`` takes the layer off the views.
+            analysis.defo_layer.set(None)
+            touch(analysis)
+        # Applied: the drawing and the reviewed polygon agree again, so the
+        # review Save stops refusing (``export._save_attributes``).
+        analysis.drawing_unapplied.set(False)
+
     def _stop_edition(widget, event, data):
+        """*Stop Drawing*: asks first when the drawing holds edits *Save
+        drawing* has not stored (``drawing_unapplied``), which stopping would
+        throw away; stops at once otherwise -- a drawing still as it was
+        seeded loses nothing."""
+        if analysis.drawing_unapplied.value:
+            ns["stop_dialog"].v_model = True
+            return
+        _end_edition()
+
+    def _stop_choice(choice):
+        ns["stop_dialog"].v_model = False
+        if choice == "keep":
+            return
+        try:
+            if choice == "save":
+                _apply_drawing()
+        except Exception:
+            logger.exception("Analysis: save edition failed")
+            return  # nothing stored, so the drawing is not thrown away either
+        _end_edition()
+
+    def _end_edition():
+        widget = ns["stop_btn"]
         widget.loading = True
         widget.disabled = True
         try:
@@ -888,6 +944,8 @@ def build_edit_tools(
         ns["start_btn"].on_event("click", _start_edition)
         ns["save_btn"].on_event("click", _save_edition)
         ns["stop_btn"].on_event("click", _stop_edition)
+        for choice in ("keep", "save", "discard"):
+            ns[f"stop_{choice}"].on_event("click", lambda *_, c=choice: _stop_choice(c))
 
         for n, (run, color_name) in enumerate(((_on_dl1_run, "lime"),
                                                (_on_dl2_run, "purple")), start=1):

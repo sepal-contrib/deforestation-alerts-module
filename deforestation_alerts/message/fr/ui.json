@@ -87,7 +87,14 @@
       "collapse_month": "{month}. Replier ce mois.",
       "no_cloud_filter": "Un fond de carte NICFI est une mosaïque mensuelle sans valeur de nébulosité : la limite de nuages ne le masque donc jamais.",
       "saved_missing": "Image enregistrée indisponible ; choisie automatiquement",
-      "swap_source": "Utiliser l'image {source} du même jour"
+      "swap_source": "Utiliser l'image {source} du même jour",
+      "month_before": "Ajouter un mois avant",
+      "month_after": "Ajouter un mois après",
+      "image_area": "Zone d'image",
+      "area_normal": "Normale",
+      "area_large": "Grande",
+      "area_xlarge": "Très grande",
+      "area_hint": "Jusqu'où les images s'étendent autour de l'alerte. Les grandes zones sont plus longues à charger et à exporter."
     },
     "panes": {
       "layers": "Couches",
@@ -122,7 +129,8 @@
       "previous": "Précédente",
       "next": "Suivante",
       "jump": "Aller au numéro d'alerte",
-      "go": "Aller"
+      "go": "Aller",
+      "next_unreviewed": "Prochaine alerte non révisée"
     },
     "questionarie": {
       "confirmation_q": "Est-ce une véritable alerte ?",
@@ -155,7 +163,8 @@
       "badge_none": "aucune question",
       "none": "Ce projet ne pose aucune question : ajoutez-en à l'étape Questionnaire.",
       "typed_hint": "Choisissez ou saisissez des réponses",
-      "none_for_verdict": "Aucune question n'est posée pour ce verdict."
+      "none_for_verdict": "Aucune question n'est posée pour ce verdict.",
+      "required": "Obligatoire"
     },
     "sections": {
       "export": "Exporter cette alerte",
@@ -180,7 +189,12 @@
       "start_edit_button": "Commencer à dessiner",
       "apply_edit_button": "Enregistrer le dessin",
       "stop_edit_button": "Arrêter de dessiner",
-      "unapplied_drawing": "Enregistrez votre dessin avant d'enregistrer cette revue"
+      "unapplied_drawing": "Enregistrez votre dessin avant d'enregistrer cette revue",
+      "stop_title": "Abandonner le dessin non enregistré ?",
+      "stop_message": "Vos modifications du polygone n'ont pas été enregistrées avec Enregistrer le dessin. Si vous arrêtez maintenant, elles seront perdues.",
+      "stop_keep": "Continuer à dessiner",
+      "stop_save": "Enregistrer et arrêter",
+      "stop_discard": "Abandonner les modifications"
     },
     "model_labels": {
       "dl_button1": "Modèle 1",
@@ -246,10 +260,17 @@
       "gif_zip_skipped": "Les fichiers de l'alerte sont prêts, mais le GIF n'a pas pu être créé : le zip ne le contient pas."
     },
     "earlier": {
-      "show": "Afficher les alertes revues des périodes antérieures",
+      "show": "Afficher sur les cartes",
       "radius": "Dans un rayon de",
       "radius_error": "Entre 0,1 et 50 km",
-      "none": "Aucune à moins de {km} km"
+      "title": "Révisions précédentes",
+      "badge_off": "désactivé",
+      "badge_none": "aucune à moins de {km} km",
+      "badge_nearby": {
+        "one": "{n} à proximité",
+        "other": "{n} à proximité",
+        "many": "{n} à proximité"
+      }
     }
   },
   "imagery": {

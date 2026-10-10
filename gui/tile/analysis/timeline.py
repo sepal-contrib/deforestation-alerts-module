@@ -39,7 +39,7 @@ from deforestation_alerts.scripts.scene_index import (
     SceneTables,
 )
 from gui.i18n import format_date, t
-from gui.tile.analysis.state import imagery_changed
+from gui.tile.analysis.state import IMAGE_AREAS, imagery_changed
 from gui.widget.handle_strip import HandleStrip
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -576,7 +576,22 @@ def build_timeline(app_state, analysis, widgets):
         ctx = widgets.imagery_ctx.value
         if tables is None or ctx is None or ctx.get("bbox") is None:
             return []
-        return scene_query.granule_keys(tables, ctx["bbox"], row["source"], row["date"])
+        # The image area (``area_bbox``, the alert box plus the chosen margin)
+        # when there is one: the mosaic must fill it, not only the alert box.
+        return scene_query.granule_keys(tables, ctx.get("area_bbox") or ctx["bbox"], row["source"], row["date"])
+
+    def _rekey():
+        """Recompute both picks' granule keys for the current image area
+        (``imagery.set_image_area`` calls it through ``widgets``)."""
+        sel, _window = _selection()
+        if sel is None:
+            return
+        for lane, rid in (("b", before_id.value), ("a", after_id.value)):
+            row = _row_of(sel, rid) if rid else None
+            if row is not None:
+                (analysis.before_keys if lane == "b" else analysis.after_keys).set(sorted(_keys_for(row, sel)))
+
+    widgets.timeline_rekey = _rekey
 
     def _assign(lane, rid, sel, *, restore=False):
         """Publish ``rid`` as ``lane``'s image. A hidden row is refused unless
@@ -840,14 +855,24 @@ def build_timeline(app_state, analysis, widgets):
             if blocked:
                 attrs["disabled"] = "disabled"
                 attrs["aria-disabled"] = "true"
+            # A toggle chip in the screen's type scale: the collection's
+            # colour as a dot (the colour of its stripes), its name, and the
+            # count dimmed. On, it is filled; off, an empty outline.
+            active = on and not blocked
+            dot = v.Html(tag="span", style_=(f"width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px; "
+                                             f"background: {SRC_COLOR[name] if active else 'transparent'}; "
+                                             f"border: 1.5px solid {SRC_COLOR[name]};"))
+            count = f"{shown}" + (f" +{hidden}" if hidden else "")
             chip = v.Html(tag="button", attributes=attrs,
-                          style_=(f"height: 32px; padding: 0 10px; border-radius: 4px; "
-                                  f"cursor: {'not-allowed' if blocked else 'pointer'}; "
-                                  f"background: var(--dat-chip); color: var(--dat-ink); font-size: 11.5px; "
-                                  f"border: 1px solid "
-                                  f"{SRC_COLOR[name] if (on and not blocked) else 'var(--dat-edge)'}; "
-                                  f"opacity: {'0.4' if blocked else ('1' if on else '0.5')}"),
-                          children=[label])
+                          style_=(f"height: 28px; padding: 0 10px; border-radius: 14px; display: inline-flex; "
+                                  f"align-items: center; gap: 6px; font-size: 12px; line-height: 16px; "
+                                  f"cursor: {'not-allowed' if blocked else 'pointer'}; color: var(--dat-ink); "
+                                  f"background: {'var(--dat-chip)' if active else 'transparent'}; "
+                                  f"border: 1px solid var(--dat-edge); "
+                                  f"opacity: {'0.4' if blocked else ('1' if on else '0.6')}"),
+                          children=[dot, SRC_LABEL[name],
+                                    v.Html(tag="span", style_="opacity: 0.7; font-variant-numeric: tabular-nums;",
+                                           children=[count])])
             if not blocked:
                 chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
             kids.append(chip)
@@ -1136,22 +1161,38 @@ def build_timeline(app_state, analysis, widgets):
         # pushed the value off the card.
         return f"{t('analysis.timeline.max_cloud')} {max_cloud.value:.0f}%"
 
-    slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True,
-                      thumb_label=True, style_="flex: 0 0 200px; max-width: 200px",
+    slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True, dense=True,
+                      class_="defo-cloud-slider", style_="flex: 0 0 230px; max-width: 230px",
                       label=_cloud_label())
     slider.on_event("change", _on_cloud)
 
+    def _on_cloud_drag(widget, event, value):
+        # The label follows the thumb while it is dragged, in place of
+        # Vuetify's thumb label: that one floats above the slider, past the
+        # strip's top edge, where the panes cover it. Only the label: the
+        # filter waits for @change (see ``_on_cloud``).
+        if value is not None:
+            slider.label = f"{t('analysis.timeline.max_cloud')} {float(value):.0f}%"
+
+    slider.on_event("input", _on_cloud_drag)
+
     def _side(side, arrow):
-        btn = v.Btn(small=True, text=True, children=[arrow + " " + t("analysis.timeline.one_more_month")])
+        hint = t("analysis.timeline.month_before" if side == "left" else "analysis.timeline.month_after")
+        btn = v.Btn(small=True, text=True, class_="defo-tl-btn", attributes={"title": hint, "aria-label": hint},
+                    children=[arrow + " " + t("analysis.timeline.one_more_month")])
         btn.on_event("click", lambda w, e, d, side=side: _widen(side))
         return btn
 
     # sentence case, not Vuetify's spaced capitals: the toolbar is full at
     # the drawer-open width, and the slider is what gave way
     _compact = "text-transform: none; letter-spacing: normal"
-    fold = v.Btn(small=True, text=True, style_=_compact, children=[t("analysis.timeline.collapse_all")])
+    fold = v.Btn(small=True, text=True, class_="defo-tl-btn", style_=_compact,
+                 children=[v.Icon(small=True, left=True, children=["mdi-arrow-collapse-horizontal"]),
+                           t("analysis.timeline.collapse_all")])
     fold.on_event("click", lambda w, e, d: _collapse_window())
-    unfold = v.Btn(small=True, text=True, style_=_compact, children=[t("analysis.timeline.expand_all")])
+    unfold = v.Btn(small=True, text=True, class_="defo-tl-btn", style_=_compact,
+                   children=[v.Icon(small=True, left=True, children=["mdi-arrow-expand-horizontal"]),
+                             t("analysis.timeline.expand_all")])
     unfold.on_event("click", lambda w, e, d: (collapsed.set(frozenset()), render()))
 
     # The legend is the only description of what the lanes, bands, fade and
@@ -1183,9 +1224,23 @@ def build_timeline(app_state, analysis, widgets):
 
     help_badge.on_event("click", _toggle_legend)
 
+    # The image area around the alert (``imagery.IMAGE_AREAS``): per alert,
+    # back to Normal on the next one (``AnalysisState.reset_alert``).
+    area = v.Select(items=[{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS],
+                    v_model=analysis.image_area.value, dense=True, outlined=True, hide_details=True,
+                    label=t("analysis.timeline.image_area"), class_="defo-area-select",
+                    attributes={"title": t("analysis.timeline.area_hint")},
+                    style_="flex: 0 0 150px; max-width: 150px;")
+    area.observe(lambda change: analysis.image_area.set(change["new"] or "normal"), "v_model")
+    analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
+
+    def _divider():
+        return v.Html(tag="span", style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
+
     card = v.Card(flat=True, class_="analysis-timeline", children=[
-        v.Html(tag="div", style_="display: flex; align-items: center; gap: 10px; padding: 0 8px 6px",
-               children=[chips, help_badge, v.Spacer(), fold, unfold, slider, status]),
+        v.Html(tag="div", style_="display: flex; align-items: center; gap: 12px; padding: 8px 8px 6px",
+               children=[chips, help_badge, v.Spacer(), fold, unfold, _divider(), slider, _divider(),
+                         area, status]),
         legend_text,
         v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px 8px",
                children=[_side("left", "‹"), track, message, _side("right", "›")]),

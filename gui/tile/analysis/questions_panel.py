@@ -22,7 +22,7 @@ import ipyvuetify as v
 
 from gui.i18n import t
 from gui.scripts import questions as qs
-from gui.tile.analysis.section import build_section
+from gui.tile.analysis.section import TYPE_TITLE, build_section
 from gui.tile.analysis.state import touch
 from gui.widget.text_style import MUTED
 
@@ -45,10 +45,19 @@ def badge_text(questions, answers, verdict):
 
 
 def _title(q):
-    children = [qs.question_label(q)]
+    """The question's header row: its number (written by ``_sync``, which
+    counts the questions asked), its words, a *Required* tag and the check
+    an answer lights. ``(row, number, mark)``."""
+    number = v.Html(tag="span", class_="dat-q-num dat-num", children=[""])
+    children = [number, v.Html(tag="span", class_=TYPE_TITLE, style_="flex: 1 1 auto;",
+                               children=[qs.question_label(q)])]
     if q.required:
-        children.append(v.Html(tag="span", class_="error--text ml-1", children=["*"]))
-    return v.Html(tag="div", class_="body-2 mb-1", children=children)
+        children.append(v.Chip(x_small=True, outlined=True, class_="dat-q-required",
+                               children=[t("analysis_tile.questions.required")]))
+    mark = v.Icon(small=True, color="success", style_=_HIDDEN, children=["mdi-check-circle"])
+    children.append(mark)
+    row = v.Html(tag="div", class_="d-flex align-center mb-2", style_="gap: 8px;", children=children)
+    return row, number, mark
 
 
 def _close(widget):
@@ -77,15 +86,17 @@ def _control(q, analysis, live):
         # combobox draws a chip from the selected value itself.
         ctl = v.Combobox(items=qs.items(q), v_model=[] if q.multiple else None, return_object=True,
                          multiple=q.multiple, chips=True, small_chips=True, clearable=True, dense=True,
-                         hide_details=True, label=t("analysis_tile.questions.typed_hint"))
+                         outlined=True, hide_details=True, label=t("analysis_tile.questions.typed_hint"))
         ctl.on_event("change", lambda _w, _e, data: _write(qs.codes(q, qs.encode(q, data))))
     elif q.multiple:
         ctl = v.ChipGroup(multiple=True, column=True, v_model=[], active_class="primary--text",
-                          children=[v.Chip(filter=True, outlined=True, small=True, value=o.code,
+                          children=[v.Chip(filter=True, outlined=True, value=o.code,
                                            children=[qs.option_label(o)]) for o in q.options])
         ctl.on_event("change", lambda _w, _e, data: _write(list(data or [])))
     else:
-        ctl = v.RadioGroup(v_model=None, dense=True, hide_details=True, class_="mt-0",
+        # Each option a full-width outlined tile (``SCREEN_CSS``'s
+        # ``.dat-options``), still a radio for the keyboard and screen readers.
+        ctl = v.RadioGroup(v_model=None, dense=True, hide_details=True, class_="mt-0 pt-0 dat-options",
                            children=[v.Radio(label=qs.option_label(o), value=o.code) for o in q.options])
         ctl.on_event("change", lambda _w, _e, data: _write([data] if data else []))
     return ctl
@@ -106,7 +117,7 @@ def build_questions_section(app_state, analysis):
     ``controls`` and ``wrappers`` of the current questions, by key (both
     dicts are updated in place by a rebuild)."""
     section = build_section(t("analysis_tile.sections.questions"), v.Html(tag="div"))
-    controls, wrappers = {}, {}
+    controls, wrappers, numbers, marks = {}, {}, {}, {}
     current = {"questions": None}
     # Says why the body is empty: no question in the project, or none asked
     # for the chosen verdict.
@@ -121,6 +132,8 @@ def build_questions_section(app_state, analysis):
             asked = qs.visible(q, verdict)
             shown += asked
             wrappers[q.key].style_ = "" if asked else _HIDDEN
+            numbers[q.key].children = [str(shown)] if asked else [""]
+            marks[q.key].style_ = "" if answers.get(q.key) else _HIDDEN
             _show(q, controls[q.key], answers.get(q.key, []))
         if shown:
             note.children, note.style_ = [], _HIDDEN
@@ -140,7 +153,8 @@ def build_questions_section(app_state, analysis):
         wrappers.clear()
         for q in questions:
             controls[q.key] = _control(q, analysis, live=lambda ctl, key=q.key: controls.get(key) is ctl)
-            wrappers[q.key] = v.Html(tag="div", class_="mb-3", children=[_title(q), controls[q.key]])
+            row, numbers[q.key], marks[q.key] = _title(q)
+            wrappers[q.key] = v.Html(tag="div", class_="dat-question", children=[row, controls[q.key]])
         section.body_box.children = [*wrappers.values(), note]
         # Off the tree now: close their comms (each rebuild would leak a
         # set otherwise); ``live`` already keeps their handlers from writing.
@@ -148,10 +162,30 @@ def build_questions_section(app_state, analysis):
             _close(wrapper)
         _sync()
 
+    picked = {"verdict": None}
+
+    def _open_if_required(*_):
+        """A verdict the reviewer picks that asks a required question with no
+        answer yet opens the section: that answer is what the save would
+        refuse without. Heard on ``edit_rev`` (the reviewer's edits), not on
+        ``verdict``, which an alert load also sets -- before its answers --
+        and once per verdict, so a section closed again stays closed."""
+        verdict = analysis.verdict.value
+        if verdict == picked["verdict"]:
+            return
+        picked["verdict"] = verdict
+        questions = current["questions"] or ()
+        answers = analysis.answers.value or {}
+        if any(q.required and qs.visible(q, verdict) and not answers.get(q.key) for q in questions):
+            section.set_open(True)
+
     # Registered once: the panel is built once per session.
     app_state.project.subscribe(_rebuild)
     analysis.answers.subscribe(_sync)
     analysis.verdict.subscribe(_sync)
+    analysis.edit_rev.subscribe(_open_if_required)
+    # a new alert: its first pick is a pick, even of the previous one's verdict
+    analysis.alert_token.subscribe(lambda *_: picked.update(verdict=analysis.verdict.value))
     _rebuild()
     return SimpleNamespace(root=section.root, set_open=section.set_open, is_open=section.is_open,
                            set_badge=section.set_badge, badge=section.badge, body_box=section.body_box,

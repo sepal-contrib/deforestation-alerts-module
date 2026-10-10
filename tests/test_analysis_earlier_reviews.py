@@ -114,7 +114,7 @@ def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
-    field = controls.children[1].children[0]
+    field = controls.field
     for bad in ("0", "abc", "51"):
         field.v_model = bad
         assert field.error_messages and analysis.earlier_radius_km.value == 1.0
@@ -215,7 +215,7 @@ def test_view_actual_alert_loads_off_the_calling_thread(monkeypatch):
     app_state.project = solara.reactive(None)
     monkeypatch.setattr(analysis_tile, "active_set", lambda p: None)
     monkeypatch.setattr(analysis_tile.set_store, "alerts_belong_to", lambda g, s: True)
-    monkeypatch.setattr(analysis_tile, "ee", MagicMock())
+    monkeypatch.setattr(analysis_tile, "alert_extent", lambda geo, m: (MagicMock(), MagicMock()))
     spawned = []
     monkeypatch.setattr(earlier, "spawn_in_context", lambda fn, args=(): spawned.append((fn, args)))
     widgets = MagicMock()
@@ -235,7 +235,7 @@ def test_a_raising_read_on_the_worker_is_logged_and_leaves_the_panel_usable(monk
 
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", boom)
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
-    switch = controls.children[0]
+    switch = controls.switch
     with caplog.at_level("ERROR", logger="SEPALUI.deforestation_alerts"):
         switch.v_model = True  # runs the spawned refresh, which raises
     assert any("earlier-reviews overlay failed" in r.message and r.exc_info for r in caplog.records)
@@ -244,3 +244,19 @@ def test_a_raising_read_on_the_worker_is_logged_and_leaves_the_panel_usable(monk
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", lambda *a, **k: _fc(1))
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     assert len(_earlier(widgets)) == 1
+
+
+def test_the_section_badge_says_off_nearby_or_none():
+    assert earlier.badge_text(False, 3, 1.0) == earlier.t("analysis_tile.earlier.badge_off")
+    assert earlier.badge_text(True, None, 1.0) == ""  # a refresh is running
+    assert earlier.badge_text(True, 0, 2.5) == earlier.t("analysis_tile.earlier.badge_none", km="2.5")
+    assert earlier.badge_text(True, 3, 1.0) == earlier.tn("analysis_tile.earlier.badge_nearby", 3)
+
+
+def test_the_switch_and_a_result_move_the_badge(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch, n=2)
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]
+    section.switch.v_model = True
+    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 2)]

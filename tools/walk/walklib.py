@@ -56,7 +56,7 @@ ENTER_BUTTON = "button.da-enter-default"
 #: screen's right column (the review console) while that screen shows. MapApp
 #: stays mounted beside the analysis screen with its right panel hidden, so a
 #: bare ``.right-panel`` would match the hidden workflow panel there.
-PANEL = (":is(.defo-analysis-screen--on .defo-analysis-right,"
+PANEL = (":is(.defo-analysis-screen--on .defo-analysis-right, .defo-analysis-screen--on .defo-analysis-topbar,"
          " body:not(:has(.defo-analysis-screen--on)) .right-panel)")
 #: The analysis screen while it shows (``analysis_tile.build_screen``).
 SCREEN_ON = ".defo-analysis-screen--on"
@@ -200,8 +200,9 @@ def title(page):
 
 
 def panel_text(page):
-    """The text of the panel the user works in (``PANEL``)."""
-    return page.evaluate("s => { const p = document.querySelector(s); return p ? p.innerText : ''; }", PANEL)
+    """The text of the panel the user works in (``PANEL``): on the analysis
+    screen, its top bar (the queue and the navigation) and its console."""
+    return page.evaluate("s => [...document.querySelectorAll(s)].map(p => p.innerText).join('\\n')", PANEL)
 
 
 def dialog_visible(page):

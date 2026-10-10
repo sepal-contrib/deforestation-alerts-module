@@ -118,8 +118,10 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
-    *head, block_a, block_b, _earlier, questions, refine, footer = panel.controls.children
-    assert len(head) == 3                       # help + selector + banner
+    banner, block_a, block_b, questions, refine, earlier, footer = panel.controls.children
+    # the help, the set selector and the navigation went to the top bar
+    assert panel.sections.topnav is not None
+    assert earlier is panel.sections.earlier.root
     # What each block OWNS, named. ``facts_widgets`` returns a tuple and
     # ``verdict_widgets`` a dict, both checked by their contents below: a bare
     # ``assert <the accessor's result>`` only ever catches the AttributeError
@@ -262,3 +264,25 @@ def test_an_alert_change_takes_the_refine_badges_emphasis_with_it(tmp_path, monk
 
     assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
     assert not refine.badge.color
+
+
+def test_the_top_bar_navigation_holds_the_selector_the_queue_and_the_buttons(tmp_path, monkeypatch):
+    from gui.tile.analysis import context
+
+    panel = _controls(tmp_path, monkeypatch)
+    block_a = panel.controls.children[1]
+    prev, nxt, jump, menu, _go, _unreviewed = context.nav_widgets(block_a)
+    counter, tally, bar = context.queue_widgets(block_a)
+
+    def walk(w):
+        yield w
+        for c in getattr(w, "children", None) or []:
+            if not isinstance(c, str):
+                yield from walk(c)
+
+    inside = list(walk(panel.sections.topnav))
+    assert all(any(x is w for x in inside) for w in (prev, nxt, menu, tally, bar))
+    assert any(isinstance(w, v.Select) for w in inside)  # the alert-set selector
+    # and none of them is in the panel any more
+    in_panel = list(walk(panel.controls))
+    assert not any(x is prev or x is counter for x in in_panel)

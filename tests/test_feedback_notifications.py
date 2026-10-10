@@ -1494,6 +1494,9 @@ def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
     # drawing on screen outside edit mode, so the clear is the app's to do),
     # so what the run found is on offer again
     slots["stop_btn"].fire_event("click", None)
+    # the added prediction is unsaved work, so Stop asks first
+    assert slots["stop_dialog"].v_model is True
+    slots["stop_discard"].fire_event("click", None)
     assert views.draw_edit_mode is False
     assert widgets.panes.drawing_features() == [] and views.draw["fc"]["features"] == []
     assert slots["dl1_add"].disabled is False and slots["dl1_remove"].disabled is True
@@ -2136,3 +2139,69 @@ def test_model_rows_hold_run_add_remove_on_one_line(edit_tools_card):
         assert slots[f"dl{n}_remove"] in first_line.children
     assert t("analysis_tile.model_labels.dl_button1") == "Model 1"
     assert t("analysis_tile.edition_labels.apply_edit_button") == "Save drawing"
+
+
+def _drawing_session_with_an_edit():
+    """A drawing session whose drawing the reviewer edited and did not save."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    import gui.tile.analysis.edit_tools as edit_tools
+    from gui.tile.analysis.state import drawing_changed
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)], crs="EPSG:4326"))
+    slots["start_btn"].fire_event("click", None)
+    drawing_changed(analysis)  # the reviewer's edit, as ``on_drawing_edit`` reports it
+    return analysis, widgets, slots
+
+
+def test_stop_drawing_asks_before_discarding_an_unsaved_drawing():
+    analysis, widgets, slots = _drawing_session_with_an_edit()
+    slots["stop_btn"].fire_event("click", None)
+    assert slots["stop_dialog"].v_model is True
+    assert widgets.panes.widget.draw_edit_mode is True, "nothing is stopped before the answer"
+
+    slots["stop_keep"].fire_event("click", None)
+    assert slots["stop_dialog"].v_model is False
+    assert widgets.panes.widget.draw_edit_mode is True and widgets.panes.drawing_features()
+
+
+def test_discard_stops_and_drops_the_unsaved_drawing():
+    analysis, widgets, slots = _drawing_session_with_an_edit()
+    before = analysis.defo_layer.value
+    slots["stop_btn"].fire_event("click", None)
+    slots["stop_discard"].fire_event("click", None)
+    assert widgets.panes.widget.draw_edit_mode is False and widgets.panes.drawing_features() == []
+    assert analysis.defo_layer.value is before and analysis.drawing_unapplied.value is False
+
+
+def test_save_and_stop_stores_the_drawing_then_stops():
+    analysis, widgets, slots = _drawing_session_with_an_edit()
+    widgets.panes.set_drawing([])  # the reviewer deleted the polygon
+    slots["stop_btn"].fire_event("click", None)
+    slots["stop_save"].fire_event("click", None)
+    assert analysis.defo_layer.value is None, "the emptied drawing was applied"
+    assert widgets.panes.widget.draw_edit_mode is False
+
+
+def test_stop_drawing_with_nothing_unsaved_does_not_ask():
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    import gui.tile.analysis.edit_tools as edit_tools
+
+    analysis = AnalysisState()
+    widgets = _draw_widgets()
+    body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
+                                       analysis=analysis, app_tile_model=_set_context_fake())
+    slots = _slots(body)
+    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)], crs="EPSG:4326"))
+    slots["start_btn"].fire_event("click", None)
+    slots["stop_btn"].fire_event("click", None)
+    assert slots["stop_dialog"].v_model is False
+    assert widgets.panes.widget.draw_edit_mode is False

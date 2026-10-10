@@ -87,7 +87,14 @@
       "collapse_month": "{month}. Collapse this month.",
       "no_cloud_filter": "A NICFI basemap is a monthly mosaic with no cloud figure, so the cloud limit never hides it.",
       "saved_missing": "Saved image not available; picked automatically",
-      "swap_source": "Use the {source} image from the same day"
+      "swap_source": "Use the {source} image from the same day",
+      "month_before": "Add a month before",
+      "month_after": "Add a month after",
+      "image_area": "Image area",
+      "area_normal": "Normal",
+      "area_large": "Large",
+      "area_xlarge": "Extra large",
+      "area_hint": "How far around the alert the images reach. Larger areas take longer to load and export."
     },
     "panes": {
       "layers": "Layers",
@@ -122,7 +129,8 @@
       "previous": "Previous",
       "next": "Next",
       "jump": "Jump to alert number",
-      "go": "Go"
+      "go": "Go",
+      "next_unreviewed": "Next unreviewed alert"
     },
     "questionarie": {
       "confirmation_q": "Is this a true alert?",
@@ -155,7 +163,8 @@
       "badge_none": "no questions",
       "none": "This project asks no questions: add some in the Questionnaire step.",
       "typed_hint": "Pick or type answers",
-      "none_for_verdict": "No questions are asked for this verdict."
+      "none_for_verdict": "No questions are asked for this verdict.",
+      "required": "Required"
     },
     "sections": {
       "export": "Export this alert",
@@ -175,10 +184,15 @@
       "questions": "Questions"
     },
     "edition_labels": {
-      "start_edit_button": "Start Drawing",
+      "start_edit_button": "Start drawing",
       "apply_edit_button": "Save drawing",
-      "stop_edit_button": "Stop Drawing",
-      "unapplied_drawing": "Save your drawing before saving this review"
+      "stop_edit_button": "Stop drawing",
+      "unapplied_drawing": "Save your drawing before saving this review",
+      "stop_title": "Discard unsaved drawing?",
+      "stop_message": "Your changes to the polygon have not been saved with Save drawing. If you stop now, they will be lost.",
+      "stop_keep": "Keep drawing",
+      "stop_save": "Save and stop",
+      "stop_discard": "Discard changes"
     },
     "model_labels": {
       "dl_button1": "Model 1",
@@ -243,10 +257,16 @@
       "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF."
     },
     "earlier": {
-      "show": "Show reviewed alerts from earlier periods",
+      "show": "Show on the maps",
       "radius": "Within",
       "radius_error": "Between 0.1 and 50 km",
-      "none": "None within {km} km"
+      "title": "Earlier reviews",
+      "badge_off": "off",
+      "badge_none": "none within {km} km",
+      "badge_nearby": {
+        "one": "{n} nearby",
+        "other": "{n} nearby"
+      }
     }
   },
   "imagery": {

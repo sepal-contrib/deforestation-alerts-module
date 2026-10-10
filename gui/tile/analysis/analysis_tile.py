@@ -63,7 +63,6 @@ import logging
 from datetime import date
 from types import SimpleNamespace
 
-import ee
 import ipyvuetify as v
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
@@ -73,14 +72,15 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
 )
-from gui.tile.analysis.context import build_context
+from gui.tile.analysis.context import build_context, build_topnav
 from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background, remove_earlier_layer
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import REQUIRED_MISSING, build_export
 from gui.tile.analysis.footer import build_footer
-from gui.tile.analysis.imagery import wire_panes
+from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
+from gui.tile.analysis.state import IMAGE_AREAS
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
@@ -158,6 +158,7 @@ def _invalidate_alert_view(widgets, analysis) -> None:
         remove_earlier_layer(widgets)
         widgets.actual_bb = None
         widgets.actual_alert_grid = None
+        widgets.actual_bb_geojson = None
     except Exception:
         logger.exception("Analysis: clearing the alert view failed")
 
@@ -290,13 +291,11 @@ def view_actual_alert(
             ).set_crs(epsg="4326", allow_override=True, inplace=True))
 
         # ee bbox (buffer + bounds) + covering grid for downloads
-        alerta_bb_geojson_ee = ee.Feature(alerta_bb_geojson).buffer(100, 1).bounds(1)
-        widgets.actual_bb = alerta_bb_geojson_ee
-
-        grid_descarga = alerta_bb_geojson_ee.geometry().coveringGrid(
-            "EPSG:3857", 1 * 256 * 4.77
-        )
-        widgets.actual_alert_grid = grid_descarga.geometry().bounds(1)
+        # (the normal image area: ``reset_alert`` put ``image_area`` back to
+        # it, and ``set_image_area`` recomputes both for a larger one)
+        widgets.actual_bb_geojson = alerta_bb_geojson
+        widgets.actual_bb, widgets.actual_alert_grid = alert_extent(
+            alerta_bb_geojson, IMAGE_AREAS["normal"])
 
         # Publish the per-alert imagery context: the one thing an alert
         # change has to do for the shared timeline, which answers the alert
@@ -472,24 +471,28 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     exports.body_box.children = [export_parts.body]
     footer = build_footer(export_parts.run_save, exports.root, app_state, analysis)
 
+    # The queue, the navigation and the set selector go to the screen's top
+    # bar (``build_screen``); built here with the card whose subscriptions
+    # keep them current.
+    context = build_context(app_state, id_field)
+    topnav = build_topnav(context, build_set_selector(app_state))
+    earlier = build_earlier_controls(widgets, app_state, analysis)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
         children=[
-            info_button(t("analysis_tile.description"), t("analysis_tile.info_header"),
-                        t("analysis_tile.info_md")),
-            build_set_selector(app_state),
             build_set_status_banner(app_state),
-            build_context(app_state, id_field),
+            context,
             build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis),
-            build_earlier_controls(widgets, app_state, analysis),
             questions.root,
             refine.root,
+            earlier.root,
             footer.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
-                                              export_parts=export_parts, footer=footer))
+                                              export_parts=export_parts, footer=footer,
+                                              earlier=earlier, topnav=topnav))
     return controls
 
 
@@ -512,14 +515,28 @@ SCREEN_CSS = (
     # toasts (9999).
     ".defo-analysis-screen { position: fixed; top: 0; bottom: 0; left: var(--sepal-drawer-width, 60px); right: 0;"
     " z-index: 4; display: flex; flex-direction: column; transition: left 0.3s ease;"
-    " background-color: #ffffff; color: rgba(0, 0, 0, 0.87); }\n"
+    " background-color: #ffffff; color: rgba(0, 0, 0, 0.87); font-size: 14px; }\n"
     ".defo-analysis-screen.theme--dark { background-color: #121212; color: #ffffff; }\n"
     # ipyvuetify wraps a standalone display in a v-application of its own,
     # whose wrap reserves a full viewport height.
     ".defo-analysis-screen .v-application--wrap { min-height: 0 !important; }\n"
-    ".defo-analysis-topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 48px;"
+    ".defo-analysis-topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 56px;"
     " padding: 0 12px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }\n"
-    ".defo-analysis-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n"
+    ".defo-analysis-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n"
+    # the top bar's navigation (``context.build_topnav``)
+    ".defo-analysis-screen .defo-topnav { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-screen .defo-topnav-set { flex: 0 1 380px; min-width: 180px; }\n"
+    ".defo-analysis-screen .defo-topnav-set .v-select { padding: 0 !important; margin: 0; }\n"
+    ".defo-analysis-screen .defo-jump-btn { min-width: 0 !important; }\n"
+    ".defo-analysis-screen .defo-topnav-progress { display: flex; flex-direction: column; gap: 4px; width: 150px; margin-left: 4px; }\n"
+    # Over the review panel, at its width and padding: Previous lines up with
+    # the panel's start, Next with its end. The negative margin cancels the
+    # top bar's right padding so the block reaches the screen edge as the
+    # panel does.
+    ".defo-analysis-screen .defo-topnav-nav { flex: 0 0 480px; align-self: stretch; display: flex; align-items: center;"
+    " justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
+    " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
     " padding: 8px; }\n"
@@ -544,6 +561,39 @@ SCREEN_CSS = (
     ".defo-analysis-screen.theme--dark .analysis-timeline { border-color: rgba(255, 255, 255, 0.18); }\n"
     ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
     " display: flex !important; align-items: center !important; }\n"
+    # The screen's one type scale (``section.TYPE_*``): 14 px titles and body,
+    # 12 px labels and badges, sentence case everywhere. Vuetify's spaced
+    # capitals on buttons and chips, and its 16 px input labels, are what
+    # made the panel read as three different apps.
+    ".defo-analysis-screen .v-btn { text-transform: none !important; letter-spacing: normal !important; }\n"
+    ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"
+    ".defo-analysis-screen .v-chip.v-size--x-small { font-size: 12px; height: 20px; }\n"
+    ".defo-analysis-screen .v-input .v-label { font-size: 14px; }\n"
+    ".defo-analysis-screen .v-select__selection, .defo-analysis-screen .v-text-field input { font-size: 14px; }\n"
+    ".defo-analysis-screen .dat-title { font-size: 14px; font-weight: 600; line-height: 20px; }\n"
+    ".defo-analysis-screen .dat-body { font-size: 14px; font-weight: 400; line-height: 20px; }\n"
+    ".defo-analysis-screen .dat-label { font-size: 12px; font-weight: 400; line-height: 16px; opacity: 0.7; }\n"
+    ".defo-analysis-screen .dat-caption { font-size: 12px; line-height: 16px; }\n"
+    ".defo-analysis-screen .dat-num { font-variant-numeric: tabular-nums; }\n"
+    ".defo-analysis-screen .analysis-mapbox .v-card__title { font-size: 16px; font-weight: 600; }\n"
+    # The Questions section (``questions_panel``): one outlined block per
+    # question, a numbered header, the options as full-width tiles.
+    ".defo-analysis-screen .dat-question { border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px;"
+    " padding: 12px; margin-bottom: 8px; }\n"
+    ".defo-analysis-screen .dat-q-num { flex: 0 0 22px; height: 22px; border-radius: 11px; display: inline-flex;"
+    " align-items: center; justify-content: center; font-size: 12px; font-weight: 600;"
+    " background: rgba(128, 128, 128, 0.18); }\n"
+    ".defo-analysis-screen .dat-q-required { font-size: 12px; }\n"
+    ".defo-analysis-screen .dat-options .v-radio { border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px;"
+    " padding: 8px 10px; margin: 0 0 6px 0 !important; cursor: pointer; transition: border-color 0.15s, background 0.15s; }\n"
+    # Neutral, not the primary colour: the theme publishes no
+    # ``--v-primary-base`` (see ``file_tile``), and the radio's own dot
+    # already wears the primary colour.
+    ".defo-analysis-screen .dat-options .v-radio:hover { border-color: rgba(128, 128, 128, 0.7); }\n"
+    ".defo-analysis-screen .dat-options .v-radio.v-item--active { border-color: currentColor;"
+    " background: rgba(128, 128, 128, 0.12); }\n"
+    ".defo-analysis-screen .dat-options .v-radio.v-item--active .v-label { font-weight: 600; }\n"
+    ".defo-analysis-screen .dat-options .v-label { font-size: 14px; }\n"
     # the timeline's and the view titles' theme colours
     + timeline_theme_css
 )
@@ -581,8 +631,22 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
         children=[v.Icon(left=True, children=["mdi-arrow-left"]), ""],
     )
     back.on_event("click", lambda *_: app_state.screen.set("workflow"))
-    title = v.Html(tag="div", class_="defo-analysis-title text-subtitle-1", children=[""])
-    topbar = v.Html(tag="div", class_="defo-analysis-topbar", children=[back, title])
+    title = v.Html(tag="div", class_="defo-analysis-title dat-title", children=[""])
+    panel = getattr(controls, _PANEL, None)
+    topnav = getattr(panel, "topnav", None)
+    # The panel's help, as the top bar's last control: the description is
+    # the icon's tooltip (it no longer has a line of its own in the panel).
+    info = info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md"))
+    _span, info_btn, _dialog = info.children
+    info_btn.children = [v.Icon(children=["mdi-help-circle-outline"])]
+    info_btn.attributes = {"title": t("analysis_tile.description"), "aria-label": t("analysis_tile.info_header")}
+    info.children = [info_btn, _dialog]
+    info.class_ = "d-flex align-center"
+    if topnav is not None:
+        # after the set's progress, before the navigation block
+        topnav.children = [*topnav.children[:-1], info, topnav.children[-1]]
+    topbar = v.Html(tag="div", class_="defo-analysis-topbar",
+                    children=[back, title, *([topnav] if topnav is not None else [info])])
     heads = v.Html(tag="div", class_="analysis-heads", children=[widgets.head_before, widgets.head_after])
     panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
     strip = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
@@ -616,10 +680,12 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
     def _retitle():
         p = app_state.project.value
         alert_set = active_set(p)
+        # The set is the top bar's selector now; the title names the screen
+        # and the project, and falls back to the set while there is no bar.
         parts = [
             t("app.drawer_item.analysis"),
             p.name if p is not None else "",
-            set_text(p, alert_set) if alert_set is not None else "",
+            set_text(p, alert_set) if alert_set is not None and topnav is None else "",
         ]
         title.children = [" · ".join(part for part in parts if part)]
 
@@ -694,7 +760,7 @@ def build_analysis_layout(
     vis_sync.wire(widgets, app_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
-    # .v_model). Owned here, passed to block A's jump row (build_context,
+    # .v_model). Owned here, passed to the counter's jump menu (build_context,
     # through build_controls) and to the per-alert subscription, which writes
     # the 1-based number the queue counter shows. Empty: with no alert
     # selected there is no number to show, and ``_on_go`` ignores a field it
@@ -702,8 +768,10 @@ def build_analysis_layout(
     id_field = v.TextField(
         v_model=None,
         outlined=True,
+        dense=True,
         single_line=True,
         hide_details=True,
+        type="number",
     )
 
     wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field)
@@ -728,6 +796,15 @@ def build_analysis_layout(
     # image from its granule keys and draws it. Side-effect only (the two
     # unsubscribers are discarded for the same reason as above).
     wire_panes(widgets, analysis, selected_alerts_model)
+
+    # The timeline's image-area control: a new area for the alert on screen.
+    def _on_area(_value):
+        try:
+            set_image_area(widgets, analysis)
+        except Exception:
+            logger.exception("Analysis: changing the image area failed")
+
+    analysis.image_area.subscribe(_on_area)
 
     # The review console -- the head, block A, block B, the Questions and
     # Refine sections and the sticky footer (``build_controls``) -- in the

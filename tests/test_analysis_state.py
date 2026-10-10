@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import geopandas as gpd
+import solara
 from shapely.geometry import box
 
 from deforestation_alerts.scripts import scene_index
@@ -588,3 +589,53 @@ def test_the_earlier_overlay_defaults_are_per_session_and_survive_an_alert_chang
     a.reset_alert()
     assert a.show_earlier_reviews.value is True and a.earlier_radius_km.value == 5.0
     assert b.show_earlier_reviews.value is False
+
+
+def _area_widgets(analysis):
+    from shapely.geometry import box as shapely_box
+
+    rekeyed = []
+    widgets = SimpleNamespace(
+        imagery_ctx=solara.reactive({"alert_id": 0, "token": analysis.alert_token.value,
+                                     "bbox": shapely_box(10.0, 0.0, 10.01, 0.01)}),
+        actual_bb_geojson={"type": "Polygon", "coordinates": []}, actual_bb=None, actual_alert_grid=None,
+        timeline_rekey=lambda: rekeyed.append(True))
+    return widgets, rekeyed
+
+
+def test_a_larger_image_area_reclips_rekeys_and_redraws(monkeypatch):
+    from gui.tile.analysis import imagery
+    from gui.tile.analysis.state import IMAGE_AREAS
+
+    analysis = AnalysisState()
+    widgets, rekeyed = _area_widgets(analysis)
+    margins = []
+    monkeypatch.setattr(imagery, "alert_extent", lambda geo, m: (margins.append(m) or "bb", f"grid{m}"))
+    analysis.prediction_files.set({1: "p.tif"})
+    rev = analysis.area_rev.value
+
+    analysis.image_area.set("large")
+    imagery.set_image_area(widgets, analysis)
+    assert margins == [IMAGE_AREAS["large"]] and widgets.actual_alert_grid == f"grid{IMAGE_AREAS['large']}"
+    area = widgets.imagery_ctx.value["area_bbox"]
+    assert area.contains(widgets.imagery_ctx.value["bbox"]) and area.area > widgets.imagery_ctx.value["bbox"].area
+    assert rekeyed == [True] and analysis.area_rev.value == rev + 1
+    assert analysis.prediction_files.value == {}, "a prediction of the previous area is dropped"
+    assert analysis.dirty.value is False, "the area is not part of the review"
+
+    analysis.image_area.set("normal")
+    imagery.set_image_area(widgets, analysis)
+    assert widgets.imagery_ctx.value["area_bbox"] is None
+
+
+def test_the_image_area_is_per_alert_and_ignores_a_stale_context(monkeypatch):
+    from gui.tile.analysis import imagery
+
+    analysis = AnalysisState()
+    widgets, rekeyed = _area_widgets(analysis)
+    monkeypatch.setattr(imagery, "alert_extent", lambda geo, m: ("bb", "grid"))
+    analysis.image_area.set("xlarge")
+    analysis.reset_alert()
+    assert analysis.image_area.value == "normal"
+    imagery.set_image_area(widgets, analysis)  # the context is the previous alert's
+    assert rekeyed == [] and widgets.actual_alert_grid is None

@@ -975,7 +975,7 @@ def test_only_the_granules_that_cover_the_alert_are_handed_to_the_rebuild():
 
 def _chips(card) -> list:
     """``[(label, pressed)]`` for the three collection chips, in their order."""
-    return [(_text(w), (w.attributes or {}).get("aria-pressed") == "true")
+    return [(_text(w).strip(), (w.attributes or {}).get("aria-pressed") == "true")
             for w in _walk(card)
             if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None]
 
@@ -983,7 +983,7 @@ def _chips(card) -> list:
 def _chip_click(card, label_start: str) -> None:
     hit = [w for w in _walk(card)
            if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None
-           and _text(w).startswith(label_start)]
+           and _text(w).strip().startswith(label_start)]
     assert len(hit) == 1, f"{len(hit)} chips starting {label_start!r}"
     hit[0].fire_event("click", None)
 

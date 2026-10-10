@@ -25,6 +25,12 @@ def _plain(value=None):
     return solara.reactive(value)
 
 
+#: The image areas the timeline offers, as the margin in metres added around
+#: the alert's box before it is snapped to the download grid. ``normal`` is
+#: the margin the analysis has always used.
+IMAGE_AREAS = {"normal": 100, "large": 1000, "xlarge": 2500}
+
+
 @dataclass
 class AnalysisState:
     #: the reviewed deforestation polygon(s) drawn for the current alert (GeoDataFrame)
@@ -68,6 +74,13 @@ class AnalysisState:
     #: the drawing session (both put the two back in step) and by
     #: ``reset_alert``.
     drawing_unapplied: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: how far around the alert its images reach: a key of ``IMAGE_AREAS``.
+    #: Per alert -- back to ``"normal"`` on every alert change -- so a large
+    #: area chosen for one alert never makes every later load and export slow.
+    image_area: solara.Reactive = field(default_factory=lambda: solara.reactive("normal"))
+    #: bumped once the views' area and both picks' keys follow a new
+    #: ``image_area`` (``imagery.set_image_area``): the panes redraw on it.
+    area_rev: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
     #: what each CNN run found, by model number: ``{1: (n_patches, area_ha)}``.
     #: Derived from the prediction the worker vectorises, beside the ``.tif``
     #: paths in ``prediction_files``.
@@ -120,6 +133,7 @@ class AnalysisState:
             # previous alert's (spec §4.4). 0.0 is the declared default and
             # the empty state the footer's save-state line reads.
             self.last_save_time.set(0.0)
+            self.image_area.set("normal")
 
     def is_current(self, token) -> bool:
         """Whether ``token`` (captured from ``alert_token``) is still the

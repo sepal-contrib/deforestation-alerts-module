@@ -112,7 +112,7 @@ def test_the_tally_is_formatted_in_the_language_in_force_when_it_is_written(tmp_
 def test_the_nav_buttons_move_the_selection(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     card = context.build_context(s, v.TextField(v_model=None))
-    prev, nxt, jump, field_box, go = context.nav_widgets(card)
+    prev, nxt, *_ = context.nav_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 4))
     s.actual_alert_id.value = 0  # a real position, as the queue line leaves it
 
@@ -128,35 +128,71 @@ def test_the_nav_buttons_are_safe_with_no_alerts(tmp_path, monkeypatch):
     not a no-op, but it never raises and never goes negative."""
     s = _state(tmp_path, monkeypatch)
     card = context.build_context(s, v.TextField(v_model=None))
-    prev, nxt, _, _, _ = context.nav_widgets(card)
+    prev, nxt, *_ = context.nav_widgets(card)
     nxt.fire_event("click", None)
     prev.fire_event("click", None)
     assert s.actual_alert_id.value == 0
 
 
-def test_the_jump_field_is_one_based_and_hidden_until_asked(tmp_path, monkeypatch):
+def test_the_counter_opens_the_jump_menu_and_the_field_is_one_based(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     field = v.TextField(v_model=None)
     card = context.build_context(s, field)
-    _, _, jump, field_box, go = context.nav_widgets(card)
+    _, _, jump, menu, go, _ = context.nav_widgets(card)
+    counter, _, _ = context.queue_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
 
-    assert field in field_box.children  # the field itself ships inside the box
-    assert "display: none" in field_box.style_
-    jump.fire_event("click", None)
-    assert "display: none" not in field_box.style_
+    # The counter is the menu's button; the field ships inside the menu.
+    assert counter in jump.children
+    assert menu.v_slots[0]["children"] is jump and jump.v_on == "menu.on"
+    assert field in _walk(menu)
+    assert field.placeholder == "1 – 9"
+
+    field.v_model = 4
+    menu.v_model = True                # opening clears the field
+    assert field.v_model is None
 
     field.v_model = 7          # the reviewer types the number the counter shows
     go.fire_event("click", None)
-    assert s.actual_alert_id.value == 6
+    assert s.actual_alert_id.value == 6 and menu.v_model is False
 
+    menu.v_model = True
     field.v_model = "not a number"
     go.fire_event("click", None)
-    assert s.actual_alert_id.value == 6   # unchanged, no exception
+    assert s.actual_alert_id.value == 6 and menu.v_model is True  # unchanged, no exception
 
-    field.v_model = 99         # out of range: go_to clamps
-    go.fire_event("click", None)
+    field.v_model = 99         # out of range: go_to clamps; Enter works as Go
+    field.fire_event("keydown.enter", None)
     assert s.actual_alert_id.value == 8
+
+
+def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
+    gdf = _alerts(["Not reviewed", "Confirmed", "False Positive", None, "Need revision"])
+    assert context.next_unreviewed(gdf, 0) == 3
+    assert context.next_unreviewed(gdf, 3) == 0          # wraps round
+    assert context.next_unreviewed(_alerts(["Not reviewed", "Confirmed"]), 0) is None
+    assert context.next_unreviewed(None, 0) is None
+
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    *_, menu, _, unreviewed = context.nav_widgets(card)
+    s.alerts_gdf.set(gdf)
+    s.actual_alert_id.value = 0
+    assert not unreviewed.disabled
+    menu.v_model = True
+    unreviewed.fire_event("click", None)
+    assert s.actual_alert_id.value == 3 and menu.v_model is False
+    s.alerts_gdf.set(_alerts(["Not reviewed", "Confirmed"]))
+    s.actual_alert_id.value = 0
+    assert unreviewed.disabled, "nothing else left to review"
+
+
+def _walk(w):
+    out = [w]
+    for c in getattr(w, "children", None) or []:
+        if hasattr(c, "children") or hasattr(c, "v_model"):
+            out.extend(_walk(c))
+    return out
 
 
 def test_facts_of_reads_the_row(tmp_path, monkeypatch):

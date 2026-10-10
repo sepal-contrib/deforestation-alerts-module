@@ -204,6 +204,7 @@ def _dynamic_keys():
     from deforestation_alerts.project import periods
     from gui.scripts.vis_layers import KINDS, NICFI_COLLECTIONS
     from gui.scripts.vis_palettes import RAMPS, RGB_COMBOS, ROLES
+    from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
@@ -236,6 +237,8 @@ def _dynamic_keys():
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
         # gui.tile.overview_tile's export buttons
         "overview_tile.export_": ["csv", "gpkg", "geojson"],
+        # gui.tile.analysis.timeline's image-area choices
+        "analysis.timeline.area_": list(IMAGE_AREAS),
     }
 
 
