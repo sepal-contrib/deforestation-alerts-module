@@ -10,7 +10,9 @@ lives in ``scene_query``, which never imports ``ee``, so the offline test tier
 can exercise it.
 """
 
+import threading
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Mapping, NamedTuple, Optional
 
 import geopandas as gpd
@@ -19,6 +21,23 @@ from pydantic import BaseModel, Field
 from shapely.geometry import shape
 
 INDEX_VERSION = 1
+
+#: One lock per project directory, process-wide. Every write of the index
+#: (``gui.scripts.scene_cache.store_chunk`` and ``note_failed_chunk``) and a
+#: review package's copy of it (``project.share.build_package``) take it, so
+#: a package never holds the files of two different writes. It lives here,
+#: not in ``scene_cache``, so ``deforestation_alerts`` can take it without
+#: importing ``gui``.
+_INDEX_LOCKS: dict[str, threading.Lock] = {}
+_INDEX_LOCKS_GUARD = threading.Lock()
+
+
+def index_lock(pdir) -> threading.Lock:
+    """The lock of ``<pdir>/imagery``, keyed by the resolved project directory
+    (a same-process lock: ``scene_cache._lock_for`` says why that is enough)."""
+    key = str(Path(pdir).resolve())
+    with _INDEX_LOCKS_GUARD:
+        return _INDEX_LOCKS.setdefault(key, threading.Lock())
 
 # Exactly the strings ``mosaics_helper._scale_for_source`` and ``before_info[0]``
 # switch on. The UI label "Sentinel-2" is a display string and never lands here.

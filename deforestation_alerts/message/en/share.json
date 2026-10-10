@@ -9,7 +9,15 @@
       "unsafe_member": "This zip holds an unsafe entry ({member}); nothing was read from it.",
       "unexpected_member": "This zip holds a file this app does not expect ({member}); nothing was read from it.",
       "missing_member": "This zip is missing {member}.",
-      "too_large": "This zip holds more data than this app accepts."
+      "too_large": "This zip holds more data than this app accepts.",
+      "no_set": "The alert set {set_id} is not in this project.",
+      "no_aoi": "The AOI geometry is not available yet; wait until the AOI step has loaded it and try again.",
+      "no_split": "Split the alerts between evaluators first.",
+      "unknown_evaluator": "{evaluator} is not an evaluator of this split.",
+      "store_missing": "The alerts file of set {set_id} is missing.",
+      "store_changed": "The alerts were rewritten while the zip was made; try again.",
+      "split_mismatch": "The alerts' evaluator column does not match the split; remove the split and split again.",
+      "not_a_copy": "Only a review copy returns reviews."
     }
   }
 }

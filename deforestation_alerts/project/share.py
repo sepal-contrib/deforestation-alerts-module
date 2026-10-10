@@ -9,21 +9,30 @@ renders it with ``error_text``.
 
 import json
 import math
+import shutil
 import stat
 import zipfile
 import zlib
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterator, Optional
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ValidationError
+from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.errors import KeyedError
+from deforestation_alerts.project import paths
+from deforestation_alerts.project import split as split_mod
+from deforestation_alerts.project.models import AlertSet, Period, Project
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_status import reviewed_mask
+from deforestation_alerts.scripts import local_files, scene_index
+from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_lock
 from deforestation_alerts.scripts.naming import safe_token
 
 FORMAT = "defo-alerts-share"
@@ -221,3 +230,244 @@ def same_value(a, b) -> bool:
     if _number(a) and _number(b):
         return math.isclose(float(a), float(b), rel_tol=1e-9)
     return str(a) == str(b)
+
+
+# ---- building (spec §5, §6.4) ------------------------------------------------
+
+#: The scene index's members and where each lives in a project folder.
+_IMAGERY = ((SCENES_MEMBER, paths.scenes_path), (TILES_MEMBER, paths.tiles_path),
+            (INDEX_MEMBER, paths.scene_manifest_path))
+
+
+def canonical_set_paths(s: AlertSet, period: Period) -> dict[str, str]:
+    """The set's three paths in the canonical layout (``project.paths``),
+    relative to the project folder: ``periods/<period_id>/sets/<sources>/...``.
+    A package carries these whatever the creator's manifest said, and an
+    import writes the store to the first one (spec §5.2, §6.1)."""
+    sdir = paths.set_dir(Path(""), s.period_id, s.sources)
+    return {
+        "store_rel_path": paths.store_path(sdir).as_posix(),
+        "combined_rel_path": paths.combined_path(sdir, s.sources, period.start, period.end).as_posix(),
+        "footprint_rel_path": paths.footprint_path(sdir).as_posix(),
+    }
+
+
+def trimmed_manifest(p: Project, set_id: str) -> Project:
+    """The manifest a package carries (spec §5.2): a deep copy of ``p`` with
+    the one set (and its split) and its period, both active; no artifacts
+    and no coverage (the copy never prepares or integrates); no file layers
+    (their paths are the creator's); no template and no review copy (the
+    importer sets both); the AOI read from ``aoi.geojson``; and the set's
+    paths in the canonical layout. ``p`` is left as it is."""
+    s = p.alert_sets.get(set_id)
+    period = p.periods.get(s.period_id) if s is not None else None
+    if s is None or period is None:
+        raise ShareError("share.err.no_set", set_id=set_id)
+    if p.aoi is None:
+        raise ShareError("share.err.no_aoi")
+    return p.model_copy(deep=True, update={
+        "alert_sets": {set_id: s.model_copy(deep=True, update=canonical_set_paths(s, period))},
+        "active_set": set_id,
+        "periods": {period.id: period.model_copy(deep=True)},
+        "active_period": period.id,
+        "artifacts": {},
+        "coverage": {},
+        "vis_layers": {k: v.model_copy(deep=True) for k, v in p.vis_layers.items() if v.kind != "file"},
+        "report_template": None,
+        "review_copy": None,
+        "aoi": p.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR}),
+    })
+
+
+def aoi_geojson_for_package(p, pdir) -> Optional[dict]:
+    """The AOI sidecar's GeoJSON, when the project has a readable one; None
+    otherwise (an Earth Engine AOI without file inputs never needed one: the
+    caller then passes the AOI step's geometry, spec §5.3)."""
+    if p is None or p.aoi is None or not p.aoi.geometry_file:
+        return None
+    try:
+        return json.loads((Path(pdir) / paths.AOI_SIDECAR).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _aoi_collection(data, key: str) -> dict:
+    """``data`` as a plain FeatureCollection of its geometries (no properties,
+    no ``crs`` member), or ``ShareError(key)`` when it holds no readable,
+    non-empty geometry. Reads a sidecar geopandas wrote and an Earth Engine
+    ``getInfo`` of the AOI collection alike."""
+    features = data.get("features") if isinstance(data, dict) and data.get("type") == "FeatureCollection" else None
+    if not features or not isinstance(features, list):
+        raise ShareError(key)
+    out = []
+    for feature in features:
+        try:
+            geom = shape(feature["geometry"])
+        except Exception as exc:  # noqa: BLE001 -- any unreadable geometry refuses the AOI
+            raise ShareError(key) from exc
+        if geom.is_empty:
+            raise ShareError(key)
+        out.append({"type": "Feature", "properties": {}, "geometry": mapping(geom)})
+    return {"type": "FeatureCollection", "features": out}
+
+
+def _generation(path) -> Optional[tuple]:
+    """Which write of ``path`` is on disk (as ``gui.scripts.set_store.store_generation``):
+    ``(st_mtime_ns, st_size, st_ino)``, or None when it is missing."""
+    try:
+        st = Path(path).stat()
+    except FileNotFoundError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def _copy_file(src, dest) -> None:
+    shutil.copyfile(src, dest)
+
+
+def _snapshot_store(store: Path, dest: Path, set_id: str) -> Path:
+    """Copy the set's store under its lock (spec §4.4, §5): a Save, a split or
+    a merge cannot replace it meanwhile, and an Integrate swap (which takes
+    no store lock) is caught by the generation check."""
+    with store_lock(store):
+        before = _generation(store)
+        if before is None:
+            raise ShareError("share.err.store_missing", set_id=set_id)
+        _copy_file(store, dest)
+        if _generation(store) != before:
+            raise ShareError("share.err.store_changed", set_id=set_id)
+    return dest
+
+
+def _snapshot_imagery(pdir: Path, dest_dir: Path) -> dict:
+    """``{member: copy}`` of the scene index, copied under its lock; ``{}``
+    unless all three files are there (a partial index reads as none)."""
+    with scene_index.index_lock(pdir):
+        sources = {member: where(pdir) for member, where in _IMAGERY}
+        if not all(src.is_file() for src in sources.values()):
+            return {}
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        copies = {}
+        for member, src in sources.items():
+            copies[member] = dest_dir / src.name
+            _copy_file(src, copies[member])
+    return copies
+
+
+def _check_assignments(gdf, sp) -> None:
+    """The store's ``evaluator`` column is the split's: some rows assigned,
+    every assigned name one of ``sp.evaluators``."""
+    if split_mod.EVALUATOR_COLUMN not in gdf.columns:
+        raise ShareError("share.err.split_mismatch")
+    assigned = set(split_mod.assignments(gdf)) - {""}
+    if not assigned or not assigned <= set(sp.evaluators):
+        raise ShareError("share.err.split_mismatch")
+
+
+def _write_zip(path: Path, texts: dict, files: dict) -> Path:
+    """``texts`` (member -> str) first, then ``files`` (member -> local path)."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for member, text in texts.items():
+            zf.writestr(member, text)
+        for member, src in files.items():
+            zf.write(src, arcname=member)
+    return path
+
+
+def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojson: dict,
+                  out_dir: Path, *, app_version: str) -> Path:
+    """The review package of ``evaluator`` for set ``set_id`` (spec §5), at
+    ``out_dir / package_filename(...)``. Built in a scratch folder and moved
+    into ``out_dir`` whole. Blocking: call it off the event loop.
+
+    ``aoi_geojson`` is the AOI geometry as GeoJSON (``aoi_geojson_for_package``
+    or the AOI step's). The packaged split is marked ``packaged`` with the
+    questionnaire's digest; ``p`` itself is not changed: the caller records
+    both on the creator's set. Raises ``ShareError``."""
+    pdir = Path(pdir)
+    trimmed = trimmed_manifest(p, set_id)
+    s = p.alert_sets[set_id]
+    sp = s.split
+    if sp is None:
+        raise ShareError("share.err.no_split", set_id=set_id)
+    if evaluator not in sp.evaluators:
+        raise ShareError("share.err.unknown_evaluator", evaluator=evaluator)
+    index = sp.evaluators.index(evaluator) + 1
+    aoi = _aoi_collection(aoi_geojson, "share.err.no_aoi")
+    digest = split_mod.questions_digest(p.questions)
+    shared = trimmed.alert_sets[set_id]
+    trimmed.alert_sets = {set_id: shared.model_copy(update={
+        "split": shared.split.model_copy(update={"packaged": True, "questions_digest": digest})})}
+    header = ShareHeader(format=FORMAT, format_version=FORMAT_VERSION, kind=KIND_PACKAGE, app_version=app_version,
+                         origin_project=p.name, set_id=set_id, set_fingerprint=s.fingerprint, split_id=sp.split_id,
+                         evaluator=evaluator, evaluator_index=index, questions_digest=digest,
+                         created_at=datetime.now())
+    template = Path(p.report_template) if p.report_template else None
+    with local_files.scratch_dir() as tmp:
+        store = _snapshot_store(paths.resolve(pdir, s.store_rel_path), tmp / "alert_db.parquet", set_id)
+        _check_assignments(load_gdf_from_parquet(store), sp)
+        files = {STORE_MEMBER: store, **_snapshot_imagery(pdir, tmp / "imagery")}
+        if template is not None and template.is_file():
+            files[TEMPLATE_MEMBER] = template
+        texts = {HEADER_MEMBER: header.model_dump_json(indent=2),
+                 MANIFEST_MEMBER: trimmed.model_dump_json(indent=2),
+                 AOI_MEMBER: json.dumps(aoi)}
+        built = _write_zip(tmp / package_filename(p.name, set_id, index, evaluator), texts, files)
+        return local_files.copy_into(built, Path(out_dir) / built.name)
+
+
+def return_rows(gdf, evaluator: str, questions) -> pd.DataFrame:
+    """What a reviewed copy returns (spec §6.4): the rows assigned to
+    ``evaluator`` and reviewed (``is_reviewed``); ``alert_id``, ``evaluator``
+    and the review columns the store has."""
+    mask = (split_mod.assignments(gdf).to_numpy() == evaluator) & reviewed_mask(gdf).to_numpy()
+    cols = ["alert_id", split_mod.EVALUATOR_COLUMN] + [c for c in review_columns(questions) if c in gdf.columns]
+    return gdf.loc[mask, cols]
+
+
+def _write_table(frame, dest: Path) -> Path:
+    """``frame`` as parquet: GeoParquet with ``alert_polygon`` as its active
+    geometry (EPSG:4326) when that column is there, plain parquet otherwise."""
+    out = pd.DataFrame(frame).reset_index(drop=True)
+    if "alert_polygon" in out.columns:
+        order = list(out.columns)
+        geoms = [g if isinstance(g, BaseGeometry) else None for g in out["alert_polygon"]]
+        out = gpd.GeoDataFrame(out.drop(columns="alert_polygon"),
+                               geometry=gpd.GeoSeries(geoms, crs="EPSG:4326")).rename_geometry("alert_polygon")
+        out = out[order]
+    out.to_parquet(dest, index=False)
+    return dest
+
+
+def read_table(path) -> pd.DataFrame:
+    """A parquet file ``_write_table`` (or the store writer) made: a
+    GeoDataFrame when it carries geometry, else a DataFrame."""
+    try:
+        return gpd.read_parquet(path)
+    except ValueError:  # "Missing geo metadata": a plain parquet
+        return pd.read_parquet(path)
+
+
+def build_return(p: Project, pdir: Path, out_dir: Path, *, app_version: str) -> Path:
+    """The reviewed copy of a review copy (spec §6.4), at
+    ``out_dir / return_filename(...)``: its header and ``reviews.parquet``.
+    Allowed at any time; each holds the latest state. Blocking: call it off
+    the event loop. Raises ``ShareError``."""
+    rc = p.review_copy
+    if rc is None:
+        raise ShareError("share.err.not_a_copy")
+    s = p.alert_sets.get(rc.set_id)
+    if s is None:
+        raise ShareError("share.err.no_set", set_id=rc.set_id)
+    now = datetime.now()
+    header = ShareHeader(format=FORMAT, format_version=FORMAT_VERSION, kind=KIND_RETURN, app_version=app_version,
+                         origin_project=rc.origin_project, set_id=rc.set_id, set_fingerprint=rc.set_fingerprint,
+                         split_id=rc.split_id, evaluator=rc.evaluator, evaluator_index=rc.evaluator_index,
+                         questions_digest=split_mod.questions_digest(p.questions), created_at=now, returned_at=now)
+    with local_files.scratch_dir() as tmp:
+        store = _snapshot_store(paths.resolve(Path(pdir), s.store_rel_path), tmp / "alert_db.parquet", s.id)
+        rows = return_rows(load_gdf_from_parquet(store), rc.evaluator, p.questions)
+        reviews = _write_table(rows, tmp / REVIEWS_MEMBER)
+        name = return_filename(rc.origin_project, rc.set_id, rc.evaluator_index, rc.evaluator)
+        built = _write_zip(tmp / name, {HEADER_MEMBER: header.model_dump_json(indent=2)}, {REVIEWS_MEMBER: reviews})
+        return local_files.copy_into(built, Path(out_dir) / built.name)

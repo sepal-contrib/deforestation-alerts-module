@@ -9,7 +9,15 @@
       "unsafe_member": "Ce zip contient une entrée dangereuse ({member}) ; rien n'en a été lu.",
       "unexpected_member": "Ce zip contient un fichier inattendu ({member}) ; rien n'en a été lu.",
       "missing_member": "Il manque {member} dans ce zip.",
-      "too_large": "Ce zip contient plus de données que cette application n'en accepte."
+      "too_large": "Ce zip contient plus de données que cette application n'en accepte.",
+      "no_set": "Le jeu d'alertes {set_id} n'est pas dans ce projet.",
+      "no_aoi": "La géométrie de l'AOI n'est pas encore disponible ; attendez que l'étape AOI l'ait chargée et réessayez.",
+      "no_split": "Répartissez d'abord les alertes entre les évaluateurs.",
+      "unknown_evaluator": "{evaluator} n'est pas un évaluateur de cette répartition.",
+      "store_missing": "Le fichier des alertes du jeu {set_id} est manquant.",
+      "store_changed": "Les alertes ont été réécrites pendant la création du zip ; réessayez.",
+      "split_mismatch": "La colonne évaluateur des alertes ne correspond pas à la répartition ; supprimez la répartition et répartissez à nouveau.",
+      "not_a_copy": "Seule une copie de révision renvoie des révisions."
     }
   }
 }
