@@ -45,6 +45,21 @@ used on the analysis screen:
 13. the rail's theme toggle, dark then light: the screen stays, and the
     screen and the views follow each theme
 
+Then ``check_edits`` (phase ``edits``): the drawing tools reach the reviewed
+polygon (the ``defo`` layer, what *Save drawing* stores):
+
+14. a square with two holes, added to the drawing (through the draw plugin's
+    ``commit``: the toolbar has no cut tool) and saved, is in the reviewed
+    polygon with both holes
+15. a right-click on the square's extra vertex deletes it: the saved polygon
+    has one vertex less
+16. *Remove hole* (on in both views, with its hint), a click in the left
+    hole, then Esc (off in both views): the saved polygon has one hole less
+17. a click on the square selects it, and *Fill holes* fills its last hole
+    only: the saved polygon has one hole less, and *Stop Drawing* keeps it.
+    The number of imagery badges shown (``tile_error_badges``) is recorded,
+    not checked: it depends on the imagery servers
+
 It needs Earth Engine and sepal.io (the imagery), so it runs outside a
 sandbox. ``run_ui.sh`` reads ``.env`` from the checkout it runs in.
 """
@@ -554,6 +569,162 @@ def check_rail(page, out, report):
     assert near(page.evaluate(SCREEN_BOX), expected), (page.evaluate(SCREEN_BOX), expected)
 
 
+#: The reviewed polygon's geometries: the ``defo`` spec's features (what the
+#: last *Save drawing* stored), or None while the alert has none.
+DEFO = """() => {
+  const host = [...document.querySelectorAll('.analysis-views')].find(e => e.offsetParent);
+  const mv = host && (host._multiview || (host.querySelector('.mv-root') || {})._multiview);
+  const spec = mv && mv.layers().find(x => x.id === 'defo');
+  return spec && spec.data ? spec.data.features.map(f => f.geometry) : null;
+}"""
+
+#: The drawing index of the selected feature, or -1 when nothing is selected.
+_SELECTED_INDEX = """() => {
+  const host = [...document.querySelectorAll('.analysis-views')].find(e => e.offsetParent);
+  const mv = host._multiview || host.querySelector('.mv-root')._multiview;
+  const draw = mv.plugin('draw');
+  const id = draw.selection();
+  return id === null ? -1 : draw.indexOf(id);
+}"""
+
+#: Adds a square with two square holes to the drawing through the draw
+#: plugin's ``commit`` (what a reviewer's cut would leave: the toolbar has no
+#: cut tool). It is laid out in screen pixels on the before view around
+#: ``[lat, lng]``, moved by 120 px when a vertex marker already sits near one
+#: of the three points the walk clicks. The shell is 140 px wide, with an
+#: extra vertex in the middle of its bottom side (collinear, so deleting it
+#: changes nothing else); the holes are 30 px squares left and right of the
+#: centre. Returns ``[lat, lng]`` of that extra vertex (``smid``), of the left
+#: hole's centre (``left``) and of a point on the square off both holes
+#: (``body``), the drawing's new feature count (``n``) and the offset used.
+_ADD_HOLED_SQUARE = """([lat, lng]) => {
+  const host = [...document.querySelectorAll('.analysis-views')].find(e => e.offsetParent);
+  const mv = host._multiview || host.querySelector('.mv-root')._multiview;
+  const view = mv.views.find(v => v.id === 'before');
+  const map = view.map;
+  const rect = map.getContainer().getBoundingClientRect();
+  const c0 = map.latLngToContainerPoint([lat, lng]);
+  const markers = [...view.container.querySelectorAll('.leaflet-marker-icon')].map(e => e.getBoundingClientRect());
+  const nearMarker = (x, y) => markers.some(b => x >= b.left - 10 && x <= b.right + 10 && y >= b.top - 10 && y <= b.bottom + 10);
+  const clicks = [[0, 70], [-28, 0], [0, -45]];
+  const offsets = [[0, 0], [-120, 0], [120, 0], [0, -120], [0, 120], [-120, -120], [120, -120], [-120, 120], [120, 120]];
+  const free = ([ox, oy]) => clicks.every(([kx, ky]) => !nearMarker(rect.left + c0.x + ox + kx, rect.top + c0.y + oy + ky));
+  const [ox, oy] = offsets.find(free) || offsets[0];
+  const at = (dx, dy) => map.containerPointToLatLng([c0.x + ox + dx, c0.y + oy + dy]);
+  const lngLat = (dx, dy) => { const p = at(dx, dy); return [p.lng, p.lat]; };
+  const latLng = (dx, dy) => { const p = at(dx, dy); return [p.lat, p.lng]; };
+  const box = (x0, x1, y0, y1) => [lngLat(x0, y0), lngLat(x1, y0), lngLat(x1, y1), lngLat(x0, y1), lngLat(x0, y0)];
+  const shell = [lngLat(-70, -70), lngLat(70, -70), lngLat(70, 70), lngLat(0, 70), lngLat(-70, 70), lngLat(-70, -70)];
+  const square = {type: 'Feature', properties: {style: {color: '#2196F3'}},
+    geometry: {type: 'Polygon', coordinates: [shell, box(-43, -13, -15, 15), box(13, 43, -15, 15)]}};
+  const draw = mv.plugin('draw');
+  const features = draw.features().features.concat([square]);
+  draw.commit({type: 'FeatureCollection', features});
+  return {smid: latLng(0, 70), left: latLng(-28, 0), body: latLng(0, -45), n: features.length, offset: [ox, oy]};
+}"""
+
+
+def defo(page):
+    """The reviewed polygon's geometries (``DEFO``), or None."""
+    return page.evaluate(DEFO)
+
+
+def _polygons(geometries):
+    """The rings of every polygon in ``geometries`` (Polygon and MultiPolygon)."""
+    out = []
+    for g in geometries or []:
+        if not g:
+            continue
+        if g["type"] == "Polygon":
+            out.append(g["coordinates"])
+        elif g["type"] == "MultiPolygon":
+            out.extend(g["coordinates"])
+    return out
+
+
+def _ring_sizes(geometries):
+    """The number of positions in each polygon's outer ring."""
+    return [len(rings[0]) for rings in _polygons(geometries)]
+
+
+def _holes(geometries):
+    """The number of holes (interior rings) over every polygon."""
+    return sum(len(rings) - 1 for rings in _polygons(geometries))
+
+
+def save_drawing(page):
+    """Wait until Python has heard the edit (the footer asks for the drawing to
+    be saved), click *Save drawing*, and wait until the footer stops asking."""
+    unapplied = w.en("analysis_tile.edition_labels.unapplied_drawing")
+    w.wait_for(lambda: unapplied in footer_text(page), 20, "the footer asking for the drawing to be saved")
+    page.get_by_role("button", name=w.en("analysis_tile.edition_labels.apply_edit_button"), exact=True).click()
+    w.wait_for(lambda: unapplied not in footer_text(page), 30, "the drawing saved")
+
+
+def check_edits(page, out, report):
+    """Checks 14-17 of the module docstring, recorded in ``report``."""
+    # 14. a square with two holes, added to the drawing and saved
+    ph.open_section(page, w.en("analysis_tile.sections.refine"))
+    w.wait_for(lambda: "alert-bb" in panes_state(page)["layer_ids"], 60, "the alert box")
+    page.locator(f'{HOST} .mv-view[data-view="after"] a.mv-fit-bounds').click()
+    page.wait_for_timeout(1500)
+    bb = page.evaluate(_BB_CENTER)
+    holes = _holes(defo(page))
+    report["defo_holes_at_start"] = holes
+    page.get_by_role("button", name=w.en("analysis_tile.edition_labels.start_edit_button")).click()
+    w.wait_for(lambda: panes_state(page)["edit_mode"] is True, 20, "edit mode on")
+    page.wait_for_timeout(1000)  # Geoman makes the seeded drawing editable after its ~100 ms throttle
+    square = page.evaluate(_ADD_HOLED_SQUARE, bb)
+    report["square"] = square
+    page.wait_for_timeout(500)
+    save_drawing(page)
+    w.wait_for(lambda: _holes(defo(page)) == holes + 2, 30, "the saved polygon with the square's two holes")
+    vertices = sum(_ring_sizes(defo(page)))
+    w.shot(page, out, "09_holed_square_saved")
+
+    # 15. a right-click on the square's extra vertex deletes it
+    x, y = page.evaluate(_XY, ["before", *square["smid"]])
+    page.mouse.click(x, y, button="right")
+    page.wait_for_timeout(500)
+    save_drawing(page)
+    w.wait_for(lambda: sum(_ring_sizes(defo(page))) == vertices - 1, 30, "the saved polygon one vertex shorter")
+    w.shot(page, out, "10_vertex_deleted")
+
+    # 16. Remove hole: the left hole goes, Esc ends the mode
+    holes = _holes(defo(page))
+    page.locator(f'{HOST} .mv-view[data-view="before"] a.mv-remove-hole').click()
+    page.wait_for_timeout(300)
+    assert shown(page, f"{HOST} a.mv-remove-hole.mv-active") == 2, "the remove-hole mode is not on in both views"
+    assert shown(page, f"{HOST} .mv-holes-hint") == 2, "the remove-hole hint is not on both views"
+    x, y = page.evaluate(_XY, ["before", *square["left"]])
+    page.mouse.click(x, y)
+    page.wait_for_timeout(500)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    assert shown(page, f"{HOST} a.mv-remove-hole.mv-active") == 0, "Esc did not end the remove-hole mode"
+    save_drawing(page)
+    w.wait_for(lambda: _holes(defo(page)) == holes - 1, 30, "the saved polygon without the left hole")
+    w.shot(page, out, "11_hole_removed")
+
+    # 17. Fill holes on the selected square: its last hole goes, nothing else
+    holes = _holes(defo(page))
+    x, y = page.evaluate(_XY, ["before", *square["body"]])
+    page.mouse.click(x, y)
+    page.wait_for_timeout(300)
+    assert page.evaluate(_SELECTED_INDEX) == square["n"] - 1, "the click did not select the square"
+    page.locator(f'{HOST} .mv-view[data-view="before"] a.mv-fill-holes').click()
+    page.wait_for_timeout(500)
+    save_drawing(page)
+    w.wait_for(lambda: _holes(defo(page)) == holes - 1, 30, "the saved polygon with the square filled")
+    w.shot(page, out, "12_holes_filled")
+    report["tile_error_badges"] = shown(page, f"{HOST} .mv-tile-error")  # recorded, not checked
+
+    page.get_by_role("button", name=w.en("analysis_tile.edition_labels.stop_edit_button")).click()
+    w.wait_for(lambda: panes_state(page)["edit_mode"] is False, 20, "edit mode off")
+    page.wait_for_timeout(800)
+    assert _holes(defo(page)) == holes - 1, "Stop Drawing changed the saved polygon"
+
+
 # ---------------------------------------------------------------------- main
 def main(argv=None):
     ap = argparse.ArgumentParser()
@@ -588,6 +759,7 @@ def main(argv=None):
                 ("panes", watched(lambda pg, r: (goto_analysis(pg), check_panes(pg, out, r)))),
                 ("screen", watched(lambda pg, r: check_screen(pg, out, r))),
                 ("rail", watched(lambda pg, r: check_rail(pg, out, r))),
+                ("edits", watched(lambda pg, r: check_edits(pg, out, r))),
             ], report, out / "report.json")
             report["error_toasts"] = [x for x in w.toasts_since(page) if x["kind"] == "toast-error"]
             report["app_page_errors"] = [f"{n}: {e}" for n, rec in report.get("phases", {}).items()
