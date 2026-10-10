@@ -565,6 +565,8 @@ def check_rail(page, out, report):
             and all(v == dark for v in s["views"]) and s, 30, f"the screen and the views {mode}")
         if dark:
             w.shot(page, out, "rail_dark")
+        # jupyter-leaflet's TileLayer refresh() timer (5 s, set by the theme swap) fires after the map is gone
+        page.wait_for_timeout(5500)  # let it fire inside this phase, where THEME_SWAP_ERROR is tolerated
     _, expected = beside_rail(page)
     assert near(page.evaluate(SCREEN_BOX), expected), (page.evaluate(SCREEN_BOX), expected)
 
