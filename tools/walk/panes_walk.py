@@ -1,5 +1,5 @@
 """Analysis views walk: the two views are one ``AlertViews`` widget
-(``leaflet-multiview``) in today's Analysis stage, on a copy of a reviewed
+(``leaflet-multiview``) on the analysis screen, on a copy of a reviewed
 project.
 
     python -m tools.walk.panes_walk --port 8953 --out /tmp/claude-1000/panes-walk
@@ -22,6 +22,29 @@ Checks, each an entry in the JSON report (``phases.panes``) with a screenshot:
  7. *Stop Drawing*: edit mode off, no toolbar, no hint, the drawing cleared,
     the alert box back, and the footer says the alert has unsaved changes
 
+Then ``check_screen`` (phase ``screen``, Review Focus 5):
+
+ 8. the analysis screen sits right of MapApp's rail, full height; the rail
+    and its collapse arrow are on top of it; MapApp's main map, its right
+    panel and the floating legend are hidden
+ 9. a window resize while the screen shows, then *← Workflow*: back on the
+    workflow, the main map has loaded tiles over its whole area (the views'
+    hide nudge re-measured it), the right panel is back and shows
+    Questionnaire
+10. *Start analysis* again: the screen beside the rail, tiles on both views;
+    the right panel closed once on the screen: its tab stays hidden there and
+    is back on the workflow
+
+Then ``check_rail`` (phase ``rail``, R30 and Review Focus 4): MapApp's rail,
+used on the analysis screen:
+
+11. a rail dialog (About) opens over the screen and closes; the screen stays
+12. the rail's language selector, French then English: the screen stays, and
+    its top bar and the views' labels (each layer menu's title, the
+    zoom-to-alert button) follow each language
+13. the rail's theme toggle, dark then light: the screen stays, and the
+    screen and the views follow each theme
+
 It needs Earth Engine and sepal.io (the imagery), so it runs outside a
 sandbox. ``run_ui.sh`` reads ``.env`` from the checkout it runs in.
 """
@@ -37,7 +60,7 @@ from playwright.sync_api import sync_playwright
 
 from tools.walk import phases as ph
 from tools.walk import walklib as w
-from tools.walk.questionnaire_walk import PROJECT, SEED, goto_analysis
+from tools.walk.questionnaire_walk import PROJECT, SEED, THEME_SWAP_ERROR, goto_analysis
 
 DATA = Path.home() / "module_results" / "deforestation_alerts_walk_panes"
 HOST = ".analysis-views"
@@ -274,6 +297,263 @@ def check_panes(page, out, report):
     w.shot(page, out, "05_stopped")
 
 
+#: The main map (MapApp's ``#map-container``): its size, and whether loaded
+#: tiles cover its centre and four points near its corners. Leaflet measures a
+#: hidden map as 0 x 0 on a window resize and keeps only the tiles of that
+#: empty view; a map measured again once shown has its whole area covered.
+MAIN_MAP_COVERED = """() => {
+  const mc = document.querySelector('#map-container');
+  const c = mc && mc.querySelector('.leaflet-container');
+  if (!c) return {found: false, covered: false};
+  const r = c.getBoundingClientRect();
+  const tiles = [...c.querySelectorAll('img.leaflet-tile-loaded')].map(t => t.getBoundingClientRect())
+      .filter(b => b.width > 0 && b.height > 0);
+  const points = [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]]
+      .map(([fx, fy]) => [r.left + fx * r.width, r.top + fy * r.height]);
+  const hit = points.map(([x, y]) => tiles.some(b => b.left <= x && x <= b.right && b.top <= y && y <= b.bottom));
+  // the extent of the loaded tiles against the map's own client box
+  const ext = tiles.length ? [Math.min(...tiles.map(b => b.left)), Math.min(...tiles.map(b => b.top)),
+                              Math.max(...tiles.map(b => b.right)), Math.max(...tiles.map(b => b.bottom))] : null;
+  return {found: true, box: [Math.round(r.width), Math.round(r.height)], client: [c.clientWidth, c.clientHeight],
+          tiles: tiles.length, hit, ext: ext && ext.map(Math.round),
+          covered: c.clientWidth > 300 && c.clientHeight > 300 && hit.every(Boolean)
+              && !!ext && ext[0] <= r.left + 2 && ext[1] <= r.top + 2 && ext[2] >= r.right - 2 && ext[3] >= r.bottom - 2};
+}"""
+
+#: ``[left, top, width, height]`` of the analysis screen while it shows, else None.
+SCREEN_BOX = """() => { const e = document.querySelector('.defo-analysis-screen--on');
+  if (!e) return null; const r = e.getBoundingClientRect();
+  return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }"""
+
+#: ``[left, top, width, height]`` of the first element matching a selector
+#: that has a box on screen, else None.
+BOX = """s => { const e = [...document.querySelectorAll(s)].find(x => x.getBoundingClientRect().width > 0);
+  if (!e) return null; const r = e.getBoundingClientRect();
+  return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }"""
+
+#: Whether the topmost element at ``[x, y]`` (page px) is inside ``selector``
+#: (``[selector, x, y]``): what a click there would reach.
+ON_TOP = """([s, x, y]) => { const e = document.elementFromPoint(x, y); return !!(e && e.closest(s)); }"""
+
+#: The views' translated labels: each layer menu's title (``menus``, one per
+#: view) and the zoom-to-alert button's tooltip (``fit``, the after view only).
+VIEW_LABELS = """() => {
+  const host = [...document.querySelectorAll('.analysis-views')].find(e => e.offsetParent);
+  if (!host) return null;
+  return {menus: [...host.querySelectorAll('.mv-layer-menu .mv-layers-title')].map(e => e.textContent.trim()),
+          fit: [...host.querySelectorAll('a.mv-fit-bounds')].map(e => e.getAttribute('title'))};
+}"""
+
+#: The analysis screen's theme while it shows, else None: its theme classes,
+#: sorted (``theme--light``, or ``analysis-stage--dark`` and ``theme--dark``),
+#: and whether each views root (``.mv-root``) has ``mv-dark``.
+SCREEN_THEME = """() => {
+  const s = document.querySelector('.defo-analysis-screen--on');
+  if (!s) return null;
+  return {screen: [...s.classList].filter(c => c.startsWith('theme--') || c === 'analysis-stage--dark').sort(),
+          views: [...s.querySelectorAll('.mv-root')].map(e => e.classList.contains('mv-dark'))};
+}"""
+
+#: MapApp's theme toggle, in its rail (pysepal's ThemeToggle: its icon shows
+#: the mode, and a click moves dark → light → auto).
+RAIL_THEME = (".left-drawer button:has(.mdi-weather-night), .left-drawer button:has(.mdi-white-balance-sunny),"
+              " .left-drawer button:has(.mdi-weather-sunny), .left-drawer button:has(.mdi-auto-fix)")
+#: MapApp's language selector, in its rail (pysepal's LocaleSelect: it opens
+#: a dialog listing "<name> (<code>)", and a pick closes it).
+RAIL_LANGUAGE = ".left-drawer button:has(.mdi-translate)"
+
+
+def shown(page, selector) -> int:
+    """How many elements matching ``selector`` have a box on screen."""
+    return page.evaluate("""s => [...document.querySelectorAll(s)].filter(e => {
+        const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).length""", selector)
+
+
+def beside_rail(page):
+    """``(rail, expected)``: MapApp's rail box, and the box the analysis
+    screen must have: right of the rail, from the top of the window to its
+    bottom and its right edge (R30)."""
+    vw, vh = page.viewport_size["width"], page.viewport_size["height"]
+    rail = page.evaluate(BOX, ".left-drawer")
+    assert rail and rail[0] == 0 and rail[2] > 0, f"MapApp's rail is not shown: {rail}"
+    edge = rail[0] + rail[2]
+    return rail, [edge, 0, vw - edge, vh]
+
+
+def near(box, expected, px=1):
+    """Two ``[left, top, width, height]`` boxes within ``px`` of each other."""
+    return bool(box) and len(box) == len(expected) and all(abs(a - b) <= px for a, b in zip(box, expected))
+
+
+def catalogue_text(code, dotted):
+    """The text of the catalogue key ``dotted`` in locale ``code``
+    (``walklib.en`` for any locale)."""
+    for path in sorted((w.MESSAGES_EN.parent / code).glob("*.json")):
+        node = json.loads(path.read_text(encoding="utf-8"))
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if isinstance(node, str):
+            return node
+    raise KeyError(f"{code}: {dotted}")
+
+
+def rail_language(page, code):
+    """Pick ``code`` in the rail's language selector, on the analysis screen,
+    and wait until the screen's back button and the views' labels read that
+    language and the selector's dialog is closed."""
+    page.locator(RAIL_LANGUAGE).first.click()
+    page.locator(f'{w.MODAL} .v-list-item:has-text("({code})")').first.click()
+    back = catalogue_text(code, "app.panel_workflow_title")
+    labels = {"menus": [catalogue_text(code, "analysis.panes.layers")] * 2,
+              "fit": [catalogue_text(code, "analysis.panes.zoom_alert")]}
+    w.wait_for(lambda: back in page.locator(".defo-back-to-workflow").first.inner_text(), 60,
+               f"{code}: the screen's back button")
+    w.wait_for(lambda: page.evaluate(VIEW_LABELS) == labels, 30, f"{code}: the views' labels")
+    w.wait_for(lambda: not page.locator(w.MODAL).count(), 10, f"{code}: the language dialog closed")
+    page.wait_for_timeout(500)
+
+
+def rail_theme(page, dark):
+    """Click the rail's theme toggle, on the analysis screen, until the screen
+    has the dark (``dark=True``) or the light theme; whether it got there. The
+    toggle moves dark → light → auto, so it takes at most three clicks."""
+    want = "theme--dark" if dark else "theme--light"
+
+    def there():
+        return want in ((page.evaluate(SCREEN_THEME) or {}).get("screen") or [])
+
+    for _ in range(4):
+        if there():
+            return True
+        page.locator(RAIL_THEME).first.click()
+        page.wait_for_timeout(1500)
+    return there()
+
+
+def check_screen(page, out, report):
+    """Review Focus 5 and R30 in the browser: checks 8-10 of the module docstring."""
+    # 8. the screen right of the rail, full height; the rail and its arrow on
+    # top; MapApp's main map, its right panel and the legend hidden
+    rail, expected = beside_rail(page)
+    report["rail_box"] = rail
+    report["screen_box"] = page.evaluate(SCREEN_BOX)
+    assert near(report["screen_box"], expected), (report["screen_box"], expected)
+    vh = page.viewport_size["height"]
+    assert page.evaluate(ON_TOP, [".left-drawer", rail[2] // 2, vh // 3]), "the analysis screen covers MapApp's rail"
+    arrow = page.evaluate(BOX, ".sidebar-controls .control-btn")
+    assert arrow and page.evaluate(ON_TOP, [".sidebar-controls", arrow[0] + arrow[2] // 2, arrow[1] + arrow[3] // 2]),         f"the analysis screen covers the rail's collapse arrow: {arrow}"
+    # the arrow straddles the screen's left edge: probe the half over the
+    # screen too (elementFromPoint, what a click there reaches), not only the rail column
+    edge = rail[0] + rail[2]
+    over = [x for x in (arrow[0] + arrow[2] - 2, arrow[0] + arrow[2] * 3 // 4)
+            if x > edge] if arrow else []
+    report["arrow_probe_over_screen"] = bool(over)
+    assert over, f"the collapse arrow has no part over the analysis screen: arrow {arrow}, rail edge {edge}"
+    for x in over:
+        assert page.evaluate(ON_TOP, [".sidebar-controls", x, arrow[1] + arrow[3] // 2]), \
+            f"the analysis screen covers the part of the collapse arrow over it, at x={x}"
+    assert page.locator("#map-container").count() >= 1, "no #map-container: the hiding rule has nothing to hide"
+    assert shown(page, "#map-container") == 0, "the main map shows under the analysis screen"
+    assert shown(page, ".right-panel") == 0, "the right panel shows beside the analysis screen"
+    assert shown(page, ".right-panel-tab") == 0, "the right panel's tab shows beside the analysis screen"
+    assert shown(page, ".sepal-legend") == 0, "the legend shows on the analysis screen"
+    assert shown(page, ".defo-analysis-right") == 1, "no review console on the analysis screen"
+    w.shot(page, out, "06_screen")
+
+    # 9. a window resize while the screen shows (Leaflet measures the hidden
+    # main map as 0 x 0), then back: the views' hide nudge re-measures it
+    page.set_viewport_size({"width": 1300, "height": 900})
+    page.wait_for_timeout(1500)
+    report["main_map_while_on_screen"] = page.evaluate(MAIN_MAP_COVERED)  # hidden: 0 x 0, no tile covers it
+    w.back_to_workflow(page)
+    report["main_map_after_back"] = w.wait_for(
+        lambda: (m := page.evaluate(MAIN_MAP_COVERED)) and m["covered"] and m, 60,
+        "back on the workflow, the main map has loaded tiles")
+    assert not report["main_map_while_on_screen"].get("covered"), report["main_map_while_on_screen"]
+    # Leaflet's own size of the main map is the container's client box again,
+    # and the tiles loaded after leaving cover that whole box (MAIN_MAP_COVERED)
+    assert report["main_map_after_back"]["client"][0] >= 300, report["main_map_after_back"]
+    assert shown(page, ".right-panel") >= 1, "the right panel did not come back"
+    assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
+    w.shot(page, out, "07_back_on_the_workflow")
+    page.set_viewport_size({"width": 1400, "height": 1000})
+    page.wait_for_timeout(1500)
+
+    # 10. Start analysis again: the screen beside the rail, with tiles on both views
+    goto_analysis(page)
+    _, expected = beside_rail(page)
+    report["screen_again"] = page.evaluate(SCREEN_BOX)
+    assert near(report["screen_again"], expected), (report["screen_again"], expected)
+    w.wait_for(lambda: (s := panes_state(page)) and all(n > 0 for n in s["tiles_loaded"]), 90,
+               "tiles on both views after coming back")
+    w.shot(page, out, "08_screen_again")
+
+    # close the right panel once while the screen shows (it is hidden: the
+    # panel's own close button, clicked from the page), and its tab, which the
+    # closed panel adds to the DOM, must stay hidden
+    page.evaluate("() => document.querySelector('.right-panel .pin-btn').click()")
+    w.wait_for(lambda: page.locator(".right-panel-tab").count() == 1, 15, "the closed panel's tab is in the DOM")
+    page.wait_for_timeout(500)
+    assert shown(page, ".right-panel-tab") == 0, "the closed right panel's tab shows on the analysis screen"
+    assert shown(page, ".right-panel") == 0, "the closed right panel shows on the analysis screen"
+    w.shot(page, out, "09_screen_panel_closed")
+    # back on the workflow the tab is the way to the panel again
+    w.back_to_workflow(page)
+    w.wait_for(lambda: shown(page, ".right-panel-tab") == 1, 15, "back on the workflow, the closed panel's tab shows")
+    page.locator(".right-panel-tab .control-btn").first.click()
+    w.wait_for(lambda: shown(page, ".right-panel") >= 1, 15, "the right panel reopened")
+    goto_analysis(page)
+    assert near(page.evaluate(SCREEN_BOX), expected), (page.evaluate(SCREEN_BOX), expected)
+
+
+def check_rail(page, out, report):
+    """R30 and Review Focus 4 in the browser: checks 11-13 of the module
+    docstring. MapApp's rail is used on the analysis screen; the check starts
+    and ends there, in English and in the light theme."""
+    assert page.locator(w.SCREEN_ON).count() == 1, "check_rail starts on the analysis screen"
+
+    # 11. a rail dialog (About) opens over the screen and closes
+    page.locator('.left-drawer [data-step-id="1"]').first.click()
+    w.wait_for(lambda: w.dialog_visible(page), 30, "the About dialog over the analysis screen")
+    page.wait_for_timeout(1000)
+    card = page.evaluate(BOX, w.RAIL_DIALOG)
+    report["about_dialog"] = card
+    assert card and page.evaluate(ON_TOP, [w.RAIL_DIALOG, card[0] + card[2] // 2, card[1] + card[3] // 2]),         "the About dialog is not on top of the analysis screen"
+    # probe near the card's four corners as well: over the screen's body, over its top bar, beside the rail
+    for fx, fy in ((0.05, 0.05), (0.95, 0.05), (0.05, 0.95), (0.95, 0.95)):
+        x, y = card[0] + int(card[2] * fx), card[1] + int(card[3] * fy)
+        assert page.evaluate(ON_TOP, [w.RAIL_DIALOG, x, y]), f"the About dialog is under the screen at ({x}, {y})"
+    assert page.locator(w.SCREEN_ON).count() == 1, "opening a rail dialog left the analysis screen"
+    w.shot(page, out, "rail_about")
+    assert w.close_dialog(page), "the About dialog did not close"
+    assert page.locator(w.SCREEN_ON).count() == 1, "closing a rail dialog left the analysis screen"
+
+    # 12. the rail's language selector: French, then English again
+    for code in ("fr", "en"):
+        rail_language(page, code)
+        assert page.locator(w.SCREEN_ON).count() == 1, f"{code}: the language switch left the analysis screen"
+        title = page.locator(".defo-analysis-title").first.inner_text()
+        report[f"{code}_title"] = title
+        report[f"{code}_labels"] = page.evaluate(VIEW_LABELS)
+        assert title.startswith(catalogue_text(code, "app.drawer_item.analysis")), title
+        if code == "fr":
+            w.shot(page, out, "rail_french")
+
+    # 13. the rail's theme toggle: dark, then light again
+    for dark in (True, False):
+        mode = "dark" if dark else "light"
+        assert rail_theme(page, dark), f"the rail's theme toggle did not reach the {mode} theme"
+        assert page.locator(w.SCREEN_ON).count() == 1, f"{mode}: the theme toggle left the analysis screen"
+        want = ["analysis-stage--dark", "theme--dark"] if dark else ["theme--light"]
+        report[mode] = w.wait_for(
+            lambda: (s := page.evaluate(SCREEN_THEME)) and s["screen"] == want and s["views"]
+            and all(v == dark for v in s["views"]) and s, 30, f"the screen and the views {mode}")
+        if dark:
+            w.shot(page, out, "rail_dark")
+    _, expected = beside_rail(page)
+    assert near(page.evaluate(SCREEN_BOX), expected), (page.evaluate(SCREEN_BOX), expected)
+
+
 # ---------------------------------------------------------------------- main
 def main(argv=None):
     ap = argparse.ArgumentParser()
@@ -306,10 +586,13 @@ def main(argv=None):
             ok = ph.run_phases(page, [
                 ("open", watched(lambda pg, r: (w.open_app(pg, args.port), w.open_project(pg, PROJECT)))),
                 ("panes", watched(lambda pg, r: (goto_analysis(pg), check_panes(pg, out, r)))),
+                ("screen", watched(lambda pg, r: check_screen(pg, out, r))),
+                ("rail", watched(lambda pg, r: check_rail(pg, out, r))),
             ], report, out / "report.json")
             report["error_toasts"] = [x for x in w.toasts_since(page) if x["kind"] == "toast-error"]
             report["app_page_errors"] = [f"{n}: {e}" for n, rec in report.get("phases", {}).items()
-                                         for e in rec.get("page_errors", [])]
+                                         for e in rec.get("page_errors", [])
+                                         if not (n == "rail" and e == THEME_SWAP_ERROR)]
             if not ok:
                 w.shot(page, out, "failure")
             browser.close()

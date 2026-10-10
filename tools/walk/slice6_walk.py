@@ -95,7 +95,7 @@ def info_buttons(page, rec, *, out):
     w.wait_for(lambda: ui["description"][:60] in w.panel_text(page), 60, "the Analysis panel")
 
     def _open_info():  # a click while the panel swaps from the last step can land on the leaving tile
-        page.locator(".right-panel .mdi-information-outline:visible").last.click()
+        page.locator(".defo-analysis-right .mdi-information-outline:visible").last.click()
         page.wait_for_timeout(1500)
         return page.locator(ph.MODAL).count()
 
@@ -155,11 +155,13 @@ def saved_ago(page, rec, *, out):
     rec["later"], rec["waited_s"] = _saved_line(page), round(time.time() - t0)
     w.close_dialog(page)
     w.goto_step(page, "period", 2000)
-    lb = page.locator('.right-panel .v-text-field:has(label:has-text("Look-back")) input').first
+    # the look-back is edited in the period dialog (the row's pencil), not in the panel
     t_ms = w.now_ms(page)
+    page.locator(".right-panel button:visible:has(.mdi-pencil-outline)").first.click()
+    lb = page.locator(f'{w.MODAL} .v-text-field:has(label:has-text("Look-back")) input').first
     lb.fill("1")
     page.wait_for_timeout(500)
-    page.locator('.right-panel button:visible:has-text("Apply")').first.click()  # Task 34's look-back Apply
+    page.locator(f"{w.MODAL} {w.ENTER_BUTTON}").first.click()  # the dialog's Save
     w.wait_for(lambda: w.toasts_since(page, t_ms), 30, "the look-back saved (its toast)")
     page.locator('[data-step-id="2"]').first.click()
     w.wait_for(lambda: _saved_line(page) == "Saved just now", 30, "'Saved just now' after the save")

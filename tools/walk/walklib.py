@@ -5,7 +5,9 @@ A walk script (``tools/walk/slice<N>_walk.py``) starts the app with
 screenshots under its ``--out`` folder, and always calls ``stop_server``.
 Selectors are the ones the slice-1 walks proved: ``[data-step-id=N]`` for
 rail items, ``[data-step-key=KEY]`` for the pipeline header, ``.right-panel``
-for the workflow panel, ``.dialog-card`` for rail dialogs and
+for the workflow panel (``PANEL``: that panel, or the analysis screen's
+console ``.defo-analysis-right`` while that screen shows), ``.dialog-card`` for
+rail dialogs and
 ``.toast-alert``/``.toast-message`` for pysepal toasts. Every other dialog (a
 step's form, Manage projects, a confirmation) is ``MODAL``: the rail dialog is
 an active ``v-dialog`` too, so a bare ``.v-dialog--active`` can land on it.
@@ -13,6 +15,15 @@ The app starts on the Project rail dialog; ``open_app`` closes it. Labels come
 from the English catalogue (``en``), not copies of it. Never match text
 page-wide: detached tiles leave hidden duplicates in the DOM; scope to a
 visible container or add ``:visible``.
+
+Analysis is a screen of its own (``.defo-analysis-screen``), not a workflow
+step. It sits right of MapApp's rail, which stays usable on it (the rail
+dialogs, the theme toggle, the language selector); MapApp's main map and
+right panel (the pipeline header, the step panels) stay mounted, hidden,
+while it shows. ``goto_step(page, "analysis")`` opens it through
+Questionnaire's *Start analysis*; ``goto_step`` leaves it first with
+``back_to_workflow`` for any other step, and ``panel_text`` reads the
+screen's console there. The rail helpers work on it as they are.
 """
 
 import json
@@ -41,6 +52,14 @@ MANAGE_BUTTON = "button:has(.mdi-folder-multiple-outline)"
 #: The open form's Enter default (``gui.widget.enter_key.ENTER_DEFAULT``):
 #: one per form, none while the form's check runs.
 ENTER_BUTTON = "button.da-enter-default"
+#: The panel the user works in: the workflow's right panel, or the analysis
+#: screen's right column (the review console) while that screen shows. MapApp
+#: stays mounted beside the analysis screen with its right panel hidden, so a
+#: bare ``.right-panel`` would match the hidden workflow panel there.
+PANEL = (":is(.defo-analysis-screen--on .defo-analysis-right,"
+         " body:not(:has(.defo-analysis-screen--on)) .right-panel)")
+#: The analysis screen while it shows (``analysis_tile.build_screen``).
+SCREEN_ON = ".defo-analysis-screen--on"
 
 TOAST_SPY = """
 (() => {
@@ -181,8 +200,8 @@ def title(page):
 
 
 def panel_text(page):
-    return page.evaluate("""() => { const p = document.querySelector('.right-panel');
-        return p ? p.innerText : ''; }""")
+    """The text of the panel the user works in (``PANEL``)."""
+    return page.evaluate("s => { const p = document.querySelector(s); return p ? p.innerText : ''; }", PANEL)
 
 
 def dialog_visible(page):
@@ -267,7 +286,34 @@ def open_project(page, name):
         close_dialog(page)
 
 
+def back_to_workflow(page, wait=1000):
+    """Leave the analysis screen through its *← Workflow* button, when it
+    shows; on the workflow, do nothing. MapApp's right panel (the pipeline
+    header, the step panels) and main map are hidden while that screen shows;
+    its rail is not, so the rail helpers (dialogs, theme, language) need no
+    call to this."""
+    if not page.locator(SCREEN_ON).count():
+        return
+    page.locator(".defo-back-to-workflow:visible").first.click()
+    wait_for(lambda: not page.locator(SCREEN_ON).count(), 30, "the workflow back")
+    page.wait_for_timeout(wait)
+
+
 def goto_step(page, key, wait=1500):
+    """A workflow step by key, from the workflow or from the analysis screen.
+
+    ``"analysis"`` is not a step: it is the analysis screen, which
+    Questionnaire's *Start analysis* opens (enabled once an alert set exists).
+    """
+    back_to_workflow(page)
+    if key == "analysis":
+        page.locator('[data-step-key="questionnaire"]').first.click()
+        start = page.locator(".defo-start-analysis:visible").first
+        wait_for(lambda: start.count() and start.is_enabled(), 30, "Start analysis enabled")
+        start.click()
+        wait_for(lambda: page.locator(SCREEN_ON).count(), 30, "the analysis screen")
+        page.wait_for_timeout(wait)
+        return
     page.locator(f'[data-step-key="{key}"]').first.click()
     page.wait_for_timeout(wait)
 
@@ -293,7 +339,7 @@ def map_tiles(page):
     return page.evaluate("""() => {
       const cs = [...document.querySelectorAll('.leaflet-container')].filter(e => {
           const r = e.getBoundingClientRect(); return r.width > 300 && r.height > 300 &&
-              !e.closest('.defo-map-hidden') && getComputedStyle(e).visibility !== 'hidden'; });
+              !e.closest('.defo-analysis-screen') && getComputedStyle(e).visibility !== 'hidden'; });
       cs.sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width);
       const c = cs[0];
       if (!c) return [];
