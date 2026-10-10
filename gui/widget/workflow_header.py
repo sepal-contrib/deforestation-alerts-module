@@ -6,9 +6,8 @@ the right panel's host. It re-renders when ``active_step``, ``project`` or
 ``PipelineHeader`` itself receives the ``project``/theme reactives and reads
 them again (the prop-equality-bailout rule from the scaffold).
 
-*Start analysis* writes ``current_page_view``, the navigation signal every
-other way into Analysis writes; ``_NavBridge`` turns it into the analysis
-screen.
+Analysis is not a step: the Questionnaire step ends with *Start analysis*,
+and the left rail has an Analysis entry.
 """
 
 import solara
@@ -24,5 +23,4 @@ def WorkflowHeader(app_state):
         on_navigate=app_state.active_step.set,
         project=app_state.project,
         dark=app_state.dark,
-        on_start_analysis=lambda: app_state.current_page_view.set("analysis_tile"),
     )

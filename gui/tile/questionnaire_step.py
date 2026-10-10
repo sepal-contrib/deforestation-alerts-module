@@ -1,6 +1,7 @@
 """The Questionnaire step (spec D3): the questions every alert is reviewed
 with, in the order Analysis asks them, and the project's report template with
-the placeholders it can use."""
+the placeholders it can use. The last workflow step, so it ends with *Start
+analysis*."""
 
 import reacton.ipyvuetify as rv
 import solara
@@ -9,6 +10,7 @@ from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribut
 from gui.i18n import t, tn
 from gui.scripts import questions as qs
 from gui.scripts.notify_bridge import current_notifier
+from gui.store.workflow_steps import active_set
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.copy_chip import CopyChipWidget
 from gui.widget.help import StepIntro
@@ -77,6 +79,19 @@ def _Placeholders(questions):
             if name not in REPORT_PLACEHOLDERS:
                 _chip(name, True)
     solara.Text(t("steps.questionnaire.placeholders_review"), style=MUTED + "font-size:0.75rem;")
+
+
+@solara.component
+def _StartAnalysis(app_state, ready):
+    """The workflow's way into Analysis, after the last step's settings. It
+    writes ``current_page_view``, the navigation signal every other way into
+    Analysis writes; ``_NavBridge`` turns it into the analysis screen. Gated on
+    an active alert set, with the reason under it."""
+    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", block=True,
+                  disabled=not ready, classes=["defo-start-analysis"],
+                  on_click=lambda: app_state.current_page_view.set("analysis_tile"))
+    if not ready:
+        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
 
 
 @solara.component
@@ -155,6 +170,7 @@ def QuestionnaireStep(app_state):
             solara.Text(t("steps.questionnaire.template_title"), style="font-weight:600;")
             ReportTemplateField(app_state=app_state)
             _Placeholders(questions=p.questions)
+        _StartAnalysis(app_state=app_state, ready=active_set(p) is not None)
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
                   columns=attribute_columns(p))

@@ -36,13 +36,14 @@ def test_the_analysis_view_opens_a_screen_not_a_step():
     assert not set(PAGE_VIEW_TO_SCREEN) & (set(PAGE_VIEW_TO_WORKFLOW) | set(PAGE_VIEW_TO_RAIL))
 
 
-def test_rail_map_covers_the_three_items():
+def test_rail_map_covers_the_three_dialogs():
     assert PAGE_VIEW_TO_RAIL == {
         "about_tile": 1,
         "project_tile": 2,
         "overview_tile": 3,
     }
-    assert RAIL_STEP_TO_PAGE_VIEW == {v: k for k, v in PAGE_VIEW_TO_RAIL.items()}
+    # The Analysis rail item mirrors the screen's page view.
+    assert RAIL_STEP_TO_PAGE_VIEW == {**{v: k for k, v in PAGE_VIEW_TO_RAIL.items()}, 4: "analysis_tile"}
     assert page_view_for_rail_step(3) == "overview_tile"
     assert page_view_for_rail_step(99) is None
 

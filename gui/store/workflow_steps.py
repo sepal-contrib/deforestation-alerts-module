@@ -9,10 +9,10 @@ Two registries:
   read only the Project. Order, labels, gates, lock reasons and
   per-step output counts derive from it; ``PipelineHeader`` and the shell
   never hand-maintain step numbers.
-* ``RAIL_ITEMS`` — the three entries on the left rail: About and Project open
-  as MapApp dialogs; Overview (``display="panel"``) opens its own view in the
-  right panel — outside the workflow, keeping its summary table, exports and
-  status clusters on the shared map.
+* ``RAIL_ITEMS`` — the entries on the left rail: About, Project and the
+  Overview dashboard open as MapApp dialogs; Analysis (``display="screen"``)
+  opens the analysis screen. MapApp renders a ``"screen"`` item nowhere: the
+  rail mirror turns its click into the screen's page view.
 
 Semantics are outputs, not completion: steps are revisitable workspaces. A
 step is LOCKED (upstream requirement missing), EMPTY (unlocked, nothing
@@ -57,11 +57,11 @@ class StepSpec:
 @dataclass(frozen=True)
 class RailItem:
     key: str
-    step_id: int  # MapApp drawer step id (1-based, rail order)
+    step_id: int  # MapApp drawer step id (stable; the list order is the rail order)
     page_view: str
     label_key: str
     icon: str
-    display: str  # MapApp's own vocabulary; every rail item is a "dialog"
+    display: str  # MapApp's "dialog", or "screen" (MapApp renders it nowhere)
     dialog_width: Optional[int] = None
 
 
@@ -118,6 +118,11 @@ RAIL_ITEMS: List[RailItem] = [
     RailItem("project", 2, "project_tile", "app.drawer_item.project", "mdi-folder-open", "dialog", 560),
     # The Overview dashboard is the widest dialog: two columns of charts
     # (spec §9.5), the same 1300 px About uses.
+    # The analysis screen, from anywhere: as the Questionnaire's *Start
+    # analysis* does, it opens with the active set (or says there is none).
+    # Listed before the Overview, the rail's order; its id comes after, so the
+    # older items keep theirs.
+    RailItem("analysis", 4, "analysis_tile", "app.drawer_item.analysis", "mdi-image-search-outline", "screen"),
     RailItem("overview", 3, "overview_tile", "app.drawer_item.overview", "mdi-chart-bar", "dialog", 1300),
 ]
 

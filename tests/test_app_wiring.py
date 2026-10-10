@@ -63,7 +63,7 @@ def test_workflow_panel_is_wired():
 def test_navigation_maps_derive_from_the_registries():
     src = _src("gui/store/navigation.py")
     assert "PAGE_VIEW_TO_WORKFLOW = {s.page_view: i for i, s in enumerate(STEPS)}" in src
-    assert "PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS}" in src
+    assert 'PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS if r.display == "dialog"}' in src
 
 
 def test_no_custom_log_console():
@@ -386,7 +386,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
         assert f"{role}=set_context," in shell, role
     assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
     assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
-    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget}' in shell
+    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
     # The alert layers are a leaf of the shell, not of a step: a layer switched

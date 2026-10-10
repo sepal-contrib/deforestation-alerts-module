@@ -49,6 +49,7 @@ from deforestation_alerts.gdal_env import (
 )
 from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
 from gui.store.navigation import (
+    PAGE_VIEW_TO_SCREEN,
     apply_navigation,
     dismiss_dialog,
     page_view_for_rail_step,
@@ -804,6 +805,17 @@ def _AppShell():
             view = page_view_for_rail_step(sid)
             if view is not None and app_state.current_page_view.value != view:
                 app_state.current_page_view.value = view
+            if view in PAGE_VIEW_TO_SCREEN:
+                # A screen is not a dialog left open: clear the step (and its
+                # rail highlight) so the next click is a change again, even
+                # one made while the screen already shows. On both ends: this
+                # runs inside the MapApp -> nav_model link's update, which
+                # drops a write-back, so clearing one end alone would leave
+                # MapApp at this step and swallow the next click.
+                mapapp = mapapp_ref.get("widget")
+                if mapapp is not None:
+                    mapapp.current_step = None
+                nav_model.current_step = None
 
         nav_model.observe(_on_rail_step, "current_step")
         return lambda: nav_model.unobserve(_on_rail_step, "current_step")
@@ -837,7 +849,11 @@ def _AppShell():
     # each one is a dialog over its rendered tile. They carry no
     # right_panel_action — the panel stays as the user left it behind a dialog,
     # as in spatial_risk.
-    rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget}
+    # A "screen" item draws nothing; MapApp only needs a non-empty content
+    # list to report its click (``handle_step_activation``).
+    screen_stub = solara.use_memo(lambda: v.Html(tag="span", children=[]), dependencies=[])
+    rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,
+                    "analysis": screen_stub}
     steps_data = [
         {
             "id": r.step_id,

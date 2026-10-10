@@ -164,3 +164,28 @@ def test_a_hand_edited_manifest_with_clashing_keys_still_renders(tmp_path, monke
         assert "{road_access}" in texts and "{verdict}" in texts
     finally:
         rc.close()
+
+
+def test_the_step_ends_with_start_analysis_gated_on_an_active_set(tmp_path, monkeypatch):
+    """*Start analysis* is the step's last control. It writes the navigation
+    signal (``_NavBridge`` opens the screen); with no active set it is
+    disabled, with the reason under it."""
+    import solara
+    s = _state(tmp_path, monkeypatch)
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        (start,) = [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
+        assert start.disabled and t("workflow.lock_analysis") in _strings(rc.container)
+    finally:
+        rc.close()
+
+    monkeypatch.setattr(qstep, "active_set", lambda p: object())
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        btns = rc.find(v.Btn).widgets
+        (start,) = [w for w in btns if "defo-start-analysis" in (w.class_ or "")]
+        assert not start.disabled and t("workflow.lock_analysis") not in _strings(rc.container)
+        start.fire_event("click", None)
+        assert s.current_page_view.value == "analysis_tile"
+    finally:
+        rc.close()

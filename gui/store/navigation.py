@@ -17,7 +17,9 @@ from collections import namedtuple
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
 
 PAGE_VIEW_TO_WORKFLOW = {s.page_view: i for i, s in enumerate(STEPS)}
-PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS}
+#: The rail's dialogs. Its "screen" items (Analysis) navigate by their page
+#: view through ``PAGE_VIEW_TO_SCREEN`` instead.
+PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS if r.display == "dialog"}
 RAIL_STEP_TO_PAGE_VIEW = {r.step_id: r.page_view for r in RAIL_ITEMS}
 #: Page views that open a screen of their own instead of a step or a dialog.
 #: Integrate's finish, the Overview's *Review alerts* / *Go* and

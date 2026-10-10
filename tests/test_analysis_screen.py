@@ -242,8 +242,9 @@ def test_a_rail_dialog_opened_on_the_analysis_screen_keeps_the_screen():
         state.active_step.set(questionnaire)
         state.current_page_view.set("analysis_tile")
         assert state.screen.value == "analysis" and _on(layout)
-        assert [r.step_id for r in RAIL_ITEMS] == [1, 2, 3]
-        for item in RAIL_ITEMS:
+        dialogs = [r for r in RAIL_ITEMS if r.display == "dialog"]
+        assert [r.step_id for r in dialogs] == [1, 2, 3]
+        for item in dialogs:
             nav.current_step = item.step_id  # MapApp opens the dialog
             state.current_page_view.set(page_view_for_rail_step(item.step_id))  # the rail mirror
             assert state.screen.value == "analysis", f"opening {item.key} left the screen"
@@ -271,44 +272,32 @@ def test_a_rail_dialog_opened_on_the_analysis_screen_keeps_the_screen():
 
 
 # ----------------------------------------------------------- start analysis
-def test_start_analysis_replaces_next_on_the_last_step_and_is_gated():
+def test_the_header_has_no_start_analysis_and_no_next_on_the_last_step():
+    """*Start analysis* ends the Questionnaire step now, not the header."""
     from gui.widget.pipeline_header import PipelineHeader
     from tests.test_pipeline_header import _project, _reactive
 
     last = len(STEPS) - 1
-    started = []
-
-    def header(p, step):
-        return reacton.render(
-            PipelineHeader(active_step=step, on_navigate=lambda i: None, project=_reactive(p),
-                           on_start_analysis=lambda: started.append(step)),
-            handle_error=False,
-        )
-
-    box, rc = header(_project(n_alerts=3), last)  # an active set: enabled
+    box, rc = reacton.render(
+        PipelineHeader(active_step=last, on_navigate=lambda i: None, project=_reactive(_project(n_alerts=3))),
+        handle_error=False,
+    )
     try:
-        (start,) = _by_class(box, "defo-start-analysis")
-        assert t("workflow.start_analysis") in start.children and not start.disabled
-        assert not _chevron_right(box), "Start analysis replaces Next, it does not join it"
-        start.fire_event("click", None)
-        assert started == [last]
+        assert not _by_class(box, "defo-start-analysis")
+        (nxt,) = [w for w in _widgets(box) if isinstance(w, v.Btn)
+                  and any(isinstance(c, v.Icon) and c.children == ["mdi-chevron-right"] for c in w.children)]
+        assert nxt.disabled, "the last step has no Next"
     finally:
         rc.close()
 
-    box, rc = header(_project(), last)  # no set: disabled, with the old lock reason
-    try:
-        (start,) = _by_class(box, "defo-start-analysis")
-        assert start.disabled
-        tips = [w for w in _widgets(box) if isinstance(w, v.Tooltip)]
-        assert any(t("workflow.lock_analysis") in w.children for w in tips)
-    finally:
-        rc.close()
 
-    box, rc = header(_project(n_alerts=3), last - 1)  # an earlier step: Next as before
-    try:
-        assert not _by_class(box, "defo-start-analysis") and _chevron_right(box)
-    finally:
-        rc.close()
+def test_the_analysis_rail_item_opens_the_screen():
+    """The rail's Analysis entry: its page view is the screen's."""
+    from gui.store.navigation import NavAction, resolve_navigation
+
+    (item,) = [r for r in RAIL_ITEMS if r.key == "analysis"]
+    assert page_view_for_rail_step(item.step_id) == "analysis_tile"
+    assert resolve_navigation("analysis_tile") == NavAction("screen", "analysis")
 
 
 # ------------------------------------------------------------------- legend
