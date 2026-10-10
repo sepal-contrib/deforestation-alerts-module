@@ -36,11 +36,12 @@
 //   even when it is not shown, so it is toggled off again right after: otherwise
 //   a click on "draw polygon" or "remove" would end edit mode.
 import {viewsOf} from "../../core/layers.js";
+import {createOrderedPane} from "../../core/panes.js";
 
 export const DRAW_STYLE = {color: "#2196F3", weight: 4, opacity: 0.5, fillOpacity: 0.2};
 
 const PANE = "mv-drawing";
-const PANE_Z_INDEX = "450"; // above the overlay pane (400), below Geoman's vertex markers (marker pane, 600)
+const PANE_Z_INDEX = 450; // above the overlay pane (400), below Geoman's vertex markers (marker pane, 600)
 
 // Edit mode shows "draw polygon" and "remove shape". Editing itself is on as
 // long as edit mode is, so the edit button is never shown.
@@ -330,7 +331,9 @@ export const draw = {
     // --- per-view Geoman setup -------------------------------------------------------
     for (const view of views) {
       const {map} = view;
-      if (!map.getPane(PANE)) map.createPane(PANE).style.zIndex = PANE_Z_INDEX;
+      // In z order in the DOM too, so a host that flattens pane z-indexes still
+      // stacks Geoman's vertex markers (marker pane) over the drawing.
+      createOrderedPane(map, PANE, PANE_Z_INDEX);
       map.pm.setGlobalOptions({
         ...EDIT,
         pathOptions: {...DRAW_STYLE},

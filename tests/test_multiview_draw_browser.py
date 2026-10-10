@@ -352,3 +352,25 @@ def test_leaving_edit_mode_removes_the_toolbar_and_hint_and_keeps_the_drawing(mv
     py(mv_page, "draw_edit_mode", True)
     mv_page.wait_for_timeout(250)
     assert _vertices(mv_page, "c") == 4
+
+
+def test_vertex_markers_stay_on_top_when_the_host_flattens_pane_z_indexes(mv_page):
+    # pysepal's base.css sets `.leaflet-pane { z-index: 2 !important }`: panes
+    # then stack by DOM order, so the drawing pane must sit before the marker
+    # pane (Geoman's vertices) in the map pane, as its z-index (450 < 600) says.
+    mv_page.add_style_tag(content=".leaflet-pane, .leaflet-top, .leaflet-bottom { z-index: 2 !important; }")
+    _mount(mv_page)
+    order = mv_eval(mv_page, """mv => mv.views.map(v => [...v.map.getPanes().mapPane.children]
+        .filter(p => p.classList.contains('leaflet-pane')).map(p => [...p.classList].find(c => c !== 'leaflet-pane' && c.endsWith('-pane')).slice(8, -5)))""")
+    for names in order:
+        assert names.index("mvBasemap") < names.index("tile") < names.index("overlay") < names.index("mv-drawing") \
+            < names.index("shadow") < names.index("marker"), names
+    x, y = _xy(mv_page, "a", *NW)
+    hit = mv_page.evaluate("([x, y]) => { const el = document.elementFromPoint(x, y); return el && el.getAttribute('class'); }",
+                           [x, y])
+    assert "marker-icon" in hit and "marker-icon-middle" not in hit, hit
+    mv_page.mouse.click(x, y, button="right")
+    mv_page.wait_for_timeout(250)
+    assert len(_draws(mv_page)) == 1
+    assert _rings(mv_page, "b")[0] == [SW, SE, NE, SW]
+    _same_everywhere(mv_page)
