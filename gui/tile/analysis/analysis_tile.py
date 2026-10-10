@@ -348,6 +348,9 @@ def select_start_alert(app_state, app_tile_model):
     the unset (-1) state, so it never fights manual navigation.
     """
     gdf = app_state.alerts_gdf.value
+    # Before the filter is read: a filter made on another set goes now, not
+    # whenever ``AppState``'s own ``alerts_gdf`` listener happens to run.
+    app_state.forget_filter_of_another_set(gdf)
     if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
         saved = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
         p = app_state.project.value
@@ -362,6 +365,11 @@ def follow_filter(app_state, f) -> None:
     Clearing the filter moves nothing. With no alert on screen the next
     publish applies the filter (``set_store.publish_set_alerts``)."""
     gdf = app_state.alerts_gdf.value
+    # As ``select_start_alert``: a filter made on another set goes first (its
+    # clear re-enters here with None), and the one left in force is followed.
+    app_state.forget_filter_of_another_set(gdf)
+    if app_state.alert_filter_reactive is not None:
+        f = app_state.alert_filter
     index = app_state.actual_alert_id.value
     if f is None or gdf is None or not len(gdf) or index < 0:
         return
@@ -390,9 +398,9 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
       navigation reads it, and a new filter moves to its start
       (``follow_filter``).
     """
-    # First: ``AppState`` drops a filter made on another set in its own
-    # ``alerts_gdf`` subscription, which must run before the start alert is
-    # chosen below.
+    # Bound before anything below reads the filter. A filter made on another
+    # set is dropped by ``select_start_alert`` / ``follow_filter`` themselves
+    # (``forget_filter_of_another_set``), not by listener order.
     app_state.bind_alert_filter(analysis.alert_filter)
     analysis.alert_filter.subscribe(lambda f: follow_filter(app_state, f))
     # A start filter set before this layout was wired (``apply_start_filter``

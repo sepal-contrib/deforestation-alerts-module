@@ -170,6 +170,36 @@ def test_a_start_filter_set_before_the_layout_is_wired_is_resolved_when_it_is(tm
     assert s.alert_filter == ANA and s.actual_alert_id.value == 2
 
 
+def test_another_sets_alerts_drop_the_filter_whatever_the_listener_order(tmp_path, monkeypatch):
+    """Solara fires a reactive's listeners in no fixed order (they are kept
+    in a set). The worst order is forced here: the tile's start-alert
+    callback runs before ``AppState``'s own reset. The start alert still
+    ignores a filter made on another set, so it never saves over the new
+    set's position (``remember_position``, as ``view_actual_alert`` does)."""
+    s = _state(tmp_path, monkeypatch)
+    p = s.project.value
+    p.alert_sets["y"] = p.alert_sets["x"].model_copy(update={"id": "y", "last_alert_index": 3})  # Bruno's
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_six())
+    s.actual_alert_id.set(0)
+    s.actual_alert_id.subscribe(lambda i: ctx.remember_position(i) if i >= 0 else None)
+
+    subscribe = s.alerts_gdf.subscribe
+    held = []
+    monkeypatch.setattr(s.alerts_gdf, "subscribe", held.append, raising=False)
+    analysis = AnalysisState()
+    s.bind_alert_filter(analysis.alert_filter)
+    assert len(held) == 1                    # AppState's own reset, held back
+    subscribe(lambda g: (analysis_tile.select_start_alert(s, ctx), held[0](g)))
+    analysis.alert_filter.set(ANA)
+
+    s.update_project("d", lambda live: setattr(live, "active_set", "y"))
+    assert set_store.publish_set_alerts(s, "d", s.project.value.alert_sets["y"], _six(set_id="y"))
+    assert analysis.alert_filter.value is None
+    assert s.project.value.alert_sets["y"].last_alert_index == 3
+    assert s.actual_alert_id.value == 3
+
+
 def test_a_publish_keeps_a_saved_position_the_filter_shows(tmp_path, monkeypatch):
     p, s_, store = _project_with_set(tmp_path, monkeypatch)
     p.alert_sets["s"].last_alert_index = 4

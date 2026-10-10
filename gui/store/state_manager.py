@@ -212,11 +212,13 @@ class AppState:
         self._alert_filter = reactive
         self._filter_set_id = _set_id_of(self.alerts_gdf.value)
         if first:
-            # Once per AppState, and before the analysis layout's own
-            # ``alerts_gdf`` subscriptions (``wire_alert_navigation`` binds
-            # first): a filter left from another set is gone by the time the
-            # start alert of the new one is chosen.
-            self.alerts_gdf.subscribe(self._forget_filter_of_another_set)
+            # Once per AppState. Solara keeps a reactive's listeners in a set,
+            # so this runs in no particular order among the other
+            # ``alerts_gdf`` listeners: the readers that must not see a
+            # filter left from another set (``analysis_tile.select_start_alert``
+            # and ``follow_filter``) call ``forget_filter_of_another_set``
+            # themselves first. It is idempotent.
+            self.alerts_gdf.subscribe(self.forget_filter_of_another_set)
 
     @property
     def alert_filter_reactive(self):
@@ -242,11 +244,14 @@ class AppState:
         p = self.project.value
         return af.match_mask(self.alerts_gdf.value, self.alert_filter, p.questions if p is not None else [])
 
-    def _forget_filter_of_another_set(self, gdf) -> None:
+    def forget_filter_of_another_set(self, gdf) -> None:
         """Spec §8.1: the filter is reset when another set's alerts arrive (a
         set switch, Overview's Go into another set, Integrate's new set). No
         alerts in between (a project install, a deleted set) keep the set it
-        was made on, so the next publish is compared with that one."""
+        was made on, so the next publish is compared with that one.
+        Idempotent: a second call with the same alerts changes nothing, so an
+        ``alerts_gdf`` listener that reads the filter calls it first rather
+        than rely on the listeners' order."""
         sid = _set_id_of(gdf)
         if sid is None:
             return
