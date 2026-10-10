@@ -1,0 +1,15 @@
+{
+  "share": {
+    "err": {
+      "not_a_zip": "Este archivo no es un archivo zip.",
+      "no_header": "Este zip no tiene share.json: no es un paquete de revisión ni una copia revisada.",
+      "bad_header": "No se puede leer el share.json de este zip.",
+      "wrong_format": "Este zip no se creó con esta aplicación.",
+      "newer_format": "Este zip usa la versión de formato {found}; esta aplicación lee la versión {expected}.",
+      "unsafe_member": "Este zip contiene una entrada no segura ({member}); no se ha leído nada de él.",
+      "unexpected_member": "Este zip contiene un archivo que esta aplicación no espera ({member}); no se ha leído nada de él.",
+      "missing_member": "A este zip le falta {member}.",
+      "too_large": "Este zip contiene más datos de los que acepta esta aplicación."
+    }
+  }
+}
