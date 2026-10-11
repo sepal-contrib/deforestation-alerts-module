@@ -258,6 +258,35 @@ def test_masks_refuse_switches_and_disable_their_actions(tmp_path, monkeypatch):
     assert all(a["disabled"] for a in row["actions"] if a["kind"] != "map_toggle")
 
 
+def test_a_copys_earth_engine_mask_preview_is_disabled_and_refused(tmp_path, monkeypatch):
+    """Spec §6.3: a copy never sends the creator's mask reference to Earth
+    Engine. An unaligned EE mask's map toggle is disabled, and a stale click
+    is refused with the banner; ``build_mask_image`` is never called."""
+    from gui.tile import masks_card
+    from tests.test_masks_card import _card, _rows, _sync_spawn
+
+    _sync_spawn(monkeypatch)
+    built = []
+    monkeypatch.setattr(masks_card.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    monkeypatch.setattr(masks_card, "build_mask_image", lambda mask, aoi: built.append(mask.ref))
+    unaligned = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+    locked = _rows([unaligned], locked=True)["forest"]
+    assert _action([locked], "forest", "map_toggle")["disabled"]
+    aligned = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")], locked=True)
+    assert not _action(list(aligned.values()), "forest", "map_toggle")["disabled"]  # a local raster stays
+    s = _state(tmp_path, monkeypatch)
+
+    async def main():
+        rc, seen, _modal, _confirm = _card(monkeypatch, s, rows=[unaligned])
+        try:
+            _action(seen["rows"], "forest", "map_toggle")["on_click"]()  # a stale click
+            assert built == [] and BANNER in _warnings()
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_layers_step_disables_and_refuses_layer_changes(tmp_path, monkeypatch):
     from gui.tile import layers_step
 

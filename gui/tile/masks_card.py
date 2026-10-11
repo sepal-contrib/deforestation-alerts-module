@@ -76,7 +76,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
     keyed ``@mask:<name>``); ``on``/``building``: the map keys shown and being
     built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``).
     ``locked``: a review copy (spec §6.3): downloads, edits, deletes and the
-    Mode select are disabled; the map toggle stays.
+    Mode select are disabled; the map toggle stays for a ready local raster.
     """
     from gui.tile.prepare_step import mask_inflight_key  # prepare_step renders this card
 
@@ -99,9 +99,11 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
             actions.append({"kind": "redownload", "disabled": locked or busy,
                             "on_click": (lambda n=r.name: rerun(n))})
         actions += [
-            # a GeoTIFF mask is shown once aligned; a layer already on can always be switched off
+            # a GeoTIFF mask is shown once aligned; a layer already on can always be switched off.
+            # A copy shows an EE mask only from its local raster: its Earth Engine
+            # preview would send the creator's reference (spec §6.3).
             {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
-             "disabled": r.origin == "file" and not r.ready and key not in on,
+             "disabled": (r.origin == "file" or locked) and not r.ready and key not in on,
              "on_click": (lambda n=r.name: toggle(n))},
             {"kind": "edit", "disabled": locked, "on_click": (lambda n=r.name: edit(n))},
             {"kind": "delete", "disabled": locked, "on_click": (lambda n=r.name: delete(n))},
@@ -254,6 +256,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
             build = source_layers.mask_builder(map_, paths.resolve(pdir, art.rel_path), key, layer_name)
             content_id = art.content_id
         elif mask.origin == "gee":  # before alignment: Earth Engine tiles of its non-zero pixels
+            if refuse_setup(app_state, notifications):  # a copy sends no creator reference (spec §6.3)
+                return
             try:
                 aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
             except ValueError as exc:
