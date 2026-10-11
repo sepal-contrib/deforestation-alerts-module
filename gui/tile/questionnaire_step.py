@@ -7,9 +7,11 @@ import reacton.ipyvuetify as rv
 import solara
 
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t, tn
 from gui.scripts import questions as qs
 from gui.scripts.notify_bridge import current_notifier
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.workflow_steps import active_set
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.copy_chip import CopyChipWidget
@@ -115,7 +117,7 @@ def QuestionnaireStep(app_state):
                 out[at] = question
             live.questions = out
 
-        app_state.update_project(name, _apply)
+        update_setup(app_state, name, _apply)
 
     def _move(key, step):
         def _apply(live):
@@ -128,31 +130,36 @@ def QuestionnaireStep(app_state):
                 out[i], out[j] = out[j], out[i]
                 live.questions = out
 
-        app_state.update_project(name, _apply)
+        update_setup(app_state, name, _apply)
 
     def _delete():
         key = pending_delete
         set_pending_delete(None)
-        app_state.update_project(name, lambda live: setattr(
+        update_setup(app_state, name, lambda live: setattr(
             live, "questions", [q for q in live.questions if q.key != key]))
 
     def _edit(q):
+        if refuse_setup(app_state):
+            return
         set_editing(q)
         modal_open.set(True)
 
     def _open_add():
+        if refuse_setup(app_state):
+            return
         set_editing(None)
         modal_open.set(True)
 
+    ro = read_only(p)  # a review copy asks the creator's questions (spec §6.3)
     last = len(p.questions) - 1
     rows = [{"key": q.key,
              "cells": [{"value": qs.question_label(q), "chips": question_tags(q), "stack": True}],
              "notes": [{"text": "{" + q.key + "}", "tone": None}],
              "actions": [
-                 {"kind": "move_up", "disabled": i == 0, "on_click": (lambda k=q.key: _move(k, -1))},
-                 {"kind": "move_down", "disabled": i == last, "on_click": (lambda k=q.key: _move(k, 1))},
-                 {"kind": "edit", "on_click": (lambda q=q: _edit(q))},
-                 {"kind": "delete", "on_click": (lambda k=q.key: set_pending_delete(k))},
+                 {"kind": "move_up", "disabled": ro or i == 0, "on_click": (lambda k=q.key: _move(k, -1))},
+                 {"kind": "move_down", "disabled": ro or i == last, "on_click": (lambda k=q.key: _move(k, 1))},
+                 {"kind": "edit", "disabled": ro, "on_click": (lambda q=q: _edit(q))},
+                 {"kind": "delete", "disabled": ro, "on_click": (lambda k=q.key: set_pending_delete(k))},
              ]} for i, q in enumerate(p.questions)]
     doomed = next((q for q in p.questions if q.key == pending_delete), None)
 
@@ -162,7 +169,7 @@ def QuestionnaireStep(app_state):
                   t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", small=True, outlined=True,
-                          block=True, on_click=_open_add)
+                          block=True, disabled=ro, on_click=_open_add)
             ProductTable(title=t("steps.questionnaire.questions_title"),
                          columns=[{"label": t("steps.questionnaire.col_question")}], rows=rows,
                          empty_text=t("steps.questionnaire.empty"))

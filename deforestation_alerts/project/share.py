@@ -31,6 +31,7 @@ from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
 from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts import local_files, scene_index
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_lock
@@ -384,7 +385,9 @@ def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojs
     ``aoi_geojson`` is the AOI geometry as GeoJSON (``aoi_geojson_for_package``
     or the AOI step's). The packaged split is marked ``packaged`` with the
     questionnaire's digest; ``p`` itself is not changed: the caller records
-    both on the creator's set. Raises ``ShareError``."""
+    both on the creator's set. Raises ``ShareError``, or ``ReadOnlyProject``
+    for a review copy (spec §6.3)."""
+    refuse_if_read_only(p)
     pdir = Path(pdir)
     trimmed = trimmed_manifest(p, set_id)
     s = p.alert_sets[set_id]

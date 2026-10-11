@@ -31,6 +31,7 @@ from deforestation_alerts.engine.coverage import coverage_request, parse_coverag
 from deforestation_alerts.engine.fingerprint import is_file_source
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import PREDEFINED_KEYS
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts import aoi_io
 from gui.scripts.error_text import error_text
@@ -77,9 +78,15 @@ def aoi_origin(p, result):
     A local AOI (drawn, uploaded, or an admin area fetched without Earth
     Engine) is not named by its selection, so the sidecar, replaced together
     with the AOI, is read instead.
+
+    A review copy reads its AOI from the sidecar its package always carries,
+    whatever the AOI kind (spec §5.3, §6.5): the evaluator's picker may never
+    resolve an Earth Engine asset or admin code of the creator's.
     """
     if p is None or p.aoi is None:
         return None
+    if read_only(p):
+        return "sidecar" if p.aoi.geometry_file is not None else None
     if result is not None and aoi_io.lazy_digest(result) == p.aoi.digest:
         return "result"
     if p.aoi.geometry_file is None or is_ee_aoi(p.aoi):

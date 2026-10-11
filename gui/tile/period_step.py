@@ -40,8 +40,10 @@ from deforestation_alerts.engine.fingerprint import Status, period_set_statuses
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths, periods
 from deforestation_alerts.project.models import period_id
+from deforestation_alerts.project.review_copy import read_only
 from gui.scripts import alert_layers
 from gui.i18n import t, tn
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
@@ -77,7 +79,8 @@ def has_earlier_set(p, period) -> bool:
                for s in p.alert_sets.values())
 
 
-def period_rows(p, pdir, *, select, edit, delete) -> list:
+def period_rows(p, pdir, *, select, edit, delete, locked=False) -> list:
+    """``locked``: a review copy (spec §6.3): every action is disabled."""
     rows = []
     for period in periods.periods_newest_first(p):
         b = badges(p, pdir, period)
@@ -104,10 +107,10 @@ def period_rows(p, pdir, *, select, edit, delete) -> list:
             "cells": [{"value": period_label(period)}, {"value": str(b["sets"])}, state],
             "notes": notes,
             "actions": [
-                {"kind": "select", "is_on": period.id == p.active_period,
+                {"kind": "select", "is_on": period.id == p.active_period, "disabled": locked,
                  "on_click": (lambda pid=period.id: select(pid))},
-                {"kind": "edit", "on_click": (lambda pid=period.id: edit(pid))},
-                {"kind": "delete", "on_click": (lambda pid=period.id: delete(pid))},
+                {"kind": "edit", "disabled": locked, "on_click": (lambda pid=period.id: edit(pid))},
+                {"kind": "delete", "disabled": locked, "on_click": (lambda pid=period.id: delete(pid))},
             ],
         })
     return rows
@@ -163,7 +166,7 @@ def _PeriodList(app_state, layers):
         if error:
             return error, [], False
         out = []
-        if not app_state.update_project(name, lambda q: out.append(fn(q))):
+        if not update_setup(app_state, name, lambda q: out.append(fn(q)), notifications):
             return None, [], False
         error, files = out[0]
         return error, files, error is None
@@ -173,10 +176,14 @@ def _PeriodList(app_state, layers):
             _change(lambda q: (periods.select_period(q, pid), []))
 
     def _new():
+        if refuse_setup(app_state, notifications):
+            return
         set_editing(None)
         modal_open.set(True)
 
     def _edit(pid):
+        if refuse_setup(app_state, notifications):
+            return
         if is_writing(name):
             notifications.warning(t("steps.period.busy"))
         else:
@@ -212,6 +219,8 @@ def _PeriodList(app_state, layers):
         return None
 
     def _ask_delete(pid):
+        if refuse_setup(app_state, notifications):
+            return
         error = periods.delete_error(p, pid)  # checked again on the live project by _delete
         if is_writing(name):
             notifications.warning(t("steps.period.busy"))
@@ -242,11 +251,11 @@ def _PeriodList(app_state, layers):
         solara.Markdown(f"### {t('steps.period.title')}")
         StepIntro(t("steps.period.description"), t("steps.period.info_header"), t("steps.period.info_md"))
         solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
-                      on_click=_new)
+                      disabled=read_only(p), on_click=_new)
         ProductTable(
             title=t("steps.period.list_title"),
             columns=period_columns(),
-            rows=period_rows(p, pdir, select=_select, edit=_edit, delete=_ask_delete),
+            rows=period_rows(p, pdir, select=_select, edit=_edit, delete=_ask_delete, locked=read_only(p)),
             empty_text=t("steps.period.empty"),
         )
     PeriodModal(open_=modal_open, app_state=app_state, on_submit=_submit, editing=editing)

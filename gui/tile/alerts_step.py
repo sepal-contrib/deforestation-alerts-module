@@ -11,10 +11,12 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_custom_source, add_predefined_source, remove_source, sets_using_source, update_custom_source,
 )
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t, tn
 from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, note_text
 from gui.scripts.error_text import error_text
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -59,13 +61,14 @@ def AlertsStep(app_state, map_, gee_interface, layers):
 
     pdir = paths.project_dir(p.name)
     period = workflow_steps.active_period(p)
+    ro = read_only(p)  # a review copy: no source changes (spec §6.3)
     # Ruling #46: the harmonized status alone misses a stale raw row (e.g.
     # after a grid change); a row is a ready preview only once ``.ready`` says
     # both raw and harmonized are current.
     rows_by_source = {r.source: r for r in plan_prepare(p, pdir, period)} if period is not None else {}
 
     def _add_predefined(key):
-        app_state.update_project(p.name, lambda live: add_predefined_source(live, key))
+        update_setup(app_state, p.name, lambda live: add_predefined_source(live, key), notifications)
 
     # The two custom callbacks run in SourceModal's validation task (on the
     # loop, never from an effect); what they raise the modal shows inline, so
@@ -76,7 +79,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             live.coverage = {**live.coverage, src.name: cov}
 
         try:
-            app_state.update_project(p.name, _apply)
+            update_setup(app_state, p.name, _apply, notifications)
         except ValueError as exc:  # a name taken meanwhile, or the cap
             raise ValueError(error_text(exc)) from None
 
@@ -94,7 +97,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             live.coverage = {**live.coverage, name: cov}
 
         try:
-            saved = app_state.update_project(p.name, _apply)
+            saved = update_setup(app_state, p.name, _apply, notifications)
         except ValueError as exc:
             notifications.warning(error_text(exc))
             raise ValueError(error_text(exc)) from None
@@ -102,6 +105,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             layers.hide(f"src:{name}")  # its preview showed the previous definition
 
     def _edit(name):
+        if refuse_setup(app_state, notifications):
+            return
         if sets_using_source(p, name):
             notifications.warning(t("steps.alerts.edit_used"))
             return
@@ -112,6 +117,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         modal_open.set(True)
 
     def _open_add():
+        if refuse_setup(app_state, notifications):
+            return
         set_editing(None)
         modal_open.set(True)
 
@@ -128,7 +135,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
             gone.extend(cleanup.drop_artifacts(live, cleanup.source_artifact_keys(live, name)))
             remove_source(live, name)
 
-        if app_state.update_project(p.name, _apply):
+        if update_setup(app_state, p.name, _apply, notifications):
             cleanup.delete_files(pdir, gone)
 
     def _toggle(name):
@@ -199,8 +206,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         actions = [{"kind": "map_toggle", "is_on": key in on, "loading": key in building,
                     "disabled": reason is not None, "on_click": (lambda n=name: _toggle(n))}]
         if src.kind == "custom":
-            actions.append({"kind": "edit", "on_click": (lambda n=name: _edit(n))})
-        actions.append({"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))})
+            actions.append({"kind": "edit", "disabled": ro, "on_click": (lambda n=name: _edit(n))})
+        actions.append({"kind": "delete", "disabled": ro, "on_click": (lambda n=name: set_pending_delete(n))})
         rows.append({"key": name, "notes": notes, "actions": actions,
                      "cells": [{"value": label}, chip_cell(cov, pending_cov)]})
 
@@ -209,7 +216,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         StepIntro(t("steps.alerts.description"), t("steps.alerts.info_header"), t("steps.alerts.info_md"))
         # spec D4: a step list's Add button sits above it, full width
         solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
-                      on_click=_open_add)
+                      disabled=ro, on_click=_open_add)
         ProductTable(title=t("steps.alerts.list_title"), columns=source_columns(), rows=rows,
                      empty_text=t("steps.alerts.empty"))
         # spec §6.2 "Failure": the sources left without a record can be checked again

@@ -60,6 +60,7 @@ from deforestation_alerts.engine.runner import (
 )
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Period
+from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.cleanup import delete_orphans
 from gui.i18n import t
 from gui.scripts import source_layers
@@ -300,7 +301,9 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     live project, so a row sees the masks aligned before it, and a mask
     switched while a row runs leaves that row recorded with the old choice
     (it then reads out of date: review focus 4). A mask row's error is keyed
-    ``@mask:<name>`` in ``row_errors``."""
+    ``@mask:<name>`` in ``row_errors``. Raises ``ReadOnlyProject``, running
+    nothing, in a review copy (spec §6.3)."""
+    refuse_if_read_only(ctx.app_state.project.value)
     scope = run_scope(ctx.app_state.project.value)
     items = _items(rows)
     with writing(ctx.name), tracked_job(ctx.notifier, t("steps.prepare.job_title"),

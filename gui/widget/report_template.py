@@ -16,9 +16,11 @@ import solara
 from pysepal.solara.components.inputs import FileInputComponent
 
 from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
+from gui.scripts.setup_guard import update_setup
 from gui.widget.text_style import MUTED
 
 EXTENSIONS = [".docx"]
@@ -57,10 +59,15 @@ def ReportTemplateField(app_state):
             current_notifier().error(error_text(exc))
             set_refusals(lambda n: n + 1)
             return
-        if value != current:
-            app_state.update_project(name, lambda live: setattr(live, "report_template", value))
+        if value != current and not update_setup(app_state, name,
+                                                 lambda live: setattr(live, "report_template", value)):
+            set_refusals(lambda n: n + 1)  # refused (a review copy): show what the project holds
 
+    # A review copy keeps the creator's template (spec §6.3). The picker has
+    # no ``disabled``: it is shown, dimmed and out of reach of the pointer.
+    locked = read_only(p)
     with solara.Column(style="gap:2px;").key(f"{name}:{current}:{refusals}"):
-        FileInputComponent(extensions=EXTENSIONS, value=current or "", on_value=_pick,
-                           label=t("analysis_tile.export_labels.report_template_label"))
+        with solara.Div(style="pointer-events:none;opacity:0.6;" if locked else ""):
+            FileInputComponent(extensions=EXTENSIONS, value=current or "", on_value=_pick,
+                               label=t("analysis_tile.export_labels.report_template_label"))
         solara.Text(t("analysis_tile.export_labels.report_template_hint"), style=MUTED + "font-size:0.8rem;")

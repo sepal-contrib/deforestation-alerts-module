@@ -42,6 +42,7 @@ from deforestation_alerts.engine.pmtiles import STATUS_CODES
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.cleanup import delete_orphans
 from deforestation_alerts.project.models import AlertSetParams
+from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.models import set_id as make_set_id
 from deforestation_alerts.project.review_status import reviewed_mask
 from gui.i18n import format_number, t, tn
@@ -348,8 +349,10 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
     open Analysis when there is something to review (spec §7.4 step 9).
 
     ``left_out``: the period's sources the form showed disabled, by name,
-    with the reason; an empty set's toast names them.
+    with the reason; an empty set's toast names them. Raises
+    ``ReadOnlyProject``, running nothing, for a review copy (spec §6.3).
     """
+    refuse_if_read_only(job.project)
     name = job.project.name
     sid = make_set_id(job.period.id, job.sources)
     with writing(name), integrating(name, sid), \

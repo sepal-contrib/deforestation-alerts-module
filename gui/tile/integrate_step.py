@@ -42,6 +42,7 @@ from gui.scripts.integrate_jobs import (
     reviewed_lines,
     run_integration_job,
 )
+from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store import workflow_steps
 from gui.widget.attribute_form import layer_label
@@ -159,6 +160,8 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         live = app_state.project.value
         if live is None or live.name != name:
             return  # closed or switched since this form rendered
+        if refuse_setup(app_state, notifications):  # a review copy runs nothing (spec §6.3)
+            return
         if not inflight.claim(key):
             return
         job = IntegrationJob(project=live.model_copy(deep=True), pdir=paths.project_dir(name), period=period,
@@ -173,6 +176,8 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         spawn_in_context(_run)
 
     def _on_run():
+        if refuse_setup(app_state, notifications):
+            return
         params, err = params_from_form(min_size, sorting, max_alerts, attr_layers,
                                        confirmed_only=sorted(x for x in probable_off if x in chosen))
         if err:

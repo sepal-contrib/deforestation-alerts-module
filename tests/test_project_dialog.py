@@ -699,3 +699,24 @@ def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_review_copy_offers_no_duplicate(dialog):
+    """Spec §6.3: Duplicate is hidden for a review copy (New and Manage stay)."""
+    from deforestation_alerts.project.models import ReviewCopy
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            p = pd.create_project("c")
+            p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
+                                       set_fingerprint="f", origin_project="orig", imported_at=datetime.now())
+            dialog.state.new_project_state(p)
+            await _settle(lambda: any(t("steps.project.manage") in w.children for w in rc.find(v.Btn).widgets),
+                          "the open project's buttons")
+            labels = [c for w in rc.find(v.Btn).widgets for c in w.children if isinstance(c, str)]
+            assert t("steps.project.new") in labels and t("steps.project.duplicate") not in labels
+        finally:
+            rc.close()
+
+    asyncio.run(main())

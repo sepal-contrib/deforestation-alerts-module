@@ -43,6 +43,7 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import Project
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts.solara_threads import spawn_in_context
@@ -371,6 +372,8 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     def _duplicate(name):
         if p is None:  # closed (a delete) while the form was open
             return True  # nothing to copy: the form just closes
+        if read_only(p):  # spec §6.3: a review copy is not duplicated (its button is hidden)
+            return True
         try:
             copy = duplicate_with_sidecar(p, name)
         except OSError as exc:  # the sidecar's folder or copy (disk full, permissions)
@@ -452,8 +455,9 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                               small=True, on_click=lambda: new_open.set(True))
                 solara.Button(t("steps.project.manage"), icon_name="mdi-folder-multiple-outline", color="primary",
                               outlined=True, small=True, on_click=_open_manage)
-                solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", color="primary",
-                              outlined=True, small=True, on_click=lambda: dup_open.set(True))
+                if not read_only(p):  # spec §6.3: a review copy is not duplicated
+                    solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", color="primary",
+                                  outlined=True, small=True, on_click=lambda: dup_open.set(True))
 
     # Every dialog below is always mounted, the Duplicate form too: one that
     # came and went with the open project would shift the ones after it, and

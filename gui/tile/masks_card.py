@@ -21,10 +21,12 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
 from gui.scripts.prepare_jobs import CELL_STATUS
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.mask_modal import MaskModal
@@ -43,8 +45,8 @@ def mask_columns() -> list:
 
 def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None) -> bool:
     """A switch only edits the project (spec §7.3): no job starts."""
-    return app_state.update_project(project_name, lambda live: set_period_mask(live, period_id, name, on=on,
-                                                                                mode=mode))
+    return update_setup(app_state, project_name, lambda live: set_period_mask(live, period_id, name, on=on,
+                                                                               mode=mode))
 
 
 def mask_status(r, busy) -> dict:
@@ -66,13 +68,15 @@ def mask_status(r, busy) -> dict:
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,
-                    switch, refusals=0) -> list:
+                    switch, refusals=0, locked=False) -> list:
     """The ``ProductTable`` rows of the Masks card (spec §7.3); pure.
 
     ``running``: every claimed in-flight key (a mask row is busy whichever
     period's job claimed it); ``errors``: the step's row errors (a mask's is
     keyed ``@mask:<name>``); ``on``/``building``: the map keys shown and being
     built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``).
+    ``locked``: a review copy (spec §6.3): downloads, edits, deletes and the
+    Mode select are disabled; the map toggle stays.
     """
     from gui.tile.prepare_step import mask_inflight_key  # prepare_step renders this card
 
@@ -89,17 +93,18 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         if r.on and r.mode == "keep" and r.covers_none:
             notes.append({"text": t("steps.prepare.mask_covers_none_line"), "tone": "warning"})
         key = f"mask:{r.name}"
-        actions = [{"kind": "download", "disabled": busy or r.file_missing is not None, "loading": busy,
+        actions = [{"kind": "download", "disabled": locked or busy or r.file_missing is not None, "loading": busy,
                     "on_click": (lambda n=r.name: run(n))}]
         if r.origin == "gee":
-            actions.append({"kind": "redownload", "disabled": busy, "on_click": (lambda n=r.name: rerun(n))})
+            actions.append({"kind": "redownload", "disabled": locked or busy,
+                            "on_click": (lambda n=r.name: rerun(n))})
         actions += [
             # a GeoTIFF mask is shown once aligned; a layer already on can always be switched off
             {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
              "disabled": r.origin == "file" and not r.ready and key not in on,
              "on_click": (lambda n=r.name: toggle(n))},
-            {"kind": "edit", "on_click": (lambda n=r.name: edit(n))},
-            {"kind": "delete", "on_click": (lambda n=r.name: delete(n))},
+            {"kind": "edit", "disabled": locked, "on_click": (lambda n=r.name: edit(n))},
+            {"kind": "delete", "disabled": locked, "on_click": (lambda n=r.name: delete(n))},
         ]
 
         def _choose(v, n=r.name):
@@ -112,7 +117,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         # the refusals: a refused switch leaves the props unchanged, so only a
         # remount puts the user's choice back to what the project holds.
         def _mode_cell(n=r.name, value=r.mode if r.on else "off"):
-            rv.Select(v_model=value, on_v_model=_choose, dense=True, hide_details=True,
+            rv.Select(v_model=value, on_v_model=_choose, dense=True, hide_details=True, disabled=locked,
                       items=[{"text": t("steps.prepare.mask_mode_off"), "value": "off"},
                              {"text": t("steps.prepare.mask_mode_keep"), "value": "keep"},
                              {"text": t("steps.prepare.mask_mode_exclude"), "value": "exclude"}],
@@ -169,7 +174,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
             add_mask(live, **fields, mode=mode, period_id=period.id)
 
         try:
-            added = app_state.update_project(p.name, _apply)
+            added = update_setup(app_state, p.name, _apply, notifications)
         except ValueError as exc:  # a name taken meanwhile
             raise ValueError(error_text(exc)) from None
         if not added:
@@ -190,7 +195,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
 
         refused = None
         try:
-            saved = app_state.update_project(p.name, _apply)
+            saved = update_setup(app_state, p.name, _apply, notifications)
         except ValueError as exc:
             refused = error_text(exc)
         if refused is not None:
@@ -200,6 +205,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         layers.hide(f"mask:{name}")  # its layer showed the previous definition
 
     def _edit(name):
+        if refuse_setup(app_state, notifications):
+            return
         if sets_using_mask(p, name):
             notifications.warning(t("steps.prepare.mask_edit_used"))
             return
@@ -210,6 +217,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         modal_open.set(True)
 
     def _open_add():
+        if refuse_setup(app_state, notifications):
+            return
         set_editing(None)
         modal_open.set(True)
 
@@ -226,7 +235,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
             gone.extend(cleanup.drop_artifacts(live, cleanup.mask_artifact_keys(live, name)))
             remove_mask(live, name)
 
-        if app_state.update_project(p.name, _apply):
+        if update_setup(app_state, p.name, _apply, notifications):
             cleanup.delete_files(pdir, gone)
 
     def _toggle(name):
@@ -262,11 +271,12 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
 
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,
-                                 delete=set_pending_delete, switch=_switch, refusals=refusals)
+                                 delete=set_pending_delete, switch=_switch, refusals=refusals,
+                                 locked=read_only(p))
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
         solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", small=True, outlined=True, block=True,
-                      on_click=_open_add)
+                      disabled=read_only(p), on_click=_open_add)
         ProductTable(title=t("steps.prepare.masks_title"), columns=mask_columns(), rows=table_rows,
                      empty_text=t("steps.prepare.masks_empty"))
         solara.Text(t("steps.prepare.masks_note"), style=MUTED + "font-size:0.78rem;")
