@@ -45,7 +45,7 @@ def visible_btn(page, text, scope=""):
 # until the header is clicked. The retired "Alert info" card's facts live in block A.
 # Block A is a flat ``panel_block`` (a ``div.py-3``, no longer a ``v-card``).
 _BLOCK_A_JS = """
-    const card = [...document.querySelectorAll('.defo-analysis-right .py-3')]
+    const card = [...document.querySelectorAll('.defo-analysis-right .py-3, .defo-analysis-right .pb-3')]
         .filter(e => e.getBoundingClientRect().width > 0)
         .filter(e => ['Source', 'Detected', 'Status'].every(w => e.textContent.includes(w)))
         .sort((a, b) => a.textContent.length - b.textContent.length)[0];
