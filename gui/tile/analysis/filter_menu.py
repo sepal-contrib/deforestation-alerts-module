@@ -44,17 +44,18 @@ def _choice_of(column, gdf, questions):
     return next((c for c in filter_columns(gdf, questions) if c.column == column), None)
 
 
-def filter_label(app_state, f) -> str:
+def filter_label(app_state, f, limit=CHIP_VALUES) -> str:
     """The chip's words for filter ``f``: the attribute's label and the
-    values' labels, in the menu's order (``Evaluator: Ana, Bruno +1``)."""
+    values' labels, in the menu's order (``Evaluator: Ana, Bruno +1``).
+    ``limit=None`` names every value (the chip's tooltip)."""
     gdf, questions = _context(app_state)
     choice = _choice_of(f.column, gdf, questions)
     known = value_choices(gdf, choice, questions) if choice is not None else []
     names = [label for value, label, _ in known if value in f.values]
     names += sorted((x for x in f.values if x not in {value for value, _, _ in known}), key=str.casefold)
-    shown = ", ".join(names[:CHIP_VALUES])
-    if len(names) > CHIP_VALUES:
-        shown = t("analysis_tile.filter.more", values=shown, count=format_number(len(names) - CHIP_VALUES))
+    shown = ", ".join(names[:limit])
+    if limit is not None and len(names) > limit:
+        shown = t("analysis_tile.filter.more", values=shown, count=format_number(len(names) - limit))
     return t("analysis_tile.filter.chip", attribute=choice.label if choice is not None else f.column, values=shown)
 
 
@@ -143,6 +144,9 @@ def build_filter_menu(app_state) -> SimpleNamespace:
         button.children = [v.Icon(children=["mdi-filter" if f is not None else "mdi-filter-outline"])]
         button.color = "primary" if f is not None else ""
         chip.children = [filter_label(app_state, f) if f is not None else ""]
+        # In a review copy the chip is the only statement of whose alerts
+        # these are: its tooltip names the filter in full.
+        chip.attributes = {"title": filter_label(app_state, f, limit=None)} if f is not None else {}
         chip.style_ = "" if f is not None else "display: none;"
 
     menu.observe(_on_open, "v_model")

@@ -578,10 +578,13 @@ SCREEN_CSS = (
     ".defo-analysis-screen .defo-topnav-set .v-select { padding: 0 !important; margin: 0; }\n"
     ".defo-analysis-screen .defo-jump-btn { min-width: 0 !important; }\n"
     # the filter's funnel and chip (``filter_menu``), left of the set
-    # selector; a long chip ends in an ellipsis rather than widen the bar
-    ".defo-analysis-screen .defo-topnav-filter { flex: 0 1 auto; min-width: 0; display: flex; align-items: center;"
+    # selector. Neither shrinks: in a review copy the chip is the only
+    # statement of whose alerts these are (at 1400 px it was cut to "Eval…"),
+    # so the title and the set selector give way first. Only a chip past
+    # 220 px ends in an ellipsis; its tooltip names the filter in full.
+    ".defo-analysis-screen .defo-topnav-filter { flex: 0 0 auto; display: flex; align-items: center;"
     " gap: 4px; }\n"
-    ".defo-analysis-screen .defo-filter-chip { max-width: 220px; }\n"
+    ".defo-analysis-screen .defo-filter-chip { flex-shrink: 0; max-width: 220px; }\n"
     ".defo-analysis-screen .defo-filter-chip .v-chip__content { display: block; min-width: 0; overflow: hidden;"
     " text-overflow: ellipsis; white-space: nowrap; }\n"
     ".defo-analysis-screen .defo-topnav-progress { display: flex; flex-direction: column; gap: 4px; width: 150px; margin-left: 4px; }\n"

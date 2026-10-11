@@ -134,6 +134,18 @@ def p3_import(page, rec, *, out, data, package):
     w.wait_for(lambda: chip in w.panel_text(page), 120, "the evaluator chip")
     w.wait_for(lambda: (counter(page) or (0, 0))[1] == 45, 180, "45 alerts in the filter")
     rec["counter"] = counter(page)
+    # The chip is the copy's only statement of whose alerts these are: it is
+    # shown in full (it was cut to "Eval…" at 1400 px), with a full tooltip.
+    rec["chip"] = page.evaluate(
+        "() => { const c = document.querySelector('.defo-analysis-screen .defo-filter-chip');"
+        " if (!c) return null; const t = c.querySelector('.v-chip__content') || c;"
+        " return {title: c.getAttribute('title'), text: t.textContent.trim(),"
+        " chip: [c.scrollWidth, c.clientWidth], content: [t.scrollWidth, t.clientWidth]}; }")
+    assert rec["chip"] is not None, "no filter chip on the screen"
+    assert rec["chip"]["title"] == chip, rec["chip"]
+    for part in ("chip", "content"):
+        scroll, client = rec["chip"][part]
+        assert scroll <= client, f"the chip's {part} is clipped: {rec['chip']}"
     w.shot(page, out, "03_imported")
 
 

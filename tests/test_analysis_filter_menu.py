@@ -106,6 +106,30 @@ def test_the_chip_names_two_values_and_counts_the_rest(bar):
         "Status: " + t("legend.status.not_reviewed") + ", " + t("legend.status.confirmed") + " +1"]
 
 
+def test_the_chips_title_names_the_filter_in_full(bar):
+    """In a review copy the chip is the only statement of whose alerts these
+    are: its tooltip names every value, even when the chip counts the rest."""
+    ui, s = bar.ui, bar.state
+    s.set_alert_filter(AlertFilter("evaluator", frozenset({"Ana"})))
+    assert ui.chip.attributes["title"] == "Evaluator: Ana" == ui.chip.children[0]
+    s.set_alert_filter(AlertFilter("status", frozenset({"Not reviewed", "Confirmed", "Need revision"})))
+    assert ui.chip.children[0].endswith(" +1")
+    assert ui.chip.attributes["title"] == "Status: " + ", ".join(
+        [t("legend.status.not_reviewed"), t("legend.status.confirmed"), "Need revision"])
+    s.clear_alert_filter()
+    assert "title" not in ui.chip.attributes
+
+
+def test_the_chip_never_shrinks_in_the_top_bar():
+    """Found at 1400 px: the filter's box shrank first, cutting the chip to
+    "Eval…". The box and the chip keep their width; the title shrinks."""
+    from tests.test_analysis_screen import _rules
+
+    rules = _rules(analysis_tile.SCREEN_CSS)
+    assert "flex: 0 0 auto;" in rules[".defo-analysis-screen .defo-topnav-filter"]
+    assert "flex-shrink: 0;" in rules[".defo-analysis-screen .defo-filter-chip"]
+
+
 def test_closing_the_chip_or_clear_removes_the_filter(bar):
     ui, s = bar.ui, bar.state
     s.set_alert_filter(AlertFilter("evaluator", frozenset({"Ana"})))
