@@ -19,7 +19,7 @@ from gui.store.navigation import (
 from gui.store.state_manager import AppState
 
 
-def test_workflow_map_covers_the_seven_steps_in_order():
+def test_workflow_map_covers_the_eight_steps_in_order():
     assert PAGE_VIEW_TO_WORKFLOW == {
         "aoi_tile": 0,
         "alerts_tile": 1,
@@ -28,6 +28,7 @@ def test_workflow_map_covers_the_seven_steps_in_order():
         "prepare_tile": 4,
         "integrate_tile": 5,
         "questionnaire_tile": 6,
+        "evaluators_tile": 7,
     }
 
 

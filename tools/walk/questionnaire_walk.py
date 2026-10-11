@@ -177,8 +177,8 @@ def step_keys(page):
 def check_1_rail(page, rec, *, out):
     keys = step_keys(page)
     rec["steps"] = keys
-    assert len(keys) == 7, keys
-    assert keys[-1] == "questionnaire" and "analysis" not in keys, keys
+    assert len(keys) == 8, keys
+    assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys, keys
     w.goto_step(page, "questionnaire", 2000)
     assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
     # Analysis is a screen of its own: the last step's Next is *Start analysis*.

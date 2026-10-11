@@ -66,6 +66,10 @@
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nothing yet",
-    "start_analysis": "Start analysis"
+    "start_analysis": "Start analysis",
+    "count_evaluators": {
+      "one": "{count} evaluator",
+      "other": "{count} evaluators"
+    }
   }
 }

@@ -3,8 +3,8 @@
 Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
 (About, Project, Overview) and the project workflow in the right panel (AOI →
 Alerts → Optional layers → Period → Download & harmonize → Integrate &
-vectorize → Questionnaire), and beside MapApp the analysis screen
-(``app_state.screen``), which Questionnaire's *Start analysis* opens.
+vectorize → Questionnaire → Evaluators), and beside MapApp the analysis
+screen (``app_state.screen``), which *Start analysis* opens.
 Run: ./run_ui.sh (Voila, as on SEPAL) or
 solara run gui/solara_app.py --port 8900 --no-open
 """
@@ -76,6 +76,7 @@ from gui.tile.alerts_step import AlertsStep
 from gui.tile.analysis import build_analysis_layout
 from gui.tile.analysis.state import AnalysisState
 from gui.tile.aoi_step import AoiStep
+from gui.tile.evaluators_step import EvaluatorsStep
 from gui.tile.integrate_step import IntegrateStep
 from gui.tile.layers_step import LayersStep
 from gui.tile.overview_tile import OverviewTile
@@ -726,6 +727,9 @@ def _AppShell():
                                          t("app.drawer_item.integrate"))[0],
             "questionnaire": render_detached(lambda: QuestionnaireStep(app_state=app_state),
                                              t("app.drawer_item.questionnaire"))[0],
+            "evaluators": render_detached(lambda: EvaluatorsStep(app_state=app_state, app_tile_model=set_context,
+                                                                 analysis=analysis, gee_interface=gee_interface),
+                                          t("app.drawer_item.evaluators"))[0],
             "layers": render_detached(lambda: LayersStep(app_state=app_state, map_=map_,
                                                          gee_interface=gee_interface, layers=layers),
                                       t("app.drawer_item.layers"))[0],

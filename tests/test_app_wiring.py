@@ -262,6 +262,7 @@ STEP_FILES = {
     "prepare": "gui/tile/prepare_step.py",
     "integrate": "gui/tile/integrate_step.py",
     "questionnaire": "gui/tile/questionnaire_step.py",
+    "evaluators": "gui/tile/evaluators_step.py",
 }
 
 
@@ -495,7 +496,7 @@ def test_a_detached_tile_may_remount_its_root():
 
     src = _src("gui/solara_app.py")
     assert "render_fixed" not in _component_body(src, "_AppShell")
-    assert src.count("render_detached(lambda: ") == 11  # About, Project, Overview, seven steps, the header
+    assert src.count("render_detached(lambda: ") == 12  # About, Project, Overview, eight steps, the header
 
 
 def test_nothing_imports_the_workspace_module():
@@ -562,3 +563,14 @@ def test_the_title_follows_a_language_switch():
     finally:
         set_locale("en")
         rc.close()
+
+
+def test_the_evaluators_step_writes_through_the_shells_set_context():
+    """Split and merge write the store through the same SetContext and
+    AnalysisState as the review Save (spec 2026-10-10 §4.4)."""
+    shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
+    body = shell[shell.index('"evaluators": render_detached('):]
+    body = body[:body.index("[0]")]
+    for arg in ("app_state=app_state", "app_tile_model=set_context", "analysis=analysis",
+                "gee_interface=gee_interface", 't("app.drawer_item.evaluators")'):
+        assert arg in body, arg

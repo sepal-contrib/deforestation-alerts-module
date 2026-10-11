@@ -21,7 +21,8 @@ def _states(p):
 
 
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire"]
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire",
+                                      "evaluators"]
     # The first three rail items are dialogs: the Overview dashboard is the
     # widest, over the map and the panel alike (spec §9.5). The Project dialog
     # is spatial_risk's status block (spec D5): Manage projects and the name
@@ -91,14 +92,33 @@ def test_every_label_and_lock_key_exists():
         resolve(r.label_key)
 
 
-def test_questionnaire_is_the_last_step_and_counts_questions():
-    """Analysis is a screen of its own now (Questionnaire's *Start analysis*)."""
+def test_questionnaire_comes_before_evaluators_and_counts_questions():
+    """Analysis is a screen of its own (Questionnaire's *Start analysis*)."""
     from gui.store.workflow_steps import step_index, step_status
     keys = [s.key for s in STEPS]
-    assert keys[-1] == "questionnaire" and "analysis" not in keys
+    assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys
     spec = STEPS[step_index("questionnaire")]
     assert not spec.unlocked(None)
     p = _p()  # a new project holds the default questions
     assert spec.unlocked(p) and spec.count(p) == len(p.questions) > 0
     p.questions = []
     assert step_status(spec, p) is StepStatus.EMPTY
+
+
+def test_evaluators_needs_an_active_set_and_counts_evaluators():
+    from deforestation_alerts.project.models import EvaluatorSplit
+    from gui.i18n import t
+    from gui.store.workflow_steps import step_index, step_status
+    spec = STEPS[step_index("evaluators")]
+    assert (spec.page_view, spec.label_key, spec.icon) == (
+        "evaluators_tile", "app.drawer_item.evaluators", "mdi-account-multiple-outline")
+    p = _p()
+    assert not spec.unlocked(None) and not spec.unlocked(p)
+    p.alert_sets["x"] = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
+    p.active_set = "x"
+    assert spec.unlocked(p) and spec.count(p) == 0 and step_status(spec, p) is StepStatus.EMPTY
+    p.alert_sets["x"].split = EvaluatorSplit(split_id="s", evaluators=["A", "B"], created_at=datetime.now())
+    assert spec.count(p) == 2 and step_status(spec, p) is StepStatus.HAS_OUTPUTS
+    assert t(spec.count_key, count=2) == "2 evaluators"

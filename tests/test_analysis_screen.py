@@ -136,9 +136,9 @@ class _Theme(HasTraits):
 
 
 # --------------------------------------------------------------- navigation
-def test_the_stepper_ends_at_questionnaire():
+def test_the_stepper_ends_at_evaluators():
     keys = [s.key for s in STEPS]
-    assert keys[-1] == "questionnaire" and "analysis" not in keys and len(STEPS) == 7
+    assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys and len(STEPS) == 8
     assert "analysis_tile" not in PAGE_VIEW_TO_WORKFLOW
     assert not hasattr(STEPS[0], "full_stage")
 

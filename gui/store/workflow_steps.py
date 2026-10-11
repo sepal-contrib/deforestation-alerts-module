@@ -3,9 +3,9 @@
 Two registries:
 
 * ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
-  Period → Download & harmonize → Integrate & vectorize → Questionnaire).
-  Analysis is not a step: Questionnaire's *Start analysis* opens its own
-  screen (``app_state.screen``), gated by ``active_set``. Gates and counts
+  Period → Download & harmonize → Integrate & vectorize → Questionnaire →
+  Evaluators). Analysis is not a step: *Start analysis* (Questionnaire,
+  Evaluators) opens its own screen (``app_state.screen``), gated by ``active_set``. Gates and counts
   read only the Project. Order, labels, gates, lock reasons and
   per-step output counts derive from it; ``PipelineHeader`` and the shell
   never hand-maintain step numbers.
@@ -109,6 +109,11 @@ STEPS: List[StepSpec] = [
              unlocked=lambda p: p is not None, lock_reason_key="workflow.lock_project",
              count=lambda p: len(p.questions) if p is not None else 0,
              count_key="workflow.count_questions"),
+    StepSpec(key="evaluators", page_view="evaluators_tile", label_key="app.drawer_item.evaluators",
+             icon="mdi-account-multiple-outline",
+             unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
+             count=lambda p: len(active_set(p).split.evaluators) if active_set(p) and active_set(p).split else 0,
+             count_key="workflow.count_evaluators"),
 ]
 
 RAIL_ITEMS: List[RailItem] = [
