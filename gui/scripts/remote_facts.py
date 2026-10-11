@@ -46,8 +46,12 @@ def coverage_needed(p, refreshed) -> tuple:
     ``(aoi_digest, key)`` pairs fetched this session), and again for a
     project without its record (another project with the same AOI was
     refreshed); a custom entry whenever its record is missing or stale.
+
+    None for a review copy (spec §6.3): its sources are the creator's (their
+    refs, possibly private Earth Engine assets, are never resolved) and its
+    setup is never written, so neither a load nor "Check again" checks them.
     """
-    if p is None or p.aoi is None:
+    if p is None or p.aoi is None or read_only(p):
         return (), ()
     digest = p.aoi.digest
     pre = tuple(k for k in PREDEFINED_KEYS if (digest, k) not in refreshed or record_for(p, k) is None)

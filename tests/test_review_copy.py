@@ -424,3 +424,106 @@ def test_the_banner_shows_above_the_steps_of_a_copy_only(tmp_path, monkeypatch):
         assert not rc.find(v.Alert).widgets
     finally:
         rc.close()
+
+
+# ------------------------------------- fix round 1: no remote reads, no gaps
+async def _settle(cond, rounds=200):
+    for _ in range(rounds):
+        await asyncio.sleep(0.01)
+        if cond():
+            return True
+    return False
+
+
+def test_opening_a_copy_checks_no_coverage_even_on_check_again(tmp_path, monkeypatch):
+    """The creator's source refs (here a private asset) are never resolved:
+    neither the load nor "Check again" asks for coverage, nor writes it."""
+    from deforestation_alerts.project.models import BandMap, add_custom_source
+    from gui.scripts import remote_facts as rf
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    p = _project()
+    add_custom_source(p, name="mine", origin="gee", ref="users/creator/private", asset_type="IMAGE",
+                      format="radd", date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
+                      native=NativeGrid(crs="EPSG:4326", scale=10.0))
+    assert p.coverage == {} and rf.coverage_needed(p, frozenset()) == ((), ())
+    s = AppState()
+    s.new_project_state(p)
+    asked = []
+
+    async def get_info_async(obj):
+        asked.append(obj)
+        return {"bands": ["conf26"]}
+
+    # ``coverage_request`` is what resolves a custom ref (``custom_footprint``)
+    monkeypatch.setattr(rf, "coverage_request", lambda *a: pytest.fail("a copy's coverage was requested"))
+    monkeypatch.setattr(rf.catalogue, "meta_request", lambda key: "META")
+
+    @solara.component
+    def Page():
+        NotificationProvider()
+        rf.RemoteFactsLoader(app_state=s, gee_interface=SimpleNamespace(get_info_async=get_info_async))
+
+    async def main():
+        _box, rc = reacton.render(Page(), handle_error=False)
+        try:
+            assert await _settle(lambda: s.catalogue_meta.value)  # the loader's tasks did run
+            s.coverage_retry.set(s.coverage_retry.value + 1)  # "Check again"
+            await _settle(lambda: False, rounds=20)
+            assert asked == ["META"] and s.project.value.coverage == {}
+            assert s.coverage_error.value is None and s.coverage_pending.value is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_copys_aoi_step_replays_nothing(tmp_path, monkeypatch):
+    """The creator's AOI (an admin code here, as a spec to replay) is never
+    replayed through GAUL or Earth Engine: no picker, ``aoi_result`` unset."""
+    from gui.tile import aoi_step
+
+    mounted = []
+
+    @solara.component
+    def _View(**kw):
+        mounted.append(kw.get("spec"))
+
+    monkeypatch.setattr(aoi_step, "AoiView", _View)
+    monkeypatch.setattr(aoi_step.AoiSpec, "from_dict", classmethod(lambda cls, d: ("SPEC", d)))
+    s = _state(tmp_path, monkeypatch)
+    s.update_project("c", lambda live: setattr(live, "aoi", live.aoi.model_copy(
+        update={"spec": {"method": "ADMIN1", "admin": "2317"}})))
+    gee = SimpleNamespace(get_info_async=lambda obj: pytest.fail("Earth Engine was asked for a copy's AOI"))
+
+    @solara.component
+    def Page():
+        NotificationProvider()
+        aoi_step.AoiStep(app_state=s, map_=SimpleNamespace(), gee_interface=gee, layers=MapLayers(_Map()))
+
+    _box, rc = reacton.render(Page(), handle_error=False)
+    try:
+        assert mounted == [] and s.aoi_result.value is None
+        assert [w for w in rc.find(v.Html).widgets if w.children == ["a"]]  # the AOI's name, read-only
+        plain = _project(name="plain", copy=False)  # the same AOI in a plain project is replayed
+        plain.aoi = s.project.value.aoi
+        s.new_project_state(plain)
+        assert mounted and mounted[-1] == ("SPEC", {"method": "ADMIN1", "admin": "2317"})
+    finally:
+        rc.close()
+
+
+def test_a_refusal_survives_the_project_closing_before_its_warning(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    real = s.update_project
+
+    def closing(name, fn):
+        try:
+            return real(name, fn)
+        finally:
+            s.project.set(None)  # closed between the refusal and its warning
+
+    monkeypatch.setattr(s, "update_project", closing)
+    warned = []
+    assert update_setup(s, "c", lambda live: None, SimpleNamespace(warning=warned.append)) is False
+    assert warned == [BANNER]

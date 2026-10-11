@@ -15,6 +15,9 @@ masks, all cut to the old AOI) leave the map first, as a period's do
 ``app_state.aoi_result`` is what downloads and previews clip to, so it only
 holds a pick the open project took: the saved AOI replayed on load, or a new
 AOI once it is saved. A rejected pick leaves it alone.
+
+A review copy (spec §6.3) shows no picker: its AOI is its package's sidecar,
+never replayed from the creator's admin code or asset.
 """
 
 import asyncio
@@ -70,7 +73,7 @@ def AoiStep(app_state, map_, gee_interface, layers):
     loading = solara.use_reactive(False)
     locked = p is not None and p.locked
     ro = read_only(p)  # a review copy: the header's banner says why (spec §6.3)
-    spec = AoiSpec.from_dict(p.aoi.spec) if p is not None and p.aoi and p.aoi.spec else None
+    spec = AoiSpec.from_dict(p.aoi.spec) if p is not None and p.aoi and p.aoi.spec and not ro else None
 
     created_here = solara.use_ref(None)  # the name of a project this step just created
     key_ref = solara.use_ref((signal, f"aoi-{signal}"))
@@ -207,6 +210,14 @@ def AoiStep(app_state, map_, gee_interface, layers):
             # Inline on purpose: a persistent state description, not the outcome
             # of an action (spec §11 routes outcomes through notifications).
             rv.Alert(type="info", dense=True, text=True, children=[t("steps.aoi.locked")])
+        if ro:
+            # A review copy's AOI is its package's sidecar (spec §5.3, §6.3):
+            # no picker, so the creator's admin code or asset is never
+            # replayed through GAUL or Earth Engine, and ``aoi_result`` stays
+            # unset (``aoi_io.ee_aoi`` then clips to the sidecar).
+            if p.aoi is not None:
+                solara.Text(p.aoi.name, style="font-weight:500;")
+            return
         # Keyed: the alert appearing above must not remount the picker (its
         # unmount clears the AOI from the map and the remount replays it).
         with rv.Html(tag="div", style_="pointer-events:none;opacity:0.6;" if locked else "").key("aoi-view"):

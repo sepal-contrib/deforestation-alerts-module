@@ -33,12 +33,19 @@ def update_setup(app_state, name: str, fn, notifier=None) -> bool:
     nothing published and a warning, when the live project is a review copy.
     Returns what ``update_project`` returns, False when refused. Every other
     exception ``fn`` raises propagates as before."""
+    refused = []
+
     def _guarded(live):
+        if read_only(live):
+            # read under the lock: the project may be closed once it is released
+            refused.append(banner_text(live))
         refuse_if_read_only(live)  # raised inside the lock: nothing is published
         fn(live)
 
     try:
         return app_state.update_project(name, _guarded)
     except ReadOnlyProject:
-        (notifier or current_notifier()).warning(banner_text(app_state.project.value))
+        if not refused:
+            raise  # ``fn``'s own refusal, not this gate's
+        (notifier or current_notifier()).warning(refused[0])
         return False
