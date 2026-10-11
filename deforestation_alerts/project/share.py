@@ -777,9 +777,16 @@ def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
     refusal: answers are merged by question key. Blocking: off the loop."""
     if p.review_copy is not None:
         raise ShareError("share.merge_err_review_copy")
+    # The kind first, as Import does: a package's members are not a reviewed
+    # copy's, and the allow-list would refuse it as an unexpected file.
+    kind = peek_header(zip_path).kind
+    if kind == KIND_PACKAGE:
+        raise ShareError("share.merge_err_kind")
+    if kind != KIND_RETURN:
+        raise ShareError("share.err.unknown_kind", kind=kind)
     with open_checked(zip_path, RETURN_REQUIRED) as zf:
         header = read_header(zf)
-        if header.kind != KIND_RETURN:
+        if header.kind != KIND_RETURN:  # the zip changed since the peek
             raise ShareError("share.merge_err_kind")
         s = p.alert_sets.get(p.active_set) if p.active_set else None
         if s is None or s.id != header.set_id:

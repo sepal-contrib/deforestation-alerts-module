@@ -22,7 +22,7 @@ from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis.state import AnalysisState
-from tests._share_helpers import APP_VERSION, CREATOR, SET1, make_copy, make_creator, rezip, zip_members
+from tests._share_helpers import AOI_FC, APP_VERSION, CREATOR, SET1, make_copy, make_creator, rezip, zip_members
 
 #: the creator's store: alert 0 reviewed alike, 1 Bo's, 2 reviewed otherwise, 3 not reviewed
 CREATOR_STATUSES = ("Confirmed", "Not reviewed", "Need revision", "Not reviewed")
@@ -194,6 +194,21 @@ def test_read_return_refusals(tmp_path, monkeypatch, case, key):
         assert exc.params == {"set": SET1}
     if case == "evaluator":
         assert exc.params == {"evaluator": "Cy"}
+
+
+def test_a_real_package_picked_to_merge_reads_as_the_wrong_kind(tmp_path, monkeypatch):
+    """A package (its alerts, AOI and imagery members) is checked for its kind
+    before the reviewed copy's member allow-list, as Import does: it reads as
+    "a review package, not a reviewed copy", never as an unexpected file."""
+    p, pdir = _creator(tmp_path, monkeypatch)
+    package = share.build_package(p, pdir, SET1, "Ana", AOI_FC, tmp_path / "out", app_version=APP_VERSION)
+    exc = _refused(lambda: read_return(package, p, _store(p)))
+    assert exc.key == "share.merge_err_kind"
+    assert error_text(exc) == t("share.merge_err_kind")
+    # a kind neither side makes is named as such
+    odd = _header(_return(tmp_path), tmp_path / "odd.zip", kind="something-else")
+    exc = _refused(lambda: read_return(odd, p, _store(p)))
+    assert exc.key == "share.err.unknown_kind" and exc.params == {"kind": "something-else"}
 
 
 # ---- apply_return ---------------------------------------------------------------------
