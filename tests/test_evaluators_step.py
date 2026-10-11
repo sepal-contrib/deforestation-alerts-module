@@ -711,3 +711,29 @@ def test_the_return_panel_starts_afresh_in_another_copy(data_root, monkeypatch):
             rc.close()
 
     asyncio.run(main())
+
+
+def _walk(w):
+    yield w
+    for c in getattr(w, "children", None) or []:
+        if not isinstance(c, str):
+            yield from _walk(c)
+
+
+def test_the_return_panels_lines_are_blocks_and_the_link_wraps(data_root, monkeypatch):
+    """Found in the browser walk: solara.Text is an inline span, so the title,
+    progress and note ran together on one line, and the long zip name in the
+    link ran past the panel's edge."""
+    copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
+                      origin_project="c", imported_at=datetime.now())
+    s = _state(_project("c__e02-bo", split=_split(), review_copy=copy), _gdf(evaluators=("Ana", "Bo", "Ana", "Bo")))
+    _box, rc = _render(s)
+    try:
+        for text in (t("evaluators.return_title"), t("evaluators.return_progress", reviewed="1", assigned="2"),
+                     t("evaluators.return_note")):
+            line = next(w for w in _walk(rc.container) if text in [c for c in getattr(w, "children", []) if isinstance(c, str)])
+            assert "display:block" in line.style_.replace(" ", ""), text
+        entry = {"url": "u", "file": "f.zip"}
+        assert "word-break" in es._download_link(entry, "x", "c").kwargs["style_"]
+    finally:
+        rc.close()

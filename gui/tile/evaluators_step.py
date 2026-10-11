@@ -239,7 +239,8 @@ def _table_rows(stats, unassigned, *, on_package, building, can_package) -> list
 def _download_link(entry, label: str, class_: str):
     return rv.Btn(children=[rv.Icon(left=True, small=True, children=["mdi-download"]), label],
                   href=entry["url"], target="_blank", attributes={"download": entry["file"]},
-                  small=True, text=True, color="primary", class_=class_)
+                  small=True, text=True, color="primary", class_=class_,
+                  style_="max-width:100%; height:auto; white-space:normal; word-break:break-all; text-align:left;")
 
 
 @solara.component
@@ -571,13 +572,14 @@ def _ReturnPanel(app_state):
     reviewed, assigned = return_progress(p, gdf)
 
     with rv.Card(outlined=True, class_="pa-3"):
-        solara.Text(t("evaluators.return_title"), style="font-weight:600;")
+        # solara.Text is an inline span: each line is its own block.
+        solara.Text(t("evaluators.return_title"), style="display:block;font-weight:600;")
         if gdf is None:
-            solara.Text(t("evaluators.loading"), style=MUTED)
+            solara.Text(t("evaluators.loading"), style="display:block;" + MUTED)
         else:
             solara.Text(t("evaluators.return_progress", reviewed=format_number(reviewed),
-                          assigned=format_number(assigned)))
-        solara.Text(t("evaluators.return_note"), style=MUTED + "font-size:0.8rem;")
+                          assigned=format_number(assigned)), style="display:block;")
+        solara.Text(t("evaluators.return_note"), style="display:block;" + MUTED + "font-size:0.8rem;")
         solara.Button(t("evaluators.download_return"), icon_name="mdi-package-up", color="primary", outlined=True,
                       small=True, block=True, classes=["mt-2"], loading=task.pending, disabled=task.pending,
                       on_click=_start)
