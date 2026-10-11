@@ -147,7 +147,7 @@ def _icon_buttons(rc, icon):
 
 
 def _links(rc, cls):
-    return [b for b in rc.find(v.Btn).widgets if cls in (b.class_ or "")]
+    return [a for a in rc.find(v.Html, tag="a").widgets if cls in (a.class_ or "")]
 
 
 def _toasts(kind):
@@ -389,7 +389,8 @@ def test_a_package_download_records_the_split_as_packaged_and_offers_the_link(da
             name = f"c__{SET_ID}__e01-ana__review.zip"
             path = paths.set_dir(paths.project_dir("c"), PERIOD, ["GLAD-L"]) / name
             assert path.read_bytes() == b"PK"
-            assert link.href.endswith("/" + local_files.home_relative(path)) and link.attributes == {"download": name}
+            assert link.attributes["href"].endswith("/" + local_files.home_relative(path))
+            assert link.attributes["download"] == name
             split = s.project.value.alert_sets[SET_ID].split
             assert split.packaged and split.questions_digest == split_mod.questions_digest(s.project.value.questions)
             assert t("evaluators.package_ready", evaluator="Ana") in _toasts("success")
@@ -733,7 +734,26 @@ def test_the_return_panels_lines_are_blocks_and_the_link_wraps(data_root, monkey
                      t("evaluators.return_note")):
             line = next(w for w in _walk(rc.container) if text in [c for c in getattr(w, "children", []) if isinstance(c, str)])
             assert "display:block" in line.style_.replace(" ", ""), text
-        entry = {"url": "u", "file": "f.zip"}
-        assert "word-break" in es._download_link(entry, "x", "c").kwargs["style_"]
+    finally:
+        rc.close()
+
+
+def test_the_zip_link_is_a_plain_anchor_that_wraps():
+    """Found in the browser walk (twice): a v-btn's inner ``.v-btn__content``
+    is ``flex: 1 0 auto`` and nowrap, so styling the button let the long zip
+    name run past both panel edges. The link is a plain block ``<a>``, whose
+    own text wraps."""
+    @solara.component
+    def _Link():
+        es._download_link({"url": "u", "file": "f.zip"}, "Download f.zip", "c")
+
+    _box, rc = reacton.render(_Link(), handle_error=False)
+    try:
+        assert not rc.find(v.Btn).widgets  # no v-btn: its content cannot wrap
+        (a,) = rc.find(v.Html, tag="a").widgets
+        assert a.attributes == {"href": "u", "target": "_blank", "download": "f.zip"} and a.class_ == "c"
+        style = a.style_.replace(" ", "")
+        assert "display:block" in style and "white-space:normal" in style and "overflow-wrap:anywhere" in style
+        assert "Download f.zip" in _strings(a)
     finally:
         rc.close()

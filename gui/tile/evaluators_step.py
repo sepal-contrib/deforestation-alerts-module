@@ -236,11 +236,18 @@ def _table_rows(stats, unassigned, *, on_package, building, can_package) -> list
     return rows
 
 
+#: a block link whose long zip name wraps inside its panel
+LINK_STYLE = ("display:block; margin-top:8px; font-size:0.85rem; white-space:normal; overflow-wrap:anywhere; "
+              "word-break:break-all; text-decoration:none;")
+
+
 def _download_link(entry, label: str, class_: str):
-    return rv.Btn(children=[rv.Icon(left=True, small=True, children=["mdi-download"]), label],
-                  href=entry["url"], target="_blank", attributes={"download": entry["file"]},
-                  small=True, text=True, color="primary", class_=class_,
-                  style_="max-width:100%; height:auto; white-space:normal; word-break:break-all; text-align:left;")
+    """A plain ``<a>``, not a v-btn: a v-btn's ``.v-btn__content`` is
+    ``flex: 1 0 auto`` and nowrap, so the zip name ran past the panel."""
+    return rv.Html(tag="a", children=[rv.Icon(small=True, color="primary", class_="mr-1",
+                                              children=["mdi-download"]), label],
+                   attributes={"href": entry["url"], "target": "_blank", "download": entry["file"]},
+                   class_=class_, style_=LINK_STYLE)
 
 
 @solara.component
