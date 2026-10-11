@@ -209,7 +209,7 @@ def review_and_save(page, rec, *, out):
     visible_btn(page, "True alert").click()
     page.wait_for_timeout(500)
     open_section(page, "Questions")
-    cb = page.locator('.defo-analysis-right div.mb-3:has(> div.body-2:has-text("Loss driver")) .v-select__slot:visible').last
+    cb = page.locator('.defo-analysis-right .dat-question:has-text("Loss driver") .v-select__slot:visible').last
     cb.click()
     page.wait_for_timeout(700)
     page.locator('.menuable__content__active .v-list-item:has-text("Logging")').first.click()
