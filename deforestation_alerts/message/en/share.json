@@ -26,6 +26,20 @@
       "bad_store": "The alerts in this package cannot be read.",
       "no_free_name": "No free project name is left for {name}.",
       "import_failed": "The package could not be imported: {error}"
-    }
+    },
+    "merge_err_review_copy": "A review copy cannot merge reviewed copies; open the creator's project.",
+    "merge_err_kind": "This zip is a review package, not a reviewed copy.",
+    "merge_err_wrong_set": "This copy is for set {set}; make it the active set to merge.",
+    "merge_err_rerun": "The set was re-run since this copy was made.",
+    "merge_err_old_split": "This copy was made for an earlier split.",
+    "merge_err_evaluator": "{evaluator} is not an evaluator of this split.",
+    "merge_err_payload": "The reviews in this zip cannot be read.",
+    "merge_err_no_alerts": "The alerts of the active set are not loaded.",
+    "merge_err_changed": "The project or its active set changed since the preview; open the copy again.",
+    "merge_err_store_changed": "The alerts were saved while merging; nothing was merged, try again.",
+    "merge_summary": "{evaluator}: {new} new reviews, {conflicts} conflicts, {unchanged} unchanged, {ignored} ignored",
+    "merge_questions_changed": "The questionnaire changed since the packages were made; answers are merged by question key.",
+    "merge_extra_columns": "Ignored columns: {columns}",
+    "merge_selected_reload": "Alert {n}, open in Analysis, will be reloaded."
   }
 }

@@ -26,6 +26,20 @@
       "bad_store": "Les alertes de ce paquet sont illisibles.",
       "no_free_name": "Aucun nom de projet libre ne reste pour {name}.",
       "import_failed": "Le paquet n'a pas pu être importé : {error}"
-    }
+    },
+    "merge_err_review_copy": "Une copie de révision ne peut pas fusionner de copies révisées ; ouvrez le projet du créateur.",
+    "merge_err_kind": "Ce zip est un paquet de révision, pas une copie révisée.",
+    "merge_err_wrong_set": "Cette copie concerne le jeu {set} ; activez-le pour la fusionner.",
+    "merge_err_rerun": "Le jeu a été relancé depuis la création de cette copie.",
+    "merge_err_old_split": "Cette copie a été faite pour une répartition antérieure.",
+    "merge_err_evaluator": "{evaluator} n'est pas évaluateur de cette répartition.",
+    "merge_err_payload": "Les révisions de ce zip ne peuvent pas être lues.",
+    "merge_err_no_alerts": "Les alertes du jeu actif ne sont pas chargées.",
+    "merge_err_changed": "Le projet ou son jeu actif a changé depuis l'aperçu ; rouvrez la copie.",
+    "merge_err_store_changed": "Les alertes ont été enregistrées pendant la fusion ; rien n'a été fusionné, réessayez.",
+    "merge_summary": "{evaluator} : {new} nouvelles révisions, {conflicts} conflits, {unchanged} inchangées, {ignored} ignorées",
+    "merge_questions_changed": "Le questionnaire a changé depuis la création des paquets ; les réponses sont fusionnées par clé de question.",
+    "merge_extra_columns": "Colonnes ignorées : {columns}",
+    "merge_selected_reload": "L'alerte {n}, ouverte dans Analyse, sera rechargée."
   }
 }

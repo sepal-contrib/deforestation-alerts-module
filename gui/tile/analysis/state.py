@@ -101,6 +101,10 @@ class AnalysisState:
     #: A worker (a CNN run, an imagery fetch) captures it when it starts and
     #: drops its result once another alert is current (``apply_if_current``).
     alert_token: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
+    #: bumped when a merge rewrote the selected alert's row (spec §7.4): the
+    #: per-alert view is seeded again from the merged store. ``reset_alert``
+    #: leaves it alone (it is a request, not per-alert state).
+    reload_alert: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
     #: the overlay of reviewed alerts from earlier periods near the current
     #: alert (spec §9). Session state: set by the panel's switch and distance
     #: field, kept across alert changes (the overlay follows the next alert),

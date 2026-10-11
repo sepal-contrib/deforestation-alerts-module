@@ -390,6 +390,8 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
       current alert changes (navigation drives it), plus one immediate call so
       a pre-selected alert renders on first build. ``view_actual_alert`` no-ops
       with no alerts loaded, so this is safe at mount/smoke time and idempotent.
+    - ``analysis.reload_alert``: the same re-run when a merge rewrote the
+      current alert's row (spec §7.4).
     - ``alerts_gdf``: an alert is selected when a set first arrives (a publish
       leaves ``actual_alert_id`` at -1, and the tile would otherwise stay empty
       until "next"), plus one immediate call. Block A subscribes for itself, so
@@ -411,6 +413,7 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
         view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
+    analysis.reload_alert.subscribe(_on_alert_change)
     view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     def _select_first_alert_cb(*_):

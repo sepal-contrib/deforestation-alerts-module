@@ -20,6 +20,7 @@ PACKAGES = ("deforestation_alerts/engine", "deforestation_alerts/project", "defo
 #: Raised with an English text on purpose: a caller's programming error,
 #: unreachable from the UI. (file, exception, a piece of its message's source)
 PROGRAMMER_ERRORS = {
+    ("deforestation_alerts/project/share.py", "ValueError", "unknown merge choice"),
     ("deforestation_alerts/engine/align.py", "ValueError", "only nearest resampling"),
     ("deforestation_alerts/engine/harmonize.py", "ValueError", "mask mode must be one of"),
     ("deforestation_alerts/engine/catalogue.py", "ValueError", "unknown source"),

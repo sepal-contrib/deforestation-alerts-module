@@ -14,9 +14,11 @@ import stat
 import zipfile
 import zlib
 from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
 
 import geopandas as gpd
 import numpy as np
@@ -29,10 +31,10 @@ from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project import io as project_io
 from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
-from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
-from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.models import SCHEMA_VERSION, VERDICTS, AlertSet, Period, Project, ReviewCopy
+from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
-from deforestation_alerts.project.review_status import reviewed_mask
+from deforestation_alerts.project.review_status import is_reviewed, reviewed_mask
 from deforestation_alerts.scripts import local_files, scene_index
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_lock
 from deforestation_alerts.scripts.naming import safe_token
@@ -689,3 +691,150 @@ def find_existing_copy(header: ShareHeader, root: Optional[Path] = None) -> Opti
         if isinstance(rc, dict) and rc.get("split_id") == header.split_id and rc.get("evaluator") == header.evaluator:
             return info.name
     return None
+
+
+# ---- merging a reviewed copy (spec §7) ------------------------------------------
+
+
+@dataclass
+class ReturnPreview:
+    """What merging one reviewed copy would do (spec §7.1-§7.3): its header,
+    its rows indexed by ``alert_id``, the alert ids of each class, the review
+    columns it writes and the columns it carries that are ignored."""
+
+    header: ShareHeader
+    rows: pd.DataFrame
+    new: list[int]
+    conflicts: list[int]
+    unchanged: list[int]
+    ignored: list[int]
+    columns: list[str]
+    extra_columns: list[str]
+    questions_changed: bool
+
+
+def _read_reviews(zf, evaluator: str) -> pd.DataFrame:
+    """``reviews.parquet``, checked (spec §7.1): unique integer ``alert_id``s,
+    every ``evaluator`` the header's, every ``status`` a verdict. Indexed by
+    ``alert_id``."""
+    try:
+        rows = read_table(BytesIO(zf.read(REVIEWS_MEMBER)))
+    except Exception as exc:  # noqa: BLE001 - any unreadable payload is the same refusal
+        raise ShareError("share.merge_err_payload") from exc
+    ids = rows["alert_id"] if "alert_id" in rows.columns else None
+    if ids is None or not pd.api.types.is_integer_dtype(ids) or not ids.is_unique:
+        raise ShareError("share.merge_err_payload")
+    who = rows[split_mod.EVALUATOR_COLUMN] if split_mod.EVALUATOR_COLUMN in rows.columns else None
+    if who is None or not all(isinstance(v, str) and v == evaluator for v in who):
+        raise ShareError("share.merge_err_payload")
+    if "status" not in rows.columns or not all(isinstance(v, str) and v in VERDICTS for v in rows["status"]):
+        raise ShareError("share.merge_err_payload")
+    return rows.set_index("alert_id")
+
+
+def _positions(gdf) -> dict[int, int]:
+    """Row position of each ``alert_id`` of a store."""
+    return {int(a): i for i, a in enumerate(gdf["alert_id"].tolist())}
+
+
+def _cell(gdf, i: int, col: str):
+    """The value at row position ``i`` of ``col``; None without the column
+    (a creator question added after the set was made, spec §7.2)."""
+    return gdf[col].iat[i] if col in gdf.columns else None
+
+
+def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
+    """``preview`` with its rows classified against ``store_gdf`` (spec §7.3):
+    ignored (no such alert, or another evaluator's), unchanged (every review
+    column equal, ``same_value``), conflict (the creator's row is reviewed and
+    differs), new (otherwise). ``read_return`` classifies against the store it
+    is given; a merge classifies again against the store it writes."""
+    who = split_mod.assignments(store_gdf).tolist()
+    at = _positions(store_gdf)
+    evaluator = preview.header.evaluator
+    out = {"new": [], "conflicts": [], "unchanged": [], "ignored": []}
+    for aid in preview.rows.index:
+        i = at.get(int(aid))
+        if i is None or who[i] != evaluator:
+            out["ignored"].append(int(aid))
+        elif all(same_value(_cell(store_gdf, i, c), preview.rows.at[aid, c]) for c in preview.columns):
+            out["unchanged"].append(int(aid))
+        elif is_reviewed(_cell(store_gdf, i, "status")):
+            out["conflicts"].append(int(aid))
+        else:
+            out["new"].append(int(aid))
+    return replace(preview, **out)
+
+
+def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
+    """The preview of merging the reviewed copy at ``zip_path`` into ``p``'s
+    active set, whose alerts are ``store_gdf`` (spec §7.1). Refused with a
+    ``ShareError``, each with its own message: ``p`` is a review copy, the
+    zip or its header (``open_checked``, ``read_header``), not a reviewed
+    copy, another set than the active one, a set re-run since, an earlier
+    split, an evaluator not in the split, a bad payload, no alerts loaded.
+    A changed questionnaire is a warning (``questions_changed``), not a
+    refusal: answers are merged by question key. Blocking: off the loop."""
+    if p.review_copy is not None:
+        raise ShareError("share.merge_err_review_copy")
+    with open_checked(zip_path, RETURN_REQUIRED) as zf:
+        header = read_header(zf)
+        if header.kind != KIND_RETURN:
+            raise ShareError("share.merge_err_kind")
+        s = p.alert_sets.get(p.active_set) if p.active_set else None
+        if s is None or s.id != header.set_id:
+            raise ShareError("share.merge_err_wrong_set", set=header.set_id)
+        if s.fingerprint != header.set_fingerprint:
+            raise ShareError("share.merge_err_rerun")
+        if s.split is None or s.split.split_id != header.split_id:
+            raise ShareError("share.merge_err_old_split")
+        if header.evaluator not in s.split.evaluators:
+            raise ShareError("share.merge_err_evaluator", evaluator=header.evaluator)
+        rows = _read_reviews(zf, header.evaluator)
+    if store_gdf is None or "alert_id" not in store_gdf.columns:
+        raise ShareError("share.merge_err_no_alerts")
+    review = review_columns(p.questions)
+    preview = ReturnPreview(
+        header=header, rows=rows, new=[], conflicts=[], unchanged=[], ignored=[],
+        columns=[c for c in review if c in rows.columns],
+        extra_columns=[c for c in rows.columns if c not in review and c != split_mod.EVALUATOR_COLUMN],
+        questions_changed=header.questions_digest != split_mod.questions_digest(p.questions),
+    )
+    return classify_return(preview, store_gdf)
+
+
+def _put(frame, label, col: str, value) -> None:
+    """``frame.at[label, col] = value``; a missing value is written as None,
+    and a column whose dtype refuses the value (a float column of unset
+    image names) becomes object first."""
+    if value is pd.NA or (isinstance(value, float) and math.isnan(value)):
+        value = None
+    try:
+        frame.at[label, col] = value
+    except (TypeError, ValueError):
+        frame[col] = frame[col].astype(object)
+        frame.at[label, col] = value
+
+
+def apply_return(store_gdf, preview: ReturnPreview, choice: Literal["mine", "theirs"]) -> gpd.GeoDataFrame:
+    """A copy of ``store_gdf`` with the reviewed copy merged (spec §7.4): the
+    *new* rows, and the *conflicts* when ``choice`` is ``"theirs"``, take the
+    return's review columns. A creator question's column the store lacks is
+    created first (``""``, as a Save does, spec §7.2); a column the return
+    lacks is left as it is. ``preview`` must be classified against
+    ``store_gdf`` (``classify_return``)."""
+    if choice not in ("mine", "theirs"):
+        raise ValueError(f"unknown merge choice {choice!r}")
+    out = store_gdf.copy()
+    ids = list(preview.new) + (list(preview.conflicts) if choice == "theirs" else [])
+    if not ids:
+        return out
+    for col in preview.columns:
+        if col not in out.columns:
+            out[col] = "" if is_answer_column(col) else None
+    at = _positions(out)
+    for aid in ids:
+        label = out.index[at[aid]]
+        for col in preview.columns:
+            _put(out, label, col, preview.rows.at[aid, col])
+    return out

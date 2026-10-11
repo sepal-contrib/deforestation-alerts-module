@@ -26,6 +26,20 @@
       "bad_store": "No se pueden leer las alertas de este paquete.",
       "no_free_name": "No queda ningún nombre de proyecto libre para {name}.",
       "import_failed": "No se pudo importar el paquete: {error}"
-    }
+    },
+    "merge_err_review_copy": "Una copia de revisión no puede fusionar copias revisadas; abra el proyecto del creador.",
+    "merge_err_kind": "Este zip es un paquete de revisión, no una copia revisada.",
+    "merge_err_wrong_set": "Esta copia es del conjunto {set}; actívelo para fusionarla.",
+    "merge_err_rerun": "El conjunto se volvió a ejecutar después de crear esta copia.",
+    "merge_err_old_split": "Esta copia se hizo para una división anterior.",
+    "merge_err_evaluator": "{evaluator} no es evaluador de esta división.",
+    "merge_err_payload": "No se pueden leer las revisiones de este zip.",
+    "merge_err_no_alerts": "Las alertas del conjunto activo no están cargadas.",
+    "merge_err_changed": "El proyecto o su conjunto activo cambió desde la vista previa; vuelva a abrir la copia.",
+    "merge_err_store_changed": "Las alertas se guardaron durante la fusión; no se fusionó nada, inténtelo de nuevo.",
+    "merge_summary": "{evaluator}: {new} revisiones nuevas, {conflicts} conflictos, {unchanged} sin cambios, {ignored} ignoradas",
+    "merge_questions_changed": "El cuestionario cambió desde que se crearon los paquetes; las respuestas se fusionan por clave de pregunta.",
+    "merge_extra_columns": "Columnas ignoradas: {columns}",
+    "merge_selected_reload": "La alerta {n}, abierta en Análisis, se volverá a cargar."
   }
 }
