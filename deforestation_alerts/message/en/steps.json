@@ -603,9 +603,10 @@
     "download_return": "Download reviewed copy",
     "return_ready": "Reviewed copy ready: send it to the project's creator.",
     "return_link": "Download {file}",
-    "split_unrecorded": "The alerts were split, but the project changed before the split was recorded. Open it again and remove the split to start over.",
-    "merged_unrecorded": "Merged {taken} reviews from {evaluator}, but the project changed before the merge was recorded. Open it again and merge the same copy to record it.",
-    "merge_failed": "{file} could not be merged: {error}"
+    "split_unrecorded": "The alerts of {project} were split, but another project was opened before the split was saved. Open {project} again and remove the split to start over.",
+    "merged_unrecorded": "The reviews from {evaluator} are in the alerts of {project}, but another project was opened before the return record was saved.",
+    "merge_failed": "{file} could not be merged: {error}",
+    "package_unrecorded": "The package for {evaluator} is built, but the split did not record it: another project was opened or the split changed meanwhile."
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

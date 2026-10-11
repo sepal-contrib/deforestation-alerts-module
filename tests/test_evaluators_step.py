@@ -8,6 +8,7 @@ tests/test_review_sharing_e2e.py."""
 
 import asyncio
 import json
+import threading
 import time
 import tomllib
 from datetime import date, datetime
@@ -289,7 +290,7 @@ def test_a_split_the_project_did_not_record_is_not_reported_as_done(data_root, m
         _box, rc = _render(s)
         try:
             _button(rc, t("evaluators.split")).fire_event("click", None)
-            await _settle(lambda: t("evaluators.split_unrecorded") in _toasts("warning"), "the warning")
+            await _settle(lambda: t("evaluators.split_unrecorded", project="c") in _toasts("warning"), "the warning")
             assert not _toasts("success")
         finally:
             rc.close()
@@ -476,7 +477,7 @@ def test_a_merge_the_project_did_not_record_says_to_merge_again(data_root, monke
         _box, rc = _render(s)
         try:
             await _open_preview(rc, zip_path)
-            await _settle(lambda: t("evaluators.merged_unrecorded", taken=2, evaluator="Bo") in _toasts("warning"),
+            await _settle(lambda: t("evaluators.merged_unrecorded", evaluator="Bo", project="c") in _toasts("warning"),
                           "the warning")
             assert not _toasts("success")
         finally:
@@ -542,6 +543,170 @@ def test_a_review_copy_shows_its_return_panel(data_root, monkeypatch):
             await _settle(lambda: _links(rc, "defo-return-link"), "the return link")
             assert seen == {"out_dir": paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"]),
                             "evaluator": "Bo"}
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ------------------------------------------------------- re-entry, switches
+def _blocking(calls, release, result=None):
+    """A service stand-in that records its call and holds its worker thread
+    until ``release`` is set, as a long split, merge or build does."""
+    def _run(*args, **kwargs):
+        calls.append(args)
+        release.wait(10)
+        return result(*args) if callable(result) else result
+
+    return _run
+
+
+def test_a_second_merge_click_while_one_runs_is_dropped(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.share, "read_return", lambda path, p, store: _preview())
+    monkeypatch.setattr(es.merge_service, "merge_return", _blocking(
+        calls, release, EvaluatorReturn(merged_at=datetime.now(), taken=2, unchanged=0, conflicts=1, ignored=1)))
+    s = _state(_project(split=_split()), _gdf())
+    zip_path = data_root / "bo__reviewed.zip"
+    zip_path.write_bytes(b"PK")
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            await _open_preview(rc, zip_path)
+            merge = _button(rc, t("evaluators.merge"))
+            merge.fire_event("click", None)  # the same click, or Enter, before the render disables it
+            await _settle(lambda: calls, "the merge")
+            _button(rc, t("evaluators.merge")).fire_event("click", None)  # while it runs
+            await asyncio.sleep(0.1)
+            assert len(calls) == 1
+            release.set()
+            await _settle(lambda: _toasts("warning"), "the merge's end")
+            assert len(calls) == 1
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_second_split_click_while_one_runs_is_dropped(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.split_service, "apply_split", _blocking(calls, release, lambda st, m, names, inc: _split()))
+    s = _state(_project(), _gdf(evaluators=("",) * 4))
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _button(rc, t("evaluators.split")).fire_event("click", None)
+            await _settle(lambda: calls, "the split")
+            _button(rc, t("evaluators.split")).fire_event("click", None)  # while its worker runs
+            await asyncio.sleep(0.1)
+            assert len(calls) == 1
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_one_package_builds_at_a_time(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+
+    def _made(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version=None):
+        made = Path(out_dir) / f"{evaluator}.zip"
+        made.parent.mkdir(parents=True, exist_ok=True)
+        made.write_bytes(b"PK")
+        return made
+
+    build = _blocking(calls, release, _made)
+    monkeypatch.setattr(es.share, "build_package", lambda *a, app_version: build(*a))
+    s = _state(_project(split=_split()), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            ana, bo = _icon_buttons(rc, DOWNLOAD)
+            ana.fire_event("click", None)
+            bo.fire_event("click", None)  # Ana's build is not cancelled for Bo's
+            await _settle(lambda: calls, "Ana's build")
+            release.set()
+            await _settle(lambda: _links(rc, "defo-package-link"), "Ana's link")
+            assert [c[3] for c in calls] == ["Ana"]
+            assert t("evaluators.package_ready", evaluator="Ana") in _toasts("success")
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_package_the_split_no_longer_matches_is_not_reported_recorded(data_root, monkeypatch):
+    s = _state(_project(split=_split()), _gdf())
+
+    def _build(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version):
+        # The split is replaced while the zip is made.
+        _record_split(s, EvaluatorSplit(split_id="s9", evaluators=["Ana", "Bo"], created_at=datetime.now()))
+        made = Path(out_dir) / "ana.zip"
+        made.parent.mkdir(parents=True, exist_ok=True)
+        made.write_bytes(b"PK")
+        return made
+
+    monkeypatch.setattr(es.share, "build_package", _build)
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _icon_buttons(rc, DOWNLOAD)[0].fire_event("click", None)
+            await _settle(lambda: t("evaluators.package_unrecorded", evaluator="Ana") in _toasts("warning"),
+                          "the warning")
+            assert not _toasts("success")
+            assert not s.project.value.alert_sets[SET_ID].split.packaged
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_split_form_starts_afresh_in_another_project(data_root):
+    s = _state(_project(), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        rc.find(v.RadioGroup).widget.v_model = "names"
+        rc.find(v.Textarea, label=t("evaluators.names_label")).widget.v_model = "Ana\nBo"
+        s.load_project_state(_project("d"))
+        s.alerts_gdf.set(_gdf(evaluators=("",) * 4))
+        assert not rc.find(v.Textarea).widgets
+        assert rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model == "2"
+    finally:
+        rc.close()
+
+
+def test_the_return_panel_starts_afresh_in_another_copy(data_root, monkeypatch):
+    def _build(p, pdir, out_dir, *, app_version):
+        made = Path(out_dir) / f"{p.name}__reviewed.zip"
+        made.parent.mkdir(parents=True, exist_ok=True)
+        made.write_bytes(b"PK")
+        return made
+
+    monkeypatch.setattr(es.share, "build_return", _build)
+
+    def _copy(name, evaluator, index):
+        rc_ = ReviewCopy(evaluator=evaluator, evaluator_index=index, set_id=SET_ID, split_id="s1",
+                         set_fingerprint="fp", origin_project="c", imported_at=datetime.now())
+        return _project(name, split=_split(), review_copy=rc_)
+
+    s = _state(_copy("c__e01-ana", "Ana", 1), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _button(rc, t("evaluators.download_return")).fire_event("click", None)
+            await _settle(lambda: _links(rc, "defo-return-link"), "the return link")
+            s.load_project_state(_copy("c__e02-bo", "Bo", 2))
+            s.alerts_gdf.set(_gdf())
+            await asyncio.sleep(0.05)
+            assert not _links(rc, "defo-return-link")  # Ana's zip is not offered in Bo's copy
         finally:
             rc.close()
 

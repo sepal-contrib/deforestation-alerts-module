@@ -627,9 +627,10 @@
     "download_return": "Télécharger la copie révisée",
     "return_ready": "Copie révisée prête : envoyez-la au créateur du projet.",
     "return_link": "Télécharger {file}",
-    "split_unrecorded": "Les alertes ont été réparties, mais le projet a changé avant l'enregistrement de la répartition. Rouvrez-le et supprimez la répartition pour recommencer.",
-    "merged_unrecorded": "{taken} révisions de {evaluator} fusionnées, mais le projet a changé avant l'enregistrement de la fusion. Rouvrez-le et fusionnez la même copie pour l'enregistrer.",
-    "merge_failed": "Impossible de fusionner {file} : {error}"
+    "split_unrecorded": "Les alertes de {project} ont été réparties, mais un autre projet a été ouvert avant l'enregistrement de la répartition. Rouvrez {project} et supprimez la répartition pour recommencer.",
+    "merged_unrecorded": "Les révisions de {evaluator} sont déjà dans les alertes de {project}, mais un autre projet a été ouvert avant l'enregistrement du retour.",
+    "merge_failed": "Impossible de fusionner {file} : {error}",
+    "package_unrecorded": "Le paquet pour {evaluator} est créé, mais la répartition ne l'a pas enregistré : un autre projet a été ouvert ou la répartition a changé entre-temps."
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

@@ -627,9 +627,10 @@
     "download_return": "Descargar la copia revisada",
     "return_ready": "Copia revisada lista: envíala al creador del proyecto.",
     "return_link": "Descargar {file}",
-    "split_unrecorded": "Las alertas se repartieron, pero el proyecto cambió antes de guardar el reparto. Ábrelo de nuevo y quita el reparto para empezar otra vez.",
-    "merged_unrecorded": "{taken} revisiones de {evaluator} integradas, pero el proyecto cambió antes de guardar la integración. Ábrelo de nuevo e integra la misma copia para guardarla.",
-    "merge_failed": "No se pudo integrar {file}: {error}"
+    "split_unrecorded": "Las alertas de {project} se repartieron, pero se abrió otro proyecto antes de guardar el reparto. Abre {project} de nuevo y quita el reparto para empezar otra vez.",
+    "merged_unrecorded": "Las revisiones de {evaluator} ya están en las alertas de {project}, pero se abrió otro proyecto antes de guardar el registro de la devolución.",
+    "merge_failed": "No se pudo integrar {file}: {error}",
+    "package_unrecorded": "El paquete para {evaluator} está creado, pero el reparto no lo registró: se abrió otro proyecto o el reparto cambió entretanto."
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."

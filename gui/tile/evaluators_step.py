@@ -28,7 +28,6 @@ The shell renders this step detached, so toasts go through
 
 import asyncio
 import functools
-import logging
 import tomllib
 from importlib import metadata
 from pathlib import Path
@@ -60,8 +59,6 @@ from gui.widget.form_dialog import field_group, form_card, use_form_dialog
 from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.text_style import MUTED
-
-logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _DIST = "deforestation-alerts-module"
 _PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
@@ -141,18 +138,22 @@ def link_entry(path) -> dict:
     return {"file": Path(path).name, "url": create_download_link(local_files.home_relative(path))}
 
 
-def mark_packaged(app_state, name: str, set_id: str, split_id: str, digest: str) -> None:
+def mark_packaged(app_state, name: str, set_id: str, split_id: str, digest: str) -> bool:
     """Record that a package of split ``split_id`` was built, with the
-    questionnaire's digest it carries; nothing when the split was replaced
-    or removed meanwhile, or the project is a review copy (§6.3)."""
+    questionnaire's digest it carries. False, recording nothing, when
+    another project was opened, the split was replaced or removed meanwhile,
+    or the project is a review copy (§6.3)."""
+    applied = []
+
     def _apply(live):
         s = live.alert_sets.get(set_id)
         if s is None or s.split is None or s.split.split_id != split_id:
             return
         made = s.split.model_copy(update={"packaged": True, "questions_digest": digest})
         live.alert_sets = {**live.alert_sets, set_id: s.model_copy(update={"split": made})}
+        applied.append(True)
 
-    update_setup(app_state, name, _apply)
+    return bool(update_setup(app_state, name, _apply)) and bool(applied)
 
 
 def split_recorded(app_state, name: str, set_id: str, made) -> bool:
@@ -295,7 +296,37 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     # Bumped by every pick: the picker is remounted empty, so the next
     # reviewed copy is picked afresh (one zip at a time, §7.4).
     picks, set_picks = solara.use_state(0)
+    # Set by the click that starts an action, cleared when its task ends.
+    # Solara calls on_click whatever ``disabled`` the last render sent, and a
+    # task called again cancels its asyncio run but not the worker thread
+    # under it. So a second click (or Enter on Merge) is dropped here, before
+    # it can start a second split, merge or build over the first.
+    inflight = solara.use_ref(False)
     split = s.split
+
+    def _reset():
+        # Another project opened: its step starts from a fresh form, without
+        # this project's preview or links. (A ``.key(p.name)`` on the panel
+        # does not remount it: reacton re-renders a child subscribed to the
+        # same reactive in place, keeping its state.)
+        set_mode("count")
+        set_count_text("2")
+        set_names_text("")
+        set_include(False)
+        set_confirm(None)
+        set_links({})
+        set_pending(None)
+        preview_open.set(False)
+
+    solara.use_effect(_reset, [p.name])
+
+    def _held(fn):
+        async def run(*args):
+            try:
+                await fn(*args)
+            finally:
+                inflight.current = False
+        return run
 
     async def _split(names, include_reviewed):
         live = app_state.project.peek()
@@ -309,9 +340,9 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         if target is not None and split_recorded(app_state, live.name, target.id, made):
             current_notifier().success(tn("evaluators.split_done", len(made.evaluators)))
         else:  # the store holds the split, the project lost the record: an orphan
-            current_notifier().warning(t("evaluators.split_unrecorded"))
+            current_notifier().warning(t("evaluators.split_unrecorded", project=live.name if live else ""))
 
-    split_task = solara.lab.use_task(_split, dependencies=None, prefer_threaded=False, raise_error=False)
+    split_task = solara.lab.use_task(_held(_split), dependencies=None, prefer_threaded=False, raise_error=False)
 
     async def _remove():
         try:
@@ -321,7 +352,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             return
         current_notifier().success(t("evaluators.removed"))
 
-    remove_task = solara.lab.use_task(_remove, dependencies=None, prefer_threaded=False, raise_error=False)
+    remove_task = solara.lab.use_task(_held(_remove), dependencies=None, prefer_threaded=False, raise_error=False)
 
     async def _package(evaluator):
         live = app_state.project.peek()
@@ -343,12 +374,16 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             return
         finally:
             set_building(None)
-        mark_packaged(app_state, snap.name, shared.id, shared.split.split_id,
-                      split_mod.questions_digest(snap.questions))
+        recorded = mark_packaged(app_state, snap.name, shared.id, shared.split.split_id,
+                                 split_mod.questions_digest(snap.questions))
         set_links(lambda old: {**old, (shared.split.split_id, evaluator): entry})
-        current_notifier().success(t("evaluators.package_ready", evaluator=evaluator))
+        if recorded:
+            current_notifier().success(t("evaluators.package_ready", evaluator=evaluator))
+        else:  # the zip is built; the split it was made for is not the open one any more
+            current_notifier().warning(t("evaluators.package_unrecorded", evaluator=evaluator))
 
-    package_task = solara.lab.use_task(_package, dependencies=None, prefer_threaded=False, raise_error=False)
+    package_task = solara.lab.use_task(_held(_package), dependencies=None, prefer_threaded=False,
+                                       raise_error=False)
 
     async def _preview(path):
         live = app_state.project.peek()
@@ -365,7 +400,8 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         set_pending({"preview": made, "file": file})
         preview_open.set(True)
 
-    preview_task = solara.lab.use_task(_preview, dependencies=None, prefer_threaded=False, raise_error=False)
+    preview_task = solara.lab.use_task(_held(_preview), dependencies=None, prefer_threaded=False,
+                                       raise_error=False)
 
     async def _merge(copy, choice):
         made, live = copy["preview"], app_state.project.peek()
@@ -383,10 +419,18 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         who = made.header.evaluator
         if target is not None and return_recorded(app_state, live.name, target.id, who, ret):
             current_notifier().success(t("evaluators.merged", taken=ret.taken, evaluator=who))
-        else:  # the rows are merged on disk; merging the same copy again records it
-            current_notifier().warning(t("evaluators.merged_unrecorded", taken=ret.taken, evaluator=who))
+        else:  # the rows are merged in the store; the return record was not saved
+            current_notifier().warning(t("evaluators.merged_unrecorded", evaluator=who,
+                                         project=live.name if live else ""))
 
-    merge_task = solara.lab.use_task(_merge, dependencies=None, prefer_threaded=False, raise_error=False)
+    merge_task = solara.lab.use_task(_held(_merge), dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _launch(task, *args):
+        """Start ``task`` unless an action of this panel is still running."""
+        if inflight.current:
+            return
+        inflight.current = True
+        task(*args)
 
     busy = split_task.pending or remove_task.pending or package_task.pending or merge_task.pending
     try:
@@ -402,11 +446,13 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     def _run(action):
         set_confirm(None)
         if action == "remove":
-            remove_task()
+            _launch(remove_task)
         else:
-            split_task(names, include)
+            _launch(split_task, names, include)
 
     def _ask(action):
+        if inflight.current:
+            return  # not even a confirmation while an action runs
         # Packages already handed out stop merging once their split goes (§4.1).
         if split is not None and split.packaged:
             set_confirm(action)
@@ -416,7 +462,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     def _pick(path):
         set_picks(lambda n: n + 1)
         if path:
-            preview_task(path)
+            _launch(preview_task, path)
 
     with solara.Column(style="gap:16px;"):
         with rv.Card(outlined=True, class_="pa-3"):
@@ -457,7 +503,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             if gdf is None:
                 solara.Text(t("evaluators.loading"), style=MUTED)
             ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
-                         rows=_table_rows(stats, unassigned, on_package=package_task, building=building,
+                         rows=_table_rows(stats, unassigned, on_package=lambda name: _launch(package_task, name), building=building,
                                           can_package=ready and gdf is not None and not busy),
                          empty_text=t("evaluators.empty"))
             if split is not None and not ready:
@@ -484,7 +530,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     ConfirmDialog(open=confirm is not None, on_cancel=lambda: set_confirm(None), on_confirm=lambda: _run(confirm),
                   title=title, message=t("evaluators.packaged_warning"), confirm_label=confirm_label)
     _PreviewDialog(app_state=app_state, open_=preview_open, pending=pending, busy=merge_task.pending,
-                   on_merge=lambda choice: merge_task(pending, choice))
+                   on_merge=lambda choice: _launch(merge_task, pending, choice))
 
 
 @solara.component
@@ -494,22 +540,34 @@ def _ReturnPanel(app_state):
     p = app_state.project.value
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
     link, set_link = solara.use_state(None)
+    inflight = solara.use_ref(False)  # as _CreatorPanel's: a second click is dropped
+    # Another copy opened: its panel starts without this one's link.
+    solara.use_effect(lambda: set_link(None), [p.name if p else None])
 
     async def _build():
-        live = app_state.project.peek()
-        if live is None or live.review_copy is None:
-            return
-        snap = live.model_copy(deep=True)
         try:
-            path = await asyncio.to_thread(build_return_file, snap, paths.project_dir(snap.name))
-            entry = link_entry(path)
-        except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
-            current_notifier().error(error_text(exc))
-            return
-        set_link(entry)
-        current_notifier().success(t("evaluators.return_ready"))
+            live = app_state.project.peek()
+            if live is None or live.review_copy is None:
+                return
+            snap = live.model_copy(deep=True)
+            try:
+                path = await asyncio.to_thread(build_return_file, snap, paths.project_dir(snap.name))
+                entry = link_entry(path)
+            except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
+                current_notifier().error(error_text(exc))
+                return
+            set_link({**entry, "project": snap.name})
+            current_notifier().success(t("evaluators.return_ready"))
+        finally:
+            inflight.current = False
 
     task = solara.lab.use_task(_build, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _start():
+        if inflight.current:
+            return
+        inflight.current = True
+        task()
     reviewed, assigned = return_progress(p, gdf)
 
     with rv.Card(outlined=True, class_="pa-3"):
@@ -522,8 +580,8 @@ def _ReturnPanel(app_state):
         solara.Text(t("evaluators.return_note"), style=MUTED + "font-size:0.8rem;")
         solara.Button(t("evaluators.download_return"), icon_name="mdi-package-up", color="primary", outlined=True,
                       small=True, block=True, classes=["mt-2"], loading=task.pending, disabled=task.pending,
-                      on_click=lambda: task())
-        if link is not None:
+                      on_click=_start)
+        if link is not None and p is not None and link["project"] == p.name:  # not a build of another copy
             _download_link(link, t("evaluators.return_link", file=link["file"]), "defo-return-link")
 
 
