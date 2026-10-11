@@ -155,3 +155,15 @@ def test_an_unbound_top_bar_has_no_filter(tmp_path, monkeypatch):
     topnav = context.build_topnav(card, v.Select(items=[]))
     assert "defo-topnav-filter" not in [getattr(c, "class_", None) for c in topnav.children]
     assert context.filter_control(card) is None
+
+
+def test_a_start_filter_set_before_the_alerts_arrive_gets_its_chip_label_once_they_do(bar):
+    """A review copy's start filter is set at project load, before its alerts
+    are published: the chip must be relabelled when they arrive, not keep the
+    raw column name."""
+    s, ui = bar.state, bar.ui
+    s.alerts_gdf.set(None)
+    s.set_alert_filter(AlertFilter("evaluator", frozenset({"Ana"})))
+    assert ui.chip.children == ["evaluator: Ana"]
+    s.alerts_gdf.set(_six())
+    assert ui.chip.children == ["Evaluator: Ana"]

@@ -153,6 +153,10 @@ def build_filter_menu(app_state) -> SimpleNamespace:
     # Built once per session: the subscription lives as long as the kernel.
     if app_state.alert_filter_reactive is not None:
         app_state.alert_filter_reactive.subscribe(_sync)
+    # The label reads the alerts (attribute and value names): a filter set
+    # before they are published (a review copy's start filter) is relabelled
+    # when they arrive.
+    app_state.alerts_gdf.subscribe(_sync)
     _sync()
 
     root = v.Html(tag="div", class_="defo-topnav-filter", children=[menu, chip])
