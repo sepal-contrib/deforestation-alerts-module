@@ -332,6 +332,36 @@ def test_a_packaged_split_asks_before_it_is_replaced_or_removed(data_root, monke
     asyncio.run(main())
 
 
+@pytest.mark.parametrize("lands", [True, False])
+def test_remove_says_removed_only_when_the_record_is_gone(data_root, monkeypatch, lands):
+    """``remove_split`` can end without recording anything (no evaluator
+    column and no alerts on hand, or another project opened meanwhile): the
+    step then says so instead of "Split removed" (the T12 convention)."""
+    s = _state(_project(split=_split()), _gdf())
+
+    def _remove(app_state, model):
+        if lands:
+            _record_split(app_state, None)
+
+    monkeypatch.setattr(es.split_service, "remove_split", _remove)
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _button(rc, t("evaluators.remove")).fire_event("click", None)
+            if lands:
+                await _settle(lambda: t("evaluators.removed") in _toasts("success"), "the success toast")
+                assert not _toasts("warning")
+            else:
+                await _settle(lambda: t("evaluators.remove_unrecorded", project="c") in _toasts("warning"),
+                              "the warning")
+                assert not _toasts("success")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_split_no_package_was_built_for_is_replaced_at_once(data_root, monkeypatch):
     calls = []
     monkeypatch.setattr(es.split_service, "apply_split",

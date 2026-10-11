@@ -165,6 +165,15 @@ def split_recorded(app_state, name: str, set_id: str, made) -> bool:
     return s is not None and s.split is not None and s.split.split_id == made.split_id
 
 
+def split_removed(app_state, name: str, set_id: str) -> bool:
+    """Whether the open project ``name`` holds no split on set ``set_id``
+    (``remove_split`` can end without recording anything: no evaluator
+    column and no alerts on hand, or another project opened meanwhile)."""
+    live = app_state.project.value
+    s = live.alert_sets.get(set_id) if live is not None and live.name == name else None
+    return s is not None and s.split is None
+
+
 def return_recorded(app_state, name: str, set_id: str, evaluator: str, record) -> bool:
     """Whether the open project ``name`` holds the merge ``record`` of
     ``evaluator`` on set ``set_id`` (``merge_return`` returns it even when
@@ -353,12 +362,17 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     split_task = solara.lab.use_task(_held(_split), dependencies=None, prefer_threaded=False, raise_error=False)
 
     async def _remove():
+        live = app_state.project.peek()
+        target = active_set(live)
         try:
             await to_thread_in_context(split_service.remove_split, app_state, app_tile_model)
         except Exception as exc:  # noqa: BLE001 - toasted
             current_notifier().error(error_text(exc))
             return
-        current_notifier().success(t("evaluators.removed"))
+        if target is not None and split_removed(app_state, live.name, target.id):
+            current_notifier().success(t("evaluators.removed"))
+        else:  # the project still holds the split, or another one is open
+            current_notifier().warning(t("evaluators.remove_unrecorded", project=live.name if live else ""))
 
     remove_task = solara.lab.use_task(_held(_remove), dependencies=None, prefer_threaded=False, raise_error=False)
 

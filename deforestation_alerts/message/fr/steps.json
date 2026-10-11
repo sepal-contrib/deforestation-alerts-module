@@ -610,6 +610,7 @@
       "other": "Alertes réparties entre {n} évaluateurs."
     },
     "removed": "Répartition supprimée.",
+    "remove_unrecorded": "La répartition de {project} n'a pas été supprimée : un autre projet a été ouvert, ou ses alertes n'étaient pas encore chargées. Ouvrez {project} et supprimez la répartition à nouveau.",
     "orphan": "Les alertes de cet ensemble portent des attributions d'évaluateurs, mais le projet n'a aucune répartition enregistrée. Supprimez la répartition pour recommencer.",
     "loading": "Chargement de l'ensemble d'alertes…",
     "table_title": "Évaluateurs",

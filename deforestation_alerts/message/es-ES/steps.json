@@ -610,6 +610,7 @@
       "other": "Alertas repartidas entre {n} evaluadores."
     },
     "removed": "Reparto quitado.",
+    "remove_unrecorded": "No se quitó el reparto de {project}: se abrió otro proyecto o sus alertas aún no estaban cargadas. Abre {project} y quita el reparto de nuevo.",
     "orphan": "Las alertas de este conjunto tienen evaluadores asignados, pero el proyecto no guarda ningún reparto. Quita el reparto para empezar de nuevo.",
     "loading": "Cargando el conjunto de alertas…",
     "table_title": "Evaluadores",

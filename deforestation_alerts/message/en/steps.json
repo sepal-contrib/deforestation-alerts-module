@@ -586,6 +586,7 @@
       "other": "Alerts split between {n} evaluators."
     },
     "removed": "Split removed.",
+    "remove_unrecorded": "The split of {project} was not removed: another project was opened, or its alerts were not loaded yet. Open {project} and remove the split again.",
     "orphan": "This set's alerts carry evaluator assignments but the project has no split record. Remove the split to start again.",
     "loading": "Loading the alert set…",
     "table_title": "Evaluators",
