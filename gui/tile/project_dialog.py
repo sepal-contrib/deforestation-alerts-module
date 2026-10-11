@@ -2,7 +2,7 @@
 project's status, New, Manage projects and Duplicate. Auto-save means there is
 no Save button (D11): the status shows a "saved" chip, or "save failed".
 
-Three dialogs hang off it, all rendered at its top level:
+These dialogs hang off it, all rendered at its top level:
 
 - the name form of New and Duplicate (``_NameForm``), on the form frame
   (``gui/widget/form_dialog.py``). The name is checked as it is typed against
@@ -10,6 +10,7 @@ Three dialogs hang off it, all rendered at its top level:
   when Create is pressed: a project created in another tab since must never be
   overwritten.
 - Manage projects (``gui/widget/manage_projects.py``): search, open, delete.
+- Import: the package picker (on the form frame) and the re-import question.
 - the delete confirmation, which shows the folder's size, counted off-thread.
 
 The list is read again whenever the open project is saved, installed or
@@ -22,7 +23,12 @@ loop, where solara starts such a task with a bare ``asyncio.create_task``
 (the ``_ActiveSetLoader`` pattern in the shell).
 
 A new, opened or duplicated project starts the workflow at its AOI and closes
-the dialog (``dismiss``, from the shell). Opening the project already open
+the dialog (``dismiss``, from the shell). A review copy (spec 2026-10-10
+§6.2), imported or opened, lands on Analysis instead, filtered to its
+evaluator: ``_land`` is the one place that decides. **Import** reads a
+review package's header first: a reviewed copy is refused (it is merged
+from the creator's project), and a package already imported as a copy asks
+to open that copy or import a new one (never overwrite). Opening the project already open
 only closes the dialogs: it is not read again over its in-memory state. Deleting the open project closes it
 first, so no auto-save can write its manifest back while the folder goes; a
 failed delete opens it again as it now reads.
@@ -39,15 +45,20 @@ from typing import Optional
 
 import reacton.ipyvuetify as rv
 import solara
+from pysepal.solara.components.inputs import FileInputComponent
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.project import io, paths
+from deforestation_alerts.project import io, paths, share
 from deforestation_alerts.project.models import Project
 from deforestation_alerts.project.review_copy import read_only
+from deforestation_alerts.project.split import EVALUATOR_COLUMN
 from gui.i18n import t
+from gui.scripts.alert_filter import AlertFilter
 from gui.scripts.error_text import error_text
-from gui.scripts.solara_threads import spawn_in_context
+from gui.scripts.solara_threads import spawn_in_context, to_thread_in_context
 from gui.store.project_writers import is_writing
+from gui.tile.analysis.state import apply_start_filter
+from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import form_card, use_form_dialog
 from gui.widget.manage_projects import (
@@ -61,6 +72,17 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _NAME_ERRORS = {"empty": "steps.project.name_empty", "chars": "steps.project.name_chars",
                 "exists": "steps.project.name_exists"}
+
+#: a review package is one zip (spec §6.1)
+IMPORT_EXTENSIONS = [".zip"]
+
+
+def import_failure_text(exc: BaseException, file: str) -> str:
+    """A failed import of ``file``: a refusal (``ShareError``) as its own
+    text, anything else (the disk's error) naming the file (R4)."""
+    if isinstance(exc, share.ShareError):
+        return error_text(exc)
+    return t("steps.project.import_failed", file=file, error=error_text(exc))
 
 
 def create_project(name: str) -> Project:
@@ -200,6 +222,30 @@ def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, curre
                         infos=infos, hint=hint, current=current)
 
 
+@solara.component
+def _ImportForm(open_, on_pick, busy):
+    """Import's package picker (420px, on the form frame). A pick starts the
+    import at once; the picker is remounted empty after each one, so a
+    refused file does not stay on screen."""
+    picks, set_picks = solara.use_state(0)
+
+    def _pick(path):
+        set_picks(lambda n: n + 1)
+        if path:
+            on_pick(path)
+
+    with use_form_dialog(open_, max_width="420px"):
+        if open_.value:
+            with form_card(t("steps.project.import_title"), on_cancel=lambda: open_.set(False),
+                           actions=lambda: None, cancel_disabled=busy):
+                with solara.Column(style="gap:2px;").key(f"import:{picks}"):
+                    FileInputComponent(extensions=IMPORT_EXTENSIONS, value="", on_value=_pick,
+                                       label=t("steps.project.import_pick"))
+                solara.Text(t("steps.project.import_hint"), style=MUTED + "font-size:0.8rem;")
+                if busy:
+                    rv.ProgressLinear(indeterminate=True, color="primary")
+
+
 #: How often the open project's "saved X ago" line is brought up to date.
 TICK_SECONDS = 30.0
 
@@ -256,14 +302,24 @@ def _reopen(name: str) -> Optional[Project]:
 
 
 @solara.component
-def ProjectDialog(app_state, dismiss=lambda: None):
-    """``dismiss`` closes the dialog (the shell's MapApp handle)."""
+def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
+    """``dismiss`` closes the dialog (the shell's MapApp handle);
+    ``analysis`` is the shell's ``AnalysisState``, where a review copy's
+    evaluator filter goes."""
     notifications = use_notifications()
     p = app_state.project.value
     refresh, set_refresh = solara.use_state(0)
     new_open = solara.use_reactive(False)
     dup_open = solara.use_reactive(False)
     manage_open = solara.use_reactive(False)
+    import_open = solara.use_reactive(False)
+    # The package a re-import asks about: {"path", "name", "evaluator"}.
+    existing, set_existing = solara.use_state(None)
+    # Set by the pick or answer that starts an import, cleared when its task
+    # ends. Solara runs on_click / on_value whatever ``disabled`` the last
+    # render sent, and a task called again cancels its asyncio run but not
+    # the worker under it: a second pick is dropped here (evaluators_step).
+    importing = solara.use_ref(False)
     # A reactive, not state: Open reads it when pressed, right after the row
     # click that set it, before the dialog has re-rendered.
     selected = solara.use_reactive(None)
@@ -323,6 +379,20 @@ def ProjectDialog(app_state, dismiss=lambda: None):
         app_state.current_page_view.value = "aoi_tile"
         dismiss()
 
+    def _land(loaded):
+        """Where an opened or imported project starts, after ``_install``
+        (which resets the screen to the workflow, ``state_manager.py:138``):
+        a review copy on Analysis, filtered to its evaluator before its
+        alerts are published (spec §6.2); any other project at its AOI."""
+        copy = loaded.review_copy
+        if copy is None:
+            _show_workflow()
+            return
+        if analysis is not None:
+            apply_start_filter(analysis, AlertFilter(EVALUATOR_COLUMN, frozenset({copy.evaluator})))
+        app_state.current_page_view.value = "analysis_tile"
+        dismiss()
+
     async def _load(name):
         try:
             loaded = await asyncio.to_thread(io.load_project, name)
@@ -331,10 +401,73 @@ def ProjectDialog(app_state, dismiss=lambda: None):
             return
         app_state.load_project_state(loaded)
         manage_open.set(False)
-        _show_workflow()
+        _land(loaded)
         notifications.success(t("steps.project.opened", name=name))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _held(fn):
+        async def run(*args):
+            try:
+                await fn(*args)
+            finally:
+                importing.current = False
+        return run
+
+    def _launch(task, *args):
+        """Start ``task`` unless an import is still running."""
+        if importing.current:
+            return
+        importing.current = True
+        task(*args)
+
+    async def _import(path):
+        try:
+            made = await to_thread_in_context(share.import_package, path)
+        except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
+            notifications.error(import_failure_text(exc, Path(path).name))
+            return
+        import_open.set(False)
+        app_state.load_project_state(made)
+        set_refresh(lambda n: n + 1)
+        _land(made)
+        notifications.success(t("steps.project.imported", name=made.name))
+
+    import_task = solara.lab.use_task(_held(_import), dependencies=None, prefer_threaded=False, raise_error=False)
+
+    async def _peek(path):
+        """The package's header, read before anything is written: a
+        reviewed copy is refused, a package imported before asks first."""
+        try:
+            header = await to_thread_in_context(share.peek_header, path)
+            if header.kind == share.KIND_RETURN:
+                notifications.error(t("share.err.is_return"))
+                return
+            found = await to_thread_in_context(share.find_existing_copy, header)
+        except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
+            notifications.error(import_failure_text(exc, Path(path).name))
+            return
+        if found:
+            import_open.set(False)
+            set_existing({"path": path, "name": found, "evaluator": header.evaluator})
+            return
+        await _import(path)
+
+    peek_task = solara.lab.use_task(_held(_peek), dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _open_existing():
+        if existing is None:
+            return
+        name = existing["name"]
+        set_existing(None)
+        _open(name)
+
+    def _import_new():
+        if existing is None:
+            return
+        path = existing["path"]
+        set_existing(None)
+        _launch(import_task, path)
 
     def _open(name):
         if not name:
@@ -438,6 +571,8 @@ def ProjectDialog(app_state, dismiss=lambda: None):
             solara.Button(t("steps.project.manage_count", count=len(infos)),
                           icon_name="mdi-folder-multiple-outline", color="primary", outlined=True, small=True,
                           block=True, disabled=not infos, on_click=_open_manage)
+            solara.Button(t("steps.project.import"), icon_name="mdi-import", color="primary", outlined=True,
+                          small=True, block=True, on_click=lambda: import_open.set(True))
         else:
             with solara.Row(style="gap:8px;align-items:center;"):
                 solara.Text(p.name, style="font-weight:600;font-size:1.1rem;")
@@ -455,6 +590,8 @@ def ProjectDialog(app_state, dismiss=lambda: None):
                               small=True, on_click=lambda: new_open.set(True))
                 solara.Button(t("steps.project.manage"), icon_name="mdi-folder-multiple-outline", color="primary",
                               outlined=True, small=True, on_click=_open_manage)
+                solara.Button(t("steps.project.import"), icon_name="mdi-import", color="primary", outlined=True,
+                              small=True, on_click=lambda: import_open.set(True))
                 if not read_only(p):  # spec §6.3: a review copy is not duplicated
                     solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", color="primary",
                                   outlined=True, small=True, on_click=lambda: dup_open.set(True))
@@ -473,7 +610,7 @@ def ProjectDialog(app_state, dismiss=lambda: None):
     ManageProjectsDialog(
         open=manage_open.value, infos=infos, selected=selected.value, on_select=selected.set,
         on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
-        current=current, busy=load_task.pending or delete_task.pending,
+        current=current, busy=load_task.pending or delete_task.pending or import_task.pending or peek_task.pending,
         covered=pending_delete is not None,
     )
     ConfirmDeleteDialog(
@@ -484,4 +621,18 @@ def ProjectDialog(app_state, dismiss=lambda: None):
         # Prepare row, and the dialog need not re-render for them otherwise.
         writer_active=pending_delete is not None and is_writing(pending_delete),
         busy=delete_task.pending,
+    )
+    _ImportForm(open_=import_open, on_pick=lambda path: _launch(peek_task, path),
+                busy=peek_task.pending or import_task.pending)
+    ConfirmDialog(
+        open=existing is not None,
+        on_cancel=lambda: set_existing(None),
+        on_confirm=_open_existing,
+        title=t("steps.project.import_existing_title"),
+        message=t("steps.project.import_existing_message", name=existing["name"], evaluator=existing["evaluator"])
+        if existing else "",
+        confirm_label=t("steps.project.import_open_existing"),
+        confirm_color="primary",
+        secondary_label=t("steps.project.import_as_new"),
+        on_secondary=_import_new,
     )

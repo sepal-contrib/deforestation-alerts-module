@@ -702,7 +702,8 @@ def _AppShell():
         lambda: render_detached(lambda: AboutTile(), t("app.drawer_item.about"))[0], dependencies=[])
     project_widget = solara.use_memo(
         lambda: render_detached(lambda: ProjectDialog(
-            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)), t("app.drawer_item.project"))[0],
+            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model),
+            analysis=analysis), t("app.drawer_item.project"))[0],
         dependencies=[])
     overview_widget = solara.use_memo(
         lambda: render_detached(lambda: OverviewTile(

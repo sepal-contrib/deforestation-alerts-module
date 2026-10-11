@@ -574,3 +574,11 @@ def test_the_evaluators_step_writes_through_the_shells_set_context():
     for arg in ("app_state=app_state", "app_tile_model=set_context", "analysis=analysis",
                 "gee_interface=gee_interface", 't("app.drawer_item.evaluators")'):
         assert arg in body, arg
+
+
+def test_the_project_dialog_gets_the_analysis_state():
+    """A review copy opens on Analysis filtered to its evaluator (spec 2026-10-10 §6.2)."""
+    shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
+    block = shell[shell.index("project_widget = "):shell.index("overview_widget = ")]
+    assert "analysis=analysis" in block
+    assert shell.index("analysis = solara.use_memo(AnalysisState") < shell.index("project_widget = ")

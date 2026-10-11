@@ -71,7 +71,17 @@
       "chip_save_failed": "échec de l'enregistrement",
       "open_instead": "Ouvrir {name} à la place",
       "name_hint": "Lettres, chiffres, espaces, « - » et « _ ».",
-      "duplicate_failed": "Impossible de dupliquer {name} : {error}"
+      "duplicate_failed": "Impossible de dupliquer {name} : {error}",
+      "import": "Importer",
+      "import_title": "Importer un paquet de révision",
+      "import_pick": "Paquet de révision (.zip)",
+      "import_hint": "Un paquet que le créateur du projet a préparé pour vous à l'étape Évaluateurs.",
+      "import_existing_title": "Déjà importé",
+      "import_existing_message": "Le projet {name} contient déjà ce paquet pour {evaluator}.",
+      "import_open_existing": "Ouvrir la copie existante",
+      "import_as_new": "Importer comme nouvelle copie",
+      "imported": "{name} importé.",
+      "import_failed": "L'import de {file} a échoué. {error}"
     },
     "aoi": {
       "title": "Zone d'intérêt",

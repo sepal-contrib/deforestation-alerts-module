@@ -65,7 +65,17 @@
       "chip_save_failed": "save failed",
       "open_instead": "Open {name} instead",
       "name_hint": "Letters, digits, spaces, '-' and '_'.",
-      "duplicate_failed": "Could not duplicate {name}: {error}"
+      "duplicate_failed": "Could not duplicate {name}: {error}",
+      "import": "Import",
+      "import_title": "Import a review package",
+      "import_pick": "Review package (.zip)",
+      "import_hint": "A package the project's creator made for you in the Evaluators step.",
+      "import_existing_title": "Already imported",
+      "import_existing_message": "Project {name} already holds this package for {evaluator}.",
+      "import_open_existing": "Open existing copy",
+      "import_as_new": "Import as new copy",
+      "imported": "Imported {name}.",
+      "import_failed": "Import of {file} failed. {error}"
     },
     "aoi": {
       "title": "Area of interest",

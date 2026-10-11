@@ -71,7 +71,17 @@
       "chip_save_failed": "error al guardar",
       "open_instead": "Abrir {name} en su lugar",
       "name_hint": "Letras, dígitos, espacios, '-' y '_'.",
-      "duplicate_failed": "No se pudo duplicar {name}: {error}"
+      "duplicate_failed": "No se pudo duplicar {name}: {error}",
+      "import": "Importar",
+      "import_title": "Importar un paquete de revisión",
+      "import_pick": "Paquete de revisión (.zip)",
+      "import_hint": "Un paquete que el creador del proyecto hizo para ti en el paso Evaluadores.",
+      "import_existing_title": "Ya importado",
+      "import_existing_message": "El proyecto {name} ya contiene este paquete para {evaluator}.",
+      "import_open_existing": "Abrir la copia existente",
+      "import_as_new": "Importar como copia nueva",
+      "imported": "{name} importado.",
+      "import_failed": "Falló la importación de {file}. {error}"
     },
     "aoi": {
       "title": "Área de interés",
