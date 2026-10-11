@@ -847,6 +847,38 @@ def test_a_package_imported_before_asks_to_open_that_copy_or_import_a_new_one(di
     asyncio.run(main())
 
 
+def test_open_existing_copy_on_the_open_copy_lands_again_without_a_reload(dialog, monkeypatch):
+    """Spec §6.2: the copy is open, but its user left Analysis (or cleared the
+    filter); re-picking its package and choosing Open existing copy lands it
+    again, from memory, not read back from disk."""
+    loads = []
+    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header())
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: "c__e01-ana")
+    monkeypatch.setattr(pd.share, "import_package", lambda path, root=None: pytest.fail("imported"))
+    monkeypatch.setattr(pd.io, "load_project", lambda name, *a, **k: loads.append(name))
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(_review_copy())
+            dialog.state.current_page_view.value = "aoi_tile"
+            await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
+                                      for w in rc.find(v.Btn).widgets), "the open copy's buttons")
+            assert dialog.filters == []
+            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+            message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
+            await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
+            _button(_open_form(rc), t("steps.project.import_open_existing")).fire_event("click", None)
+            await _settle(lambda: dialog.state.current_page_view.value == "analysis_tile", "back on Analysis")
+            assert dialog.filters == [(dialog.analysis, _ana_filter())]
+            assert loads == [] and dialog.dismissed == 1
+            assert dialog.state.project.value.name == "c__e01-ana"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
     io.save_project(_review_copy())
 
@@ -872,7 +904,13 @@ def test_a_failed_import_toasts_and_opens_nothing(dialog, monkeypatch):
     def _fail(path, root=None):
         raise OSError("disk full")
 
-    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header())
+    peeked = []
+
+    def _peek(path):
+        peeked.append(path)
+        return _header()
+
+    monkeypatch.setattr(pd.share, "peek_header", _peek)
     monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
     monkeypatch.setattr(pd.share, "import_package", _fail)
 
@@ -883,6 +921,12 @@ def test_a_failed_import_toasts_and_opens_nothing(dialog, monkeypatch):
             await _settle(lambda: t("steps.project.import_failed", file="p.zip", error="disk full")
                           in _toasts("error"), "the failure toast")
             assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
+            # Still usable: the form stays open on a fresh picker, and the
+            # next pick is read (the in-flight guard was released).
+            await _settle(lambda: _open_form(rc).find(FileInput).widgets, "the picker, empty again")
+            _open_form(rc).find(FileInput).widget.v_model = str(dialog.root / "q.zip")
+            await _settle(lambda: len(peeked) == 2, "the second pick read")
+            assert peeked == [str(dialog.root / "p.zip"), str(dialog.root / "q.zip")]
         finally:
             rc.close()
 

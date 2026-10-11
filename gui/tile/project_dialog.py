@@ -460,6 +460,14 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
             return
         name = existing["name"]
         set_existing(None)
+        open_now = app_state.project.peek()
+        if open_now is not None and open_now.name == name:
+            # The copy is open already: not read again (``_open``), but it
+            # still lands as a review copy does (spec §6.2), on Analysis with
+            # its evaluator's filter. Manage → Open of the open project keeps
+            # whatever filter the user chose instead.
+            _land(open_now)
+            return
         _open(name)
 
     def _import_new():
