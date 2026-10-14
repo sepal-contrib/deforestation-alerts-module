@@ -12,7 +12,7 @@ inference_output_list.py.
 """
 
 import re
-from typing import Optional
+from typing import Callable, Optional
 
 import reacton.ipyvuetify as rv
 import solara
@@ -160,6 +160,34 @@ def _render_chip(item: dict):
     )
 
 
+# A download action that is a link (spec 2026-10-14 §4.4): its file is built
+# and the icon downloads it. The same box holds the dimmed placeholder and
+# the spinner, so the Actions column keeps its width.
+LINK_ACTION = ("display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;"
+               "text-decoration:none;")
+
+
+def link_action(act: dict):
+    """A ``download`` action carrying ``href``: an ``<a download>`` around its
+    icon once ``href`` is set, a dimmed ``<span aria-disabled>`` while it is
+    None, a spinner while ``loading``. ``title`` is the tooltip of each (a
+    span, not a disabled v-btn: a disabled button shows no tooltip)."""
+    title = act.get("title", "")
+    if act.get("loading"):
+        with rv.Html(tag="span", class_="defo-download-action", attributes={"title": title}, style_=LINK_ACTION):
+            rv.ProgressCircular(indeterminate=True, size=14, width=2, color="primary")
+        return
+    href = act.get("href")
+    if href:
+        attributes = {"title": title, "href": href, "target": "_blank", "download": act.get("file", "")}
+        with rv.Html(tag="a", class_="defo-download-action", attributes=attributes, style_=LINK_ACTION):
+            rv.Icon(small=True, color=act.get("color", "primary"), children=[action_icon(act["kind"])])
+    else:
+        with rv.Html(tag="span", class_="defo-download-action", attributes={"title": title, "aria-disabled": "true"},
+                     style_=LINK_ACTION + "opacity:0.38;"):
+            rv.Icon(small=True, children=[action_icon(act["kind"])])
+
+
 def _render_cell(cell: dict, first: bool):
     ctype = cell.get("type", "text")
     wrapper = NAME_CELL if first else CELL
@@ -215,6 +243,9 @@ def _render_cell(cell: dict, first: bool):
 
 
 def _render_action(act: dict):
+    if "href" in act:
+        link_action(act)
+        return
     kind = act["kind"]
     is_on = act.get("is_on", False)
     if "color" in act:
@@ -247,6 +278,7 @@ def ProductTable(
     collapsible: bool = True,
     show_actions: bool = True,
     banner: Optional[str] = None,
+    header_action: Optional[Callable] = None,
 ):
     """Uniform product table: collapsible count header + CSS-grid rows.
 
@@ -268,6 +300,8 @@ def ProductTable(
         collapsible: show the collapse chevron (expanded by default).
         show_actions: False = read-only mode (Summary popup).
         banner: optional stats line under the header (Summary popup).
+        header_action: optional render function for the title row's right
+            end (the Evaluation step's Split alerts… / Edit split).
     """
     collapsed, set_collapsed = solara.use_state(False)
 
@@ -296,6 +330,9 @@ def ProductTable(
                     text=True,
                     x_small=True,
                 )
+            if header_action is not None:
+                with rv.Html(tag="div", style_="margin-left:auto;display:flex;align-items:center;"):
+                    header_action()
         if not collapsed:
             if banner:
                 solara.Text(
