@@ -131,6 +131,12 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
     flight cannot be started again (the claim would refuse it silently), so
     both run buttons say so, the download one with its spinner. ``locked``: a
     review copy (spec §6.3): both run buttons are disabled.
+
+    A source already downloaded for this window offers no Run again (user
+    decision 2026-10-15): it stays only while its harmonized file needs
+    building, and comes back when the raw file goes out of date, as a new
+    period or a change to the period's dates makes it. Re-download stays: a
+    live catalogue changes under the same window (spec §5.3).
     """
     out = []
     for r in rows:
@@ -153,7 +159,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
             "notes": notes,
             "error": errors.get(r.source),
             "actions": [
-                {"kind": "download", "disabled": locked or busy or r.blocked, "loading": busy,
+                {"kind": "download", "disabled": locked or busy or not r.needs_run, "loading": busy,
                  "on_click": (lambda s=r.source: run(s))},
                 {"kind": "redownload", "disabled": locked or busy or r.blocked,
                  "on_click": (lambda s=r.source: rerun(s))},

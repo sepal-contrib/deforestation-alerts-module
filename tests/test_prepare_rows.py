@@ -67,7 +67,18 @@ def test_partial_lines_and_results():
     assert out["GLAD-L"]["notes"][1]["text"] == "ready · 1,200 alert pixels"
     assert out["RADD"]["notes"] == [{"text": "ready · 0 alerts found", "tone": "info"}]
     assert out["GLAD-S2"]["notes"] == [{"text": "ready · all 40 alert pixels removed by masks", "tone": "warning"}]
-    assert not any(a["disabled"] for a in out["GLAD-L"]["actions"])
+    assert not next(a for a in out["GLAD-L"]["actions"] if a["kind"] == "map_toggle")["disabled"]
+
+
+@pytest.mark.parametrize("raw, harmonized, download, redownload", [
+    (Status.MISSING, Status.MISSING, True, True),  # a new period
+    (Status.STALE, Status.STALE, True, True),  # the period's dates changed
+    (Status.CURRENT, Status.STALE, True, True),  # downloaded: Run only harmonizes again
+    (Status.CURRENT, Status.CURRENT, False, True),  # downloaded and harmonized: only a forced refresh
+])
+def test_a_downloaded_source_offers_no_run_until_its_window_changes(raw, harmonized, download, redownload):
+    acts = {a["kind"]: a for a in _build([PrepareRow("GLAD-L", raw, harmonized)])["GLAD-L"]["actions"]}
+    assert (not acts["download"]["disabled"], not acts["redownload"]["disabled"]) == (download, redownload)
 
 
 def test_a_missing_user_file():

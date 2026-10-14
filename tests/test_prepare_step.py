@@ -638,6 +638,7 @@ def test_a_download_waits_for_the_catalogue_metadata(step, monkeypatch):
 
     box, rc = _render(state)
     try:
+        assert not step.table[-1][0]["actions"][1]["disabled"]  # a ready row can still be refreshed
         redownload = step.table[-1][0]["actions"][1]["on_click"]
         redownload()  # force: downloads, so it needs the metadata
         assert step.jobs == [] and _toasts("info") == [t("steps.alerts.meta_loading")]
@@ -704,7 +705,7 @@ def test_a_row_in_flight_disables_its_run_buttons_until_its_job_ends(step, monke
     row: another row stays startable while it runs."""
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING),
-              PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
+              PrepareRow("RADD", Status.MISSING, Status.MISSING))
     state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True),
                    meta={"GLAD-L": {}, "RADD": {}})
 
