@@ -24,11 +24,15 @@ import ipyvuetify as v
 from gui.i18n import format_number, t
 from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter, filter_columns, value_choices
+from gui.widget.outside_click import OutsideClickWidget
 
 #: How many values the chip names before it counts the rest ("Ana, Bruno +2").
 CHIP_VALUES = 2
 
 _BTN = "text-transform: none; letter-spacing: normal; font-size: 14px;"
+
+#: The panel's menu content, for ``OutsideClickWidget``.
+_PANEL_CLASS = "defo-filter-panel"
 
 
 def _context(app_state):
@@ -62,7 +66,8 @@ def filter_label(app_state, f, limit=CHIP_VALUES) -> str:
 def build_filter_menu(app_state) -> SimpleNamespace:
     """The funnel button, its menu and the chip. Returns
     ``SimpleNamespace(root, button, menu, attribute, values, empty, apply,
-    clear, chip)``; ``root`` goes into the top bar, left of the set selector."""
+    clear, chip, outside)``; ``root`` goes into the top bar, left of the set
+    selector."""
     button = v.Btn(icon=True, v_on="menu.on", class_="defo-filter-btn",
                    attributes={"aria-label": t("analysis_tile.filter.button"),
                                "title": t("analysis_tile.filter.button")},
@@ -83,7 +88,9 @@ def build_filter_menu(app_state) -> SimpleNamespace:
                       v.Html(tag="div", style_="display: flex; justify-content: flex-end; gap: 8px;",
                              children=[clear, apply]),
                   ])
+    # Outside clicks are ``outside``'s to handle (below), not the menu's.
     menu = v.Menu(v_model=False, offset_y=True, nudge_bottom=4, close_on_content_click=False,
+                  close_on_click=False, content_class=_PANEL_CLASS,
                   v_slots=[{"name": "activator", "variable": "menu", "children": button}],
                   children=[body])
     chip = v.Chip(small=True, close=True, outlined=True, class_="defo-filter-chip",
@@ -127,7 +134,6 @@ def build_filter_menu(app_state) -> SimpleNamespace:
     def _on_attribute(change):
         if getattr(local, "syncing", False):
             return
-        _on_select_focus("attribute", False)  # the pick closed its list
         _fill_values(change["new"], set())
 
     def _on_apply(*_):
@@ -151,31 +157,11 @@ def build_filter_menu(app_state) -> SimpleNamespace:
         chip.style_ = "" if f is not None else "display: none;"
 
     # A click outside while a select's list is open closes that list only:
-    # the panel stays, so the reviewer can still press Apply. Vuetify closes
-    # both on the same click, so the panel ignores outside clicks while a
-    # select has the focus (its list is open from the click that focuses it
-    # to the click that blurs it). The blur reaches Python after the click
-    # was already ignored; the next outside click closes the panel. The
-    # attribute is single-choice: its pick closes its list, so it holds the
-    # panel open no longer (``_on_attribute``); the values' list stays open
-    # across picks.
-    focused = set()
+    # the panel stays, so the reviewer can still press Apply. Vuetify would
+    # close both on that click, so the browser decides (``outside_click``).
+    outside = OutsideClickWidget(content_class=_PANEL_CLASS, activator_class="defo-filter-btn")
+    outside.observe(lambda _: setattr(menu, "v_model", False), "outside_clicks")
 
-    def _on_select_focus(name, on):
-        (focused.add if on else focused.discard)(name)
-        menu.close_on_click = not focused
-
-    for name, select in (("attribute", attribute), ("values", values)):
-        select.on_event("focus", lambda *_, n=name: _on_select_focus(n, True))
-        select.on_event("blur", lambda *_, n=name: _on_select_focus(n, False))
-
-    def _on_menu_toggle(change):
-        # Opened or closed, the panel starts over closing on outside clicks:
-        # a select still marked focused when it closed does not carry over.
-        focused.clear()
-        menu.close_on_click = True
-
-    menu.observe(_on_menu_toggle, "v_model")
     menu.observe(_on_open, "v_model")
     attribute.observe(_on_attribute, "v_model")
     apply.on_event("click", _on_apply)
@@ -190,6 +176,6 @@ def build_filter_menu(app_state) -> SimpleNamespace:
     app_state.alerts_gdf.subscribe(_sync)
     _sync()
 
-    root = v.Html(tag="div", class_="defo-topnav-filter", children=[menu, chip])
+    root = v.Html(tag="div", class_="defo-topnav-filter", children=[menu, chip, outside])
     return SimpleNamespace(root=root, button=button, menu=menu, attribute=attribute, values=values,
-                           empty=empty, apply=apply, clear=clear, chip=chip)
+                           empty=empty, apply=apply, clear=clear, chip=chip, outside=outside)
