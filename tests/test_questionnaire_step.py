@@ -268,3 +268,40 @@ def test_a_missing_template_holds_the_card_open(tmp_path, monkeypatch):
         assert _template_toggle(rc).disabled
     finally:
         rc.close()
+
+
+def _styles(w):
+    """Every ``style_`` / ``style`` string in a widget tree."""
+    out = [x for x in (getattr(w, "style_", None), getattr(w, "style", None)) if isinstance(x, str)]
+    for c in getattr(w, "children", None) or []:
+        if not isinstance(c, str):
+            out.extend(_styles(c))
+    return out
+
+
+def test_a_review_copys_template_card_expands_to_the_read_only_picker(tmp_path, monkeypatch):
+    """Spec 2026-10-14 §5: a review copy keeps the creator's template, so the
+    picker under the caret is dimmed and out of reach of the pointer."""
+    from pysepal.sepalwidgets.file_input import FileInput
+    from deforestation_alerts.project.models import ReviewCopy
+    from deforestation_alerts.project.review_copy import read_only
+    mine = tmp_path / "creators.docx"
+    mine.write_bytes(b"x")
+    set_locale("en")
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    s.new_project_state(Project(
+        name="p", created_at=datetime.now(), updated_at=datetime.now(), report_template=str(mine),
+        review_copy=ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
+                               set_fingerprint="f", origin_project="orig", imported_at=datetime.now())))
+    assert read_only(s.project.value)
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        texts = _strings(rc.container)
+        assert "creators.docx" in texts and t("steps.questionnaire.template_chip_custom") in texts
+        assert not rc.find(FileInput).widgets
+        _template_toggle(rc).fire_event("click", None)
+        assert rc.find(FileInput).widgets
+        assert any("pointer-events:none" in st for st in _styles(rc.container))  # dimmed, out of reach
+    finally:
+        rc.close()
