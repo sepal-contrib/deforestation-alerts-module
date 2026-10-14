@@ -1,0 +1,75 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "replace": "Replace",
+    "delete": "Delete",
+    "close": "Close",
+    "actions": "Actions",
+    "_test_fmt": "hello {name}",
+    "_test": {
+      "one": "{count} item",
+      "other": "{count} items"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "Delete?",
+    "confirm_default_message": "This action cannot be undone.",
+    "confirm_default_label": "Delete"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "running",
+      "status_ready": "ready",
+      "status_completed": "completed",
+      "status_failed": "failed",
+      "status_cancelled": "cancelled",
+      "status_stale": "out of date",
+      "status_missing": "missing",
+      "status_no_data": "no data",
+      "status_not_covered": "not covered",
+      "status_unchecked": "not checked"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Select an area of interest first.",
+    "lock_project": "Open a project first.",
+    "lock_layers": "Select an area of interest first.",
+    "lock_period": "Add at least one alert source first.",
+    "lock_prepare": "Create or select a period first.",
+    "lock_integrate": "Download and harmonize at least one source first.",
+    "lock_analysis": "Run Integrate & vectorize first.",
+    "count_sources": {
+      "one": "{count} source",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} layer",
+      "other": "{count} layers"
+    },
+    "count_questions": {
+      "one": "{count} question",
+      "other": "{count} questions"
+    },
+    "count_periods": {
+      "one": "{count} period",
+      "other": "{count} periods"
+    },
+    "count_ready": {
+      "one": "{count} ready",
+      "other": "{count} ready"
+    },
+    "count_alerts": {
+      "one": "{count} alert",
+      "other": "{count} alerts"
+    },
+    "step_badge": "{n} / {total}",
+    "count_empty": "nothing yet",
+    "start_analysis": "Start analysis",
+    "count_evaluators": {
+      "one": "{count} evaluator",
+      "other": "{count} evaluators"
+    }
+  }
+}

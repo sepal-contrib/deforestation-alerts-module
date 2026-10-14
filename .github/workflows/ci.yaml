@@ -22,28 +22,19 @@ jobs:
       - name: Verify ee-api fork
         shell: micromamba-shell {0}
         run: |
-          python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.1.5rc0', 'Expected fork 1.1.5rc0, got ' + v"
+          python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.6.14', 'Expected openforis fork 1.6.14, got ' + v"
 
 
-      - name: Verify notebook kernelspec
+      # Tier-1 tests run fully offline; the Tier-2 raster-pipeline integration tests
+      # run when EARTHENGINE_TOKEN is set (above) and otherwise skip cleanly.
+      - name: Run unit tests
+        shell: micromamba-shell {0}
         run: |
-          kernel_name=$(python3 -c "import json; nb=json.load(open('ui.ipynb')); print(nb['metadata']['kernelspec']['name'])")
-          expected="venv-deforestation-alerts-module"
-          if [ "$kernel_name" != "$expected" ]; then
-            echo "ERROR: kernelspec name '$kernel_name' != expected '$expected'"
-            echo "SEPAL's update-app.sh installs kernels as 'venv-<app_name>'. Update ui.ipynb metadata."
-            exit 1
-          fi
-          echo "kernelspec name OK: $kernel_name"
+          pip install pytest
+          pytest tests/ -v
 
-      - name: Install test deps
+      - name: Solara app compile + import
         shell: micromamba-shell {0}
-        run: pip install pytest nbmake ipykernel
-
-      - name: Register kernel
-        shell: micromamba-shell {0}
-        run: python -m ipykernel install --user --name=test-kernel
-
-      - name: Test UI notebook
-        shell: micromamba-shell {0}
-        run: pytest --nbmake ui.ipynb --nbmake-timeout=600 --nbmake-kernel=test-kernel
+        run: |
+          python -m compileall -q gui deforestation_alerts
+          python -c "import gui.solara_app; print('solara app import ok')"

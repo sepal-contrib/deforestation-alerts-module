@@ -1,0 +1,946 @@
+"""Solara entry for the Forest Cover Loss Alerts app.
+
+Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
+(About, Project, Overview) and the project workflow in the right panel (AOI →
+Alerts → Optional layers → Period → Download & harmonize → Integrate &
+vectorize → Questionnaire → Evaluators), and beside MapApp the analysis
+screen (``app_state.screen``), which *Start analysis* opens.
+Run: ./run_ui.sh (Voila, as on SEPAL) or
+solara run gui/solara_app.py --port 8900 --no-open
+"""
+
+import logging
+import os
+import sys
+from pathlib import Path
+
+# `solara run gui/solara_app.py` exec's this file without putting the repo root
+# on sys.path, so the first-party imports below (deforestation_alerts, gui)
+# would fail. Add the repo root (gui/solara_app.py -> parents[1]) up front so
+# the app loads regardless of how solara is invoked or the process CWD.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+import ipyvuetify as v
+import solara
+from ipyleaflet import Popup
+from traitlets import HasTraits, Int
+
+from pysepal.i18n import current_locale
+from pysepal.scripts.utils import init_ee
+from pysepal.mapping import SepalMap
+from pysepal.sepalwidgets.vue_app import MapApp
+from pysepal.solara import (
+    get_current_gee_interface,
+    get_current_theme_state,
+    prime_dev_auth,
+    setup_sessions,
+    setup_solara_server,
+    setup_theme_colors,
+    with_sepal_sessions,
+)
+from pysepal.solara.notifications import NotificationProvider, use_notifications
+
+from deforestation_alerts.gdal_env import (
+    configure_gdal_tmpdir,
+    keep_gdal_sidecars_visible,
+    pin_gdal_num_threads,
+)
+from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
+from gui.store.navigation import (
+    PAGE_VIEW_TO_SCREEN,
+    apply_navigation,
+    dismiss_dialog,
+    page_view_for_rail_step,
+    resolve_navigation,
+)
+from gui.i18n import app_available_locales, format_number, t
+from gui.scripts import alert_layers, legend_specs, set_store
+from gui.scripts.error_text import error_text
+from gui.scripts.map_layers import MapLayers
+from gui.scripts.remote_facts import RemoteFactsLoader
+from gui.scripts.scene_loader import SceneIndexLoader
+from gui.scripts.set_context import SetContext
+from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend
+from gui.scripts.solara_threads import spawn_in_context
+from gui.store.autosave import install_autosave
+from gui.store.project_writers import is_writing
+from gui.store.state_manager import AppState
+from gui.scripts.detached import render_detached
+from gui.scripts.notify_bridge import install_server_log_handler, install_task_log_handler
+from gui.scripts.reacton_widgets import find_rendered_widget
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set
+from gui.tile.about_tile import AboutTile
+from gui.tile.alerts_step import AlertsStep
+from gui.tile.analysis import build_analysis_layout
+from gui.tile.analysis.state import AnalysisState
+from gui.tile.aoi_step import AoiStep
+from gui.tile.evaluators_step import EvaluatorsStep
+from gui.tile.integrate_step import IntegrateStep
+from gui.tile.layers_step import LayersStep
+from gui.tile.overview_tile import OverviewTile
+from gui.tile.period_step import PeriodStep
+from gui.tile.prepare_step import PrepareStep
+from gui.tile.project_dialog import ProjectDialog
+from gui.tile.questionnaire_step import QuestionnaireStep
+from gui.widget.enter_key import EnterKeyListener
+from gui.widget.workflow_header import WorkflowHeader
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+# Forward INFO+ app log records of tracked jobs into pysepal's task pill (gui/scripts/notify_bridge.py).
+install_task_log_handler()
+# The bridge only sees records the app logger lets through. Nothing else
+# configures it, so under a bare process, `solara run` and Voila its effective
+# level is the root's WARNING and every INFO milestone would be dropped before
+# reaching the handler. Raise it to INFO — but never raise a level someone
+# deliberately set lower (e.g. DEBUG while troubleshooting).
+if logger.level == logging.NOTSET or logger.level > logging.INFO:
+    logger.setLevel(logging.INFO)
+# WARNING+ records (a failed worker, with its traceback) also go to the
+# server's own stderr: the kernel's sys.stderr is the browser's, where Voila
+# shows nothing, and the task-pill handler above would otherwise be the only
+# handler, which silences Python's last-resort stderr fallback.
+install_server_log_handler()
+
+# Point GDAL's temp-file allocator at a directory proven writable, ONCE per
+# process. This used to ride along on the import of the (now deleted)
+# ``deforestation_alerts.parameter`` package, whose only other job was a
+# container-local ``module_dir`` that no longer exists. It lives here
+# because this module is the app's single entry point (``solara run
+# gui/solara_app.py`` and ``ui.ipynb`` both import it), and it is import-time,
+# not render-time: it is a local mkdir + write probe, never a network call.
+configure_gdal_tmpdir()
+
+# Tile transport and GDAL guards, before any TileClient exists. On SEPAL the
+# sandbox sets LOCALTILESERVER_CLIENT_PREFIX=/api/sandbox/jupyter/proxy/{port};
+# PMTiles borrow it and both tile servers skip the comm bridge (verified on
+# test.sepal.io 2026-09-28 in spatial_risk: rasters 200, PMTiles 206).
+keep_gdal_sidecars_visible()
+pin_gdal_num_threads()
+borrow_localtileserver_prefix()
+prefer_http_proxy()
+
+
+class _NavModel(HasTraits):
+    """Tiny HasTraits bridge so we can observe MapApp's active step from Python.
+
+    Passed to ``MapApp.element(model=...)``; MapApp links its ``current_step``
+    trait to this model's (``_setup_model_binding`` links matching trait names).
+    The Vue drawer sets ``MapApp.current_step`` on step activation, which flows
+    here, letting the right-panel host swap to the active tile's controls.
+    """
+
+    current_step = Int(allow_none=True, default_value=None)
+
+
+@solara.component
+def _NavBridge(app_state, nav_model, mapapp_ref):
+    """Programmatic navigation: tiles' ``current_page_view`` writes → shell state.
+
+    Tiles signal navigation by writing ``app_state.current_page_view``
+    (a finished Integrate, the Overview's "Review"/"Go" and Questionnaire's
+    *Start analysis* → the analysis screen, the Overview's "Workflow" → the
+    active step, a new or opened project → AOI). This invisible leaf
+    component resolves the string to a workflow index, a rail step id or a
+    screen and applies it. It is a *leaf* on purpose: only this component
+    re-renders on a nav event, so ``Page`` / ``MapApp`` are not rebuilt.
+
+    Threading: the render and the effect run in whichever thread set the
+    reactive. Integrate sets it from its worker thread, so ``_drive`` then
+    runs on that worker, not on the kernel's event loop (reacton renders
+    synchronously in the setting thread; see ``_ActiveSetLoader``). It may
+    only set traits and reactives, as the workers themselves do; it must
+    never start loop-only work (``use_task``, ``asyncio.create_task``).
+    """
+    view = app_state.current_page_view.value
+
+    def _drive():
+        action = resolve_navigation(view)
+        if action is None:
+            return
+        # Loop-safety: the target is already showing (e.g. _PanelBridge just
+        # mirrored the showing view back into current_page_view). A workflow
+        # target is showing only on the workflow screen: from the analysis
+        # screen it is a real navigation back.
+        if (action.kind == "workflow" and action.target == app_state.active_step.value
+                and app_state.screen.value == "workflow"):
+            return
+        if action.kind == "screen" and action.target == app_state.screen.value:
+            return
+        if action.kind == "rail" and action.target == nav_model.current_step:
+            return
+        apply_navigation(mapapp_ref.get("widget"), nav_model, app_state, action)
+
+    solara.use_effect(_drive, [view])
+
+
+@solara.component
+def _ScreenBridge(app_state, layout):
+    """Show the screen ``app_state.screen`` names: the workflow (MapApp) or
+    the analysis screen, its sibling (``build_analysis_layout``'s ``layout``).
+
+    A leaf, like ``_NavBridge``. On every screen change and every language
+    switch it shows or hides the analysis screen (``layout.show``: MapApp
+    stays mounted; the shell's CSS keyed on the screen's ``--on`` class hides
+    its main map and right panel, and its rail stays usable) and relabels it
+    (the back button, the title and the views' ``labels``).
+
+    Back on the workflow, the ``current_page_view`` mirror is put back on the
+    active step's view: "analysis_tile" would otherwise stay, and the next
+    *Review* (the same value) would not fire ``_NavBridge`` again.
+    """
+    screen = app_state.screen.value
+    # A language switch re-renders this leaf: the screen's labels follow it.
+    locale = current_locale()
+
+    def _apply():
+        layout.show(screen == "analysis")
+        layout.relabel()
+        if screen == "workflow" and app_state.current_page_view.value == "analysis_tile":
+            app_state.current_page_view.value = STEPS[app_state.active_step.value].page_view
+
+    solara.use_effect(_apply, [screen, locale])
+
+
+@solara.component
+def _PanelBridge(app_state, panel_wrappers, mapapp_ref, workflow_config):
+    """Apply the workflow position to the widgets: which step's wrapper shows,
+    the panel title/icon, and the ``current_page_view`` mirror. (Layers on the
+    shared map belong to the session's ``MapLayers`` registry, not to the
+    showing step, spec §4.3; the analysis screen is ``_ScreenBridge``'s.)
+
+    A leaf component (same reason as ``_NavBridge``). Runs whenever
+    ``active_step`` or the locale change, whoever set them (header click, rail
+    click, navigation bridge, language selector). The rail items are all
+    dialogs, so the panel itself only ever shows the Workflow view.
+    """
+    active = app_state.active_step.value
+    # A language switch re-renders Page, and MapApp then copies the translated
+    # Workflow config onto the panel: re-apply so the panel keeps its title.
+    locale = current_locale()
+
+    def _apply():
+        spec = STEPS[active]
+        for key, wrap in panel_wrappers.items():
+            wrap.style_ = "" if key == spec.key else "display: none;"
+        # Panel title/icon (pysepal RightPanel.config is a synced trait; keep
+        # the width so the config observer is a no-op).
+        mapapp = mapapp_ref.get("widget")
+        if mapapp is not None and mapapp.right_panel:
+            mapapp.right_panel[0].config = {**workflow_config}
+        # Mirror, on the workflow screen only: keep current_page_view faithful
+        # to what is showing so a *repeated* trigger (e.g. searching twice)
+        # still changes the value and re-fires _NavBridge, whose guard then
+        # no-ops. On the analysis screen current_page_view is "analysis_tile",
+        # and writing the step's view (a language switch re-runs this) would
+        # send the reviewer back to the workflow.
+        if app_state.screen.value == "workflow" and app_state.current_page_view.value != spec.page_view:
+            app_state.current_page_view.value = spec.page_view
+
+    solara.use_effect(_apply, [active, locale])
+
+
+init_ee()
+setup_solara_server()
+
+# PYSEPAL_DEV_AUTH (local dev against a real SEPAL) logs in with a blocking
+# POST; prime it once here so it stays off the render path. prime_dev_auth()
+# raises when the flag is not armed, hence the guard.
+if os.getenv("PYSEPAL_DEV_AUTH", "").strip().lower() in {"1", "true", "yes", "on"}:
+    prime_dev_auth()
+
+
+@solara.lab.on_kernel_start
+def on_kernel_start():
+    """Per-kernel session bootstrap (pysepal's sessions; its cleanup is returned)."""
+    return setup_sessions()
+
+
+def compute_title(app_state) -> str:
+    """The app bar title: the app's name, then the open project's (spec §4.1).
+
+    Peeks: it subscribes its caller to nothing (see ``_AppShell``'s title).
+    """
+    p = app_state.project.peek()
+    return f"{t('app.title')} · {p.name}" if p is not None else t("app.title")
+
+
+def use_app_title(app_state) -> str:
+    """The title, recomputed only when a project is installed (opened, created
+    or closed) or the language changes: never on a commit (ruling #91).
+    Reading the locale here subscribes the shell, so a switch re-renders it."""
+    locale = current_locale()
+    return solara.use_memo(
+        lambda: compute_title(app_state), dependencies=[app_state.project_loaded_signal.value, locale]
+    )
+
+
+@solara.component
+def _ActiveSetLoader(app_state, layers, map_):
+    """Load the active alert set into ``alerts_gdf`` and reset the map when a
+    project is installed. A leaf component so only it re-renders on these changes.
+
+    The read runs on a worker started from an effect, not in a
+    ``prefer_threaded=False`` task: Integrate records a project's first set
+    through ``update_project`` on its worker thread, so this component
+    re-renders there, and solara starts such a task with a bare
+    ``asyncio.create_task``, which raises without a running event loop.
+
+    A new active set in the same project is left alone when ``alerts_gdf``
+    already holds it (Integrate publishes the set it records). A newly
+    installed project is always read from disk: set ids repeat across
+    projects, so alerts on hand can never stand in for its set.
+    """
+    notifications = use_notifications()
+    p = app_state.project.value
+    signal = app_state.project_loaded_signal.value
+    s = active_set(p)
+    name = p.name if p is not None else None
+    key = (signal, name, s.id if s is not None else None)
+    # The install signal and project of the last load started, and a counter
+    # that drops a load superseded by a newer one.
+    loads = solara.use_ref({"signal": None, "name": None, "run": 0})
+
+    def _on_install():
+        layers.clear()
+        if p is not None and p.aoi is not None:
+            try:
+                map_.zoom_bounds(p.aoi.bounds)
+            except Exception:
+                logger.exception("could not zoom to the AOI")
+
+    solara.use_effect(_on_install, [signal])
+
+    def _start_load():
+        last = loads.current
+        installed = last["signal"] != signal
+        if not installed and last["name"] != name:
+            # AppState._install publishes the project before it bumps the
+            # signal: that bump follows within the same install, and loads.
+            return
+        last.update(signal=signal, name=name, run=last["run"] + 1)
+        run = last["run"]
+        if s is None:
+            app_state.alerts_gdf.set(None)
+            return
+
+        def _kept():
+            return not installed and set_store.holds_set(app_state.alerts_gdf.value, s)
+
+        def _load():
+            if _kept():
+                return
+            store = set_store.active_store_path(p)
+            if store is not None and not store.exists() and loads.current["run"] == run:
+                # Review focus 4: the set's files were deleted or moved. The
+                # set is left unloaded (nothing to review) and the user is
+                # told where the store was and what rebuilds it.
+                notifications.warning(t("steps.project.set_missing", path=str(store)))
+            try:
+                gdf = set_store.load_active_alerts(p)
+            except Exception as exc:  # noqa: BLE001 - reported, the set stays unloaded
+                logger.exception("could not load the alerts of set %s", s.id)
+                if loads.current["run"] == run:
+                    # A Go into this set (Overview) will not land: forgotten,
+                    # so a later publish of the set opens at its saved position.
+                    set_store.drop_go_wish(app_state, s.id)
+                    notifications.error(t("steps.project.set_load_failed", error=error_text(exc)))
+                return
+            if loads.current["run"] != run or _kept():
+                return  # a newer load runs, or Integrate published the set meanwhile
+            # Checked again with the publish, atomically: Integrate may publish right now.
+            set_store.publish_set_alerts(app_state, p.name, s, gdf, unless_held=not installed)
+
+        spawn_in_context(_load)
+
+    solara.use_effect(_start_load, [key])
+
+
+@solara.component
+def _AlertLayers(app_state, layers, map_):
+    """The alert sets on the shared map, and a click on one of their alerts.
+
+    A leaf of the shell, not a step. The layers are switched on in Integrate &
+    vectorize once a run has produced a set, and a layer stays on while the
+    user moves on to Analysis or opens the Overview dialog (``MapLayers``
+    ruling #10) -- so nothing here may be mounted inside a step's body, which
+    unmounts with its view, and nothing here reads a view flag. ``IntegrateStep``
+    in particular early-returns a lock notice before its hooks could run, and
+    re-keys its form per project and period.
+
+    It owns every ``MapLayers`` call these layers need, so the switches in
+    Integrate are two booleans on ``app_state`` and carry no build closure.
+
+    The builds themselves are in ``gui.scripts.alert_layers``; what lives here
+    is when they run: once per new set (Integrate flips ``active_set`` as its
+    last act), again when a build skipped while the project was being written
+    becomes possible, and never while the alerts on hand are still the previous
+    set's (``set_store.active_set_alerts``).
+    """
+    notifications = use_notifications()
+    p = app_state.project.value
+    # None while the published alerts are still another set's: the publish that
+    # follows re-runs every effect keyed on it.
+    gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
+    s = active_set(p)
+    show = app_state.show_alerts.value
+    show_earlier = app_state.show_earlier_sets.value
+    has_alerts = gdf is not None and len(gdf) > 0
+    popup_ref = solara.use_ref(None)
+    # (project, set id) pairs already told that tippecanoe is missing: a review
+    # Save re-publishes the alerts and redraws the centroids, without the warning.
+    warned = solara.use_memo(set, [])
+    # (project, set id, fingerprint) -> the alerts an earlier set's build
+    # loaded, for the hit test. Written by the builds (MapLayers workers), read
+    # by the click handler.
+    earlier_alerts = solara.use_memo(dict, [])
+    # Subscribes to project_writers: a build skipped while the project was
+    # being written is asked for again once the writer is done.
+    busy = is_writing(p.name) if p is not None else False
+    deferred = solara.use_memo(alert_layers.Deferred, [])
+    earlier_deferred = solara.use_memo(set, [])
+    earlier_retry = solara.use_ref(0)
+    retries, set_retries = solara.use_state(0)
+
+    def _retry_when_free():
+        if not busy and deferred.current:
+            deferred.current = False
+            set_retries(retries + 1)
+
+    solara.use_effect(_retry_when_free, [busy])
+
+    def _sync_layer():
+        if not show or s is None or not has_alerts:
+            layers.hide(alert_layers.SET_LAYER_KEY)
+            return
+        build = alert_layers.active_build(map_, project=p, alert_set=s, alerts=gdf,
+                                          notifier=notifications, warned=warned, deferred=deferred)
+        # spec §9.4: the tiles and the centroids draw the same status colours
+        layers.show(alert_layers.SET_LAYER_KEY, build, content_id=f"{s.id}:{len(gdf)}",
+                    notifier=notifications, legend=set_legend(alert_layers.SET_LAYER_KEY, s))
+
+    solara.use_effect(_sync_layer, [show, s.id if s else None, gdf, retries])
+
+    show_states = app_state.show_unanalysable.value
+    combined_art = alert_layers.combined_artifact(p, s)
+    states_content = combined_art.content_id if combined_art is not None else None
+
+    def _sync_states():
+        if not show_states or s is None or not alert_layers.has_states(p, s):
+            layers.hide(alert_layers.STATES_LAYER_KEY)
+            return
+        layers.show(alert_layers.STATES_LAYER_KEY,
+                    lambda: alert_layers.states_build(map_, project=p, alert_set=s),
+                    content_id=states_content, notifier=notifications,
+                    legend=legend_specs.states_legend(alert_layers.STATES_LAYER_KEY))
+
+    solara.use_effect(_sync_states, [show_states, s.id if s else None, states_content])
+
+    earlier = alert_layers.earlier_of(p, s) if p is not None else []
+    earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)
+
+    def _build_earlier(e):
+        return alert_layers.earlier_build(map_, project=p, alert_set=e, loaded=earlier_alerts,
+                                          deferred_keys=earlier_deferred)
+
+    def _sync_earlier():
+        wanted = {alert_layers.earlier_key(e): e for e in earlier} if show_earlier else {}
+        for key in sorted(layers.on.value):
+            if key.startswith(alert_layers.EARLIER_PREFIX) and key not in wanted:
+                layers.hide(key)
+        # Alerts of sets no longer drawn are let go (a show below reloads its own).
+        keep = {(p.name, e.id, e.fingerprint) for e in wanted.values()}
+        for loaded in list(earlier_alerts):
+            if loaded not in keep:
+                earlier_alerts.pop(loaded, None)
+        for key, e in wanted.items():
+            layers.show(key, _build_earlier(e), content_id=f"{e.id}:{e.fingerprint}:{e.n_reviewed}",
+                        notifier=notifications, legend=earlier_set_legend(key, e))
+
+    solara.use_effect(_sync_earlier, [show_earlier, p.name if p is not None else None, earlier_sig])
+
+    def _retry_earlier_when_free():
+        # spec §9.2: tiles skipped while the project was being written are
+        # built once the writer is done. Only the deferred keys are rebuilt,
+        # through ``refresh`` (a key switched off meanwhile stays off).
+        if busy or not earlier_deferred:
+            return
+        by_key = {alert_layers.earlier_key(e): e for e in earlier}
+        for key in sorted(earlier_deferred):
+            earlier_deferred.discard(key)
+            e = by_key.get(key)
+            if e is None:
+                continue
+            earlier_retry.current += 1
+            layers.refresh(key, _build_earlier(e),
+                           f"{e.id}:{e.fingerprint}:{e.n_reviewed}:retry{earlier_retry.current}",
+                           legend=earlier_set_legend(key, e), notifier=notifications)
+
+    solara.use_effect(_retry_earlier_when_free, [busy])
+
+    def _on_install():
+        # The shell clears every layer when a project is installed (spec §4.3);
+        # _install has already put both switches back to off.
+        earlier_alerts.clear()
+        earlier_deferred.clear()
+
+    solara.use_effect(_on_install, [app_state.project_loaded_signal.value])
+
+    def _close_popup():
+        if popup_ref.current is not None:
+            map_.remove_layer(popup_ref.current, none_ok=True)
+            popup_ref.current = None
+
+    def _on_map(**kwargs):
+        if kwargs.get("type") != "click":
+            return
+        lat, lon = kwargs["coordinates"]
+        project = app_state.project.value
+        current = set_store.active_set_alerts(project, app_state.alerts_gdf.value) if show else None
+        hit = alert_layers.hit_in(project, current, lon, lat, loaded=earlier_alerts, is_shown=layers.is_on)
+        _close_popup()
+        if hit is None:
+            return
+        target, alerts, i = hit
+        row = alerts.iloc[i]
+        alert_id = int(row.get("alert_id", i))
+        go = v.Btn(small=True, color="primary", children=[t("steps.integrate.go")])
+        go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
+        summary = t("steps.integrate.popup", id=alert_id, status=row.get("status", ""),
+                    area=format_number(float(row.get("area_ha", 0)), 2))
+        lines = [v.Html(tag="div", children=[summary])]
+        if target.id != project.active_set:
+            lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))
+        popup = Popup(location=(lat, lon), child=v.Html(tag="div", children=[*lines, go]), close_button=True,
+                      auto_close=True)
+        # pysepal's key lookups read ``.key`` on every layer, and a Popup added
+        # without one breaks them.
+        map_.add_layer(popup, key=alert_layers.POPUP_KEY)
+        popup_ref.current = popup
+
+    def _wire_clicks():
+        map_.on_interaction(_on_map)
+
+        def _unwire():
+            map_.on_interaction(_on_map, remove=True)
+            _close_popup()  # also after the user closed it: a closed Popup stays in map_.layers
+
+        return _unwire
+
+    # Re-wired whenever the handler would close over stale alerts: a popup's
+    # Review index belongs to the alerts it was opened on.
+    solara.use_effect(_wire_clicks, [show, show_earlier, gdf])
+
+
+def legend_props(app_state, translate) -> dict:
+    """Props for pysepal's LegendComponent from the published legends (spec §9.4).
+
+    Translated at every render, so a locale switch re-translates the legend
+    on screen. Hidden on the analysis screen: the legend floats at z-index
+    150, over a screen at 4, and the shared map it describes is hidden there.
+    """
+    from dataclasses import asdict
+
+    from gui.scripts.legend_data import resolve_label, to_legend_data
+
+    legends = app_state.layer_legends.value
+    selected = app_state.selected_legend.value
+    current = next((e for e in legends if e.layer_id == selected), None)
+    return {
+        "legend_data": asdict(to_legend_data(current.spec, translate)) if current else {},
+        "selector_options": [{"value": e.layer_id, "text": resolve_label(e.label, translate)} for e in legends],
+        "selected": current.layer_id if current else "",
+        "visible": bool(legends) and app_state.screen.value == "workflow",
+    }
+
+
+@solara.component
+def MapLegend(app_state, layers):
+    """The floating legend of the shared map: a leaf, so legend churn never
+    re-renders the shell (it renders on the thread that published, like the
+    other leaves; it starts no task).
+    """
+    from pysepal.solara.components.legend import LegendComponent
+
+    props = legend_props(app_state, t)
+    LegendComponent(
+        legend_data=props["legend_data"],
+        selector_options=props["selector_options"],
+        selected=props["selected"],
+        event_set_selected=layers.select,
+        visible=props["visible"],
+    )
+
+
+@solara.component
+@with_sepal_sessions(module_name="deforestation_alerts")
+def Page():
+    setup_theme_colors()
+
+    # Centralized user feedback, mounted ABOVE the shell. pysepal 4's
+    # use_notifications() raises when no bus exists, and the provider creates
+    # the bus when it renders -- after its parent's body has run. The tiles
+    # are built with solara.render_fixed inside the shell's body, so the
+    # provider must render first, as an earlier sibling of _AppShell. MapApp
+    # publishes --sepal-notification-right-offset so the pill tracks the
+    # right panel.
+    NotificationProvider()
+    # Enter presses the open dialog's default button (gui/widget/enter_key):
+    # one listener on document, so where it sits in the tree does not matter.
+    EnterKeyListener()
+    _AppShell()
+
+
+@solara.component
+def _AppShell():
+    solara.Style(
+        # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
+        # `solara.display(card)`, and ipyvuetify wraps each standalone display in
+        # its OWN Vuetify `<v-application>` whose `.v-application--wrap` carries
+        # `min-height: 100vh`, so every card would reserve a full viewport height.
+        ".dialog-card .v-application--wrap,\n"
+        ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
+        # The analysis screen (SCREEN_CSS in gui/tile/analysis/analysis_tile.py)
+        # is a sibling of MapApp, fixed right of MapApp's rail
+        # (left: var(--sepal-drawer-width)). Its z-index, 4, is the LOWEST
+        # that still covers the map, because the layers that must show over
+        # it are stacked from small values (measured in the running app):
+        # MapApp's `.map-background` (the main map's stacking context) 0 <
+        # screen 4 < the rail collapse arrow 5 < the rail and the right panel
+        # 6 < menus 8 < the task pill 170 < the dialog scrim 201 < dialogs
+        # 202+ (Vuetify's stack minimum, raised by 2 per open dialog) < toasts
+        # 9999.
+        # MapApp stays mounted while the screen shows, and its rail stays
+        # visible and usable (user, 2026-10-09: the title, the About, Project
+        # and Overview dialogs, the theme toggle, the language selector).
+        # Hidden: only the main map, the right panel (the workflow) and the
+        # panel's "open" tab. Never the .v-application, its .v-application--wrap
+        # or the rail: the rail lives in the wrap, and menus and dialogs attach
+        # to the .v-application element itself ([data-app]).
+        "body:has(.defo-analysis-screen--on) #map-container,\n"
+        "body:has(.defo-analysis-screen--on) .right-panel,\n"
+        "body:has(.defo-analysis-screen--on) .right-panel-tab { display: none !important; }\n"
+        # The rail collapse/expand arrow sits on the screen's left edge: keep it
+        # above the screen (MapApp's own value, restated here so the whole order
+        # above is in one place) and below the dialogs.
+        ".v-application .sidebar-controls { z-index: 5 !important; }\n"
+        # The Analysis panel's sticky footer (gui/tile/analysis/footer.py)
+        # paints its own background so the panel scrolls under it. Its inline
+        # `var(--v-background-base, #ffffff)` is the light fallback: no theme
+        # defines `background`, so on the dark theme it was a white bar. Dark:
+        # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
+        # !important since an inline style beats any stylesheet rule.
+        ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
+        # Center modal dialogs over the MAP area (viewport minus the left rail):
+        # `.v-dialog__content` is a fixed full-viewport flex box; shrink it by the
+        # live rail width so a wide dialog (About is 1300px) is not tucked under
+        # the rail's collapse handle. Scoped with :has to MapApp's dialogs.
+        ".v-dialog__content:has(> .dialog-container) {\n"
+        "  left: var(--sepal-drawer-width, 0px) !important;\n"
+        "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
+        "}\n"
+        ".about-content { text-align: justify; }"
+    )
+
+    gee_interface = get_current_gee_interface()
+    theme_state = get_current_theme_state()
+
+    # Session state (the Project, navigation, alert review) — memoized so it
+    # is not re-created on every re-render (which would discard every reactive
+    # value mid-session). The auto-save hook saves the project after every
+    # committed change (spec D11).
+    app_state = solara.use_memo(AppState, dependencies=[])
+    solara.use_effect(lambda: install_autosave(app_state), dependencies=[])
+
+    # Analysis keeps its review state in Solara reactives, one per session
+    # (spec §10), and reads the active alert set through one SetContext, under
+    # the recipe-era names it still uses.
+    analysis = solara.use_memo(AnalysisState, dependencies=[])
+    set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])
+
+    # The ONE shared map. Memoized so the SAME instance is handed to MapApp AND
+    # to every map-bearing step (AOI, Alerts, Download & harmonize, Integrate,
+    # Overview draw their layers + popups on it). Re-creating it per render
+    # would desync the steps (which capture it once) from the map MapApp
+    # renders. The SATELLITE basemap is added once here.
+    def _make_shared_map():
+        m = SepalMap(
+            gee_interface=gee_interface, fullscreen=True, theme_state=theme_state
+        )
+        try:
+            m.add_basemap("SATELLITE")
+        except Exception:
+            logger.exception("Failed to add SATELLITE basemap to the shared map")
+        return m
+
+    map_ = solara.use_memo(_make_shared_map, dependencies=[])
+    # The session's one registry of layers toggled on the shared map (spec
+    # §4.3); cleared when a project is installed (_ActiveSetLoader). It
+    # publishes the legends of its layers into AppState (spec §9.4), which
+    # the MapLegend leaf renders.
+    layers = solara.use_memo(
+        lambda: MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend),
+        dependencies=[],
+    )
+
+    # MapApp step/dialog content is a synced traitlets `Instance(DOMWidget)` slot
+    # (MapApp.vue binds `:widget="activeStep.content"`), NOT a reacton child — so a
+    # raw @solara.component element is not rendered there. Render each Solara tile to
+    # a concrete widget (gui/scripts/detached.py) and hand MapApp that single widget.
+    # Memoized so the widget is stable across re-renders, and each step is
+    # mounted once per session: steps follow project switches themselves.
+    # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
+    # rendered MapApp widget, resolved once it is mounted (_resolve_mapapp).
+    # Both exist before the tiles so the Project dialog can close itself.
+    nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
+    mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
+    about_widget = solara.use_memo(
+        lambda: render_detached(lambda: AboutTile(), t("app.drawer_item.about"))[0], dependencies=[])
+    project_widget = solara.use_memo(
+        lambda: render_detached(lambda: ProjectDialog(
+            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model),
+            analysis=analysis), t("app.drawer_item.project"))[0],
+        dependencies=[])
+    overview_widget = solara.use_memo(
+        lambda: render_detached(lambda: OverviewTile(
+            app_state=app_state, map_=map_, layers=layers,
+            dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)),
+            t("app.drawer_item.overview"))[0], dependencies=[])
+    step_widgets = solara.use_memo(
+        lambda: {
+            "aoi": render_detached(lambda: AoiStep(app_state=app_state, map_=map_, gee_interface=gee_interface,
+                                                   layers=layers),
+                                   t("app.drawer_item.aoi"))[0],
+            "alerts": render_detached(lambda: AlertsStep(app_state=app_state, map_=map_,
+                                                         gee_interface=gee_interface, layers=layers),
+                                      t("app.drawer_item.alerts"))[0],
+            "period": render_detached(lambda: PeriodStep(app_state=app_state, layers=layers),
+                                      t("app.drawer_item.period"))[0],
+            "prepare": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
+                                                           gee_interface=gee_interface, layers=layers),
+                                       t("app.drawer_item.prepare"))[0],
+            "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
+                                                               gee_interface=gee_interface, layers=layers),
+                                         t("app.drawer_item.integrate"))[0],
+            "questionnaire": render_detached(lambda: QuestionnaireStep(app_state=app_state),
+                                             t("app.drawer_item.questionnaire"))[0],
+            "evaluators": render_detached(lambda: EvaluatorsStep(app_state=app_state, app_tile_model=set_context,
+                                                                 analysis=analysis, gee_interface=gee_interface),
+                                          t("app.drawer_item.evaluators"))[0],
+            "layers": render_detached(lambda: LayersStep(app_state=app_state, map_=map_,
+                                                         gee_interface=gee_interface, layers=layers),
+                                      t("app.drawer_item.layers"))[0],
+        },
+        dependencies=[],
+    )
+
+    # Analysis: build the analysis screen once (spec 2026-10-08 §2): the
+    # views, the timeline and the review console, in a full-height sibling of
+    # MapApp, right of its rail, that _ScreenBridge shows and hides. Raw
+    # widgets survive every show and hide.
+    analysis_layout = solara.use_memo(
+        lambda: build_analysis_layout(
+            aux_model=set_context,
+            selected_alerts_model=set_context,
+            analysis=analysis,
+            app_tile_model=set_context,
+            app_state=app_state,
+            gee_interface=gee_interface,
+            theme_state=theme_state,
+        ),
+        dependencies=[],
+    )
+
+    # -----------------------------------------------------------------------
+    # The right panel (spatial_risk parity): the PipelineHeader above the
+    # active workflow step's controls. Which step is active is
+    # app_state.active_step; nav_model.current_step tracks the rail, whose
+    # three items (About, Project, Overview) are all MapApp dialogs, so the
+    # panel never has to change what it shows.
+    # -----------------------------------------------------------------------
+    # Every step's controls wrapped in a div we SHOW/HIDE. ALL wrappers stay
+    # mounted in panel_host at all times; on a step change we toggle their
+    # visibility instead of swapping panel_host.children.
+    # WHY (not a children swap): swapping detaches the previous widget, and a
+    # tile's `solara.display`-captured controls live in an `Output` whose view
+    # is NOT recreated when the widget is reattached — so step cards vanished
+    # after navigating away and back. `display:none` keeps the DOM —
+    # and the widget views — alive. Keyed by step key; AOI is the
+    # default-visible one (active_step 0).
+    panel_controls = {**step_widgets}
+
+    def _wrap(key, visible):
+        return v.Html(
+            tag="div",
+            children=[panel_controls[key]],
+            style_="" if visible else "display: none;",
+        )
+
+    panel_wrappers = solara.use_memo(
+        lambda: {s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS},
+        dependencies=[],
+    )
+    # The pipeline header: rendered detached (MapApp's right_panel_content is a
+    # widget slot, not a reacton child) and memoized so it is stable across
+    # Page re-renders. It re-renders on its own when the AppState reactives it
+    # reads change.
+    header_widget = solara.use_memo(
+        lambda: render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0],
+        dependencies=[],
+    )
+    panel_host = solara.use_memo(
+        lambda: v.Container(
+            fluid=True,
+            class_="pa-0 ma-0",
+            children=[header_widget, *panel_wrappers.values()],
+        ),
+        dependencies=[],
+    )
+
+    # Rail clicks: every item mirrors its page view, so repeated triggers keep
+    # working. The panel is left as the user left it behind the dialog.
+    # None (dialog closed, "Map" clicked) changes nothing — see spec D13.
+    def _wire_rail_mirror():
+        def _on_rail_step(change):
+            sid = change["new"]
+            view = page_view_for_rail_step(sid)
+            if view is not None and app_state.current_page_view.value != view:
+                app_state.current_page_view.value = view
+            if view in PAGE_VIEW_TO_SCREEN:
+                # A screen is not a dialog left open: clear the step (and its
+                # rail highlight) so the next click is a change again, even
+                # one made while the screen already shows. On both ends: this
+                # runs inside the MapApp -> nav_model link's update, which
+                # drops a write-back, so clearing one end alone would leave
+                # MapApp at this step and swallow the next click.
+                mapapp = mapapp_ref.get("widget")
+                if mapapp is not None:
+                    mapapp.current_step = None
+                nav_model.current_step = None
+
+        nav_model.observe(_on_rail_step, "current_step")
+        return lambda: nav_model.unobserve(_on_rail_step, "current_step")
+
+    solara.use_effect(_wire_rail_mirror, dependencies=[])
+
+    # Theme mirror for the pipeline header's "primary" accent. The app's theme
+    # is owned by pysepal's ThemeState (MapApp's toggle), not by Solara's own
+    # dark mode, so solara.lab.use_dark_effective() reports the wrong value in
+    # this shell; and the header is rendered detached, so a toggle would not
+    # re-render it anyway. Mirroring the trait into a reactive fixes both.
+    def _mirror_theme():
+        def _on_theme(change=None):
+            app_state.dark.set(bool(theme_state.dark))
+
+        theme_state.observe(_on_theme, names=["dark"])
+        _on_theme()
+        return lambda: theme_state.unobserve(_on_theme, names=["dark"])
+
+    solara.use_effect(_mirror_theme, dependencies=[])
+
+    WORKFLOW_PANEL_CONFIG = {
+        "title": t("app.panel_workflow_title"),
+        "icon": "mdi-tune",
+        "width": 480,
+        "toggle_icon": "mdi-chevron-right",
+    }
+    right_panel_content = [{"content": [panel_host]}]
+
+    # MapApp drawer entries derive from RAIL_ITEMS (gui/store/workflow_steps.py):
+    # each one is a dialog over its rendered tile. They carry no
+    # right_panel_action — the panel stays as the user left it behind a dialog,
+    # as in spatial_risk.
+    # A "screen" item draws nothing; MapApp only needs a non-empty content
+    # list to report its click (``handle_step_activation``).
+    screen_stub = solara.use_memo(lambda: v.Html(tag="span", children=[]), dependencies=[])
+    rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,
+                    "analysis": screen_stub}
+    steps_data = [
+        {
+            "id": r.step_id,
+            "name": t(r.label_key),
+            "icon": r.icon,
+            "display": r.display,
+            "content": rail_content[r.key],
+            **({"width": r.dialog_width} if r.dialog_width else {}),
+        }
+        for r in RAIL_ITEMS
+    ]
+
+    # The title names the open project. Only a new, opened or closed project
+    # (or a language switch) changes it, so the shell follows the install
+    # signal and the locale, never the project:
+    # reading the project would re-render the whole shell on every commit
+    # (ruling #91). A leaf cannot set the title on the widget instead: reacton
+    # re-applies MapApp's element props whenever this context renders again.
+    app_title = use_app_title(app_state)
+    # The floating legend, a leaf mounted before MapApp (spec §9.4).
+    MapLegend(app_state=app_state, layers=layers)
+    app_element = MapApp.element(
+        app_title=app_title,
+        app_icon="mdi-tree",
+        repo_url="https://github.com/sepal-contrib/deforestation-alerts-module",
+        main_map=[map_],
+        steps_data=steps_data,
+        # Open the Project dialog at startup (rail step id 2): work starts by
+        # creating, opening or managing a project (spec A4). About stays one
+        # rail click away.
+        initial_step=2,
+        theme_state=theme_state,
+        model=nav_model,
+        right_panel_config=WORKFLOW_PANEL_CONFIG,
+        right_panel_content=right_panel_content,
+        right_panel_open=True,
+        is_pinned=False,  # start as the 60px icon rail
+        # Offer every catalog we ship (en, es-ES, fr); without it the default
+        # LocaleSelect is English-only. The selector writes pysepal's Solara
+        # locale, which gui.i18n.t() reads.
+        locales=app_available_locales(),
+    )
+
+    # The analysis screen is a sibling of MapApp (a fixed element inside the
+    # right drawer would be re-rooted by its transform). MapApp stays mounted;
+    # while the analysis screen shows, CSS hides its main map and right panel
+    # and keeps its rail.
+    solara.display(analysis_layout.screen)
+
+    # Resolve the rendered MapApp widget ONCE here, in Page's own context — where
+    # ``app_element`` is valid (``solara.get_widget`` must be called from the
+    # component that created the element; calling it from _NavBridge raises
+    # KeyError). _NavBridge reads it from this holder to open/close the right panel
+    # + dismiss dialogs (the part the Vue current_step watcher skips); the
+    # holder itself is created above, with nav_model.
+
+    def _resolve_mapapp():
+        try:
+            mapapp_ref["widget"] = solara.get_widget(app_element)
+        except KeyError:
+            # A re-render before the mount effects run (a reactive set while a
+            # child renders) leaves reacton's element->widget map keyed by the
+            # FIRST pass's MapApp element, so get_widget() misses the element
+            # this closure holds. The widget itself is the same one.
+            widget = find_rendered_widget(MapApp)
+            if widget is None:
+                logger.error("Navigation: could not resolve the MapApp widget")
+            mapapp_ref["widget"] = widget
+
+    solara.use_effect(_resolve_mapapp, dependencies=[])
+
+    _NavBridge(app_state=app_state, nav_model=nav_model, mapapp_ref=mapapp_ref)
+    _ScreenBridge(app_state=app_state, layout=analysis_layout)
+    _PanelBridge(
+        app_state=app_state,
+        panel_wrappers=panel_wrappers,
+        mapapp_ref=mapapp_ref,
+        workflow_config=WORKFLOW_PANEL_CONFIG,
+    )
+    _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)
+    _AlertLayers(app_state=app_state, layers=layers, map_=map_)
+    RemoteFactsLoader(app_state=app_state, gee_interface=gee_interface)
+    # App level, not inside a step: the project's scene index survives every
+    # navigation, so opening Analysis finds the timeline already loaded.
+    SceneIndexLoader(app_state=app_state, gee_interface=gee_interface)

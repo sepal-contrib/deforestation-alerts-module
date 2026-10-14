@@ -1,0 +1,135 @@
+import numpy as np
+import pytest
+
+from deforestation_alerts.engine import raster_io
+from deforestation_alerts.engine.vectorize import vectorize_alerts, yyyyddd_to_decimal
+from deforestation_alerts.project.models import GridSpec
+
+GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
+
+
+def _raster(tmp_path, alert, date=None, name="a.tif", grid=GRID):
+    out = tmp_path / name
+    date = np.zeros_like(alert) if date is None else date
+    with raster_io.write_grid_raster(out, grid, count=2) as dst:
+        dst.write(alert.astype("int32"), 1)
+        dst.write(date.astype("int32"), 2)
+    return out
+
+
+def _blank():
+    return np.zeros((GRID.height, GRID.width), dtype="int64")
+
+
+def test_decimal_dates():
+    assert yyyyddd_to_decimal(2026045) == pytest.approx(2026.045)
+    assert yyyyddd_to_decimal(2024366) == pytest.approx(2024.366)
+
+
+def test_min_cluster_size_filters_small_components(tmp_path):
+    a = _blank()
+    a[2:4, 2:4] = 1      # 4 px, dropped at min 5
+    a[10:12, 10:13] = 1  # 6 px, kept
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert len(gdf) == 1 and gdf.iloc[0]["count"] == 6
+
+
+def test_cluster_split_by_block_edge_is_kept(tmp_path):
+    a = _blank()
+    a[17:23, 5] = 1  # 6 px vertical line across the row-20 block edge: 3 + 3
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, block_rows=20)
+    assert len(gdf) == 1 and gdf.iloc[0]["count"] == 6
+
+
+def test_diagonal_pixels_are_one_component_with_8_connectivity(tmp_path):
+    a = _blank()
+    for i in range(5):
+        a[5 + i, 5 + i] = 1  # 5 diagonal pixels
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert len(gdf) == 1 and gdf.iloc[0]["count"] == 5
+    assert len(vectorize_alerts(_raster(tmp_path, a, name="b.tif"), min_cluster_size=5, connectivity=4)) == 0
+
+
+def test_mixed_codes_share_one_component_but_split_into_regions(tmp_path):
+    a = _blank()
+    a[5:8, 5:8] = 1     # 9 px GLAD-L
+    a[5:8, 8:11] = 10   # 9 px RADD, touching: one 18 px component
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert sorted(c[0] for c in gdf["alert_type_unique"]) == [1, 10]
+
+
+def test_nine_digit_code_survives(tmp_path):
+    a = _blank()
+    a[5:8, 5:8] = 222222222
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=1)
+    assert gdf.iloc[0]["alert_type_unique"] == [222222222]
+
+
+def test_dates_per_region_and_crs_and_area(tmp_path):
+    a, d = _blank(), _blank()
+    a[5:7, 5:8] = 2
+    d[5:7, 5:8] = 2026010
+    d[5, 5] = 2026003
+    gdf = vectorize_alerts(_raster(tmp_path, a, d), min_cluster_size=1)
+    row = gdf.iloc[0]
+    assert row["alert_date_min"] == pytest.approx(2026.003)
+    assert row["alert_date_max"] == pytest.approx(2026.010)
+    assert gdf.crs.to_epsg() == 32721
+    assert row["area_ha"] == pytest.approx(6 * 100 / 10_000)
+
+
+def test_empty_raster_gives_empty_frame(tmp_path):
+    gdf = vectorize_alerts(_raster(tmp_path, _blank()), min_cluster_size=1)
+    assert len(gdf) == 0 and "alert_type_unique" in gdf.columns
+
+
+def _rows(gdf):
+    cols = ["count", "alert_date_min", "alert_date_max", "area_ha"]
+    return sorted(tuple(round(float(v), 6) for v in r) for r in gdf[cols].itertuples(index=False))
+
+
+def test_region_cut_at_a_block_edge_matches_the_unblocked_result(tmp_path):
+    # A 6 px diagonal whose halves (3 + 3) meet only at a pixel corner on the
+    # row-20 block edge; each pixel has its own date.
+    a, d = _blank(), _blank()
+    for i in range(6):
+        a[17 + i, 5 + i] = 1
+        d[17 + i, 5 + i] = 2026001 + i
+    path = _raster(tmp_path, a, d)
+
+    blocked = vectorize_alerts(path, min_cluster_size=5, block_rows=20)
+    assert len(blocked) == 1
+    row = blocked.iloc[0]
+    assert row["count"] == 6
+    assert row["alert_date_min"] == pytest.approx(2026.001)
+    assert row["alert_date_max"] == pytest.approx(2026.006)
+    assert _rows(blocked) == _rows(vectorize_alerts(path, min_cluster_size=5))
+
+    # 4-connectivity does not follow a shared corner: six 1 px regions either way.
+    blocked4 = vectorize_alerts(path, min_cluster_size=1, connectivity=4, block_rows=20)
+    assert list(blocked4["count"]) == [1] * 6
+    assert _rows(blocked4) == _rows(vectorize_alerts(path, min_cluster_size=1, connectivity=4))
+
+
+def test_block_edge_stitch_holds_for_a_fractional_pixel_size(tmp_path):
+    # A 4.77 m grid snapped like grid.build_grid. In world coordinates the
+    # row-10 edge of block 0 and the top of block 1 differ in the last bit, so
+    # the two halves would not touch; stitching must not depend on that.
+    grid = GridSpec(
+        epsg="EPSG:32721", resolution=4.77, xmin=500000.94, ymax=8900004.33, width=40, height=40
+    )
+    a = _blank()
+    a[3:37, 5] = 1  # 34 px vertical line crossing the edges at rows 10, 20 and 30
+    path = _raster(tmp_path, a, grid=grid)
+    gdf = vectorize_alerts(path, min_cluster_size=1, block_rows=10)
+    assert len(gdf) == 1 and gdf.iloc[0]["count"] == 34
+    assert gdf.iloc[0]["area_ha"] == pytest.approx(34 * 4.77**2 / 10_000)
+
+
+def test_region_below_the_minimum_is_dropped_though_its_component_clears_it(tmp_path):
+    a = _blank()
+    a[5:10, 5:10] = 1  # 25 px GLAD-L
+    a[5, 10] = 10      # 1 px RADD touching it: one 26 px component, two regions
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert len(gdf) == 1
+    assert gdf.iloc[0]["count"] == 25 and gdf.iloc[0]["alert_type_unique"] == [1]

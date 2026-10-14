@@ -1,0 +1,260 @@
+"""GDAL allocates scratch files via CPLGenerateTempFilename, which falls back
+to "." when CPL_TMPDIR/TMPDIR are unset. On SEPAL the CWD can be read-only, so
+ComputeProximity with a non-Float32 destination dies with 'Read-only file
+system' — only on the platform, never in dev. configure_gdal_tmpdir() must
+make this class of operation survive a read-only CWD."""
+
+import os
+
+import numpy as np
+import pytest
+from osgeo import gdal
+
+gdal.UseExceptions()
+
+
+def test_compute_proximity_survives_readonly_cwd(tmp_path, monkeypatch, request):
+    # The app wires this once at import of gui/solara_app.py; call it directly
+    # so the test does not depend on the whole UI module being importable.
+    from deforestation_alerts.gdal_env import configure_gdal_tmpdir
+
+    configure_gdal_tmpdir()
+
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o555)
+    request.addfinalizer(lambda: ro.chmod(0o755))
+    monkeypatch.chdir(ro)
+
+    drv = gdal.GetDriverByName("MEM")
+    src = drv.Create("", 64, 64, 1, gdal.GDT_Byte)
+    src.GetRasterBand(1).WriteArray(
+        (np.arange(64 * 64).reshape(64, 64) % 7 == 0).astype("uint8")
+    )
+    # A non-Float32 destination forces GDAL to allocate a Float32 scratch band
+    dst = drv.Create("", 64, 64, 1, gdal.GDT_UInt32)
+    gdal.ComputeProximity(src.GetRasterBand(1), dst.GetRasterBand(1), ["VALUES=1"])
+    assert dst.GetRasterBand(1).ReadAsArray().max() > 0
+
+
+def test_configure_is_fail_fast(monkeypatch, tmp_path):
+    from deforestation_alerts import gdal_env
+
+    # Force every candidate to an unwritable location -> must raise, not log
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o555)
+    monkeypatch.setenv("DEFORESTATION_ALERTS_GDAL_TMPDIR", str(ro / "nope"))
+    monkeypatch.setattr(gdal_env, "_fallback_candidates", lambda: [], raising=False)
+    with pytest.raises(RuntimeError):
+        gdal_env.configure_gdal_tmpdir()
+    ro.chmod(0o755)
+
+
+# ---------------------------------------------------------------------------
+# The engine under SEPAL's conditions (spec §13): an unwritable working
+# directory and no temp-dir hint at all, spatial_risk's test_gdal_readonly_cwd
+# pattern. Nothing above configures GDAL here: the engine must not need it.
+# ---------------------------------------------------------------------------
+
+# What CPLGenerateTempFilename() (CPL_TMPDIR, TMPDIR, TEMP) and Python's
+# tempfile (TMPDIR, TEMP, TMP) consult before falling back to the CWD.
+_TMP_VARS = ("CPL_TMPDIR", "TMPDIR", "TEMP", "TMP")
+
+
+@pytest.fixture()
+def unconfigured_tmpdir(monkeypatch):
+    """Strip every temp-dir hint, through GDAL's config option too: an earlier
+    configure_gdal_tmpdir() (the test above, or an app import) sets it, and it
+    outlives os.environ edits. pytest does not know GDAL's globals, so the old
+    value is put back by hand; tempfile's cached choice is reset as well."""
+    import tempfile
+
+    for var in _TMP_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    previous = gdal.GetConfigOption("CPL_TMPDIR")
+    gdal.SetConfigOption("CPL_TMPDIR", None)
+    yield
+    gdal.SetConfigOption("CPL_TMPDIR", previous)
+
+
+@pytest.fixture()
+def readonly_cwd(tmp_path, monkeypatch, request):
+    """Run from a directory nothing can be written to, like SEPAL's module mount."""
+    cwd = tmp_path / "readonly_module_mount"
+    cwd.mkdir()
+    cwd.chmod(0o555)
+    request.addfinalizer(lambda: cwd.chmod(0o755))  # else tmp_path cleanup trips on it
+    monkeypatch.chdir(cwd)
+    return cwd
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+def test_the_fixtures_recreate_the_cwd_fallback(readonly_cwd, unconfigured_tmpdir):
+    """Guard for the engine test below: under these fixtures the known
+    offender (a UInt32 ComputeProximity, which needs a GDAL temp file) fails,
+    so the engine passing there means it needs no temp dir, not that GDAL
+    still had one."""
+    drv = gdal.GetDriverByName("MEM")
+    src = drv.Create("", 64, 64, 1, gdal.GDT_Byte)
+    src.GetRasterBand(1).WriteArray((np.arange(64 * 64).reshape(64, 64) % 7 == 0).astype("uint8"))
+    dst = drv.Create("", 64, 64, 1, gdal.GDT_UInt32)
+    with pytest.raises(RuntimeError):
+        gdal.ComputeProximity(src.GetRasterBand(1), dst.GetRasterBand(1), ["VALUES=1"])
+
+
+def _native_raw(path, grid):
+    """A raw download as Earth Engine returns it: EPSG:4326 over the grid,
+    alerts (code 1, dated 2026010) north of the grid's middle latitude."""
+    import math
+
+    import rasterio
+    from affine import Affine
+    from pyproj import Transformer
+
+    w, s, e, n = Transformer.from_crs(grid.epsg, "EPSG:4326", always_xy=True).transform_bounds(
+        grid.xmin, grid.ymax - grid.height * grid.resolution, grid.xmin + grid.width * grid.resolution, grid.ymax
+    )
+    res, pad = 0.00005, 0.001
+    minx, maxy = w - pad, n + pad
+    width, height = math.ceil((e + pad - minx) / res), math.ceil((maxy - (s - pad)) / res)
+    lat = maxy - (np.arange(height) + 0.5) * res
+    alert = np.repeat((lat > (s + n) / 2).astype("int32")[:, None], width, axis=1)
+    profile = dict(driver="GTiff", dtype="int32", nodata=0, count=2, width=width, height=height,
+                   crs="EPSG:4326", transform=Affine(res, 0, minx, 0, -res, maxy))
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(alert, 1)
+        dst.write(alert * 2026010, 2)
+    return path
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+# The vectorizer's polygons go to EPSG:4326 for tippecanoe, whose centroid
+# geopandas flags for any geographic CRS; harmless for alert-sized polygons.
+@pytest.mark.filterwarnings("ignore:Geometry is in a geographic CRS:UserWarning")
+def test_the_engine_runs_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd, unconfigured_tmpdir):
+    import rasterio
+
+    from deforestation_alerts.engine import integrate, raster_io
+    from deforestation_alerts.engine.harmonize import harmonize
+    from deforestation_alerts.engine.vectorize import vectorize_alerts
+    from deforestation_alerts.project.models import GridSpec
+
+    assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
+    # wide and tall enough for internal overviews, so they are built too
+    grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=600, height=520)
+    out = tmp_path / "project"
+    out.mkdir()
+
+    # write_grid_raster: an on-grid keep mask (the left half)
+    keep = np.zeros((grid.height, grid.width), "int32")
+    keep[:, : grid.width // 2] = 1
+    with raster_io.write_grid_raster(out / "mask.tif", grid, count=1) as dst:
+        dst.write(keep, 1)
+
+    # harmonize: align the native raw onto the grid, mask it, nearest overviews
+    raw = _native_raw(out / "raw.tif", grid)
+    harmonize(raw, [(out / "mask.tif", "keep")], out / "harmonized.tif", grid)
+    harm = out / "harmonized.tif"
+    raster_io.check_header(harm, grid)
+    with rasterio.open(harm) as src:
+        alert, dates = src.read(1), src.read(2)
+        assert src.overviews(1) == [2]
+    assert alert[10, 10] == 1 and dates[10, 10] == 2026010  # north, inside the mask
+    assert alert[10, grid.width - 10] == 0  # outside the keep mask
+    assert alert[grid.height - 10, 10] == 0  # south: no alert
+
+    # integrate's rasters and the vectorizer
+    n = integrate.combine([(harm, 0)], grid, out / "combined.tif")
+    assert n == int((alert > 0).sum()) > 0
+    gdf = vectorize_alerts(out / "combined.tif", min_cluster_size=1)
+    assert len(gdf) == 1
+    integrate.rasterize_footprint(gdf, grid, out / "footprint.tif")
+    with rasterio.open(out / "footprint.tif") as src:
+        assert int(src.read(1).sum()) == n
+
+    assert list(readonly_cwd.iterdir()) == []
+    assert not list(out.rglob("*.part"))
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+def test_the_geotiff_and_mask_writers_run_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd,
+                                                                                unconfigured_tmpdir):
+    from datetime import date
+
+    import geopandas as gpd
+    import rasterio
+    from affine import Affine
+    from pyproj import Transformer
+    from shapely.geometry import box
+
+    from deforestation_alerts.engine import masks, normalize, raster_io
+    from deforestation_alerts.project.models import BandMap, CustomSource, GridSpec, NativeGrid
+
+    assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
+    grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=600, height=520)
+    out = tmp_path / "project"
+    (out / "user").mkdir(parents=True)
+    t = Affine(10, 0, 500000, 0, -10, 8900000)
+    # a RADD-preset GeoTIFF on the grid's lattice and a float32 mask with NaN no-data
+    with rasterio.open(out / "user" / "radd.tif", "w", driver="GTiff", width=600, height=520, count=2,
+                       dtype="int16", crs=grid.epsg, transform=t) as dst:
+        dst.write(np.full((520, 600), 3, "int16"), 1)
+        dst.write(np.full((520, 600), 26010, "int16"), 2)
+    prob = np.full((520, 600), 0.8, "float32")
+    prob[:, 300:] = np.nan
+    with rasterio.open(out / "user" / "prob.tif", "w", driver="GTiff", width=600, height=520, count=1,
+                       dtype="float32", crs=grid.epsg, transform=t, nodata=float("nan")) as dst:
+        dst.write(prob, 1)
+    w, s, e, n = Transformer.from_crs(grid.epsg, "EPSG:4326", always_xy=True).transform_bounds(
+        500000, 8900000 - 5200, 506000, 8900000)
+    bounds = (w, s, e, n)
+
+    src = CustomSource(name="tif", origin="file", ref=str(out / "user" / "radd.tif"), asset_type="FILE",
+                       format="radd", date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
+                       native=NativeGrid(crs=grid.epsg, scale=10.0, transform=tuple(t)[:6], bounds=bounds), digit=3)
+    raw = normalize.normalize_file(src, bounds, date(2026, 1, 1), date(2026, 1, 31), out / "raw.tif")
+    with rasterio.open(raw) as r:
+        assert r.count == 2 and r.read(1).max() == 1
+
+    sidecar = out / "aoi.geojson"
+    gpd.GeoDataFrame(geometry=[box(*bounds)], crs="EPSG:4326").to_file(sidecar, driver="GeoJSON")
+    aoi = masks.build_aoi_raster(sidecar, grid, out / "masks" / "aoi.tif")
+    raster_io.check_header(aoi, grid)
+
+    stats = masks.align_mask(out / "user" / "prob.tif", grid, out / "masks" / "prob.tif", band=1, aoi_raster=aoi)
+    assert 0 < stats["on_pixels"] < grid.width * grid.height  # NaN is off: the western half only
+
+    assert list(readonly_cwd.iterdir()) == []
+    assert not list(out.rglob("*.part"))
+
+
+def _tippecanoe_available():
+    from deforestation_alerts.engine import pmtiles
+
+    return pmtiles.tippecanoe_available()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits, so a read-only CWD proves nothing")
+@pytest.mark.skipif(not _tippecanoe_available(), reason="tippecanoe not installed")
+@pytest.mark.filterwarnings("ignore:Geometry is in a geographic CRS:UserWarning")
+def test_the_tiles_build_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly_cwd, unconfigured_tmpdir):
+    """The set's tiles: tippecanoe builds in the local scratch, never the CWD.
+    Its own test, skipped without tippecanoe, so a missing binary is reported
+    rather than passed over inside the engine test above."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from deforestation_alerts.engine import pmtiles
+
+    assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
+    out = tmp_path / "project"
+    out.mkdir()
+    alerts = gpd.GeoDataFrame({"alert_id": [0, 1], "status": ["Not reviewed", "Confirmed"], "set_id": ["s", "s"]},
+                              geometry=[box(-55.01, -24.01, -55.0, -24.0), box(-55.02, -24.02, -55.01, -24.01)],
+                              crs="EPSG:4326")
+    assert pmtiles.alerts_to_pmtiles(alerts, out / "alerts.pmtiles").stat().st_size > 0
+
+    assert list(readonly_cwd.iterdir()) == []
+    assert not list(out.rglob("*.part"))

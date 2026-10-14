@@ -4,7 +4,6 @@ The nox run are build in isolated environment that will be stored in .nox. to fo
 """
 
 import nox
-import tomli
 
 
 @nox.session(reuse_venv=True)
@@ -14,18 +13,7 @@ def lint(session):
     session.run("pre-commit", "run", "--a", *session.posargs)
 
 
-@nox.session(reuse_venv=True)
+@nox.session(reuse_venv=True, venv_backend="none")
 def app(session):
-    """Run the application."""
-    init_notebook = tomli.load("pyproject.toml")["sepal-ui"]["init-notebook"]
-    session.install("-r", "requirements.txt")
-    session.run("jupyter", "trust", init_notebook)
-    session.run("voila", "--debug", init_notebook)
-
-
-@nox.session(reuse_venv=True)
-def jupyter(session):
-    """Run the application in a jupyter notebook."""
-    session.install("-r", "requirements.txt")
-    session.run("jupyter", "trust", "no_ui.ipynb")
-    session.run("jupyter", "notebook", "no_ui.ipynb")
+    """Run the Solara application in the active (conda) environment."""
+    session.run("solara", "run", "gui/solara_app.py", "--port", "8900", "--no-open")

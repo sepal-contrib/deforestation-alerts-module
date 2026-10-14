@@ -1,0 +1,39 @@
+{
+  "legend": {
+    "state_too_small": "Trop petit",
+    "state_over_cap": "Au-delà du plafond d'alertes",
+    "states_title": "Non analysable",
+    "alert": {
+      "confirmed": "Confirmée (confiance élevée)",
+      "probable": "Probable (confiance faible)"
+    },
+    "status": {
+      "not_reviewed": "Non examinée",
+      "confirmed": "Examinée : confirmée",
+      "false_positive": "Examinée : faux positif",
+      "needs_revision": "Examinée : à revoir"
+    },
+    "mask": {
+      "keep": "Zone conservée : les alertes à l'extérieur sont supprimées",
+      "exclude": "Zone exclue : les alertes à l'intérieur sont supprimées",
+      "off": "Non utilisée pour cette période"
+    },
+    "title": {
+      "preview": "{source} · aperçu {start} → {end}",
+      "harmonized": "{source} · {start} → {end}",
+      "mask": "Masque {name}",
+      "set": "Alertes · {period} · {sources}",
+      "earlier_set": "Jeu antérieur · {period}"
+    },
+    "name": {
+      "preview": "{source} · aperçu",
+      "harmonized": "{source} · {start} → {end}",
+      "mask": "Masque {name}",
+      "earlier_set": "Jeu antérieur · {period} · {sources}"
+    },
+    "vis": {
+      "rgb": "Composite RGB de {bands}, {min}–{max}",
+      "nicfi": "Planet NICFI {month}, vraies couleurs"
+    }
+  }
+}

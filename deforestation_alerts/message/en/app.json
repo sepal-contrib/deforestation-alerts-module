@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "Forest Loss Alerts Analysis",
+    "panel_workflow_title": "Workflow",
+    "tile_failed": "The {tile} tile failed to render ({error}). Reload the page; the details are in the server log.",
+    "drawer_item": {
+      "about": "About",
+      "project": "Project",
+      "aoi": "AOI",
+      "alerts": "Alerts",
+      "layers": "Optional layers",
+      "period": "Period",
+      "prepare": "Download & harmonize",
+      "integrate": "Integrate & vectorize",
+      "overview": "Overview",
+      "questionnaire": "Questionnaire",
+      "analysis": "Analysis",
+      "evaluators": "Evaluation"
+    }
+  }
+}

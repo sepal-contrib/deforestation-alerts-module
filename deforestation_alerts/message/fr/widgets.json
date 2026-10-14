@@ -1,0 +1,83 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "replace": "Remplacer",
+    "delete": "Supprimer",
+    "close": "Fermer",
+    "actions": "Actions",
+    "_test_fmt": "bonjour {name}",
+    "_test": {
+      "one": "{count} élément",
+      "many": "{count} d'éléments",
+      "other": "{count} éléments"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "Supprimer ?",
+    "confirm_default_message": "Cette action est irréversible.",
+    "confirm_default_label": "Supprimer"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "en cours",
+      "status_ready": "prête",
+      "status_completed": "terminée",
+      "status_failed": "échouée",
+      "status_cancelled": "annulée",
+      "status_stale": "obsolète",
+      "status_missing": "manquante",
+      "status_no_data": "aucune donnée",
+      "status_not_covered": "non couverte",
+      "status_unchecked": "non vérifiée"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Sélectionnez d'abord une zone d'intérêt.",
+    "lock_project": "Ouvrez d'abord un projet.",
+    "lock_layers": "Sélectionnez d'abord une zone d'intérêt.",
+    "lock_period": "Ajoutez d'abord au moins une source d'alertes.",
+    "lock_prepare": "Créez ou sélectionnez d'abord une période.",
+    "lock_integrate": "Téléchargez et harmonisez d'abord au moins une source.",
+    "lock_analysis": "Lancez d'abord Intégrer et vectoriser.",
+    "count_sources": {
+      "one": "{count} source",
+      "many": "{count} de sources",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} couche",
+      "many": "{count} de couches",
+      "other": "{count} couches"
+    },
+    "count_questions": {
+      "one": "{count} question",
+      "many": "{count} de questions",
+      "other": "{count} questions"
+    },
+    "count_periods": {
+      "one": "{count} période",
+      "many": "{count} de périodes",
+      "other": "{count} périodes"
+    },
+    "count_ready": {
+      "one": "{count} prête",
+      "many": "{count} prêtes",
+      "other": "{count} prêtes"
+    },
+    "count_alerts": {
+      "one": "{count} alerte",
+      "many": "{count} d'alertes",
+      "other": "{count} alertes"
+    },
+    "step_badge": "{n} / {total}",
+    "count_empty": "rien pour l'instant",
+    "start_analysis": "Lancer l'analyse",
+    "count_evaluators": {
+      "one": "{count} évaluateur",
+      "many": "{count} d'évaluateurs",
+      "other": "{count} évaluateurs"
+    }
+  }
+}

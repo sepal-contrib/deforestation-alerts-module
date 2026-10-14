@@ -1,0 +1,29 @@
+{
+  "errors": {
+    "not_enough_space": "Espace disque libre insuffisant : ceci nécessite {needed_gb} Go dans {folder}, et {free_gb} Go sont libres.",
+    "off_grid": "Le raster écrit dans {path} n'est pas sur la grille du projet ; rien n'a été enregistré.",
+    "raw_not_as_asked": "Le téléchargement {path} n'est pas le raster à 2 bandes Int32 en {crs} demandé ; rien n'a été enregistré.",
+    "mask_not_as_asked": "Le téléchargement du masque {path} n'est pas le raster à 1 bande 0/1 en {crs} demandé ; rien n'a été enregistré.",
+    "no_aoi_or_grid": "Le projet a besoin d'une AOI et d'une grille avant de télécharger quoi que ce soit.",
+    "source_native_unknown": "{source} : sa grille native (projection et échelle) est inconnue ; modifiez la source.",
+    "bands_not_loaded": "{source} : sa liste de bandes n'est pas encore chargée depuis Earth Engine ; réessayez dans un instant.",
+    "file_not_found": "Fichier introuvable : {path}",
+    "not_a_source": "{source} n'est pas une source de ce projet.",
+    "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser.",
+    "footprint_missing": "L'empreinte du jeu antérieur {set_id} est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
+    "carry_missing": "Le raster combiné du jeu antérieur {set_id} est manquant ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
+    "no_sources": "Choisissez au moins une source, chacune une seule fois.",
+    "attribute_band_missing": "Le raster d'attributs n'a pas la bande {band} (il a {bands}).",
+    "band_out_of_range": "{file} n'a pas de bande {band} (il en a {bands}).",
+    "attribute_no_crs": "Le raster d'attributs {path} n'a pas de système de référence de coordonnées.",
+    "no_tippecanoe": "tippecanoe n'a été trouvé ni à côté de Python ni dans le PATH.",
+    "project_unreadable": "{path} n'a pas pu être lu : {error}",
+    "project_not_a_manifest": "{path} n'est pas un manifeste de projet de cette application.",
+    "project_newer_schema": "{path} a le schéma {found} ; cette application lit le schéma {expected}.",
+    "project_invalid": "{path} n'est pas un projet valide : {error}",
+    "no_images": "Téléchargez d'abord les images avant et après.",
+    "folder_not_writable": "Le dossier {folder} n'est pas accessible en écriture : les pyramides de la couche ne peuvent pas être écrites à côté.",
+    "ee_asset_not_found": "L'asset Earth Engine {asset} n'existe pas, ou votre compte ne peut pas le lire.",
+    "download_busy": "Un autre téléchargement Earth Engine était encore en cours après {minutes} minutes, donc {file} n'a pas été téléchargé. Relancez cette étape une fois celui-ci terminé."
+  }
+}

@@ -1,0 +1,147 @@
+/* leaflet-multiview: core styles. The host page loads Leaflet's and Geoman's
+   own CSS (plain.html with <link> tags, the app bundle by importing them). */
+.mv-root {
+  --mv-gap: 8px;
+  --mv-radius: 4px;
+  --mv-header-fg: #222;
+  --mv-control-bg: #fff;
+  --mv-control-fg: #333;
+  --mv-control-border: #ccc;
+  --mv-error-bg: #b3261e;
+  --mv-error-fg: #fff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+.mv-root.mv-dark {
+  --mv-header-fg: #eee;
+  --mv-control-bg: #1e1e1e;
+  --mv-control-fg: #eee;
+  --mv-control-border: #444;
+}
+.mv-views { flex: 1 1 auto; min-height: 0; display: flex; gap: var(--mv-gap); }
+.mv-layout-grid > .mv-views { display: grid; grid-auto-rows: minmax(0, 1fr); }
+.mv-view { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.mv-header {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  color: var(--mv-header-fg);
+  font: 500 13px/1.5 Roboto, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-header:empty { display: none; }
+.mv-map { flex: 1 1 auto; min-height: 0; position: relative; border-radius: var(--mv-radius); }
+/* A host's own `a` rule (pysepal's MapApp underlines `.v-application a`) ties
+   Leaflet's `.leaflet-bar a` and wins by load order: out-rank it. */
+.mv-root .leaflet-bar a { text-decoration: none; }
+.mv-dark .leaflet-bar a,
+.mv-dark .leaflet-control-layers {
+  background: var(--mv-control-bg);
+  color: var(--mv-control-fg);
+  border-color: var(--mv-control-border);
+}
+.mv-dark .leaflet-control-layers-toggle { filter: invert(0.9); }
+.mv-error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  padding: 2px 8px;
+  background: var(--mv-error-bg);
+  color: var(--mv-error-fg);
+  font: 12px/1.6 Roboto, sans-serif;
+}
+
+/* --- layerMenu (src/plugins/layer-menu) --- */
+.mv-layers-title { font-weight: 600; padding: 0 0 4px; }
+.mv-layer-menu.mv-layer-menu--empty { display: none; }
+
+/* --- fitBounds (src/plugins/fit-bounds) --- */
+.mv-fit-bounds { font-size: 18px; line-height: 30px; text-align: center; cursor: pointer; }
+.mv-fit-bounds-bar.mv-fit-bounds--none { display: none; }
+
+/* --- anywidget adapter (src/widget/anywidget.js) --- */
+/* The wrapper also holds the error strip when no multiview could be built,
+   outside .mv-root: it carries the strip's colours itself. */
+.mv-widget { position: relative; width: 100%; height: 100%; --mv-error-bg: #b3261e; --mv-error-fg: #fff; }
+.mv-widget > .mv-widget-views { width: 100%; height: 100%; }
+
+/* --- draw (src/plugins/draw) --- */
+.mv-draw-hint {
+  padding: 2px 6px;
+  border-radius: var(--mv-radius);
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+  font: 12px/1.5 Roboto, sans-serif;
+  pointer-events: none;
+}
+.mv-dark .mv-draw-hint { background: rgba(30, 30, 30, 0.85); color: #eee; }
+.leaflet-interactive.mv-draw-selected { stroke: #ff9800; stroke-width: 5px; stroke-dasharray: 8 6; }
+/* Bulk deletes: the armed Select area action, the box, the shapes a Delete
+   would remove and the confirmation that asks first. */
+.button-container .leaflet-pm-actions-container .leaflet-pm-action.mv-active { background-color: #1976d2; }
+.leaflet-container.mv-selecting,
+.leaflet-container.mv-selecting .leaflet-interactive { cursor: crosshair; }
+.mv-select-box {
+  position: absolute;
+  z-index: 800;
+  border: 1.5px dashed #fff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.leaflet-interactive.mv-draw-doomed { stroke: #f44336; fill: #f44336; fill-opacity: 0.35; }
+.mv-bulk-confirm {
+  position: absolute;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--mv-radius);
+  background: #fff;
+  color: #222;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  font: 12px/1.5 Roboto, sans-serif;
+  white-space: nowrap;
+  cursor: default;
+}
+.mv-bulk-confirm button { font: inherit; padding: 2px 9px; border-radius: 3px; cursor: pointer; }
+.mv-bulk-cancel { border: 1px solid #bbb; background: #fff; color: #444; }
+.mv-bulk-delete { border: 1px solid #c62828; background: #d32f2f; color: #fff; }
+.mv-dark .mv-bulk-confirm { background: #2b2b2b; color: #eee; }
+.mv-dark .mv-bulk-cancel { background: #2b2b2b; color: #ddd; border-color: #666; }
+
+/* --- holes (src/plugins/holes) --- */
+.mv-hole-bar a { font-size: 16px; line-height: 30px; text-align: center; cursor: pointer; }
+.mv-hole-bar a.mv-active,
+.mv-dark .mv-hole-bar a.mv-active { background: #2196f3; color: #fff; }
+.leaflet-container.mv-removing,
+.leaflet-container.mv-removing .leaflet-interactive { cursor: crosshair; }
+.mv-removing .mv-draw-hint { display: none; }
+.mv-holes-hint {
+  padding: 2px 6px;
+  border-radius: var(--mv-radius);
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+  font: 12px/1.5 Roboto, sans-serif;
+  pointer-events: none;
+}
+.mv-dark .mv-holes-hint { background: rgba(30, 30, 30, 0.85); color: #eee; }
+
+/* --- tileErrors (src/plugins/tile-errors) --- */
+.mv-tile-error {
+  padding: 2px 8px;
+  border-radius: var(--mv-radius);
+  background: var(--mv-error-bg);
+  color: var(--mv-error-fg);
+  font: 12px/1.6 Roboto, sans-serif;
+  pointer-events: none;
+}

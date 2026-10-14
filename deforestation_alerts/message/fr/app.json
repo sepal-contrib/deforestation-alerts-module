@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "Analyse des alertes de perte forestière",
+    "panel_workflow_title": "Flux de travail",
+    "tile_failed": "Le panneau {tile} n'a pas pu s'afficher ({error}). Rechargez la page ; les détails sont dans le journal du serveur.",
+    "drawer_item": {
+      "about": "À propos",
+      "project": "Projet",
+      "aoi": "AOI",
+      "alerts": "Alertes",
+      "layers": "Couches facultatives",
+      "period": "Période",
+      "prepare": "Télécharger et harmoniser",
+      "integrate": "Intégrer et vectoriser",
+      "overview": "Aperçu",
+      "questionnaire": "Questionnaire",
+      "analysis": "Analyse",
+      "evaluators": "Évaluation"
+    }
+  }
+}

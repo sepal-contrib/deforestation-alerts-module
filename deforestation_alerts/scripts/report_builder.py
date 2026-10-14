@@ -1,0 +1,394 @@
+from docx import Document
+from docx.shared import Inches, Pt
+import geopandas as gpd
+import rasterio
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib_scalebar.scalebar import ScaleBar
+import cartopy.crs as ccrs
+from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
+from deforestation_alerts.scripts.mosaics_helper import *
+from datetime import datetime
+import cartopy.io.img_tiles as cimgt
+from shapely.geometry import box
+from pathlib import Path
+import ast
+from deforestation_alerts.scripts.custom_sources import MAX_CUSTOM_SOURCES, slot_value
+from deforestation_alerts.scripts import local_files
+
+def ensure_list(input_data):
+    if isinstance(input_data, str):
+        return [input_data]  # Convert string to list
+    elif isinstance(input_data, list):
+        return input_data  # Return the list as is
+    else:
+        raise ValueError("Input must be a string or a list")  # Handle invalid input
+
+
+def format_list(items):
+    if not items:  # Handle empty list
+        return ""
+    if len(items) == 1:
+        return str(items[0])
+    elif len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    else:
+        return f"{', '.join(map(str, items[:-1]))} and {items[-1]}"
+
+
+def parse_formatted_string(formatted_string):
+    if not formatted_string:  # Handle empty string
+        return []
+    if " and " not in formatted_string:  # Only one item
+        return [formatted_string]
+    parts = formatted_string.rsplit(" and ", 1)
+    if ", " in parts[0]:  # Multiple items
+        return parts[0].split(", ") + [parts[1]]
+    else:  # Two items
+        return parts
+
+
+def plot_tiff_with_overlay(
+    tiff_path, output_path, bands=(1, 2, 3), vector_overlay=None, overlay_color="red"
+):
+    """
+    Plot a multi-band TIFF image with map elements and an optional vector overlay.
+
+    Parameters:
+    - tiff_path (str): Path to the input TIFF image.
+    - output_path (str): Path to save the output JPEG image.
+    - bands (tuple): Tuple of band indices for RGB visualization (e.g., (1, 2, 3) for Red, Green, Blue).
+    - vector_overlay (GeoDataFrame): Optional GeoDataFrame for overlaying vector data on the map.
+    - overlay_color (str): Color for vector overlay.
+    """
+
+    # Load the TIFF image
+    with rasterio.open(tiff_path) as src:
+        # Read the specified bands
+        img_data = src.read(bands)
+        img_extent = [
+            src.bounds.left,
+            src.bounds.right,
+            src.bounds.bottom,
+            src.bounds.top,
+        ]
+        crs_proj = src.crs.to_string()
+
+    # Set up the plot
+    fig, ax = plt.subplots(
+        figsize=(6, 6), subplot_kw={"projection": ccrs.epsg(int(src.crs.to_epsg()))}
+    )
+    ax.set_extent(img_extent, crs=ccrs.epsg(int(src.crs.to_epsg())))
+
+    # Display image data
+    ax.imshow(img_data.transpose(1, 2, 0), extent=img_extent, origin="upper")
+
+    # Add gridlines and ticks
+    gl = ax.gridlines(draw_labels=True, color="gray", alpha=0.5, linestyle="--")
+    gl.top_labels = True
+    gl.bottom_labels = True
+    gl.left_labels = True
+    gl.right_labels = True
+
+    # Rotate left and right tick labels for vertical orientation
+    # gl.xlabel_style = {'rotation': 0}
+    # gl.ylabel_style = {'rotation': 90}
+
+    # Add north arrow
+    ax.annotate(
+        "N",
+        xy=(0.95, 0.95),
+        xycoords="axes fraction",
+        ha="center",
+        va="center",
+        fontsize=16,
+        color="black",
+        weight="bold",
+        arrowprops=dict(
+            facecolor="black", width=4, headwidth=8, headlength=4, shrink=0.4
+        ),
+    )
+
+    # Add scale bar
+    # scale_length_km = 5  # scale length in km (customize as needed)
+    # scale_length_deg = scale_length_km / 111  # approximate conversion to degrees
+    # x0, y0 = ax.get_xlim()[0] + scale_length_deg * 1, ax.get_ylim()[0] + scale_length_deg * 1
+    # ax.plot([x0, x0 + scale_length_deg], [y0, y0], color='black', lw=3)
+    # ax.text(x0 + scale_length_deg / 2, y0, f'{scale_length_km} km', ha='center', va='bottom')
+    ax.add_artist(
+        ScaleBar(
+            4.77,
+            location="lower left",
+            label_loc="bottom",
+            scale_loc="top",
+            frameon=True,
+            length_fraction=0.1,
+            width_fraction=0.004,
+            box_alpha=0.2,
+        )
+    )
+
+    # Add vector overlay if provided
+    if vector_overlay is not None and not vector_overlay.empty:
+        vector_overlay.to_crs(crs_proj, inplace=True)
+        vector_overlay.plot(
+            ax=ax,
+            edgecolor=overlay_color,
+            facecolor="none",
+            linewidth=1,
+            transform=ccrs.epsg(int(src.crs.to_epsg())),
+        )
+
+    # Save the output as JPEG
+    plt.savefig(output_path, format="jpg", bbox_inches="tight", dpi=150)
+    plt.close(fig)
+
+
+def row_attributes(gdf_row) -> dict:
+    """The placeholders the report fills from the alert's own row (the names
+    ``project.questions.REPORT_PLACEHOLDERS`` reserves)."""
+    return {
+        "admin1": gdf_row["admin1"],
+        "admin2": gdf_row["admin2"],
+        "admin3": gdf_row["admin3"],
+        "detection_date1": convert_julian_to_date(gdf_row["alert_date_min"]),
+        "detection_date2": convert_julian_to_date(gdf_row["alert_date_max"]),
+        "confirmation_date": datetime.now().strftime("%Y-%m-%d"),
+        "before_img": gdf_row["before_img"],
+        "after_img": gdf_row["after_img"],
+        "alert_system": gdf_row["alert_sources"],
+        "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
+    }
+
+
+def _fill_placeholders(doc, attributes: dict):
+    """Replace every ``{key}`` in the body paragraphs (not tables, headers or
+    footers: spec D3 says so in the UI). Returns ``doc``."""
+    for para in doc.paragraphs:
+        for key, value in attributes.items():
+            if f"{{{key}}}" in para.text:
+                para.text = para.text.replace(f"{{{key}}}", str(value))
+    return doc
+
+
+def generate_deforestation_report_with_word_template(
+    image_path,
+    geodataframe_path,
+    template_path,
+    output_path,
+    scale_bar_length=200,
+    extra=None,
+):
+    """Render the Word report onto ``output_path`` and return that path.
+
+    ``extra`` is ``{placeholder: value}`` for the placeholders beyond the
+    alert's own (the review's ``{verdict}`` and one ``{key}`` per question);
+    ``None`` values read as empty.
+
+    Path contract: all paths are local; the report is built in a private
+    scratch folder and copied onto ``output_path``. The six intermediate JPEGs
+    and the ``.docx`` live in that per-call scratch folder (two concurrent
+    reports never share an ``output_image1.jpg``), which is deleted before
+    this function returns.
+    """
+    # Load Word template
+    doc = Document(template_path)
+    geodataframe = gpd.read_file(geodataframe_path)
+
+    # The first row's attributes from the GeoDataFrame (one alert per file)
+    attributes = row_attributes(geodataframe.iloc[0])
+    attributes.update({k: "" if v is None else str(v) for k, v in (extra or {}).items()})
+
+    # Replace placeholders in the Word document
+    _fill_placeholders(doc, attributes)
+
+    with local_files.scratch_dir() as folder_temp:
+        local_doc = folder_temp / "report.docx"
+        _render_report(doc, geodataframe, image_path, folder_temp, local_doc)
+        local_files.copy_into(local_doc, output_path)
+    return str(output_path)
+
+
+def _render_report(doc, geodataframe, image_path, folder_temp, local_doc):
+    """Plot the six figures into ``folder_temp``, place them in ``doc`` and
+    save it as ``local_doc``."""
+    folder_temp = str(folder_temp)
+
+    # Process Image 1
+    img1_path_jpg = folder_temp + "/output_image1.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img1_path_jpg),
+        bands=(4, 3, 2),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 2
+    img2_path_jpg = folder_temp + "/output_image2.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img2_path_jpg),
+        bands=(8, 7, 6),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 3
+    img3_path_jpg = folder_temp + "/output_image3.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img3_path_jpg),
+        bands=(8, 7, 6),
+        vector_overlay=geodataframe,
+        overlay_color="red",
+    )
+
+    # Process Image 4
+    img4_path_jpg = folder_temp + "/output_image4.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img4_path_jpg),
+        bands=(3, 2, 1),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 2
+    img5_path_jpg = folder_temp + "/output_image5.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img5_path_jpg),
+        bands=(7, 6, 5),
+        vector_overlay=None,
+        overlay_color="red",
+    )
+
+    # Process Image 2
+    img6_path_jpg = folder_temp + "/output_image6.jpg"
+    plot_tiff_with_overlay(
+        image_path,
+        Path(img6_path_jpg),
+        bands=(7, 6, 5),
+        vector_overlay=geodataframe,
+        overlay_color="red",
+    )
+
+    # Insert images in place of placeholders
+    for para in doc.paragraphs:
+        if "[Placeholder for Image 1]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img1_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 2]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img2_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 3]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img3_path_jpg, width=Pt(250))
+
+        if "[Placeholder for Image 4]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img4_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 5]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img5_path_jpg, width=Pt(250))
+
+        elif "[Placeholder for Image 6]" in para.text:
+            para.text = ""  # Clear placeholder text
+            run = para.add_run()
+            run.add_picture(img6_path_jpg, width=Pt(250))
+
+    doc.save(str(local_doc))
+
+
+def get_unique_alerts(alert_list, custom_names=None, digit_map=None):
+    """
+    Given a list of integers representing sums of alert values,
+    return a list of unique alert types found.
+
+    The alert values are constructed by summing contributions from:
+    - GLAD-L: ones digit (1 or 2 if triggered)
+    - RADD: tens digit (10 or 20 → digit 1 or 2 if triggered)
+    - GLAD-S2: hundreds digit (100 or 200 → digit 1 or 2 if triggered)
+    - CCDC: thousands digit (1000 or 2000 → digit 1 or 2 if triggered)
+    - custom slot s (0–4): digit 10^(4+s) (1 or 2 if triggered)
+
+    Parameters:
+        alert_list (list): A list of integers (or strings representing numbers).
+        custom_names (dict[int, str] | None): ``{slot: name}`` for the custom
+            sources of the run; a slot without a name decodes as "Custom <s+1>".
+        digit_map (dict[int, str] | None): ``{digit: name}`` of the alert set;
+            when given, it alone decides the names (the fixed layout above and
+            ``custom_names`` are ignored).
+
+    Returns:
+        List[str]: Unique alert type names found in the list.
+    """
+
+     # If input is a string, attempt to convert it into a Python literal
+    if isinstance(alert_list, str):
+        try:
+            alert_list = ast.literal_eval(alert_list)
+        except (ValueError, SyntaxError):
+            # If invalid, treat as an empty list for safety
+            alert_list = []
+
+    if not isinstance(alert_list, list):
+        alert_list = [alert_list]
+    
+    unique_alerts = set()
+
+    if digit_map is not None:
+        for value in alert_list:
+            try:
+                value = int(float(value))
+            except (TypeError, ValueError):
+                continue
+            for digit, name in digit_map.items():
+                if (value // 10 ** int(digit)) % 10 in (1, 2):
+                    unique_alerts.add(name)
+        return list(unique_alerts)
+
+    for value in alert_list:
+        try:
+            # float() first: the float64 export yields 10000.0, and CSV
+            # round-trips can hand the same over as "10000.0".
+            value = int(float(value))
+        except (TypeError, ValueError):
+            continue  # Skip invalid entries
+
+        # Check GLAD-L (ones digit)
+        if value % 10 in [1, 2]:
+            unique_alerts.add("GLAD-L")
+        
+        # Check RADD (tens digit)
+        if (value % 100) // 10 in [1, 2]:
+            unique_alerts.add("RADD")
+        
+        # Check GLAD-S2 (hundreds digit)
+        if (value % 1000) // 100 in [1, 2]:
+            unique_alerts.add("GLAD-S2")
+        
+        # Check CCDC (thousands digit) — position-bounded so a non-zero
+        # ten-thousands (custom) digit does not break the CCDC extraction.
+        if (value % 10000) // 1000 in [1, 2]:
+            unique_alerts.add("CCDC")
+
+        # Custom sources: slot s owns digit 10^(4+s).
+        for slot in range(MAX_CUSTOM_SOURCES):
+            if (value // slot_value(slot)) % 10 in (1, 2):
+                unique_alerts.add(
+                    (custom_names or {}).get(slot) or f"Custom {slot + 1}"
+                )
+
+    return list(unique_alerts)
+

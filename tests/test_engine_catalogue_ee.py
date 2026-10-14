@@ -1,0 +1,124 @@
+"""Tier 2: the builders against real Earth Engine. Skips without credentials."""
+
+from datetime import date, timedelta
+
+import pytest
+
+from deforestation_alerts.engine import catalogue as cat
+
+# The first quarter of 2024 (GLAD-L's 2024 lives in 2023final) and a window
+# that crosses New Year into the years GLAD-L's UpdResult holds.
+WINDOWS = [(date(2024, 1, 1), date(2024, 3, 31)), (date(2025, 11, 3), date(2026, 2, 28))]
+
+
+@pytest.mark.parametrize("start,end", WINDOWS, ids=["2024Q1", "across-new-year"])
+@pytest.mark.parametrize("key", cat.KEYS)
+def test_builder_contract(gee, tiny_aoi, key, start, end):
+    meta = cat.meta_request("GLAD-L").getInfo() if key == "GLAD-L" else {}
+    img = cat.build_image(key, start, end, tiny_aoi, meta)
+    info = img.getInfo()
+    assert [b["id"] for b in info["bands"]] == ["alert", "date"]
+    assert all(b["data_type"]["precision"] == "int" for b in info["bands"])
+    stats = img.reduceRegion("minMax", tiny_aoi, scale=30, maxPixels=1e9).getInfo()
+    if stats.get("alert_min") is not None:
+        assert stats["alert_min"] >= 1 and stats["alert_max"] <= 2
+        assert stats["date_min"] >= cat.yyyyddd(start) and stats["date_max"] <= cat.yyyyddd(end)
+
+
+@pytest.mark.parametrize("key", cat.KEYS)
+def test_window_keeps_both_end_days(gee, tiny_aoi, key):
+    import ee
+
+    meta = cat.meta_request("GLAD-L").getInfo() if key == "GLAD-L" else {}
+
+    def date_stats(start, end):
+        img = cat.build_image(key, start, end, tiny_aoi, meta).select("date")
+        reducer = ee.Reducer.minMax().combine(ee.Reducer.count(), sharedInputs=True)
+        return img.reduceRegion(reducer, tiny_aoi, scale=30, maxPixels=1e9).getInfo()
+
+    wide = date_stats(*WINDOWS[0])
+    assert wide["date_count"], f"no {key} alert in tiny_aoi"
+    first, last = (date(v // 1000, 1, 1) + timedelta(days=v % 1000 - 1) for v in (wide["date_min"], wide["date_max"]))
+    # a window that starts on the first alert's day and ends on the last one's keeps both
+    assert date_stats(first, last) == wide
+
+
+def test_glad_l_window_across_new_year_reads_both_years(gee, tiny_aoi):
+    start, end = WINDOWS[1]
+    meta = cat.meta_request("GLAD-L").getInfo()
+    img = cat.build_image("GLAD-L", start, end, tiny_aoi, meta)
+    stats = img.reduceRegion("minMax", tiny_aoi, scale=30, maxPixels=1e9).getInfo()
+    # tiny_aoi holds GLAD-L alerts on both sides of 2026-01-01 (50 px when checked, 2026-09-30)
+    assert cat.yyyyddd(start) <= stats["date_min"] < cat.yyyyddd(date(2026, 1, 1)) <= stats["date_max"]
+
+
+def test_glad_l_window_no_collection_holds_is_empty(gee, tiny_aoi):
+    start, end = date(2024, 8, 1), date(2024, 8, 31)
+    meta = cat.meta_request("GLAD-L").getInfo()
+    img = cat.build_image("GLAD-L", start, end, tiny_aoi, meta)
+    info = img.getInfo()
+    assert [b["id"] for b in info["bands"]] == ["alert", "date"]
+    assert all(b["data_type"]["precision"] == "int" for b in info["bands"])
+    assert img.reduceRegion("count", tiny_aoi, scale=30).getInfo() == {"alert": 0, "date": 0}
+
+
+def test_glad_s2_dates_are_the_calendar_days_of_its_day_counts(gee):
+    import ee
+
+    start, end = WINDOWS[1]
+    # near Porto Velho: GLAD-S2 alerts on both sides of 2026-01-01 (271 px when checked, 2026-09-30)
+    region = ee.Geometry.Rectangle([-63.60, -9.10, -63.50, -9.00])
+    img = cat.build_image("GLAD-S2", start, end, region, {})
+    days = ee.Image(cat.GLAD_S2 + "/alertDate").rename("days")
+    pixels = (
+        img.select("date").addBands(days).updateMask(img.select("date").mask())
+        .reduceRegion(ee.Reducer.toList(), region, scale=10, maxPixels=1e9).getInfo()
+    )
+    assert pixels["date"], "no GLAD-S2 alert in the region"
+    assert len(pixels["date"]) == len(pixels["days"])  # one shared mask: the lists align
+    for got, count in zip(pixels["date"], pixels["days"]):
+        assert got == cat.yyyyddd(cat.GLAD_S2_ORIGIN + timedelta(days=count)), count
+    assert {d // 1000 for d in pixels["date"]} == {2025, 2026}
+
+
+# Outside South America, where RADD's legacy radd_* images sort after the
+# weekly versions of their geography (system:index order).
+RADD_BOXES = {
+    "africa": [25.0, 0.3, 25.3, 0.6],  # DRC
+    "asia": [113.8, -1.2, 114.1, -0.9],  # Borneo
+}
+
+
+@pytest.mark.parametrize("geography", RADD_BOXES)
+def test_radd_is_the_latest_version_of_its_geography(gee, geography):
+    import ee
+
+    start, end = date(2025, 1, 1), date(2025, 12, 31)
+    region = ee.Geometry.Rectangle(RADD_BOXES[geography])
+    img = cat.build_image("RADD", start, end, region, {})
+    latest = (
+        ee.ImageCollection(cat.RADD_COLLECTION)
+        .filterMetadata("layer", "contains", "alert")
+        .filter(ee.Filter.eq("geography", geography))
+        .sort("system:time_end", False)
+        .first()
+    )
+    d = latest.select("Date")
+    in_window = d.gte(cat.yyddd(start)).And(d.lte(cat.yyddd(end)))
+    # Alert 3 confirmed -> 1, 2 probable -> 2; anything else is masked
+    want = latest.select("Alert").remap([2, 3], [2, 1]).updateMask(in_window).rename("alert").clip(region)
+    native = latest.select("Alert").projection()
+
+    def counts(image):
+        hist = (
+            image.select("alert")
+            .reduceRegion(ee.Reducer.frequencyHistogram().unweighted(), region, crs=native, maxPixels=1e9)
+            .getInfo()["alert"]
+        )
+        return {"confirmed": hist.get("1", 0), "probable": hist.get("2", 0)}
+
+    expected = counts(want)
+    assert expected["confirmed"], f"no confirmed RADD alert in the {geography} box in 2025"
+    # a mosaic of every weekly version would add the probable alerts RADD later
+    # withdrew (thousands here, against tens in the latest version)
+    assert counts(img) == expected

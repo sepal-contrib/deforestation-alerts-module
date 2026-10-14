@@ -1,8 +1,20 @@
-[project]
-version = "1.1.1"
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
 
-[sepal-ui]
-init-notebook = "ui.ipynb"
+[project]
+name = "deforestation-alerts-module"
+version = "1.1.1"
+description = "Forest Cover Loss Alerts analysis app for SEPAL (pysepal + Solara)."
+requires-python = ">=3.10"
+# Runtime dependencies are NOT declared here: sepal_environment.yml is the
+# packaging authority (conda geospatial binaries + pip pins). This project
+# table only makes `pip install -e .` expose the deforestation_alerts library
+# package; `gui/` stays import-path-only (PYTHONPATH / conftest).
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["deforestation_alerts*"]
 
 [tool.ruff]
 ignore-init-module-imports = true
@@ -26,4 +38,14 @@ convention = "google"
 "*/__init__.py" = ["F403"] # unable to detect undefined names | hide internal structure
 
 [tool.codespell]
-skip = 'component/message/**/*.json'
+skip = 'deforestation_alerts/message/**/*.json'
+
+[tool.pytest.ini_options]
+# Put the repo root on sys.path so `import deforestation_alerts` / `import gui`
+# work without installing the app.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra --import-mode=importlib"
+markers = [
+    "ee: live Earth Engine test (credentials + network); skipped unless DEFO_ALERTS_EE_TESTS=1 or -m ee",
+]

@@ -1,40 +1,112 @@
 name: deforestation-alerts-module
 channels:
   - conda-forge
-  - defaults
 
 dependencies:
-  - python=3.10
+  # Match the tested dev env (python 3.11.10, gdal 3.12.3, numpy 1.26.4;
+  # tensorflow: pip, see below)
+  - python=3.11
+  - gdal=3.12
+  - numpy=1.26
+  # Geospatial binaries — conda handles these correctly
   - cartopy>=0.24.0
   - fiona>=1.10
-  - gdal>=3.8
-  - geemap>=0.35.0
   - geopandas>=1.0
+  - rasterio>=1.4
+  - shapely>=2.0
+  - pyproj
+  - tippecanoe
+  # Harmonize: native Earth Engine downloads aligned onto the project grid,
+  # streamed (engine/align.py, ported from spatial_risk's xr_reproject)
+  - odc-geo
+  - rioxarray
+  - xarray
+  - dask
+  # Scientific
+  - matplotlib>=3.9
+  - pandas>=2.2
+  - pillow>=10.1  # the alert GIF (scripts/alert_gif.py): load_default(size=) needs 10.1
+  - pyarrow
+  - pydantic>=2.7
+  - scipy
+  # GUI / widgets
+  - anywidget>=0.9  # the analysis views (gui/widget/multiview)
+  - geemap>=0.35.0
   - ipyevents>=2.0
   - ipyleaflet>=0.19
   - ipython>=8.12
-  - ipyvuetify>=1.10.0,<2  # sepal_ui 2.x breaks on ipyvuetify 3 (Vuetify 3 API)
+  - ipyvuetify<3
   - ipywidgets>=8.1
-  - matplotlib>=3.9
-  - numpy>=1.26,<2
-  - pandas>=2.2
-  - pyproj
-  - rasterio>=1.3
-  - shapely>=2.0
-  - tensorflow>=2.16,<2.18
-  - tensorflow-probability>=0.24
-  - tf-keras
   - traitlets>=5.14
+  # Locale-aware number formatting (gui/i18n.py format_number); within
+  # pysepal 4.1.0's babel<3,>=2.17
+  - babel>=2.17,<3
+  # Serving: Voila in the user's SEPAL sandbox (ui.ipynb). No container.
+  - voila
+  # Env plumbing
+  - ipykernel
+  - setuptools
+  - wheel
   - pip
   - pip:
-      - dateutils==0.6.12
-      - git+https://github.com/openforis/earthengine-api.git@v1.1.5rc0#egg=earthengine-api&subdirectory=python
-      - geedim==1.8.1
-      - huggingface_hub
-      - matplotlib-scalebar==0.8.1
+      # Earth Engine — SEPAL's custom build. v1.1.5rc0 conflicts with
+      # pysepal's earthengine-api>1.6.0 requirement; v1.6.14 is the
+      # build spatial_risk deploys with.
+      - "earthengine-api @ git+https://github.com/openforis/earthengine-api.git@v1.6.14#subdirectory=python"
+      - geedim==2.0.0
+      - localtileserver==1.0.0   # conda-forge has only 0.11.x
+      - vectortileserver==0.3.0  # PMTiles server; NEVER unpinned (the pyvectortiles rename broke a deploy)
+      - "jupyter-loopback[comm]==0.3.3"
+      - huggingface_hub==1.29.0   # CNN model download (gui/tile/analysis/edit_tools.py)
+      - matplotlib-scalebar==0.9.0
       - MightyMosaic==1.2.3
-      - python-docx==1.1.2
-      - sepal_ui==2.22.1
-      - tomli==2.0.2
-      - voila==0.5.8
-      - pygaul>=0.3.1,<0.4  # sepal_ui 2.x expects GAUL 2015 (ADM0_CODE); pygaul 0.4 switched to GAUL 2024
+      - python-docx==1.2.0
+      - pygaul==0.4.2
+      # pysepal 4.x resolves the credential source from runtime topology, so
+      # Voila/Jupyter get a PROCESS session without the old fork's
+      # in_solara_server_context patch (Decision 4 fallback retired).
+      # solara is pinned: pysepal 4 relies on two private solara APIs and
+      # has reviewed 1.60.0-1.62.0 (docs/guides/solara-upstream.md).
+      - pysepal==4.1.0
+      # pysepal 4 floor (assets cache survives a cancelled fetch)
+      - "ee-client>=3.2.1,<4"
+      - solara==1.62.0
+      # tensorflow: pip, not conda. conda-forge's tensorflow=2.17 defaults to
+      # CUDA builds gated on the __cuda virtual package; when that package is
+      # absent (this dev box, and SEPAL's GPU-less app-launcher containers
+      # alike), the solver still has to backtrack through all 31 build
+      # variants while co-solving the conda geospatial stack, which never
+      # converges in practice. The tested dev env installs tensorflow via pip
+      # for the same reason. Do NOT move this back to the conda block.
+      - tensorflow==2.17.0
+      # NOTE: no `-e .` — the app runs in place (ui.ipynb imports
+      # gui.solara_app; gui/solara_app.py shims sys.path,
+      # pytest uses pyproject's pythonpath=["."]).
+
+# KNOWN BENIGN pip resolver warning at build time (investigated, not a live
+# hazard — do not re-litigate without new evidence):
+#   grpcio-status 1.82.1 requires protobuf<8.0.0,>=7.35.1, but you have
+#   protobuf 4.25.9 which is incompatible.
+#   grpc-google-iam-v1 0.14.5 requires protobuf<8.0.0,>=6.33.5, but you have
+#   protobuf 4.25.9 which is incompatible.
+# grpcio-status and grpc-google-iam-v1 arrive transitively via conda
+# (pulled in by geemap's google-api-python-client dep); tensorflow==2.17.0's
+# own ceiling (`protobuf<5,>=3.20.3`) forces protobuf down from conda's
+# 7.35.1 to 4.25.9 during the pip pass. Verified this does not break
+# anything the app touches:
+#   - `pip show grpcio-status` / `grpc-google-iam-v1` report empty
+#     Required-by: nothing installed actually depends on them.
+#   - Neither is imported anywhere in earthengine-api's own source (grepped
+#     the installed `ee` package); the only importers in the whole env are
+#     `ee/cli/utils.py` (the `earthengine` CLI tool) and `geemap/ai.py` —
+#     this app imports neither.
+#   - `from grpc_status import rpc_status` still imports and runs fine
+#     against protobuf 4.25.9 despite the metadata mismatch.
+#   - `import ee; ee.__version__` reports 1.6.14 correctly; the app's real
+#     EE surface (ee.Image/ee.FeatureCollection/ee.Number/.getInfo()) never
+#     touches grpc_status or google.iam.v1.
+# A real fix would mean pinning older conda-forge builds of grpcio-status
+# (<1.65, e.g. 1.62.2 wants protobuf>=4.21.6) and grpc-google-iam-v1
+# (e.g. 0.13.0 wants protobuf>=3.19.5) that are compatible with
+# protobuf<5 — deliberately not done, since it would add two new pins for
+# packages this app never calls, purely to silence a build-time warning.
