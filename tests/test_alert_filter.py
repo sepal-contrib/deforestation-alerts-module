@@ -4,7 +4,6 @@ the start position go among the matches."""
 
 import geopandas as gpd
 import numpy as np
-import pandas as pd
 import pytest
 from pysepal.i18n import set_locale
 from shapely.geometry import box

@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 from matplotlib.colors import to_hex

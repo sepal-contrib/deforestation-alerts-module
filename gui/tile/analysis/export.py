@@ -140,11 +140,8 @@ from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
-from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
-from deforestation_alerts.scripts.report_builder import (
-    add_files_to_zip,
-    generate_deforestation_report_with_word_template,
-)
+from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip, calculate_total_area
+from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
 from gui.i18n import t, tn
 from gui.scripts import questions
 from gui.scripts import set_store

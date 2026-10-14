@@ -983,7 +983,7 @@ def test_the_default_name_follows_the_image_and_the_combination_until_typed_over
             _field(rc, "steps.layers.field_band", v.Select).v_model = "B8"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
             _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
-            combo = _field(rc, "steps.layers.field_combo", v.Select)
+            _field(rc, "steps.layers.field_combo", v.Select)
             want = "mosaic_true_color"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_combo", v.Select).v_model = "false_color"

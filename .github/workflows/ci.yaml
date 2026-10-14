@@ -9,6 +9,13 @@ env:
   EARTHENGINE_TOKEN: ${{ secrets.EARTHENGINE_TOKEN }}
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ruff
+        run: pipx run ruff==0.12.0 check .
+
   ci:
     runs-on: ubuntu-latest
     steps:
@@ -25,8 +32,8 @@ jobs:
           python -c "import ee; v=ee.__version__; print('ee-api:', v); assert v == '1.6.14', 'Expected openforis fork 1.6.14, got ' + v"
 
 
-      # Tier-1 tests run fully offline; the Tier-2 raster-pipeline integration tests
-      # run when EARTHENGINE_TOKEN is set (above) and otherwise skip cleanly.
+      # The offline tier only: the live Earth Engine tests (marked `ee`) skip
+      # unless DEFO_ALERTS_EE_TESTS=1 is set, which this job does not set.
       - name: Run unit tests
         shell: micromamba-shell {0}
         run: |

@@ -1,24 +1,12 @@
-import pandas as pd
 import geopandas as gpd
 import ee
 import os
-import pathlib
 import zipfile
-import ast
 import numpy as np
 
 from datetime import datetime, timedelta
-from operator import itemgetter
-from ipyleaflet import GeoData
 from shapely.geometry import shape
 
-# CNN code consolidated into cnn_worker (D3); re-export so `from
-# mosaics_helper import *` keeps providing these names.
-from deforestation_alerts.scripts.cnn_worker import (  # noqa: F401
-    apply_dl_model,
-    save_prediction_prob,
-    RepeatElements,
-)
 
 
 def convert_julian_to_date(julian_date):
@@ -219,7 +207,6 @@ def simplify_and_extract_features(
     Returns:
     list: Simplified GeoJSON features.
     """
-    import geopandas as gpd
 
     # Ensure the column exists
     if column not in gdf.columns:
@@ -249,8 +236,6 @@ def add_files_to_zip(zip_filename, *files):
     folder: without it zipfile stores the full path, so the user unpacking the
     archive would get a directory tree instead of the files they asked for.
     """
-    import os
-    import zipfile
 
     with zipfile.ZipFile(zip_filename, "w") as zipf:
         for path in files:
@@ -299,7 +284,7 @@ def multipolygon_to_geodataframe(geometry):
     Raises:
         ValueError: If the input is not a MultiPolygon or Polygon.
     """
-    from shapely.geometry import shape, MultiPolygon, Polygon
+    from shapely.geometry import MultiPolygon, Polygon
 
     if isinstance(geometry, MultiPolygon):
         # Extract individual polygons from the MultiPolygon

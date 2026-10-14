@@ -1,7 +1,6 @@
 """The GIF's assembly (Pillow) and the thumbnail fetch, offline."""
 
 import io
-from pathlib import Path
 
 import pytest
 from PIL import Image

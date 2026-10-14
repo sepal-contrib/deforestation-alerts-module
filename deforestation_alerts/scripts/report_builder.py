@@ -1,17 +1,12 @@
 from docx import Document
-from docx.shared import Inches, Pt
+from docx.shared import Pt
 import geopandas as gpd
 import rasterio
-from rasterio.plot import show
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib_scalebar.scalebar import ScaleBar
 import cartopy.crs as ccrs
-from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
-from deforestation_alerts.scripts.mosaics_helper import *
+from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from datetime import datetime
-import cartopy.io.img_tiles as cimgt
-from shapely.geometry import box
 from pathlib import Path
 import ast
 from deforestation_alerts.scripts.custom_sources import MAX_CUSTOM_SOURCES, slot_value

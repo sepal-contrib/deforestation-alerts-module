@@ -689,7 +689,7 @@ def _icons(btn):
 def test_a_geotiff_mask_is_validated_added_inside_the_task_and_the_modal_closes(tmp_path, monkeypatch):
     path = _tif(tmp_path / "forest.tif")
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
-    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    state, open_, added = _state(_p()), solara.reactive(True), []
     loop_thread = []
 
     def on_add(fields, mode):

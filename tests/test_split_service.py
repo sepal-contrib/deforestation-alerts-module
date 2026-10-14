@@ -6,7 +6,6 @@ alerts and the set record."""
 from datetime import datetime
 
 import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import box
 

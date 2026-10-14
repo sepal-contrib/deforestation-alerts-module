@@ -157,7 +157,7 @@ def test_one_scene_on_both_sides_is_named_as_that_and_not_as_zero_change():
     """``default_pick`` returns one id twice when the alert window is a single
     day and a scene lands on it (pinned behaviour). "0 days apart" would read
     as two images that happen to agree."""
-    sel = _sel([(S2, "2026-04-24", 8.0)])
+    _sel([(S2, "2026-04-24", 8.0)])
     rid = scene_index.row_id(S2, date(2026, 4, 24))
     assert timeline.days_apart(rid, rid) == 0
     assert timeline.pair_note(rid, rid) == timeline.t("analysis.timeline.same_image")

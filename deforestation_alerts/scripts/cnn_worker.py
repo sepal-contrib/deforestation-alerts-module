@@ -77,12 +77,6 @@ def apply_dl_model(image, model, suffix):
     # Input model
     model_path = os.path.abspath(model)
 
-    # size of patches
-    patch_size = 256
-
-    # Number of classes
-    n_classes = 1
-
     img = read_image(input_image)
 
     model1 = models.load_model(

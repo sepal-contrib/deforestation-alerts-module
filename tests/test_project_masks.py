@@ -4,7 +4,7 @@ import pytest
 
 from deforestation_alerts.project import cleanup
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, MaskLayer, NativeGrid, Period, PeriodMask, Project, add_mask, latest_period_masks,
+    AlertSet, AlertSetParams, NativeGrid, Period, PeriodMask, Project, add_mask, latest_period_masks,
     remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
 

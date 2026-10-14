@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from deforestation_alerts.project import io, paths, share
+from deforestation_alerts.project import paths, share
 from deforestation_alerts.project.share import (
     ShareError,
     build_package,

@@ -1,6 +1,7 @@
-"""All the process that can be run using nox.
+"""Developer sessions: ``nox -s lint`` (the pre-commit hooks) and ``nox -s app``.
 
-The nox run are build in isolated environment that will be stored in .nox. to force the venv update, remove the .nox/xxx folder.
+``lint`` runs in a virtualenv kept in ``.nox/`` (delete ``.nox/lint`` to rebuild
+it); ``app`` runs in the active conda environment.
 """
 
 import nox
@@ -10,7 +11,7 @@ import nox
 def lint(session):
     """Apply the pre-commits."""
     session.install("pre-commit")
-    session.run("pre-commit", "run", "--a", *session.posargs)
+    session.run("pre-commit", "run", "--all-files", *session.posargs)
 
 
 @nox.session(reuse_venv=True, venv_backend="none")

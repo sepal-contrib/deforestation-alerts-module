@@ -186,7 +186,6 @@ def test_the_step_ends_with_start_analysis_gated_on_an_active_set(tmp_path, monk
     """*Start analysis* is the step's last control. It writes the navigation
     signal (``_NavBridge`` opens the screen); with no active set it is
     disabled, with the reason under it."""
-    import solara
     s = _state(tmp_path, monkeypatch)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:

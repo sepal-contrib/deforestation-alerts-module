@@ -67,7 +67,7 @@ def test_the_coverage_texts_of_a_table():
 
 
 def test_the_result_line_of_a_harmonized_row():
-    from gui.i18n import t, tn
+    from gui.i18n import tn
     from gui.scripts.coverage_ui import result_note
 
     assert result_note(None) is None and result_note({"on_pixels": 3}) is None

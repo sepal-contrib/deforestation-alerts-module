@@ -4,7 +4,7 @@ import pytest
 
 from deforestation_alerts.project import names
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, BandMap, CustomSource, MaskLayer, Project, add_custom_source,
+    AlertSet, AlertSetParams, BandMap, MaskLayer, Project, add_custom_source,
     add_predefined_source,
 )
 

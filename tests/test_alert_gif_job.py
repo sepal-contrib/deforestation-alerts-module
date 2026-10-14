@@ -3,7 +3,6 @@ Offline: Earth Engine is replaced at the three seams build_gif calls."""
 
 import io
 from datetime import date, datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import geopandas as gpd

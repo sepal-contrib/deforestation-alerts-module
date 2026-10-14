@@ -17,28 +17,18 @@ dependencies = []
 include = ["deforestation_alerts*"]
 
 [tool.ruff]
-ignore-init-module-imports = true
-fix = true
-select = ["E", "F", "W", "I", "D", "RUF"]
-ignore = [
-    "E501", # line too long | Black takes care of it
-    "D101", # Missing docstring in public class | set it in __init__
-]
+line-length = 120
+extend-exclude = ["js", "gui/widget/static"]
 
-# init file are here to hide the internal structure to the user of the lib
-exclude = ["*/__init__.py"]
+[tool.ruff.lint]
+# Errors only (pyflakes + syntax): unused/undefined names, redefinitions. No
+# formatter is enforced yet; style rules can be added once one is chosen.
+select = ["F", "E9"]
 
-[tool.ruff.flake8-quotes]
-docstring-quotes = "double"
-
-[tool.ruff.pydocstyle]
-convention = "google"
-
-[tool.ruff.per-file-ignores]
-"*/__init__.py" = ["F403"] # unable to detect undefined names | hide internal structure
-
-[tool.codespell]
-skip = 'deforestation_alerts/message/**/*.json'
+[tool.ruff.lint.per-file-ignores]
+# Browser tests import their Playwright fixtures by name, which pyflakes reads
+# as an unused import that each test then redefines.
+"tests/test_*_browser.py" = ["F401", "F811"]
 
 [tool.pytest.ini_options]
 # Put the repo root on sys.path so `import deforestation_alerts` / `import gui`
