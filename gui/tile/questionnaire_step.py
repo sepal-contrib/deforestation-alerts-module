@@ -3,6 +3,8 @@ with, in the order Analysis asks them, and the project's report template with
 the placeholders it can use. The last workflow step, so it ends with *Start
 analysis*."""
 
+from pathlib import Path
+
 import reacton.ipyvuetify as rv
 import solara
 
@@ -18,7 +20,7 @@ from gui.widget.copy_chip import CopyChipWidget
 from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.question_modal import QuestionModal
-from gui.widget.report_template import ReportTemplateField
+from gui.widget.report_template import ReportTemplateField, template_state
 from gui.widget.text_style import MUTED
 
 _VERDICT_KEYS = {"Confirmed": "analysis_tile.verdict.true", "False Positive": "analysis_tile.verdict.false",
@@ -81,6 +83,44 @@ def _Placeholders(questions):
             if name not in REPORT_PLACEHOLDERS:
                 _chip(name, True)
     solara.Text(t("steps.questionnaire.placeholders_review"), style=MUTED + "font-size:0.75rem;")
+
+
+#: the template line's chip per ``template_state``: its text and colour
+_TEMPLATE_CHIPS = {"default": ("steps.questionnaire.template_chip_default", None),
+                   "custom": ("steps.questionnaire.template_chip_custom", "primary"),
+                   "missing": ("steps.questionnaire.template_chip_missing", "warning")}
+
+
+@solara.component
+def _TemplateCard(app_state, questions):
+    """The report template (spec 2026-10-14 §3): one line naming it, and the
+    picker with the placeholders under its caret. A custom file that is gone
+    holds the card open (the caret disabled), so it is picked again or
+    cleared. Whether it is open is this card's own state, never the project's."""
+    p = app_state.project.value
+    expanded, set_expanded = solara.use_state(False)
+    state = template_state(p.report_template)
+    shown = expanded or state == "missing"
+    name = Path(p.report_template).name if p.report_template else t("steps.questionnaire.template_default")
+    chip_key, chip_color = _TEMPLATE_CHIPS[state]
+    with rv.Card(outlined=True, class_="pa-3"):
+        with solara.Row(style="align-items:center;gap:8px;flex-wrap:nowrap;"):
+            rv.Icon(small=True, children=["mdi-file-word-outline"])
+            with rv.Html(tag="div", style_="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;"
+                                           "white-space:nowrap;"):
+                solara.Text(t("steps.questionnaire.template_title") + " · ", style=MUTED + "font-size:0.8rem;")
+                solara.Text(name, style="font-weight:600;")
+            rv.Chip(x_small=True, outlined=True, color=chip_color, children=[t(chip_key)])
+            solara.Button("", icon_name="mdi-chevron-up" if shown else "mdi-chevron-down", icon=True, text=True,
+                          x_small=True, disabled=state == "missing", classes=["defo-template-toggle"],
+                          on_click=lambda: set_expanded(not expanded))
+        if state == "missing":
+            solara.Text(t("steps.questionnaire.template_missing"), classes=["warning--text"],
+                        style="display:block;font-size:0.75rem;")
+        if shown:
+            with solara.Column(style="gap:8px;margin-top:8px;"):
+                ReportTemplateField(app_state=app_state)
+                _Placeholders(questions=questions)
 
 
 @solara.component
@@ -177,10 +217,7 @@ def QuestionnaireStep(app_state):
                           name, lambda live: setattr(live, "questions_expanded", bool(on))),
                       dense=True, hide_details=True, class_="mt-3")
             solara.Text(t("steps.questionnaire.expanded_hint"), style=MUTED + "font-size:0.75rem;")
-        with rv.Card(outlined=True, class_="pa-3"):
-            solara.Text(t("steps.questionnaire.template_title"), style="font-weight:600;")
-            ReportTemplateField(app_state=app_state)
-            _Placeholders(questions=p.questions)
+        _TemplateCard(app_state=app_state, questions=p.questions)
         _StartAnalysis(app_state=app_state, ready=active_set(p) is not None)
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,

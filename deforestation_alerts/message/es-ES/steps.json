@@ -558,7 +558,12 @@
       "template_title": "Plantilla del informe",
       "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
       "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",
-      "copied": "{placeholder} copiado"
+      "copied": "{placeholder} copiado",
+      "template_default": "Plantilla predeterminada",
+      "template_chip_default": "predeterminada",
+      "template_chip_custom": "propia",
+      "template_chip_missing": "no encontrada",
+      "template_missing": "El archivo ya no está: elígelo de nuevo o vacía el campo para usar la plantilla predeterminada."
     },
     "evaluators": {
       "description": "Reparte las alertas entre evaluadores, envía a cada uno un paquete de revisión e integra las copias revisadas que te devuelvan.",

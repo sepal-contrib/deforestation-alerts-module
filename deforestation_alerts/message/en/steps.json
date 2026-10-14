@@ -535,7 +535,12 @@
       "template_title": "Report template",
       "placeholders_label": "Placeholders the template can use (click to copy):",
       "placeholders_review": "Green ones come from the review. They are replaced in the document's paragraphs, not inside tables, headers or footers.",
-      "copied": "Copied {placeholder}"
+      "copied": "Copied {placeholder}",
+      "template_default": "Default template",
+      "template_chip_default": "default",
+      "template_chip_custom": "custom",
+      "template_chip_missing": "missing",
+      "template_missing": "The file is gone: pick it again, or clear it to use the default template."
     },
     "evaluators": {
       "description": "Split the alerts between evaluators, send each one a review package, and merge the reviewed copies they send back.",

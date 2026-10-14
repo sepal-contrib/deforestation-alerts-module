@@ -10,7 +10,7 @@ field resolves its notifier when a file is picked: it also works where no
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import solara
 from pysepal.solara.components.inputs import FileInputComponent
@@ -36,6 +36,15 @@ def template_value(path) -> Optional[str]:
     if picked.suffix.lower() != ".docx" or not picked.is_file():
         raise ProjectRuleError(key="analysis_tile.export_labels.report_template_bad", path=str(path))
     return str(picked)
+
+
+def template_state(path) -> Literal["default", "custom", "missing"]:
+    """What the Questionnaire's template line says (spec 2026-10-14 §3): no
+    path is the app's default template; a path is the user's file, unless
+    that file is gone."""
+    if not path:
+        return "default"
+    return "custom" if Path(path).is_file() else "missing"
 
 
 @solara.component

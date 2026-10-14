@@ -113,3 +113,10 @@ def test_the_field_follows_a_project_switch(field, data_root):
     now = datetime.now()
     state.new_project_state(Project(name="s", created_at=now, updated_at=now, report_template=str(mine)))
     assert rc.find(FileInput).widget.v_model == str(mine)
+
+
+def test_template_state(tmp_path):
+    assert rt.template_state(None) == "default" and rt.template_state("") == "default"
+    mine = _docx(tmp_path / "mine.docx")
+    assert rt.template_state(str(mine)) == "custom"
+    assert rt.template_state(str(tmp_path / "gone.docx")) == "missing"

@@ -558,7 +558,12 @@
       "template_title": "Modèle de rapport",
       "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
       "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",
-      "copied": "{placeholder} copié"
+      "copied": "{placeholder} copié",
+      "template_default": "Modèle par défaut",
+      "template_chip_default": "par défaut",
+      "template_chip_custom": "personnalisé",
+      "template_chip_missing": "introuvable",
+      "template_missing": "Le fichier a disparu : choisissez-le de nouveau, ou videz le champ pour utiliser le modèle par défaut."
     },
     "evaluators": {
       "description": "Répartissez les alertes entre des évaluateurs, envoyez à chacun un paquet de révision et fusionnez les copies révisées qu'ils vous renvoient.",

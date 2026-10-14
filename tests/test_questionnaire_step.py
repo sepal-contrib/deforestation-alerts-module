@@ -27,6 +27,20 @@ def _state(tmp_path, monkeypatch, questions=None):
     return s
 
 
+def _state_with_template(tmp_path, monkeypatch, path):
+    set_locale("en")
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(),
+                                report_template=str(path)))
+    return s
+
+
+def _template_toggle(rc):
+    (btn,) = [b for b in rc.find(v.Btn).widgets if "defo-template-toggle" in (b.class_ or "")]
+    return btn
+
+
 def test_tags_say_how_a_question_is_asked():
     set_locale("en")
     values = [c["value"] for c in qstep.question_tags(ROAD)]
@@ -91,6 +105,7 @@ def test_every_placeholder_is_offered_as_a_chip(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:
+        _template_toggle(rc).fire_event("click", None)  # the placeholders sit in the expanded template card
         chips = {w.text: w.review for w in rc.find(CopyChipWidget).widgets}
         assert {"{" + n + "}" for n in REPORT_PLACEHOLDERS} <= set(chips)
         assert chips["{verdict}"] and chips["{loss_driver}"] and not chips["{" + REPORT_PLACEHOLDERS[0] + "}"]
@@ -159,6 +174,7 @@ def test_a_hand_edited_manifest_with_clashing_keys_still_renders(tmp_path, monke
     s = _state(tmp_path, monkeypatch, questions=clash)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:
+        _template_toggle(rc).fire_event("click", None)  # the placeholders sit in the expanded template card
         texts = [w.text for w in rc.find(CopyChipWidget).widgets]
         assert len(texts) == len(set(texts))
         assert "{road_access}" in texts and "{verdict}" in texts
@@ -202,5 +218,53 @@ def test_a_switch_says_whether_analysis_shows_the_questions_expanded(tmp_path, m
         assert s.project.value.questions_expanded is True
         (switch,) = [w for w in rc.find(v.Switch).widgets if w.label == t("steps.questionnaire.expanded")]
         assert switch.v_model is True
+    finally:
+        rc.close()
+
+
+def test_the_report_template_is_one_line_until_expanded(tmp_path, monkeypatch):
+    from pysepal.sepalwidgets.file_input import FileInput
+    from gui.widget.copy_chip import CopyChipWidget
+    s = _state(tmp_path, monkeypatch)
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        texts = _strings(rc.container)
+        assert t("steps.questionnaire.template_default") in texts
+        assert t("steps.questionnaire.template_chip_default") in texts
+        assert not rc.find(FileInput).widgets and not rc.find(CopyChipWidget).widgets
+        _template_toggle(rc).fire_event("click", None)
+        assert rc.find(FileInput).widgets and rc.find(CopyChipWidget).widgets
+        _template_toggle(rc).fire_event("click", None)
+        assert not rc.find(FileInput).widgets
+    finally:
+        rc.close()
+
+
+def test_a_custom_template_is_named_by_its_file(tmp_path, monkeypatch):
+    from pysepal.sepalwidgets.file_input import FileInput
+    mine = tmp_path / "field_report.docx"
+    mine.write_bytes(b"x")
+    s = _state_with_template(tmp_path, monkeypatch, mine)
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        texts = _strings(rc.container)
+        assert "field_report.docx" in texts and t("steps.questionnaire.template_chip_custom") in texts
+        assert t("steps.questionnaire.template_missing") not in texts
+        assert not rc.find(FileInput).widgets
+        assert not _template_toggle(rc).disabled
+    finally:
+        rc.close()
+
+
+def test_a_missing_template_holds_the_card_open(tmp_path, monkeypatch):
+    from pysepal.sepalwidgets.file_input import FileInput
+    s = _state_with_template(tmp_path, monkeypatch, tmp_path / "gone.docx")
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        texts = _strings(rc.container)
+        assert t("steps.questionnaire.template_chip_missing") in texts
+        assert t("steps.questionnaire.template_missing") in texts
+        assert rc.find(FileInput).widgets  # open: pick it again or clear it
+        assert _template_toggle(rc).disabled
     finally:
         rc.close()
