@@ -73,6 +73,16 @@ def pane_labels() -> dict:
         "layerMenu.title": t("analysis.panes.layers"),
         "fitBounds.button": t("analysis.panes.zoom_alert"),
         "draw.hint": t("analysis.panes.vertex_hint"),
+        "draw.selectArea": t("analysis.panes.select_area"),
+        "draw.clearAll": t("analysis.panes.clear_all"),
+        "draw.selectAreaHint": t("analysis.panes.select_area_hint"),
+        # ``{n}`` is left for the browser, which fills in the count of shapes
+        # asked about.
+        "draw.confirmOne": t("analysis.panes.delete_one"),
+        "draw.confirmMany": t("analysis.panes.delete_many", n="{n}"),
+        "draw.confirmAll": t("analysis.panes.delete_all", n="{n}"),
+        "draw.cancel": t("analysis.panes.delete_cancel"),
+        "draw.delete": t("analysis.panes.delete_confirm"),
         "holes.fill": t("analysis.panes.fill_holes"),
         "holes.remove": t("analysis.panes.remove_hole"),
         "holes.hint": t("analysis.panes.remove_hole_hint"),

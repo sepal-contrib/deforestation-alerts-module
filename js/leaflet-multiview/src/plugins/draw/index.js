@@ -35,8 +35,25 @@
 //   global edit mode (5495). enableGlobalEditMode toggles that button on (3388),
 //   even when it is not shown, so it is toggled off again right after: otherwise
 //   a click on "draw polygon" or "remove" would end edit mode.
+// - Toolbar actions (_makeButton, 5039): changeActionsOfControl (5816) swaps a
+//   button's actions and rebuilds the toolbar; a custom action is an object
+//   with text (set as innerHTML) and onClick, and Geoman stores the action's
+//   <a> on it as action._node (class "action-<name>"). A click on an action
+//   leaves the mode on; only "finishMode" clicks the button again.
+// - disableGlobalRemovalMode (3550) toggles the trash button off and fires
+//   pm:globalremovalmodetoggled. In removal mode a layer is deleted on its
+//   "click", which Leaflet dispatches from the map container.
+//
+// Bulk deletes (the trash's actions "Select area" and "Clear all") never
+// delete straight away: the shapes concerned turn red and a confirmation asks
+// first. Select area arms a box drag in one view: the map container's own
+// pointer and mouse events are taken in the capture phase while it is armed
+// or asking, so Leaflet neither pans nor hands Geoman a removal click. Delete
+// is one drawingchange; Cancel, Esc, Finish, leaving edit mode and any other
+// change of the drawing close the confirmation and delete nothing.
 import {viewsOf} from "../../core/layers.js";
 import {createOrderedPane} from "../../core/panes.js";
+import {geometryInside} from "./geometry.js";
 
 export const DRAW_STYLE = {color: "#2196F3", weight: 4, opacity: 0.5, fillOpacity: 0.2};
 
@@ -54,6 +71,9 @@ const TOOLBAR = {
 
 const clone = value => JSON.parse(JSON.stringify(value)); // features are plain JSON
 
+// What an armed, drawn or asked-about box takes from its view's map (see swallows()).
+const SWALLOWED = ["mousedown", "mouseup", "click", "dblclick", "contextmenu", "touchstart"];
+
 function asFeatures(fc) {
   if (!fc) return [];
   if (Array.isArray(fc)) return fc;
@@ -68,7 +88,17 @@ export const draw = {
   name: "draw",
   requires: [],
   defaults: {views: "all", removeVertexOn: "contextmenu", hint: true},
-  labels: {hint: "Right-click a vertex to delete it"},
+  labels: {
+    hint: "Right-click a vertex to delete it",
+    selectArea: "Select area",
+    clearAll: "Clear all",
+    selectAreaHint: "Drag a box around the shapes to delete · Esc to cancel",
+    confirmOne: "Delete 1 shape?",
+    confirmMany: "Delete {n} shapes?",
+    confirmAll: "Delete all {n} shapes?",
+    cancel: "Cancel",
+    delete: "Delete",
+  },
 
   install(mv, options) {
     const L = mv.L;
@@ -80,7 +110,8 @@ export const draw = {
     const targetIds = viewsOf({view: options.views}, mv.views.map(v => v.id));
     const views = mv.views
       .filter(v => targetIds.includes(v.id))
-      .map(v => ({id: v.id, map: v.map, layers: new Map(), offs: []}));
+      .map(v => ({id: v.id, map: v.map, layers: new Map(), offs: [], actions: null}));
+    const doc = views.length ? views[0].map.getContainer().ownerDocument : null;
 
     let features = new Map(); // internal id -> feature; the ids never leave this plugin
     let nextId = 1;
@@ -91,6 +122,9 @@ export const draw = {
     let destroyed = false;
     let gesture = null; // {view, layer, dirty, aborted, closing}: the edit in progress
     let closeToken = 0; // a scheduled close runs only while its token is current
+    // The bulk delete in progress: {view, kind: "area" | "clear", phase:
+    // "armed" | "dragging" | "confirm", ids, start, box, confirm, offDrag}.
+    let bulk = null;
 
     const collection = () => ({type: "FeatureCollection", features: [...features.values()].map(clone)});
 
@@ -225,6 +259,7 @@ export const draw = {
       if (!g.dirty) return;
       const next = readView(g.view);
       if (sameFeatures(next, features)) return; // e.g. a vertex removal Geoman undid (14822)
+      closeBulk(); // it was asking about shapes that have changed
       features = next;
       if (selected !== null && !features.has(selected)) setSelected(null);
       for (const view of views) if (view !== g.view) render(view); // the source keeps its Geoman state
@@ -274,15 +309,20 @@ export const draw = {
     }
 
     // --- edit mode, toolbar and hint -----------------------------------------------
+    // A view arming Select area shows its own hint; the others keep the
+    // vertex hint.
     const Hint = L.Control.extend({
       options: {position: "bottomleft"},
-      onAdd() {
+      onAdd(map) {
+        this._map = map;
         this._div = L.DomUtil.create("div", "mv-draw-hint");
-        this._div.textContent = mv.label("draw", "hint");
+        this.relabel();
         return this._div;
       },
       relabel() {
-        if (this._div) this._div.textContent = mv.label("draw", "hint");
+        if (!this._div) return;
+        const selecting = bulk && bulk.kind === "area" && bulk.view.map === this._map;
+        this._div.textContent = mv.label("draw", selecting ? "selectAreaHint" : "hint");
       },
     });
     let hints = [];
@@ -293,6 +333,26 @@ export const draw = {
       pm.enableGlobalEditMode(EDIT);
       pm.Toolbar.toggleButton("editMode", false, false); // see the header (5374, 5495)
       pm.addControls(TOOLBAR);
+      setActions(view);
+    }
+
+    // The trash's actions, in this order: Select area, Clear all, Finish.
+    // Rebuilt on a relabel (Geoman sets the text as innerHTML, hence the escape).
+    function setActions(view) {
+      const text = key => {
+        const span = doc.createElement("span");
+        span.textContent = mv.label("draw", key);
+        return span.innerHTML;
+      };
+      view.actions = {
+        selectArea: {name: "mvSelectArea", text: text("selectArea"), title: mv.label("draw", "selectArea"),
+          onClick: () => toggleSelectArea(view)},
+        clearAll: {name: "mvClearAll", text: text("clearAll"), title: mv.label("draw", "clearAll"),
+          onClick: () => askClearAll(view)},
+      };
+      view.map.pm.Toolbar.changeActionsOfControl("removalMode",
+        [view.actions.selectArea, view.actions.clearAll, "finishMode"]);
+      markArmed();
     }
 
     function stopEditing(view) {
@@ -306,6 +366,7 @@ export const draw = {
     function setEditMode(on) {
       on = !!on;
       if (on === editOn || destroyed) return;
+      if (!on) closeBulk();
       if (!on && gesture) {
         if (gesture.closing) finish();
         else abortGesture(true); // a drag still in progress: its view goes back to the collection
@@ -348,8 +409,10 @@ export const draw = {
         watch(view, id, layer);
         oneShot(view, layer);
       };
-      // Removal mode turned editing off on this view's layers (3527).
+      // Removal mode turned editing off on this view's layers (3527). Leaving
+      // it (Finish, the trash again) ends this view's bulk delete.
       const onRemovalMode = e => {
+        if (!e.enabled && bulk && bulk.view === view) closeBulk();
         if (e.enabled || !editOn || destroyed) return;
         for (const layer of view.layers.values()) {
           if (layer.pm && map.hasLayer(layer)) layer.pm.enable(EDIT);
@@ -359,17 +422,234 @@ export const draw = {
       map.on("pm:globalremovalmodetoggled", onRemovalMode);
       view.offs.push(() => map.off("pm:create", onCreate));
       view.offs.push(() => map.off("pm:globalremovalmodetoggled", onRemovalMode));
+      const container = map.getContainer();
+      const onPointerDown = e => startBox(view, e);
+      const onSwallow = e => {
+        if (swallows(view, e)) swallow(e);
+      };
+      container.addEventListener("pointerdown", onPointerDown, true);
+      for (const type of SWALLOWED) container.addEventListener(type, onSwallow, true);
+      view.offs.push(() => {
+        container.removeEventListener("pointerdown", onPointerDown, true);
+        for (const type of SWALLOWED) container.removeEventListener(type, onSwallow, true);
+      });
     }
+
+    // --- bulk deletes: Select area and Clear all -------------------------------------
+    // What the trash's actions put in front of a deletion; see the header.
+    const onControl = target => !!(target && target.closest && target.closest(".leaflet-control"));
+    const onConfirm = target => !!(target && target.closest && target.closest(".mv-bulk-confirm"));
+
+    // The view's own events Leaflet must not see: all of them while its bulk
+    // delete is armed, drawn or asking, except on the toolbar and the
+    // confirmation. Immediate: Leaflet also listens on the container itself.
+    function swallows(view, e) {
+      if (!bulk || bulk.view !== view || destroyed) return false;
+      return !onControl(e.target) && !onConfirm(e.target);
+    }
+
+    function swallow(e) {
+      e.stopImmediatePropagation();
+      L.DomEvent.stop(e);
+    }
+
+    function setDoomed(ids) {
+      for (const view of views) {
+        for (const [id, layer] of view.layers) {
+          const el = layer.getElement && layer.getElement();
+          if (el) el.classList.toggle("mv-draw-doomed", ids.has(id));
+        }
+      }
+    }
+
+    function markArmed() {
+      for (const view of views) {
+        const node = view.actions && view.actions.selectArea._node;
+        if (node) node.classList.toggle("mv-active", !!(bulk && bulk.kind === "area" && bulk.view === view));
+      }
+    }
+
+    function syncBulkLook() {
+      for (const view of views) {
+        view.map.getContainer().classList.toggle("mv-selecting",
+          !!(bulk && bulk.kind === "area" && bulk.view === view && bulk.phase !== "confirm"));
+      }
+      markArmed();
+      hints.forEach(hint => hint.relabel());
+    }
+
+    function closeBulk() {
+      const b = bulk;
+      if (!b) return;
+      bulk = null;
+      if (b.offDrag) b.offDrag();
+      if (b.box) b.box.remove();
+      if (b.confirm) b.confirm.remove();
+      setDoomed(new Set());
+      syncBulkLook();
+    }
+
+    function toggleSelectArea(view) {
+      if (destroyed || !editOn) return;
+      const armed = bulk && bulk.kind === "area" && bulk.view === view;
+      closeBulk();
+      if (!armed) bulk = {view, kind: "area", phase: "armed", ids: new Set()};
+      syncBulkLook();
+    }
+
+    function askClearAll(view) {
+      if (destroyed || !editOn) return;
+      closeBulk();
+      if (!features.size) return; // nothing to clear, nothing to ask
+      bulk = {view, kind: "clear", phase: "confirm", ids: new Set(features.keys())};
+      setDoomed(bulk.ids);
+      // Under the trash's action strip.
+      const container = view.map.getContainer();
+      const strip = container.querySelector(".leaflet-pm-icon-delete");
+      const actions = strip && strip.closest(".button-container");
+      const where = actions && actions.querySelector(".leaflet-pm-actions-container");
+      const rect = (where || actions || container).getBoundingClientRect();
+      const origin = container.getBoundingClientRect();
+      showConfirm(view, {left: rect.left - origin.left, top: rect.bottom - origin.top + 6});
+      syncBulkLook();
+    }
+
+    const boxBounds = (map, a, b) => {
+      const p = map.containerPointToLatLng(L.point(Math.min(a.x, b.x), Math.min(a.y, b.y)));
+      const q = map.containerPointToLatLng(L.point(Math.max(a.x, b.x), Math.max(a.y, b.y)));
+      return {west: p.lng, north: p.lat, east: q.lng, south: q.lat};
+    };
+
+    function idsInside(bounds) {
+      const ids = new Set();
+      for (const [id, feature] of features) if (geometryInside(feature.geometry, bounds)) ids.add(id);
+      return ids;
+    }
+
+    function startBox(view, e) {
+      if (!swallows(view, e)) return;
+      swallow(e);
+      if (bulk.kind !== "area" || bulk.phase !== "armed" || e.button !== 0) return;
+      const map = view.map;
+      const container = map.getContainer();
+      const start = map.mouseEventToContainerPoint(e);
+      const box = L.DomUtil.create("div", "mv-select-box", container);
+      bulk = {...bulk, phase: "dragging", start, box, end: start};
+      const draw = point => {
+        const x = Math.min(start.x, point.x), y = Math.min(start.y, point.y);
+        Object.assign(box.style, {left: `${x}px`, top: `${y}px`,
+          width: `${Math.abs(point.x - start.x)}px`, height: `${Math.abs(point.y - start.y)}px`});
+      };
+      draw(start);
+      const onMove = ev => {
+        if (!bulk || bulk.box !== box) return;
+        const point = map.mouseEventToContainerPoint(ev);
+        bulk.end = point;
+        draw(point);
+        bulk.ids = idsInside(boxBounds(map, start, point));
+        setDoomed(bulk.ids);
+      };
+      const onUp = ev => {
+        if (!bulk || bulk.box !== box) return;
+        onMove(ev);
+        bulk.offDrag();
+        bulk.offDrag = null;
+        if (!bulk.ids.size) {
+          box.remove(); // nothing wholly inside: no question, still armed
+          bulk = {view, kind: "area", phase: "armed", ids: new Set()};
+          setDoomed(bulk.ids);
+          syncBulkLook();
+          return;
+        }
+        bulk.phase = "confirm";
+        showConfirm(view, {box: {
+          left: Math.min(start.x, bulk.end.x), right: Math.max(start.x, bulk.end.x),
+          top: Math.min(start.y, bulk.end.y), bottom: Math.max(start.y, bulk.end.y),
+        }});
+        syncBulkLook();
+      };
+      doc.addEventListener("pointermove", onMove, true);
+      doc.addEventListener("pointerup", onUp, true);
+      bulk.offDrag = () => {
+        doc.removeEventListener("pointermove", onMove, true);
+        doc.removeEventListener("pointerup", onUp, true);
+      };
+      syncBulkLook();
+    }
+
+    // The confirmation in the view: at {left, top}, or beside ``box`` (right
+    // of it, else left, else below, else above) so it never covers the shapes
+    // it asks about; kept inside the view either way.
+    function showConfirm(view, {left, top, box}) {
+      const container = view.map.getContainer();
+      const n = bulk.ids.size;
+      const key = n === 1 ? "confirmOne" : bulk.kind === "clear" ? "confirmAll" : "confirmMany";
+      const el = L.DomUtil.create("div", "mv-bulk-confirm", container);
+      const message = L.DomUtil.create("span", "mv-bulk-message", el);
+      message.textContent = mv.label("draw", key).replace("{n}", String(n));
+      const cancel = L.DomUtil.create("button", "mv-bulk-cancel", el);
+      const del = L.DomUtil.create("button", "mv-bulk-delete", el);
+      cancel.type = del.type = "button";
+      cancel.textContent = mv.label("draw", "cancel");
+      del.textContent = mv.label("draw", "delete");
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+      L.DomEvent.on(cancel, "click", ev => {
+        L.DomEvent.stop(ev);
+        closeBulk();
+      });
+      L.DomEvent.on(del, "click", ev => {
+        L.DomEvent.stop(ev);
+        deleteAsked();
+      });
+      bulk.confirm = el;
+      const w = el.offsetWidth, h = el.offsetHeight, gap = 8;
+      const width = container.clientWidth, height = container.clientHeight;
+      if (box) {
+        if (box.right + gap + w <= width - gap) [left, top] = [box.right + gap, box.top];
+        else if (box.left - gap - w >= gap) [left, top] = [box.left - gap - w, box.top];
+        else if (box.bottom + gap + h <= height - gap) [left, top] = [box.left, box.bottom + gap];
+        else [left, top] = [box.left, box.top - gap - h];
+      }
+      el.style.left = `${Math.max(gap, Math.min(left, width - w - gap))}px`;
+      el.style.top = `${Math.max(gap, Math.min(top, height - h - gap))}px`;
+    }
+
+    // Delete: the shapes asked about leave the collection, in one
+    // drawingchange. Clear all also ends removal mode in its view.
+    function deleteAsked() {
+      const b = bulk;
+      if (!b || b.phase !== "confirm" || destroyed) return;
+      closeBulk();
+      abortGesture(false); // every view is rebuilt below
+      const next = new Map([...features].filter(([id]) => !b.ids.has(id)));
+      if (next.size !== features.size) {
+        features = next;
+        if (selected !== null && !features.has(selected)) setSelected(null);
+        for (const view of views) render(view);
+        mv.emit("drawingchange", {features: collection()});
+      }
+      if (b.kind === "clear" && b.view.map.pm.globalRemovalModeEnabled()) b.view.map.pm.disableGlobalRemovalMode();
+    }
+
+    const onKey = e => {
+      if (e.key === "Escape" && bulk) closeBulk();
+    };
+    if (doc) doc.addEventListener("keydown", onKey);
 
     // Layers marked meta.hideWhileEditing (the alert box, the reviewed polygon)
     // are denied while edit mode is on.
     const removeRule = mv.addVisibilityRule(spec =>
       editOn && spec && spec.meta && spec.meta.hideWhileEditing ? false : undefined,
     );
-    const offLabels = mv.on("labelschange", () => hints.forEach(hint => hint.relabel()));
+    const offLabels = mv.on("labelschange", () => {
+      hints.forEach(hint => hint.relabel());
+      if (editOn) views.forEach(setActions);
+    });
 
     // --- API ---------------------------------------------------------------------------
     function setFeatures(fc) {
+      closeBulk(); // a host write: the shapes asked about may be gone
       abortGesture(false); // every view is rebuilt below
       const was = applying;
       applying = true;
@@ -387,6 +667,7 @@ export const draw = {
     // the current ids by position, so the selection survives. One drawingchange,
     // unless nothing changed.
     function commit(fc) {
+      closeBulk();
       abortGesture(false);
       const ids = [...features.keys()];
       const next = new Map();
@@ -402,8 +683,10 @@ export const draw = {
 
     function destroy() {
       if (destroyed) return;
+      closeBulk();
       abortGesture(false);
       destroyed = true;
+      if (doc) doc.removeEventListener("keydown", onKey);
       if (removeHints) removeHints();
       removeHints = null;
       hints = [];

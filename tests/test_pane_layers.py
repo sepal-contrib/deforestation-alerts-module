@@ -240,6 +240,33 @@ def test_the_hole_tool_labels_are_translated():
     assert pane_labels()["holes.remove"] == "Supprimer un trou"
 
 
+BULK_DELETE_ENGLISH = {
+    # The draw plugin's own English defaults (js/leaflet-multiview/src/plugins/draw/index.js).
+    "draw.selectArea": "Select area",
+    "draw.clearAll": "Clear all",
+    "draw.selectAreaHint": "Drag a box around the shapes to delete · Esc to cancel",
+    "draw.confirmOne": "Delete 1 shape?",
+    "draw.confirmMany": "Delete {n} shapes?",
+    "draw.confirmAll": "Delete all {n} shapes?",
+    "draw.cancel": "Cancel",
+    "draw.delete": "Delete",
+}
+
+
+def test_the_bulk_delete_labels_are_translated():
+    labels = pane_labels()
+    assert {k: labels[k] for k in BULK_DELETE_ENGLISH} == BULK_DELETE_ENGLISH
+    for locale in ("es-ES", "fr"):
+        set_locale(locale)
+        translated = pane_labels()
+        for key in BULK_DELETE_ENGLISH:
+            assert translated[key] != BULK_DELETE_ENGLISH[key], (locale, key)
+        for key in ("draw.confirmMany", "draw.confirmAll"):
+            assert "{n}" in translated[key], (locale, key)
+    set_locale("es-ES")
+    assert pane_labels()["draw.selectArea"] == "Seleccionar área"
+
+
 def test_the_tile_error_badge_label_is_translated():
     assert pane_labels()["tileErrors.badge"] == "Imagery failed to load"
     set_locale("es-ES")
