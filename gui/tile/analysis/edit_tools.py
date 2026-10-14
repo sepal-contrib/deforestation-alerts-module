@@ -127,11 +127,7 @@ from deforestation_alerts.scripts.mosaics_helper import (
     simplify_and_extract_features,
 )
 from gui.i18n import format_number, t, tn
-from gui.scripts.notify_bridge import (
-    current_notifier,
-    tile_progress_reporter,
-    tracked_job,
-)
+from gui.scripts.notify_bridge import current_notifier, run_button_job, tile_progress_reporter
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.pane_layers import geojson_spec
@@ -151,6 +147,8 @@ _MODEL1_REPO = "joseserafinig/forest_cover_change_cnn_m1"
 _MODEL1_FILE = "Model1.h5"
 _MODEL2_REPO = "joseserafinig/forest_cover_change_cnn_m2"
 _MODEL2_FILE = "Model2.keras"
+#: CNN row -> (its HuggingFace repo, model file, composite suffix).
+_MODELS = {1: (_MODEL1_REPO, _MODEL1_FILE, "_m1"), 2: (_MODEL2_REPO, _MODEL2_FILE, "_m2")}
 
 # CNN prediction probability cutoff (OLD passed 0.20 to verify_raster/raster_to_gdf)
 # and polygon simplify tolerance in metres of the project's grid CRS (OLD
@@ -805,14 +803,15 @@ def build_edit_tools(
         # raw exception stays in the log.
         return t("analysis_tile.model_labels.dl_404")
 
-    def _on_dl1_run(*_):
+    def _on_dl_run(n):
         # The previous run's prediction is not what this row offers any more
         # (``added`` is left alone: whatever it put in the drawing is still
         # there, and *Remove* still takes it off).
-        dl_state[1]["found"] = None
-        _sync_dl(1)
-        ns["dl1_run"].loading = True
-        ns["dl1_run"].disabled = True
+        dl_state[n]["found"] = None
+        _sync_dl(n)
+        button = ns[f"dl{n}_run"]
+        button.loading = True
+        button.disabled = True
         # The alert this run is for, with its images and grid, read here on
         # the UI thread; the worker starts only while it is still current.
         alert = capture_alert(analysis, widgets, app_state)
@@ -822,127 +821,54 @@ def build_edit_tools(
         # meanwhile. The name is read now, at the click: the run keeps marking
         # the project it writes into after the user switched to another one.
         project = writer_name(app_state)
+        repo, filename, suffix = _MODELS[n]
+        valid = {"found": False}
 
-        def _worker():
-            # No ``total_steps`` — the run is one download+inference phase; the
-            # composite download drives the ring, the rest is indeterminate.
-            notifier = current_notifier()
-            try:
-                with tracked_job(
-                    notifier,
-                    t("analysis_tile.model_labels.dl_task_title"),
-                    error_format=_dl_404,
-                ) as task:
-                    task.step(t("analysis_tile.model_labels.dl_step_run"))
-                    applied = valid = False
-                    # Nothing to run on while a pane is still rebuilding its
-                    # pick: a composite staged now would carry one pick's name
-                    # over the other's pixels (``_images_ready``). Its own
-                    # reason, so the refusal does not read as "you moved on".
-                    refused = None if _images_ready(alert) else t(
-                        "analysis_tile.model_labels.dl_no_images")
-                    if refused is None and analysis.is_current(token):
-                        with writing(project):
-                            pred_path = _run_cnn_model(
-                                _MODEL1_REPO, _MODEL1_FILE, "_m1",
-                                widgets, analysis, app_state, app_tile_model,
-                                task=task, alert=alert,
-                            )
-                            # Vectorised here, inside the job and inside the
-                            # writer guard that keeps the set's folder alive:
-                            # the row can then say what was found and *Add* is
-                            # instant. A failure fails the run like any other.
-                            found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
-                        applied, valid = _apply_model(1, pred_path, token, found)
-                    if not applied:
-                        # Another alert is on screen (its result is dropped),
-                        # or the pair was not ready to run on. A warning,
-                        # recorded on the task before the toast.
-                        reason = refused or t("analysis_tile.model_labels.dl_stale")
-                        task.fail(reason)
-                        notifier.warning(reason)
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
+        # No ``total_steps`` — the run is one download+inference phase; the
+        # composite download drives the ring, the rest is indeterminate.
+        def _body(task, notifier):
+            task.step(t("analysis_tile.model_labels.dl_step_run"))
+            # Nothing to run on while a pane is still rebuilding its pick: a
+            # composite staged now would carry one pick's name over the other's
+            # pixels (``_images_ready``). Its own reason, so the refusal does
+            # not read as "you moved on".
+            if not _images_ready(alert):
+                return t("analysis_tile.model_labels.dl_no_images")
+            applied = False
+            if analysis.is_current(token):
+                with writing(project):
+                    pred_path = _run_cnn_model(
+                        repo, filename, suffix,
+                        widgets, analysis, app_state, app_tile_model,
+                        task=task, alert=alert,
+                    )
+                    # Vectorised here, inside the job and inside the writer
+                    # guard that keeps the set's folder alive: the row can then
+                    # say what was found and *Add* is instant. A failure fails
+                    # the run like any other.
+                    found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
+                applied, valid["found"] = _apply_model(n, pred_path, token, found)
+            # Another alert is on screen: its result is dropped.
+            return None if applied else t("analysis_tile.model_labels.dl_stale")
+
+        def _ran(notifier):
+            if valid["found"]:
+                notifier.success(t("analysis_tile.model_labels.dl_done"))
             else:
-                if applied and valid:
-                    notifier.success(t("analysis_tile.model_labels.dl_done"))
-                elif applied:
-                    # The run worked; the model simply found no forest loss.
-                    # Nothing is recorded and nothing is offered to add, so the
-                    # reviewer's own drawing is left exactly as it was.
-                    notifier.warning(t("analysis_tile.model_labels.dl_404"))
-            finally:
-                ns["dl1_run"].loading = False
-                ns["dl1_run"].disabled = False
+                # The run worked; the model simply found no forest loss.
+                # Nothing is recorded and nothing is offered to add, so the
+                # reviewer's own drawing is left exactly as it was.
+                notifier.warning(t("analysis_tile.model_labels.dl_404"))
 
-        spawn_in_context(_worker)
+        def _release():
+            button.loading = False
+            button.disabled = False
 
-    def _on_dl2_run(*_):
-        # The previous run's prediction is not what this row offers any more
-        # (``added`` is left alone: whatever it put in the drawing is still
-        # there, and *Remove* still takes it off).
-        dl_state[2]["found"] = None
-        _sync_dl(2)
-        ns["dl2_run"].loading = True
-        ns["dl2_run"].disabled = True
-        # The alert this run is for, with its images and grid, read here on
-        # the UI thread; the worker starts only while it is still current.
-        alert = capture_alert(analysis, widgets, app_state)
-        token = alert.token  # the alert this run is for
-        project = writer_name(app_state)  # as in _on_dl1_run
-
-        def _worker():
-            # Same tracked_job shape as _on_dl1_run above.
-            notifier = current_notifier()
-            try:
-                with tracked_job(
-                    notifier,
-                    t("analysis_tile.model_labels.dl_task_title"),
-                    error_format=_dl_404,
-                ) as task:
-                    task.step(t("analysis_tile.model_labels.dl_step_run"))
-                    applied = valid = False
-                    # Nothing to run on while a pane is still rebuilding its
-                    # pick: a composite staged now would carry one pick's name
-                    # over the other's pixels (``_images_ready``). Its own
-                    # reason, so the refusal does not read as "you moved on".
-                    refused = None if _images_ready(alert) else t(
-                        "analysis_tile.model_labels.dl_no_images")
-                    if refused is None and analysis.is_current(token):
-                        with writing(project):
-                            pred_path = _run_cnn_model(
-                                _MODEL2_REPO, _MODEL2_FILE, "_m2",
-                                widgets, analysis, app_state, app_tile_model,
-                                task=task, alert=alert,
-                            )
-                            # Vectorised here, inside the job and inside the
-                            # writer guard that keeps the set's folder alive:
-                            # the row can then say what was found and *Add* is
-                            # instant. A failure fails the run like any other.
-                            found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
-                        applied, valid = _apply_model(2, pred_path, token, found)
-                    if not applied:
-                        # Another alert is on screen (its result is dropped),
-                        # or the pair was not ready to run on. A warning,
-                        # recorded on the task before the toast.
-                        reason = refused or t("analysis_tile.model_labels.dl_stale")
-                        task.fail(reason)
-                        notifier.warning(reason)
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                if applied and valid:
-                    notifier.success(t("analysis_tile.model_labels.dl_done"))
-                elif applied:
-                    # The run worked; the model simply found no forest loss.
-                    # Nothing is recorded and nothing is offered to add, so the
-                    # reviewer's own drawing is left exactly as it was.
-                    notifier.warning(t("analysis_tile.model_labels.dl_404"))
-            finally:
-                ns["dl2_run"].loading = False
-                ns["dl2_run"].disabled = False
-
-        spawn_in_context(_worker)
+        run_button_job(
+            t("analysis_tile.model_labels.dl_task_title"), _body,
+            release=_release, on_success=_ran, error_format=_dl_404, logger=logger,
+            spawn=spawn_in_context, notifier=current_notifier,
+        )
 
     # ------------------------------------------------------------------
     # Wire all click handlers once (the widgets are built once per build).
@@ -954,9 +880,8 @@ def build_edit_tools(
         for choice in ("keep", "save", "discard"):
             ns[f"stop_{choice}"].on_event("click", lambda *_, c=choice: _stop_choice(c))
 
-        for n, (run, color_name) in enumerate(((_on_dl1_run, "lime"),
-                                               (_on_dl2_run, "purple")), start=1):
-            ns[f"dl{n}_run"].on_event("click", run)
+        for n, color_name in ((1, "lime"), (2, "purple")):
+            ns[f"dl{n}_run"].on_event("click", lambda *_, n=n: _on_dl_run(n))
             ns[f"dl{n}_add"].on_event(
                 "click", lambda *_, n=n, c=color_name: _add_model_prediction(n, c))
             ns[f"dl{n}_remove"].on_event(

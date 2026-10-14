@@ -1787,19 +1787,22 @@ def test_raw_layouts_publish_through_the_bridge_not_the_hook():
 
     They resolve a notifier from the worker's kernel context
     (notify_bridge.current_notifier) and run their body under
-    tracked_job, which owns the task + the one error toast.
+    tracked_job, which owns the task + the one error toast -- directly, or
+    through run_button_job, which wraps it for a button's job.
     """
+    trackers = {"tracked_job", "run_button_job"}
     for rel in RAW_LAYOUTS:
         called = _called(rel)
         imported = _imported_names(rel)
-        assert "gui.scripts.notify_bridge.tracked_job" in imported, (
-            f"{rel} does not import tracked_job"
+        assert {f"gui.scripts.notify_bridge.{name}" for name in trackers} & set(imported), (
+            f"{rel} imports neither tracked_job nor run_button_job"
         )
         assert "gui.scripts.notify_bridge.current_notifier" in imported, (
             f"{rel} does not import current_notifier"
         )
-        assert "tracked_job" in called, f"{rel} tracks no long-running work"
-        assert "current_notifier" in called, f"{rel} resolves no notifier"
+        assert trackers & set(called), f"{rel} tracks no long-running work"
+        # run_button_job resolves it on the worker, from the name it is handed
+        assert {"current_notifier", "run_button_job"} & set(called), f"{rel} resolves no notifier"
         assert "notifier.success" in called, f"{rel} publishes no success toast"
         assert "pysepal.solara.notifications.track_task" not in imported, (
             f"{rel} still imports the track_task() global"
@@ -1817,7 +1820,7 @@ def test_raw_layout_workers_use_tracked_job():
         "gui/tile/analysis/edit_tools.py",
     ):
         src = _src(rel)
-        assert "tracked_job(" in src, rel
+        assert "tracked_job(" in src or "run_button_job(" in src, rel
         assert "track_task(" not in src, rel
 
 

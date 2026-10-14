@@ -196,6 +196,69 @@ def current_notifier():
     return NoopNotifier() if bus is None else Notifier(bus)
 
 
+def run_button_job(title, body, *, release, on_success=None, on_refused=None, refused_log=None,
+                   error_format=None, logger=None, spawn=None, notifier=None):
+    """Run the job a button started on a worker, with the choreography every
+    such button shares. The caller has already spun its button.
+
+    On the worker, ``body(task, notifier)`` runs under ``tracked_job(notifier,
+    title, error_format)``:
+
+    * it returns None: the job is done. ``on_success(notifier)`` runs after
+      the tracked block, so its toast follows the finished task.
+    * it returns a reason: a refusal, a WARNING outcome. The task is failed
+      with the reason before the warning toast, so the run is recorded as
+      FAILED when the message lands; then ``refused_log`` (a label) logs it,
+      last because a FAILED task takes no more milestones; then
+      ``on_refused(reason)`` runs. A hook that raises is logged and changes
+      nothing else: the refusal has already been reported.
+    * it raises: ``tracked_job`` has failed the task, toasted and logged it.
+
+    ``release()`` runs last on the worker whatever happened. If the worker
+    cannot be started at all, that is logged and ``release()`` runs at once,
+    so the button never spins forever.
+
+    ``spawn`` and ``notifier`` default to ``solara_threads.spawn_in_context``
+    and ``current_notifier``. A caller passes its own module's names, so a
+    test that patches them there still reaches the job.
+    """
+    log = logger or logging.getLogger(_LOGGER_NAME)
+    if spawn is None:
+        from gui.scripts.solara_threads import spawn_in_context as spawn
+    make_notifier = notifier or current_notifier
+
+    def _worker():
+        notifier_ = make_notifier()
+        done = False
+        try:
+            with tracked_job(notifier_, title, error_format=error_format) as task:
+                reason = body(task, notifier_)
+                if reason is not None:
+                    task.fail(reason)
+                    notifier_.warning(reason)
+                    if refused_log:
+                        log.warning("%s — %s", refused_log, reason)
+                    if on_refused is not None:
+                        try:
+                            on_refused(reason)
+                        except Exception:
+                            log.exception("%s: the refusal hook failed", title)
+                done = reason is None
+        except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
+            pass
+        else:
+            if done and on_success is not None:
+                on_success(notifier_)
+        finally:
+            release()
+
+    try:
+        spawn(_worker)
+    except Exception:
+        log.exception("%s: the worker could not be started", title)
+        release()
+
+
 def tile_progress_reporter(task):
     """Adapt geedim tile ticks ``(done, total)`` to ``task.set_progress``.
 

@@ -55,8 +55,8 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
 * **Save + Download each run button-triggered via ``spawn_in_context``** (both
   do blocking GEE ``.getInfo()`` / heavy report generation). They NEVER auto-run; the
   click handler toggles that button's ``.loading``/``.disabled`` and starts the
-  worker; the worker runs the blocking work under ``notify_bridge.tracked_job``
-  (inside a ``try/except/else/finally``) so the notification pill shows it
+  worker through ``notify_bridge.run_button_job``, which runs the blocking work
+  under ``tracked_job`` and always releases the button, so the notification pill shows it
   running and the worker thread's app log lines become its milestones.
 * **No widget mutation inside the blocking bodies.** The save body does the gdf
   mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
@@ -136,10 +136,7 @@ from pysepal import sepalwidgets as sw
 from deforestation_alerts.project.review_status import CONFIRMED
 from gui.i18n import t, tn
 from gui.scripts.error_text import error_text
-from gui.scripts.notify_bridge import (
-    current_notifier,
-    tracked_job,
-)
+from gui.scripts.notify_bridge import current_notifier, run_button_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis import alert_files, review_save
@@ -255,142 +252,100 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         token = alert.token  # the alert this save is for
 
         outpaced = []  # the reviewer changed this alert while the save ran
+        refusal = {}  # the SaveRefused of a refused save, for ``on_refused``
 
-        def _worker():
-            # No ``total_steps`` — the save is a single opaque phase (GEE admin
-            # lookups + the alert-store write), so the pill stays indeterminate.
-            # On an exception tracked_job fails the task and publishes the one
-            # error toast (``error_text``), then re-raises into except.
-            notifier = current_notifier()
-            try:
-                with tracked_job(
-                    notifier, t("analysis_tile.export_labels.save_task_title")
-                ) as task:
-                    task.step(t("analysis_tile.export_labels.save_step"))
-                    # Writer tracking: register the open project while the
-                    # set's alert store is written, so deleting the project
-                    # refuses mid-write.
-                    refusal_obj = None
-                    with writing(writer_name(app_state)):
-                        try:
-                            saved = _save_attributes(
-                                widgets,
-                                app_state,
-                                analysis,
-                                app_tile_model,
-                                alert=alert,
-                            )
-                            refused = None
-                        except SaveRefused as refusal:
-                            saved, refused, refusal_obj = False, error_text(refusal), refusal
-                    if not saved:
-                        # `_save_attributes` refused: nothing was written and the
-                        # download button stays disabled, so completing the task
-                        # would record a DONE run for a no-op the user cannot
-                        # explain. A WARNING outcome, not an error: fail() BEFORE
-                        # the toast, so the run is already recorded as FAILED
-                        # with its reason when the message lands. (Returning
-                        # False means a missing/invalid alert id, which is what
-                        # the default message says; SaveRefused carries its
-                        # own.) The log line comes last: once the task is FAILED
-                        # it is not echoed as a milestone.
-                        reason = refused or t("analysis_tile.export_labels.save_no_alert")
-                        task.fail(reason)
-                        notifier.warning(reason)
-                        logger.warning("Analysis: save refused — %s", reason)
-                        # After the toast: the reviewer reads why, then sees
-                        # where (a required answer opens the Questions
-                        # section). Guarded: the refusal is already reported,
-                        # and a failing hook must not turn it into an error.
-                        if on_refused is not None and refusal_obj is not None:
-                            try:
-                                on_refused(refusal_obj)
-                            except Exception:
-                                logger.exception("Analysis: the refusal hook failed")
-                    else:
-                        # Inside the tracked block: if the apply step raises, the
-                        # run is a FAILED task + one error toast, not a green pill.
-                        #
-                        # Only while the alert saved is still the one on screen:
-                        # ``apply_save`` is per-alert UI (the export section's
-                        # build button and its badge), and a save that lands
-                        # after the reviewer moved on would otherwise announce
-                        # "ready to build" over an alert nobody saved. The
-                        # set-wide half — re-publishing ``alerts_gdf`` so
-                        # Overview's counts and markers see the write — is NOT
-                        # per-alert and still has to run: the store write landed
-                        # either way. That half is exactly ``_default_apply``.
-                        if not analysis.apply_if_current(token, apply):
-                            _default_apply()
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                if saved:
-                    notifier.success(t("analysis_tile.export_labels.save_done"))
-                    # This alert's review is on disk: nothing unsaved left.
-                    # Keyed on the token for the same reason as the apply above:
-                    # ``reset_alert`` has already cleared the flag for the alert
-                    # now on screen, which may carry edits of its own that this
-                    # save did not write.
-                    #
-                    # The save stamp goes with it, and under the same guard:
-                    # it is per-alert UI (``reset_alert`` clears it so an
-                    # alert nobody saved shows no time at all), so a save that
-                    # lands after the reviewer navigated must not stamp the
-                    # alert they went to as saved.
-                    analysis.apply_if_current(
-                        token, lambda: outpaced.append(not _mark_saved(alert))
-                    )
-                    # Said, not left to the state line alone: after *Save &
-                    # next* the reviewer is watching for the next alert, and
-                    # the one thing on screen would be a save they pressed
-                    # that did not advance.
-                    if any(outpaced):
-                        reason = t("analysis_tile.export_labels.save_outpaced")
-                        notifier.warning(reason)
-                        logger.info("Analysis: %s", reason)
-                    # Only now — Save & next must not move off an alert whose
-                    # review was refused. And only for the alert this save was
-                    # for: ``then`` is ``go_next``, so a save that lands after
-                    # the reviewer navigated by hand would advance from THERE
-                    # and leave them one alert further than where they went,
-                    # with nothing to say why. ``is_current``, not
-                    # ``apply_if_current``: ``go_next`` republishes
-                    # ``actual_alert_id``, whose subscriber runs the whole
-                    # per-alert orchestration (``reset_alert`` included), and
-                    # that must not run under ``_alert_lock``.
-                    # Guarded: a failing ``then`` is a log line, not a lost
-                    # success toast.
-                    #
-                    # And not off a change this save did not write: ``then``
-                    # is ``go_next``, so advancing would leave the reviewer's
-                    # later verdict or driver behind on an alert they can no
-                    # longer see is unsaved.
-                    if then is not None and analysis.is_current(token) and not any(outpaced):
-                        try:
-                            then()
-                        except Exception:
-                            logger.exception("Analysis: after-save step failed")
-            finally:
-                # The runner is free again and every button it shares comes
-                # back, whichever one started this save.
-                saving["on"] = False
-                _hold(False)
-                if button is not None:
-                    button.loading = False
-                    button.disabled = False
+        # No ``total_steps`` — the save is a single opaque phase (GEE admin
+        # lookups + the alert-store write), so the pill stays indeterminate.
+        def _body(task, notifier):
+            task.step(t("analysis_tile.export_labels.save_step"))
+            # Writer tracking: register the open project while the set's
+            # alert store is written, so deleting the project refuses mid-write.
+            with writing(writer_name(app_state)):
+                try:
+                    saved = _save_attributes(widgets, app_state, analysis, app_tile_model, alert=alert)
+                except SaveRefused as exc:
+                    refusal["exc"] = exc
+                    return error_text(exc)
+            if not saved:
+                # A missing/invalid alert id: nothing was written and the
+                # download button stays disabled, so completing the task would
+                # record a DONE run for a no-op the user cannot explain.
+                return t("analysis_tile.export_labels.save_no_alert")
+            # Inside the tracked block: if the apply step raises, the run is a
+            # FAILED task + one error toast, not a green pill.
+            #
+            # Only while the alert saved is still the one on screen:
+            # ``apply_save`` is per-alert UI (the export section's build button
+            # and its badge), and a save that lands after the reviewer moved on
+            # would otherwise announce "ready to build" over an alert nobody
+            # saved. The set-wide half — re-publishing ``alerts_gdf`` so
+            # Overview's counts and markers see the write — is NOT per-alert and
+            # still has to run: the store write landed either way. That half is
+            # exactly ``_default_apply``.
+            if not analysis.apply_if_current(token, apply):
+                _default_apply()
+            return None
 
-        try:
-            spawn_in_context(_worker)
-        except Exception:
-            # The worker's ``finally`` is what releases the runner, so a spawn
-            # that never got there would lock saving out for the session.
-            logger.exception("Analysis: the save worker could not be started")
+        def _refused(_reason):
+            # After the toast: the reviewer reads why, then sees where (a
+            # required answer opens the Questions section).
+            if on_refused is not None and "exc" in refusal:
+                on_refused(refusal["exc"])
+
+        def _saved(notifier):
+            notifier.success(t("analysis_tile.export_labels.save_done"))
+            # This alert's review is on disk: nothing unsaved left. Keyed on
+            # the token for the same reason as the apply above: ``reset_alert``
+            # has already cleared the flag for the alert now on screen, which
+            # may carry edits of its own that this save did not write.
+            #
+            # The save stamp goes with it, and under the same guard: it is
+            # per-alert UI (``reset_alert`` clears it so an alert nobody saved
+            # shows no time at all), so a save that lands after the reviewer
+            # navigated must not stamp the alert they went to as saved.
+            analysis.apply_if_current(token, lambda: outpaced.append(not _mark_saved(alert)))
+            # Said, not left to the state line alone: after *Save & next* the
+            # reviewer is watching for the next alert, and the one thing on
+            # screen would be a save they pressed that did not advance.
+            if any(outpaced):
+                reason = t("analysis_tile.export_labels.save_outpaced")
+                notifier.warning(reason)
+                logger.info("Analysis: %s", reason)
+            # Only now — Save & next must not move off an alert whose review
+            # was refused. And only for the alert this save was for: ``then``
+            # is ``go_next``, so a save that lands after the reviewer navigated
+            # by hand would advance from THERE and leave them one alert further
+            # than where they went, with nothing to say why. ``is_current``,
+            # not ``apply_if_current``: ``go_next`` republishes
+            # ``actual_alert_id``, whose subscriber runs the whole per-alert
+            # orchestration (``reset_alert`` included), and that must not run
+            # under ``_alert_lock``. Guarded: a failing ``then`` is a log line,
+            # not a lost success toast.
+            #
+            # And not off a change this save did not write: advancing would
+            # leave the reviewer's later verdict or driver behind on an alert
+            # they can no longer see is unsaved.
+            if then is not None and analysis.is_current(token) and not any(outpaced):
+                try:
+                    then()
+                except Exception:
+                    logger.exception("Analysis: after-save step failed")
+
+        def _release():
+            # The runner is free again and every button it shares comes back,
+            # whichever one started this save.
             saving["on"] = False
             _hold(False)
             if button is not None:
                 button.loading = False
                 button.disabled = False
+
+        run_button_job(
+            t("analysis_tile.export_labels.save_task_title"), _body,
+            release=_release, on_success=_saved, on_refused=_refused,
+            refused_log="Analysis: save refused", logger=logger,
+            spawn=spawn_in_context, notifier=current_notifier,
+        )
 
     run_save.guard = _guard
     return run_save
@@ -774,108 +729,74 @@ def build_export(
                 logger.exception("Analysis: the GIF for the zip could not be captured")
                 gif_skipped = True
 
-        def _worker():
-            # Same tracked_job shape as _on_save above; the report/zip build is
-            # one opaque long phase, but the composite download inside it drives
-            # the progress ring (``task=`` below).
-            notifier = current_notifier()
-            applied = False
-            result = None  # read after the tracked block, for the GIF warning
-            try:
-                with tracked_job(
-                    notifier,
-                    t("analysis_tile.export_labels.download_task_title"),
-                ) as task:
-                    task.step(t("analysis_tile.export_labels.download_step"))
-                    # Writer tracking: the report/zip generation writes into the
-                    # set's folder — register the open project for the duration.
-                    with writing(writer_name(app_state)):
-                        result = _download_data(
-                            widgets,
-                            analysis,
-                            app_state,
-                            aux_model,
-                            app_tile_model,
-                            task=task,
-                            alert=alert,
-                            gif=gif_job,
-                        )
-                    if result is None:
-                        # `_download_data` refused: nothing was written and no
-                        # download button will be revealed, so completing the
-                        # task would show a green pill for a no-op the user
-                        # cannot explain. A WARNING outcome: fail() BEFORE the
-                        # toast, so the run is already recorded as FAILED (with
-                        # its reason) in the task log when the message lands.
-                        # (The three causes are re-derived here rather than
-                        # returned, so `_download_data` keeps its "paths or
-                        # nothing" contract.) Log last: a FAILED task takes no
-                        # more milestones.
-                        if not app_tile_model.recipe_folder_path:
-                            reason = t("analysis_tile.export_labels.download_no_recipe")
-                        elif not alert_files.alert_selected(alert):
-                            reason = t("analysis_tile.export_labels.download_no_alert")
-                        else:
-                            reason = t("analysis_tile.export_labels.download_no_images")
-                        task.fail(reason)
-                        notifier.warning(reason)
-                        logger.warning("Analysis: download refused — %s", reason)
-                    else:
-                        # Inside the tracked block: ``local_files.home_relative``
-                        # raises ValueError for a path outside $HOME, and that
-                        # must be a FAILED task + one error toast,
-                        # not a green pill with download buttons that never show.
-                        #
-                        # And only while the alert built for is still on screen.
-                        # The build is slow (an imagery export plus the Word
-                        # report), so the reviewer can navigate while it runs,
-                        # and this apply is itself what REVEALS the toolbar: a
-                        # stale one would hand the reviewer the previous alert's
-                        # GeoPackage and report under a badge counting them as
-                        # the current alert's.
-                        offered = {"ok": False}
-                        analysis.apply_if_current(
-                            token,
-                            lambda: offered.update(ok=_apply_download(result, rev)),
-                        )
-                        applied = offered["ok"]
-                        if not applied:
-                            # Said, not swallowed: the files exist (they were
-                            # written into the set's folder) but nothing on
-                            # screen offers them, and the reviewer waited for
-                            # them -- because they moved on, or because what
-                            # this build was for has changed since. Recorded on
-                            # the task before the toast, as the model runs do
-                            # with ``dl_stale``.
-                            reason = t("analysis_tile.export_labels.download_stale")
-                            task.fail(reason)
-                            notifier.warning(reason)
-                            logger.warning("Analysis: download dropped — %s", reason)
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                if applied:
-                    notifier.success(
-                        t("analysis_tile.export_labels.download_done")
-                    )
-                    if result is not None and (gif_skipped or result.get("gif_warning")):
-                        notifier.warning(t("analysis_tile.export_labels.gif_zip_skipped"))
-            finally:
-                clicked.loading = False
-                # The spinner always stops; the button only comes back for the
-                # alert this build was for. An unconditional re-enable would
-                # undo ``_forget_previous_alert``'s disable and leave a
-                # clickable build button under "available after save".
-                # Through ``apply_if_current``, like the three apply sites
-                # above: a bare ``is_current`` check followed by the write is
-                # two statements outside ``_alert_lock``, and a ``reset_alert``
-                # landing between them re-enables the button anyway.
-                analysis.apply_if_current(
-                    token,
-                    lambda: _set_build_enabled(True),
-                )
+        result = {}  # the built paths, for the GIF warning after the task
 
-        spawn_in_context(_worker)
+        # The report/zip build is one opaque long phase, but the composite
+        # download inside it drives the progress ring (``task=`` below).
+        def _body(task, notifier):
+            task.step(t("analysis_tile.export_labels.download_step"))
+            # Writer tracking: the report/zip generation writes into the set's
+            # folder — register the open project for the duration.
+            with writing(writer_name(app_state)):
+                built_paths = _download_data(
+                    widgets, analysis, app_state, aux_model, app_tile_model,
+                    task=task, alert=alert, gif=gif_job,
+                )
+            if built_paths is None:
+                # Refused: nothing was written and no download button will be
+                # revealed, so completing the task would show a green pill for
+                # a no-op the user cannot explain. (The three causes are
+                # re-derived here rather than returned, so ``_download_data``
+                # keeps its "paths or nothing" contract.)
+                if not app_tile_model.recipe_folder_path:
+                    return t("analysis_tile.export_labels.download_no_recipe")
+                if not alert_files.alert_selected(alert):
+                    return t("analysis_tile.export_labels.download_no_alert")
+                return t("analysis_tile.export_labels.download_no_images")
+            result.update(built_paths)
+            # Inside the tracked block: ``local_files.home_relative`` raises
+            # ValueError for a path outside $HOME, and that must be a FAILED
+            # task + one error toast, not a green pill with download buttons
+            # that never show.
+            #
+            # And only while the alert built for is still on screen. The build
+            # is slow (an imagery export plus the Word report), so the reviewer
+            # can navigate while it runs, and this apply is itself what REVEALS
+            # the toolbar: a stale one would hand the reviewer the previous
+            # alert's GeoPackage and report under a badge counting them as the
+            # current alert's.
+            offered = {"ok": False}
+            analysis.apply_if_current(token, lambda: offered.update(ok=_apply_download(built_paths, rev)))
+            if not offered["ok"]:
+                # Said, not swallowed: the files exist (they were written into
+                # the set's folder) but nothing on screen offers them, and the
+                # reviewer waited for them -- because they moved on, or because
+                # what this build was for has changed since.
+                return t("analysis_tile.export_labels.download_stale")
+            return None
+
+        def _built(notifier):
+            notifier.success(t("analysis_tile.export_labels.download_done"))
+            if gif_skipped or result.get("gif_warning"):
+                notifier.warning(t("analysis_tile.export_labels.gif_zip_skipped"))
+
+        def _release():
+            clicked.loading = False
+            # The spinner always stops; the button only comes back for the
+            # alert this build was for. An unconditional re-enable would undo
+            # ``_forget_previous_alert``'s disable and leave a clickable build
+            # button under "available after save". Through
+            # ``apply_if_current``: a bare ``is_current`` check followed by the
+            # write is two statements outside ``_alert_lock``, and a
+            # ``reset_alert`` landing between them re-enables the button anyway.
+            analysis.apply_if_current(token, lambda: _set_build_enabled(True))
+
+        run_button_job(
+            t("analysis_tile.export_labels.download_task_title"), _body,
+            release=_release, on_success=_built,
+            refused_log="Analysis: download refused", logger=logger,
+            spawn=spawn_in_context, notifier=current_notifier,
+        )
 
     # ------------------------------------------------------------------
     # Export GIF (spec D9): the job is captured at the click (UI thread), the
@@ -909,65 +830,44 @@ def build_export(
         ns["gif_dwn_btn"].loading = True
         ns["gif_dwn_btn"].disabled = True
 
-        def _worker():
-            notifier = current_notifier()
-            applied = False
-            try:
-                with tracked_job(notifier, t("analysis_tile.export_labels.gif_task_title")) as task:
-                    if crashed is not None:
-                        raise crashed
-                    reason = None if refused is None else error_text(refused)
-                    path = None
-                    if reason is None:
-                        task.step(t("analysis_tile.export_labels.gif_step", count=len(job.frames)))
-                        # Writer tracking: the GIF is written into the set's folder.
-                        with writing(writer_name(app_state)):
-                            try:
-                                path = gif_mod.build_gif(job, dest)
-                            except gif_mod.GifRefused as exc:
-                                reason = error_text(exc)
-                    if reason is None:
-                        # Only while the alert it was made for is on screen, and
-                        # nothing it was made from has changed since (``rev``).
-                        offered = {"ok": False}
-                        analysis.apply_if_current(token, lambda: offered.update(ok=_apply_gif(path, rev)))
-                        applied = offered["ok"]
-                        if not applied:
-                            reason = t("analysis_tile.export_labels.gif_stale")
-                    if reason is not None:
-                        # A WARNING outcome, recorded on the task before the
-                        # toast; the log line last, as the build does.
-                        task.fail(reason)
-                        notifier.warning(reason)
-                        logger.warning("Analysis: GIF not offered — %s", reason)
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                if applied:
-                    notifier.success(t("analysis_tile.export_labels.gif_done"))
-            finally:
-                ns["gif_dwn_btn"].loading = False
-                gif_running["on"] = False
-                # The gate decides, for whichever alert is on screen now: it
-                # reads that alert's row (its stored status and saved pair)
-                # and the picks on screen, so the button comes back for a true
-                # alert still on its saved pair, stays off for one whose row is
-                # not Confirmed or whose pair has changed, and is not left held
-                # for one saved Confirmed while this GIF rendered (the gate
-                # skipped it then). Under the alert lock (``token=None``: any
-                # alert), so an alert change cannot land between the gate's
-                # read and its write.
-                analysis.apply_if_current(None, _refresh_gif_gate)
+        def _body(task, notifier):
+            if crashed is not None:
+                raise crashed
+            if refused is not None:
+                return error_text(refused)
+            task.step(t("analysis_tile.export_labels.gif_step", count=len(job.frames)))
+            # Writer tracking: the GIF is written into the set's folder.
+            with writing(writer_name(app_state)):
+                try:
+                    path = gif_mod.build_gif(job, dest)
+                except gif_mod.GifRefused as exc:
+                    return error_text(exc)
+            # Only while the alert it was made for is on screen, and nothing it
+            # was made from has changed since (``rev``).
+            offered = {"ok": False}
+            analysis.apply_if_current(token, lambda: offered.update(ok=_apply_gif(path, rev)))
+            return None if offered["ok"] else t("analysis_tile.export_labels.gif_stale")
 
-        try:
-            spawn_in_context(_worker)
-        except Exception:
-            # The worker's ``finally`` is what releases the gate, so a spawn
-            # that never got there would hold Export GIF off for the session.
-            logger.exception("Analysis: the GIF worker could not be started")
+        def _release():
             ns["gif_dwn_btn"].loading = False
             gif_running["on"] = False
+            # The gate decides, for whichever alert is on screen now: it reads
+            # that alert's row (its stored status and saved pair) and the picks
+            # on screen, so the button comes back for a true alert still on its
+            # saved pair, stays off for one whose row is not Confirmed or whose
+            # pair has changed, and is not left held for one saved Confirmed
+            # while this GIF rendered (the gate skipped it then). Under the
+            # alert lock (``token=None``: any alert), so an alert change cannot
+            # land between the gate's read and its write.
             analysis.apply_if_current(None, _refresh_gif_gate)
+
+        run_button_job(
+            t("analysis_tile.export_labels.gif_task_title"), _body,
+            release=_release,
+            on_success=lambda notifier: notifier.success(t("analysis_tile.export_labels.gif_done")),
+            refused_log="Analysis: GIF not offered", logger=logger,
+            spawn=spawn_in_context, notifier=current_notifier,
+        )
 
     # ------------------------------------------------------------------
     # Wire click handlers once (the widgets are built once per build). The buttons

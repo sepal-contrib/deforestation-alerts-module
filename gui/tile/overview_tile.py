@@ -65,7 +65,7 @@ from gui.scripts import alert_layers, charts, overview_data, set_store
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
-from gui.scripts.notify_bridge import current_notifier, tracked_job
+from gui.scripts.notify_bridge import current_notifier, run_button_job
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
@@ -117,36 +117,38 @@ def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project
         gen_btn.loading = True
         gen_btn.disabled = True
 
-        def _worker():
-            # One opaque phase (the write), so no ``total_steps``. On a
-            # failure tracked_job fails the task and publishes the one error
-            # toast (the raw exception text), then re-raises into the except.
-            notifier = current_notifier()
-            try:
-                with tracked_job(
-                    notifier, t("overview_tile.export_task_title")
-                ) as task:
-                    task.step(t("overview_tile.export_step", fmt=fmt.upper()))
-                    with writing(project):
-                        # the answers in the export's language (the store
-                        # keeps their codes, see gui.scripts.questions); the
-                        # columns of deleted questions are left out
-                        path = export_alerts_gdf(
-                            questions_mod.with_labels(gdf, list(questions)),
-                            folder, fmt, sources, start, end,
-                        )
-                    url_path = local_files.home_relative(path)
-            except Exception:  # noqa: BLE001 — tracked_job toasted and logged it (traceback included)
-                pass
-            else:
-                dl_btn.set_url(path=url_path)
-                dl_btn.show()
-                notifier.success(t("overview_tile.export_done", fmt=fmt.upper()))
-            finally:
-                gen_btn.loading = False
-                gen_btn.disabled = False
+        written = {}
 
-        spawn_in_context(_worker)
+        # One opaque phase (the write), so no ``total_steps``. A failure is
+        # tracked_job's: a FAILED task and the one error toast (the raw
+        # exception text).
+        def _body(task, notifier):
+            task.step(t("overview_tile.export_step", fmt=fmt.upper()))
+            with writing(project):
+                # the answers in the export's language (the store keeps their
+                # codes, see gui.scripts.questions); the columns of deleted
+                # questions are left out
+                path = export_alerts_gdf(
+                    questions_mod.with_labels(gdf, list(questions)),
+                    folder, fmt, sources, start, end,
+                )
+            written["url"] = local_files.home_relative(path)
+            return None
+
+        def _done(notifier):
+            dl_btn.set_url(path=written["url"])
+            dl_btn.show()
+            notifier.success(t("overview_tile.export_done", fmt=fmt.upper()))
+
+        def _release():
+            gen_btn.loading = False
+            gen_btn.disabled = False
+
+        run_button_job(
+            t("overview_tile.export_task_title"), _body,
+            release=_release, on_success=_done, logger=logger,
+            spawn=spawn_in_context, notifier=current_notifier,
+        )
 
     return _on_click
 

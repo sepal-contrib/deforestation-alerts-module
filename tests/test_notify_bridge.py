@@ -440,3 +440,75 @@ def test_a_keyed_failure_is_toasted_in_words_by_default():
     expected = t("errors.not_enough_space", needed_gb=9, free_gb=1, folder="/x")
     assert next(x for x in bus.tasks.value if x.title == "Keyed job").error_message == expected
     assert [x.message for x in bus.toasts.value if x.type == ToastType.ERROR] == [expected]
+
+
+def _run_now(target, *a, **k):
+    target()
+
+
+def _job(bus, body, **kw):
+    events = []
+    notify_bridge.run_button_job(
+        "Button job", body, release=lambda: events.append("release"),
+        spawn=_run_now, notifier=lambda: Notifier(bus), **kw,
+    )
+    return events
+
+
+def _toasts(bus, kind):
+    return [t.message for t in bus.toasts.value if t.type == kind]
+
+
+def test_a_button_job_that_finishes_toasts_its_success_after_the_task_and_releases():
+    _, bus, _ = _fresh()
+    events = _job(bus, lambda task, n: None, on_success=lambda n: n.success("Done"))
+    assert _status(bus, "Button job") == TaskStatus.COMPLETED
+    assert _toasts(bus, ToastType.SUCCESS) == ["Done"]
+    assert events == ["release"]
+
+
+def test_a_refused_button_job_fails_its_task_warns_once_and_runs_the_hook():
+    _, bus, _ = _fresh()
+    seen = []
+    events = _job(bus, lambda task, n: "Nothing to do", on_success=lambda n: n.success("Done"),
+                  on_refused=seen.append)
+    assert _status(bus, "Button job") == TaskStatus.FAILED
+    assert _toasts(bus, ToastType.WARNING) == ["Nothing to do"]
+    assert _toasts(bus, ToastType.SUCCESS) == []
+    assert seen == ["Nothing to do"] and events == ["release"]
+
+
+def test_a_failing_refusal_hook_is_logged_and_changes_nothing_else(caplog):
+    _, bus, _ = _fresh()
+
+    def _hook(reason):
+        raise RuntimeError("hook")
+
+    with caplog.at_level(logging.ERROR, logger="SEPALUI.deforestation_alerts"):
+        events = _job(bus, lambda task, n: "Refused", on_refused=_hook)
+    assert _toasts(bus, ToastType.ERROR) == []
+    assert "the refusal hook failed" in caplog.text and events == ["release"]
+
+
+def test_a_button_job_that_raises_is_one_error_toast_and_still_releases():
+    _, bus, _ = _fresh()
+
+    def _body(task, n):
+        raise ValueError("boom")
+
+    events = _job(bus, _body, on_success=lambda n: n.success("Done"))
+    assert _status(bus, "Button job") == TaskStatus.FAILED
+    assert len(_toasts(bus, ToastType.ERROR)) == 1 and _toasts(bus, ToastType.SUCCESS) == []
+    assert events == ["release"]
+
+
+def test_a_worker_that_cannot_start_still_releases_the_button(caplog):
+    def _no_threads(target, *a, **k):
+        raise RuntimeError("can't start new thread")
+
+    released = []
+    with caplog.at_level(logging.ERROR, logger="SEPALUI.deforestation_alerts"):
+        notify_bridge.run_button_job("Button job", lambda task, n: None,
+                                     release=lambda: released.append(True), spawn=_no_threads)
+    assert released == [True]
+    assert "could not be started" in caplog.text
