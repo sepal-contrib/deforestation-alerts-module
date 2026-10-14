@@ -50,12 +50,15 @@ def test_diagonal_pixels_are_one_component_with_8_connectivity(tmp_path):
     assert len(vectorize_alerts(_raster(tmp_path, a, name="b.tif"), min_cluster_size=5, connectivity=4)) == 0
 
 
-def test_mixed_codes_share_one_component_but_split_into_regions(tmp_path):
+def test_mixed_codes_in_one_cluster_are_one_alert(tmp_path):
     a = _blank()
     a[5:8, 5:8] = 1     # 9 px GLAD-L
-    a[5:8, 8:11] = 10   # 9 px RADD, touching: one 18 px component
+    a[5:8, 8:11] = 10   # 9 px RADD, touching: one 18 px cluster
     gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
-    assert sorted(c[0] for c in gdf["alert_type_unique"]) == [1, 10]
+    assert len(gdf) == 1
+    row = gdf.iloc[0]
+    assert row["count"] == 18 and row["alert_type_unique"] == [1, 10]
+    assert row["area_ha"] == pytest.approx(18 * 100 / 10_000)
 
 
 def test_nine_digit_code_survives(tmp_path):
@@ -126,10 +129,42 @@ def test_block_edge_stitch_holds_for_a_fractional_pixel_size(tmp_path):
     assert gdf.iloc[0]["area_ha"] == pytest.approx(34 * 4.77**2 / 10_000)
 
 
-def test_region_below_the_minimum_is_dropped_though_its_component_clears_it(tmp_path):
+def test_the_minimum_gates_the_whole_cluster_not_its_parts(tmp_path):
     a = _blank()
     a[5:10, 5:10] = 1  # 25 px GLAD-L
-    a[5, 10] = 10      # 1 px RADD touching it: one 26 px component, two regions
+    a[5, 10] = 10      # 1 px RADD touching it: one 26 px cluster, kept whole
+    a[20:22, 20] = 1   # 2 px GLAD-L
+    a[20:22, 21] = 10  # 2 px RADD touching it: one 4 px cluster, dropped whole
     gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
     assert len(gdf) == 1
-    assert gdf.iloc[0]["count"] == 25 and gdf.iloc[0]["alert_type_unique"] == [1]
+    assert gdf.iloc[0]["count"] == 26 and gdf.iloc[0]["alert_type_unique"] == [1, 10]
+
+
+def test_a_mixed_cluster_cut_by_a_block_edge_is_one_alert(tmp_path):
+    # GLAD-L above the row-20 block edge, RADD below it, touching across it;
+    # the two codes and the dates of both halves land on one row.
+    a, d = _blank(), _blank()
+    a[17:20, 5:8], d[17:20, 5:8] = 1, 2026010
+    a[20:23, 5:8], d[20:23, 5:8] = 10, 2026020
+    d[17, 5] = 2026002
+    path = _raster(tmp_path, a, d)
+    blocked = vectorize_alerts(path, min_cluster_size=5, block_rows=20)
+    assert len(blocked) == 1
+    row = blocked.iloc[0]
+    assert row["count"] == 18 and row["alert_type_unique"] == [1, 10]
+    assert row["alert_date_min"] == pytest.approx(2026.002)
+    assert row["alert_date_max"] == pytest.approx(2026.020)
+    assert row.geometry.geom_type == "Polygon"
+    assert _rows(blocked) == _rows(vectorize_alerts(path, min_cluster_size=5))
+
+
+def test_a_cluster_that_meets_itself_only_in_a_later_block_is_one_alert(tmp_path):
+    # A U shape: its two arms are separate in the top block and join only in
+    # the bottom one, so the top block sees two pieces of one cluster.
+    a = _blank()
+    a[10:25, 5] = 1
+    a[10:25, 9] = 10
+    a[24, 5:10] = 100
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, block_rows=20)
+    assert len(gdf) == 1
+    assert gdf.iloc[0]["count"] == 33 and gdf.iloc[0]["alert_type_unique"] == [1, 10, 100]

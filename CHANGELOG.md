@@ -103,13 +103,12 @@
   app) and `DEFORESTATION_ALERTS_DOWNLOAD_ROOT` (default `$HOME`). `run_ui.sh`
   points both at its own jupyter for local runs. Link segments are now
   percent-escaped, so a project name with a space downloads.
-- The **minimum alert size** now applies to the alerts themselves. It used to
-  gate the connected cluster of alert pixels, which Integrate & vectorize then
-  split into one alert per source combination — so a cluster that cleared the
-  minimum could still yield alerts far below it (a 25-pixel GLAD-L alert beside
-  a 1-pixel RADD one), and those reached the review list. Every alert now holds
-  at least the minimum, and the ones below it are left out of the set, its
-  count, its exports, the Overview map and the period footprint.
+- **One alert per cluster.** Integrate & vectorize makes one alert of each
+  connected cluster of alert pixels, whatever sources flagged them: a cluster
+  where GLAD-L and RADD touch is one alert listing both sources, reviewed as
+  one, as in the previous version of the module. It used to split each cluster
+  into one alert per source combination (a 25-pixel GLAD-L alert beside a
+  1-pixel RADD one). The minimum alert size keeps or drops whole clusters.
 - The free-space checks before a download, a harmonize and an Integrate &
   vectorize run use a **compressed** size estimate (5 % of the uncompressed
   raster size, and twice that for the room a run needs). At 10 m over
