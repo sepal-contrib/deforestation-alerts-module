@@ -745,29 +745,31 @@ def _ReturnPanel(app_state):
 
 
 @solara.component
-def _MultiSwitch(app_state):
-    """Solo evaluation or multiple evaluators, on one line (spec 2026-10-14
-    §4.2): the hint is the info icon's tooltip. A split holds it on: switching
-    to solo would leave alerts assigned to evaluators the step no longer shows."""
+def _ReviewMode(app_state):
+    """Solo or multiple evaluators, as a select whose note says what the chosen
+    mode means, so the step always shows which one is on. A split holds it on
+    Multiple: switching to solo would leave alerts assigned to evaluators the
+    step no longer shows."""
     p = app_state.project.value
     split = active_set(p).split
     on = bool(p.multi_evaluator)
 
     def _set(value):
-        update_setup(app_state, p.name, lambda live: setattr(live, "multi_evaluator", bool(value)))
+        update_setup(app_state, p.name, lambda live: setattr(live, "multi_evaluator", value == "multi"))
 
     if split is not None:
-        hint = t("evaluators.multi_locked")
+        note = t("evaluators.multi_locked")
     elif on:
-        hint = t("evaluators.multi_note")
+        note = t("evaluators.multi_note")
     else:
-        hint = t("evaluators.solo_note")
-    with solara.Row(style="align-items:center;gap:8px;flex-wrap:nowrap;"):
-        rv.Switch(label=t("evaluators.multi_label"), v_model=on, on_v_model=_set, disabled=split is not None,
-                  dense=True, hide_details=True, class_="mt-0 pt-0")
-        rv.Spacer()
-        with rv.Html(tag="span", class_="defo-multi-hint", attributes={"title": hint}):
-            rv.Icon(small=True, children=["mdi-information-outline"])
+        note = t("evaluators.solo_note")
+    rv.Select(label=t("evaluators.review_mode_label"), v_model="multi" if on else "solo", on_v_model=_set,
+              items=[{"text": t("evaluators.review_mode_solo"), "value": "solo"},
+                     {"text": t("evaluators.review_mode_multi"), "value": "multi"}],
+              prepend_inner_icon="mdi-account-group" if on else "mdi-account", disabled=split is not None,
+              dense=True, outlined=True, hide_details=True)
+    rv.Html(tag="div", class_="defo-mode-note", style_="margin-top:4px;" + MUTED + "font-size:0.75rem;",
+            children=[note])
 
 
 @solara.component
@@ -787,7 +789,7 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
             _ReturnPanel(app_state=app_state)
         elif s is not None:
             with rv.Card(outlined=True, class_="pa-3"):
-                _MultiSwitch(app_state=app_state)
+                _ReviewMode(app_state=app_state)
                 if p.multi_evaluator:
                     _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
                                   gee_interface=gee_interface)

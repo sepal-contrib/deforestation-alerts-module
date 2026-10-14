@@ -6,7 +6,7 @@ The walk copies ``~/module_results/deforestation_alerts/repro_p`` (its active
 set: 90 unreviewed GLAD-L alerts; an Earth Engine ADMIN1 AOI without a
 sidecar) into its own data dir and plays both sides of spec 2026-10-10 §10:
 
- 1. creator: Evaluation step, Multiple evaluators on, Split alerts… → Count 2 → Split: 45 / 45, toast
+ 1. creator: Evaluation step, Review mode → Multiple evaluators, Split alerts… → Count 2 → Split: 45 / 45, toast
  2. creator: Generate packages (after the AOI step's replay) → both zips, Evaluator 1's cloud link, packaged
  3. evaluator: Project → Import the package → lands on Analysis with the evaluator chip, 45 alerts
     (the chip text is built from the catalogue: ``analysis_tile.filter.chip``)
@@ -86,9 +86,9 @@ def p1_split(page, rec, *, out, data):
         "() => [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey)")))
     rec["steps"] = keys
     assert keys[-2:] == ["questionnaire", "evaluators"], keys
-    # a project without a split opens as a solo evaluation: switch to multiple evaluators
-    page.locator(f'{RIGHT} .v-input--switch label:text-is("{w.en("evaluators.multi_label")}")').first.click()
-    page.wait_for_timeout(1000)
+    # a project without a split opens as a solo evaluation: pick multiple evaluators
+    ph.choose(page, w.en("evaluators.review_mode_label"), w.en("evaluators.review_mode_multi"), scope=RIGHT)
+    page.wait_for_timeout(400)
     page.locator(f"{RIGHT} button.defo-split-open:visible").first.click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the split modal")
     field = page.locator(f'{w.MODAL} .v-text-field:has(label:text-is("{w.en("evaluators.count_label")}")) input').first

@@ -568,7 +568,7 @@
     "evaluators": {
       "description": "Revisa tú solo, o reparte las alertas entre evaluadores e integra lo que te devuelvan.",
       "info_header": "Evaluación",
-      "info_md": "**Varios evaluadores** desactivado, revisas tú todas las alertas. Activado, las alertas se reparten entre evaluadores.\n\n**Repartir alertas…** distribuye por turnos las alertas del conjunto activo, en el orden del conjunto, entre los evaluadores que cuentes o nombres. Las alertas ya revisadas quedan sin asignar salvo que las incluyas. **Editar reparto** reparte de nuevo o quita el reparto.\n\n**Generar paquetes** crea un zip por evaluador: las alertas del conjunto, el cuestionario, el AOI y la caché de escenas. El icono de nube de cada fila descarga después el zip de ese evaluador. El evaluador lo importa en el diálogo Proyecto y revisa sus alertas en Análisis.\n\n**Integrar copia revisada…** integra las revisiones que te devuelve un evaluador. Solo se toman las alertas asignadas a ese evaluador; si revisaste una de otra forma, eliges qué revisión conservar."
+      "info_md": "**Modo de revisión**: en **Individual** revisas tú todas las alertas; con **Varios evaluadores** las alertas se reparten entre evaluadores.\n\n**Repartir alertas…** distribuye por turnos las alertas del conjunto activo, en el orden del conjunto, entre los evaluadores que cuentes o nombres. Las alertas ya revisadas quedan sin asignar salvo que las incluyas. **Editar reparto** reparte de nuevo o quita el reparto.\n\n**Generar paquetes** crea un zip por evaluador: las alertas del conjunto, el cuestionario, el AOI y la caché de escenas. El icono de nube de cada fila descarga después el zip de ese evaluador. El evaluador lo importa en el diálogo Proyecto y revisa sus alertas en Análisis.\n\n**Integrar copia revisada…** integra las revisiones que te devuelve un evaluador. Solo se toman las alertas asignadas a ese evaluador; si revisaste una de otra forma, eliges qué revisión conservar."
     }
   },
   "evaluators": {
@@ -584,8 +584,7 @@
       "bad_count": "Elige entre 1 y {max} evaluadores."
     },
     "default_prefix": "Evaluador",
-    "multi_label": "Varios evaluadores",
-    "solo_note": "Evaluación individual: revisas tú todas las alertas.",
+    "solo_note": "Revisas tú todas las alertas.",
     "multi_note": "Reparte las alertas entre evaluadores y envía a cada uno un paquete de revisión.",
     "multi_locked": "Quita el reparto para pasar a evaluación individual.",
     "split_title": "Repartir las alertas",
@@ -654,7 +653,10 @@
     "generate_return": "Generar copia revisada",
     "regenerate_return": "Regenerar copia revisada",
     "return_download": "Descargar la copia revisada",
-    "generate_return_first": "Genera primero la copia revisada."
+    "generate_return_first": "Genera primero la copia revisada.",
+    "review_mode_label": "Modo de revisión",
+    "review_mode_solo": "Individual",
+    "review_mode_multi": "Varios evaluadores"
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."

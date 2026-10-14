@@ -568,7 +568,7 @@
     "evaluators": {
       "description": "Révisez seul, ou répartissez les alertes entre des évaluateurs et fusionnez ce qu'ils vous renvoient.",
       "info_header": "Évaluation",
-      "info_md": "**Plusieurs évaluateurs** désactivé, vous révisez vous-même toutes les alertes. Activé, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
+      "info_md": "**Mode de revue** : en **Individuelle**, vous examinez vous-même toutes les alertes ; avec **Plusieurs évaluateurs**, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
     }
   },
   "evaluators": {
@@ -584,8 +584,7 @@
       "bad_count": "Choisissez entre 1 et {max} évaluateurs."
     },
     "default_prefix": "Évaluateur",
-    "multi_label": "Plusieurs évaluateurs",
-    "solo_note": "Évaluation individuelle : vous examinez vous-même toutes les alertes.",
+    "solo_note": "Vous examinez vous-même toutes les alertes.",
     "multi_note": "Répartissez les alertes entre les évaluateurs et envoyez à chacun un paquet de revue.",
     "multi_locked": "Supprimez la répartition pour passer en évaluation individuelle.",
     "split_title": "Répartir les alertes",
@@ -654,7 +653,10 @@
     "generate_return": "Générer la copie révisée",
     "regenerate_return": "Régénérer la copie révisée",
     "return_download": "Télécharger la copie révisée",
-    "generate_return_first": "Générez d'abord la copie révisée."
+    "generate_return_first": "Générez d'abord la copie révisée.",
+    "review_mode_label": "Mode de revue",
+    "review_mode_solo": "Individuelle",
+    "review_mode_multi": "Plusieurs évaluateurs"
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

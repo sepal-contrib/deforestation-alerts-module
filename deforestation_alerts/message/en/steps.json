@@ -545,7 +545,7 @@
     "evaluators": {
       "description": "Review alone, or split the alerts between evaluators and merge what they send back.",
       "info_header": "Evaluation",
-      "info_md": "**Multiple evaluators** off, you review every alert yourself. On, the alerts are split between evaluators.\n\n**Split alerts…** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them. **Edit split** re-splits or removes the split.\n\n**Generate packages** builds one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. Each row's cloud icon then downloads that evaluator's zip. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Merge reviewed copy…** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
+      "info_md": "**Review mode**: in **Solo** you review every alert yourself; with **Multiple evaluators** the alerts are split between evaluators.\n\n**Split alerts…** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them. **Edit split** re-splits or removes the split.\n\n**Generate packages** builds one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. Each row's cloud icon then downloads that evaluator's zip. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Merge reviewed copy…** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
     }
   },
   "evaluators": {
@@ -561,8 +561,7 @@
       "bad_count": "Choose between 1 and {max} evaluators."
     },
     "default_prefix": "Evaluator",
-    "multi_label": "Multiple evaluators",
-    "solo_note": "Solo evaluation: you review every alert yourself.",
+    "solo_note": "You review every alert yourself.",
     "multi_note": "Split the alerts between evaluators and send each one a review package.",
     "multi_locked": "Remove the split to switch to solo.",
     "split_title": "Split the alerts",
@@ -629,7 +628,10 @@
     "generate_return": "Generate reviewed copy",
     "regenerate_return": "Regenerate reviewed copy",
     "return_download": "Download the reviewed copy",
-    "generate_return_first": "Generate the reviewed copy first."
+    "generate_return_first": "Generate the reviewed copy first.",
+    "review_mode_label": "Review mode",
+    "review_mode_solo": "Solo",
+    "review_mode_multi": "Multiple evaluators"
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

@@ -160,7 +160,8 @@ def _open_merge(rc):
 
 
 def _hint(rc):
-    return rc.find(v.Html, class_="defo-multi-hint").widget.attributes["title"]
+    """The note under the review-mode select: what the chosen mode means."""
+    return rc.find(v.Html, class_="defo-mode-note").widget.children[0]
 
 
 async def _settle(done, what, timeout=10.0):
@@ -310,15 +311,26 @@ def test_the_step_waits_for_an_alert_set(data_root):
         rc.close()
 
 
-def _multi_switch(rc):
-    return rc.find(v.Switch, label=t("evaluators.multi_label"))
+def _mode_select(rc):
+    return rc.find(v.Select, label=t("evaluators.review_mode_label"))
+
+
+def test_the_review_mode_is_a_select_of_solo_and_multiple_evaluators(data_root):
+    _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
+    try:
+        select = _mode_select(rc).widget
+        assert [(i["value"], i["text"]) for i in select.items] == [
+            ("solo", t("evaluators.review_mode_solo")), ("multi", t("evaluators.review_mode_multi"))]
+        assert select.v_model == "solo"
+    finally:
+        rc.close()
 
 
 def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
     _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
     try:
         texts = _strings(rc.container)
-        assert _multi_switch(rc).widget.v_model is False
+        assert _mode_select(rc).widget.v_model == "solo"
         assert _hint(rc) == t("evaluators.solo_note")
         assert t("evaluators.split_title") not in texts
         assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
@@ -332,32 +344,33 @@ def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root
     s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
-        _multi_switch(rc).widget.v_model = True
+        _mode_select(rc).widget.v_model = "multi"
         assert s.project.value.multi_evaluator is True
         assert t("evaluators.open_split") in _strings(rc.container)
-        _multi_switch(rc).widget.v_model = False
+        assert _hint(rc) == t("evaluators.multi_note")
+        _mode_select(rc).widget.v_model = "solo"
         assert s.project.value.multi_evaluator is False
         assert t("evaluators.open_split") not in _strings(rc.container)
     finally:
         rc.close()
 
 
-def test_a_split_holds_the_switch_on(data_root):
+def test_a_split_holds_the_mode_on_multiple_evaluators(data_root):
     _box, rc = _render(_state(_project(split=_split()), _gdf()))
     try:
-        switch = _multi_switch(rc).widget
-        assert switch.v_model is True and switch.disabled is True
+        select = _mode_select(rc).widget
+        assert select.v_model == "multi" and select.disabled is True
         assert _hint(rc) == t("evaluators.multi_locked")
     finally:
         rc.close()
 
 
-def test_a_review_copy_has_no_switch(data_root):
+def test_a_review_copy_has_no_review_mode(data_root):
     copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
                       origin_project="c", imported_at=datetime.now())
     _box, rc = _render(_state(_project("c__e02-bo", split=_split(), review_copy=copy, multi=False), _gdf()))
     try:
-        assert not _multi_switch(rc).widgets
+        assert not _mode_select(rc).widgets
         assert t("evaluators.return_title") in _strings(rc.container)
     finally:
         rc.close()
