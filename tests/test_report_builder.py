@@ -217,3 +217,10 @@ def test_report_intermediates_go_to_a_private_scratch_dir(data_root, tmp_path, s
     assert len(set(stub_plots)) == 12
     for path in stub_plots:
         assert path.is_relative_to(scratch_root)
+
+
+def test_get_unique_alerts_lists_the_sources_in_digit_order():
+    # alert_sources is stored text: the same code must give the same text.
+    assert get_unique_alerts([1011]) == ["GLAD-L", "RADD", "CCDC"]
+    assert get_unique_alerts([21, 10000], custom_names={0: "Mine"}) == ["GLAD-L", "RADD", "Mine"]
+    assert get_unique_alerts([12], digit_map={1: "B", 0: "A"}) == ["A", "B"]

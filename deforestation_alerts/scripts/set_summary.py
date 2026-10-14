@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from typing import Callable, Optional
 
 from deforestation_alerts.project.review_status import CONFIRMED, NOT_REVIEWED, STATUS_CODES
-from deforestation_alerts.scripts.report_builder import parse_formatted_string
+from deforestation_alerts.scripts.alert_codes import parse_formatted_string
 
 #: The only columns the dashboard reads. A projected parquet read of these is
 #: ~36x cheaper than loading the geometry too, which is what makes recomputing

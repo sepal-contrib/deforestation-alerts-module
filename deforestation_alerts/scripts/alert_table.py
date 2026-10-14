@@ -4,7 +4,7 @@ import pandas as pd
 
 from deforestation_alerts.project.review_status import NOT_REVIEWED
 
-from deforestation_alerts.scripts.report_builder import format_list, get_unique_alerts
+from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts
 
 
 def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
@@ -19,7 +19,7 @@ def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
     ``custom_names`` (``{slot: name}``) labels the user-defined custom alert
     sources in ``alert_sources``; unnamed slots decode as "Custom <n>".
     ``digit_map`` (``{digit: name}``, an alert set's own) replaces both when
-    given: see ``report_builder.get_unique_alerts``.
+    given: see ``alert_codes.get_unique_alerts``.
     """
     gdf = vectorized_gdf.copy()
 

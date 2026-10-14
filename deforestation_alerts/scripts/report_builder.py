@@ -8,8 +8,8 @@ import cartopy.crs as ccrs
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from datetime import datetime
 from pathlib import Path
-import ast
-from deforestation_alerts.scripts.custom_sources import MAX_CUSTOM_SOURCES, slot_value
+# The code decoding moved to alert_codes (no report libraries); kept importable from here.
+from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts, parse_formatted_string  # noqa: F401
 from deforestation_alerts.scripts import local_files
 
 def ensure_list(input_data):
@@ -19,29 +19,6 @@ def ensure_list(input_data):
         return input_data  # Return the list as is
     else:
         raise ValueError("Input must be a string or a list")  # Handle invalid input
-
-
-def format_list(items):
-    if not items:  # Handle empty list
-        return ""
-    if len(items) == 1:
-        return str(items[0])
-    elif len(items) == 2:
-        return f"{items[0]} and {items[1]}"
-    else:
-        return f"{', '.join(map(str, items[:-1]))} and {items[-1]}"
-
-
-def parse_formatted_string(formatted_string):
-    if not formatted_string:  # Handle empty string
-        return []
-    if " and " not in formatted_string:  # Only one item
-        return [formatted_string]
-    parts = formatted_string.rsplit(" and ", 1)
-    if ", " in parts[0]:  # Multiple items
-        return parts[0].split(", ") + [parts[1]]
-    else:  # Two items
-        return parts
 
 
 def plot_tiff_with_overlay(
@@ -303,87 +280,3 @@ def _render_report(doc, geodataframe, image_path, folder_temp, local_doc):
             run.add_picture(img6_path_jpg, width=Pt(250))
 
     doc.save(str(local_doc))
-
-
-def get_unique_alerts(alert_list, custom_names=None, digit_map=None):
-    """
-    Given a list of integers representing sums of alert values,
-    return a list of unique alert types found.
-
-    The alert values are constructed by summing contributions from:
-    - GLAD-L: ones digit (1 or 2 if triggered)
-    - RADD: tens digit (10 or 20 → digit 1 or 2 if triggered)
-    - GLAD-S2: hundreds digit (100 or 200 → digit 1 or 2 if triggered)
-    - CCDC: thousands digit (1000 or 2000 → digit 1 or 2 if triggered)
-    - custom slot s (0–4): digit 10^(4+s) (1 or 2 if triggered)
-
-    Parameters:
-        alert_list (list): A list of integers (or strings representing numbers).
-        custom_names (dict[int, str] | None): ``{slot: name}`` for the custom
-            sources of the run; a slot without a name decodes as "Custom <s+1>".
-        digit_map (dict[int, str] | None): ``{digit: name}`` of the alert set;
-            when given, it alone decides the names (the fixed layout above and
-            ``custom_names`` are ignored).
-
-    Returns:
-        List[str]: Unique alert type names found in the list.
-    """
-
-     # If input is a string, attempt to convert it into a Python literal
-    if isinstance(alert_list, str):
-        try:
-            alert_list = ast.literal_eval(alert_list)
-        except (ValueError, SyntaxError):
-            # If invalid, treat as an empty list for safety
-            alert_list = []
-
-    if not isinstance(alert_list, list):
-        alert_list = [alert_list]
-    
-    unique_alerts = set()
-
-    if digit_map is not None:
-        for value in alert_list:
-            try:
-                value = int(float(value))
-            except (TypeError, ValueError):
-                continue
-            for digit, name in digit_map.items():
-                if (value // 10 ** int(digit)) % 10 in (1, 2):
-                    unique_alerts.add(name)
-        return list(unique_alerts)
-
-    for value in alert_list:
-        try:
-            # float() first: the float64 export yields 10000.0, and CSV
-            # round-trips can hand the same over as "10000.0".
-            value = int(float(value))
-        except (TypeError, ValueError):
-            continue  # Skip invalid entries
-
-        # Check GLAD-L (ones digit)
-        if value % 10 in [1, 2]:
-            unique_alerts.add("GLAD-L")
-        
-        # Check RADD (tens digit)
-        if (value % 100) // 10 in [1, 2]:
-            unique_alerts.add("RADD")
-        
-        # Check GLAD-S2 (hundreds digit)
-        if (value % 1000) // 100 in [1, 2]:
-            unique_alerts.add("GLAD-S2")
-        
-        # Check CCDC (thousands digit) — position-bounded so a non-zero
-        # ten-thousands (custom) digit does not break the CCDC extraction.
-        if (value % 10000) // 1000 in [1, 2]:
-            unique_alerts.add("CCDC")
-
-        # Custom sources: slot s owns digit 10^(4+s).
-        for slot in range(MAX_CUSTOM_SOURCES):
-            if (value // slot_value(slot)) % 10 in (1, 2):
-                unique_alerts.add(
-                    (custom_names or {}).get(slot) or f"Custom {slot + 1}"
-                )
-
-    return list(unique_alerts)
-
