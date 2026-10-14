@@ -212,7 +212,6 @@ def AlertsStep(app_state, map_, gee_interface, layers):
                      "cells": [{"value": label}, chip_cell(cov, pending_cov)]})
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.alerts.title')}")
         StepIntro(t("steps.alerts.description"), t("steps.alerts.info_header"), t("steps.alerts.info_md"))
         # spec D4: a step list's Add button sits above it, full width
         solara.Button(t("steps.alerts.add"), icon_name="mdi-plus", color="primary", small=True, block=True,

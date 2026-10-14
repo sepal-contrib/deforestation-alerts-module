@@ -164,7 +164,6 @@ def QuestionnaireStep(app_state):
     doomed = next((q for q in p.questions if q.key == pending_delete), None)
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.questionnaire.title')}")
         StepIntro(t("steps.questionnaire.description"), t("steps.questionnaire.info_header"),
                   t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):

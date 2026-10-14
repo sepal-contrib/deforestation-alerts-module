@@ -248,7 +248,6 @@ def _PeriodList(app_state, layers):
             notifications.success(t("steps.period.deleted"))
 
     with solara.Column(style="gap:12px;"):
-        solara.Markdown(f"### {t('steps.period.title')}")
         StepIntro(t("steps.period.description"), t("steps.period.info_header"), t("steps.period.info_md"))
         solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       disabled=read_only(p), on_click=_new)

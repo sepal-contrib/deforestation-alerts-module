@@ -123,7 +123,6 @@ def LayersStep(app_state, map_, gee_interface, layers):
                      ]})
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.layers.title')}")
         StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
         solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       disabled=ro, on_click=_open_add)

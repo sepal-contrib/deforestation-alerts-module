@@ -371,7 +371,6 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                             locked=read_only(p))
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.prepare.title')}")
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:

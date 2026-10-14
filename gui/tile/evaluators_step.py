@@ -638,7 +638,6 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     p = app_state.project.value
     s = active_set(p)
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('evaluators.title')}")
         StepIntro(t("steps.evaluators.description"), t("steps.evaluators.info_header"),
                   t("steps.evaluators.info_md"))
         if p is None:

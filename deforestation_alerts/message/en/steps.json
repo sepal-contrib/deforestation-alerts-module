@@ -78,7 +78,6 @@
       "import_failed": "Import of {file} failed. {error}"
     },
     "aoi": {
-      "title": "Area of interest",
       "description": "Pick the area to monitor. It is saved with the project and every download is cut to it.",
       "info_header": "About the area of interest",
       "info_md": "Pick the area this project monitors: an administrative area, a polygon you draw, or an Earth Engine asset. It is saved with the project as soon as you select it, and every download is cut to it.\n\n- The **coverage** of every alert source over this area is checked once and saved in the project; the Alerts step shows it.\n- Once the project has an alert set, the AOI is locked: a new area would invalidate every download and every footprint. Use **Duplicate** in the Project dialog to monitor another area with the same sources, masks, layers and grid.",
@@ -89,7 +88,6 @@
       "busy": "A job is writing into this project; change the AOI once it has finished."
     },
     "alerts": {
-      "title": "Alert sources",
       "description": "The alert datasets this project monitors, with the share of the AOI each one covers. Each is downloaded for every period, cut to the AOI and the period's dates.",
       "info_header": "About alert sources",
       "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning. A project holds at most 3 predefined and 6 custom sources. A custom source can be edited until an alert set uses it; after that, delete it and add a new one.",
@@ -164,7 +162,6 @@
       "format_label": "Alert format"
     },
     "layers": {
-      "title": "Optional layers",
       "description": "Layers that help you read the alerts: an Earth Engine image, a GeoTIFF from your SEPAL folder, or Planet NICFI. They can also be shown on the two Analysis maps.",
       "info_header": "About optional layers",
       "info_md": "Visualization layers help you read the map; they never change the alerts.\n\n- **Earth Engine image** and **GeoTIFF** (in your SEPAL folder): one band drawn with a colour ramp, or three bands as an RGB composite, between a minimum and a maximum.\n- A GeoTIFF layer: the app writes an overview file next to it, so its folder must be writable.\n- **Planet NICFI:** the monthly tropical mosaic through Earth Engine, for the month you choose or the last month of the active period. Your Earth Engine account needs NICFI access.\n\nShow a layer on this map with its row's map button; its legend appears with it. Tick **Show in Analysis** to add it, switched off, to both Analysis maps.",
@@ -246,7 +243,6 @@
       "origin_hint": "Where to read the raster from"
     },
     "period": {
-      "title": "Periods",
       "description": "Each period downloads every source over its dates plus the look-back days before them. Pixels already reported by the sets of earlier periods are skipped, so a late-published alert lands in the next period's set and no pixel is reported twice.",
       "info_header": "About periods",
       "info_md": "A period is one monitoring round, usually a month. For each period every source is downloaded over its **search window**: the period's dates plus the **look-back** days before them, so that alerts published late are still found.\n\n- Pixels already reported by the alert sets of earlier periods are removed before vectorizing, so a pixel is never reported twice.\n- **New period** starts the day after the latest period and copies that period's mask choices.\n- A period's dates cannot change once it has alert sets. A period can be deleted when it has no sets, or when it is the latest period; its downloads and files are deleted with it.\n- Select a row to make it the active period of Download & harmonize and Integrate & vectorize.",
@@ -304,7 +300,6 @@
       "add": "Add period"
     },
     "prepare": {
-      "title": "Download & harmonize",
       "description": "Download every mask and source of the active period in its own projection, then align them onto the project grid and apply the period's masks (harmonize). Nothing whose inputs are unchanged runs twice.",
       "info_header": "About Download & harmonize",
       "info_md": "This step prepares every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source is downloaded over the period's search window in its own projection, then aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Run … pending** runs the masks first, then every source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
@@ -394,7 +389,6 @@
       "size_note": "{size} on disk"
     },
     "integrate": {
-      "title": "Integrate & vectorize",
       "description": "Combine the downloaded sources, skip pixels an earlier period already reported, and turn the clusters into alerts.",
       "info_header": "About Integrate & vectorize",
       "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the alerts Analysis reviews.\n\n1. The chosen sources are combined pixel by pixel; each alert remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring pixels become alerts. Alerts smaller than the **minimum size** are dropped; you can limit the number of alerts, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every alert.\n\nPixels too small to be an alert, or beyond the maximum number of alerts, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. Each source has an **include probable alerts** switch; off, its probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed alerts it would discard. When the run ends, Analysis opens on the new set.",
@@ -515,7 +509,6 @@
       "err_option_duplicate": "Two options have the same name.",
       "err_option_comma": "An option cannot contain a comma.",
       "err_ask_for": "Pick at least one verdict.",
-      "title": "Questionnaire",
       "description": "Choose the questions asked for every alert in Analysis, and the Word template its report is built from.",
       "info_header": "The questionnaire",
       "info_md": "Each question appears in the Questions section of Analysis, in this order. Its answers are saved with the alert (one column per question), exported with it, charted in Overview and available to the report as `{{placeholder}}`. Deleting a question keeps the answers already saved, but they are no longer shown, exported or charted.",
@@ -562,7 +555,6 @@
       "no_names": "Type at least one name.",
       "bad_count": "Choose between 1 and {max} evaluators."
     },
-    "title": "Evaluators",
     "default_prefix": "Evaluator",
     "multi_label": "Multiple evaluators",
     "solo_note": "Solo evaluation: you review every alert yourself.",
