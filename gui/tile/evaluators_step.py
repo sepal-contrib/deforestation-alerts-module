@@ -252,11 +252,23 @@ def return_link(p) -> Optional[dict]:
     return {**entry, "built_at": z.built_at}
 
 
-def package_action(name: str, found, building) -> dict:
+def building_here(building, p, split) -> Optional[str]:
+    """The evaluator whose package is being built for ``p``'s ``split``, from
+    the panel's ``(project, split_id, evaluator)``: None while a run started
+    in another project, or for another split, is building (the panel is not
+    remounted on a project switch), or while the run is still fetching the
+    AOI (evaluator None)."""
+    if building is None or p is None or split is None or building[:2] != (p.name, split.split_id):
+        return None
+    return building[2]
+
+
+def package_action(name: str, found, building_name: Optional[str]) -> dict:
     """A row's cloud icon (spec 2026-10-14 §4.4): it spins while that
-    evaluator's zip is built, is dim until one exists for this split, then
-    downloads it, amber when the questionnaire changed since."""
-    if building == name:
+    evaluator's zip is built (``building_name``, already resolved for this
+    project and split by ``building_here``), is dim until one exists for this
+    split, then downloads it, amber when the questionnaire changed since."""
+    if building_name == name:
         return {"kind": "download", "href": None, "loading": True,
                 "title": t("evaluators.package_download", evaluator=name)}
     if found is None:
@@ -267,14 +279,14 @@ def package_action(name: str, found, building) -> dict:
             else t("evaluators.package_download", evaluator=name)}
 
 
-def _table_rows(stats, unassigned, *, found, building) -> list:
+def _table_rows(stats, unassigned, *, found, building_name) -> list:
     rows = [{"key": s["name"],
              "cells": [{"value": s["name"]},
                        {"value": format_number(s["assigned"])},
                        {"value": format_number(s["reviewed"])},
                        {"value": s["merged_at"].strftime("%Y-%m-%d") if s["merged_at"] else NO_VALUE,
                         "muted": s["merged_at"] is None}],
-             "actions": [package_action(s["name"], found.get(s["name"]), building)]}
+             "actions": [package_action(s["name"], found.get(s["name"]), building_name)]}
             for s in stats]
     if unassigned:
         rows.append({"key": "", "actions": [],
@@ -314,13 +326,15 @@ def _PreviewFields(app_state, preview, busy, on_cancel, on_merge):
 
 
 @solara.component
-def _SplitFields(form, form_error, split, orphan, busy, on_cancel, on_run):
+def _SplitFields(form, form_error, split, orphan, packaged, busy, on_cancel, on_run):
     """The split modal's card (spec 2026-10-14 §4.3), mounted while it is
     open. ``form`` is the panel's ``{"mode", "count", "names", "include"}``
     and their setters, so a reopened modal shows what was last typed. With a
     split, or assignments without one, it offers Remove split on the left;
     a split that packages were built for says so here, and one click on
-    Re-split or Remove split proceeds."""
+    Re-split or Remove split proceeds. ``packaged`` is the split's record or
+    zips of it found on disk: a run that ended after a project switch built
+    zips the split does not record, and they may have been sent."""
     mode = form["mode"]
     typed = (form["count"] if mode == "count" else form["names"]).strip()
     shown = [form_error] if form_error and typed else []
@@ -357,16 +371,16 @@ def _SplitFields(form, form_error, split, orphan, busy, on_cancel, on_run):
                     on_v_model=lambda value: form["set_include"](bool(value)), dense=True, hide_details=True,
                     disabled=busy)
         solara.Text(t("evaluators.include_reviewed_hint"), style=MUTED + "font-size:0.75rem;")
-        if split is not None and split.packaged:
+        if split is not None and packaged:
             solara.Text(t("evaluators.packaged_warning"), classes=["warning--text"],
                         style="display:block;font-size:0.8rem;")
 
 
 @solara.component
-def _SplitDialog(open_, form, form_error, split, orphan, busy, on_run):
+def _SplitDialog(open_, form, form_error, split, orphan, packaged, busy, on_run):
     with use_form_dialog(open_, max_width="480px"):
         if open_.value:
-            _SplitFields(form=form, form_error=form_error, split=split, orphan=orphan, busy=busy,
+            _SplitFields(form=form, form_error=form_error, split=split, orphan=orphan, packaged=packaged, busy=busy,
                          on_cancel=lambda: open_.set(False), on_run=on_run)
 
 
@@ -407,7 +421,10 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     count_text, set_count_text = solara.use_state("2")
     names_text, set_names_text = solara.use_state("")
     include, set_include = solara.use_state(False)
-    building, set_building = solara.use_state(None)  # the evaluator whose package is being built
+    # (project, split_id, evaluator) of the package being built; evaluator
+    # None while the run fetches the AOI. The project and split say whose
+    # run it is: the panel outlives a project switch (see ``_reset``).
+    building, set_building = solara.use_state(None)
     scans, set_scans = solara.use_state(0)  # bumped by each Generate run: rescan the set folder
     pending, set_pending = solara.use_state(None)  # {"preview", "file"} of the copy being merged
     split_open = solara.use_reactive(False)
@@ -488,13 +505,15 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             return
         pdir = paths.project_dir(snap.name)
         built = 0
+        mine = (snap.name, shared.split.split_id)
+        set_building((*mine, None))
         try:
             aoi = await package_aoi(snap, pdir, app_state.aoi_result.peek(), gee_interface)
             if aoi is None:
                 current_notifier().warning(t("evaluators.aoi_waiting"))
                 return
             for name in shared.split.evaluators:
-                set_building(name)
+                set_building((*mine, name))
                 await asyncio.to_thread(build_package_file, snap, pdir, shared.id, name, aoi)
                 built += 1
         except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
@@ -574,8 +593,9 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     found = solara.use_memo(lambda: found_links(package_files.package_zips(p, s)),
                             [p.name, s.id, split.split_id if split is not None else None, digest, scans])
     newest = max((f["built_at"] for f in found.values()), default=None)
-    if generate_task.pending and building in (split.evaluators if split is not None else []):
-        generate_label = t("evaluators.generating", i=split.evaluators.index(building) + 1,
+    building_name = building_here(building, p, split) if generate_task.pending else None
+    if building_name in (split.evaluators if split is not None else []):
+        generate_label = t("evaluators.generating", i=split.evaluators.index(building_name) + 1,
                            n=len(split.evaluators))
     elif found:
         generate_label = t("evaluators.regenerate")
@@ -623,7 +643,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         if orphan:
             solara.Text(t("evaluators.orphan"), classes=["warning--text"])
         ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
-                     rows=_table_rows(stats, unassigned, found=found, building=building),
+                     rows=_table_rows(stats, unassigned, found=found, building_name=building_name),
                      empty_text=t("evaluators.empty"), header_action=_header_action)
         if split is not None and not ready:
             solara.Text(t("evaluators.aoi_waiting"), style=MUTED + "font-size:0.75rem;")
@@ -639,8 +659,8 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
                               small=True, disabled=busy, style="flex:1 1 150px;",
                               on_click=lambda: merge_open.set(True))
 
-    _SplitDialog(open_=split_open, form=form, form_error=form_error, split=split, orphan=orphan, busy=busy,
-                 on_run=_run)
+    _SplitDialog(open_=split_open, form=form, form_error=form_error, split=split, orphan=orphan,
+                 packaged=split is not None and (split.packaged or bool(found)), busy=busy, on_run=_run)
     _MergeDialog(app_state=app_state, open_=merge_open, pending=pending, picks=picks, reading=preview_task.pending,
                  busy=merge_task.pending, on_pick=_pick, on_cancel=_close_merge,
                  on_merge=lambda choice: _launch(merge_task, pending, choice))
@@ -656,6 +676,9 @@ def _ReturnPanel(app_state):
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
     scans, set_scans = solara.use_state(0)  # bumped by each build: look in the set folder again
     inflight = solara.use_ref(False)  # as _CreatorPanel's: a second click is dropped
+    # The copy a build was started for: the panel outlives a project switch,
+    # so another copy opened mid-build shows no spinner and no "ready" toast.
+    built_for = solara.use_ref(None)
     found = solara.use_memo(lambda: return_link(p), [p.name if p else None, scans])
 
     async def _build():
@@ -669,7 +692,9 @@ def _ReturnPanel(app_state):
             except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
                 current_notifier().error(error_text(exc))
                 return
-            current_notifier().success(t("evaluators.return_ready"))
+            now = app_state.project.peek()
+            if now is not None and now.name == snap.name:  # else its cloud shows when that copy is reopened
+                current_notifier().success(t("evaluators.return_ready"))
         finally:
             set_scans(lambda n: n + 1)
             inflight.current = False
@@ -680,9 +705,12 @@ def _ReturnPanel(app_state):
         if inflight.current:
             return
         inflight.current = True
+        live = app_state.project.peek()
+        built_for.current = live.name if live is not None else None
         task()
 
     reviewed, assigned = return_progress(p, gdf)
+    building = task.pending and p is not None and built_for.current == p.name
     with rv.Card(outlined=True, class_="pa-3"):
         # solara.Text is an inline span: each line is its own block.
         solara.Text(t("evaluators.return_title"), style="display:block;font-weight:600;")
@@ -693,7 +721,7 @@ def _ReturnPanel(app_state):
                 solara.Text(t("evaluators.return_progress", reviewed=format_number(reviewed),
                               assigned=format_number(assigned)), style="flex:1 1 auto;")
             link_action({"kind": "download", "href": found["url"] if found else None,
-                         "file": found["file"] if found else "", "loading": task.pending,
+                         "file": found["file"] if found else "", "loading": building,
                          "title": t("evaluators.return_download") if found else t("evaluators.generate_return_first")})
         if found is not None:
             solara.Text(t("evaluators.built_at", when=found["built_at"].strftime("%Y-%m-%d %H:%M")),
@@ -701,7 +729,7 @@ def _ReturnPanel(app_state):
         solara.Text(t("evaluators.return_note"), style="display:block;" + MUTED + "font-size:0.8rem;")
         solara.Button(t("evaluators.regenerate_return") if found else t("evaluators.generate_return"),
                       icon_name="mdi-package-up", color="primary", outlined=True, small=True, block=True,
-                      classes=["mt-2", "defo-generate-return"], loading=task.pending, disabled=task.pending,
+                      classes=["mt-2", "defo-generate-return"], loading=building, disabled=task.pending,
                       on_click=_start)
 
 

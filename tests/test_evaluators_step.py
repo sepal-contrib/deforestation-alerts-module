@@ -927,6 +927,88 @@ def test_a_split_replaced_while_generating_is_not_reported_recorded(data_root, m
     asyncio.run(main())
 
 
+def test_switching_project_while_generating_shows_no_build_in_the_other(data_root, monkeypatch):
+    """The panel is not remounted on a project switch: a run started in "c"
+    must not show as building in "d", whose split has the same names."""
+    calls, release = [], threading.Event()
+
+    def _made(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version=None):
+        return _package_zip(p_, set_id, evaluator, out_dir)
+
+    build = _blocking(calls, release, _made)
+    monkeypatch.setattr(es.share, "build_package", lambda *a, app_version: build(*a))
+    s = _state(_project(split=_split()), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _generate_btn(rc).fire_event("click", None)
+            await _settle(lambda: calls, "Ana's build in c")
+            s.load_project_state(_project("d", split=_split()))
+            s.alerts_gdf.set(_gdf())
+            await asyncio.sleep(0.05)
+            label = _strings(_generate_btn(rc))
+            assert not [x for x in label if x in (t("evaluators.generating", i=1, n=2),
+                                                  t("evaluators.generating", i=2, n=2))]
+            assert not rc.find(v.ProgressCircular).widgets
+            release.set()
+            await _settle(lambda: t("evaluators.packages_unrecorded") in _toasts("warning"), "c's run ends")
+            assert not _toasts("success")
+            assert not rc.find(v.ProgressCircular).widgets
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_return_build_shows_only_in_the_copy_it_was_started_for(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    build = _blocking(calls, release, lambda p, pdir, out_dir: _return_zip(p, out_dir))
+    monkeypatch.setattr(es.share, "build_return", lambda *a, app_version: build(*a))
+
+    def _copy(name, evaluator, index):
+        rc_ = ReviewCopy(evaluator=evaluator, evaluator_index=index, set_id=SET_ID, split_id="s1",
+                         set_fingerprint="fp", origin_project="c", imported_at=datetime.now())
+        return _project(name, split=_split(), review_copy=rc_)
+
+    s = _state(_copy("c__e01-ana", "Ana", 1), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _generate_return_btn(rc).fire_event("click", None)
+            await _settle(lambda: calls, "Ana's reviewed copy build")
+            assert rc.find(v.ProgressCircular).widgets  # the cloud spins in Ana's copy
+            s.load_project_state(_copy("c__e02-bo", "Bo", 2))
+            s.alerts_gdf.set(_gdf())
+            await asyncio.sleep(0.05)
+            assert not rc.find(v.ProgressCircular).widgets
+            release.set()
+            await _settle(lambda: not _generate_return_btn(rc).disabled, "Ana's build ends")
+            await asyncio.sleep(0.05)
+            assert t("evaluators.return_ready") not in _toasts("success")
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_zips_on_disk_warn_before_a_resplit_even_if_not_recorded(data_root):
+    """A run that ended after a project switch built zips that the split
+    does not record as packaged: they may have been sent, so warn."""
+    p = _project(split=_split())
+    assert not p.alert_sets[SET_ID].split.packaged
+    _package_zip(p, SET_ID, "Ana", _set_folder())
+    _box, rc = _render(_state(p, _gdf()))
+    try:
+        _open_split(rc)
+        assert t("evaluators.packaged_warning") in _strings(rc.container)
+    finally:
+        rc.close()
+
+
 def test_the_split_form_starts_afresh_in_another_project(data_root):
     s = _state(_project(), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
