@@ -83,6 +83,37 @@ def test_apply_sets_the_filter_moves_to_its_start_and_shows_the_chip(bar):
     assert ui.button.color == "primary" and ui.button.children[0].children == ["mdi-filter"]
 
 
+def test_an_outside_click_with_a_list_open_closes_only_the_list(bar):
+    """While a select has the focus (its list is open), the panel ignores
+    outside clicks: that click closes the list only, and the reviewer can
+    still Apply. Its blur hands outside clicks back to the panel."""
+    ui = bar.ui
+    ui.menu.v_model = True
+    assert ui.menu.close_on_click is True
+    ui.values.fire_event("focus", None)
+    assert ui.menu.close_on_click is False
+    ui.values.fire_event("blur", None)
+    assert ui.menu.close_on_click is True
+
+
+def test_picking_an_attribute_closes_its_list_so_the_panel_closes_again(bar):
+    ui = bar.ui
+    ui.menu.v_model = True
+    ui.attribute.fire_event("focus", None)
+    assert ui.menu.close_on_click is False
+    ui.attribute.v_model = "evaluator"  # single choice: the pick closes its list
+    assert ui.menu.close_on_click is True
+
+
+def test_a_panel_closed_with_a_select_focused_reopens_closing_on_outside_clicks(bar):
+    ui = bar.ui
+    ui.menu.v_model = True
+    ui.values.fire_event("focus", None)
+    ui.menu.v_model = False  # Escape, Apply or Clear: no blur reached Python
+    ui.menu.v_model = True
+    assert ui.menu.close_on_click is True
+
+
 def test_the_menu_reopens_on_the_filter_in_force(bar):
     ui = bar.ui
     bar.state.set_alert_filter(AlertFilter("q_road", frozenset({"yes", "no"})))

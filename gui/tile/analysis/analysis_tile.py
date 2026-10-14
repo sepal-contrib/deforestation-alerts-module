@@ -587,7 +587,12 @@ SCREEN_CSS = (
     ".defo-analysis-screen .defo-filter-chip { flex-shrink: 0; max-width: 220px; }\n"
     ".defo-analysis-screen .defo-filter-chip .v-chip__content { display: block; min-width: 0; overflow: hidden;"
     " text-overflow: ellipsis; white-space: nowrap; }\n"
-    ".defo-analysis-screen .defo-topnav-progress { display: flex; flex-direction: column; gap: 4px; width: 150px; margin-left: 4px; }\n"
+    # The progress is as wide as its tally (one line, at least 150 px): a
+    # filtered tally ("… · filtered · 860 total") is longer, and a fixed width
+    # let it run over the help button. The spacer, then the set selector,
+    # give way instead, so the filter and the set move left.
+    ".defo-analysis-screen .defo-topnav-progress { flex: 0 0 auto; min-width: 150px; display: flex;"
+    " flex-direction: column; gap: 4px; margin-left: 4px; }\n"
     # Over the review panel, at its width and padding: Previous lines up with
     # the panel's start, Next with its end. The negative margin cancels the
     # top bar's right padding so the block reaches the screen edge as the
