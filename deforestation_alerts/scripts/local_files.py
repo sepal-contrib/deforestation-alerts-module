@@ -18,6 +18,7 @@ from typing import Iterator
 from urllib.parse import quote
 
 from deforestation_alerts import gdal_env
+from deforestation_alerts.errors import NotDownloadable
 
 
 def _part_sibling(dest: Path) -> Path:
@@ -76,9 +77,13 @@ def download_root() -> Path:
 def served_relative(path) -> str:
     """``path`` relative to :func:`download_root`, for a download link.
 
-    Raises ``ValueError`` for a path outside that root: it cannot be served,
+    Raises ``NotDownloadable`` (a ``ValueError``) for a path outside that root: it cannot be served,
     and a link to it would 404 rather than quietly download the wrong file."""
-    return Path(path).resolve().relative_to(download_root()).as_posix()
+    root = download_root()
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(root):
+        raise NotDownloadable(resolved, root)
+    return resolved.relative_to(root).as_posix()
 
 
 def home_relative(path) -> str:

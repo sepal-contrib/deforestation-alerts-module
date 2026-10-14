@@ -42,3 +42,13 @@ class FolderNotWritable(KeyedError, PermissionError):
     """A folder the app has to write next to a user file is read-only."""
 
     key = "errors.folder_not_writable"
+
+
+class NotDownloadable(KeyedError, ValueError):
+    """A file the app wrote is outside the folder the server offers for
+    download (``local_files.download_root``), so no link to it would work."""
+
+    key = "errors.not_downloadable"
+
+    def __init__(self, path, root):
+        super().__init__(f"{path} is not inside the download root {root}", path=str(path), root=str(root))

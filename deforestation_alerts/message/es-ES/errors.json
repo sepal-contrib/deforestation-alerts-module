@@ -22,6 +22,7 @@
     "project_newer_schema": "{path} tiene el esquema {found}; esta aplicación lee el esquema {expected}.",
     "project_invalid": "{path} no es un proyecto válido: {error}",
     "no_images": "Descarga primero las imágenes de antes y después.",
+    "not_downloadable": "El archivo se guardó en {path}, pero no se puede ofrecer para descargar: este servidor solo permite descargar archivos dentro de {root}.",
     "folder_not_writable": "No se puede escribir en la carpeta {folder}: las pirámides de la capa no se pueden escribir junto a ella.",
     "ee_asset_not_found": "El recurso de Earth Engine {asset} no existe, o tu cuenta no puede leerlo.",
     "download_busy": "Otra descarga de Earth Engine seguía en curso después de {minutes} minutos, así que {file} no se descargó. Ejecuta este paso de nuevo cuando termine."

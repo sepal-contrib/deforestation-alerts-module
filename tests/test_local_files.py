@@ -97,3 +97,17 @@ def test_download_url_refuses_a_path_outside_the_served_root(monkeypatch, tmp_pa
     monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
     with pytest.raises(ValueError):
         local_files.download_url(Path("/var/tmp/x.zip"))
+
+
+def test_a_path_outside_the_served_root_is_refused_with_a_readable_message(monkeypatch, tmp_path):
+    from deforestation_alerts.errors import NotDownloadable
+    from gui.scripts.error_text import error_text
+
+    root = tmp_path / "served"
+    root.mkdir()
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(root))
+    with pytest.raises(NotDownloadable) as err:
+        local_files.home_relative(tmp_path / "elsewhere" / "alerts.csv")
+    text = error_text(err.value)
+    assert "cannot be offered for download" in text and str(root) in text
+    assert "subpath" not in text

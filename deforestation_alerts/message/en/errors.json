@@ -22,6 +22,7 @@
     "project_newer_schema": "{path} has schema {found}; this app reads schema {expected}.",
     "project_invalid": "{path} is not a valid project: {error}",
     "no_images": "Download the before and after images first.",
+    "not_downloadable": "The file was written to {path}, but it cannot be offered for download: only files inside {root} can be downloaded from this server.",
     "folder_not_writable": "The folder {folder} is not writable: the layer's overviews cannot be written next to it.",
     "ee_asset_not_found": "The Earth Engine asset {asset} does not exist, or your account cannot read it.",
     "download_busy": "Another Earth Engine download was still running after {minutes} minutes, so {file} was not downloaded. Run this step again once it finishes."

@@ -65,13 +65,25 @@ mkdir -p "$CPL_TMPDIR"
 # Download links. On SEPAL the gateway serves the user's $HOME under
 # /api/sandbox/jupyter/files, which is the app's default and needs no setting
 # here -- the URL is root-relative, so it follows whichever SEPAL (sepal.io,
-# test.sepal.io) is serving the page. This local jupyter instead serves
-# SCRIPT_DIR at /files, so point both knobs at that. Operator values win.
+# test.sepal.io) is serving the page. Only files UNDER the served root can be
+# downloaded. Operator values win.
 #
-# A consequence worth knowing: only files UNDER the served root can be
-# downloaded. Locally that means keeping the project data inside the checkout,
-# e.g. DEFORESTATION_ALERTS_DATA_DIR="$SCRIPT_DIR/.local_data" in your .env;
-# with the default ~/module_results the export buttons will refuse the link.
+# This local jupyter serves SCRIPT_DIR at /files. When the project data lives
+# outside it (the default ~/module_results), a read-only file server on
+# loopback serves the data folder instead, reached through jupyter-server-proxy
+# at /proxy/<port> like the map tiles, and stopped when this script exits.
+DATA_DIR="$(python -c 'from deforestation_alerts.project.paths import data_dir; print(data_dir())')"
+if [[ -z ${DEFORESTATION_ALERTS_DOWNLOAD_BASE:-} && -z ${DEFORESTATION_ALERTS_DOWNLOAD_ROOT:-} \
+      && -n $DATA_DIR && $DATA_DIR != "$SCRIPT_DIR"/* ]]; then
+  mkdir -p "$DATA_DIR"
+  FILES_PORT="$(python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+  python -m http.server "$FILES_PORT" --bind 127.0.0.1 --directory "$DATA_DIR" >/dev/null 2>&1 &
+  FILES_PID=$!
+  trap 'kill "$FILES_PID" 2>/dev/null' EXIT
+  export DEFORESTATION_ALERTS_DOWNLOAD_BASE="/proxy/$FILES_PORT"
+  export DEFORESTATION_ALERTS_DOWNLOAD_ROOT="$DATA_DIR"
+  echo "Downloads: serving $DATA_DIR at /proxy/$FILES_PORT"
+fi
 export DEFORESTATION_ALERTS_DOWNLOAD_BASE="${DEFORESTATION_ALERTS_DOWNLOAD_BASE:-/files}"
 export DEFORESTATION_ALERTS_DOWNLOAD_ROOT="${DEFORESTATION_ALERTS_DOWNLOAD_ROOT:-$SCRIPT_DIR}"
 
