@@ -256,3 +256,12 @@ def test_unnamed_legacy_config_keeps_its_columns():
     cfg = ra.build_attribute_config("x", "local", [{"include": True, "band": "a", "stat": "mean", "column": "mine"}])
     assert cfg["bands"][0]["column"] == "mine" and "name" not in cfg
     assert "name" not in ra.build_attribute_config("x", "local", [], name="  ")
+
+
+@pytest.mark.parametrize("column", ["alert_id", "set_id"])
+def test_an_attribution_column_never_takes_an_alert_id_column(column):
+    # Integrate writes alert_id and set_id before attribution runs: a band
+    # named after one would overwrite every alert's id.
+    rows = [{"include": True, "band": "b1", "stat": "mean", "column": column}]
+    cfg = ra.build_attribute_config("/data/x.tif", "local", rows)
+    assert cfg["bands"][0]["column"] == f"{column}_2"

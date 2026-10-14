@@ -161,3 +161,15 @@ def test_attribute_alerts_from_config_removes_its_scratch_folder(tmp_path, monke
 
     assert seen and not seen[0].exists()
     assert list(scratch.iterdir()) == []
+
+
+@_AFFINE_MUL
+def test_a_saved_config_naming_a_store_column_never_overwrites_it(tmp_path):
+    # A layer saved before alert_id was reserved still carries "alert_id":
+    # attribution writes it as alert_id_2 and the ids stay as they were.
+    path = _write_raster(tmp_path / "forest.tif", [[5, 5], [5, 5]], descriptions=["forest"])
+    gdf = gpd.GeoDataFrame({"alert_id": [7]}, geometry=[box(0.1, 8.1, 1.9, 9.9)], crs="EPSG:4326")
+    cfg = {"source": path, "kind": "local", "bands": [{"band": "forest", "stat": "mean", "column": "alert_id"}]}
+    out = asrc.attribute_alerts_from_config(gdf, cfg, None)
+    assert list(out["alert_id"]) == [7]
+    assert list(out["alert_id_2"]) == [5]

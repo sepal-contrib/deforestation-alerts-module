@@ -12,17 +12,14 @@ import rasterio
 from rasterio import features
 
 from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.project.store_schema import RESERVED_COLUMNS
 from deforestation_alerts.project.questions import is_answer_column
 
-# Columns the assembled alerts gdf already carries (convert_to_geopandas +
-# vectorize output), and ``evaluator``, which an evaluator split writes later
-# (spec §3). Attribution columns must not silently overwrite these.
-ALERT_RESERVED_COLUMNS = {
-    "geometry", "bounding_box", "point", "count", "area_ha",
-    "alert_date_min", "alert_date_max", "alert_type_unique", "alert_sources",
-    "status", "before_img", "before_img_info", "after_img", "after_img_info",
-    "alert_polygon", "description", "admin1", "admin2", "admin3", "evaluator",
-}
+#: Columns the alerts gdf already carries when attribution runs (the ids
+#: included: Integrate writes them first), and ``evaluator``, which an
+#: evaluator split writes later (spec §3). Attribution columns must not
+#: silently overwrite these.
+ALERT_RESERVED_COLUMNS = RESERVED_COLUMNS
 
 #: What an attribution column named like a questionnaire answer
 #: (``questions.is_answer_column``: the ``q_`` prefix) is written as instead.

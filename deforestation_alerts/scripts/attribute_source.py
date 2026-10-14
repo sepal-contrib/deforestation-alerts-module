@@ -13,7 +13,7 @@ import rasterio
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.naming import safe_token
 from deforestation_alerts.scripts.raster_export import download_ee_image
-from deforestation_alerts.scripts.raster_attribute import attribute_alerts
+from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS, attribute_alerts, resolve_column_names
 
 
 def _set_band_descriptions(tif_path, names):
@@ -53,9 +53,13 @@ def _by_band(specs) -> dict:
 
 
 def attribute_alerts_from_config(gdf, config, region, materialize=None):
-    """No-op without bands; else attribute every included band (fail loud)."""
+    """No-op without bands; else attribute every included band (fail loud).
+
+    The column names are resolved again here: a layer saved before a column
+    was reserved (``alert_id``, ``set_id``) would otherwise overwrite it."""
     if not config or not config.get("bands"):
         return gdf
+    config = {**config, "bands": resolve_column_names(config["bands"], reserved=ALERT_RESERVED_COLUMNS)}
     materialize = materialize or materialize_attribute_bands
     with local_files.scratch_dir() as folder:
         for tif, specs in materialize(config, region, folder):
