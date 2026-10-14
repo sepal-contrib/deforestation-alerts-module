@@ -384,9 +384,9 @@ def _SplitFields(form, form_error, split, orphan, packaged, busy, on_cancel, on_
                          on_v_model=lambda value: form["set_count"](value or ""), type="number", dense=True,
                          outlined=True, class_="mt-3", error_messages=shown, disabled=busy)
         else:
-            # One field per evaluator, as the questionnaire's options. A duplicate
-            # is flagged on its own row; the other refusals under the rows.
-            with rv.Html(tag="div", class_="mt-3"):
+            # One field per evaluator, in a card as the questionnaire's options. A
+            # duplicate is flagged on its own row; the other refusals under the rows.
+            with field_group(t("evaluators.names_group")):
                 for i, name in enumerate(names):
                     with rv.Html(tag="div", style_="display:flex;align-items:flex-start;gap:2px;margin:4px 0 8px;"):
                         rv.TextField(label=t("evaluators.name_field", n=i + 1), v_model=name,

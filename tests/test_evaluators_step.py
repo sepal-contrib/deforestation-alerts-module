@@ -466,6 +466,28 @@ def test_names_mode_lists_one_field_per_evaluator(data_root):
         rc.close()
 
 
+def _widgets(w):
+    out = [w]
+    for c in getattr(w, "children", None) or []:
+        if not isinstance(c, str):
+            out.extend(_widgets(c))
+    return out
+
+
+def test_the_names_and_add_evaluator_sit_in_one_card_as_the_questions_options(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        _open_split(rc)
+        rc.find(v.RadioGroup).widget.v_model = "names"
+        (card,) = [f for f in rc.find(v.Html, tag="fieldset").widgets
+                   if _strings(f)[:1] == [t("evaluators.names_group")]]
+        inside = _widgets(card)
+        assert all(row in inside for row in _name_rows(rc))
+        assert _button(rc, t("evaluators.add_name")) in inside
+    finally:
+        rc.close()
+
+
 def test_names_mode_stops_adding_at_the_most_evaluators(data_root):
     _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
     try:

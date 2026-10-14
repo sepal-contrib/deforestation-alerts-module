@@ -632,7 +632,8 @@
     "review_mode_solo": "Solo",
     "review_mode_multi": "Multiple evaluators",
     "name_field": "Evaluator {n}",
-    "add_name": "Add evaluator"
+    "add_name": "Add evaluator",
+    "names_group": "Evaluators"
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

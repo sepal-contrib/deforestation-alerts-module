@@ -657,7 +657,8 @@
     "review_mode_solo": "Individuelle",
     "review_mode_multi": "Plusieurs évaluateurs",
     "name_field": "Évaluateur {n}",
-    "add_name": "Ajouter un évaluateur"
+    "add_name": "Ajouter un évaluateur",
+    "names_group": "Évaluateurs"
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

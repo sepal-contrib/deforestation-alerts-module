@@ -657,7 +657,8 @@
     "review_mode_solo": "Individual",
     "review_mode_multi": "Varios evaluadores",
     "name_field": "Evaluador {n}",
-    "add_name": "Añadir evaluador"
+    "add_name": "Añadir evaluador",
+    "names_group": "Evaluadores"
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
