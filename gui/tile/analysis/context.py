@@ -3,8 +3,7 @@
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Holds
 the queue position with its progress bar, the navigation row, and the facts
 grid with its status chip — the part of the panel that answers "which alert of
-how many, and what does the table say about it" (see
-``docs/superpowers/specs/2026-10-03-analysis-side-panel-design.md`` §3).
+how many, and what does the table say about it".
 
 The set selector and the set-status banner are NOT built here, although the
 spec's block table counts them as block A: ``analysis_tile.build_controls``

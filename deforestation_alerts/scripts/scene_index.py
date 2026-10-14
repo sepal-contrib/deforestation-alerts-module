@@ -1,8 +1,7 @@
 # deforestation_alerts/scripts/scene_index.py
 """The project-level scene index: one Earth Engine request per project returns
 the granule metadata of the whole AOI, and every alert is then answered from
-the cached tables without a round trip (see
-``docs/superpowers/specs/2026-10-02-shared-image-timeline-design.md``).
+the cached tables without a round trip.
 
 This module is the Earth-Engine-facing half: the request builders and the
 array-to-DataFrame parsers. Every rule that can be expressed over plain data

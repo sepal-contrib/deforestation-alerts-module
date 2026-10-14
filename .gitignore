@@ -138,8 +138,9 @@ outputs/
 utils/model2.h5
 CLAUDE.md
 
-# Local Claude Code session data
+# Local Claude Code session data and AI working docs (plans, specs)
 .claude/
+docs/superpowers/
 
 # leaflet-multiview JS packages (js/leaflet-multiview, js/app): node_modules is
 # installed from the committed package-lock.json files; the built bundle in
