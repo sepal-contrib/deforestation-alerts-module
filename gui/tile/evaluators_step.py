@@ -57,7 +57,7 @@ from gui.tile.questionnaire_step import _StartAnalysis
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
 from gui.widget.help import StepIntro
-from gui.widget.product_table import ProductTable
+from gui.widget.product_table import ProductTable, link_action
 from gui.widget.text_style import MUTED
 
 _DIST = "deforestation-alerts-module"
@@ -240,6 +240,18 @@ def found_links(zips) -> dict:
     return out
 
 
+def return_link(p) -> Optional[dict]:
+    """A review copy's reviewed copy as a download, once one is built."""
+    z = package_files.return_zip(p)
+    if z is None:
+        return None
+    try:
+        entry = link_entry(z.path)
+    except ValueError:  # outside $HOME: no link to give
+        return None
+    return {**entry, "built_at": z.built_at}
+
+
 def package_action(name: str, found, building) -> dict:
     """A row's cloud icon (spec 2026-10-14 §4.4): it spins while that
     evaluator's zip is built, is dim until one exists for this split, then
@@ -270,20 +282,6 @@ def _table_rows(stats, unassigned, *, found, building) -> list:
                                {"value": format_number(unassigned)},
                                {"value": NO_VALUE, "muted": True}, {"value": NO_VALUE, "muted": True}]})
     return rows
-
-
-#: a block link whose long zip name wraps inside its panel
-LINK_STYLE = ("display:block; margin-top:8px; font-size:0.85rem; white-space:normal; overflow-wrap:anywhere; "
-              "word-break:break-all; text-decoration:none;")
-
-
-def _download_link(entry, label: str, class_: str):
-    """A plain ``<a>``, not a v-btn: a v-btn's ``.v-btn__content`` is
-    ``flex: 1 0 auto`` and nowrap, so the zip name ran past the panel."""
-    return rv.Html(tag="a", children=[rv.Icon(small=True, color="primary", class_="mr-1",
-                                              children=["mdi-download"]), label],
-                   attributes={"href": entry["url"], "target": "_blank", "download": entry["file"]},
-                   class_=class_, style_=LINK_STYLE)
 
 
 @solara.component
@@ -650,14 +648,15 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
 
 @solara.component
 def _ReturnPanel(app_state):
-    """A review copy's *Return reviews* (§6.4): its progress and the reviewed
-    copy, built any time (each holds the latest state)."""
+    """A review copy's *Return reviews* (§6.4, spec 2026-10-14 §4.6): its
+    progress with the reviewed copy's cloud icon, and *Generate reviewed
+    copy*. A reviewed copy holds the reviews as of its build; "Built …" says
+    when, so the evaluator generates it again after reviewing more."""
     p = app_state.project.value
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
-    link, set_link = solara.use_state(None)
+    scans, set_scans = solara.use_state(0)  # bumped by each build: look in the set folder again
     inflight = solara.use_ref(False)  # as _CreatorPanel's: a second click is dropped
-    # Another copy opened: its panel starts without this one's link.
-    solara.use_effect(lambda: set_link(None), [p.name if p else None])
+    found = solara.use_memo(lambda: return_link(p), [p.name if p else None, scans])
 
     async def _build():
         try:
@@ -666,14 +665,13 @@ def _ReturnPanel(app_state):
                 return
             snap = live.model_copy(deep=True)
             try:
-                path = await asyncio.to_thread(build_return_file, snap, paths.project_dir(snap.name))
-                entry = link_entry(path)
+                await asyncio.to_thread(build_return_file, snap, paths.project_dir(snap.name))
             except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
                 current_notifier().error(error_text(exc))
                 return
-            set_link({**entry, "project": snap.name})
             current_notifier().success(t("evaluators.return_ready"))
         finally:
+            set_scans(lambda n: n + 1)
             inflight.current = False
 
     task = solara.lab.use_task(_build, dependencies=None, prefer_threaded=False, raise_error=False)
@@ -683,22 +681,28 @@ def _ReturnPanel(app_state):
             return
         inflight.current = True
         task()
-    reviewed, assigned = return_progress(p, gdf)
 
+    reviewed, assigned = return_progress(p, gdf)
     with rv.Card(outlined=True, class_="pa-3"):
         # solara.Text is an inline span: each line is its own block.
         solara.Text(t("evaluators.return_title"), style="display:block;font-weight:600;")
-        if gdf is None:
-            solara.Text(t("evaluators.loading"), style="display:block;" + MUTED)
-        else:
-            solara.Text(t("evaluators.return_progress", reviewed=format_number(reviewed),
-                          assigned=format_number(assigned)), style="display:block;")
+        with solara.Row(style="align-items:center;gap:8px;flex-wrap:nowrap;"):
+            if gdf is None:
+                solara.Text(t("evaluators.loading"), style="flex:1 1 auto;" + MUTED)
+            else:
+                solara.Text(t("evaluators.return_progress", reviewed=format_number(reviewed),
+                              assigned=format_number(assigned)), style="flex:1 1 auto;")
+            link_action({"kind": "download", "href": found["url"] if found else None,
+                         "file": found["file"] if found else "", "loading": task.pending,
+                         "title": t("evaluators.return_download") if found else t("evaluators.generate_return_first")})
+        if found is not None:
+            solara.Text(t("evaluators.built_at", when=found["built_at"].strftime("%Y-%m-%d %H:%M")),
+                        style="display:block;" + MUTED + "font-size:0.75rem;")
         solara.Text(t("evaluators.return_note"), style="display:block;" + MUTED + "font-size:0.8rem;")
-        solara.Button(t("evaluators.download_return"), icon_name="mdi-package-up", color="primary", outlined=True,
-                      small=True, block=True, classes=["mt-2"], loading=task.pending, disabled=task.pending,
+        solara.Button(t("evaluators.regenerate_return") if found else t("evaluators.generate_return"),
+                      icon_name="mdi-package-up", color="primary", outlined=True, small=True, block=True,
+                      classes=["mt-2", "defo-generate-return"], loading=task.pending, disabled=task.pending,
                       on_click=_start)
-        if link is not None and p is not None and link["project"] == p.name:  # not a build of another copy
-            _download_link(link, t("evaluators.return_link", file=link["file"]), "defo-return-link")
 
 
 @solara.component

@@ -605,9 +605,7 @@
     "return_title": "Return reviews",
     "return_progress": "{reviewed} / {assigned} of your alerts reviewed",
     "return_note": "Only your assigned alerts are returned.",
-    "download_return": "Download reviewed copy",
     "return_ready": "Reviewed copy ready: send it to the project's creator.",
-    "return_link": "Download {file}",
     "split_unrecorded": "The alerts of {project} were split, but another project was opened before the split was saved. Open {project} again and remove the split to start over.",
     "merged_unrecorded": "The reviews from {evaluator} are in the alerts of {project}, but another project was opened before the return record was saved.",
     "merge_failed": "{file} could not be merged: {error}",
@@ -627,7 +625,11 @@
     "generate_first": "Generate the packages first.",
     "package_download": "Download {evaluator}'s package",
     "package_outdated": "Built before the questionnaire changed: generate the packages again.",
-    "built_at": "Built {when}"
+    "built_at": "Built {when}",
+    "generate_return": "Generate reviewed copy",
+    "regenerate_return": "Regenerate reviewed copy",
+    "return_download": "Download the reviewed copy",
+    "generate_return_first": "Generate the reviewed copy first."
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

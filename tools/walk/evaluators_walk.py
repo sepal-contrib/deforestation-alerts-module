@@ -170,8 +170,8 @@ def p5_return(page, rec, *, out, data, copy):
     text = w.panel_text(page)
     rec["panel"] = text[:400]
     assert "2 / 45" in text and w.en("evaluators.return_note") in text, text[:400]
-    ph.visible_btn(page, w.en("evaluators.download_return"), RIGHT).click()
-    link = page.locator(f"{RIGHT} .defo-return-link:visible").first
+    ph.visible_btn(page, w.en("evaluators.generate_return"), RIGHT).click()
+    link = page.locator(f"{RIGHT} a.defo-download-action:visible").first
     w.wait_for(lambda: link.count(), 120, "the reviewed-copy link")
     zips = sorted(set_folder(data, copy).glob("*__reviewed.zip"))
     assert len(zips) == 1, [z.name for z in zips]

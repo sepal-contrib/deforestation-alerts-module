@@ -212,6 +212,25 @@ def _package_zip(p_, set_id, evaluator, out_dir, *, split_id=None, digest=None):
     return path
 
 
+def _return_zip(p_, out_dir):
+    rc_ = p_.review_copy
+    header = share.ShareHeader(format=share.FORMAT, format_version=share.FORMAT_VERSION, kind=share.KIND_RETURN,
+                               app_version="test", origin_project=rc_.origin_project, set_id=rc_.set_id,
+                               set_fingerprint="fp", split_id=rc_.split_id, evaluator=rc_.evaluator,
+                               evaluator_index=rc_.evaluator_index, questions_digest="d", created_at=datetime.now(),
+                               returned_at=datetime.now())
+    path = Path(out_dir) / share.return_filename(rc_.origin_project, rc_.set_id, rc_.evaluator_index, rc_.evaluator)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(share.HEADER_MEMBER, header.model_dump_json())
+    return path
+
+
+def _generate_return_btn(rc):
+    (btn,) = [b for b in rc.find(v.Btn).widgets if "defo-generate-return" in (b.class_ or "")]
+    return btn
+
+
 def _set_folder():
     return paths.set_dir(paths.project_dir("c"), PERIOD, ["GLAD-L"])
 
@@ -741,15 +760,12 @@ def test_an_unexpected_failure_reading_or_merging_a_copy_is_toasted(data_root, m
     asyncio.run(main())
 
 
-def test_a_review_copy_shows_its_return_panel(data_root, monkeypatch):
+def test_a_review_copy_generates_its_reviewed_copy_then_the_cloud_downloads_it(data_root, monkeypatch):
     seen = {}
 
     def _build(p, pdir, out_dir, *, app_version):
         seen.update(out_dir=Path(out_dir), evaluator=p.review_copy.evaluator)
-        made = Path(out_dir) / "c__x__e02-bo__reviewed.zip"
-        made.parent.mkdir(parents=True, exist_ok=True)
-        made.write_bytes(b"PK")
-        return made
+        return _return_zip(p, out_dir)
 
     monkeypatch.setattr(es.share, "build_return", _build)
     copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
@@ -766,14 +782,34 @@ def test_a_review_copy_shows_its_return_panel(data_root, monkeypatch):
             assert t("evaluators.return_note") in texts
             assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
             assert not rc.find(FileInput).widgets  # no import in a copy
-            _button(rc, t("evaluators.download_return")).fire_event("click", None)
-            await _settle(lambda: _links(rc, "defo-return-link"), "the return link")
-            assert seen == {"out_dir": paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"]),
-                            "evaluator": "Bo"}
+            (cloud,) = _clouds(rc)
+            assert cloud.tag == "span" and cloud.attributes["title"] == t("evaluators.generate_return_first")
+            assert t("evaluators.generate_return") in _strings(_generate_return_btn(rc))
+            _generate_return_btn(rc).fire_event("click", None)
+            await _settle(lambda: _clouds(rc)[0].tag == "a", "the reviewed copy's link")
+            folder = paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"])
+            assert seen == {"out_dir": folder, "evaluator": "Bo"}
+            (cloud,) = _clouds(rc)
+            assert cloud.attributes["download"] == share.return_filename("c", SET_ID, 2, "Bo")
+            assert t("evaluators.regenerate_return") in _strings(_generate_return_btn(rc))
+            assert t("evaluators.return_ready") in _toasts("success")
         finally:
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_reviewed_copy_built_earlier_is_offered_after_a_reload(data_root):
+    copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
+                      origin_project="c", imported_at=datetime.now())
+    p = _project("c__e02-bo", split=_split(), review_copy=copy)
+    _return_zip(p, paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"]))
+    _box, rc = _render(_state(p, _gdf(evaluators=("Ana", "Bo", "Ana", "Bo"))))
+    try:
+        assert _clouds(rc)[0].tag == "a"
+        assert any(x.startswith(t("evaluators.built_at", when="")[:5]) for x in _strings(rc.container))
+    finally:
+        rc.close()
 
 
 # ------------------------------------------------------- re-entry, switches
@@ -982,14 +1018,8 @@ def test_the_step_is_named_evaluation():
     assert t("steps.evaluators.info_header") == "Evaluation"
 
 
-def test_the_return_panel_starts_afresh_in_another_copy(data_root, monkeypatch):
-    def _build(p, pdir, out_dir, *, app_version):
-        made = Path(out_dir) / f"{p.name}__reviewed.zip"
-        made.parent.mkdir(parents=True, exist_ok=True)
-        made.write_bytes(b"PK")
-        return made
-
-    monkeypatch.setattr(es.share, "build_return", _build)
+def test_the_return_panel_offers_only_this_copys_reviewed_copy(data_root, monkeypatch):
+    monkeypatch.setattr(es.share, "build_return", lambda p, pdir, out_dir, *, app_version: _return_zip(p, out_dir))
 
     def _copy(name, evaluator, index):
         rc_ = ReviewCopy(evaluator=evaluator, evaluator_index=index, set_id=SET_ID, split_id="s1",
@@ -1001,12 +1031,12 @@ def test_the_return_panel_starts_afresh_in_another_copy(data_root, monkeypatch):
     async def main():
         _box, rc = _render(s)
         try:
-            _button(rc, t("evaluators.download_return")).fire_event("click", None)
-            await _settle(lambda: _links(rc, "defo-return-link"), "the return link")
+            _generate_return_btn(rc).fire_event("click", None)
+            await _settle(lambda: _clouds(rc)[0].tag == "a", "Ana's reviewed copy")
             s.load_project_state(_copy("c__e02-bo", "Bo", 2))
             s.alerts_gdf.set(_gdf())
             await asyncio.sleep(0.05)
-            assert not _links(rc, "defo-return-link")  # Ana's zip is not offered in Bo's copy
+            assert _clouds(rc)[0].tag == "span"  # Ana's zip is not offered in Bo's copy
         finally:
             rc.close()
 
@@ -1020,39 +1050,17 @@ def _walk(w):
             yield from _walk(c)
 
 
-def test_the_return_panels_lines_are_blocks_and_the_link_wraps(data_root, monkeypatch):
+def test_the_return_panels_title_and_note_are_blocks(data_root):
     """Found in the browser walk: solara.Text is an inline span, so the title,
-    progress and note ran together on one line, and the long zip name in the
-    link ran past the panel's edge."""
+    progress and note ran together on one line."""
     copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
                       origin_project="c", imported_at=datetime.now())
     s = _state(_project("c__e02-bo", split=_split(), review_copy=copy), _gdf(evaluators=("Ana", "Bo", "Ana", "Bo")))
     _box, rc = _render(s)
     try:
-        for text in (t("evaluators.return_title"), t("evaluators.return_progress", reviewed="1", assigned="2"),
-                     t("evaluators.return_note")):
-            line = next(w for w in _walk(rc.container) if text in [c for c in getattr(w, "children", []) if isinstance(c, str)])
+        for text in (t("evaluators.return_title"), t("evaluators.return_note")):
+            line = next(w for w in _walk(rc.container)
+                        if text in [c for c in getattr(w, "children", []) if isinstance(c, str)])
             assert "display:block" in line.style_.replace(" ", ""), text
-    finally:
-        rc.close()
-
-
-def test_the_zip_link_is_a_plain_anchor_that_wraps():
-    """Found in the browser walk (twice): a v-btn's inner ``.v-btn__content``
-    is ``flex: 1 0 auto`` and nowrap, so styling the button let the long zip
-    name run past both panel edges. The link is a plain block ``<a>``, whose
-    own text wraps."""
-    @solara.component
-    def _Link():
-        es._download_link({"url": "u", "file": "f.zip"}, "Download f.zip", "c")
-
-    _box, rc = reacton.render(_Link(), handle_error=False)
-    try:
-        assert not rc.find(v.Btn).widgets  # no v-btn: its content cannot wrap
-        (a,) = rc.find(v.Html, tag="a").widgets
-        assert a.attributes == {"href": "u", "target": "_blank", "download": "f.zip"} and a.class_ == "c"
-        style = a.style_.replace(" ", "")
-        assert "display:block" in style and "white-space:normal" in style and "overflow-wrap:anywhere" in style
-        assert "Download f.zip" in _strings(a)
     finally:
         rc.close()

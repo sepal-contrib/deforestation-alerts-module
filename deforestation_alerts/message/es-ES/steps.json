@@ -629,9 +629,7 @@
     "return_title": "Devolver las revisiones",
     "return_progress": "{reviewed} / {assigned} de tus alertas revisadas",
     "return_note": "Solo se devuelven las alertas que tienes asignadas.",
-    "download_return": "Descargar la copia revisada",
     "return_ready": "Copia revisada lista: envíala al creador del proyecto.",
-    "return_link": "Descargar {file}",
     "split_unrecorded": "Las alertas de {project} se repartieron, pero se abrió otro proyecto antes de guardar el reparto. Abre {project} de nuevo y quita el reparto para empezar otra vez.",
     "merged_unrecorded": "Las revisiones de {evaluator} ya están en las alertas de {project}, pero se abrió otro proyecto antes de guardar el registro de la devolución.",
     "merge_failed": "No se pudo integrar {file}: {error}",
@@ -652,7 +650,11 @@
     "generate_first": "Genera primero los paquetes.",
     "package_download": "Descargar el paquete de {evaluator}",
     "package_outdated": "Creado antes de que cambiara el cuestionario: genera los paquetes de nuevo.",
-    "built_at": "Creado {when}"
+    "built_at": "Creado {when}",
+    "generate_return": "Generar copia revisada",
+    "regenerate_return": "Regenerar copia revisada",
+    "return_download": "Descargar la copia revisada",
+    "generate_return_first": "Genera primero la copia revisada."
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
