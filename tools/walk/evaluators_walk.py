@@ -6,13 +6,13 @@ The walk copies ``~/module_results/deforestation_alerts/repro_p`` (its active
 set: 90 unreviewed GLAD-L alerts; an Earth Engine ADMIN1 AOI without a
 sidecar) into its own data dir and plays both sides of spec 2026-10-10 §10:
 
- 1. creator: Evaluators step, Multiple evaluators on, Count 2 → Split: 45 / 45, toast
- 2. creator: Download package for Evaluator 1 (after the AOI step's replay): link, zip members, packaged
+ 1. creator: Evaluation step, Multiple evaluators on, Split alerts… → Count 2 → Split: 45 / 45, toast
+ 2. creator: Generate packages (after the AOI step's replay) → both zips, Evaluator 1's cloud link, packaged
  3. evaluator: Project → Import the package → lands on Analysis with the evaluator chip, 45 alerts
     (the chip text is built from the catalogue: ``analysis_tile.filter.chip``)
  4. evaluator: review and Save, Next, review and Save: two saved rows, both Evaluator 1's
- 5. evaluator: Evaluators step shows Return reviews (2 / 45) → Download reviewed copy
- 6. creator: reopen repro_p → Evaluators → Import the reviewed copy → preview → Merge → table and store
+ 5. evaluator: Evaluation step shows Return reviews (2 / 45) → Generate reviewed copy → cloud link
+ 6. creator: reopen repro_p → Evaluation → Merge reviewed copy… → pick → preview → Merge → table and store
 
 It needs Earth Engine and sepal.io (the AOI replay, the image timeline), so
 it runs outside a sandbox.
@@ -89,10 +89,12 @@ def p1_split(page, rec, *, out, data):
     # a project without a split opens as a solo evaluation: switch to multiple evaluators
     page.locator(f'{RIGHT} .v-input--switch label:text-is("{w.en("evaluators.multi_label")}")').first.click()
     page.wait_for_timeout(1000)
-    field = page.locator(f'{RIGHT} .v-text-field:has(label:text-is("{w.en("evaluators.count_label")}")) input').first
+    page.locator(f"{RIGHT} button.defo-split-open:visible").first.click()
+    w.wait_for(lambda: ph.dialog_open(page), 15, "the split modal")
+    field = page.locator(f'{w.MODAL} .v-text-field:has(label:text-is("{w.en("evaluators.count_label")}")) input').first
     field.fill("2")
     t0 = w.now_ms(page)
-    ph.visible_btn(page, w.en("evaluators.split"), RIGHT).click()
+    ph.modal_button(page, w.en("evaluators.split")).click()
     ph.wait_toast(page, t0, "split between 2", kind="success")
     page.wait_for_timeout(1500)
     rec["rows"] = {n: ph.row_text(page, n) for n in (EVALUATOR, "Evaluator 2")}
@@ -104,22 +106,25 @@ def p1_split(page, rec, *, out, data):
 
 
 def p2_package(page, rec, *, out, data):
-    btn = ph.row_button(page, EVALUATOR, "mdi-cloud-download-outline")
-    # repro_p's ADMIN1 AOI has no sidecar: the button waits for the AOI step's replay.
-    w.wait_for(lambda: btn.count() and btn.is_enabled(), 240, "Download package enabled")
+    btn = page.locator(f"{RIGHT} button.defo-generate:visible").first
+    # repro_p's ADMIN1 AOI has no sidecar: Generate waits for the AOI step's replay.
+    w.wait_for(lambda: btn.count() and btn.is_enabled(), 240, "Generate packages enabled")
+    t0 = w.now_ms(page)
     btn.click()
-    link = page.locator(f"{RIGHT} .defo-package-link:visible").first
-    w.wait_for(lambda: link.count(), 300, "the package link")
+    ph.wait_toast(page, t0, "2 packages ready", kind="success", timeout=600)
+    link = ph.row(page, EVALUATOR).locator("a.defo-download-action").first
+    w.wait_for(lambda: link.count(), 30, "Evaluator 1's cloud link")
     rec["href"] = link.get_attribute("href")
     zips = sorted(set_folder(data, PROJECT).glob("*__review.zip"))
     rec["zips"] = [z.name for z in zips]
-    assert len(zips) == 1, rec["zips"]
-    with zipfile.ZipFile(zips[0]) as zf:
+    assert len(zips) == 2, rec["zips"]
+    first = next(z for z in zips if "__e01-" in z.name)
+    with zipfile.ZipFile(first) as zf:
         rec["members"] = sorted(zf.namelist())
     assert {"project.json", "aoi.geojson", "alerts/alert_db.parquet"} <= set(rec["members"]), rec["members"]
-    assert rec["href"].endswith(zips[0].name), rec["href"]
+    assert rec["href"].endswith(first.name), rec["href"]
     assert split_record(data, PROJECT)["packaged"] is True
-    rec["package"] = str(zips[0])
+    rec["package"] = str(first)
     w.shot(page, out, "02_package")
 
 
@@ -170,9 +175,9 @@ def p5_return(page, rec, *, out, data, copy):
     text = w.panel_text(page)
     rec["panel"] = text[:400]
     assert "2 / 45" in text and w.en("evaluators.return_note") in text, text[:400]
-    ph.visible_btn(page, w.en("evaluators.generate_return"), RIGHT).click()
+    page.locator(f"{RIGHT} button.defo-generate-return:visible").first.click()
     link = page.locator(f"{RIGHT} a.defo-download-action:visible").first
-    w.wait_for(lambda: link.count(), 120, "the reviewed-copy link")
+    w.wait_for(lambda: link.count(), 120, "the reviewed copy's cloud link")
     zips = sorted(set_folder(data, copy).glob("*__reviewed.zip"))
     assert len(zips) == 1, [z.name for z in zips]
     rec["returned"] = str(zips[0])
@@ -182,7 +187,9 @@ def p5_return(page, rec, *, out, data, copy):
 def p6_merge(page, rec, *, out, data, returned):
     w.open_project(page, PROJECT)
     w.goto_step(page, "evaluators", 2000)
-    ph.pick_file(page, w.en("evaluators.import_label"), returned, scope=RIGHT)
+    ph.visible_btn(page, w.en("evaluators.merge_open"), RIGHT).click()
+    w.wait_for(lambda: ph.dialog_open(page), 15, "the merge modal")
+    ph.pick_file(page, w.en("evaluators.import_label"), returned, scope=w.MODAL)
     w.wait_for(lambda: ph.dialog_open(page) and "2 new reviews" in ph.modal_text(page), 120, "the merge preview")
     rec["preview"] = ph.modal_text(page)[:400]
     w.shot(page, out, "06_preview")

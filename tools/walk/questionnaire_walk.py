@@ -215,6 +215,8 @@ def check_2_add_question(page, rec, *, out, data, template):
         assert tag in row, f"tag {tag!r} missing from {row!r}"
     assert "Needs review" not in row and "False positive" not in row and "all verdicts" not in row, row
     assert PLACEHOLDER in row, row
+    page.locator(".right-panel button.defo-template-toggle:visible").first.click()
+    page.wait_for_timeout(800)
     chips = page.evaluate("() => [...document.querySelectorAll('span[title]')].map(e => e.title)"
                           ".filter(x => x.startsWith('{'))")
     rec["chips"] = sorted(set(chips))
