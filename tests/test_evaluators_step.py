@@ -854,6 +854,31 @@ def test_cancelling_the_merge_drops_the_preview(data_root, monkeypatch):
     asyncio.run(main())
 
 
+def test_cancelling_the_merge_while_a_copy_is_read_drops_it(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.share, "read_return", _blocking(calls, release, lambda path, p, store: _preview()))
+    s = _state(_project(split=_split()), _gdf())
+    zip_path = data_root / "bo__reviewed.zip"
+    zip_path.write_bytes(b"PK")
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _open_merge(rc)
+            rc.find(FileInput).widget.v_model = str(zip_path)
+            await _settle(lambda: calls, "the read")
+            _button(rc, t("common.cancel")).fire_event("click", None)
+            release.set()
+            await asyncio.sleep(0.2)  # the read's worker returns
+            _open_merge(rc)
+            assert rc.find(FileInput).widgets and t("evaluators.merge") not in _strings(rc.container)
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_without_a_split_there_is_nothing_to_merge(data_root):
     _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
     try:

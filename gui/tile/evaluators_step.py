@@ -556,6 +556,10 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             _launch(preview_task, path)
 
     def _close_merge():
+        # A copy still being read is dropped too: cancelled, its run stops
+        # before it sets the preview (``_held`` still clears ``inflight``).
+        if preview_task.pending:
+            preview_task.cancel()
         merge_open.set(False)
         set_pending(None)
 
