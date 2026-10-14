@@ -363,13 +363,13 @@ def test_no_traitlets_models_in_new_code():
                 "gui/widget/grid_form.py", "gui/widget/dialog_nudge.py", "gui/widget/form_dialog.py",
                 "gui/widget/attribute_modal.py", "gui/widget/manage_projects.py", "gui/widget/mask_modal.py",
                 "gui/widget/vis_layer_modal.py", "gui/widget/period_modal.py", "gui/widget/product_table.py",
-                "gui/widget/attribute_form.py", "gui/scripts/aoi_io.py", "gui/scripts/catalogue_meta.py",
+                "gui/widget/attribute_form.py", "gui/scripts/aoi_io.py", 
                 "gui/scripts/inflight.py", "gui/scripts/integrate_jobs.py", "gui/scripts/map_layers.py",
                 "gui/scripts/pmtiles_map.py", "gui/scripts/prepare_jobs.py", "gui/scripts/raster_map.py",
                 "gui/scripts/remote_facts.py", "gui/scripts/coverage_ui.py",
-                "gui/scripts/scene_cache.py", "gui/scripts/scene_loader.py",
+                "gui/scripts/scene_loader.py",
                 "gui/scripts/set_context.py", "gui/scripts/set_store.py", "gui/scripts/tile_proxy.py",
-                "deforestation_alerts/scripts/alert_store.py", "deforestation_alerts/scripts/alert_table.py"):
+                "deforestation_alerts/scripts/alert_store.py", "deforestation_alerts/scripts/scene_cache.py", "deforestation_alerts/scripts/alert_table.py"):
         path = ROOT / rel
         files = path.rglob("*.py") if path.is_dir() else [path]
         for f in files:

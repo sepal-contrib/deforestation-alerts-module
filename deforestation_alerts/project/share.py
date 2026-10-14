@@ -38,7 +38,7 @@ from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.review_status import is_reviewed, reviewed_mask
 from deforestation_alerts.scripts import local_files, scene_index
-from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_lock
+from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_generation, store_lock
 from deforestation_alerts.scripts.naming import safe_token
 
 FORMAT = "defo-alerts-share"
@@ -311,16 +311,6 @@ def _aoi_collection(data, key: str) -> dict:
     return {"type": "FeatureCollection", "features": out}
 
 
-def _generation(path) -> Optional[tuple]:
-    """Which write of ``path`` is on disk (as ``gui.scripts.set_store.store_generation``):
-    ``(st_mtime_ns, st_size, st_ino)``, or None when it is missing."""
-    try:
-        st = Path(path).stat()
-    except FileNotFoundError:
-        return None
-    return (st.st_mtime_ns, st.st_size, st.st_ino)
-
-
 def _copy_file(src, dest) -> None:
     shutil.copyfile(src, dest)
 
@@ -330,11 +320,11 @@ def _snapshot_store(store: Path, dest: Path, set_id: str) -> Path:
     a merge cannot replace it meanwhile, and an Integrate swap (which takes
     no store lock) is caught by the generation check."""
     with store_lock(store):
-        before = _generation(store)
+        before = store_generation(store)
         if before is None:
             raise ShareError("share.err.store_missing", set_id=set_id)
         _copy_file(store, dest)
-        if _generation(store) != before:
+        if store_generation(store) != before:
             raise ShareError("share.err.store_changed", set_id=set_id)
     return dest
 

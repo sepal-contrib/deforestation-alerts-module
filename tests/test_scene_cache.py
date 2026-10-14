@@ -9,7 +9,7 @@ from shapely.geometry import box
 
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files, scene_index
-from gui.scripts import scene_cache
+from deforestation_alerts.scripts import scene_cache
 
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
 S2, LS = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT

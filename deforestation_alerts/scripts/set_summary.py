@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable, Optional
 
+from deforestation_alerts.project.questions import SEP
 from deforestation_alerts.project.review_status import CONFIRMED, NOT_REVIEWED, STATUS_CODES
 from deforestation_alerts.scripts.alert_codes import parse_formatted_string
 
@@ -49,7 +50,6 @@ UNKNOWN_SOURCE = ""
 
 _NOT_REVIEWED = STATUS_CODES[NOT_REVIEWED]
 _CONFIRMED = STATUS_CODES[CONFIRMED]
-_SEP = ", "  # gui.scripts.questions.SEP
 
 
 @dataclass(frozen=True)
@@ -206,7 +206,7 @@ def _text(value) -> str:
 
 
 def _split_answer(value) -> list:
-    return [part.strip() for part in _text(value).split(_SEP) if part.strip()]
+    return [part.strip() for part in _text(value).split(SEP) if part.strip()]
 
 
 def _column(frame, name: str, n: int) -> list:

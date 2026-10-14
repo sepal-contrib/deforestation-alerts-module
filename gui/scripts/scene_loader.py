@@ -47,9 +47,9 @@ import solara.lab
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import paths
-from deforestation_alerts.scripts import scene_index, scene_query
+from deforestation_alerts.scripts import scene_cache, scene_index, scene_query
 from gui.i18n import t
-from gui.scripts import aoi_io, remote_facts, scene_cache, vis_layers
+from gui.scripts import aoi_io, remote_facts, vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
 from gui.scripts.solara_threads import to_thread_in_context, use_loop_dependencies
 

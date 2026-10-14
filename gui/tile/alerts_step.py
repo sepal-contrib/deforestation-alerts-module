@@ -4,7 +4,7 @@ import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine import catalogue
-from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, record_for, window_coverage
+from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, preview_window, record_for, window_coverage
 from deforestation_alerts.engine.fingerprint import harm_key, is_file_source
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths
@@ -13,7 +13,7 @@ from deforestation_alerts.project.models import (
 )
 from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t, tn
-from gui.scripts import aoi_io, catalogue_meta, raster_map, source_layers
+from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, chip_cell, dates_text, note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.setup_guard import refuse_setup, update_setup
@@ -38,7 +38,7 @@ def blocked_reason(p, name):
     cov = record_for(p, name)
     if cov is None:
         return t("coverage.unchecked")
-    a, b = catalogue_meta.preview_window(p, name)
+    a, b = preview_window(p, name)
     state, notes = window_coverage(cov, name, a, b)
     return note_text(notes[0]) if state in (NOT_COVERED, NO_DATA) else None
 
@@ -169,7 +169,7 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         if src.kind == "predefined" and src.catalogue_key == "GLAD-L" and glad_l is None:
             notifications.info(t("steps.alerts.meta_loading"))
             return
-        a, b = catalogue_meta.preview_window(p, name)
+        a, b = preview_window(p, name)
         try:
             aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)
         except ValueError as exc:

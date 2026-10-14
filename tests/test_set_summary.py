@@ -97,7 +97,7 @@ def test_a_negative_or_null_area_counts_as_zero():
 
 
 def test_an_alerts_full_area_counts_under_each_answer_it_names():
-    """An answer is multi-code (``gui.scripts.questions.SEP``), so the bars
+    """An answer is multi-code (``questions.SEP``), so the bars
     may sum past the reviewed total -- the spec's ruling."""
     s = ss.summarize_alerts(_frame(), answer_columns=LOSS)
     rows = s.breakdown("loss_driver")

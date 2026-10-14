@@ -11,6 +11,9 @@ from deforestation_alerts.project.store_schema import RESERVED_COLUMNS
 
 MAX_KEY = 40
 
+#: What joins the codes of a multi-answer in its store column ("a, b").
+SEP = ", "
+
 #: The report placeholders the Word report fills from the alert itself
 #: (``report_builder.generate_deforestation_report_with_word_template``).
 REPORT_PLACEHOLDERS = ("admin1", "admin2", "admin3", "detection_date1", "detection_date2",

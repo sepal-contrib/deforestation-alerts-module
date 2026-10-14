@@ -39,7 +39,7 @@ from deforestation_alerts.project.models import (
 )
 from gui.i18n import t, tn
 from gui.scripts import aoi_io as aoi_io_mod
-from gui.scripts import catalogue_meta
+from deforestation_alerts.engine.coverage import preview_window
 from gui.scripts import raster_map as raster_map_mod
 from gui.scripts.map_layers import MapLayers
 from gui.store.state_manager import AppState
@@ -68,20 +68,20 @@ def test_preview_window_prefers_the_active_period():
     per = Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31))
     p.periods["x"] = per
     p.active_period = "x"
-    assert catalogue_meta.preview_window(p, "RADD") == per.search_window()
+    assert preview_window(p, "RADD") == per.search_window()
 
 
 def test_preview_window_without_period_is_the_covered_span():
     p = _project_with_source("RADD")
     p.coverage = {"RADD": _cov()}
-    assert catalogue_meta.preview_window(p, "RADD") == (date(2020, 1, 1), date(2026, 9, 23))
+    assert preview_window(p, "RADD") == (date(2020, 1, 1), date(2026, 9, 23))
 
 
 def test_preview_window_of_an_undated_source_is_every_date():
     p = _project_with_source("RADD")
     p.coverage = {"RADD": SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=1.0,
                                          regions=[RegionCoverage(name="mine", fraction=1.0)])}
-    assert catalogue_meta.preview_window(p, "RADD") == (date(2000, 1, 1), date.today())
+    assert preview_window(p, "RADD") == (date(2000, 1, 1), date.today())
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ def test_a_preview_without_a_period_is_named_and_carries_its_legend(monkeypatch,
         assert map_.ee_calls == [("RADD · preview", "src:RADD")]
         (legend,) = layers.legends.value
         assert legend.layer_id == "src:RADD" and legend.label.key == "legend.name.preview"
-        a, b = catalogue_meta.preview_window(p, "RADD")
+        a, b = preview_window(p, "RADD")
         assert legend.spec.title.key == "legend.title.preview"
         assert dict(legend.spec.title.args) == {"source": "RADD", "start": str(a), "end": str(b)}
     finally:

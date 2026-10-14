@@ -14,6 +14,8 @@ before the serialization until the file is in place.
 
 import os
 import threading
+from pathlib import Path
+from typing import Optional
 
 import geopandas as gpd
 import pandas as pd
@@ -23,6 +25,17 @@ from deforestation_alerts.project.store_schema import GEOM_COLUMNS
 # Geometry columns the alerts gdf may carry. Used to coerce secondary geometry
 # columns to GeoSeries before a GeoParquet write and to encode the CSV export.
 ALERT_GEOM_COLS = list(GEOM_COLUMNS)
+
+
+def store_generation(store) -> Optional[tuple]:
+    """Which write of ``store`` is on disk: ``(st_mtime_ns, st_size, st_ino)``,
+    or None when the file is missing. Every writer (Integrate's swap, a review
+    Save's ``write_into``) replaces the file, so a rewrite changes it."""
+    try:
+        st = Path(store).stat()
+    except FileNotFoundError:
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
 
 
 #: One lock per store path (``os.path.realpath``), made on first use and kept

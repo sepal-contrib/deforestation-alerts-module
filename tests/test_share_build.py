@@ -270,7 +270,7 @@ def test_a_store_rewritten_during_the_copy_is_refused(creator, tmp_path, monkeyp
 
 
 def test_the_scene_cache_lock_is_the_scene_index_lock(data_root):
-    from gui.scripts import scene_cache
+    from deforestation_alerts.scripts import scene_cache
 
     pdir = paths.project_dir("p")
     assert scene_cache._lock_for(pdir) is scene_index.index_lock(pdir)

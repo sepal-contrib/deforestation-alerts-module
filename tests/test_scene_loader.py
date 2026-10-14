@@ -30,7 +30,7 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import AoiRecord, Period, Project
 from deforestation_alerts.scripts import scene_index
 from gui.i18n import t
-from gui.scripts import scene_cache
+from deforestation_alerts.scripts import scene_cache
 from gui.scripts.error_text import ee_no_access
 from gui.scripts import scene_loader as sl
 from gui.store.state_manager import AppState

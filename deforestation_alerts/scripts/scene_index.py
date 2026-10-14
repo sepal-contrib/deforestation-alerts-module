@@ -22,11 +22,9 @@ from shapely.geometry import shape
 INDEX_VERSION = 1
 
 #: One lock per project directory, process-wide. Every write of the index
-#: (``gui.scripts.scene_cache.store_chunk`` and ``note_failed_chunk``) and a
+#: (``scene_cache.store_chunk`` and ``note_failed_chunk``) and a
 #: review package's copy of it (``project.share.build_package``) take it, so
-#: a package never holds the files of two different writes. It lives here,
-#: not in ``scene_cache``, so ``deforestation_alerts`` can take it without
-#: importing ``gui``.
+#: a package never holds the files of two different writes.
 _INDEX_LOCKS: dict[str, threading.Lock] = {}
 _INDEX_LOCKS_GUARD = threading.Lock()
 

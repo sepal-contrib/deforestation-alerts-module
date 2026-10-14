@@ -300,3 +300,13 @@ def data_window(cov: Optional[SourceCoverage]) -> Optional[tuple]:
     """The span a preview shows without a period: first to last day of the covering regions."""
     dated = covering_dates(cov)
     return (min(d[1] for d in dated), max(d[2] for d in dated)) if dated else None
+
+
+def preview_window(project, source) -> tuple:
+    """The window "Show on map" previews a source over (spec §6.2): the active
+    period's search window; without one, the span the source's covering
+    regions hold for this AOI; for an undated custom source, every date."""
+    period = project.periods.get(project.active_period) if project.active_period else None
+    if period is not None:
+        return period.search_window()
+    return data_window(record_for(project, source)) or (date(2000, 1, 1), date.today())
