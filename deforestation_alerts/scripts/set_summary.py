@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable, Optional
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import CONFIRMED, NOT_REVIEWED, STATUS_CODES
 from deforestation_alerts.scripts.report_builder import parse_formatted_string
 
 #: The only columns the dashboard reads. A projected parquet read of these is
@@ -47,8 +47,8 @@ UNATTRIBUTED = ""
 #: An alert whose ``alert_sources`` is empty.
 UNKNOWN_SOURCE = ""
 
-_NOT_REVIEWED = STATUS_CODES["Not reviewed"]
-_CONFIRMED = STATUS_CODES["Confirmed"]
+_NOT_REVIEWED = STATUS_CODES[NOT_REVIEWED]
+_CONFIRMED = STATUS_CODES[CONFIRMED]
 _SEP = ", "  # gui.scripts.questions.SEP
 
 

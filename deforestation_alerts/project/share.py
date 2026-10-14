@@ -31,7 +31,9 @@ from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project import io as project_io
 from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
-from deforestation_alerts.project.models import SCHEMA_VERSION, VERDICTS, AlertSet, Period, Project, ReviewCopy
+from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
+from deforestation_alerts.project.review_status import VERDICTS
+from deforestation_alerts.project.store_schema import REVIEW_AFTER, REVIEW_BEFORE
 from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.review_status import is_reviewed, reviewed_mask
@@ -65,12 +67,6 @@ RETURN_REQUIRED = frozenset({HEADER_MEMBER, REVIEWS_MEMBER})
 MAX_MEMBER_BYTES = 2 * 1024 ** 3
 MAX_TOTAL_BYTES = 8 * 1024 ** 3
 MAX_HEADER_BYTES = 1024 ** 2
-
-#: The columns a review Save writes (``gui/tile/analysis/export.py``
-#: ``_save_attributes``) around the answer columns of the questions.
-_REVIEW_BEFORE = ("status",)
-_REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info",
-                 "admin1", "admin2", "admin3", "alert_polygon", "area_ha")
 
 
 class ShareError(KeyedError, ValueError):
@@ -196,12 +192,12 @@ def review_columns(questions) -> list[str]:
     """The store columns a review writes (spec §7.2): ``status``, the answer
     column of each question (``questions.column``), then the images, the
     admin names, the drawn polygon and its area."""
-    out = list(_REVIEW_BEFORE)
+    out = list(REVIEW_BEFORE)
     for q in questions:
         name = column(q)
         if name not in out:
             out.append(name)
-    out += [c for c in _REVIEW_AFTER if c not in out]
+    out += [c for c in REVIEW_AFTER if c not in out]
     return out
 
 

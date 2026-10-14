@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from deforestation_alerts.project.review_status import NOT_REVIEWED
+
 from deforestation_alerts.scripts.report_builder import format_list, get_unique_alerts
 
 
@@ -25,7 +27,7 @@ def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
     gdf["bounding_box"] = gdf.geometry.envelope          # D2 back-compat bbox
     gdf["point"] = gdf.geometry.centroid
 
-    gdf["status"] = "Not reviewed"
+    gdf["status"] = NOT_REVIEWED
     gdf["alert_sources"] = gdf["alert_type_unique"].apply(
         lambda x: format_list(get_unique_alerts(x, custom_names=custom_names, digit_map=digit_map))
     )

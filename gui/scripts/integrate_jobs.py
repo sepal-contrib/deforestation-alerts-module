@@ -38,7 +38,7 @@ import pandas as pd
 
 from deforestation_alerts.engine import pmtiles as pmt
 from deforestation_alerts.engine.integrate import run_integration
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.cleanup import delete_orphans
 from deforestation_alerts.project.models import AlertSetParams

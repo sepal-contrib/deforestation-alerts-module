@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from geopandas.array import GeometryDtype
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project.questions import column as question_column
 from deforestation_alerts.project.questions import is_answer_column
 from deforestation_alerts.project.review_status import NOT_REVIEWED, is_reviewed, reviewed_mask

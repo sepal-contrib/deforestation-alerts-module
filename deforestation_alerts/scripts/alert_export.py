@@ -13,12 +13,13 @@ from pathlib import Path
 
 import geopandas as gpd
 
+from deforestation_alerts.project.store_schema import SECONDARY_GEOM_COLUMNS
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import ALERT_GEOM_COLS, save_gdf_to_csv
 from deforestation_alerts.scripts.naming import alert_artifact_name
 
 EXPORT_FORMATS = {"csv": "csv", "gpkg": "gpkg", "geojson": "geojson"}
-_SECONDARY_GEOM_COLS = ["bounding_box", "point", "alert_polygon"]
+_SECONDARY_GEOM_COLS = list(SECONDARY_GEOM_COLUMNS)
 
 
 def export_alerts_gdf(gdf, folder, fmt, sources, start_date, end_date):

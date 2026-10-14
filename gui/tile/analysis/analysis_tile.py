@@ -68,6 +68,7 @@ import ipyvuetify as v
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -230,7 +231,7 @@ def view_actual_alert(
     # answer at all, so a default is never saved. After reset_alert, which
     # clears it; the seeding is not a change, so ``dirty`` stays False. ---
     stored = alerta.get("status")
-    analysis.verdict.set(stored if isinstance(stored, str) and stored != "Not reviewed" else None)
+    analysis.verdict.set(stored if is_reviewed(stored) else None)
     # --- a reviewed alert opens on its stored answers (codes, read back; a
     # re-save stores them again as codes), an unreviewed one on none (spec
     # U13: no default, so "required" means something). A store without a
@@ -284,7 +285,7 @@ def view_actual_alert(
 
         # re-add the saved defo polygon if this alert was already reviewed
         if (
-            alerta["status"] in {"Confirmed", "Need revision"}
+            alerta["status"] in LOSS_VERDICTS
             and alerta["alert_polygon"] is not None
         ):
             analysis.defo_layer.set(multipolygon_to_geodataframe(

@@ -31,23 +31,22 @@ unsubscribers are deliberately discarded.
 
 import ipyvuetify as v
 
+from deforestation_alerts.project.review_status import (
+    CONFIRMED, FALSE_POSITIVE, NEED_REVISION, VERDICT_LABEL_KEYS, VERDICTS,
+)
 from gui.i18n import t
 from gui.tile.analysis.state import touch
 from gui.tile.analysis.section import TYPE_TITLE, panel_block
 
 #: The review statuses a Save stores, with the key of each one's button label.
 #: The store always gets the status; the label follows the locale.
-REVIEW_CHOICES = (
-    ("Confirmed", "analysis_tile.verdict.true"),
-    ("False Positive", "analysis_tile.verdict.false"),
-    ("Need revision", "analysis_tile.verdict.revision"),
-)
+REVIEW_CHOICES = tuple((status, VERDICT_LABEL_KEYS[status]) for status in VERDICTS)
 
 #: status -> the icon on its button
 _ICONS = {
-    "Confirmed": "mdi-check-bold",
-    "False Positive": "mdi-close-thick",
-    "Need revision": "mdi-flag-outline",
+    CONFIRMED: "mdi-check-bold",
+    FALSE_POSITIVE: "mdi-close-thick",
+    NEED_REVISION: "mdi-flag-outline",
 }
 
 _SLOTS = "_defo_verdict_slots"

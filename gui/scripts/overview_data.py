@@ -22,7 +22,7 @@ import logging
 from collections import OrderedDict
 from typing import Optional
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import CONFIRMED, STATUS_CODES
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts.set_summary import read_summary
 from gui.i18n import t
@@ -36,7 +36,7 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.overview_data")
 #: holds a whole session's worth without growing with it.
 MEMO_LIMIT = 32
 
-CONFIRMED = STATUS_CODES["Confirmed"]
+CONFIRMED_CODE = STATUS_CODES[CONFIRMED]
 
 _LABEL_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 _MEMO: "OrderedDict" = OrderedDict()
@@ -199,7 +199,7 @@ def draw_figures(summary, series, *, measure: str, theme: dict, label_of, questi
     falls back to its numbers in text, and no other card is affected (spec,
     Error handling).
     """
-    spark = [status_value(s, CONFIRMED, measure) for _, s, _ in series]
+    spark = [status_value(s, CONFIRMED_CODE, measure) for _, s, _ in series]
     jobs = {
         "spark": lambda: charts.chart_spark(spark, theme=theme),
         "status": lambda: charts.chart_status(summary, measure=measure, theme=theme),

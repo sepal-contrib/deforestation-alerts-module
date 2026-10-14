@@ -13,17 +13,14 @@ from typing import Optional
 import reacton.ipyvuetify as rv
 import solara
 
-from deforestation_alerts.project.models import VERDICTS, Question, QuestionOption
+from deforestation_alerts.project.models import Question, QuestionOption
+from deforestation_alerts.project.review_status import VERDICT_LABEL_KEYS, VERDICTS
 from deforestation_alerts.project.questions import new_code, new_key
 from gui.i18n import t
 from gui.scripts import questions as qs
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
 from gui.widget.text_style import MUTED
-
-_VERDICT_KEYS = {"Confirmed": "analysis_tile.verdict.true", "False Positive": "analysis_tile.verdict.false",
-                 "Need revision": "analysis_tile.verdict.revision"}
-
 
 def empty_draft() -> dict:
     return {"label": "", "multiple": False, "allow_typed": False, "required": False,
@@ -163,7 +160,7 @@ def _QuestionFields(open_, questions, editing, on_save, columns=()):
                   hide_details=True, on_v_model=lambda x: _set(required=bool(x)))
         with field_group(t("steps.questionnaire.ask_for_label")):
             for verdict in VERDICTS:
-                rv.Checkbox(label=t(_VERDICT_KEYS[verdict]), v_model=verdict in draft["ask_for"], dense=True,
+                rv.Checkbox(label=t(VERDICT_LABEL_KEYS[verdict]), v_model=verdict in draft["ask_for"], dense=True,
                             hide_details=True,
                             on_v_model=lambda on, verdict=verdict: _set(ask_for=[
                                 x for x in VERDICTS

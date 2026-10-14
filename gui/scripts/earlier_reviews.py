@@ -14,9 +14,9 @@ import shapely
 from pyproj import Transformer
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
+from deforestation_alerts.project.review_status import LOSS_VERDICTS
 from gui.scripts import set_store
 
-REVIEWED = ("Confirmed", "Need revision")
 _MAX_SETS = 8
 
 
@@ -45,7 +45,7 @@ def _build(p, s, gdf) -> _Entry:
     empty = _Entry(None, [], [], [])
     if gdf is None or len(gdf) == 0 or "alert_polygon" not in gdf.columns:
         return empty
-    rows = gdf[gdf["status"].isin(REVIEWED)]
+    rows = gdf[gdf["status"].isin(LOSS_VERDICTS)]
     rows = rows[[_has_polygon(g) for g in rows["alert_polygon"]]]
     if rows.empty:
         return empty

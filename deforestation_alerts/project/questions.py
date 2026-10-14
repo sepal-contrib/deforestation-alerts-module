@@ -7,6 +7,7 @@ import unicodedata
 from typing import Union
 
 from deforestation_alerts.project.models import LOSS_DRIVER_KEY, Question
+from deforestation_alerts.project.store_schema import RESERVED_COLUMNS
 
 MAX_KEY = 40
 
@@ -17,10 +18,7 @@ REPORT_PLACEHOLDERS = ("admin1", "admin2", "admin3", "detection_date1", "detecti
 
 #: Every name a question key may not take: the review's own placeholder, the
 #: report's, and the alert store's columns (``evaluator``: the split's, spec §3).
-RESERVED_KEYS = frozenset({"verdict", *REPORT_PLACEHOLDERS,
-                           "alert_id", "geometry", "bounding_box", "point", "status", "alert_sources",
-                           "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha",
-                           "before_img_info", "after_img_info", "alert_polygon", "description", "evaluator"})
+RESERVED_KEYS = frozenset({"verdict", *REPORT_PLACEHOLDERS, *RESERVED_COLUMNS})
 
 _NOT_SLUG = re.compile(r"[^a-z0-9]+")
 

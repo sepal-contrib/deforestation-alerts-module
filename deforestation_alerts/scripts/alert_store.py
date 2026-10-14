@@ -18,9 +18,11 @@ import threading
 import geopandas as gpd
 import pandas as pd
 
+from deforestation_alerts.project.store_schema import GEOM_COLUMNS
+
 # Geometry columns the alerts gdf may carry. Used to coerce secondary geometry
 # columns to GeoSeries before a GeoParquet write and to encode the CSV export.
-ALERT_GEOM_COLS = ["geometry", "bounding_box", "point", "alert_polygon"]
+ALERT_GEOM_COLS = list(GEOM_COLUMNS)
 
 
 #: One lock per store path (``os.path.realpath``), made on first use and kept

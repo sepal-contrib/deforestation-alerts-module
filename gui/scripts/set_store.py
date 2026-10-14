@@ -31,6 +31,7 @@ import numpy as np
 from shapely.geometry import Point, mapping
 
 from deforestation_alerts.engine import pmtiles as pmt
+from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project import paths
 from gui.scripts import alert_filter
 from gui.store.project_writers import is_writing, writing
@@ -328,7 +329,7 @@ def centroid_geojson(gdf) -> dict:
             features.append({
                 "type": "Feature",
                 "geometry": mapping(geom.centroid),
-                "properties": {"alert_id": int(alert_id), "status_code": pmt.STATUS_CODES.get(status, 0)},
+                "properties": {"alert_id": int(alert_id), "status_code": STATUS_CODES.get(status, 0)},
             })
     return {"type": "FeatureCollection", "features": features}
 

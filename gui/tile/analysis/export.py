@@ -137,6 +137,7 @@ from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
@@ -382,7 +383,7 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     # A refusal: nothing is written at all -- not the store, and not the row
     # (the admin names above are in ``updates``, which is dropped with it).
     if (
-        status == "False Positive"
+        status == FALSE_POSITIVE
         and defo_layer is not None
     ):
         raise SaveRefused(key="analysis_tile.questionarie.false_positive_drawn")
@@ -501,10 +502,6 @@ def review_placeholders(question_list, row, status) -> dict:
     for q in question_list:
         out[q.key] = questions.label(q, row.get(column(q))) if questions.visible(q, status) else ""
     return out
-
-
-#: The stored status of a true alert: the verdict a GIF is made for (spec D9).
-CONFIRMED = "Confirmed"
 
 
 def _saved_status(alerts, alert_id) -> Optional[str]:

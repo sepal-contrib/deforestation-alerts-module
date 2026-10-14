@@ -33,7 +33,9 @@ from rasterio.windows import Window
 from scipy import ndimage
 from shapely.geometry import shape
 
-COLUMNS = ["geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha"]
+from deforestation_alerts.project.store_schema import VECTOR_COLUMNS
+
+COLUMNS = list(VECTOR_COLUMNS)
 _BIG = np.iinfo(np.int64).max
 
 

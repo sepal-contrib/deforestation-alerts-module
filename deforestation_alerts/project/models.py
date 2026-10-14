@@ -12,6 +12,7 @@ from affine import Affine
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.project.review_status import LOSS_VERDICTS, VERDICTS
 from deforestation_alerts.scripts.naming import safe_token
 
 SCHEMA_VERSION = 1
@@ -314,10 +315,6 @@ class AlertSet(BaseModel):
     split: Optional[EvaluatorSplit] = None
 
 
-#: The stored review statuses a question can be asked for (the alert store's
-#: ``status`` values; ``gui.tile.analysis.review_panel.REVIEW_CHOICES`` labels them).
-VERDICTS = ("Confirmed", "False Positive", "Need revision")
-
 #: The default question's key; its answers keep the store's ``description``
 #: column (``questions.column``).
 LOSS_DRIVER_KEY = "loss_driver"
@@ -378,7 +375,7 @@ def default_questions() -> list[Question]:
         label_key="analysis_tile.questionarie.loss_driver_label",
         multiple=True,
         allow_typed=True,
-        ask_for=["Confirmed", "Need revision"],
+        ask_for=list(LOSS_VERDICTS),
         options=[QuestionOption(code=c, label_key=k) for c, k in DRIVER_OPTIONS],
     )]
 

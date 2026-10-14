@@ -22,10 +22,10 @@ from typing import Callable, Optional
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.gdal_env import local_scratch_dir
+from deforestation_alerts.project.review_status import STATUS_CODES
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
-STATUS_CODES = {"Not reviewed": 0, "Confirmed": 1, "False Positive": 2, "Need revision": 3}
 POLYGON_MIN_ZOOM = 11
 
 

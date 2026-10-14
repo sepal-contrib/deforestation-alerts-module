@@ -109,3 +109,23 @@ def test_evaluator_is_reserved_for_questions_and_attribute_layers():
     cfg = ra.build_attribute_config("/r.tif", "local",
                                     [{"include": True, "band": "evaluator", "stat": "mean", "column": "evaluator"}])
     assert [b["column"] for b in cfg["bands"]] == ["evaluator_2"]
+
+
+def test_the_review_vocabulary_agrees_with_itself():
+    from deforestation_alerts.project import review_status as rs
+
+    assert set(rs.STATUS_CODES) == {rs.NOT_REVIEWED, *rs.VERDICTS}
+    assert rs.STATUS_CODES[rs.NOT_REVIEWED] == 0
+    assert set(rs.VERDICT_LABEL_KEYS) == set(rs.VERDICTS)
+    assert set(rs.LOSS_VERDICTS) < set(rs.VERDICTS)
+    assert all(rs.is_reviewed(v) for v in rs.VERDICTS)
+
+
+def test_no_question_key_or_attribute_column_takes_a_store_column():
+    from deforestation_alerts.project.questions import RESERVED_KEYS
+    from deforestation_alerts.project.store_schema import RESERVED_COLUMNS
+    from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS
+
+    assert {"alert_id", "set_id", "evaluator"} <= RESERVED_COLUMNS
+    assert RESERVED_COLUMNS <= RESERVED_KEYS
+    assert RESERVED_COLUMNS <= ALERT_RESERVED_COLUMNS

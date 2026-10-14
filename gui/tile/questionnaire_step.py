@@ -10,6 +10,7 @@ import solara
 
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
 from deforestation_alerts.project.review_copy import read_only
+from deforestation_alerts.project.review_status import VERDICT_LABEL_KEYS
 from gui.i18n import t, tn
 from gui.scripts import questions as qs
 from gui.scripts.notify_bridge import current_notifier
@@ -23,10 +24,6 @@ from gui.widget.question_modal import QuestionModal
 from gui.widget.report_template import ReportTemplateField, template_state
 from gui.widget.text_style import MUTED
 
-_VERDICT_KEYS = {"Confirmed": "analysis_tile.verdict.true", "False Positive": "analysis_tile.verdict.false",
-                 "Need revision": "analysis_tile.verdict.revision"}
-
-
 def question_tags(q) -> list:
     """The chips under a question: how it is answered, whether it is required
     and the verdicts it is asked for."""
@@ -37,10 +34,10 @@ def question_tags(q) -> list:
         tags.append({"value": t("steps.questionnaire.tag_typed")})
     if q.required:
         tags.append({"value": t("steps.questionnaire.tag_required"), "color": "error"})
-    if len(q.ask_for) == len(_VERDICT_KEYS):
+    if len(q.ask_for) == len(VERDICT_LABEL_KEYS):
         tags.append({"value": t("steps.questionnaire.tag_all_verdicts")})
     else:
-        tags.extend({"value": t(_VERDICT_KEYS[v])} for v in q.ask_for)
+        tags.extend({"value": t(VERDICT_LABEL_KEYS[v])} for v in q.ask_for)
     return tags
 
 

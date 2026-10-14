@@ -37,7 +37,7 @@ from matplotlib.backends.backend_svg import FigureCanvasSVG
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import NOT_REVIEWED, STATUS_CODES
 from deforestation_alerts.scripts.set_summary import UNKNOWN_DRIVER
 from gui.i18n import format_date, format_number, t
 from gui.scripts.legend_specs import STACK_ORDER, STATUS_CLASSES, status_colors
@@ -97,7 +97,7 @@ _RC = {
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 _STATUS_LABEL_KEYS = {code: key for code, _, key in STATUS_CLASSES}
-_NOT_REVIEWED = STATUS_CODES["Not reviewed"]
+_NOT_REVIEWED = STATUS_CODES[NOT_REVIEWED]
 _STYLE = re.compile(r"<style[^>]*>.*?</style>", re.S)
 _METADATA = re.compile(r"<metadata>.*?</metadata>", re.S)
 _COMMENT = re.compile(r"<!--.*?-->", re.S)

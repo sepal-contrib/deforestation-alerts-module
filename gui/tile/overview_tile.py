@@ -271,7 +271,7 @@ def _kpi(label: str, value: str, *, support: str = "", delta=None, spark=None, h
                 solara.Text(support, style=_NOTE)
             if delta is not None:
                 text, critical = delta
-                ink = status_colors()[overview_data.CONFIRMED] if critical else ""
+                ink = status_colors()[overview_data.CONFIRMED_CODE] if critical else ""
                 solara.Text(text, style=f"{_NOTE}{f' color: {ink};' if ink else ''}")
             if spark is not None:
                 solara.HTML(tag="div", unsafe_innerHTML=spark)
@@ -343,8 +343,8 @@ def _delta_of(history, summary, measure: str):
     before = overview_data.previous_in(history, entry[0].id)
     if before is None:
         return None
-    now = overview_data.status_value(summary, overview_data.CONFIRMED, measure)
-    was = overview_data.status_value(before[2], overview_data.CONFIRMED, measure)
+    now = overview_data.status_value(summary, overview_data.CONFIRMED_CODE, measure)
+    was = overview_data.status_value(before[2], overview_data.CONFIRMED_CODE, measure)
     label = period_label(before[0])
     if now == was:
         return t("overview_tile.delta_same", period=label), False
@@ -355,7 +355,7 @@ def _delta_of(history, summary, measure: str):
 def _kpi_strip(summary, history, figures, measure: str):
     """Confirmed loss (the headline, with its trend), the set's total, how
     much of it has been reviewed, and the single largest alert."""
-    confirmed = overview_data.status_value(summary, overview_data.CONFIRMED, measure)
+    confirmed = overview_data.status_value(summary, overview_data.CONFIRMED_CODE, measure)
     with solara.Row(style="gap: 10px; flex-wrap: wrap; align-items: stretch;"):
         _kpi(t("overview_tile.kpi_confirmed"), charts.format_value(confirmed, measure), hero=True,
              delta=_delta_of(history, summary, measure),

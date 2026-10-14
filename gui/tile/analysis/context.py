@@ -27,8 +27,8 @@ panel is built once per session and a language switch never rebuilds it.
 import ipyvuetify as v
 import numpy as np
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
-from deforestation_alerts.project.review_status import reviewed_mask
+from deforestation_alerts.project.review_status import STATUS_CODES
+from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from gui.i18n import format_number, t
 from gui.scripts import set_store
@@ -137,7 +137,7 @@ def facts_of(gdf, alert_id, project):
         "source": str(row["alert_sources"]),
         "first": convert_julian_to_date(row["alert_date_min"]),
         "last": convert_julian_to_date(row["alert_date_max"]),
-        "status": status if isinstance(status, str) and status else "Not reviewed",
+        "status": status if isinstance(status, str) and status else NOT_REVIEWED,
     }
 
 
@@ -169,11 +169,7 @@ def next_unreviewed(gdf, index):
     if gdf is None or len(gdf) == 0:
         return None
     n = len(gdf)
-    if "status" in gdf.columns:
-        status = gdf["status"]
-        todo = (status.isna() | (status == "Not reviewed") | (status == "")).to_numpy()
-    else:
-        todo = [True] * n  # an older store: nothing reviewed
+    todo = (~reviewed_mask(gdf)).to_numpy()  # an older store without status: nothing reviewed
     start = max(index, -1)
     for step in range(1, n + 1):
         i = (start + step) % n

@@ -9,7 +9,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.scripts import set_summary as ss
 
 

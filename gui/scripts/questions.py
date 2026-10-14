@@ -16,7 +16,8 @@ from functools import lru_cache
 
 import pandas as pd
 
-from deforestation_alerts.project.models import LOSS_DRIVER_KEY, VERDICTS
+from deforestation_alerts.project.models import LOSS_DRIVER_KEY
+from deforestation_alerts.project.review_status import VERDICTS
 from deforestation_alerts.project.questions import column, is_answer_column
 from gui.i18n import MESSAGES_DIR, t
 

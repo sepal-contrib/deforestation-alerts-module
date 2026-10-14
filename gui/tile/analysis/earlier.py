@@ -16,7 +16,7 @@ import logging
 
 import ipyvuetify as v
 
-from deforestation_alerts.engine.pmtiles import STATUS_CODES
+from deforestation_alerts.project.review_status import LOSS_VERDICTS, STATUS_CODES
 from gui.i18n import t, tn
 from gui.scripts import earlier_reviews
 from gui.scripts.legend_specs import status_colors
@@ -157,7 +157,7 @@ def build_earlier_controls(widgets, app_state, analysis):
     distance = v.Html(tag="div", class_="d-flex align-center mt-3", style_="gap: 12px;", children=[
         v.Html(tag="span", class_=TYPE_BODY, children=[t("analysis_tile.earlier.radius")]), field_])
     key = v.Html(tag="div", class_="mt-3", style_=_KEY_SHOWN,
-                 children=[_key_item(status) for status in earlier_reviews.REVIEWED])
+                 children=[_key_item(status) for status in LOSS_VERDICTS])
     section.body_box.children = [v.Html(tag="div", children=[switch, distance, key])]
     last = {"n": None}
 
