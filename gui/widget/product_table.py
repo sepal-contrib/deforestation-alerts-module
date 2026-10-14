@@ -167,24 +167,30 @@ LINK_ACTION = ("display:inline-flex;align-items:center;justify-content:center;wi
                "text-decoration:none;")
 
 
-def link_action(act: dict):
+def link_action(act: dict, key: str = ""):
     """A ``download`` action carrying ``href``: an ``<a download>`` around its
     icon once ``href`` is set, a dimmed ``<span aria-disabled>`` while it is
     None, a spinner while ``loading``. ``title`` is the tooltip of each (a
-    span, not a disabled v-btn: a disabled button shows no tooltip)."""
+    span, not a disabled v-btn: a disabled button shows no tooltip). Each
+    state has its own key: ipyvue reads an Html widget's ``tag`` once, when its
+    Vue component is built, so reusing the span's widget for the anchor would
+    set ``href`` on a span that is never a link. ``key`` tells apart the links
+    of one component render (reacton keys are unique per render, not per parent)."""
     title = act.get("title", "")
     if act.get("loading"):
-        with rv.Html(tag="span", class_="defo-download-action", attributes={"title": title}, style_=LINK_ACTION):
+        with rv.Html(tag="span", class_="defo-download-action", attributes={"title": title},
+                     style_=LINK_ACTION).key(f"{key}link-loading"):
             rv.ProgressCircular(indeterminate=True, size=14, width=2, color="primary")
         return
     href = act.get("href")
     if href:
         attributes = {"title": title, "href": href, "target": "_blank", "download": act.get("file", "")}
-        with rv.Html(tag="a", class_="defo-download-action", attributes=attributes, style_=LINK_ACTION):
+        with rv.Html(tag="a", class_="defo-download-action", attributes=attributes,
+                     style_=LINK_ACTION).key(f"{key}link-ready"):
             rv.Icon(small=True, color=act.get("color", "primary"), children=[action_icon(act["kind"])])
     else:
         with rv.Html(tag="span", class_="defo-download-action", attributes={"title": title, "aria-disabled": "true"},
-                     style_=LINK_ACTION + "opacity:0.38;"):
+                     style_=LINK_ACTION + "opacity:0.38;").key(f"{key}link-pending"):
             rv.Icon(small=True, children=[action_icon(act["kind"])])
 
 
@@ -242,9 +248,9 @@ def _render_cell(cell: dict, first: bool):
             _render_chip(item)
 
 
-def _render_action(act: dict):
+def _render_action(act: dict, key: str = ""):
     if "href" in act:
-        link_action(act)
+        link_action(act, key)
         return
     kind = act["kind"]
     is_on = act.get("is_on", False)
@@ -360,14 +366,14 @@ def ProductTable(
                             + ("text-align:right;" if is_actions else ""),
                             children=[lbl],
                         )
-                for row in rows:
+                for r, row in enumerate(rows):
                     with rv.Html(tag="div", style_=grid + ROW_EXTRA):
                         for i, cell in enumerate(row.get("cells", [])):
                             _render_cell(cell, first=i == 0)
                         if show_actions:
                             with rv.Html(tag="div", style_=CELL_RIGHT):
-                                for act in row.get("actions", []):
-                                    _render_action(act)
+                                for n, act in enumerate(row.get("actions", [])):
+                                    _render_action(act, f"{r}:{n}:")
                         notes = list(row.get("notes") or [])
                         if row.get("error"):
                             notes.append({"text": str(row["error"]), "tone": "error"})

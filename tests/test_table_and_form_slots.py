@@ -121,3 +121,32 @@ def test_a_forms_leading_action_sits_left_of_cancel():
         assert "Re-split" in _strings(bar[3])
     finally:
         rc.close()
+
+
+def test_a_download_that_becomes_ready_is_a_new_widget_not_the_span_reused():
+    """ipyvue reads an Html widget's ``tag`` once, when its Vue component is built: the
+    dimmed span's widget given ``tag="a"`` would stay a span in the browser (the cloud
+    icon would carry an ``href`` and download nothing)."""
+    pending = {"kind": "download", "href": None, "title": "Ana"}
+    ready = {"kind": "download", "href": "https://x/files/a.zip", "file": "a.zip", "title": "Ana"}
+    box, rc = _render_row(pending)
+    try:
+        (span,) = rc.find(v.Html, class_="defo-download-action").widgets
+        row = {"key": "a", "cells": [{"value": "Ana"}], "actions": [ready]}
+        rc.render(ProductTable(title="T", columns=[{"label": "C"}], rows=[row], empty_text="-"))
+        (a,) = rc.find(v.Html, class_="defo-download-action").widgets
+        assert a.tag == "a" and a is not span
+    finally:
+        rc.close()
+
+
+def test_several_rows_with_the_same_download_state_render():
+    """Reacton's keys are unique per render, so two dimmed links need keys of their own."""
+    rows = [{"key": k, "cells": [{"value": k}], "actions": [{"kind": "download", "href": None, "title": k}]}
+            for k in ("a", "b")]
+    _box, rc = reacton.render(ProductTable(title="T", columns=[{"label": "C"}], rows=rows, empty_text="-"),
+                        handle_error=False)
+    try:
+        assert len(rc.find(v.Html, class_="defo-download-action").widgets) == 2
+    finally:
+        rc.close()
