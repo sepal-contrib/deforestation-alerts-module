@@ -592,8 +592,7 @@
     "mode_count": "Nombre",
     "mode_names": "Noms",
     "count_label": "Nombre d'évaluateurs",
-    "names_label": "Noms, un par ligne",
-    "names_hint": "N'importe quel nom ; les lignes vides sont ignorées.",
+    "names_hint": "Les lignes vides sont ignorées.",
     "include_reviewed": "Inclure les alertes déjà révisées",
     "include_reviewed_hint": "Décochée, les alertes révisées restent non attribuées.",
     "split": "Répartir",
@@ -656,7 +655,9 @@
     "generate_return_first": "Générez d'abord la copie révisée.",
     "review_mode_label": "Mode de revue",
     "review_mode_solo": "Individuelle",
-    "review_mode_multi": "Plusieurs évaluateurs"
+    "review_mode_multi": "Plusieurs évaluateurs",
+    "name_field": "Évaluateur {n}",
+    "add_name": "Ajouter un évaluateur"
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

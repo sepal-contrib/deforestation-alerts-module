@@ -569,8 +569,7 @@
     "mode_count": "Count",
     "mode_names": "Names",
     "count_label": "Number of evaluators",
-    "names_label": "Names, one per line",
-    "names_hint": "Any name; blank lines are skipped.",
+    "names_hint": "Empty rows are skipped.",
     "include_reviewed": "Include already reviewed alerts",
     "include_reviewed_hint": "Unchecked, reviewed alerts stay unassigned.",
     "split": "Split",
@@ -631,7 +630,9 @@
     "generate_return_first": "Generate the reviewed copy first.",
     "review_mode_label": "Review mode",
     "review_mode_solo": "Solo",
-    "review_mode_multi": "Multiple evaluators"
+    "review_mode_multi": "Multiple evaluators",
+    "name_field": "Evaluator {n}",
+    "add_name": "Add evaluator"
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

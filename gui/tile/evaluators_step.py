@@ -82,16 +82,29 @@ def app_version() -> str:
         return "unknown"
 
 
-def typed_evaluators(mode: str, count_text, names_text) -> list[str]:
+def typed_evaluators(mode: str, count_text, names: list) -> list[str]:
     """The evaluators the form names: "Evaluator 1".."Evaluator N" for a
-    count, or the typed names. Raises ``SplitError``."""
+    count, or the names typed in its rows. Raises ``SplitError``."""
     if mode == "names":
-        return split_mod.normalize_names(str(names_text or "").splitlines())
+        return split_mod.normalize_names(names)
     try:
         n = int(str(count_text or "").strip())
     except ValueError:
         raise split_mod.SplitError("evaluators.err.bad_count", max=split_mod.MAX_EVALUATORS) from None
     return split_mod.count_names(n, t("evaluators.default_prefix"))
+
+
+def duplicate_rows(names: list) -> set[int]:
+    """The rows whose name an earlier row already has (ignoring case and
+    spaces, as ``normalize_names``): where the names mode shows the error."""
+    seen, out = set(), set()
+    for i, name in enumerate(names):
+        folded = str(name).strip().casefold()
+        if folded in seen:
+            out.add(i)
+        elif folded:
+            seen.add(folded)
+    return out
 
 
 def aoi_ready(p, pdir, result) -> bool:
@@ -336,9 +349,17 @@ def _SplitFields(form, form_error, split, orphan, packaged, busy, on_cancel, on_
     zips of it found on disk: a run that ended after a project switch built
     zips the split does not record, and they may have been sent."""
     mode = form["mode"]
-    typed = (form["count"] if mode == "count" else form["names"]).strip()
+    names = form["names"]
+    duplicates = duplicate_rows(names) if mode == "names" else set()
+    typed = form["count"].strip() if mode == "count" else "".join(names).strip()
     shown = [form_error] if form_error and typed else []
     editing = split is not None or orphan
+
+    def _set_name(i, text):
+        form["set_names"]([(text or "") if j == i else x for j, x in enumerate(names)])
+
+    def _drop_name(i):
+        form["set_names"]([x for j, x in enumerate(names) if j != i])
 
     def _leading():
         if editing:
@@ -363,10 +384,25 @@ def _SplitFields(form, form_error, split, orphan, packaged, busy, on_cancel, on_
                          on_v_model=lambda value: form["set_count"](value or ""), type="number", dense=True,
                          outlined=True, class_="mt-3", error_messages=shown, disabled=busy)
         else:
-            rv.Textarea(label=t("evaluators.names_label"), v_model=form["names"],
-                        on_v_model=lambda value: form["set_names"](value or ""), hint=t("evaluators.names_hint"),
-                        persistent_hint=not shown, rows=4, auto_grow=True, dense=True, outlined=True,
-                        class_="mt-3", error_messages=shown, disabled=busy)
+            # One field per evaluator, as the questionnaire's options. A duplicate
+            # is flagged on its own row; the other refusals under the rows.
+            with rv.Html(tag="div", class_="mt-3"):
+                for i, name in enumerate(names):
+                    with rv.Html(tag="div", style_="display:flex;align-items:flex-start;gap:2px;margin:4px 0 8px;"):
+                        rv.TextField(label=t("evaluators.name_field", n=i + 1), v_model=name,
+                                     on_v_model=lambda x, i=i: _set_name(i, x), class_="defo-name-row",
+                                     error_messages=([t("evaluators.err.duplicate_name", name=name.strip())]
+                                                     if i in duplicates else []),
+                                     hide_details="auto", autofocus=i >= 2, dense=True, outlined=True,
+                                     disabled=busy)
+                        solara.Button("", icon_name="mdi-close", icon=True, x_small=True, disabled=busy,
+                                      classes=["defo-name-remove", "mt-2"], on_click=lambda i=i: _drop_name(i))
+                solara.Button(t("evaluators.add_name"), icon_name="mdi-plus", text=True, small=True, color="primary",
+                              disabled=busy or len(names) >= split_mod.MAX_EVALUATORS,
+                              on_click=lambda: form["set_names"]([*names, ""]))
+                if shown and not duplicates:
+                    solara.Text(shown[0], classes=["error--text"], style="display:block;font-size:0.75rem;")
+                solara.Text(t("evaluators.names_hint"), style="display:block;" + MUTED + "font-size:0.75rem;")
         rv.Checkbox(label=t("evaluators.include_reviewed"), v_model=form["include"],
                     on_v_model=lambda value: form["set_include"](bool(value)), dense=True, hide_details=True,
                     disabled=busy)
@@ -419,7 +455,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
     mode, set_mode = solara.use_state("count")
     count_text, set_count_text = solara.use_state("2")
-    names_text, set_names_text = solara.use_state("")
+    name_rows, set_name_rows = solara.use_state(["", ""])
     include, set_include = solara.use_state(False)
     # (project, split_id, evaluator) of the package being built; evaluator
     # None while the run fetches the AOI. The project and split say whose
@@ -447,7 +483,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         # to the same reactive in place, keeping its state.)
         set_mode("count")
         set_count_text("2")
-        set_names_text("")
+        set_name_rows(["", ""])
         set_include(False)
         set_pending(None)
         split_open.set(False)
@@ -581,7 +617,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
 
     busy = split_task.pending or remove_task.pending or generate_task.pending or merge_task.pending
     try:
-        names, form_error = typed_evaluators(mode, count_text, names_text), None
+        names, form_error = typed_evaluators(mode, count_text, name_rows), None
     except split_mod.SplitError as exc:
         names, form_error = [], error_text(exc)
     orphan = bool(split is None and gdf is not None and split_service.orphan_assignments(p, gdf))
@@ -643,8 +679,8 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
                       loading=split_task.pending or remove_task.pending,
                       classes=["defo-split-open"], on_click=lambda: split_open.set(True))
 
-    form = {"mode": mode, "count": count_text, "names": names_text, "include": include, "set_mode": set_mode,
-            "set_count": set_count_text, "set_names": set_names_text, "set_include": set_include}
+    form = {"mode": mode, "count": count_text, "names": name_rows, "include": include, "set_mode": set_mode,
+            "set_count": set_count_text, "set_names": set_name_rows, "set_include": set_include}
 
     with solara.Column(style="gap:8px;margin-top:8px;"):
         rv.Divider()

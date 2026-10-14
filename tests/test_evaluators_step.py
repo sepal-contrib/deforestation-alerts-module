@@ -159,6 +159,20 @@ def _open_merge(rc):
     _button(rc, t("evaluators.merge_open")).fire_event("click", None)
 
 
+def _name_rows(rc):
+    """The names mode's fields, one per evaluator, in order."""
+    return [f for f in rc.find(v.TextField).widgets if "defo-name-row" in (f.class_ or "")]
+
+
+def _names_mode(rc, *names):
+    """Switch the open split modal to Names and type ``names`` in its rows."""
+    rc.find(v.RadioGroup).widget.v_model = "names"
+    for i, name in enumerate(names):
+        if i >= len(_name_rows(rc)):
+            _button(rc, t("evaluators.add_name")).fire_event("click", None)
+        _name_rows(rc)[i].v_model = name
+
+
 def _hint(rc):
     """The note under the review-mode select: what the chosen mode means."""
     return rc.find(v.Html, class_="defo-mode-note").widget.children[0]
@@ -236,14 +250,19 @@ def test_the_package_header_carries_the_apps_version():
 
 def test_a_count_or_a_list_names_the_evaluators():
     set_locale("en")
-    assert es.typed_evaluators("count", " 3 ", "") == ["Evaluator 1", "Evaluator 2", "Evaluator 3"]
-    assert es.typed_evaluators("names", "", "Ana\n\n  Bo \n") == ["Ana", "Bo"]
+    assert es.typed_evaluators("count", " 3 ", []) == ["Evaluator 1", "Evaluator 2", "Evaluator 3"]
+    assert es.typed_evaluators("names", "", ["Ana", "", "  Bo "]) == ["Ana", "Bo"]
     with pytest.raises(SplitError) as err:
-        es.typed_evaluators("count", "two", "")
+        es.typed_evaluators("count", "two", [])
     assert err.value.key == "evaluators.err.bad_count"  # T3's key, rendered by error_text
     assert error_text(err.value) == t("evaluators.err.bad_count", max=split_mod.MAX_EVALUATORS)
     with pytest.raises(SplitError):
-        es.typed_evaluators("names", "", "Ana\nana")  # a casefold duplicate
+        es.typed_evaluators("names", "", ["Ana", "ana"])  # a casefold duplicate
+
+
+def test_a_duplicate_is_flagged_on_its_second_row():
+    assert es.duplicate_rows(["Ana", "", " ana ", "Bo", "ANA"]) == {2, 4}
+    assert es.duplicate_rows(["Ana", "Bo", "", ""]) == set()
 
 
 def test_the_table_counts_each_evaluators_alerts_and_the_unassigned_ones():
@@ -425,14 +444,76 @@ def test_a_split_the_project_did_not_record_is_not_reported_as_done(data_root, m
     asyncio.run(main())
 
 
+def test_names_mode_lists_one_field_per_evaluator(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        _open_split(rc)
+        rc.find(v.RadioGroup).widget.v_model = "names"
+        rows = _name_rows(rc)
+        assert [r.label for r in rows] == [t("evaluators.name_field", n=1), t("evaluators.name_field", n=2)]
+        assert [r.v_model for r in rows] == ["", ""]
+        assert _button(rc, t("evaluators.split")).disabled  # no name yet, and no error shown for it
+        assert not any(r.error_messages for r in rows)
+        _names_mode(rc, "Ana", "Bo", "Cy")
+        assert [r.label for r in _name_rows(rc)][-1] == t("evaluators.name_field", n=3)
+        removes = [b for b in rc.find(v.Btn).widgets if "defo-name-remove" in (b.class_ or "")]
+        removes[0].fire_event("click", None)
+        assert [r.v_model for r in _name_rows(rc)] == ["Bo", "Cy"]
+        assert [r.label for r in _name_rows(rc)] == [t("evaluators.name_field", n=1),
+                                                     t("evaluators.name_field", n=2)]
+        assert not _button(rc, t("evaluators.split")).disabled
+    finally:
+        rc.close()
+
+
+def test_names_mode_stops_adding_at_the_most_evaluators(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        _open_split(rc)
+        rc.find(v.RadioGroup).widget.v_model = "names"
+        add = lambda: _button(rc, t("evaluators.add_name"))  # noqa: E731
+        while not add().disabled:
+            add().fire_event("click", None)
+        assert len(_name_rows(rc)) == split_mod.MAX_EVALUATORS
+    finally:
+        rc.close()
+
+
+def test_split_hands_the_named_evaluators_to_the_service(data_root, monkeypatch):
+    calls = []
+
+    def _apply(app_state, model, names, include_reviewed):
+        calls.append(names)
+        made = EvaluatorSplit(split_id="s2", evaluators=names, created_at=datetime.now())
+        _record_split(app_state, made)
+        return made
+
+    monkeypatch.setattr(es.split_service, "apply_split", _apply)
+    s = _state(_project(), _gdf(evaluators=("",) * 4))
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _open_split(rc)
+            _names_mode(rc, " Ana ", "", "Bo")
+            _button(rc, t("evaluators.split")).fire_event("click", None)
+            await _settle(lambda: calls, "the split")
+            assert calls == [["Ana", "Bo"]]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_duplicate_name_is_refused_inline(data_root):
     s = _state(_project(), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
         _open_split(rc)
-        rc.find(v.RadioGroup).widget.v_model = "names"
-        rc.find(v.Textarea, label=t("evaluators.names_label")).widget.v_model = "Ana\nana"
-        assert rc.find(v.Textarea, label=t("evaluators.names_label")).widget.error_messages
+        _names_mode(rc, "Ana", "ana")
+        first, second = _name_rows(rc)
+        assert not first.error_messages
+        assert second.error_messages == [t("evaluators.err.duplicate_name", name="ana")]
         assert _button(rc, t("evaluators.split")).disabled
     finally:
         rc.close()
@@ -1091,13 +1172,12 @@ def test_the_split_form_starts_afresh_in_another_project(data_root):
     _box, rc = _render(s)
     try:
         _open_split(rc)
-        rc.find(v.RadioGroup).widget.v_model = "names"
-        rc.find(v.Textarea, label=t("evaluators.names_label")).widget.v_model = "Ana\nBo"
+        _names_mode(rc, "Ana", "Bo")
         s.load_project_state(_project("d"))
         s.alerts_gdf.set(_gdf(evaluators=("",) * 4))
         assert t("evaluators.split_title") not in _strings(rc.container)  # the modal closed
         _open_split(rc)
-        assert not rc.find(v.Textarea).widgets
+        assert not _name_rows(rc)
         assert rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model == "2"
     finally:
         rc.close()

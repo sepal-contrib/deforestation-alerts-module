@@ -592,8 +592,7 @@
     "mode_count": "Número",
     "mode_names": "Nombres",
     "count_label": "Número de evaluadores",
-    "names_label": "Nombres, uno por línea",
-    "names_hint": "Cualquier nombre; las líneas vacías se omiten.",
+    "names_hint": "Las filas vacías se omiten.",
     "include_reviewed": "Incluir las alertas ya revisadas",
     "include_reviewed_hint": "Sin marcar, las alertas revisadas quedan sin asignar.",
     "split": "Repartir",
@@ -656,7 +655,9 @@
     "generate_return_first": "Genera primero la copia revisada.",
     "review_mode_label": "Modo de revisión",
     "review_mode_solo": "Individual",
-    "review_mode_multi": "Varios evaluadores"
+    "review_mode_multi": "Varios evaluadores",
+    "name_field": "Evaluador {n}",
+    "add_name": "Añadir evaluador"
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
