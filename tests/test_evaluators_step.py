@@ -63,7 +63,7 @@ def _split(packaged=False, returns=None):
                           returns=returns or {})
 
 
-def _project(name="c", *, split=None, review_copy=None, sidecar=True):
+def _project(name="c", *, split=None, review_copy=None, sidecar=True, multi=True):
     """A project whose active set has a canonical folder; with ``sidecar``,
     a drawn AOI with its ``aoi.geojson``, else an Earth Engine one without."""
     now = datetime.now()
@@ -83,6 +83,7 @@ def _project(name="c", *, split=None, review_copy=None, sidecar=True):
         n_alerts=4, fingerprint="fp", created_at=now, split=split)}
     p.active_set = SET_ID
     p.review_copy = review_copy
+    p.multi_evaluator = multi
     if sidecar:
         pdir.mkdir(parents=True, exist_ok=True)
         (pdir / paths.AOI_SIDECAR).write_text(json.dumps(FC), encoding="utf-8")
@@ -247,6 +248,59 @@ def test_the_step_waits_for_an_alert_set(data_root):
     try:
         assert t("workflow.lock_analysis") in _strings(rc.container)
         assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
+    finally:
+        rc.close()
+
+
+def _multi_switch(rc):
+    return rc.find(v.Switch, label=t("evaluators.multi_label"))
+
+
+def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
+    _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
+    try:
+        texts = _strings(rc.container)
+        assert _multi_switch(rc).widget.v_model is False
+        assert t("evaluators.solo_note") in texts
+        assert t("evaluators.split_title") not in texts
+        assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
+        assert not rc.find(FileInput).widgets
+        assert _button(rc, t("workflow.start_analysis"))
+    finally:
+        rc.close()
+
+
+def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root):
+    s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        _multi_switch(rc).widget.v_model = True
+        assert s.project.value.multi_evaluator is True
+        assert t("evaluators.split_title") in _strings(rc.container)
+        _multi_switch(rc).widget.v_model = False
+        assert s.project.value.multi_evaluator is False
+        assert t("evaluators.split_title") not in _strings(rc.container)
+    finally:
+        rc.close()
+
+
+def test_a_split_holds_the_switch_on(data_root):
+    _box, rc = _render(_state(_project(split=_split()), _gdf()))
+    try:
+        switch = _multi_switch(rc).widget
+        assert switch.v_model is True and switch.disabled is True
+        assert t("evaluators.multi_locked") in _strings(rc.container)
+    finally:
+        rc.close()
+
+
+def test_a_review_copy_has_no_switch(data_root):
+    copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
+                      origin_project="c", imported_at=datetime.now())
+    _box, rc = _render(_state(_project("c__e02-bo", split=_split(), review_copy=copy, multi=False), _gdf()))
+    try:
+        assert not _multi_switch(rc).widgets
+        assert t("evaluators.return_title") in _strings(rc.container)
     finally:
         rc.close()
 

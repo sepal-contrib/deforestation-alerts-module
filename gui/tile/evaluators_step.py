@@ -609,6 +609,29 @@ def _ReturnPanel(app_state):
 
 
 @solara.component
+def _MultiSwitch(app_state):
+    """Solo evaluation or multiple evaluators. A split holds it on: switching
+    to solo would leave alerts assigned to evaluators the step no longer shows."""
+    p = app_state.project.value
+    split = active_set(p).split
+    on = bool(p.multi_evaluator)
+
+    def _set(value):
+        update_setup(app_state, p.name, lambda live: setattr(live, "multi_evaluator", bool(value)))
+
+    with rv.Card(outlined=True, class_="pa-3"):
+        rv.Switch(label=t("evaluators.multi_label"), v_model=on, on_v_model=_set, disabled=split is not None,
+                  dense=True, hide_details=True)
+        if split is not None:
+            hint = t("evaluators.multi_locked")
+        elif on:
+            hint = t("evaluators.multi_note")
+        else:
+            hint = t("evaluators.solo_note")
+        solara.Text(hint, style="display:block;" + MUTED + "font-size:0.75rem;")
+
+
+@solara.component
 def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     """``app_tile_model`` is the shell's ``SetContext`` and ``analysis`` its
     ``AnalysisState``: the split and merge services write through them."""
@@ -624,7 +647,9 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
             # A review copy neither splits nor builds packages (§6.3): it returns.
             _ReturnPanel(app_state=app_state)
         elif s is not None:
-            _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
-                          gee_interface=gee_interface)
+            _MultiSwitch(app_state=app_state)
+            if p.multi_evaluator:
+                _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
+                              gee_interface=gee_interface)
         # Without an active set, Start analysis says why (workflow.lock_analysis).
         _StartAnalysis(app_state=app_state, ready=s is not None)

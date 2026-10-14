@@ -264,6 +264,26 @@ def test_a_period_stored_without_look_back_takes_the_projects():
     assert period.search_window() == (date(2025, 12, 1), date(2026, 1, 31))
 
 
+def test_a_new_project_is_a_solo_evaluation():
+    assert Project(name="x", created_at=NOW, updated_at=NOW).multi_evaluator is False
+
+
+@pytest.mark.parametrize("split, expected", [(None, False), ("made", True)])
+def test_a_project_saved_before_the_evaluator_toggle_is_multi_when_a_set_was_split(split, expected):
+    from deforestation_alerts.project.models import EvaluatorSplit
+
+    p = _project()
+    made = EvaluatorSplit(split_id="s1", evaluators=["Ana"], created_at=NOW) if split else None
+    p.alert_sets["s"] = AlertSet(id="s", period_id="x", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", fingerprint="f", created_at=NOW, split=made)
+    raw = p.model_dump(mode="json")
+    del raw["multi_evaluator"]  # what an older manifest holds
+    assert Project.model_validate(raw).multi_evaluator is expected
+    # a saved choice is kept as it is
+    assert Project.model_validate({**raw, "multi_evaluator": False}).multi_evaluator is False
+
+
 def test_old_manifest_keeps_every_status(tmp_path):
     """A d438e0b-era manifest (no per-period look-back) reopens with every raw
     and harmonized artifact CURRENT as before."""

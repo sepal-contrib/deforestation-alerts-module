@@ -406,13 +406,23 @@ class Project(BaseModel):
     questions_expanded: bool = False
     #: set when this project was imported from a review package (spec §6)
     review_copy: Optional[ReviewCopy] = None
+    #: whether the Evaluators step splits the alerts between evaluators; off,
+    #: the project is a solo evaluation
+    multi_evaluator: bool = False
 
     @model_validator(mode="before")
     @classmethod
     def _periods_inherit_look_back(cls, data):
         """A period stored before look-back moved onto periods takes the
-        project's value, so its window (and every fingerprint) is unchanged."""
+        project's value, so its window (and every fingerprint) is unchanged.
+        A project stored before the evaluator switch is multi-evaluator when
+        any of its sets was split, so its Evaluators step keeps its panel."""
         if isinstance(data, dict):
+            if "multi_evaluator" not in data:
+                sets = data.get("alert_sets") or {}
+                split = any((v.get("split") if isinstance(v, dict) else getattr(v, "split", None))
+                            for v in sets.values())
+                data = {**data, "multi_evaluator": split}
             days = data.get("look_back_days", 90)
             periods_ = data.get("periods") or {}
             if any(isinstance(v, dict) and "look_back_days" not in v for v in periods_.values()):
