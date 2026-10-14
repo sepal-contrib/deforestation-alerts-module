@@ -4,15 +4,14 @@ Run this in a SEPAL sandbox (test.sepal.io or sepal.io). It has two parts:
 the app in a real browser through SEPAL's proxy, and one national-scale
 measurement. Record the results at the end of this file.
 
-## 0. Set up the branch in the sandbox
+## 0. Set up the checkout in the sandbox
 
-The SEPAL apps page launches the published release, not this branch, so run
-the branch from your own checkout. First make the branch reachable from SEPAL
-(push `feat/alert-monitoring-slices2-6` to a remote you can clone, or copy the
-checkout into your SEPAL home). Then, in a sandbox terminal:
+The SEPAL apps page launches the published release (the `release` branch), not
+`main`, so run `main` (or the branch under test) from your own checkout. In a
+sandbox terminal:
 
 ```bash
-git clone -b feat/alert-monitoring-slices2-6 <your remote> ~/defo-alerts-gate
+git clone -b main https://github.com/sepal-contrib/deforestation-alerts-module ~/defo-alerts-gate
 cd ~/defo-alerts-gate
 micromamba create -y -n defo-alerts -f sepal_environment.yml   # once
 micromamba activate defo-alerts

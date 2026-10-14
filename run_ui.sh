@@ -2,7 +2,7 @@
 # Deforestation Alerts: sources the .env file and runs ui.ipynb via voila — the SEPAL app entry path.
 # Open http://127.0.0.1:PORT/voila/render/ui.ipynb
 # Usage: ./run_ui.sh [--port PORT]
-# If no port is provided, defaults to 8911 (run_solara.sh uses 8910)
+# If no port is provided, defaults to 8911 (`nox -s app` runs plain `solara run` on 8900)
 
 PORT="8911"
 

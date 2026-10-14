@@ -1,12 +1,8 @@
-from pysepal import color, sepalwidgets as sw
-from pysepal.frontend.resize_trigger import rt
+from pysepal import sepalwidgets as sw
 import ipyvuetify as v
 from pysepal.sepalwidgets.sepalwidget import SepalWidget
-from configparser import ConfigParser
 from pathlib import Path
-from typing import List, Tuple, Union
-from typing import Callable, List
-import time
+from typing import Union
 
 from deforestation_alerts.scripts import local_files
 

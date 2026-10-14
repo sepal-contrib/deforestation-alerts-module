@@ -2,140 +2,48 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
 
 # C extensions
 *.so
 *Untitled*
 
 # Distribution / packaging
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
 *.egg
-MANIFEST
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
+# Test, lint and coverage caches
 .nox/
+.tox/
+.pytest_cache/
+.ruff_cache/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
+htmlcov/
 coverage.xml
-*.cover
-*.py,cover
 .hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
 *.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
 
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
+# Jupyter / IPython
 .ipynb_checkpoints
-
-# IPython
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# Environments (.env holds local settings such as DEFORESTATION_ALERTS_DATA_DIR)
 .env
 .venv
 env/
 venv/
-ENV/
-env.bak/
-venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
+# Editors and type checkers
 .vscode/sftp.json
 .vscode/settings.json
+.mypy_cache/
 
-# Outfiles and models
-test/
+# Local outputs
 outputs/
-utils/model2.h5
 CLAUDE.md
 
 # Local Claude Code session data and AI working docs (plans, specs)
@@ -143,8 +51,7 @@ CLAUDE.md
 docs/superpowers/
 
 # leaflet-multiview JS packages (js/leaflet-multiview, js/app): node_modules is
-# installed from the committed package-lock.json files; the built bundle in
-# gui/widget/static is committed.
-js/**/node_modules/
-# the "test/" rule above would also hide the JS package's own tests
-!js/leaflet-multiview/test/
+# installed from the committed package-lock.json files (no trailing slash, so a
+# symlinked node_modules is ignored too); the built bundle in gui/widget/static
+# is committed.
+js/**/node_modules

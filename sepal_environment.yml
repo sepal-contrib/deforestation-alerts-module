@@ -66,7 +66,7 @@ dependencies:
       # Voila/Jupyter get a PROCESS session without the old fork's
       # in_solara_server_context patch (Decision 4 fallback retired).
       # solara is pinned: pysepal 4 relies on two private solara APIs and
-      # has reviewed 1.60.0-1.62.0 (docs/guides/solara-upstream.md).
+      # has reviewed 1.60.0-1.62.0 (pysepal's docs/guides/solara-upstream.md).
       - pysepal==4.1.0
       # pysepal 4 floor (assets cache survives a cancelled fetch)
       - "ee-client>=3.2.1,<4"
