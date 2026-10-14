@@ -450,6 +450,56 @@ def test_a_widen_request_beyond_the_coverage_is_fetched_in_the_foreground(
     asyncio.run(main())
 
 
+def test_a_widen_request_published_from_a_worker_is_fetched_on_the_loop(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """Opening a project publishes its first alert from the active-set
+    loader's worker thread, and the timeline asks there for the months that
+    alert's saved image pair needs. The worker renders the loader itself, with
+    no event loop: the foreground load must not start in that render ("no
+    running event loop" took the whole app down), but on the loop after it."""
+    import threading
+    import traceback
+
+    pdir = paths.project_dir("sl")
+    scene_cache.store_chunk(
+        pdir, scene_index.parse_scenes(RAW), (date(2026, 3, 3), date(2026, 10, 2)), "d1",
+        now=datetime.now(timezone.utc),
+    )
+    asked, errors = [], []
+
+    async def get_info_async(obj):
+        asked.append(obj)
+        return RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()))
+
+    def publish():
+        try:
+            state.scene_window_request.set((date(2026, 1, 3), date(2026, 10, 2)))
+        except BaseException:  # noqa: BLE001 - reported by the test
+            errors.append(traceback.format_exc())
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index.value is not None)
+            worker = threading.Thread(target=publish, name="worker")
+            worker.start()
+            while worker.is_alive():
+                await asyncio.sleep(0.01)
+            assert errors == []
+            assert await _settle(lambda: state.scene_manifest.value.covered.start == date(2026, 1, 3))
+            assert asked == [(date(2026, 2, 3), date(2026, 3, 3)),
+                             (date(2026, 1, 3), date(2026, 2, 3))]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_an_earth_engine_aoi_waits_for_the_picker_instead_of_failing(
         data_root, monkeypatch, no_planet):
     """``AppState._install`` clears ``aoi_result``, and the AOI step republishes
