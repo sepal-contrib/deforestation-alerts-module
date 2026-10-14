@@ -123,9 +123,8 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convertir_formato3,
     filter_features_by_color,
     geojson_to_geodataframe,
-    raster_to_gdf,
+    prediction_patches,
     simplify_and_extract_features,
-    verify_raster,
 )
 from gui.i18n import format_number, t, tn
 from gui.scripts.notify_bridge import (
@@ -137,7 +136,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
-from gui.tile.analysis.state import capture_alert, drawing_changed, touch
+from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, touch
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -154,8 +153,8 @@ _MODEL2_REPO = "joseserafinig/forest_cover_change_cnn_m2"
 _MODEL2_FILE = "Model2.keras"
 
 # CNN prediction probability cutoff (OLD passed 0.20 to verify_raster/raster_to_gdf)
-# and polygon simplify tolerance in metres (OLD passed 15 to
-# simplify_and_extract_features).
+# and polygon simplify tolerance in metres of the project's grid CRS (OLD
+# passed 15, in EPSG:3857, to simplify_and_extract_features).
 _PRED_THRESHOLD = 0.20
 _SIMPLIFY_TOLERANCE = 15
 
@@ -175,19 +174,25 @@ def edit_widgets(body):
     return getattr(body, _EDIT_SLOTS)
 
 
-def vectorise(path):
+def vectorise(path, crs=None, min_size_ha=0.0):
     """``(features, n_patches, area_ha)`` of a prediction raster.
+
+    Only the patches of at least ``min_size_ha`` count (the alert set's
+    minimum size, ``state.min_patch_ha``), measured in ``crs`` (the project's
+    grid CRS, ``state.area_crs``): the same rule and the same scale as the
+    alerts Integrate made. A prediction whose patches are all smaller found
+    nothing. The area is the patches' own, before the simplification.
 
     Ran at *Add* time before; the worker now does it inside its tracked job, so
     the row can report what was found and *Add* is instant. ``color`` is applied
     by the caller (``convertir_formato3``), which is what distinguishes the two
     models' features on the map.
     """
-    gdf = raster_to_gdf(path, "4326", _PRED_THRESHOLD)
-    if gdf is None or len(gdf) == 0:
+    patches = prediction_patches(path, _PRED_THRESHOLD, crs, min_size_ha)
+    if len(patches) == 0:
         return [], 0, 0.0
-    return (simplify_and_extract_features(gdf, "geometry", _SIMPLIFY_TOLERANCE),
-            int(len(gdf)), float(calculate_total_area(gdf)))
+    return (simplify_and_extract_features(patches, "geometry", _SIMPLIFY_TOLERANCE),
+            int(len(patches)), float(patches["area_ha"].sum()))
 
 
 def _record_prediction_shapes(analysis, model, n_patches, area_ha):
@@ -216,10 +221,11 @@ def found_text(analysis, model) -> str:
              area=format_number(area, 1))
 
 
-def wire_refine_badge(analysis, set_badge):
+def wire_refine_badge(analysis, set_badge, crs_of=lambda: None):
     """Keep a section badge reading the drawn polygon: *nothing drawn*, or the
-    shape count and the area -- the same ``calculate_total_area`` the save
-    stores as ``area_ha``, so the badge and the column can never disagree."""
+    shape count and the area -- the same ``calculate_total_area`` in the same
+    CRS (``crs_of()``, the project's ``state.area_crs``) the save stores as
+    ``area_ha``, so the badge and the column can never disagree."""
 
     def _show(gdf=None):
         # Guarded like ``wire_defo_layer._on_layer``, the other
@@ -240,7 +246,7 @@ def wire_refine_badge(analysis, set_badge):
                 return
             set_badge(t("analysis_tile.sections.refine_summary",
                         shapes=tn("analysis_tile.sections.shapes", len(gdf)),
-                        area=format_number(calculate_total_area(gdf), 1)), color="primary")
+                        area=format_number(calculate_total_area(gdf, crs_of()), 1)), color="primary")
         except Exception:
             logger.exception("Analysis: the refine badge could not be written")
 
@@ -579,7 +585,7 @@ def build_edit_tools(
         if not analysis.is_current(token):
             return False, False
         features, n_patches, area_ha = found
-        valid = n_patches > 0 and verify_raster(pred_path, _PRED_THRESHOLD)
+        valid = n_patches > 0
 
         def _apply():
             _record_prediction(model, pred_path)
@@ -640,7 +646,8 @@ def build_edit_tools(
             # prediction this build never saw has to do it again.
             features = features_cache.get((analysis.alert_token.value, model))
             if features is None:
-                features, _n, _area = vectorise(path)
+                p = app_state.project.value
+                features, _n, _area = vectorise(path, area_crs(p), min_patch_ha(p))
             orig_features = widgets.panes.drawing_features()
             new_features = convertir_formato3(features, color_name)
             widgets.panes.set_drawing(orig_features + new_features)
@@ -845,7 +852,7 @@ def build_edit_tools(
                             # writer guard that keeps the set's folder alive:
                             # the row can then say what was found and *Add* is
                             # instant. A failure fails the run like any other.
-                            found = vectorise(pred_path)
+                            found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
                         applied, valid = _apply_model(1, pred_path, token, found)
                     if not applied:
                         # Another alert is on screen (its result is dropped),
@@ -912,7 +919,7 @@ def build_edit_tools(
                             # writer guard that keeps the set's folder alive:
                             # the row can then say what was found and *Add* is
                             # instant. A failure fails the run like any other.
-                            found = vectorise(pred_path)
+                            found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
                         applied, valid = _apply_model(2, pred_path, token, found)
                     if not applied:
                         # Another alert is on screen (its result is dropped),
@@ -1012,7 +1019,7 @@ def build_edit_tools(
     wire_defo_layer(widgets, analysis)
 
     if set_badge is not None:
-        wire_refine_badge(analysis, set_badge)
+        wire_refine_badge(analysis, set_badge, lambda: area_crs(app_state.project.value))
 
     # ------------------------------------------------------------------
     # Layout: the section's body -- the edit buttons over one row per model.

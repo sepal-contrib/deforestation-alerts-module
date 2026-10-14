@@ -390,14 +390,15 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     ):
         raise SaveRefused(key="analysis_tile.questionarie.false_positive_drawn")
 
-    # alert_polygon + area_ha from the drawn defo layer (if any). With nothing
-    # drawn, area_ha keeps the alert's own area, which Integrate stored: the
-    # store feeds the exports, the map tiles and the report.
+    # alert_polygon + area_ha from the drawn defo layer (if any), measured in
+    # the project's grid CRS like Integrate's. With nothing drawn, area_ha
+    # keeps the alert's own area, which Integrate stored: the store feeds the
+    # exports, the map tiles and the report.
     if defo_layer is None:
         updates["alert_polygon"] = None
     else:
         updates["alert_polygon"] = defo_layer["geometry"].union_all()
-        updates["area_ha"] = calculate_total_area(defo_layer)
+        updates["area_ha"] = calculate_total_area(defo_layer, alert.area_crs)
 
     # Persist the alert DB (OLD save_alerts_to_gdf) where the save started,
     # from a private copy carrying this review. Skip if there is no folder.

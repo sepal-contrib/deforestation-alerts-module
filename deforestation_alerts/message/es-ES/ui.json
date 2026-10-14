@@ -103,6 +103,14 @@
       "fill_holes": "Rellenar huecos",
       "remove_hole": "Quitar hueco",
       "remove_hole_hint": "Haga clic dentro de un hueco para quitarlo · Esc para salir",
+      "select_area": "Seleccionar área",
+      "clear_all": "Borrar todo",
+      "select_area_hint": "Arrastre un recuadro alrededor de las formas a borrar · Esc para cancelar",
+      "delete_one": "¿Borrar 1 forma?",
+      "delete_many": "¿Borrar {n} formas?",
+      "delete_all": "¿Borrar las {n} formas?",
+      "delete_cancel": "Cancelar",
+      "delete_confirm": "Borrar",
       "tile_error": "No se pudieron cargar las imágenes"
     }
   },

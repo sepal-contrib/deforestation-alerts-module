@@ -14,6 +14,7 @@ from typing import Optional
 import solara
 
 from gui.scripts.alert_filter import AlertFilter
+from gui.store.workflow_steps import active_set
 
 
 def _same(a, b) -> bool:
@@ -196,15 +197,35 @@ def apply_start_filter(analysis: AnalysisState, f: Optional[AlertFilter]) -> Non
     analysis.alert_filter.set(f)
 
 
+def area_crs(project) -> Optional[str]:
+    """The CRS every area of the review is measured in: the project's grid
+    CRS, the one Integrate measured the alerts' ``area_ha`` in. ``None``
+    before there is a grid (``calculate_total_area`` then takes the local UTM
+    zone)."""
+    return project.grid.epsg if project is not None and project.grid is not None else None
+
+
+def min_patch_ha(project) -> float:
+    """The smallest CNN patch worth offering: the active set's minimum size,
+    the one Integrate dropped its smaller clusters with. ``0.0`` (keep every
+    patch) without an active set."""
+    s = active_set(project)
+    return float(s.params.min_size_ha) if s is not None else 0.0
+
+
 def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespace:
     """``analysis.capture`` with the alert's row, the review widgets, the
     answers and the questions they answer: what a Save, a Download or a CNN
     run uses, read at the click (UI thread). The answers are copied, so an
-    edit after the click is not in what the Save writes."""
+    edit after the click is not in what the Save writes. ``area_crs`` and
+    ``min_patch_ha`` are the project's, for the areas the Save stores and the
+    patches a CNN run offers."""
 
     def _read():
         p = app_state.project.value
         return {
+            "area_crs": area_crs(p),
+            "min_patch_ha": min_patch_ha(p),
             "alerts": app_state.alerts_gdf.value,
             "alert_id": app_state.actual_alert_id.value,
             "grid": getattr(widgets, "actual_alert_grid", None),

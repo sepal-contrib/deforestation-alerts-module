@@ -83,6 +83,21 @@ def test_apply_sets_the_filter_moves_to_its_start_and_shows_the_chip(bar):
     assert ui.button.color == "primary" and ui.button.children[0].children == ["mdi-filter"]
 
 
+def test_outside_clicks_are_the_browser_watchers_to_handle(bar):
+    """Vuetify would close the panel with an open list on one outside click,
+    so the menu leaves outside clicks to ``OutsideClickWidget``. The browser
+    decides which clicks count (none that closes a list); each one it counts
+    closes the panel."""
+    ui = bar.ui
+    assert ui.menu.close_on_click is False
+    assert ui.outside in ui.root.children
+    assert ui.menu.content_class == ui.outside.content_class == "defo-filter-panel"
+    assert ui.outside.activator_class in ui.button.class_.split()
+    ui.menu.v_model = True
+    ui.outside.outside_clicks += 1
+    assert ui.menu.v_model is False
+
+
 def test_the_menu_reopens_on_the_filter_in_force(bar):
     ui = bar.ui
     bar.state.set_alert_filter(AlertFilter("q_road", frozenset({"yes", "no"})))
