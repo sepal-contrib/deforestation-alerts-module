@@ -19,7 +19,9 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from shapely.geometry import shape
 
-INDEX_VERSION = 1
+#: 2: each Sentinel-2 granule is its own tile; a version-1 index filed them by
+#: MGRS tile, under partial footprints, and is rebuilt.
+INDEX_VERSION = 2
 
 #: One lock per project directory, process-wide. Every write of the index
 #: (``scene_cache.store_chunk`` and ``note_failed_chunk``) and a
@@ -257,14 +259,24 @@ def _row(img, source: str, cloud_prop: str, tile):
 
 
 def _s2_rows(aoi, start: date, end: date):
-    """Every Sentinel-2 granule over ``aoi``, keyed by its MGRS tile."""
+    """Every Sentinel-2 granule over ``aoi``, each its own "tile": the
+    ``system:index``, e.g. ``20260814T134231_20260814T134225_T21JYN``.
+
+    The MGRS tile is not a footprint. A tile on a swath edge is imaged by two
+    orbits, one covering all of it and the other a slanted strip, and a
+    granule at either end of a datastrip covers only part of it even within
+    one orbit. ``distinct("tile")`` keeps whichever granule it meets first, so
+    a partial one stood for the whole tile and hid its granules from every
+    alert outside it. No coarser key is safe, so each granule carries its own
+    footprint (~20 vertices: ~40 kB a month over a department).
+    """
     import ee
 
     d0, d1 = _window(start, end)
     coll = (ee.ImageCollection(S2_COLLECTION).filterBounds(aoi).filterDate(d0, d1)
             .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", MAX_CLOUD)))
     return coll.map(lambda img: _row(img, SOURCE_S2, "CLOUDY_PIXEL_PERCENTAGE",
-                                     ee.String(ee.Image(img).get("MGRS_TILE"))))
+                                     ee.String(ee.Image(img).get("system:index"))))
 
 
 def _landsat_rows(aoi, start: date, end: date):

@@ -71,12 +71,13 @@ def test_the_whole_index_arrives_in_one_round_trip(tables):
 def test_the_parallel_arrays_come_back_paired(tables):
     """``source``, ``key`` and ``tile`` travel as three separate arrays, so a
     row only means anything if all three are aggregated in one order: an
-    S2 row has to carry an S2 asset id and an MGRS tile, a Landsat row a
+    S2 row has to carry an S2 asset id and that granule's own index as its
+    tile, a Landsat row a
     ``LANDSAT_SCENE_ID`` -- which is not an asset id -- and a WRS-2 path/row."""
     s2 = tables.scenes[tables.scenes["source"] == scene_index.SOURCE_S2]
     assert len(s2) > 0
     assert s2["key"].str.startswith(scene_index.S2_COLLECTION + "/").all()
-    assert s2["tile"].str.fullmatch(r"\d{2}[A-Z]{3}").all()
+    assert (s2["key"] == scene_index.S2_COLLECTION + "/" + s2["tile"]).all()
 
     # Asserted, not skipped: the AOI and the window are pinned constants and
     # three months over them always hold Landsat 8/9 passes, so an empty
@@ -107,6 +108,40 @@ def test_the_tile_footprints_are_real_footprints_not_bounding_boxes(tables):
     ls = ls.to_crs("EPSG:3857")
     worst = (ls.geometry.area / ls.geometry.envelope.area).min()
     assert worst < 0.95
+
+
+#: A box on the swath edge in Canindeyú, Paraguay: MGRS tile 21KYP is imaged
+#: there by relative orbit 124 (the whole granule) and by relative orbit 24 (a
+#: slanted strip ending ~0.2 deg west of the box). Two weeks of August 2026
+#: hold passes of both.
+EDGE_RECT = [-54.69, -24.44, -54.66, -24.42]
+EDGE_START, EDGE_END = date(2026, 8, 1), date(2026, 8, 15)
+
+
+def test_every_sentinel2_granule_draws_inside_the_footprint_its_tile_records(gee):
+    """A tile's footprint has to hold *every* granule filed under it.
+
+    ``distinct("tile")`` keeps the footprint of whichever granule it meets
+    first. Keyed by MGRS tile alone, the edge box's 21KYP got orbit 24's
+    partial strip whenever that pass came first, and every alert east of the
+    strip lost all its Sentinel-2 rows -- 49 of 101 alerts of one Canindeyú
+    project. Tile plus relative orbit is not enough either: a granule at the
+    end of a datastrip (2026-08-14's 21JYN) is partial within its orbit.
+    """
+    import ee
+
+    tables = scene_index.parse_scenes(scene_index.scene_request(
+        ee.Geometry.Rectangle(EDGE_RECT), EDGE_START, EDGE_END).getInfo())
+    s2 = tables.scenes[tables.scenes["source"] == scene_index.SOURCE_S2]
+    assert s2["key"].str.endswith("_T21KYP").sum() > 0
+    footprints = dict(zip(tables.tiles["tile"], tables.tiles.geometry))
+    granules = ee.List([ee.Image(k).geometry() for k in s2["key"]]).getInfo()
+    from shapely.geometry import shape
+
+    for tile, key, geo in zip(s2["tile"], s2["key"], granules):
+        granule = shape(geo)
+        missed = granule.difference(footprints[tile]).area / granule.area
+        assert missed < 0.01, f"{key} lies {missed:.0%} outside the footprint of {tile}"
 
 
 def test_the_sentinel2_keys_are_loadable_asset_ids(tables, gee):
