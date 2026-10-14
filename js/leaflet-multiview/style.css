@@ -37,6 +37,9 @@
 }
 .mv-header:empty { display: none; }
 .mv-map { flex: 1 1 auto; min-height: 0; position: relative; border-radius: var(--mv-radius); }
+/* A host's own `a` rule (pysepal's MapApp underlines `.v-application a`) ties
+   Leaflet's `.leaflet-bar a` and wins by load order: out-rank it. */
+.mv-root .leaflet-bar a { text-decoration: none; }
 .mv-dark .leaflet-bar a,
 .mv-dark .leaflet-control-layers {
   background: var(--mv-control-bg);
