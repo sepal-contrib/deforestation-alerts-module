@@ -126,3 +126,20 @@ def test_a_package_in_the_reviewed_copys_place_is_not_offered(data_root):
     path = set_store.set_folder(p, p.alert_sets[SET_ID]) / share.return_filename("c", SET_ID, 2, "Bo")
     _zip(path, digest="d", kind=share.KIND_PACKAGE, evaluator="Bo", index=2)
     assert pf.return_zip(p) is None
+
+
+def test_a_zip_deleted_between_its_header_read_and_its_stat_is_not_offered(data_root, monkeypatch):
+    """The scans run during the step's render: a vanished or broken zip is
+    skipped, whatever it raises (``FileNotFoundError``, ``lzma.LZMAError``)."""
+    p = _project()
+    _zip(_package_path(p, 1, "Ana"), digest=split_mod.questions_digest(p.questions))
+
+    def _gone(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(pf, "_built_at", _gone)
+    assert pf.package_zips(p, p.alert_sets[SET_ID]) == {}
+    c = _copy()
+    path = set_store.set_folder(c, c.alert_sets[SET_ID]) / share.return_filename("c", SET_ID, 2, "Bo")
+    _zip(path, digest="d", kind=share.KIND_RETURN, evaluator="Bo", index=2)
+    assert pf.return_zip(c) is None

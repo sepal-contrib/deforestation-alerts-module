@@ -27,17 +27,21 @@ class BuiltZip:
     outdated: bool = False
 
 
-def _header(path: Path) -> Optional[share.ShareHeader]:
-    if not path.is_file():
-        return None
-    try:
-        return share.peek_header(path)
-    except (ValueError, OSError):  # ShareError is a ValueError: not a zip, not ours, unreadable
-        return None
-
-
 def _built_at(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime)
+
+
+def _read(path: Path) -> Optional[tuple[share.ShareHeader, datetime]]:
+    """The zip's header and build time, or None. Best effort: these scans run
+    during the step's render, so a zip that is not one of ours, is broken
+    (``ShareError``, ``zipfile.BadZipFile``, ``lzma.LZMAError`` and the like)
+    or vanished before its stat is "not offered", never raised."""
+    try:
+        if not path.is_file():
+            return None
+        return share.peek_header(path), _built_at(path)
+    except Exception:  # noqa: BLE001 - see the docstring
+        return None
 
 
 def package_zips(p, s) -> dict[str, BuiltZip]:
@@ -49,11 +53,13 @@ def package_zips(p, s) -> dict[str, BuiltZip]:
     out = {}
     for index, name in enumerate(s.split.evaluators, start=1):
         path = folder / share.package_filename(p.name, s.id, index, name)
-        header = _header(path)
-        if (header is None or header.kind != share.KIND_PACKAGE or header.split_id != s.split.split_id
-                or header.evaluator != name):
+        read = _read(path)
+        if read is None:
             continue
-        out[name] = BuiltZip(path=path, built_at=_built_at(path), outdated=header.questions_digest != digest)
+        header, built_at = read
+        if header.kind != share.KIND_PACKAGE or header.split_id != s.split.split_id or header.evaluator != name:
+            continue
+        out[name] = BuiltZip(path=path, built_at=built_at, outdated=header.questions_digest != digest)
     return out
 
 
@@ -67,7 +73,10 @@ def return_zip(p) -> Optional[BuiltZip]:
         return None
     path = Path(set_store.set_folder(p, s)) / share.return_filename(rc.origin_project, rc.set_id,
                                                                      rc.evaluator_index, rc.evaluator)
-    header = _header(path)
-    if header is None or header.kind != share.KIND_RETURN or header.split_id != rc.split_id:
+    read = _read(path)
+    if read is None:
         return None
-    return BuiltZip(path=path, built_at=_built_at(path))
+    header, built_at = read
+    if header.kind != share.KIND_RETURN or header.split_id != rc.split_id:
+        return None
+    return BuiltZip(path=path, built_at=built_at)

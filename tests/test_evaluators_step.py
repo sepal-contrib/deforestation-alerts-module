@@ -144,14 +144,6 @@ def _button(rc, label):
     return next(b for b in rc.find(v.Btn).widgets if label in _strings(b))
 
 
-def _icon_buttons(rc, icon):
-    return [b for b in rc.find(v.Btn).widgets if icon in _strings(b)]
-
-
-def _links(rc, cls):
-    return [a for a in rc.find(v.Html, tag="a").widgets if cls in (a.class_ or "")]
-
-
 def _toasts(kind):
     return [x.message for x in get_current_bus().toasts.value if x.type.value == kind]
 

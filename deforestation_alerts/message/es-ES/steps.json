@@ -563,7 +563,7 @@
       "template_chip_default": "predeterminada",
       "template_chip_custom": "propia",
       "template_chip_missing": "no encontrada",
-      "template_missing": "El archivo ya no está: elígelo de nuevo o vacía el campo para usar la plantilla predeterminada."
+      "template_missing": "El archivo ya no está: elíjalo de nuevo o vacíe el campo para usar la plantilla predeterminada."
     },
     "evaluators": {
       "description": "Revisa tú solo, o reparte las alertas entre evaluadores e integra lo que te devuelvan.",
