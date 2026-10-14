@@ -23,12 +23,13 @@ from gui.tile.analysis.state import AnalysisState
 SET_DIR = ("periods", "per", "sets", "glad-l")
 
 
-def _state(tmp_path, monkeypatch):
+def _state(tmp_path, monkeypatch, *, grid=None, params=None):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     s = AppState()
-    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now(), report_template="/t.docx")
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now(), report_template="/t.docx",
+                grid=grid)
     p.alert_sets["x"] = AlertSet(id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-                                 params=AlertSetParams(), store_rel_path="periods/per/sets/glad-l/alert_db.parquet",
+                                 params=params or AlertSetParams(), store_rel_path="periods/per/sets/glad-l/alert_db.parquet",
                                  combined_rel_path="periods/per/sets/glad-l/c.tif",
                                  footprint_rel_path="periods/per/sets/glad-l/footprint.tif",
                                  fingerprint="f", created_at=datetime.now())
@@ -676,6 +677,47 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
     assert saved.loc[0, "alert_polygon"] is not None
     assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
+
+
+def test_a_drawn_polygon_is_measured_in_the_projects_grid_crs(tmp_path, monkeypatch):
+    """The saved ``area_ha`` is on Integrate's scale: the grid's CRS, not Web
+    Mercator, which makes a polygon at 24 deg S ~20 % larger."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from deforestation_alerts.project.models import GridSpec
+    from gui.tile.analysis import export
+
+    grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=7350000, width=10, height=10)
+    s = _state(tmp_path, monkeypatch, grid=grid)
+    ctx = SetContext(s)
+    s.alerts_gdf.set(_review_alerts("x"))
+    monkeypatch.setattr(export, "ee", _AdminLookups())
+    drawn = gpd.GeoDataFrame(geometry=[box(500_000, 7_340_000, 500_100, 7_340_100)],
+                             crs="EPSG:32721").to_crs(4326)  # 1 ha, drawn in lon/lat
+    analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
+    analysis.defo_layer.set(drawn)
+    s.actual_alert_id.set(0)
+    assert export._save_attributes(SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None)),
+                                   s, analysis, ctx) is True
+
+    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha"])
+    assert saved.loc[0, "area_ha"] == pytest.approx(1.0, rel=1e-6)
+    assert drawn.to_crs(3857).area.sum() / 10_000 > 1.15
+
+
+def test_the_capture_carries_the_projects_area_crs_and_minimum_size(tmp_path, monkeypatch):
+    from deforestation_alerts.project.models import GridSpec
+    from gui.tile.analysis.state import capture_alert
+
+    grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=7350000, width=10, height=10)
+    s = _state(tmp_path, monkeypatch, grid=grid, params=AlertSetParams(min_size_ha=1.5))
+    alert = capture_alert(AnalysisState(), SimpleNamespace(), s)
+    assert (alert.area_crs, alert.min_patch_ha) == ("EPSG:32721", 1.5)
+
+    bare = capture_alert(AnalysisState(), SimpleNamespace(), AppState())
+    assert (bare.area_crs, bare.min_patch_ha) == (None, 0.0)
 
 
 def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_path, monkeypatch):

@@ -919,8 +919,7 @@ def test_edit_tools_model_run_publishes_success(
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
 
     run_btn = _dl_run_button(card, model)
     run_btn.fire_event("click", None)
@@ -998,8 +997,7 @@ def test_a_finished_run_offers_its_prediction_on_screen(
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
 
     _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
@@ -1046,8 +1044,7 @@ def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
     edit_tools, card, analysis = edit_tools_card
     before = analysis.prediction_files.value
     paths = {1: "/tmp/pred_m1.tif", 2: "/tmp/pred_m2.tif"}
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
     for model in (1, 2):
         feedback = _record_feedback(monkeypatch, edit_tools)
         monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, _p=paths[model], **k: _p)
@@ -1079,8 +1076,7 @@ def test_a_model_run_for_a_previous_alert_drops_its_result(
         return "/tmp/pred_of_A.tif"
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _run_while_the_user_moves_on)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
 
     _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
@@ -1102,8 +1098,7 @@ def test_an_alert_change_disables_the_previous_alerts_prediction_buttons(
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
     _dl_run_button(card, 1).fire_event("click", None)
     feedback.join()
     add = _edition_button(card, "add")[0]
@@ -1148,8 +1143,7 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
         return "/tmp/pred.tif"
 
     monkeypatch.setattr(edit_tools, "_run_cnn_model", _run)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
 
     _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
@@ -1206,21 +1200,53 @@ def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
 
 
 @pytest.mark.parametrize("model", [1, 2])
-def test_edit_tools_verify_failure_is_one_dl_404_error_on_a_failed_task(
+def test_a_model_run_vectorises_with_the_projects_crs_and_minimum_size(monkeypatch, model):
+    """The patches a run offers follow the alert set's minimum size, measured
+    in the project's grid CRS, read at the click."""
+    from datetime import datetime
+
+    import gui.tile.analysis.edit_tools as edit_tools
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams, GridSpec, Project
+
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now(),
+                grid=GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=7350000, width=10, height=10))
+    p.alert_sets["x"] = AlertSet(id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(min_size_ha=1.5), store_rel_path="s/alert_db.parquet",
+                                 combined_rel_path="s/c.tif", footprint_rel_path="s/footprint.tif",
+                                 fingerprint="f", created_at=datetime.now())
+    p.active_set = "x"
+    app_state = AppState()
+    app_state.project.value = p
+    card = edit_tools.build_edit_tools(widgets=None, app_state=app_state,
+                                       analysis=_images_drawn(AnalysisState()),
+                                       app_tile_model=_set_context_fake())
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
+    calls = []
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *rule: calls.append(rule) or _found())
+
+    _dl_run_button(card, model).fire_event("click", None)
+    feedback.join()
+
+    assert calls == [("EPSG:32721", 1.5)]
+
+
+@pytest.mark.parametrize("model", [1, 2])
+def test_edit_tools_vectorise_failure_is_one_dl_404_error_on_a_failed_task(
     edit_tools_card, monkeypatch, model
 ):
     """The verify/apply step used to publish its own dl_404 toast and let the
-    worker fail the task AFTER it; it now fails inside the tracked job, so the
-    task is FAILED first and there is still exactly one error toast."""
+    worker fail the task AFTER it; reading the prediction now fails inside the
+    tracked job, so the task is FAILED first and there is still exactly one
+    error toast."""
     edit_tools, card, _model = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
 
-    def _bad_raster(path, threshold):
+    def _bad_raster(path, *_):
         raise OSError("not a raster")
 
-    monkeypatch.setattr(edit_tools, "verify_raster", _bad_raster)
+    monkeypatch.setattr(edit_tools, "vectorise", _bad_raster)
 
     run_btn = _dl_run_button(card, model)
     run_btn.fire_event("click", None)
@@ -1301,21 +1327,57 @@ def test_nothing_found_is_recorded_as_nothing_and_shows_as_nothing():
     assert analysis.prediction_shapes.value == {}
 
 
-@pytest.mark.parametrize("empty", ["no raster at all", "a raster with no patches"])
-def test_vectorise_reads_an_empty_prediction_as_nothing_found(monkeypatch, empty):
+def _prediction_raster(path, prob):
+    """A 10 m probability raster in Paraguay's UTM zone, as the CNN writes one."""
+    import numpy as np
+    import rasterio
+    from affine import Affine
+
+    prob = np.asarray(prob, dtype=np.float32)
+    with rasterio.open(path, "w", driver="GTiff", width=prob.shape[1], height=prob.shape[0],
+                       count=1, dtype="float32", crs="EPSG:32721",
+                       transform=Affine(10, 0, 500_000, 0, -10, 7_350_000)) as dst:
+        dst.write(prob, 1)
+    return str(path)
+
+
+@pytest.mark.parametrize("empty", ["nothing above the threshold", "only patches under the minimum"])
+def test_vectorise_reads_an_empty_prediction_as_nothing_found(tmp_path, empty):
     """The translation the row's "nothing found" rests on, run for real: a
-    prediction ``raster_to_gdf`` cannot read, and one it reads as no patches,
-    are both ``([], 0, 0.0)`` -- never a zero-area row, never a division by
-    zero in ``calculate_total_area``."""
-    import geopandas as gpd
+    prediction with no detection, and one whose patches are all smaller than
+    the set's minimum size, are both ``([], 0, 0.0)`` -- never a zero-area row
+    or a placeholder point."""
+    import numpy as np
 
     from gui.tile.analysis import edit_tools
 
-    gdf = None if empty == "no raster at all" else gpd.GeoDataFrame(
-        geometry=[], crs="EPSG:4326")
-    monkeypatch.setattr(edit_tools, "raster_to_gdf", lambda *a, **k: gdf)
+    prob = np.full((20, 20), 0.1)
+    if empty == "only patches under the minimum":
+        prob[2:4, 2:4] = 0.9  # 0.04 ha
+    path = _prediction_raster(tmp_path / "pred.tif", prob)
 
-    assert edit_tools.vectorise("x.tif") == ([], 0, 0.0)
+    assert edit_tools.vectorise(path, "EPSG:32721", 0.5) == ([], 0, 0.0)
+
+
+def test_vectorise_offers_only_the_patches_of_the_sets_minimum_size(tmp_path):
+    """A 1 ha and a 0.04 ha patch under a 0.5 ha minimum: one patch found, its
+    area measured in the project's CRS, its feature in lon/lat for the map."""
+    import numpy as np
+
+    from gui.tile.analysis import edit_tools
+
+    prob = np.zeros((30, 30))
+    prob[2:12, 2:12] = 0.9
+    prob[20:22, 20:22] = 0.9
+    path = _prediction_raster(tmp_path / "pred.tif", prob)
+
+    features, n_patches, area_ha = edit_tools.vectorise(path, "EPSG:32721", 0.5)
+    assert n_patches == 1 and len(features) == 1
+    assert area_ha == pytest.approx(1.0)
+    lon, lat = features[0]["geometry"]["coordinates"][0][0]
+    assert -60 < lon < -54 and -25 < lat < -23
+
+    assert edit_tools.vectorise(path, "EPSG:32721", 0.0)[1] == 2
 
 
 # Fix 1: every widget the builder makes must be reachable from the body it
@@ -1345,7 +1407,7 @@ def test_a_run_that_finds_nothing_says_so_and_leaves_the_drawing_alone(
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: ([], 0, 0.0))
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: ([], 0, 0.0))
     drawn = object()
     analysis.defo_layer.set(drawn)
 
@@ -1448,7 +1510,7 @@ def test_a_drawing_edit_marks_the_alert_unsaved_but_seeding_it_does_not(monkeypa
     assert analysis.defo_layer.value is not None and analysis.dirty.value is True
 
     # and so are adding a model's prediction to the drawing and taking it off
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found(patches=1, area=1.0))
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found(patches=1, area=1.0))
     analysis.prediction_files.set({1: "/tmp/pred.tif"})
     for name in ("dl1_add", "dl1_remove"):
         analysis.dirty.set(False)
@@ -1473,7 +1535,7 @@ def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
     body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
                                        analysis=analysis, app_tile_model=_set_context_fake())
     slots = _slots(body)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found(patches=1, area=1.0))
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found(patches=1, area=1.0))
     views = widgets.panes.widget
     assert views.draw_edit_mode is False, "no drawing session was started"
     assert slots["dl1_add"].disabled is False, "the recorded prediction is on offer"
@@ -1594,8 +1656,7 @@ def test_a_rerun_does_not_strand_the_prediction_already_in_the_drawing(monkeypat
     body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
                                        analysis=analysis, app_tile_model=_set_context_fake())
     slots = _slots(body)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: "/tmp/pred.tif")
 
     slots["dl1_add"].fire_event("click", None)
@@ -1612,7 +1673,7 @@ def test_a_rerun_does_not_strand_the_prediction_already_in_the_drawing(monkeypat
 
     # and again, finding nothing this time
     feedback = _record_feedback(monkeypatch, edit_tools)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: ([], 0, 0.0))
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: ([], 0, 0.0))
     slots["dl1_run"].fire_event("click", None)
     feedback.join()
 
@@ -1644,7 +1705,7 @@ def test_other_imagery_picked_after_a_run_puts_the_rows_back_to_nothing_run(monk
     body = edit_tools.build_edit_tools(widgets=widgets, app_state=AppState(),
                                        analysis=analysis, app_tile_model=_set_context_fake())
     slots = _slots(body)
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
 
     slots["dl1_add"].fire_event("click", None)
     drawn = widgets.panes.drawing_features()
@@ -1869,8 +1930,7 @@ def test_a_model_run_for_a_previous_alert_does_not_start(monkeypatch):
     held = _deferred(monkeypatch, edit_tools)
     ran = []
     monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(k.get("alert")) or "/p.tif")
-    monkeypatch.setattr(edit_tools, "vectorise", lambda path: _found())
-    monkeypatch.setattr(edit_tools, "verify_raster", lambda path, threshold: True)
+    monkeypatch.setattr(edit_tools, "vectorise", lambda path, *_: _found())
     run_btn = _dl_run_button(card, 1)
 
     run_btn.fire_event("click", None)  # a run started while A is shown runs on A's values

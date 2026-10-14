@@ -107,99 +107,31 @@ def download_both_images(image1, image2, image_name, source1, source2, region):
     return image_name
 
 
-def raster_to_gdf(raster_path, output_epsg, threshold):
+def prediction_patches(raster_path, threshold, crs, min_size_ha=0.0):
+    """The patches of a CNN prediction raster, in ``crs``, with their ``area_ha``.
+
+    A pixel is a detection when its probability is above ``threshold``. Each
+    polygon ``shapes`` makes of the detections is one patch, measured in
+    ``crs`` (the project's grid CRS: equal-distance metres, unlike the
+    composite's EPSG:3857, which overstates the area by ~20 % at 24 deg S).
+    Patches under ``min_size_ha`` are dropped: the alert set's minimum size,
+    the same one Integrate applies to its clusters. Nothing detected is an
+    empty frame. ``crs=None`` (no grid yet) measures in the local UTM zone.
+    """
     import rasterio
-    import geopandas as gpd
-    from shapely.geometry import shape, box
-    from rasterio.features import shapes
-    from rasterio.warp import calculate_default_transform, reproject, Resampling
-    from fiona.crs import from_epsg
-    from shapely.geometry import Point
-    import json
-    from ipyleaflet import GeoData
-    import numpy as np
-
-    # Open the raster file
-    with rasterio.open(raster_path) as src:
-        # Read the CRS of the input raster
-        input_crs = src.crs
-
-        # Read the first band of the raster (assuming a single band with 0/1 values)
-        band = src.read(1)
-        band_reclassified = np.where(band > threshold, 1, 0).astype(np.uint8)
-
-        # Extract shapes (polygons) from the raster
-        mask = None  # No mask, we're interested in all 0/1 values
-        shapes_gen = list(shapes(band_reclassified, mask=mask, transform=src.transform))
-        
-        # Filter out elements with value 0; only keep those with value 1
-        filtered_shapes = [geom for geom, val in shapes_gen if val == 1]
-        
-        features = []
-        if len(filtered_shapes) > 0:
-            for geom, value in shapes_gen:
-                if value == 1:  # We're interested in 1 values or positive mask areas
-                    features.append(
-                        {
-                            "type": "Feature",
-                            "geometry": geom,
-                            "properties": {"value": int(value)},
-                        }
-                    )
-        else:
-            # If no shapes, calculate the centroid of the raster extent
-            raster_extent = box(*src.bounds)  # Get the extent as a bounding box
-            centroid = raster_extent.centroid  # Get the centroid point
-            centroid_geom = Point(centroid.x, centroid.y)
-
-            # Create a single feature with the centroid
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": centroid_geom.__geo_interface__,  # Use shapely's geo interface
-                    "properties": {"value": "centroid"},
-                }
-            )
-
-        # Create GeoJSON structure
-        geojson = {"type": "FeatureCollection", "features": features}
-
-        # Convert the GeoJSON geometry CRS to the user-defined output EPSG
-        gdf = gpd.GeoDataFrame.from_features(geojson["features"])
-        gdf.set_geometry("geometry")
-
-        # Set the CRS from input raster
-        gdf = gdf.set_crs(input_crs, allow_override=True, inplace=True).to_crs(
-            epsg=output_epsg
-        )  # Reproject to the output EPSG
-
-        # geo_json_layer = GeoData(
-        #     geo_dataframe=gdf,
-        #     name='Deforestation'
-        # )
-
-    return gdf
-
-
-#Funcion para verificar si el modelo de DL encontro poligonos de deforestacion
-def verify_raster(raster_path, threshold):
-    import rasterio
-    import numpy as np
     from rasterio.features import shapes
 
     with rasterio.open(raster_path) as src:
-        band = src.read(1)
-        band_reclassified = np.where(band > threshold, 1, 0).astype(np.uint8)
-
-        # Extract shapes (polygons) from the raster
-        shapes_gen = list(shapes(band_reclassified, transform=src.transform))
-        # Filter out elements with value 0; only keep those with value 1
-        filtered_shapes = [geom for geom, val in shapes_gen if val == 1]
-
-    if len(filtered_shapes) == 0 :
-        return False
-    else:
-        return True
+        detected = (src.read(1) > threshold).astype(np.uint8)
+        geoms = [shape(geom) for geom, _ in shapes(detected, mask=detected.astype(bool),
+                                                     transform=src.transform)]
+        src_crs = src.crs
+    patches = gpd.GeoDataFrame(geometry=geoms, crs=src_crs)
+    if crs is None and len(patches):
+        crs = patches.estimate_utm_crs()  # no grid yet: the local UTM zone
+    patches = patches.to_crs(crs) if crs is not None else patches
+    patches["area_ha"] = patches.geometry.area / 10_000
+    return patches[patches["area_ha"] >= float(min_size_ha)].reset_index(drop=True)
 
 
 def convertir_formato3(input_features, color="#2196F3"):
@@ -261,18 +193,16 @@ def convertir_formato3(input_features, color="#2196F3"):
     return converted_features
 
 
-# Function to calculate total area
-def calculate_total_area(gdf):
-    # Reproject to a CRS that uses meters, change depending on your location
-    gdf_proj = gdf.to_crs("EPSG:3857")
+def calculate_total_area(gdf, crs=None):
+    """The polygons' total area in hectares, measured in ``crs``.
 
-    # Calculate the area for each polygon and add it to a new column
-    gdf_proj["area_m2"] = gdf_proj["geometry"].area
-
-    # Sum the areas
-    total_area = gdf_proj["area_m2"].sum()
-
-    return total_area / 10000
+    ``crs`` is the project's grid CRS (``project.grid.epsg``), the one
+    Integrate measures every alert's ``area_ha`` in, so a reviewed polygon and
+    the alert it replaces are on one scale. Without one (no grid yet), the
+    polygons' own UTM zone. Never EPSG:3857: its areas are ~20 % too large at
+    Paraguay's latitudes.
+    """
+    return float(gdf.to_crs(crs or gdf.estimate_utm_crs()).geometry.area.sum()) / 10_000
 
 
 def simplify_and_extract_features(
@@ -295,7 +225,9 @@ def simplify_and_extract_features(
     if column not in gdf.columns:
         raise ValueError(f"Column '{column}' not found in the GeoDataFrame")
 
-    gdf_repro = gdf.to_crs(epsg="3857")
+    # The tolerance is in metres: a projected frame (the project's grid CRS)
+    # is simplified as it is.
+    gdf_repro = gdf.copy() if gdf.crs is not None and gdf.crs.is_projected else gdf.to_crs(epsg="3857")
 
     # Apply simplify to the geometry column and store the result in a new column
     gdf_repro["simplified_geometry"] = gdf_repro[column].simplify(
