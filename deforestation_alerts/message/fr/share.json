@@ -18,7 +18,7 @@
       "store_changed": "Les alertes ont été réécrites pendant la création du zip ; réessayez.",
       "split_mismatch": "La colonne évaluateur des alertes ne correspond pas à la répartition ; supprimez la répartition et répartissez à nouveau.",
       "not_a_copy": "Seule une copie de révision renvoie des révisions.",
-      "is_return": "Ceci est une copie révisée ; fusionnez-la depuis le projet du créateur, étape Évaluateurs.",
+      "is_return": "Ceci est une copie révisée ; fusionnez-la depuis le projet du créateur, étape Évaluation.",
       "unknown_kind": "Ce zip n'est pas un paquet de révision.",
       "bad_manifest": "Le fichier de projet de ce paquet est illisible.",
       "payload_mismatch": "Ce paquet est incohérent ({what}) ; demandez-en un nouveau au créateur.",

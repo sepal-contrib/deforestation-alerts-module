@@ -155,6 +155,21 @@ def _toasts(kind):
     return [x.message for x in get_current_bus().toasts.value if x.type.value == kind]
 
 
+def _open_split(rc):
+    """The split modal, from the table header (spec 2026-10-14 §4.3)."""
+    (btn,) = [b for b in rc.find(v.Btn).widgets if "defo-split-open" in (b.class_ or "")]
+    btn.fire_event("click", None)
+
+
+def _open_merge(rc):
+    """The merge modal, from the table footer (spec 2026-10-14 §4.5)."""
+    _button(rc, t("evaluators.merge_open")).fire_event("click", None)
+
+
+def _hint(rc):
+    return rc.find(v.Html, class_="defo-multi-hint").widget.attributes["title"]
+
+
 async def _settle(done, what, timeout=10.0):
     deadline = time.monotonic() + timeout
     while not done():
@@ -261,7 +276,7 @@ def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
     try:
         texts = _strings(rc.container)
         assert _multi_switch(rc).widget.v_model is False
-        assert t("evaluators.solo_note") in texts
+        assert _hint(rc) == t("evaluators.solo_note")
         assert t("evaluators.split_title") not in texts
         assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
         assert not rc.find(FileInput).widgets
@@ -276,10 +291,10 @@ def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root
     try:
         _multi_switch(rc).widget.v_model = True
         assert s.project.value.multi_evaluator is True
-        assert t("evaluators.split_title") in _strings(rc.container)
+        assert t("evaluators.open_split") in _strings(rc.container)
         _multi_switch(rc).widget.v_model = False
         assert s.project.value.multi_evaluator is False
-        assert t("evaluators.split_title") not in _strings(rc.container)
+        assert t("evaluators.open_split") not in _strings(rc.container)
     finally:
         rc.close()
 
@@ -289,7 +304,7 @@ def test_a_split_holds_the_switch_on(data_root):
     try:
         switch = _multi_switch(rc).widget
         assert switch.v_model is True and switch.disabled is True
-        assert t("evaluators.multi_locked") in _strings(rc.container)
+        assert _hint(rc) == t("evaluators.multi_locked")
     finally:
         rc.close()
 
@@ -320,6 +335,7 @@ def test_split_hands_the_typed_names_to_the_service(data_root, monkeypatch):
     async def main():
         _box, rc = _render(s)
         try:
+            _open_split(rc)
             rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model = "3"
             rc.find(v.Checkbox, label=t("evaluators.include_reviewed")).widget.v_model = True
             _button(rc, t("evaluators.split")).fire_event("click", None)
@@ -343,6 +359,7 @@ def test_a_split_the_project_did_not_record_is_not_reported_as_done(data_root, m
     async def main():
         _box, rc = _render(s)
         try:
+            _open_split(rc)
             _button(rc, t("evaluators.split")).fire_event("click", None)
             await _settle(lambda: t("evaluators.split_unrecorded", project="c") in _toasts("warning"), "the warning")
             assert not _toasts("success")
@@ -356,6 +373,7 @@ def test_a_duplicate_name_is_refused_inline(data_root):
     s = _state(_project(), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
+        _open_split(rc)
         rc.find(v.RadioGroup).widget.v_model = "names"
         rc.find(v.Textarea, label=t("evaluators.names_label")).widget.v_model = "Ana\nana"
         assert rc.find(v.Textarea, label=t("evaluators.names_label")).widget.error_messages
@@ -365,7 +383,7 @@ def test_a_duplicate_name_is_refused_inline(data_root):
 
 
 @pytest.mark.parametrize("action", ["resplit", "remove"])
-def test_a_packaged_split_asks_before_it_is_replaced_or_removed(data_root, monkeypatch, action):
+def test_a_packaged_split_warns_in_the_modal_and_one_click_proceeds(data_root, monkeypatch, action):
     calls = []
     monkeypatch.setattr(es.split_service, "apply_split",
                         lambda st, m, names, inc: calls.append("resplit") or _split())
@@ -375,15 +393,37 @@ def test_a_packaged_split_asks_before_it_is_replaced_or_removed(data_root, monke
     async def main():
         _box, rc = _render(s)
         try:
+            assert t("evaluators.packaged_warning") not in _strings(rc.container)
+            _open_split(rc)
+            assert t("evaluators.packaged_warning") in _strings(rc.container)
             _button(rc, t(f"evaluators.{action}")).fire_event("click", None)
-            await asyncio.sleep(0.05)
-            assert calls == [] and t("evaluators.packaged_warning") in _strings(rc.container)
-            _button(rc, t(f"evaluators.{action}_confirm")).fire_event("click", None)
             await _settle(lambda: calls == [action], f"the {action}")
+            assert t("evaluators.packaged_warning") not in _strings(rc.container)  # the modal closed
         finally:
             rc.close()
 
     asyncio.run(main())
+
+
+def test_the_modal_offers_remove_only_with_a_split(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        assert t("evaluators.open_split") in _strings(rc.container)
+        _open_split(rc)
+        texts = _strings(rc.container)
+        assert t("evaluators.split_title") in texts and t("evaluators.packaged_warning") not in texts
+        assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.remove") in _strings(b)]
+    finally:
+        rc.close()
+    _box, rc = _render(_state(_project(split=_split()), _gdf()))
+    try:
+        assert t("evaluators.edit_split") in _strings(rc.container)
+        _open_split(rc)
+        assert t("evaluators.edit_title") in _strings(rc.container)
+        assert _button(rc, t("evaluators.remove")) and _button(rc, t("evaluators.resplit"))
+        assert t("evaluators.packaged_warning") not in _strings(rc.container)  # nothing was packaged
+    finally:
+        rc.close()
 
 
 @pytest.mark.parametrize("lands", [True, False])
@@ -402,6 +442,7 @@ def test_remove_says_removed_only_when_the_record_is_gone(data_root, monkeypatch
     async def main():
         _box, rc = _render(s)
         try:
+            _open_split(rc)
             _button(rc, t("evaluators.remove")).fire_event("click", None)
             if lands:
                 await _settle(lambda: t("evaluators.removed") in _toasts("success"), "the success toast")
@@ -425,6 +466,7 @@ def test_a_split_no_package_was_built_for_is_replaced_at_once(data_root, monkeyp
     async def main():
         _box, rc = _render(s)
         try:
+            _open_split(rc)
             _button(rc, t("evaluators.resplit")).fire_event("click", None)
             await _settle(lambda: calls == [["Evaluator 1", "Evaluator 2"]], "the re-split")
         finally:
@@ -447,6 +489,7 @@ def test_assignments_without_a_split_record_offer_remove_split(data_root, monkey
     _box, rc = _render(_state(_project(), _gdf()))
     try:
         assert t("evaluators.orphan") in _strings(rc.container)
+        _open_split(rc)
         assert not _button(rc, t("evaluators.remove")).disabled
     finally:
         rc.close()
@@ -519,6 +562,7 @@ def test_a_reviewed_copy_is_previewed_then_merged_with_the_chosen_side(data_root
     async def main():
         _box, rc = _render(s)
         try:
+            _open_merge(rc)
             rc.find(FileInput).widget.v_model = str(zip_path)
             await _settle(lambda: read, "the preview read")
             assert read == [(str(zip_path), "c", 4)]
@@ -542,8 +586,9 @@ def test_a_reviewed_copy_is_previewed_then_merged_with_the_chosen_side(data_root
 
 
 async def _open_preview(rc, zip_path):
+    _open_merge(rc)
     rc.find(FileInput).widget.v_model = str(zip_path)
-    await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview dialog")
+    await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview")
     _button(rc, t("evaluators.merge")).fire_event("click", None)
 
 
@@ -587,10 +632,13 @@ def test_an_unexpected_failure_reading_or_merging_a_copy_is_toasted(data_root, m
         _box, rc = _render(s)
         try:
             if stage == "read":
+                _open_merge(rc)
                 rc.find(FileInput).widget.v_model = str(zip_path)
             else:
                 await _open_preview(rc, zip_path)
             await _settle(lambda: expected in _toasts("error"), "the error toast")
+            if stage == "read":  # the modal stays on the picker for another pick
+                assert rc.find(FileInput).widgets
             if stage == "merge":  # the preview stays open on the copy
                 assert t("evaluators.merge") in _strings(rc.container)
         finally:
@@ -683,9 +731,11 @@ def test_a_second_split_click_while_one_runs_is_dropped(data_root, monkeypatch):
     async def main():
         _box, rc = _render(s)
         try:
+            _open_split(rc)
             _button(rc, t("evaluators.split")).fire_event("click", None)
             await _settle(lambda: calls, "the split")
-            _button(rc, t("evaluators.split")).fire_event("click", None)  # while its worker runs
+            _open_split(rc)  # Solara still calls on_click on a button it rendered disabled
+            _button(rc, t("evaluators.split")).fire_event("click", None)
             await asyncio.sleep(0.1)
             assert len(calls) == 1
         finally:
@@ -757,14 +807,66 @@ def test_the_split_form_starts_afresh_in_another_project(data_root):
     s = _state(_project(), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
+        _open_split(rc)
         rc.find(v.RadioGroup).widget.v_model = "names"
         rc.find(v.Textarea, label=t("evaluators.names_label")).widget.v_model = "Ana\nBo"
         s.load_project_state(_project("d"))
         s.alerts_gdf.set(_gdf(evaluators=("",) * 4))
+        assert t("evaluators.split_title") not in _strings(rc.container)  # the modal closed
+        _open_split(rc)
         assert not rc.find(v.Textarea).widgets
         assert rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model == "2"
     finally:
         rc.close()
+
+
+def test_the_split_modal_keeps_what_was_typed_when_reopened(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        _open_split(rc)
+        rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model = "3"
+        _button(rc, t("common.cancel")).fire_event("click", None)
+        _open_split(rc)
+        assert rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model == "3"
+    finally:
+        rc.close()
+
+
+def test_cancelling_the_merge_drops_the_preview(data_root, monkeypatch):
+    monkeypatch.setattr(es.share, "read_return", lambda path, p, store: _preview())
+    s = _state(_project(split=_split()), _gdf())
+    zip_path = data_root / "bo__reviewed.zip"
+    zip_path.write_bytes(b"PK")
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _open_merge(rc)
+            rc.find(FileInput).widget.v_model = str(zip_path)
+            await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview")
+            _button(rc, t("common.cancel")).fire_event("click", None)
+            assert t("evaluators.merge") not in _strings(rc.container)
+            _open_merge(rc)  # a fresh pick, not the dropped preview
+            assert rc.find(FileInput).widgets and t("evaluators.merge") not in _strings(rc.container)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_without_a_split_there_is_nothing_to_merge(data_root):
+    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
+    try:
+        assert t("evaluators.merge_open") not in _strings(rc.container)
+        assert not rc.find(FileInput).widgets
+    finally:
+        rc.close()
+
+
+def test_the_step_is_named_evaluation():
+    set_locale("en")
+    assert t("app.drawer_item.evaluators") == "Evaluation"
+    assert t("steps.evaluators.info_header") == "Evaluation"
 
 
 def test_the_return_panel_starts_afresh_in_another_copy(data_root, monkeypatch):

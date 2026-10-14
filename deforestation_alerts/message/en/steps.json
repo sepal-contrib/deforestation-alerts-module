@@ -69,7 +69,7 @@
       "import": "Import",
       "import_title": "Import a review package",
       "import_pick": "Review package (.zip)",
-      "import_hint": "A package the project's creator made for you in the Evaluators step.",
+      "import_hint": "A package the project's creator made for you in the Evaluation step.",
       "import_existing_title": "Already imported",
       "import_existing_message": "Project {name} already holds this package for {evaluator}.",
       "import_open_existing": "Open existing copy",
@@ -543,9 +543,9 @@
       "template_missing": "The file is gone: pick it again, or clear it to use the default template."
     },
     "evaluators": {
-      "description": "Split the alerts between evaluators, send each one a review package, and merge the reviewed copies they send back.",
-      "info_header": "Evaluators",
-      "info_md": "**Split** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them.\n\n**Download package** makes one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Import a reviewed copy** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
+      "description": "Review alone, or split the alerts between evaluators and merge what they send back.",
+      "info_header": "Evaluation",
+      "info_md": "**Multiple evaluators** off, you review every alert yourself. On, the alerts are split between evaluators.\n\n**Split alerts…** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them. **Edit split** re-splits or removes the split.\n\n**Generate packages** builds one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. Each row's cloud icon then downloads that evaluator's zip. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Merge reviewed copy…** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
     }
   },
   "evaluators": {
@@ -577,11 +577,7 @@
     "split": "Split",
     "resplit": "Re-split",
     "remove": "Remove split",
-    "resplit_title": "Re-split the alerts?",
-    "remove_title": "Remove the split?",
     "packaged_warning": "Packages already sent for this split will no longer merge.",
-    "resplit_confirm": "Re-split anyway",
-    "remove_confirm": "Remove anyway",
     "split_done": {
       "one": "Alerts split between {n} evaluator.",
       "other": "Alerts split between {n} evaluators."
@@ -596,13 +592,12 @@
     "col_reviewed": "Reviewed",
     "col_merged": "Merged",
     "unassigned": "Unassigned",
-    "empty": "No split yet: split the alerts above.",
+    "empty": "No split yet: use Split alerts… to assign them to evaluators.",
     "aoi_waiting": "Packages wait for the AOI geometry: open the AOI step to load it.",
     "package_ready": "Package for {evaluator} ready.",
     "package_link": "Download {file}",
-    "import_title": "Reviewed copies",
-    "import_label": "Import a reviewed copy (.zip)",
-    "import_hint": "Pick one evaluator's reviewed copy at a time; each is previewed before it merges.",
+    "import_label": "Reviewed copy (.zip)",
+    "import_hint": "Pick one evaluator's reviewed copy. It is previewed here before it merges.",
     "preview_title": "Merge reviews from {evaluator}",
     "conflicts_label": "Alerts you reviewed differently",
     "keep_mine": "Keep mine",
@@ -618,7 +613,12 @@
     "split_unrecorded": "The alerts of {project} were split, but another project was opened before the split was saved. Open {project} again and remove the split to start over.",
     "merged_unrecorded": "The reviews from {evaluator} are in the alerts of {project}, but another project was opened before the return record was saved.",
     "merge_failed": "{file} could not be merged: {error}",
-    "package_unrecorded": "The package for {evaluator} is built, but the split did not record it: another project was opened or the split changed meanwhile."
+    "package_unrecorded": "The package for {evaluator} is built, but the split did not record it: another project was opened or the split changed meanwhile.",
+    "open_split": "Split alerts…",
+    "edit_split": "Edit split",
+    "edit_title": "Edit the split",
+    "merge_open": "Merge reviewed copy…",
+    "merge_title": "Merge a reviewed copy"
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

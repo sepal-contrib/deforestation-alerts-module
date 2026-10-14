@@ -75,7 +75,7 @@
       "import": "Importer",
       "import_title": "Importer un paquet de révision",
       "import_pick": "Paquet de révision (.zip)",
-      "import_hint": "Un paquet que le créateur du projet a préparé pour vous à l'étape Évaluateurs.",
+      "import_hint": "Un paquet que le créateur du projet a préparé pour vous à l'étape Évaluation.",
       "import_existing_title": "Déjà importé",
       "import_existing_message": "Le projet {name} contient déjà ce paquet pour {evaluator}.",
       "import_open_existing": "Ouvrir la copie existante",
@@ -566,9 +566,9 @@
       "template_missing": "Le fichier a disparu : choisissez-le de nouveau, ou videz le champ pour utiliser le modèle par défaut."
     },
     "evaluators": {
-      "description": "Répartissez les alertes entre des évaluateurs, envoyez à chacun un paquet de révision et fusionnez les copies révisées qu'ils vous renvoient.",
-      "info_header": "Évaluateurs",
-      "info_md": "**Répartir** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez.\n\n**Télécharger le paquet** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Importer une copie révisée** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
+      "description": "Révisez seul, ou répartissez les alertes entre des évaluateurs et fusionnez ce qu'ils vous renvoient.",
+      "info_header": "Évaluation",
+      "info_md": "**Plusieurs évaluateurs** désactivé, vous révisez vous-même toutes les alertes. Activé, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
     }
   },
   "evaluators": {
@@ -600,11 +600,7 @@
     "split": "Répartir",
     "resplit": "Répartir à nouveau",
     "remove": "Supprimer la répartition",
-    "resplit_title": "Répartir à nouveau les alertes ?",
-    "remove_title": "Supprimer la répartition ?",
     "packaged_warning": "Les paquets déjà envoyés pour cette répartition ne pourront plus être fusionnés.",
-    "resplit_confirm": "Répartir quand même",
-    "remove_confirm": "Supprimer quand même",
     "split_done": {
       "one": "Alertes réparties entre {n} évaluateur.",
       "many": "Alertes réparties entre {n} d'évaluateurs.",
@@ -620,13 +616,12 @@
     "col_reviewed": "Révisées",
     "col_merged": "Fusionné",
     "unassigned": "Non attribuées",
-    "empty": "Pas encore de répartition : répartissez les alertes ci-dessus.",
+    "empty": "Pas encore de répartition : utilisez Répartir les alertes… pour les attribuer aux évaluateurs.",
     "aoi_waiting": "Les paquets attendent la géométrie de l'AOI : ouvrez l'étape AOI pour la charger.",
     "package_ready": "Paquet pour {evaluator} prêt.",
     "package_link": "Télécharger {file}",
-    "import_title": "Copies révisées",
-    "import_label": "Importer une copie révisée (.zip)",
-    "import_hint": "Choisissez la copie révisée d'un évaluateur à la fois ; chacune est prévisualisée avant la fusion.",
+    "import_label": "Copie révisée (.zip)",
+    "import_hint": "Choisissez la copie révisée d'un évaluateur. Elle est prévisualisée ici avant la fusion.",
     "preview_title": "Fusionner les révisions de {evaluator}",
     "conflicts_label": "Alertes que vous avez révisées autrement",
     "keep_mine": "Garder les miennes",
@@ -642,7 +637,12 @@
     "split_unrecorded": "Les alertes de {project} ont été réparties, mais un autre projet a été ouvert avant l'enregistrement de la répartition. Rouvrez {project} et supprimez la répartition pour recommencer.",
     "merged_unrecorded": "Les révisions de {evaluator} sont déjà dans les alertes de {project}, mais un autre projet a été ouvert avant l'enregistrement du retour.",
     "merge_failed": "Impossible de fusionner {file} : {error}",
-    "package_unrecorded": "Le paquet pour {evaluator} est créé, mais la répartition ne l'a pas enregistré : un autre projet a été ouvert ou la répartition a changé entre-temps."
+    "package_unrecorded": "Le paquet pour {evaluator} est créé, mais la répartition ne l'a pas enregistré : un autre projet a été ouvert ou la répartition a changé entre-temps.",
+    "open_split": "Répartir les alertes…",
+    "edit_split": "Modifier la répartition",
+    "edit_title": "Modifier la répartition des alertes",
+    "merge_open": "Fusionner une copie révisée…",
+    "merge_title": "Fusionner une copie révisée"
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

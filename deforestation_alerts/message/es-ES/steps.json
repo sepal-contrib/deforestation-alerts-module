@@ -75,7 +75,7 @@
       "import": "Importar",
       "import_title": "Importar un paquete de revisión",
       "import_pick": "Paquete de revisión (.zip)",
-      "import_hint": "Un paquete que el creador del proyecto hizo para ti en el paso Evaluadores.",
+      "import_hint": "Un paquete que el creador del proyecto hizo para ti en el paso Evaluación.",
       "import_existing_title": "Ya importado",
       "import_existing_message": "El proyecto {name} ya contiene este paquete para {evaluator}.",
       "import_open_existing": "Abrir la copia existente",
@@ -566,9 +566,9 @@
       "template_missing": "El archivo ya no está: elígelo de nuevo o vacía el campo para usar la plantilla predeterminada."
     },
     "evaluators": {
-      "description": "Reparte las alertas entre evaluadores, envía a cada uno un paquete de revisión e integra las copias revisadas que te devuelvan.",
-      "info_header": "Evaluadores",
-      "info_md": "**Repartir** distribuye por turnos las alertas del conjunto activo, en el orden del conjunto, entre los evaluadores que cuentes o nombres. Las alertas ya revisadas quedan sin asignar salvo que las incluyas.\n\n**Descargar paquete** crea un zip por evaluador: las alertas del conjunto, el cuestionario, el AOI y la caché de escenas. El evaluador lo importa en el diálogo Proyecto y revisa sus alertas en Análisis.\n\n**Importar una copia revisada** integra las revisiones que te devuelve un evaluador. Solo se toman las alertas asignadas a ese evaluador; si revisaste una de otra forma, eliges qué revisión conservar."
+      "description": "Revisa tú solo, o reparte las alertas entre evaluadores e integra lo que te devuelvan.",
+      "info_header": "Evaluación",
+      "info_md": "**Varios evaluadores** desactivado, revisas tú todas las alertas. Activado, las alertas se reparten entre evaluadores.\n\n**Repartir alertas…** distribuye por turnos las alertas del conjunto activo, en el orden del conjunto, entre los evaluadores que cuentes o nombres. Las alertas ya revisadas quedan sin asignar salvo que las incluyas. **Editar reparto** reparte de nuevo o quita el reparto.\n\n**Generar paquetes** crea un zip por evaluador: las alertas del conjunto, el cuestionario, el AOI y la caché de escenas. El icono de nube de cada fila descarga después el zip de ese evaluador. El evaluador lo importa en el diálogo Proyecto y revisa sus alertas en Análisis.\n\n**Integrar copia revisada…** integra las revisiones que te devuelve un evaluador. Solo se toman las alertas asignadas a ese evaluador; si revisaste una de otra forma, eliges qué revisión conservar."
     }
   },
   "evaluators": {
@@ -600,11 +600,7 @@
     "split": "Repartir",
     "resplit": "Repartir de nuevo",
     "remove": "Quitar el reparto",
-    "resplit_title": "¿Repartir de nuevo las alertas?",
-    "remove_title": "¿Quitar el reparto?",
     "packaged_warning": "Los paquetes ya enviados para este reparto dejarán de poder integrarse.",
-    "resplit_confirm": "Repartir de todos modos",
-    "remove_confirm": "Quitar de todos modos",
     "split_done": {
       "one": "Alertas repartidas entre {n} evaluador.",
       "many": "Alertas repartidas entre {n} de evaluadores.",
@@ -620,13 +616,12 @@
     "col_reviewed": "Revisadas",
     "col_merged": "Integrado",
     "unassigned": "Sin asignar",
-    "empty": "Aún no hay reparto: reparte las alertas arriba.",
+    "empty": "Aún no hay reparto: usa Repartir alertas… para asignarlas a evaluadores.",
     "aoi_waiting": "Los paquetes esperan la geometría del AOI: abre el paso AOI para cargarla.",
     "package_ready": "Paquete para {evaluator} listo.",
     "package_link": "Descargar {file}",
-    "import_title": "Copias revisadas",
-    "import_label": "Importar una copia revisada (.zip)",
-    "import_hint": "Elige la copia revisada de un evaluador cada vez; cada una se previsualiza antes de integrarse.",
+    "import_label": "Copia revisada (.zip)",
+    "import_hint": "Elige la copia revisada de un evaluador. Se previsualiza aquí antes de integrarse.",
     "preview_title": "Integrar las revisiones de {evaluator}",
     "conflicts_label": "Alertas que revisaste de otra forma",
     "keep_mine": "Conservar las mías",
@@ -642,7 +637,12 @@
     "split_unrecorded": "Las alertas de {project} se repartieron, pero se abrió otro proyecto antes de guardar el reparto. Abre {project} de nuevo y quita el reparto para empezar otra vez.",
     "merged_unrecorded": "Las revisiones de {evaluator} ya están en las alertas de {project}, pero se abrió otro proyecto antes de guardar el registro de la devolución.",
     "merge_failed": "No se pudo integrar {file}: {error}",
-    "package_unrecorded": "El paquete para {evaluator} está creado, pero el reparto no lo registró: se abrió otro proyecto o el reparto cambió entretanto."
+    "package_unrecorded": "El paquete para {evaluator} está creado, pero el reparto no lo registró: se abrió otro proyecto o el reparto cambió entretanto.",
+    "open_split": "Repartir alertas…",
+    "edit_split": "Editar reparto",
+    "edit_title": "Editar el reparto",
+    "merge_open": "Integrar copia revisada…",
+    "merge_title": "Integrar una copia revisada"
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."

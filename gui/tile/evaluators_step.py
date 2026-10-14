@@ -53,7 +53,6 @@ from gui.scripts.solara_threads import to_thread_in_context
 from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
 from gui.tile.questionnaire_step import _StartAnalysis
-from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
 from gui.widget.help import StepIntro
@@ -289,15 +288,92 @@ def _PreviewFields(app_state, preview, busy, on_cancel, on_merge):
 
 
 @solara.component
-def _PreviewDialog(app_state, open_, pending, busy, on_merge):
+def _SplitFields(form, form_error, split, orphan, busy, on_cancel, on_run):
+    """The split modal's card (spec 2026-10-14 §4.3), mounted while it is
+    open. ``form`` is the panel's ``{"mode", "count", "names", "include"}``
+    and their setters, so a reopened modal shows what was last typed. With a
+    split, or assignments without one, it offers Remove split on the left;
+    a split that packages were built for says so here, and one click on
+    Re-split or Remove split proceeds."""
+    mode = form["mode"]
+    typed = (form["count"] if mode == "count" else form["names"]).strip()
+    shown = [form_error] if form_error and typed else []
+    editing = split is not None or orphan
+
+    def _leading():
+        if editing:
+            solara.Button(t("evaluators.remove"), icon_name="mdi-account-multiple-remove-outline", color="error",
+                          text=True, small=True, disabled=busy, on_click=lambda: on_run("remove"))
+
+    def _actions():
+        label = t("evaluators.resplit") if split is not None else t("evaluators.split")
+        solara.Button(label, icon_name="mdi-account-multiple-plus-outline", color="primary", small=True,
+                      disabled=busy or form_error is not None, classes=[ENTER_DEFAULT],
+                      on_click=lambda: on_run("split"))
+
+    title = t("evaluators.edit_title") if editing else t("evaluators.split_title")
+    with form_card(title, on_cancel=on_cancel, actions=_actions, leading=_leading, cancel_disabled=busy):
+        with field_group(t("evaluators.mode_label")):
+            with rv.RadioGroup(v_model=mode, on_v_model=form["set_mode"], row=True, dense=True, hide_details=True,
+                               disabled=busy):
+                rv.Radio(label=t("evaluators.mode_count"), value="count")
+                rv.Radio(label=t("evaluators.mode_names"), value="names")
+        if mode == "count":
+            rv.TextField(label=t("evaluators.count_label"), v_model=form["count"],
+                         on_v_model=lambda value: form["set_count"](value or ""), type="number", dense=True,
+                         outlined=True, class_="mt-3", error_messages=shown, disabled=busy)
+        else:
+            rv.Textarea(label=t("evaluators.names_label"), v_model=form["names"],
+                        on_v_model=lambda value: form["set_names"](value or ""), hint=t("evaluators.names_hint"),
+                        persistent_hint=not shown, rows=4, auto_grow=True, dense=True, outlined=True,
+                        class_="mt-3", error_messages=shown, disabled=busy)
+        rv.Checkbox(label=t("evaluators.include_reviewed"), v_model=form["include"],
+                    on_v_model=lambda value: form["set_include"](bool(value)), dense=True, hide_details=True,
+                    disabled=busy)
+        solara.Text(t("evaluators.include_reviewed_hint"), style=MUTED + "font-size:0.75rem;")
+        if split is not None and split.packaged:
+            solara.Text(t("evaluators.packaged_warning"), classes=["warning--text"],
+                        style="display:block;font-size:0.8rem;")
+
+
+@solara.component
+def _SplitDialog(open_, form, form_error, split, orphan, busy, on_run):
     with use_form_dialog(open_, max_width="480px"):
-        if open_.value and pending is not None:
-            _PreviewFields(app_state=app_state, preview=pending["preview"], busy=busy,
-                           on_cancel=lambda: open_.set(False), on_merge=on_merge)
+        if open_.value:
+            _SplitFields(form=form, form_error=form_error, split=split, orphan=orphan, busy=busy,
+                         on_cancel=lambda: open_.set(False), on_run=on_run)
+
+
+@solara.component
+def _MergePick(picks, reading, busy, on_cancel, on_pick):
+    """The merge modal's first stage (spec 2026-10-14 §4.5): one reviewed copy,
+    picked afresh after each pick (``picks`` remounts the picker)."""
+    with form_card(t("evaluators.merge_title"), on_cancel=on_cancel, actions=lambda: None, cancel_disabled=busy):
+        with solara.Column(style="gap:2px;").key(f"import:{picks}"):
+            FileInputComponent(extensions=ZIP, value="", on_value=on_pick, label=t("evaluators.import_label"))
+        solara.Text(t("evaluators.import_hint"), style=MUTED + "font-size:0.8rem;")
+        if reading:
+            rv.ProgressLinear(indeterminate=True, color="primary")
+
+
+@solara.component
+def _MergeDialog(app_state, open_, pending, picks, reading, busy, on_pick, on_merge, on_cancel):
+    """One modal, two stages: the picker, then the preview of the copy read
+    (``_PreviewFields``, mounted afresh for each copy so it starts on Keep
+    mine). Cancel, or ESC, drops the preview."""
+    with use_form_dialog(open_, max_width="480px", on_close=on_cancel):
+        if open_.value:
+            if pending is None:
+                _MergePick(picks=picks, reading=reading, busy=busy, on_cancel=on_cancel, on_pick=on_pick)
+            else:
+                _PreviewFields(app_state=app_state, preview=pending["preview"], busy=busy, on_cancel=on_cancel,
+                               on_merge=on_merge)
 
 
 @solara.component
 def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
+    """The evaluators table under the switch (spec 2026-10-14 §4.2), with the
+    split form and the reviewed-copy import in modals (§4.3, §4.5)."""
     p = app_state.project.value
     s = active_set(p)
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
@@ -305,11 +381,11 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     count_text, set_count_text = solara.use_state("2")
     names_text, set_names_text = solara.use_state("")
     include, set_include = solara.use_state(False)
-    confirm, set_confirm = solara.use_state(None)  # "resplit" / "remove" while asking
     building, set_building = solara.use_state(None)  # the evaluator whose package is being built
     links, set_links = solara.use_state({})  # (split_id, evaluator) -> link entry
     pending, set_pending = solara.use_state(None)  # {"preview", "file"} of the copy being merged
-    preview_open = solara.use_reactive(False)
+    split_open = solara.use_reactive(False)
+    merge_open = solara.use_reactive(False)
     # Bumped by every pick: the picker is remounted empty, so the next
     # reviewed copy is picked afresh (one zip at a time, §7.4).
     picks, set_picks = solara.use_state(0)
@@ -323,17 +399,17 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
 
     def _reset():
         # Another project opened: its step starts from a fresh form, without
-        # this project's preview or links. (A ``.key(p.name)`` on the panel
-        # does not remount it: reacton re-renders a child subscribed to the
-        # same reactive in place, keeping its state.)
+        # this project's preview, links or open modal. (A ``.key(p.name)`` on
+        # the panel does not remount it: reacton re-renders a child subscribed
+        # to the same reactive in place, keeping its state.)
         set_mode("count")
         set_count_text("2")
         set_names_text("")
         set_include(False)
-        set_confirm(None)
         set_links({})
         set_pending(None)
-        preview_open.set(False)
+        split_open.set(False)
+        merge_open.set(False)
 
     solara.use_effect(_reset, [p.name])
 
@@ -420,7 +496,6 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             current_notifier().error(failure_text(exc, file))
             return
         set_pending({"preview": made, "file": file})
-        preview_open.set(True)
 
     preview_task = solara.lab.use_task(_held(_preview), dependencies=None, prefer_threaded=False,
                                        raise_error=False)
@@ -436,7 +511,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         except Exception as exc:  # noqa: BLE001 - toasted; the preview stays open on the copy
             current_notifier().error(failure_text(exc, copy["file"]))
             return
-        preview_open.set(False)
+        merge_open.set(False)
         set_pending(None)
         who = made.header.evaluator
         if target is not None and return_recorded(app_state, live.name, target.id, who, ret):
@@ -459,100 +534,68 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         names, form_error = typed_evaluators(mode, count_text, names_text), None
     except split_mod.SplitError as exc:
         names, form_error = [], error_text(exc)
-    typed = (count_text if mode == "count" else names_text).strip()
-    shown = [form_error] if form_error and typed else []
-    orphan = split is None and gdf is not None and split_service.orphan_assignments(p, gdf)
+    orphan = bool(split is None and gdf is not None and split_service.orphan_assignments(p, gdf))
     stats, unassigned = evaluator_rows(split, gdf)
     ready = aoi_ready(p, paths.project_dir(p.name), app_state.aoi_result.value)
+    editing = split is not None or orphan
 
     def _run(action):
-        set_confirm(None)
+        """The split modal's Split, Re-split or Remove split: the modal closes
+        as the action starts; its toast says how it ended."""
+        if inflight.current:
+            return
+        split_open.set(False)
         if action == "remove":
             _launch(remove_task)
         else:
             _launch(split_task, names, include)
-
-    def _ask(action):
-        if inflight.current:
-            return  # not even a confirmation while an action runs
-        # Packages already handed out stop merging once their split goes (§4.1).
-        if split is not None and split.packaged:
-            set_confirm(action)
-        else:
-            _run(action)
 
     def _pick(path):
         set_picks(lambda n: n + 1)
         if path:
             _launch(preview_task, path)
 
-    with solara.Column(style="gap:16px;"):
-        with rv.Card(outlined=True, class_="pa-3"):
-            solara.Text(t("evaluators.split_title"), style="font-weight:600;")
-            with field_group(t("evaluators.mode_label")):
-                with rv.RadioGroup(v_model=mode, on_v_model=set_mode, row=True, dense=True, hide_details=True,
-                                   disabled=busy):
-                    rv.Radio(label=t("evaluators.mode_count"), value="count")
-                    rv.Radio(label=t("evaluators.mode_names"), value="names")
-            if mode == "count":
-                rv.TextField(label=t("evaluators.count_label"), v_model=count_text,
-                             on_v_model=lambda value: set_count_text(value or ""), type="number", dense=True,
-                             outlined=True, class_="mt-3", error_messages=shown, disabled=busy)
-            else:
-                rv.Textarea(label=t("evaluators.names_label"), v_model=names_text,
-                            on_v_model=lambda value: set_names_text(value or ""), hint=t("evaluators.names_hint"),
-                            persistent_hint=not shown, rows=4, auto_grow=True, dense=True, outlined=True,
-                            class_="mt-3", error_messages=shown, disabled=busy)
-            rv.Checkbox(label=t("evaluators.include_reviewed"), v_model=include,
-                        on_v_model=lambda value: set_include(bool(value)), dense=True, hide_details=True,
-                        disabled=busy)
-            solara.Text(t("evaluators.include_reviewed_hint"), style=MUTED + "font-size:0.75rem;")
-            if orphan:
-                solara.Text(t("evaluators.orphan"), classes=["warning--text"])
-            with solara.Row(style="gap:8px;flex-wrap:wrap;margin-top:8px;"):
-                if split is None:
-                    label = t("evaluators.split")
-                else:
-                    label = t("evaluators.resplit")
-                solara.Button(label, icon_name="mdi-account-multiple-plus-outline", color="primary", small=True,
-                              loading=split_task.pending, disabled=busy or gdf is None or form_error is not None,
-                              on_click=lambda: _ask("resplit"))
-                if split is not None or orphan:
-                    solara.Button(t("evaluators.remove"), icon_name="mdi-account-multiple-remove-outline",
-                                  color="error", outlined=True, small=True, loading=remove_task.pending,
-                                  disabled=busy, on_click=lambda: _ask("remove"))
-        with rv.Card(outlined=True, class_="pa-3"):
-            if gdf is None:
-                solara.Text(t("evaluators.loading"), style=MUTED)
-            ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
-                         rows=_table_rows(stats, unassigned, on_package=lambda name: _launch(package_task, name), building=building,
-                                          can_package=ready and gdf is not None and not busy),
-                         empty_text=t("evaluators.empty"))
-            if split is not None and not ready:
-                solara.Text(t("evaluators.aoi_waiting"), style=MUTED + "font-size:0.75rem;")
-            for name in (split.evaluators if split is not None else []):
-                entry = links.get((split.split_id, name))
-                if entry is not None:
-                    _download_link(entry, t("evaluators.package_link", file=entry["file"]),
-                                   "defo-package-link").key(f"package:{name}")
-        if split is not None:
-            with rv.Card(outlined=True, class_="pa-3"):
-                solara.Text(t("evaluators.import_title"), style="font-weight:600;")
-                with solara.Column(style="gap:2px;").key(f"import:{picks}"):
-                    FileInputComponent(extensions=ZIP, value="", on_value=_pick,
-                                       label=t("evaluators.import_label"))
-                solara.Text(t("evaluators.import_hint"), style=MUTED + "font-size:0.8rem;")
-                if preview_task.pending:
-                    rv.ProgressLinear(indeterminate=True, color="primary")
+    def _close_merge():
+        merge_open.set(False)
+        set_pending(None)
 
-    if confirm == "remove":
-        title, confirm_label = t("evaluators.remove_title"), t("evaluators.remove_confirm")
-    else:
-        title, confirm_label = t("evaluators.resplit_title"), t("evaluators.resplit_confirm")
-    ConfirmDialog(open=confirm is not None, on_cancel=lambda: set_confirm(None), on_confirm=lambda: _run(confirm),
-                  title=title, message=t("evaluators.packaged_warning"), confirm_label=confirm_label)
-    _PreviewDialog(app_state=app_state, open_=preview_open, pending=pending, busy=merge_task.pending,
-                   on_merge=lambda choice: _launch(merge_task, pending, choice))
+    def _header_action():
+        solara.Button(t("evaluators.edit_split") if editing else t("evaluators.open_split"),
+                      icon_name="mdi-pencil-outline" if editing else "mdi-account-multiple-plus-outline",
+                      color="primary", text=True, x_small=True, disabled=busy or gdf is None,
+                      classes=["defo-split-open"], on_click=lambda: split_open.set(True))
+
+    form = {"mode": mode, "count": count_text, "names": names_text, "include": include, "set_mode": set_mode,
+            "set_count": set_count_text, "set_names": set_names_text, "set_include": set_include}
+
+    with solara.Column(style="gap:8px;margin-top:8px;"):
+        rv.Divider()
+        if gdf is None:
+            solara.Text(t("evaluators.loading"), style=MUTED)
+        if orphan:
+            solara.Text(t("evaluators.orphan"), classes=["warning--text"])
+        ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
+                     rows=_table_rows(stats, unassigned, on_package=lambda name: _launch(package_task, name),
+                                      building=building, can_package=ready and gdf is not None and not busy),
+                     empty_text=t("evaluators.empty"), header_action=_header_action)
+        if split is not None and not ready:
+            solara.Text(t("evaluators.aoi_waiting"), style=MUTED + "font-size:0.75rem;")
+        for name in (split.evaluators if split is not None else []):
+            entry = links.get((split.split_id, name))
+            if entry is not None:
+                _download_link(entry, t("evaluators.package_link", file=entry["file"]),
+                               "defo-package-link").key(f"package:{name}")
+        if split is not None:
+            with solara.Row(style="gap:8px;flex-wrap:wrap;"):
+                solara.Button(t("evaluators.merge_open"), icon_name="mdi-call-merge", color="primary", outlined=True,
+                              small=True, disabled=busy, style="flex:1 1 150px;",
+                              on_click=lambda: merge_open.set(True))
+
+    _SplitDialog(open_=split_open, form=form, form_error=form_error, split=split, orphan=orphan, busy=busy,
+                 on_run=_run)
+    _MergeDialog(app_state=app_state, open_=merge_open, pending=pending, picks=picks, reading=preview_task.pending,
+                 busy=merge_task.pending, on_pick=_pick, on_cancel=_close_merge,
+                 on_merge=lambda choice: _launch(merge_task, pending, choice))
 
 
 @solara.component
@@ -610,7 +653,8 @@ def _ReturnPanel(app_state):
 
 @solara.component
 def _MultiSwitch(app_state):
-    """Solo evaluation or multiple evaluators. A split holds it on: switching
+    """Solo evaluation or multiple evaluators, on one line (spec 2026-10-14
+    §4.2): the hint is the info icon's tooltip. A split holds it on: switching
     to solo would leave alerts assigned to evaluators the step no longer shows."""
     p = app_state.project.value
     split = active_set(p).split
@@ -619,22 +663,25 @@ def _MultiSwitch(app_state):
     def _set(value):
         update_setup(app_state, p.name, lambda live: setattr(live, "multi_evaluator", bool(value)))
 
-    with rv.Card(outlined=True, class_="pa-3"):
+    if split is not None:
+        hint = t("evaluators.multi_locked")
+    elif on:
+        hint = t("evaluators.multi_note")
+    else:
+        hint = t("evaluators.solo_note")
+    with solara.Row(style="align-items:center;gap:8px;flex-wrap:nowrap;"):
         rv.Switch(label=t("evaluators.multi_label"), v_model=on, on_v_model=_set, disabled=split is not None,
-                  dense=True, hide_details=True)
-        if split is not None:
-            hint = t("evaluators.multi_locked")
-        elif on:
-            hint = t("evaluators.multi_note")
-        else:
-            hint = t("evaluators.solo_note")
-        solara.Text(hint, style="display:block;" + MUTED + "font-size:0.75rem;")
+                  dense=True, hide_details=True, class_="mt-0 pt-0")
+        rv.Spacer()
+        with rv.Html(tag="span", class_="defo-multi-hint", attributes={"title": hint}):
+            rv.Icon(small=True, children=["mdi-information-outline"])
 
 
 @solara.component
 def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     """``app_tile_model`` is the shell's ``SetContext`` and ``analysis`` its
-    ``AnalysisState``: the split and merge services write through them."""
+    ``AnalysisState``: the split and merge services write through them. The
+    step reads "Evaluation"; its key, page view and module keep "evaluators"."""
     p = app_state.project.value
     s = active_set(p)
     with solara.Column(style="gap:16px;"):
@@ -646,9 +693,10 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
             # A review copy neither splits nor builds packages (§6.3): it returns.
             _ReturnPanel(app_state=app_state)
         elif s is not None:
-            _MultiSwitch(app_state=app_state)
-            if p.multi_evaluator:
-                _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
-                              gee_interface=gee_interface)
+            with rv.Card(outlined=True, class_="pa-3"):
+                _MultiSwitch(app_state=app_state)
+                if p.multi_evaluator:
+                    _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
+                                  gee_interface=gee_interface)
         # Without an active set, Start analysis says why (workflow.lock_analysis).
         _StartAnalysis(app_state=app_state, ready=s is not None)

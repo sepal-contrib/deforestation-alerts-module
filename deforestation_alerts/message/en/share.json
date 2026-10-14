@@ -18,7 +18,7 @@
       "store_changed": "The alerts were rewritten while the zip was made; try again.",
       "split_mismatch": "The alerts' evaluator column does not match the split; remove the split and split again.",
       "not_a_copy": "Only a review copy returns reviews.",
-      "is_return": "This is a reviewed copy; merge it from the creator's project, Evaluators step.",
+      "is_return": "This is a reviewed copy; merge it from the creator's project, Evaluation step.",
       "unknown_kind": "This zip is not a review package.",
       "bad_manifest": "The project file in this package cannot be read.",
       "payload_mismatch": "This package is inconsistent ({what}); ask the creator for a new one.",
