@@ -75,7 +75,7 @@ def test_the_live_alerts_carry_the_split_and_the_next_save_keeps_it(tmp_path, mo
     """The alerts on hand are republished with the column and the new
     generation: a review Save of them lands and writes the split back, not
     over it."""
-    from gui.tile.analysis.export import _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import write_store as _save_alerts_to_gdf
 
     state, ctx, store = _open(tmp_path, monkeypatch, ["Not reviewed"] * 3)
     before = state.alerts_gdf.value
@@ -94,7 +94,7 @@ def test_the_live_alerts_carry_the_split_and_the_next_save_keeps_it(tmp_path, mo
 def test_a_save_of_the_alerts_read_before_the_split_is_refused(tmp_path, monkeypatch):
     """Those alerts have no ``evaluator`` column: written back, they would
     erase the split. Their generation is the one before the split's."""
-    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import SaveRefused, write_store as _save_alerts_to_gdf
 
     state, ctx, store = _open(tmp_path, monkeypatch, ["Not reviewed"] * 2)
     stale = state.alerts_gdf.value

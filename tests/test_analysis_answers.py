@@ -14,6 +14,7 @@ from deforestation_alerts.project.models import Project, Question, QuestionOptio
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export
+from gui.tile.analysis import review_save
 from gui.tile.analysis.state import AnalysisState, capture_alert
 from tests.test_set_context import _AdminLookups, _review_alerts, _state, _store
 
@@ -42,7 +43,7 @@ def _saved(tmp_path, monkeypatch, questions, status, answers):
     _set_questions(s, questions)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set(status)
@@ -98,9 +99,9 @@ def test_a_hidden_required_question_without_an_answer_does_not_block(tmp_path, m
 
 
 def test_a_visible_required_question_without_an_answer_refuses_the_save(tmp_path, monkeypatch):
-    with pytest.raises(export.SaveRefused) as info:
+    with pytest.raises(review_save.SaveRefused) as info:
         _saved(tmp_path, monkeypatch, [LOSS, ROAD], "Confirmed", {"loss_driver": ["other"]})
-    assert info.value.key == export.REQUIRED_MISSING
+    assert info.value.key == review_save.REQUIRED_MISSING
     assert info.value.values["question"] == "Road access" and info.value.values["question_key"] == "road_access"
     assert not _store(tmp_path, "d", "glad-l").exists()  # nothing written
     from gui.scripts.error_text import error_text
@@ -109,20 +110,20 @@ def test_a_visible_required_question_without_an_answer_refuses_the_save(tmp_path
 
 
 def test_a_required_answer_of_blanks_only_is_missing(tmp_path, monkeypatch):
-    with pytest.raises(export.SaveRefused) as info:
+    with pytest.raises(review_save.SaveRefused) as info:
         _saved(tmp_path, monkeypatch, [ROAD], "Confirmed", {"road_access": ["  ", ""]})
-    assert info.value.key == export.REQUIRED_MISSING
+    assert info.value.key == review_save.REQUIRED_MISSING
 
 
 def test_the_refusal_names_the_question_in_the_current_language(tmp_path, monkeypatch):
     set_locale("es-ES")
     required_loss = LOSS.model_copy(update={"required": True})
-    with pytest.raises(export.SaveRefused) as info:
+    with pytest.raises(review_save.SaveRefused) as info:
         _saved(tmp_path, monkeypatch, [required_loss], "Need revision", {})
     from gui.i18n import t
 
     assert info.value.values["question"] == t("analysis_tile.questionarie.loss_driver_label")
-    assert t(export.REQUIRED_MISSING, question="X") == "Responda «X» antes de guardar."
+    assert t(review_save.REQUIRED_MISSING, question="X") == "Responda «X» antes de guardar."
 
 
 def test_a_store_without_the_column_gets_it_on_the_first_save(tmp_path, monkeypatch):
@@ -139,7 +140,7 @@ def test_the_live_table_gets_the_new_column_too(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["no"]})
@@ -159,7 +160,7 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x").drop(columns=["area_ha"]))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["yes"]})
@@ -169,9 +170,9 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     assert export._save_attributes(SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None)),
                                    s, analysis, ctx) is True
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "q_road_access"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
     assert saved["q_road_access"].tolist() == ["yes", ""]
-    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
 
 
 def test_drafts_of_deleted_questions_are_ignored(tmp_path, monkeypatch):

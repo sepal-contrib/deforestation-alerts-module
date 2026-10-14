@@ -16,12 +16,12 @@ from deforestation_alerts.project.models import Project
 from gui.scripts.error_text import error_text
 from gui.store.autosave import install_autosave
 from gui.store.state_manager import AppState
-from gui.tile.analysis import export as export_mod
+from gui.tile.analysis import alert_files
 from gui.widget import report_template as rt
 
 
 def _docx(path: Path) -> Path:
-    path.write_bytes(Path(export_mod._DEFAULT_REPORT_TEMPLATE).read_bytes())
+    path.write_bytes(Path(alert_files.DEFAULT_REPORT_TEMPLATE).read_bytes())
     return path
 
 
@@ -37,12 +37,12 @@ def test_template_value(tmp_path):
 
 
 def test_report_template_path(tmp_path):
-    assert export_mod.report_template_path(None) == Path(export_mod._DEFAULT_REPORT_TEMPLATE)
-    assert export_mod.report_template_path("") == Path(export_mod._DEFAULT_REPORT_TEMPLATE)
+    assert alert_files.report_template_path(None) == Path(alert_files.DEFAULT_REPORT_TEMPLATE)
+    assert alert_files.report_template_path("") == Path(alert_files.DEFAULT_REPORT_TEMPLATE)
     mine = _docx(tmp_path / "mine.docx")
-    assert export_mod.report_template_path(str(mine)) == mine
-    with pytest.raises(export_mod.ReportTemplateMissing) as err:
-        export_mod.report_template_path(str(tmp_path / "gone.docx"))
+    assert alert_files.report_template_path(str(mine)) == mine
+    with pytest.raises(alert_files.ReportTemplateMissing) as err:
+        alert_files.report_template_path(str(tmp_path / "gone.docx"))
     assert err.value.values == {"path": str(tmp_path / "gone.docx")}
     assert err.value.key == "analysis_tile.export_labels.report_template_missing"
     # The download's failure toast (tracked_job's default) reads the keyed message, with the path.

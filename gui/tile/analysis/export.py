@@ -10,7 +10,8 @@ the Save, so ``build_export`` builds neither.
 * The OLD **Save** button (``save_btn``) ran ``save_attributes_to_gdf`` —
   writing the user's verdict / answers / image-info / GEE-admin attributes
   + the drawn polygon area onto ``alerts_gdf`` and persisting ``alert_db.parquet``.
-  That flow now lives in ``make_save_runner`` (module level) and the button
+  What a Save writes, and the store transaction, live in ``review_save``;
+  the runner that drives it is ``make_save_runner`` (module level) and the button
   itself in the footer, which drives that runner; the runner's ``then``
   is what moves to the next alert, and only a save that wrote calls it.
   ``build_export`` returns the runner so there is ONE save for the panel.
@@ -20,7 +21,7 @@ the Save, so ``build_export`` builds neither.
   it back to the first state, because the build button and the two download
   links belong to the alert they were made for.
 * The dashed **Build alert files** tile (``download_alert_data_btn``, in
-  ``toolbar_build``) runs the OLD ``download_data`` — building the single-alert
+  ``toolbar_build``) runs the OLD ``download_data`` (``alert_files``) — building the single-alert
   gpkg, the before/after-image GeoTIFF, the zip, and the Word report. Until a
   save of this alert lands it is disabled and carries a muted "(save first)"
   hint (``save_first``).
@@ -128,556 +129,43 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
 
-import ee
-import geopandas as gpd
 import ipyvuetify as v
 from pysepal import sepalwidgets as sw
 
-from deforestation_alerts.errors import KeyedError
-from deforestation_alerts.project.questions import column
-from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
-from deforestation_alerts.scripts import local_files
-from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
-from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
-from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip, calculate_total_area
-from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
+from deforestation_alerts.project.review_status import CONFIRMED
 from gui.i18n import t, tn
-from gui.scripts import questions
-from gui.scripts import set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
     current_notifier,
-    tile_progress_reporter,
     tracked_job,
 )
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
+from gui.tile.analysis import alert_files, review_save
 from gui.tile.analysis import gif as gif_mod
 from gui.tile.analysis.file_tile import FileTile
-from gui.tile.analysis.paths import alert_gif_name, stage_alert_image
-from gui.tile.analysis.review_panel import REVIEW_CHOICES
+from gui.tile.analysis.paths import alert_gif_name
+from gui.tile.analysis.review_save import SaveRefused
 from gui.tile.analysis.state import capture_alert
 from gui.widget.text_style import MUTED
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
-# Default Word report template (OLD used this literal when no custom template set).
-# Resolve from the repo root (export.py -> analysis -> tile -> gui -> root):
-# the CWD is not guaranteed writable or even stable on the platform.
-_DEFAULT_REPORT_TEMPLATE = str(
-    Path(__file__).resolve().parents[3] / "data" / "report_template.docx"
-)
-
-
-class ReportTemplateMissing(KeyedError, RuntimeError):
-    """The project's report template is gone from disk: the download writes nothing."""
-
-    key = "analysis_tile.export_labels.report_template_missing"
-
-    def __init__(self, path: str):
-        super().__init__(f"report template not found: {path}", path=path)
-
-
-def report_template_path(template: Optional[str]) -> Path:
-    """The ``.docx`` a report is built from: the project's, or the app's default."""
-    if not template:
-        return Path(_DEFAULT_REPORT_TEMPLATE)
-    path = Path(template)
-    if not path.is_file():
-        raise ReportTemplateMissing(template)
-    return path
-
-
-def _save_target(app_tile_model):
-    """Where a Save writes, read once: ``(folder, target)``.
-
-    A ``SetContext`` pins its active set (``target``: that set and its
-    project) and the folder is that set's. A recipe-era model (the old shell,
-    test fakes) has only ``recipe_folder_path``, and no target. The folder is
-    ``""`` when there is nowhere to write.
-    """
-    pin = getattr(app_tile_model, "pin", None)
-    if pin is None:
-        return app_tile_model.recipe_folder_path, None
-    target = pin()
-    return (str(target.folder), target) if target is not None else ("", None)
-
-
-class SaveRefused(KeyedError):
-    """A Save that must not write: nothing went wrong, it has nowhere to go.
-    The worker reports it as a warning, not as an error. ``key`` names the
-    reason; the worker renders it where it toasts (spec §11)."""
-
-
-#: A Save refused for a required question left unanswered (spec D5); the
-#: refusal carries the question's label (``question``) and key (``question_key``).
-REQUIRED_MISSING = "analysis_tile.questions.required_missing"
-
-
-def _store_of(target) -> Path:
-    """Where ``target``'s set keeps its alerts: the store this Save rewrites."""
-    return Path(str(target.folder)) / "alert_db.parquet"
-
-
-def _refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
-    """Raise ``SaveRefused`` unless the Save may still write for ``target``.
-
-    ``alerts_gdf`` and the active set are separate reactives: Integrate records
-    a new set before it publishes that set's alerts, so for a moment the alerts
-    on hand are the previous set's. Saved, they would overwrite the new set's
-    store. And the admin lookups block for seconds, during which an Integrate
-    can activate another set, or the project can be switched: the alerts this
-    Save edited then belong to a set that is no longer the open project's
-    active set, so they are not written at all (Review Focus 5).
-
-    A re-run of the *same* set keeps its id, so those two checks pass while
-    the run swaps a new store in under the alerts on hand. The alerts carry
-    the generation of the store they were read from
-    (``set_store.stamp_generation``): once the store on disk is another
-    generation, writing them back would overwrite the new set, so the Save is
-    refused (``save_store_changed``). Checked before the lookups, and again
-    right before the file is moved into place (``_save_alerts_to_gdf``).
-    """
-    if target is None:
-        return
-    if not set_store.alerts_belong_to(alertas_gdf, target.alert_set):
-        raise SaveRefused(key="analysis_tile.export_labels.save_other_set")
-    if not app_tile_model.is_current(target):
-        raise SaveRefused(key="analysis_tile.export_labels.save_set_changed")
-    if set_store.generation_changed(alertas_gdf, _store_of(target)):
-        raise SaveRefused(key="analysis_tile.export_labels.save_store_changed")
-
-
-def review_status(confirmation) -> str:
-    """The status a Save stores (spec §10): one of the three, never a label.
-
-    Anything else is refused, an unhashable value (a list) included."""
-    if not isinstance(confirmation, str) or confirmation not in {status for status, _ in REVIEW_CHOICES}:
-        raise SaveRefused(key="analysis_tile.questionarie.confirmation_missing")
-    return confirmation
-
 
 def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
-    """Body of the OLD ``save_attributes_to_gdf`` (data/IO only, no widgets).
-
-    Prepares every field of the review, persists ``alert_db.parquet`` from a
-    private copy of the table, and only then writes the row of
-    ``app_state.alerts_gdf.value`` in place via ``.at[id, col] = ...``
-    (faithful to OLD: that object is what Overview and the map layers read).
-    A refusal or a failure therefore leaves the live table exactly as it was.
-    Returns ``True`` on success (the caller stamps ``last_save_time``: see
-    ``make_save_runner``).
-    Guards on the gdf being present + the id in range (smoke-safe). Raises
-    ``SaveRefused`` for the OLD "False Positive but a polygon is drawn" guard
-    (``false_positive_drawn``), a missing answer, a drawing the reviewer has
-    not applied (``unapplied_drawing``), and alerts of another set than the one
-    it writes for.
-
-    The store it writes is the active set's AS THE SAVE STARTS: the admin
-    lookups below block for seconds, and the live ``SetContext`` (ruling #84)
-    follows an Integrate that activates a new set, or a project switch,
-    meanwhile. The write then happens only if that set is still the active
-    one (``_save_alerts_to_gdf``); otherwise the Save is refused.
-
-    ``alert`` (``state.capture_alert``) is what the Save writes: the alert, its
-    images, drawn polygon and questionnaire, read together at the click. An
-    alert change while the lookups block leaves them alone; the row written
-    is the clicked alert's, with its own values. Taken here when not given.
-    """
+    """The save runner's body: ``review_save.save_review`` of ``alert``
+    (``state.capture_alert``; taken here when not given)."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
-    folder, target = _save_target(app_tile_model)
-    alertas_gdf = alert.alerts
-    actual_alert_id = alert.alert_id
-
-    # Guard: nothing to save without an alert set / valid id (smoke-safe).
-    if alertas_gdf is None or actual_alert_id is None or actual_alert_id < 0:
-        return False
-    if actual_alert_id >= len(alertas_gdf):
-        return False
-    # Before any row changes or a lookup blocks; the store writer checks again.
-    _refuse_unless_current(alertas_gdf, app_tile_model, target)
-    status = review_status(alert.status)
-
-    # A drawing with changes *Apply* has not written yet: ``defo_layer`` is the
-    # polygon from BEFORE them, so this save would store that one over work the
-    # reviewer can still see on the maps -- and Save & next would navigate it
-    # away. OLD disabled the review Save for the whole edit session
-    # (``start_edition_function``); this is the same guard, as a message that
-    # names what to do. Captured at the click like everything else here.
-    if getattr(alert, "drawing_unapplied", False):
-        raise SaveRefused(key="analysis_tile.edition_labels.unapplied_drawing")
-
-    # One column per current question (spec D2, D5). A question not asked for
-    # this verdict stores "" -- a false positive records no loss driver -- and
-    # its draft stays in the panel, so switching the verdict back still has
-    # it. A required question is required only where it is asked. Drafts of
-    # questions deleted since are ignored: their columns are left as stored.
-    # Refused here, before the admin lookups block and before any row changes.
-    answer_updates = {}
-    for q in getattr(alert, "questions", None) or []:
-        shown = questions.visible(q, status)
-        value = questions.encode(q, (getattr(alert, "answers", None) or {}).get(q.key)) if shown else ""
-        if shown and q.required and not value:
-            raise SaveRefused(key=REQUIRED_MISSING, question=questions.question_label(q), question_key=q.key)
-        answer_updates[column(q)] = value
-
-    # Every field this save writes, prepared BEFORE the live table is touched:
-    # the refusals below and the admin lookups come between, and a row already
-    # half-written by a save that is then refused (or that fails) is a review
-    # the reviewer was told was rejected, sitting in the table Overview counts
-    # from and the next save persists whole. Applied in one pass at the end,
-    # once the store write has landed.
-    updates = {"status": status, **answer_updates}
-
-    # before/after image name + info. Guarded (fix round 1): both are None
-    # until an image is actually picked for this alert (``AnalysisState``;
-    # ``reset_alert`` clears them on every alert change), e.g. no Planet login
-    # yet and no S2/Landsat chosen; unconditionally subscripting raised
-    # "'NoneType' object is not subscriptable" and lost the whole review, the
-    # same way the drawn-polygon case below is guarded on
-    # ``defo_layer is None``.
-    before_info = alert.before_info
-    after_info = alert.after_info
-    # Captured with the images: an alert change meanwhile resets it
-    # (``reset_alert``), or the next alert's drawn polygon replaces it, and
-    # neither belongs to the alert this Save writes.
-    defo_layer = alert.defo_layer
-    updates["before_img"] = None if before_info is None else before_info[3]
-    updates["before_img_info"] = None if before_info is None else before_info[1]
-    updates["after_img"] = None if after_info is None else after_info[3]
-    updates["after_img_info"] = None if after_info is None else after_info[1]
-
-    # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
-    adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
-    selected_admin = adminL2.filterBounds(alert.bb.geometry())
-    at1 = selected_admin.aggregate_array("ADM0_NAME").distinct()
-    at2 = selected_admin.aggregate_array("ADM1_NAME").distinct()
-    at3 = selected_admin.aggregate_array("ADM2_NAME").distinct()
-
-    st1 = at1.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-    st2 = at2.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-    st3 = at3.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-
-    updates["admin1"] = st1.getInfo()[:-1]
-    updates["admin2"] = st2.getInfo()[:-1]
-    updates["admin3"] = st3.getInfo()[:-1]
-
-    # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
-    # A refusal: nothing is written at all -- not the store, and not the row
-    # (the admin names above are in ``updates``, which is dropped with it).
-    if (
-        status == FALSE_POSITIVE
-        and defo_layer is not None
-    ):
-        raise SaveRefused(key="analysis_tile.questionarie.false_positive_drawn")
-
-    # alert_polygon + area_ha from the drawn defo layer (if any), measured in
-    # the project's grid CRS like Integrate's. With nothing drawn, area_ha
-    # keeps the alert's own area, which Integrate stored: the store feeds the
-    # exports, the map tiles and the report.
-    if defo_layer is None:
-        updates["alert_polygon"] = None
-    else:
-        updates["alert_polygon"] = defo_layer["geometry"].union_all()
-        updates["area_ha"] = calculate_total_area(defo_layer, alert.area_crs)
-
-    # Persist the alert DB (OLD save_alerts_to_gdf) where the save started,
-    # from a private copy carrying this review. Skip if there is no folder.
-    #
-    # The copy is what makes a FAILED write (a full disk, a set deleted
-    # mid-write) leave the app as it was: the live table is published only
-    # below, once the parquet has landed, so the app never shows a review as
-    # stored that is not on disk. ``_default_apply`` re-publishes a copy of
-    # the live table after every save anyway, so this is the same order of
-    # cost.
-    staged = alertas_gdf.copy()
-    # Only the answer columns are padded: under pandas' string inference a
-    # column made from "" is a str column, and a float (``area_ha``) set into
-    # it raises. Any other missing column is left to ``.at``'s enlargement.
-    for column_name in answer_updates:
-        if column_name not in staged.columns:
-            staged[column_name] = ""  # a question added after this set was made
-    for column_name, value in updates.items():
-        staged.at[actual_alert_id, column_name] = value
-    _save_alerts_to_gdf(staged, app_tile_model, folder=folder, target=target)
-
-    # Published to the live table (in place, faithful to OLD: Overview and the
-    # map layers read this very object, and the save runner re-publishes it).
-    # A new question's column is added first, "" on every other row, as above.
-    for column_name in answer_updates:
-        if column_name not in alertas_gdf.columns:
-            alertas_gdf[column_name] = ""
-    for column_name, value in updates.items():
-        alertas_gdf.at[actual_alert_id, column_name] = value
-    # With the store generation the write stamped on the copy
-    # (``set_store.stamp_generation``): the alerts on hand ARE what is on disk
-    # now, and without the stamp the live table still claims the generation
-    # from before this write -- which the next Save of the same alerts reads
-    # as "the store changed under us" and refuses.
-    alertas_gdf.attrs.update(staged.attrs)
-
-    return True
-
-
-def _save_alerts_to_gdf(alertas_gdf, app_tile_model, *, folder=None, target=None):
-    """Persist the alerts gdf to the canonical GeoParquet store.
-
-    Writes ``<folder>/alert_db.parquet`` (all geometry columns preserved)
-    through a unique ``.part`` renamed into place. Then records the set's
-    reviewed count (``record_review``, when the model has one).
-
-    ``folder`` and ``target`` are where the Save started (``_save_target``);
-    without ``folder`` both are read now. Raises ``SaveRefused``, writing
-    nothing, unless the alerts are ``target``'s set's, that set is still the
-    open project's active set, and its store on disk is still the one the
-    alerts came from; the last check runs again right before the serialized
-    file is moved into place, so a store swapped in during the serialization
-    is not overwritten either. After the write the alerts are stamped with
-    the new store's generation, so the next Save of them lands.
-    Guard: skip if the folder is empty (smoke / no set yet).
-    """
-    if folder is None:
-        folder, target = _save_target(app_tile_model)
-    if not folder:
-        return
-    _refuse_unless_current(alertas_gdf, app_tile_model, target)
-    store = str(Path(folder) / "alert_db.parquet")
-    save_gdf_to_parquet(
-        alertas_gdf,
-        store,
-        guard=lambda: _refuse_unless_current(alertas_gdf, app_tile_model, target),
-    )
-    if target is not None:
-        set_store.stamp_generation(alertas_gdf, store)
-    record = getattr(app_tile_model, "record_review", None)
-    if record is not None:
-        # The count of the set this store belongs to (the Analysis badge).
-        record(alertas_gdf, target)
-
-
-def _alert_selected(alert) -> bool:
-    """An alert set is loaded and the selected index points into it
-    (``alert``: ``state.capture_alert``)."""
-    gdf, alert_id = alert.alerts, alert.alert_id
-    return gdf is not None and alert_id is not None and 0 <= alert_id < len(gdf)
-
-
-def _images_picked(alert) -> bool:
-    """A before and an after image are selected for the alert under review
-    AND each pane has rebuilt the one it was given.
-
-    The infos alone are not enough: the timeline publishes them at the click
-    and the ee.Image of that pick lands when its rebuild does
-    (``imagery.wire_panes``, which clears the lane's image at the pick). In
-    between, a build would name the composite after the new pick
-    (``paths.alert_image_name`` reads the infos) and export the previous
-    pick's pixels -- or fail inside geedim on a ``None`` image.
-    """
-    return all(v is not None for v in (alert.before_info, alert.after_info,
-                                       alert.before_image, alert.after_image))
-
-
-def review_placeholders(question_list, row, status) -> dict:
-    """``{verdict}`` and one ``{key}`` per question, as the report shows them
-    (in the current language; a question the verdict does not ask is blank)."""
-    labels = dict(REVIEW_CHOICES)
-    out = {"verdict": t(labels[status]) if status in labels else ""}
-    for q in question_list:
-        out[q.key] = questions.label(q, row.get(column(q))) if questions.visible(q, status) else ""
-    return out
-
-
-def _saved_status(alerts, alert_id) -> Optional[str]:
-    """The verdict the alert's row holds: what its last save wrote, or None."""
-    if alerts is None or alert_id is None or not 0 <= alert_id < len(alerts) or "status" not in alerts.columns:
-        return None
-    value = alerts.iloc[alert_id]["status"]
-    return value if isinstance(value, str) else None
-
-
-def _picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
-    """Whether the pair on screen is the pair the alert's row was saved with
-    (``before_img`` / ``after_img`` hold the picks' ``info[3]``). A GIF
-    animates the reviewed pair only (spec D9): a new, unsaved pick is not it.
-    A missing column or value is no match."""
-    if before_info is None or after_info is None:
-        return False
-    if alerts is None or alert_id is None or not 0 <= alert_id < len(alerts):
-        return False
-    row = alerts.iloc[alert_id]
-    saved = [row.get("before_img"), row.get("after_img")]
-    if not all(isinstance(value, str) for value in saved):
-        return False
-    return [before_info[3], after_info[3]] == saved
-
-
-def _gif_allowed(alerts, alert_id, before_info, after_info) -> bool:
-    """A GIF is made for a true alert on its reviewed pair (spec D9): the
-    row's stored status is Confirmed and both picks are the pair it was saved
-    with. The Timelapse tile and the zip build share this rule."""
-    return (_saved_status(alerts, alert_id) == CONFIRMED
-            and _picks_are_saved(alerts, alert_id, before_info, after_info))
+    return review_save.save_review(alert, app_tile_model)
 
 
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
-    """Body of the OLD ``download_data`` (IO only, no widgets).
-
-    Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
-    and the Word report, all in the set folder. Returns ``{"zip_path",
-    "report_path"}`` — the set-folder paths for the download effect to wire onto
-    the two file tiles. Guards on the gdf/id.
-
-    The gpkg and the zip are built in a private scratch folder (GDAL may leave
-    sidecars, zipfile writes a named file) and copied into the set folder; the
-    composite is downloaded into the set folder once (``stage_alert_image``)
-    and read where it is; the report is rendered from the scratch gpkg onto
-    its set-folder path. The scratch folder is deleted when the block ends.
-
-    ``task`` (the worker's ``TaskTracker``, optional) gets the composite
-    download's geedim tile ticks as progress, and is handed back to
-    indeterminate once the composite is staged. A cache hit produces no ticks.
-
-    ``alert`` (``state.capture_alert``, taken at the click) is the alert the
-    files are built for: its row, images and grid, read together, so the
-    composite is never one alert's images clipped to another's grid. Taken
-    here when not given.
-
-    ``gif`` (``gif.capture_gif``'s job, taken at the click) adds the alert's
-    GIF to the zip when the row is saved Confirmed (spec D9); a GIF that fails
-    leaves the zip without it and says so in the result: ``"gif_path"`` when
-    one was made, ``"gif_warning": True`` when one was asked for and failed.
-    """
+    """The build's body: ``alert_files.build_alert_files`` of ``alert``
+    (``state.capture_alert``; taken here when not given) into the set folder."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
-    alertas_gdf = alert.alerts
-    actual_alert_id = alert.alert_id
-
-    if alertas_gdf is None or actual_alert_id is None or actual_alert_id < 0:
-        return None
-    if actual_alert_id >= len(alertas_gdf):
-        return None
-
-    # Every artifact below is written into the set folder; without one there
-    # is nowhere to put them (smoke / no active set).
-    if not app_tile_model.recipe_folder_path:
-        return None
-    folder = Path(app_tile_model.recipe_folder_path)
-
-    # The composite needs a before and an after image (their info lists carry
-    # the date suffix and the image id, see paths.alert_image_name), and both
-    # are None until an image is picked for this alert, which nothing does by
-    # itself. Refused here, before any file is written: the TypeError this
-    # raised further down used to leave a partial alert_<id>.gpkg behind.
-    if not _images_picked(alert):
-        return None
-    picked = (alert.before_info, alert.after_info, alert.before_image, alert.after_image)
-
-    # Before any file is written: a template gone from disk is a refusal, not
-    # a half-written set of downloads.
-    template = report_template_path(aux_model.custom_report_template)
-
-    # Single-row GeoDataFrame for the selected alert.
-    selected_element = alertas_gdf.iloc[actual_alert_id]
-    # The answers in the language of the download (stored as codes); the
-    # columns of deleted questions are left out.
-    selected_gdf = questions.with_labels(
-        gpd.GeoDataFrame([selected_element], columns=alertas_gdf.columns), alert.questions or []
-    )
-    active = (
-        "alert_polygon"
-        if not selected_gdf["alert_polygon"].isnull().all()
-        else "bounding_box"
-    )
-    selected_gdf.set_geometry(active, inplace=True)
-    # PRE-EXISTING BUG, fixed here because the migrated path is otherwise
-    # untestable: ``alerts_gdf`` carries three geometry columns (polygon +
-    # ``bounding_box`` + ``point``), and GPKG accepts exactly one — so
-    # ``to_file`` raised "GeoDataFrame contains multiple geometry columns" on
-    # EVERY download. Drop the inactive ones, the same way ``alert_export`` does
-    # for its single-geometry formats; the report only reads attribute columns.
-    selected_gdf = selected_gdf.drop(
-        columns=[
-            c
-            for c in selected_gdf.columns
-            if c != active and selected_gdf[c].dtype == "geometry"
-        ]
-    )
-
-    gpkg_dest = folder / f"alert_{actual_alert_id}.gpkg"
-    zip_dest = folder / f"alert_{actual_alert_id}.zip"
-    report_dest = folder / f"alert_{actual_alert_id}.docx"
-    with local_files.scratch_dir() as stage:
-        gpkg_local = stage / gpkg_dest.name
-        selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
-            str(gpkg_local), driver="GPKG"
-        )
-
-        # Before/after image GeoTIFF (downloaded only if not already in the set
-        # folder). Built via the shared helper so it resolves to the same file
-        # the CNN run (edit_tools) wrote.
-        on_tiles = tile_progress_reporter(task) if task is not None else None
-        with geedim_tile_progress(on_tiles):
-            image_local = stage_alert_image(
-                folder,
-                actual_alert_id,
-                *picked,
-                alert.grid,
-            )
-        if task is not None:
-            task.set_progress(None)  # zip + report: back to indeterminate
-
-        # The GIF of a true alert, into the set folder and the zip (spec D9).
-        # A failure costs the GIF, not the build: the reviewer still gets the
-        # files and is told the zip has no GIF.
-        gif_local, gif_warning = None, False
-        if gif is not None and _saved_status(alertas_gdf, actual_alert_id) == CONFIRMED:
-            try:
-                gif_local = gif_mod.build_gif(
-                    gif, Path(alert_gif_name(str(folder), actual_alert_id, gif.before_info, gif.after_info)))
-            except Exception:  # noqa: BLE001 - logged; the build goes on without it
-                logger.exception("Analysis: the GIF for the zip could not be made")
-                gif_warning = True
-
-        # Only once the composite is there: a failed download must not leave
-        # the alert's gpkg in the set folder.
-        local_files.copy_into(gpkg_local, gpkg_dest)
-
-        # Zip the image + gpkg.
-        zip_local = stage / zip_dest.name
-        add_files_to_zip(str(zip_local), str(image_local), str(gpkg_local),
-                         *([str(gif_local)] if gif_local is not None else []))
-        local_files.copy_into(zip_local, zip_dest)
-
-        # Word report: the project's template (a file of the user's, read
-        # where it is) or the packaged default, resolved above.
-        generate_deforestation_report_with_word_template(
-            str(image_local), str(gpkg_local), str(template), str(report_dest),
-            # The stored row is what the report describes: a build follows a save.
-            extra=review_placeholders(alert.questions or [], selected_element, selected_element.get("status")),
-        )
-
-    result = {"zip_path": str(zip_dest), "report_path": str(report_dest)}
-    if gif_local is not None:
-        result["gif_path"] = str(gif_local)
-    if gif_warning:
-        result["gif_warning"] = True
-    return result
+    return alert_files.build_alert_files(alert, app_tile_model.recipe_folder_path, aux_model.custom_report_template,
+                                         task=task, gif=gif)
 
 
 def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None):
@@ -1104,7 +592,7 @@ def build_export(
         if gif_running["on"] or ns["gif_dwn_btn"].path is not None:
             return
         alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
-        allowed = _gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
+        allowed = alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
         ns["gif_dwn_btn"].set_action(allowed, t(
             "analysis_tile.export_labels.tile_gif_make" if allowed else "analysis_tile.export_labels.gif_hint"))
 
@@ -1275,8 +763,8 @@ def build_export(
         # A capture that fails for any other reason costs the GIF too, never
         # the build: escaping here would leave the build button spinning with
         # no worker started.
-        if not _gif_allowed(alert.alerts, alert.alert_id, alert.before_info, alert.after_info):
-            gif_skipped = _saved_status(alert.alerts, alert.alert_id) == CONFIRMED
+        if not alert_files.gif_allowed(alert.alerts, alert.alert_id, alert.before_info, alert.after_info):
+            gif_skipped = alert_files.saved_status(alert.alerts, alert.alert_id) == CONFIRMED
         else:
             try:
                 gif_job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
@@ -1325,7 +813,7 @@ def build_export(
                         # more milestones.
                         if not app_tile_model.recipe_folder_path:
                             reason = t("analysis_tile.export_labels.download_no_recipe")
-                        elif not _alert_selected(alert):
+                        elif not alert_files.alert_selected(alert):
                             reason = t("analysis_tile.export_labels.download_no_alert")
                         else:
                             reason = t("analysis_tile.export_labels.download_no_images")

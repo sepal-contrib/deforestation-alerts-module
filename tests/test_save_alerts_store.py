@@ -9,7 +9,7 @@ import geopandas as gpd
 from shapely.geometry import Polygon
 
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
-from gui.tile.analysis.export import _save_alerts_to_gdf
+from gui.tile.analysis.review_save import write_store as _save_alerts_to_gdf
 
 
 def _gdf():

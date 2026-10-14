@@ -21,6 +21,7 @@ from gui.scripts.error_text import error_text
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import review_panel
+from gui.tile.analysis import review_save
 from gui.tile.analysis.state import AnalysisState
 
 
@@ -136,14 +137,14 @@ def test_a_save_with_an_unapplied_drawing_is_refused_before_anything_is_written(
     model = SimpleNamespace(recipe_folder_path="")  # a recipe-era fake: nowhere to write
     alert = capture_alert(analysis, widgets, app_state)
 
-    with pytest.raises(export.SaveRefused) as refusal:
+    with pytest.raises(review_save.SaveRefused) as refusal:
         export._save_attributes(widgets, app_state, analysis, model, alert=alert)
 
     assert error_text(refusal.value) == t("analysis_tile.edition_labels.unapplied_drawing")
     assert gdf.at[0, "status"] == "Not reviewed", "the refused save changed the row"
 
 
-class _AdminLookups:  # stands in for ``export.ee``: the FAO/GAUL lookups
+class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
     def __getattr__(self, name):
         return lambda *a, **k: self
 
@@ -171,7 +172,7 @@ def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
     import gui.tile.analysis.export as export
     from gui.tile.analysis.state import capture_alert
 
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     app_state = AppState()
     # A project with the default questionnaire (Loss driver): the questions a
     # Save writes come with the answers (``capture_alert``).
@@ -204,7 +205,7 @@ def test_a_refused_save_leaves_the_live_review_row_untouched(tmp_path, monkeypat
         monkeypatch, gdf, verdict="False Positive", drawn=drawn
     )
 
-    with pytest.raises(export.SaveRefused) as refusal:
+    with pytest.raises(review_save.SaveRefused) as refusal:
         export._save_attributes(widgets, app_state, analysis, model, alert=alert)
 
     assert error_text(refusal.value) == t("analysis_tile.questionarie.false_positive_drawn")
@@ -230,7 +231,7 @@ def test_a_failed_store_write_leaves_the_live_review_row_untouched(tmp_path, mon
     def _boom(*_a, **_k):
         raise OSError("disk full")
 
-    monkeypatch.setattr(export, "_save_alerts_to_gdf", _boom)
+    monkeypatch.setattr("gui.tile.analysis.review_save.write_store", _boom)
 
     with pytest.raises(OSError):
         export._save_attributes(widgets, app_state, analysis, model, alert=alert)
@@ -247,7 +248,7 @@ def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monke
         monkeypatch, gdf, verdict="Confirmed"
     )
     written = []
-    monkeypatch.setattr(export, "_save_alerts_to_gdf",
+    monkeypatch.setattr("gui.tile.analysis.review_save.write_store",
                         lambda staged, *a, **k: written.append(staged))
 
     assert export._save_attributes(widgets, app_state, analysis, model, alert=alert) is True

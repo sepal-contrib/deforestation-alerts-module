@@ -3,7 +3,7 @@ the creator splits a set between two evaluators and builds their packages;
 each evaluator imports theirs, reviews their own alerts through the review
 Save's write path and builds a reviewed copy; the creator merges both, one
 of them with a conflict taken from the evaluator. Every step is the real
-code: split_service, share, merge_service, export._save_alerts_to_gdf."""
+code: split_service, share, merge_service, review_save.write_store."""
 
 from deforestation_alerts.project import io, paths, share
 from deforestation_alerts.project.questions import column
@@ -13,7 +13,7 @@ from gui.scripts import merge_service, set_store, split_service
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import active_set
-from gui.tile.analysis.export import _save_alerts_to_gdf
+from gui.tile.analysis.review_save import write_store as _save_alerts_to_gdf
 from gui.tile.analysis.state import AnalysisState
 from tests._share_helpers import AOI_FC, APP_VERSION, CAUSE, SET1, make_creator
 

@@ -19,6 +19,7 @@ from gui.scripts import questions
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
+from gui.tile.analysis import review_save
 
 SET_DIR = ("periods", "per", "sets", "glad-l")
 
@@ -169,7 +170,7 @@ def test_a_review_save_writes_the_sets_store_and_its_reviewed_count(tmp_path, mo
     import geopandas as gpd
     from shapely.geometry import box
 
-    from gui.tile.analysis.export import _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import write_store as _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -218,7 +219,7 @@ def _review_alerts(set_id="x", n=2):
 
 
 class _AdminLookups:
-    """Stands in for ``export.ee``: the FAO/GAUL lookup chain. Its first
+    """Stands in for ``review_save.ee``: the FAO/GAUL lookup chain. Its first
     blocking ``getInfo`` runs ``during``, what the user does while it blocks."""
 
     def __init__(self, during=None):
@@ -240,7 +241,7 @@ def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
     from gui.tile.analysis import export
 
-    monkeypatch.setattr(export, "ee", lookups or _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", lookups or _AdminLookups())
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
@@ -262,7 +263,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, publi
     for the set it started on (ruling: a warning, not a cross-write): neither
     the reviewed set's store nor the new set's is written, nor either count."""
     from gui.scripts.integrate_jobs import apply_result
-    from gui.tile.analysis.export import SaveRefused
+    from gui.tile.analysis.review_save import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -292,7 +293,7 @@ def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, swit
     """The set the Save started on is no longer the open project's active set:
     nothing is written, in either project. Set ids repeat across projects
     (period + sources), so project e's set "x" is neither written nor counted."""
-    from gui.tile.analysis.export import SaveRefused
+    from gui.tile.analysis.review_save import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -354,7 +355,7 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, publ
     lookups) must not write them, plus its review, over the re-run's store:
     the alerts carry the generation of the store they were read from, and
     the store on disk is another one by the time the write would land."""
-    from gui.tile.analysis.export import SaveRefused
+    from gui.tile.analysis.review_save import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -384,7 +385,7 @@ def test_a_store_swapped_in_during_the_serialization_is_not_overwritten(tmp_path
     the parquet write, seconds for a large set) is caught too."""
     import geopandas as gpd
 
-    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import SaveRefused, write_store as _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -454,7 +455,7 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     s.alerts_gdf.set(_review_alerts("x"))
 
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
@@ -476,7 +477,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     that moment the alerts on hand are the previous set's. A Save is then
     refused (the task's warning toast) before it looks anything up or changes
     a row."""
-    from gui.tile.analysis.export import SaveRefused
+    from gui.tile.analysis.review_save import SaveRefused
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -496,7 +497,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
 
 def test_the_store_writer_refuses_another_sets_alerts(tmp_path, monkeypatch):
     """The guard sits right before the write too, for every caller."""
-    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import SaveRefused, write_store as _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     store = _store(tmp_path, "d", "glad-l", b"set x's store")
@@ -509,7 +510,7 @@ def test_the_store_writer_refuses_a_set_that_is_no_longer_active(tmp_path, monke
     """A writer handed the set it pinned earlier checks that set is still the
     active one before it writes."""
     from gui.scripts.integrate_jobs import apply_result
-    from gui.tile.analysis.export import SaveRefused, _save_alerts_to_gdf
+    from gui.tile.analysis.review_save import SaveRefused, write_store as _save_alerts_to_gdf
 
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
@@ -662,7 +663,7 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     alerts = _review_alerts("x")
     alerts["area_ha"] = [3.87, 1.25]
     s.alerts_gdf.set(alerts)
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
     analysis = AnalysisState()
@@ -673,7 +674,7 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
     assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
     assert saved.loc[0, "alert_polygon"] is not None
     assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
@@ -692,7 +693,7 @@ def test_a_drawn_polygon_is_measured_in_the_projects_grid_crs(tmp_path, monkeypa
     s = _state(tmp_path, monkeypatch, grid=grid)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     drawn = gpd.GeoDataFrame(geometry=[box(500_000, 7_340_000, 500_100, 7_340_100)],
                              crs="EPSG:32721").to_crs(4326)  # 1 ha, drawn in lon/lat
     analysis = AnalysisState()
@@ -742,13 +743,13 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
         analysis.reset_alert()
         analysis.defo_layer.set(drawn_b)
 
-    monkeypatch.setattr(export, "ee", _AdminLookups(during=_move_to_the_next_alert))
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups(during=_move_to_the_next_alert))
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = gpd.read_parquet(_store(tmp_path, "d", "glad-l"))
-    assert saved.loc[0, "area_ha"] == pytest.approx(export.calculate_total_area(drawn_a))
+    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn_a))
 
 
 def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
@@ -759,7 +760,7 @@ def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
@@ -786,7 +787,7 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()

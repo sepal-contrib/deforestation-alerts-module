@@ -173,7 +173,7 @@ def test_report_is_saved_onto_its_output_path(data_root, tmp_path, scratch_root,
     from deforestation_alerts.scripts.report_builder import (
         generate_deforestation_report_with_word_template,
     )
-    from gui.tile.analysis.export import _DEFAULT_REPORT_TEMPLATE
+    from gui.tile.analysis.alert_files import DEFAULT_REPORT_TEMPLATE as _DEFAULT_REPORT_TEMPLATE
 
     out = str(data_root / "recipe_a" / "alert_0.docx")
 
@@ -198,7 +198,7 @@ def test_report_intermediates_go_to_a_private_scratch_dir(data_root, tmp_path, s
     from deforestation_alerts.scripts.report_builder import (
         generate_deforestation_report_with_word_template,
     )
-    from gui.tile.analysis.export import _DEFAULT_REPORT_TEMPLATE
+    from gui.tile.analysis.alert_files import DEFAULT_REPORT_TEMPLATE as _DEFAULT_REPORT_TEMPLATE
 
     gpkg = _alert_gpkg(tmp_path)
     for name in ("alert_0.docx", "alert_1.docx"):

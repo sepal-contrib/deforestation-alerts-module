@@ -67,7 +67,7 @@ def build_footer(run_save, export_root, app_state, analysis):
     def _sync_state_line(*_):
         if analysis.drawing_unapplied.value:
             # The save refuses an unapplied drawing
-            # (``export._save_attributes``), so the line says what to do about
+            # (``review_save.save_review``), so the line says what to do about
             # it rather than leaving the refusal to the click. Ahead of
             # "Unsaved changes": applying is what clears both.
             state_line.children = [t("analysis_tile.edition_labels.unapplied_drawing")]

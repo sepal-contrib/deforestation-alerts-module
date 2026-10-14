@@ -8,7 +8,7 @@ from pysepal.i18n import set_locale
 
 from gui.i18n import t
 from gui.store.state_manager import AppState
-from gui.tile.analysis import export as export_mod
+from gui.tile.analysis import review_save
 from gui.tile.analysis.review_panel import REVIEW_CHOICES, build_review_panel, verdict_widgets
 from gui.tile.analysis.state import AnalysisState
 
@@ -37,7 +37,7 @@ def test_the_buttons_hold_statuses_and_show_labels(locale):
 
 def test_review_status():
     for status in STATUSES:
-        assert export_mod.review_status(status) == status
+        assert review_save.review_status(status) == status
     for bad in (None, "", "Yes", t("analysis_tile.verdict.true"), ["Confirmed"], {"value": "Confirmed"}):
-        with pytest.raises(export_mod.SaveRefused):
-            export_mod.review_status(bad)
+        with pytest.raises(review_save.SaveRefused):
+            review_save.review_status(bad)

@@ -272,7 +272,7 @@ class _EditionButton(v.Btn, sw.SepalWidget):
 def _images_ready(alert) -> bool:
     """Whether the alert's before/after pair is picked AND drawn.
 
-    The same guard as ``export._images_picked``, for the run that stages the
+    The same guard as ``alert_files.images_picked``, for the run that stages the
     composite: the infos are published at the click and each pane's ee.Image
     when its rebuild lands, so in between the pair's metadata and its pixels
     are of different scenes (``imagery.wire_panes``).
@@ -739,7 +739,7 @@ def build_edit_tools(
             analysis.defo_layer.set(None)
             touch(analysis)
         # Applied: the drawing and the reviewed polygon agree again, so the
-        # review Save stops refusing (``export._save_attributes``).
+        # review Save stops refusing (``review_save.save_review``).
         analysis.drawing_unapplied.set(False)
 
     def _stop_edition(widget, event, data):

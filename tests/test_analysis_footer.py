@@ -17,6 +17,7 @@ from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis import export as export_mod
+from gui.tile.analysis import review_save
 from gui.tile.analysis.footer import build_footer, footer_widgets
 from gui.tile.analysis.state import AnalysisState
 from tests._pane_helpers import make_panes
@@ -149,7 +150,7 @@ def test_the_footer_registers_both_save_buttons_with_the_runner():
 # ---------------------------------------------------------------------------
 def _refuse_with(monkeypatch, key, **values):
     def _refuse(*_a, **_k):
-        raise export_mod.SaveRefused(key=key, **values)
+        raise review_save.SaveRefused(key=key, **values)
 
     monkeypatch.setattr(export_mod, "_save_attributes", _refuse)
     monkeypatch.setattr(export_mod, "spawn_in_context", lambda target, *a, **k: target())
@@ -158,7 +159,7 @@ def _refuse_with(monkeypatch, key, **values):
 def test_a_required_refusal_opens_the_questions_section(panel, monkeypatch):
     sections = analysis_tile.panel_sections(panel.controls)
     assert not sections.questions.is_open()
-    _refuse_with(monkeypatch, export_mod.REQUIRED_MISSING,
+    _refuse_with(monkeypatch, review_save.REQUIRED_MISSING,
                  question="Road access", question_key="road_access")
     save_next, _save, _ = footer_widgets(sections.footer.root)
 

@@ -72,7 +72,7 @@ class AnalysisState:
     dirty: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     #: whether the drawing on the maps holds changes *Apply* has not written to
     #: ``defo_layer`` yet. The review Save refuses while it is True
-    #: (``export._save_attributes``): what it would store is the polygon
+    #: (``review_save.save_review``): what it would store is the polygon
     #: BEFORE those changes, and Save & next would navigate the drawing away.
     #: Set by every drawing change, cleared by *Apply*, by opening or stopping
     #: the drawing session (both put the two back in step) and by

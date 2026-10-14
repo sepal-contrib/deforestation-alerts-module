@@ -35,8 +35,8 @@ def test_the_app_entry_point_wires_the_tmpdir():
 
 
 def test_report_template_not_cwd_relative():
-    from gui.tile.analysis import export
+    from gui.tile.analysis import alert_files
 
-    p = Path(export._DEFAULT_REPORT_TEMPLATE)
+    p = Path(alert_files.DEFAULT_REPORT_TEMPLATE)
     assert p.is_absolute(), "report template must not resolve against the CWD"
     assert p.exists()

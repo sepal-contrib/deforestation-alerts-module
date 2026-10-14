@@ -78,7 +78,8 @@ from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_backgro
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
-from gui.tile.analysis.export import REQUIRED_MISSING, build_export
+from gui.tile.analysis.export import build_export
+from gui.tile.analysis.review_save import REQUIRED_MISSING
 from gui.tile.analysis.footer import build_footer
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
 from gui.tile.analysis.state import IMAGE_AREAS

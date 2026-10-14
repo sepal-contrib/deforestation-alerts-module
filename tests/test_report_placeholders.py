@@ -9,7 +9,7 @@ from pysepal.i18n import set_locale
 from deforestation_alerts.project.models import Question, QuestionOption, default_questions
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS
 from deforestation_alerts.scripts import report_builder
-from gui.tile.analysis.export import review_placeholders
+from gui.tile.analysis.alert_files import review_placeholders
 
 ROAD = Question(key="road_access", label="Road access",
                 options=[QuestionOption(code="yes", label="Yes")])

@@ -16,6 +16,8 @@ import pytest
 
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
+from gui.tile.analysis import alert_files
+from deforestation_alerts.scripts import local_files
 from gui.tile.analysis.state import AnalysisState
 # ``_in`` / ``_build_button`` / ``_alerts_gdf`` live in conftest: the assembled
 # panel's tests (tests/test_analysis_sections.py) drive the same export section
@@ -202,7 +204,7 @@ def test_download_uses_the_users_custom_report_template(download_ctx, data_root)
     """A custom template is the user's own file, read where it is."""
     ctx = download_ctx
     template = data_root / "my_template.docx"
-    template.write_bytes(Path(export_mod._DEFAULT_REPORT_TEMPLATE).read_bytes())
+    template.write_bytes(Path(alert_files.DEFAULT_REPORT_TEMPLATE).read_bytes())
     ctx.aux_model.custom_report_template = str(template)
 
     result = _run(ctx)
@@ -275,7 +277,7 @@ def test_a_report_template_gone_from_disk_refuses_before_any_file_is_written(dow
     folder = Path(ctx.app_tile_model.recipe_folder_path)
     ctx.aux_model.custom_report_template = str(folder.parent / "gone.docx")
     before = sorted(p.name for p in folder.iterdir())
-    with pytest.raises(export_mod.ReportTemplateMissing):
+    with pytest.raises(alert_files.ReportTemplateMissing):
         _run(ctx)
     assert sorted(p.name for p in folder.iterdir()) == before
 
@@ -287,7 +289,7 @@ def test_the_report_is_built_from_the_projects_template(download_ctx):
     ctx = download_ctx
     folder = Path(ctx.app_tile_model.recipe_folder_path)
     template = folder.parent / "mine.docx"
-    doc = docx.Document(export_mod._DEFAULT_REPORT_TEMPLATE)
+    doc = docx.Document(alert_files.DEFAULT_REPORT_TEMPLATE)
     doc.add_paragraph("MARKER-6f1c")
     doc.save(template)
     ctx.aux_model.custom_report_template = str(template)
@@ -307,7 +309,7 @@ def test_the_download_labels_the_questions_and_fills_their_placeholders(download
 
     ctx = download_ctx
     template = ctx.folder.parent / "mine.docx"
-    doc = docx.Document(export_mod._DEFAULT_REPORT_TEMPLATE)
+    doc = docx.Document(alert_files.DEFAULT_REPORT_TEMPLATE)
     doc.add_paragraph("PH {verdict} / {loss_driver}")
     doc.save(template)
     ctx.aux_model.custom_report_template = str(template)
@@ -409,7 +411,7 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
         },
     )
     # Serve tmp_path, so the built files get a real link.
-    monkeypatch.setenv(export_mod.local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
+    monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(tmp_path))
 
     parts = export_mod.build_export(
         widgets=widgets,

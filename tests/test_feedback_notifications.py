@@ -34,6 +34,7 @@ from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
+from deforestation_alerts.scripts import local_files
 from gui.i18n import t
 from tests._pane_helpers import make_panes, reviewer_edits
 
@@ -491,7 +492,7 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
     from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
     from gui.scripts.set_context import SetContext
 
-    class _AdminLookups:  # stands in for ``export.ee``: the FAO/GAUL lookups
+    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
         def __getattr__(self, name):
             return lambda *a, **k: self
 
@@ -499,7 +500,7 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
             return "Brasil, "
 
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
     now = datetime.now()
     rel = "periods/per/sets/glad-l"
     p = Project(name="d", created_at=now, updated_at=now)
@@ -767,7 +768,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     def _reject(path):
         raise ValueError(f"not under the SEPAL home: {path}")
 
-    monkeypatch.setattr(export.local_files, "home_relative", _reject)
+    monkeypatch.setattr(local_files, "home_relative", _reject)
 
     toolbar = _download_toolbar(card)
     download_btn = _button(
@@ -2006,7 +2007,7 @@ def _save_harness(tmp_path, monkeypatch):
     from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
     from gui.scripts.set_context import SetContext
 
-    class _AdminLookups:  # stands in for ``export.ee``: the FAO/GAUL lookups
+    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
         def __getattr__(self, name):
             return lambda *a, **k: self
 
@@ -2014,7 +2015,7 @@ def _save_harness(tmp_path, monkeypatch):
             return "Brasil, "
 
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(export, "ee", _AdminLookups())
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
 
     now = datetime.now()
     rel = "periods/per/sets/glad-l"
