@@ -50,12 +50,14 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
+from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
@@ -119,7 +121,7 @@ def _label(p, source):
     return t(catalogue.LABEL_KEYS[src.catalogue_key]) if src.kind == "predefined" else source
 
 
-def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun, toggle) -> list:
+def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun, toggle, locked=False) -> list:
     """The ``ProductTable`` rows of the sources table (spec §7.3); pure.
 
     ``mine``: this project's and period's in-flight keys; ``errors``: the row
@@ -127,7 +129,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
     ``run``/``rerun``/``toggle``: the row actions, called with the source.
     A blocked row (``PrepareRow.blocked``) cannot be run or shown; a row in
     flight cannot be started again (the claim would refuse it silently), so
-    both run buttons say so, the download one with its spinner.
+    both run buttons say so, the download one with its spinner. ``locked``: a
+    review copy (spec §6.3): both run buttons are disabled.
     """
     out = []
     for r in rows:
@@ -150,9 +153,10 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
             "notes": notes,
             "error": errors.get(r.source),
             "actions": [
-                {"kind": "download", "disabled": busy or r.blocked, "loading": busy,
+                {"kind": "download", "disabled": locked or busy or r.blocked, "loading": busy,
                  "on_click": (lambda s=r.source: run(s))},
-                {"kind": "redownload", "disabled": busy or r.blocked, "on_click": (lambda s=r.source: rerun(s))},
+                {"kind": "redownload", "disabled": locked or busy or r.blocked,
+                 "on_click": (lambda s=r.source: rerun(s))},
                 # ``ready`` keeps files built before a failed check (Integrate
                 # uses them), but a blocked row is not shown (ruling T19 C)
                 # (a layer already on can always be switched off)
@@ -270,6 +274,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     def _start(items, force=False):
         """Start one tracked job for ``items`` (``("mask", name)`` /
         ``("source", name)``, in run order)."""
+        if refuse_setup(app_state, notifications):  # a review copy downloads nothing (spec §6.3)
+            return
         by_mask = {m.name: m for m in plan_masks(p, pdir, period)}
         file_items = [it for it in items if _is_file(*it)]
         needs_aoi_raster = bool(file_items) and not _aoi_raster_current()
@@ -361,10 +367,10 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)),
-                            rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map)
+                            rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map,
+                            locked=read_only(p))
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.prepare.title')}")
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:
@@ -377,7 +383,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                          empty_text=t("steps.prepare.empty"))
             with solara.Row(style="gap:8px;"):
                 solara.Button(tn("steps.prepare.run_all", len(pending)), color="primary", small=True,
-                              icon_name="mdi-play", disabled=not pending or bool(mine),
+                              icon_name="mdi-play", disabled=not pending or bool(mine) or read_only(p),
                               on_click=lambda: _start(pending))
                 solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
                               on_click=lambda: stops.stop((p.name, period.id)))

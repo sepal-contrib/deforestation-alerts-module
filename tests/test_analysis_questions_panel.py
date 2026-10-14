@@ -196,12 +196,38 @@ def test_a_reset_alert_empties_the_controls(ctx):
     assert sec.controls["loss_driver"].v_model == []
 
 
-def test_required_questions_carry_a_star(ctx):
+def test_required_questions_carry_a_required_tag(ctx):
     _s, _a, sec = ctx
-    title = sec.wrappers["road_access"].children[0]
-    assert title.children[0] == "Road access"
-    assert title.children[1].children == ["*"]
-    assert len(sec.wrappers["fire"].children[0].children) == 1
+    number, label, tag, _mark = sec.wrappers["road_access"].children[0].children
+    assert label.children == ["Road access"]
+    assert isinstance(tag, v.Chip) and tag.children == ["Required"]
+    assert not any(isinstance(w, v.Chip) for w in sec.wrappers["fire"].children[0].children)
+
+
+def test_questions_are_numbered_among_the_asked_and_checked_once_answered(ctx):
+    _s, a, sec = ctx
+    a.verdict.set("Confirmed")
+    shown = [k for k, w in sec.wrappers.items() if "display: none" not in (w.style_ or "")]
+    numbers = [sec.wrappers[k].children[0].children[0].children for k in shown]
+    assert numbers == [[str(i)] for i in range(1, len(shown) + 1)]
+    mark = sec.wrappers["road_access"].children[0].children[-1]
+    assert "display: none" in mark.style_
+    a.answers.set({"road_access": ["yes"]})
+    assert "display: none" not in (mark.style_ or "")
+
+
+def test_a_picked_verdict_with_a_required_question_unanswered_opens_the_section(ctx):
+    from gui.tile.analysis.state import touch
+
+    _s, a, sec = ctx
+    assert not sec.is_open()
+    a.verdict.set("Confirmed")
+    touch(a)  # what the verdict buttons do
+    assert sec.is_open()
+    sec.set_open(False)
+    a.answers.set({"loss_driver": ["logging"]})
+    touch(a)  # another edit under the same verdict does not reopen it
+    assert not sec.is_open()
 
 
 def test_an_auto_save_publish_of_the_same_questions_does_not_rebuild(ctx):
@@ -248,8 +274,8 @@ def test_the_options_read_in_this_language_and_store_codes(tmp_path, monkeypatch
     assert combobox.v_model == [{"text": qs.option_label(other), "value": "other"}]
     combobox.fire_event("change", combobox.v_model)
     assert a.answers.value["loss_driver"] == ["other"]
-    title = sec.wrappers["loss_driver"].children[0]
-    assert title.children[0] == qs.question_label(loss) != "Loss driver"
+    label = sec.wrappers["loss_driver"].children[0].children[1]
+    assert label.children[0] == qs.question_label(loss) != "Loss driver"
 
 
 @pytest.mark.parametrize("code, chips", [
@@ -299,3 +325,21 @@ def test_an_unreviewed_alert_opens_empty_not_on_the_last_ones_answers(tmp_path, 
     s.actual_alert_id.value = 1
     assert sec.controls["loss_driver"].v_model == []  # U13
     assert analysis.answers.value == {}
+
+
+def test_the_questionnaire_setting_opens_or_closes_the_section(tmp_path, monkeypatch):
+    """``questions_expanded`` sets the section's state when it changes (a
+    project opening included); a later publish leaves the reviewer's choice."""
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    s = AppState()
+    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(),
+                                questions_expanded=True))
+    sec = qp.build_questions_section(s, AnalysisState())
+    assert sec.is_open()
+    sec.set_open(False)  # the reviewer closes it
+    s.update_project("p", lambda live: setattr(live, "questions", [ROAD]))
+    assert not sec.is_open()
+    s.update_project("p", lambda live: setattr(live, "questions_expanded", False))
+    assert not sec.is_open()
+    s.update_project("p", lambda live: setattr(live, "questions_expanded", True))
+    assert sec.is_open()

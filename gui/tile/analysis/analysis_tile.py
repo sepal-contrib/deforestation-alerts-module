@@ -5,7 +5,8 @@ the parent slice of porting the 2052-line ipyvuetify ``AnalysisTile`` god-class.
 It establishes:
 
   * the shared heavy widgets (``AnalysisWidgets``, built once),
-  * the two-map left panel + control right panel layout (ports OLD
+  * the two-view stage (one ``AlertViews`` under a header row, the timeline
+    strip below) + control right panel layout (ports OLD
     ``initialize_layout``), as a raw ipyvuetify ``v.Container`` tree,
   * the per-alert orchestration ``view_actual_alert`` registered as a
     ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
@@ -15,20 +16,17 @@ It establishes:
     holds the Export section and the Save buttons),
   * and the sub-component builders (imagery / review / edit / export).
 
-WHY A RAW BUILDER (not a ``@solara.component`` + ``render_fixed`` /
-``solara.display``): MapApp renders the Analysis step content with ``v-if``, so it
-DESTROYS the step DOM on close and REBUILDS it on reopen. A ``@solara.component``
-rendered via ``render_fixed`` + ``solara.display`` goes blank on reopen, but a raw
-ipyvuetify widget tree is re-viewed from its model on reopen, so it survives.
-``build_analysis_layout`` builds the tree once and RETURNS ``(stage, controls)``
-— the step content container and the right-panel controls — same pattern
-as the sibling builders (``context`` / ``review_panel`` / ``build_edit_tools`` /
-``build_export`` / ``build_timeline``) and ``recipe_tile.build_recipe_layout`` /
-``aux_tile.build_aux_layout``. The CSS the OLD component injected via
-``solara.Style`` (a hook) is now the first child of the returned container as a raw
-``v.Html(tag="style", ...)`` element. The two former ``use_effect``s become
-``.subscribe`` registrations on ``app_state.actual_alert_id`` /
-``app_state.alerts_gdf`` (each also invoked once immediately).
+WHY A RAW BUILDER (not a ``@solara.component``): the analysis screen is built
+once per session and stays mounted for the session's lifetime, shown and hidden
+with CSS; a raw ipyvuetify widget tree keeps its views (and ``AlertViews`` its
+Leaflet maps) across every show and hide. ``build_analysis_layout`` builds the
+tree once and RETURNS ``build_screen``'s namespace: ``screen`` (the full-height
+root, right of MapApp's rail, the shell displays as a sibling of MapApp), ``controls`` (the review
+console in its right column), ``widgets``, ``show(on)`` and ``relabel()``. The
+screen's CSS (``SCREEN_CSS``) is its first child, a raw ``v.Html(tag="style")``.
+The two former ``use_effect``s are ``.subscribe`` registrations on
+``app_state.actual_alert_id`` / ``app_state.alerts_gdf`` (each also invoked
+once immediately).
 
 Key architectural decisions (FIXED by the migration contract):
 
@@ -47,9 +45,9 @@ Key architectural decisions (FIXED by the migration contract):
   layer, the CNN predictions, ``last_save_time``. ``view_actual_alert`` resets
   it on every alert change (``reset_alert``); the shared timeline then publishes
   the chosen images into it and ``imagery.wire_panes`` draws them.
-* **Heavy widgets are imperative + memoized once.** The two maps / draw controls /
-  AOI control live on ``AnalysisWidgets`` and are mutated in
-  place by ``view_actual_alert``; the per-alert effect is keyed on the alert id
+* **Heavy widgets are imperative + memoized once.** The views (``AlertViews``)
+  and their writer (``PaneLayers``) live on ``AnalysisWidgets`` and are
+  mutated in place by ``view_actual_alert``; the per-alert effect is keyed on the alert id
   reactive so it re-runs on navigation. Guarded to no-op when no alerts are loaded
   (safe at smoke time + idempotent under render_fixed double-mount).
 
@@ -65,9 +63,7 @@ import logging
 from datetime import date
 from types import SimpleNamespace
 
-import ee
 import ipyvuetify as v
-from ipyleaflet import GeoJSON
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
@@ -76,24 +72,27 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
 )
-from gui.tile.analysis.context import build_context
-from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background
+from gui.tile.analysis.context import build_context, build_topnav
+from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background, remove_earlier_layer
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import REQUIRED_MISSING, build_export
 from gui.tile.analysis.footer import build_footer
-from gui.tile.analysis.imagery import wire_panes
+from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
+from gui.tile.analysis.state import IMAGE_AREAS
+from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
 from gui.tile.analysis.timeline import build_timeline
 from gui.tile.analysis import vis_sync
 from gui.i18n import t
+from gui.scripts import alert_filter
 from gui.scripts import questions
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
-from gui.widget.set_selector import build_set_selector
+from gui.widget.set_selector import build_set_selector, set_text
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -106,6 +105,8 @@ _ALERT_BB_STYLE = {
     "dashArray": "2",
     "fillOpacity": 0,
 }
+#: The spec id of the alert's bounding box on the views.
+ALERT_BB_ID = "alert-bb"
 
 
 def _as_date(julian):
@@ -135,28 +136,30 @@ def _invalidate_alert_view(widgets, analysis) -> None:
     needs an alert: the per-alert review state (``reset_alert``, whose token
     bump also makes every worker in flight drop its result and takes the
     export section back to "available after save"), the imagery context the
-    shared timeline draws from, the drawn-polygon controls, the alert layers
-    on both maps, and the ee bbox and covering grid an export is built from.
+    shared timeline draws from, the drawing, the alert layers and the earlier
+    overlay on the views, the zoom-to-alert bounds, and the ee bbox and
+    covering grid an export is built from.
 
     The visualization layers stay, as they do on an ordinary alert change
     (spec §10, ``vis_sync``). Everything after the state is best-effort: a
-    map stand-in without layers must not cost the invalidation itself.
+    stand-in without views must not cost the invalidation itself.
     """
     analysis.reset_alert()
     try:
         ctx = getattr(widgets, "imagery_ctx", None)
         if ctx is not None:
             ctx.value = None
-        for name in ("draw_before", "draw_after"):
-            control = getattr(widgets, name, None)
-            if control is not None:
-                control.hide()
-        for name in ("map_before", "map_after"):
-            a_map = getattr(widgets, name, None)
-            if a_map is not None:
-                vis_sync.clear_alert_layers(a_map)
+        panes = getattr(widgets, "panes", None)
+        if panes is not None:
+            # Out of edit mode and nothing drawn: both belonged to the alert.
+            panes.set_edit_mode(False)
+            panes.set_drawing([])
+            panes.clear("alert")
+            panes.set_focus_bounds(None)
+        remove_earlier_layer(widgets)
         widgets.actual_bb = None
         widgets.actual_alert_grid = None
+        widgets.actual_bb_geojson = None
     except Exception:
         logger.exception("Analysis: clearing the alert view failed")
 
@@ -168,9 +171,9 @@ def view_actual_alert(
 
     Ports the foundation-relevant parts of the OLD ``view_actual_alert``: select
     the alert row, refresh the nav id field, forget the
-    previous alert's review state (``analysis.reset_alert``), rebuild the bbox overlay on both maps, center/zoom, compute
-    the ee bbox + covering grid (stored on ``widgets``), register the AOI, set the
-    default image-collection flags, and remember the position on the active
+    previous alert's review state (``analysis.reset_alert``), rebuild the bbox overlay on the views, center/zoom
+    and the zoom-to-alert bounds, compute the ee bbox + covering grid (stored on
+    ``widgets``), set the default image-collection flags, and remember the position on the active
     alert set (``SetContext.remember_position``; spec §10 replaces the recipe
     json's ``actual_alert_id``).
 
@@ -255,26 +258,29 @@ def view_actual_alert(
     try:
         alerta_bb_geojson = alerta["bounding_box"].__geo_interface__
 
-        # hide the draw controls between alerts (Task 9.3 shows them on edit)
-        widgets.draw_before.hide()
-        widgets.draw_after.hide()
+        panes = widgets.panes
+        # out of edit mode, nothing drawn: the drawing belonged to the
+        # previous alert (the edit tools open it again on Start Drawing)
+        panes.set_edit_mode(False)
+        panes.set_drawing([])
 
         # clear the previous alert's layers (the visualization layers stay:
         # vis_sync keeps them, spec §10) BEFORE the view moves: a layer left
         # on would fetch tiles at the new view, from the previous set's
         # raster, which a period delete is removing (500s from the tile server)
-        vis_sync.clear_alert_layers(widgets.map_before)
-        vis_sync.clear_alert_layers(widgets.map_after)
+        panes.clear("alert")
+        # the earlier-reviews overlay is the previous alert's neighbourhood:
+        # ``refresh_in_background`` below draws this alert's
+        remove_earlier_layer(widgets)
 
-        # center/zoom (the two maps are jslink'd; write both explicitly)
-        widgets.set_synced_view((alerta.point.y, alerta.point.x), 16)
+        # center/zoom: one write, every view follows (``AlertViews``)
+        panes.set_view((alerta.point.y, alerta.point.x), 16)
 
-        # rebuild the bbox overlay on both maps
-        geojson_layer = GeoJSON(
-            data=alerta_bb_geojson, style=_ALERT_BB_STYLE, name="Alert BB"
-        )
-        widgets.map_before.add_layer(geojson_layer)
-        widgets.map_after.add_layer(geojson_layer)
+        # the bbox overlay on every view, hidden while the reviewer edits
+        panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
+                               style=_ALERT_BB_STYLE, hide_while_editing=True))
+        # the after view's zoom-to-alert button goes back to this box
+        panes.set_focus_bounds(alerta["bounding_box"].bounds)
 
         # re-add the saved defo polygon if this alert was already reviewed
         if (
@@ -286,14 +292,11 @@ def view_actual_alert(
             ).set_crs(epsg="4326", allow_override=True, inplace=True))
 
         # ee bbox (buffer + bounds) + covering grid for downloads
-        alerta_bb_geojson_ee = ee.Feature(alerta_bb_geojson).buffer(100, 1).bounds(1)
-        widgets.aoi_control.add_aoi("AOI", alerta_bb_geojson_ee)
-        widgets.actual_bb = alerta_bb_geojson_ee
-
-        grid_descarga = alerta_bb_geojson_ee.geometry().coveringGrid(
-            "EPSG:3857", 1 * 256 * 4.77
-        )
-        widgets.actual_alert_grid = grid_descarga.geometry().bounds(1)
+        # (the normal image area: ``reset_alert`` put ``image_area`` back to
+        # it, and ``set_image_area`` recomputes both for a larger one)
+        widgets.actual_bb_geojson = alerta_bb_geojson
+        widgets.actual_bb, widgets.actual_alert_grid = alert_extent(
+            alerta_bb_geojson, IMAGE_AREAS["normal"])
 
         # Publish the per-alert imagery context: the one thing an alert
         # change has to do for the shared timeline, which answers the alert
@@ -333,8 +336,10 @@ def view_actual_alert(
 
 
 def select_start_alert(app_state, app_tile_model):
-    """Select an alert when alerts arrive with none selected: the active set's
-    saved position (``go_to`` clamps it), else the first alert.
+    """Select an alert when alerts arrive with none selected, by the one
+    start-position resolver (spec §8.4, ``alert_filter.start_position``, as
+    ``set_store.publish_set_alerts``): the active set's saved position
+    clamped, or under the Analysis filter its first unreviewed match.
 
     Starting from the saved position matters because a set load publishes its
     alerts before it reads ``last_alert_index``: going to 0 here would make
@@ -343,9 +348,38 @@ def select_start_alert(app_state, app_tile_model):
     the unset (-1) state, so it never fights manual navigation.
     """
     gdf = app_state.alerts_gdf.value
+    # Before the filter is read: a filter made on another set goes now, not
+    # whenever ``AppState``'s own ``alerts_gdf`` listener happens to run.
+    app_state.forget_filter_of_another_set(gdf)
     if gdf is not None and len(gdf) > 0 and app_state.actual_alert_id.value < 0:
-        start = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
-        app_state.go_to(start)
+        saved = getattr(getattr(app_tile_model, "alert_set", None), "last_alert_index", 0)
+        p = app_state.project.value
+        app_state.go_to(alert_filter.start_position(gdf, app_state.alert_filter, saved,
+                                                    p.questions if p is not None else []))
+
+
+def follow_filter(app_state, f) -> None:
+    """A filter applied while an alert is on screen moves to the filter's
+    start (spec §8.4): that alert when it matches, else the first unreviewed
+    match, else the first match; when nothing matches, the alert stays.
+    Clearing the filter moves nothing. With no alert on screen the next
+    publish applies the filter (``set_store.publish_set_alerts``)."""
+    gdf = app_state.alerts_gdf.value
+    # As ``select_start_alert``: a filter made on another set goes first (its
+    # clear re-enters here with None), and the one left in force is followed.
+    app_state.forget_filter_of_another_set(gdf)
+    if app_state.alert_filter_reactive is not None:
+        f = app_state.alert_filter
+    index = app_state.actual_alert_id.value
+    if f is None or gdf is None or not len(gdf) or index < 0:
+        return
+    p = app_state.project.value
+    s = active_set(p)
+    if s is not None and not set_store.alerts_belong_to(gdf, s):
+        return  # another set's alerts, until the new set's are published
+    target = alert_filter.start_position(gdf, f, index, p.questions if p is not None else [])
+    if target != index:
+        app_state.go_to(target)
 
 
 def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field) -> None:
@@ -356,16 +390,30 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
       current alert changes (navigation drives it), plus one immediate call so
       a pre-selected alert renders on first build. ``view_actual_alert`` no-ops
       with no alerts loaded, so this is safe at mount/smoke time and idempotent.
+    - ``analysis.reload_alert``: the same re-run when a merge rewrote the
+      current alert's row (spec §7.4).
     - ``alerts_gdf``: an alert is selected when a set first arrives (a publish
       leaves ``actual_alert_id`` at -1, and the tile would otherwise stay empty
       until "next"), plus one immediate call. Block A subscribes for itself, so
       a review Save's rebind refreshes its facts grid without the tile's help.
+    - ``analysis.alert_filter``: bound into ``app_state``, where the
+      navigation reads it, and a new filter moves to its start
+      (``follow_filter``).
     """
+    # Bound before anything below reads the filter. A filter made on another
+    # set is dropped by ``select_start_alert`` / ``follow_filter`` themselves
+    # (``forget_filter_of_another_set``), not by listener order.
+    app_state.bind_alert_filter(analysis.alert_filter)
+    analysis.alert_filter.subscribe(lambda f: follow_filter(app_state, f))
+    # A start filter set before this layout was wired (``apply_start_filter``
+    # on a session whose alerts were already published) is resolved now.
+    follow_filter(app_state, analysis.alert_filter.value)
 
     def _on_alert_change(*_):
         view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     app_state.actual_alert_id.subscribe(_on_alert_change)
+    analysis.reload_alert.subscribe(_on_alert_change)
     view_actual_alert(widgets, app_state, analysis, app_tile_model, id_field)
 
     def _select_first_alert_cb(*_):
@@ -469,25 +517,254 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     exports.body_box.children = [export_parts.body]
     footer = build_footer(export_parts.run_save, exports.root, app_state, analysis)
 
+    # The queue, the navigation and the set selector go to the screen's top
+    # bar (``build_screen``); built here with the card whose subscriptions
+    # keep them current.
+    # Bound before block A is built, which subscribes to the bound filter
+    # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
+    app_state.bind_alert_filter(analysis.alert_filter)
+    context = build_context(app_state, id_field)
+    topnav = build_topnav(context, build_set_selector(app_state))
+    earlier = build_earlier_controls(widgets, app_state, analysis)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
         children=[
-            info_button(t("analysis_tile.description"), t("analysis_tile.info_header"),
-                        t("analysis_tile.info_md")),
-            build_set_selector(app_state),
             build_set_status_banner(app_state),
-            build_context(app_state, id_field),
+            context,
             build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis),
-            build_earlier_controls(widgets, app_state, analysis),
             questions.root,
             refine.root,
+            earlier.root,
             footer.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
-                                              export_parts=export_parts, footer=footer))
+                                              export_parts=export_parts, footer=footer,
+                                              earlier=earlier, topnav=topnav))
     return controls
+
+
+#: The analysis screen's stylesheet (spec 2026-10-08 §2.2): a full-height flex
+#: layout right of MapApp's rail, no height computed from the viewport. The
+#: left column holds the view headers, the views (whatever height is left) and
+#: the timeline strip; the right column (the review console) is the only part
+#: that scrolls. The root keeps the ``analysis-stage`` /
+#: ``analysis-stage--dark`` classes the timeline's colours key on
+#: (``timeline.THEME_CSS``, ``handle_strip.py``).
+SCREEN_CSS = (
+    # Right of MapApp's rail, which stays usable on the screen (user,
+    # 2026-10-09): ``left`` follows the rail's live width (MapApp sets
+    # --sepal-drawer-width on :root, 60 px mini, 320 px expanded), as HEAD's
+    # stage did. ``bottom`` and ``right`` are 0: --sepal-bottom-reserved and
+    # --sepal-right-panel-width belong to the right panel, which is hidden here.
+    # z-index 4, HEAD's stage level: above MapApp's map (0); below the rail's
+    # collapse arrow (5), the rail and the right panel (6), menus (8+),
+    # pysepal's task pill (170), the dialog scrim (201), dialogs (202+) and
+    # toasts (9999).
+    ".defo-analysis-screen { position: fixed; top: 0; bottom: 0; left: var(--sepal-drawer-width, 60px); right: 0;"
+    " z-index: 4; display: flex; flex-direction: column; transition: left 0.3s ease;"
+    " background-color: #ffffff; color: rgba(0, 0, 0, 0.87); font-size: 14px; }\n"
+    ".defo-analysis-screen.theme--dark { background-color: #121212; color: #ffffff; }\n"
+    # ipyvuetify wraps a standalone display in a v-application of its own,
+    # whose wrap reserves a full viewport height.
+    ".defo-analysis-screen .v-application--wrap { min-height: 0 !important; }\n"
+    ".defo-analysis-topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 56px;"
+    " padding: 0 12px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n"
+    # the top bar's navigation (``context.build_topnav``)
+    ".defo-analysis-screen .defo-topnav { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-screen .defo-topnav-set { flex: 0 1 380px; min-width: 180px; }\n"
+    ".defo-analysis-screen .defo-topnav-set .v-select { padding: 0 !important; margin: 0; }\n"
+    ".defo-analysis-screen .defo-jump-btn { min-width: 0 !important; }\n"
+    # the filter's funnel and chip (``filter_menu``), left of the set
+    # selector. Neither shrinks: in a review copy the chip is the only
+    # statement of whose alerts these are (at 1400 px it was cut to "Eval…"),
+    # so the title and the set selector give way first. Only a chip past
+    # 220 px ends in an ellipsis; its tooltip names the filter in full.
+    ".defo-analysis-screen .defo-topnav-filter { flex: 0 0 auto; display: flex; align-items: center;"
+    " gap: 4px; }\n"
+    ".defo-analysis-screen .defo-filter-chip { flex-shrink: 0; max-width: 220px; }\n"
+    ".defo-analysis-screen .defo-filter-chip .v-chip__content { display: block; min-width: 0; overflow: hidden;"
+    " text-overflow: ellipsis; white-space: nowrap; }\n"
+    ".defo-analysis-screen .defo-topnav-progress { display: flex; flex-direction: column; gap: 4px; width: 150px; margin-left: 4px; }\n"
+    # Over the review panel, at its width and padding: Previous lines up with
+    # the panel's start, Next with its end. The negative margin cancels the
+    # top bar's right padding so the block reaches the screen edge as the
+    # panel does.
+    ".defo-analysis-screen .defo-topnav-nav { flex: 0 0 480px; align-self: stretch; display: flex; align-items: center;"
+    " justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
+    " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
+    ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
+    " padding: 8px; }\n"
+    # The review console, at the workflow panel's width (480 px) it was laid out at.
+    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; overflow-y: auto; padding: 8px 16px 0 16px;"
+    " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    # One header cell per view, in a row over the views: equal halves, as the
+    # views split the width (``.mv-layout-row``). min-width:0 keeps a long
+    # title from widening its half.
+    ".analysis-heads { display: flex; gap: 8px; flex: 0 0 auto; }\n"
+    ".analysis-heads > .analysis-mapbox { flex: 1 1 0; min-width: 0; }\n"
+    ".analysis-mapbox { display: flex; flex-direction: column; }\n"
+    # The views take whatever height is left. The widget sits in an
+    # ipywidgets wrapper that breaks a flex height chain, so the slot is the
+    # positioned box and the widget fills it.
+    ".analysis-panes-slot { position: relative; flex: 1 1 auto; min-height: 240px; }\n"
+    ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
+    ".analysis-strip { flex: 0 0 auto; padding: 0 4px 4px 4px; }\n"
+    # The strip's outline follows the theme. The views are not bordered: they
+    # draw their own limit with the basemap.
+    ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
+    ".defo-analysis-screen.theme--dark .analysis-timeline { border-color: rgba(255, 255, 255, 0.18); }\n"
+    ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
+    " display: flex !important; align-items: center !important; }\n"
+    # The screen's one type scale (``section.TYPE_*``): 14 px titles and body,
+    # 12 px labels and badges, sentence case everywhere. Vuetify's spaced
+    # capitals on buttons and chips, and its 16 px input labels, are what
+    # made the panel read as three different apps.
+    ".defo-analysis-screen .v-btn { text-transform: none !important; letter-spacing: normal !important; }\n"
+    ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"
+    ".defo-analysis-screen .v-chip.v-size--x-small { font-size: 12px; height: 20px; }\n"
+    ".defo-analysis-screen .v-input .v-label { font-size: 14px; }\n"
+    ".defo-analysis-screen .v-select__selection, .defo-analysis-screen .v-text-field input { font-size: 14px; }\n"
+    ".defo-analysis-screen .dat-title { font-size: 14px; font-weight: 600; line-height: 20px; }\n"
+    ".defo-analysis-screen .dat-body { font-size: 14px; font-weight: 400; line-height: 20px; }\n"
+    ".defo-analysis-screen .dat-label { font-size: 12px; font-weight: 400; line-height: 16px; opacity: 0.7; }\n"
+    ".defo-analysis-screen .dat-caption { font-size: 12px; line-height: 16px; }\n"
+    ".defo-analysis-screen .dat-num { font-variant-numeric: tabular-nums; }\n"
+    ".defo-analysis-screen .analysis-mapbox .v-card__title { font-size: 16px; font-weight: 600; }\n"
+    # The Questions section (``questions_panel``): one outlined block per
+    # question, a numbered header, the options as full-width tiles.
+    ".defo-analysis-screen .dat-question { border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px;"
+    " padding: 12px; margin-bottom: 8px; }\n"
+    ".defo-analysis-screen .dat-q-num { flex: 0 0 22px; height: 22px; border-radius: 11px; display: inline-flex;"
+    " align-items: center; justify-content: center; font-size: 12px; font-weight: 600;"
+    " background: rgba(128, 128, 128, 0.18); }\n"
+    ".defo-analysis-screen .dat-q-required { font-size: 12px; }\n"
+    ".defo-analysis-screen .dat-options .v-radio { border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px;"
+    " padding: 8px 10px; margin: 0 0 6px 0 !important; cursor: pointer; transition: border-color 0.15s, background 0.15s; }\n"
+    # Neutral, not the primary colour: the theme publishes no
+    # ``--v-primary-base`` (see ``file_tile``), and the radio's own dot
+    # already wears the primary colour.
+    ".defo-analysis-screen .dat-options .v-radio:hover { border-color: rgba(128, 128, 128, 0.7); }\n"
+    ".defo-analysis-screen .dat-options .v-radio.v-item--active { border-color: currentColor;"
+    " background: rgba(128, 128, 128, 0.12); }\n"
+    ".defo-analysis-screen .dat-options .v-radio.v-item--active .v-label { font-weight: 600; }\n"
+    ".defo-analysis-screen .dat-options .v-label { font-size: 14px; }\n"
+    # the timeline's and the view titles' theme colours
+    + timeline_theme_css
+)
+
+
+def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamespace:
+    """The analysis screen: a full-height sibling of MapApp, right of its rail
+    (spec 2026-10-08 §2.2, R30), around the analysis widgets and the review
+    console.
+
+    A top bar (*← Workflow* and the title: Analysis · project · alert set),
+    then the left column (the two view headers, ``widgets.panes_widget`` and
+    the timeline strip) beside the right column (``controls``). Built hidden
+    (``display: none``); the shell's ``_ScreenBridge`` calls ``show`` and
+    ``relabel``. ``widgets`` needs ``panes_widget``, ``panes`` (its
+    ``PaneLayers``), ``head_before``, ``head_after`` and ``timeline``.
+
+    Returns ``SimpleNamespace(screen, controls, widgets, show, relabel)``:
+
+    * ``show(on)``: on, the screen is displayed, then it gets the
+      ``defo-analysis-screen--on`` class the shell's CSS hides MapApp's main
+      map and right panel with (its rail stays). Off, in the other order: the
+      class goes first, so the main map and the panel are displayed again
+      while the screen still covers the map, and only then the screen (and
+      the views in it) is hidden. The views' hide nudge (a window resize,
+      ``js/app/resize_nudge.js``) then finds the main map displayed and
+      re-measures it; the frontend applies the two writes in this order.
+    * ``relabel()``: the back button, the title and the views' ``labels`` in
+      the current language.
+    """
+    back = v.Btn(
+        text=True,
+        class_="defo-back-to-workflow",
+        style_="text-transform: none;",
+        children=[v.Icon(left=True, children=["mdi-arrow-left"]), ""],
+    )
+    back.on_event("click", lambda *_: app_state.screen.set("workflow"))
+    title = v.Html(tag="div", class_="defo-analysis-title dat-title", children=[""])
+    panel = getattr(controls, _PANEL, None)
+    topnav = getattr(panel, "topnav", None)
+    # The panel's help, as the top bar's last control: the description is
+    # the icon's tooltip (it no longer has a line of its own in the panel).
+    info = info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md"))
+    _span, info_btn, _dialog = info.children
+    info_btn.children = [v.Icon(children=["mdi-help-circle-outline"])]
+    info_btn.attributes = {"title": t("analysis_tile.description"), "aria-label": t("analysis_tile.info_header")}
+    info.children = [info_btn, _dialog]
+    info.class_ = "d-flex align-center"
+    if topnav is not None:
+        # after the set's progress, before the navigation block
+        topnav.children = [*topnav.children[:-1], info, topnav.children[-1]]
+    topbar = v.Html(tag="div", class_="defo-analysis-topbar",
+                    children=[back, title, *([topnav] if topnav is not None else [info])])
+    heads = v.Html(tag="div", class_="analysis-heads", children=[widgets.head_before, widgets.head_after])
+    panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
+    strip = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
+    left = v.Html(tag="div", class_="defo-analysis-left", children=[heads, panes_slot, strip])
+    right = v.Html(tag="div", class_="defo-analysis-right", children=[controls])
+    body = v.Html(tag="div", class_="defo-analysis-body", children=[left, right])
+    screen = v.Html(
+        tag="div",
+        style_="display: none;",
+        children=[v.Html(tag="style", children=[SCREEN_CSS]), topbar, body],
+    )
+    state = {"on": False, "dark": bool(getattr(theme_state, "dark", False))}
+
+    def _apply_classes():
+        screen.class_ = (
+            "defo-analysis-screen analysis-stage"
+            + (" defo-analysis-screen--on" if state["on"] else "")
+            + (" analysis-stage--dark theme--dark" if state["dark"] else " theme--light")
+        )
+
+    def show(on):
+        if on:
+            screen.style_ = ""
+            state["on"] = True
+            _apply_classes()
+        else:
+            state["on"] = False
+            _apply_classes()
+            screen.style_ = "display: none;"
+
+    def _retitle():
+        p = app_state.project.value
+        alert_set = active_set(p)
+        # The set is the top bar's selector now; the title names the screen
+        # and the project, and falls back to the set while there is no bar.
+        parts = [
+            t("app.drawer_item.analysis"),
+            p.name if p is not None else "",
+            set_text(p, alert_set) if alert_set is not None and topnav is None else "",
+        ]
+        title.children = [" · ".join(part for part in parts if part)]
+
+    def relabel():
+        back.children = [back.children[0], t("app.panel_workflow_title")]
+        _retitle()
+        widgets.panes.relabel()
+
+    def _on_dark(change):
+        state["dark"] = bool(change["new"])
+        _apply_classes()
+
+    # Built once per session, like the rest of the tree: the subscription and
+    # the observer live as long as the kernel (their unsubscribers are not kept).
+    app_state.project.subscribe(lambda _project: _retitle())
+    if theme_state is not None:
+        theme_state.observe(_on_dark, "dark")
+    relabel()
+    _apply_classes()
+    return SimpleNamespace(screen=screen, controls=controls, widgets=widgets, show=show, relabel=relabel)
 
 
 def build_analysis_layout(
@@ -499,13 +776,13 @@ def build_analysis_layout(
     gee_interface,
     theme_state=None,
 ):
-    """Build the raw ipyvuetify analysis layout (parent of the analysis tile).
+    """Build the analysis screen once per session (the shell memoizes it).
 
-    Returns ``(stage, controls)`` — the two-map workspace ``v.Container`` and the
-    right-panel controls ``v.Html``. The shell renders ``stage`` as the MapApp step
-    content and ``controls`` in the docked right panel (wrapper 7). Built once (no
-    re-render) so the sub-builders' handlers + subscriptions are wired exactly once
-    and the raw widget trees survive the step container's ``v-if`` rebuild.
+    Returns ``build_screen``'s ``SimpleNamespace(screen, controls, widgets,
+    show, relabel)``: the shell displays ``screen`` as a sibling of MapApp,
+    and its ``_ScreenBridge`` calls ``show`` and ``relabel``. Built once (no
+    re-render) so the sub-builders' handlers + subscriptions are wired exactly
+    once and the raw widget tree survives every show and hide.
 
     Parameters
     ----------
@@ -526,99 +803,34 @@ def build_analysis_layout(
         ``record_review`` for the reviewed count. The shell passes the same
         ``SetContext`` for all three models (spec §10).
     app_state : AppState
-        Source of truth for the alerts table + navigation.
+        Source of truth for the alerts table + navigation, and the screen's
+        title (the project and its active set).
     gee_interface : GEEInterface
-        Session GEE interface, forwarded to both maps.
+        Session GEE interface, used for the views' Earth Engine tile URLs.
     theme_state : ThemeState, optional
-        Shared app theme state, forwarded to both maps so they track the app's
+        Shared app theme state: the views and the screen track the app's
         light/dark theme exactly as the shared main map does.
     """
     # Build the shared heavy widgets once.
     widgets = AnalysisWidgets(gee_interface=gee_interface, theme_state=theme_state)
-    # The visualization layers marked for Analysis, switched off on both maps
+    # The visualization layers marked for Analysis, switched off on every view
     # (spec §10); the layout is built once per session, so wired once and the
     # subscription lives as long as the kernel (its unsubscribe is not kept).
     vis_sync.wire(widgets, app_state)
 
     # Alert-id field (raw ipyvuetify so view_actual_alert can imperatively set
-    # .v_model). Owned here, passed to block A's jump row (build_context,
+    # .v_model). Owned here, passed to the counter's jump menu (build_context,
     # through build_controls) and to the per-alert subscription, which writes
-    # the 1-based number the queue counter shows.
-    # Empty, not the 0-based index it used to seed: the field is 1-based now
-    # and ``wire_alert_navigation`` below fills it from the selected alert
-    # before the panel is built (with none selected there is no number to
-    # show, and ``_on_go`` ignores a field it cannot read).
+    # the 1-based number the queue counter shows. Empty: with no alert
+    # selected there is no number to show, and ``_on_go`` ignores a field it
+    # cannot read.
     id_field = v.TextField(
         v_model=None,
         outlined=True,
+        dense=True,
         single_line=True,
         hide_details=True,
-    )
-
-    # Full-stage analysis workspace (Option C / variant 1). The stage fills the
-    # MapApp step container; two equal map columns sit side by side, each map
-    # fills the stage height (viewport-relative), with a compact internally-scrolling
-    # image-selector strip beneath it. Was injected via solara.Style; lives here as the stage's first
-    # child so the raw widget tree survives the step container's v-if rebuild.
-    style_el = v.Html(
-        tag="style",
-        children=[
-            ".analysis-stage { height: 100%; display: flex; flex-direction: column; } "
-            # Stage background follows the app light/dark theme. The default is the
-            # light surface; the ``analysis-stage--dark`` marker class (toggled from
-            # ``theme_state.dark`` below — the SAME trait the maps bind to) swaps it
-            # to the dark surface so the workspace matches the rest of the app.
-            ".analysis-stage { background-color: #ffffff; transition: background-color 0.2s; } "
-            ".analysis-stage.analysis-stage--dark { background-color: #121212; } "
-            # Outline drawing the limits of the timeline strip. The border
-            # colour tracks the theme (subtle dark line on light, subtle light line
-            # on dark) via the same ``--dark`` marker on the stage. The maps are NOT
-            # bordered: a light line framing the near-black map panels reads as a
-            # harsh white border, so the maps draw their own limit via the basemap.
-            ".analysis-stage .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); "
-            "border-radius: 4px; } "
-            ".analysis-stage.analysis-stage--dark .analysis-timeline { "
-            "border-color: rgba(255, 255, 255, 0.18); } "
-            ".analysis-row { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; "
-            "width: 100%; } "
-            # min-width:0 is THE fix for the selector overflow: without it the flex
-            # column defaults to min-width:auto, so the image slide group stretches
-            # the column and resizes the maps. With it the column holds its half and
-            # the slide group scrolls inside its strip.
-            # overflow: clip, not hidden: a hidden box is still a scroll
-            # container, so Leaflet's container.focus() on the first press
-            # scrolled the column to reveal the map and cut off the pane title
-            # for good (no scrollbar to bring it back). A clipped box cannot
-            # be scrolled, programmatically or otherwise.
-            ".analysis-col { flex: 1 1 0; min-width: 0; overflow: clip; "
-            "display: flex; flex-direction: column; } "
-            ".analysis-mapbox { display: flex; flex-direction: column; } "
-            # The ipyleaflet map sits inside an auto-generated ipywidgets wrapper
-            # (display:block) that breaks the flex-grow chain, so the map cannot be
-            # grown to fill the column via flex. Use a viewport-relative fixed
-            # height instead (the MapApp step container is full-viewport): tall maps
-            # that fill the stage, leaving room for the per-column title plus the
-            # one shared strip below both of them. Measured: 32px of stage
-            # padding (``.defo-stage``, 16px top + bottom), 68px of per-column
-            # chrome (the map box's 8px margin + 8px padding, the 48px title,
-            # the ipywidgets wrapper's 4px margin) and ~146px of strip (38px
-            # source toolbar + 100px track -- 28px handle rail, 45px lane, 27px
-            # axis -- + 8px padding). The stage also ends above MapApp's
-            # bottom reserve (narrow layouts). The old 210px left out the
-            # stage padding, so each column overflowed by ~32px.
-            ".custom-map-class2 { height: calc(100vh - var(--sepal-bottom-reserved, 0px) "
-            "- 246px) !important; min-height: 320px; } "
-            # The strip spans both columns, so it is a row of its own under them.
-            # flex: 0 0 auto, not the default 0 1 auto: the stage is a flex
-            # column and ``.analysis-row`` already absorbs overflow
-            # (flex: 1 1 auto), so the strip must not shrink too -- that is
-            # what makes the 246px the maps give up self-enforcing.
-            ".analysis-strip { width: 100%; flex: 0 0 auto; padding: 0 4px 4px 4px; } "
-            ".v-text-field .v-input__control .v-input__slot { min-height: auto !important; "
-            "min-width: 40px; display: flex !important; align-items: center !important; } "
-            # the timeline's and the pane titles' theme colours
-            + timeline_theme_css
-        ],
+        type="number",
     )
 
     wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field)
@@ -629,44 +841,33 @@ def build_analysis_layout(
     # tile publishing app_state.alerts_gdf. The recipe-LOAD re-discovery/merge
     # path (re-pointing previously reviewed alerts) is deferred to a later task.
 
-    # ------------------------------------------------------------------
-    # Layout: left two-map panel + right scrolling control panel (ports OLD
-    # initialize_layout left_panel / right_panel), as a raw ipyvuetify tree.
-    # ------------------------------------------------------------------
-    # The one shared image timeline, under both panes. Built HERE because
+    # The one shared image timeline, under both views. Built HERE because
     # ``build_analysis_layout`` runs once per session
     # (``solara_app``'s ``solara.use_memo(..., dependencies=[])``), and
     # ``build_timeline`` registers five reactive subscriptions and discards
     # their unsubscribers: correct for a builder that lives as long as the
-    # kernel, a compounding leak anywhere that re-runs per alert or per step
+    # kernel, a compounding leak anywhere that re-runs per alert or per screen
     # entry. It needs no alert: an alert change reaches it through
     # ``widgets.imagery_ctx``.
     widgets.timeline = build_timeline(app_state, analysis, widgets)
 
-    # One subscription per pane, so a pick on the strip rebuilds that pane's
+    # One subscription per view, so a pick on the strip rebuilds that view's
     # image from its granule keys and draws it. Side-effect only (the two
     # unsubscribers are discarded for the same reason as above).
     wire_panes(widgets, analysis, selected_alerts_model)
 
-    # LEFT/STAGE: the two map columns, now carrying only their map -- the
-    # selector that used to sit under each one is replaced by the single strip
-    # below both of them. Each column keeps min-width:0 so a wide child
-    # scrolls inside the column instead of resizing the maps.
-    left_inner_row = v.Html(
-        tag="div",
-        class_="analysis-row",
-        children=[
-            v.Html(tag="div", class_="analysis-col", children=[widgets.map31]),
-            v.Html(tag="div", class_="analysis-col", children=[widgets.map32]),
-        ],
-    )
-    strip_row = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
+    # The timeline's image-area control: a new area for the alert on screen.
+    def _on_area(_value):
+        try:
+            set_image_area(widgets, analysis)
+        except Exception:
+            logger.exception("Analysis: changing the image area failed")
 
-    # RIGHT/CONTROLS: the review console -- the head, block A, block B, the
-    # Questions and Refine sections and the sticky footer (``build_controls``).
-    # Rendered in MapApp's
-    # docked right panel (a panel wrapper in the shell), NOT inside the stage
-    # -- same chrome as AOI/Filter/Overview.
+    analysis.image_area.subscribe(_on_area)
+
+    # The review console -- the head, block A, block B, the Questions and
+    # Refine sections and the sticky footer (``build_controls``) -- in the
+    # screen's right column.
     controls = build_controls(
         widgets=widgets,
         app_state=app_state,
@@ -675,28 +876,4 @@ def build_analysis_layout(
         app_tile_model=app_tile_model,
         id_field=id_field,
     )
-
-    # STAGE: the two-map workspace, handed to MapApp as the step content.
-    stage = v.Container(
-        fluid=True,
-        class_="pa-0 ma-0 analysis-stage",
-        children=[style_el, left_inner_row, strip_row],
-    )
-
-    # Drive the stage background + outline colours off the app theme by toggling
-    # the ``analysis-stage--dark`` marker class. We observe the SAME
-    # ``theme_state.dark`` trait the two maps bind to, so the workspace chrome and
-    # the maps flip together. Built once with the rest of the raw widget tree, so
-    # the observer is wired exactly once.
-    def _sync_stage_theme(dark):
-        stage.class_ = "pa-0 ma-0 analysis-stage" + (
-            " analysis-stage--dark" if dark else ""
-        )
-
-    if theme_state is not None:
-        theme_state.observe(
-            lambda change: _sync_stage_theme(bool(change["new"])), "dark"
-        )
-    _sync_stage_theme(bool(getattr(theme_state, "dark", False)))
-
-    return stage, controls
+    return build_screen(widgets, controls, app_state, theme_state)

@@ -15,12 +15,13 @@ from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project.questions import is_answer_column
 
 # Columns the assembled alerts gdf already carries (convert_to_geopandas +
-# vectorize output). Attribution columns must not silently overwrite these.
+# vectorize output), and ``evaluator``, which an evaluator split writes later
+# (spec §3). Attribution columns must not silently overwrite these.
 ALERT_RESERVED_COLUMNS = {
     "geometry", "bounding_box", "point", "count", "area_ha",
     "alert_date_min", "alert_date_max", "alert_type_unique", "alert_sources",
     "status", "before_img", "before_img_info", "after_img", "after_img_info",
-    "alert_polygon", "description", "admin1", "admin2", "admin3",
+    "alert_polygon", "description", "admin1", "admin2", "admin3", "evaluator",
 }
 
 #: What an attribution column named like a questionnaire answer

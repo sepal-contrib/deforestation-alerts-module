@@ -63,8 +63,9 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
 @solara.component
 def StepIntro(description: str, title: str, markdown: str):
     """A workflow step's opening line (spec §14 slice 6): its description and
-    an info button with the longer explanation. Rendered once per step, right
-    under the step's title, at the component's top level (see InfoButton)."""
+    an info button with the longer explanation. Rendered once per step, as the
+    first line of its body (the header above names the step), at the
+    component's top level (see InfoButton)."""
     with solara.Row(style="gap:4px;align-items:center;flex-wrap:nowrap;"):
         solara.Text(description, style=MUTED + "flex:1 1 auto;")
         InfoButton(title, markdown)

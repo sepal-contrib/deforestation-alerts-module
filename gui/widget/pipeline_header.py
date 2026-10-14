@@ -120,6 +120,9 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     here (it is always True, which painted the strip and badge gold even in the
     light theme) and never re-renders on a toggle. When the reactive is passed
     it wins; the Solara hook stays as the fallback for a standalone render.
+
+    The last step has no *Next*: Analysis is not a step, and the
+    Questionnaire step ends with its own *Start analysis*.
     """
     p = project.value
     states = step_states(p)

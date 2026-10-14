@@ -28,5 +28,5 @@ def add_raster_layer(map_, path, *, key: str, name: str, band: int | list[int] =
         client, indexes=indexes, colormap=colormap if len(indexes) == 1 else None, vmin=vmin, vmax=vmax, nodata=nodata,
         name=name, opacity=opacity, visible=visible, max_zoom=20, max_native_zoom=20,
     )
-    map_.add_layer(layer, key=key)  # replaces a same-key layer itself (inside a LockedMap gate)
+    map_.add_layer(layer, key=key)  # replaces a same-key layer itself (inside a PaneTarget gate)
     return layer

@@ -72,12 +72,14 @@ def use_form_dialog(open_, max_width="560px", on_close=None):
 
 
 @contextmanager
-def form_card(title, on_cancel, actions, error=None, cancel_disabled=False):
+def form_card(title, on_cancel, actions, error=None, cancel_disabled=False, leading=None):
     """The form's card; the ``with`` body renders the fields.
 
     ``actions()`` renders the primary button (one ``ENTER_DEFAULT`` button, or a
-    ``SubmitTaskButton``) after Cancel. ``error`` is the inline validation
-    error (``form_error``), shown under the fields."""
+    ``SubmitTaskButton``) after Cancel. ``leading()``, when given, renders
+    actions on the footer's left (a destructive one, as the split modal's
+    Remove split), apart from Cancel and the primary button. ``error`` is the
+    inline validation error (``form_error``), shown under the fields."""
     with rv.Card():
         with rv.CardTitle():
             solara.Text(title)
@@ -88,6 +90,9 @@ def form_card(title, on_cancel, actions, error=None, cancel_disabled=False):
                 if error:
                     form_error(error)
         with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
+            if leading is not None:
+                leading()
+                rv.Spacer()
             solara.Button(t("common.cancel"), text=True, small=True, disabled=cancel_disabled, on_click=on_cancel)
             actions()
 

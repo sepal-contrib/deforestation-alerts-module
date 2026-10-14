@@ -117,8 +117,10 @@ def test_duplicate_keeps_setup_drops_results():
     p.alert_sets["s"] = AlertSet(id="s", period_id="x", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
                                  params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
                                  footprint_rel_path="f", fingerprint="f", created_at=datetime(2026, 9, 30))
+    p.questions_expanded = True
     q = io.duplicate_project(p, "copy")
     assert q.name == "copy" and q.grid == p.grid and q.sources == p.sources
+    assert q.questions_expanded is True
     assert q.periods == {} and q.alert_sets == {} and q.artifacts == {} and q.locked is False
 
 

@@ -21,6 +21,14 @@ _HIDDEN = "display: none;"
 #: (``footer.FOOTER_STYLE``), which reads on both themes.
 BLOCK_STYLE = "border-top: 1px solid rgba(128, 128, 128, 0.25);"
 
+#: The screen's type scale (its CSS is ``analysis_tile.SCREEN_CSS``): every
+#: text of the panel takes one of these, so a title, a value or a label reads
+#: the same in every block. Sentence case throughout; no capitals.
+TYPE_TITLE = "dat-title"  # 14 px semibold: section and block titles
+TYPE_BODY = "dat-body"  # 14 px regular: values, options, names
+TYPE_LABEL = "dat-label"  # 12 px dimmed: field labels, hints, counts
+TYPE_CAPTION = "dat-caption"  # 12 px in the ink: state lines
+
 
 def panel_block(children, *, class_: str = "py-3"):
     """A flat block of the Analysis panel (see ``BLOCK_STYLE``)."""
@@ -45,7 +53,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         style_="height: 50px; justify-content: flex-start; text-transform: none;",
         children=[
             chevron,
-            v.Html(tag="span", class_="ml-2 body-2", children=[title]),
+            v.Html(tag="span", class_=f"ml-2 {TYPE_TITLE}", children=[title]),
             v.Html(tag="span", style_="flex: 1 1 auto;", children=[]),
             badge_chip,
         ],

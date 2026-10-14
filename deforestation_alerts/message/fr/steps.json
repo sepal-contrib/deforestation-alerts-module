@@ -71,10 +71,19 @@
       "chip_save_failed": "échec de l'enregistrement",
       "open_instead": "Ouvrir {name} à la place",
       "name_hint": "Lettres, chiffres, espaces, « - » et « _ ».",
-      "duplicate_failed": "Impossible de dupliquer {name} : {error}"
+      "duplicate_failed": "Impossible de dupliquer {name} : {error}",
+      "import": "Importer",
+      "import_title": "Importer un paquet de révision",
+      "import_pick": "Paquet de révision (.zip)",
+      "import_hint": "Un paquet que le créateur du projet a préparé pour vous à l'étape Évaluation.",
+      "import_existing_title": "Déjà importé",
+      "import_existing_message": "Le projet {name} contient déjà ce paquet pour {evaluator}.",
+      "import_open_existing": "Ouvrir la copie existante",
+      "import_as_new": "Importer comme nouvelle copie",
+      "imported": "{name} importé.",
+      "import_failed": "L'import de {file} a échoué. {error}"
     },
     "aoi": {
-      "title": "Zone d'intérêt",
       "description": "Choisissez la zone à surveiller. Elle est enregistrée avec le projet et chaque téléchargement y est découpé.",
       "info_header": "À propos de la zone d'intérêt",
       "info_md": "Choisissez la zone que ce projet surveille : une zone administrative, un polygone que vous dessinez, ou un asset Earth Engine. Elle est enregistrée avec le projet dès que vous la sélectionnez, et chaque téléchargement y est découpé.\n\n- La **couverture** de chaque source d'alertes sur cette zone est vérifiée une fois et enregistrée dans le projet ; l'étape Alertes l'affiche.\n- Dès que le projet a un jeu d'alertes, l'AOI est verrouillée : une nouvelle zone invaliderait tous les téléchargements et toutes les empreintes. Utilisez **Dupliquer** dans la boîte de dialogue Projet pour surveiller une autre zone avec les mêmes sources, masques, couches et grille.",
@@ -85,7 +94,6 @@
       "busy": "Une tâche écrit dans ce projet ; modifiez l'AOI une fois celle-ci terminée."
     },
     "alerts": {
-      "title": "Sources d'alertes",
       "description": "Les jeux de données d'alertes que ce projet surveille, avec la part de l'AOI que chacun couvre. Chacun est téléchargé pour chaque période, découpé selon l'AOI et les dates de la période.",
       "info_header": "À propos des sources d'alertes",
       "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement. Un projet contient au plus 3 sources prédéfinies et 6 personnalisées. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, supprimez-la et ajoutez-en une nouvelle.",
@@ -161,7 +169,6 @@
       "format_label": "Format des alertes"
     },
     "layers": {
-      "title": "Couches facultatives",
       "description": "Des couches qui aident à lire les alertes : une image Earth Engine, un GeoTIFF de votre dossier SEPAL, ou Planet NICFI. Elles peuvent aussi être affichées sur les deux cartes d'Analyse.",
       "info_header": "À propos des couches facultatives",
       "info_md": "Les couches de visualisation aident à lire la carte ; elles ne modifient jamais les alertes.\n\n- **Image Earth Engine** et **GeoTIFF** (dans votre dossier SEPAL) : une bande affichée avec une rampe de couleurs, ou trois bandes en composite RGB, entre un minimum et un maximum.\n- Une couche GeoTIFF : l'application écrit un fichier de pyramides à côté, donc son dossier doit être accessible en écriture.\n- **Planet NICFI :** la mosaïque tropicale mensuelle via Earth Engine, pour le mois choisi ou le dernier mois de la période active. Votre compte Earth Engine a besoin d'un accès à NICFI.\n\nAffichez une couche sur cette carte avec le bouton carte de sa ligne ; sa légende apparaît avec elle. Cochez **Afficher dans Analyse** pour l'ajouter, désactivée, aux deux cartes d'Analyse.",
@@ -243,7 +250,6 @@
       "origin_hint": "Où lire le raster"
     },
     "period": {
-      "title": "Périodes",
       "description": "Chaque période télécharge toutes les sources sur ses dates plus les jours de rétrospection qui les précèdent. Les pixels déjà signalés par les jeux des périodes antérieures sont ignorés, donc une alerte publiée tardivement atterrit dans le jeu de la période suivante et aucun pixel n'est signalé deux fois.",
       "info_header": "À propos des périodes",
       "info_md": "Une période est un cycle de surveillance, généralement un mois. Pour chaque période, toutes les sources sont téléchargées sur sa **fenêtre de recherche** : les dates de la période plus les jours de **rétrospection** qui les précèdent, afin que les alertes publiées tardivement soient quand même trouvées.\n\n- Les pixels déjà signalés par les jeux d'alertes des périodes antérieures sont retirés avant la vectorisation, donc un pixel n'est jamais signalé deux fois.\n- **Nouvelle période** commence le lendemain de la dernière période et reprend les choix de masques de cette période.\n- Les dates d'une période ne peuvent plus changer dès qu'elle a des jeux d'alertes. Une période peut être supprimée quand elle n'a aucun jeu, ou quand elle est la dernière période ; ses téléchargements et fichiers sont supprimés avec elle.\n- Sélectionnez une ligne pour en faire la période active de Télécharger et harmoniser et d'Intégrer et vectoriser.",
@@ -305,7 +311,6 @@
       "add": "Ajouter une période"
     },
     "prepare": {
-      "title": "Télécharger et harmoniser",
       "description": "Télécharge chaque masque et source de la période active dans sa propre projection, puis les aligne sur la grille du projet et applique les masques de la période (harmoniser). Rien dont les entrées sont inchangées ne s'exécute deux fois.",
       "info_header": "À propos de Télécharger et harmoniser",
       "info_md": "Cette étape prépare chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source est téléchargée sur la fenêtre de recherche de la période dans sa propre projection, puis alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Exécuter … en attente** exécute d'abord les masques, puis chaque source manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
@@ -399,7 +404,6 @@
       "size_note": "{size} sur le disque"
     },
     "integrate": {
-      "title": "Intégrer et vectoriser",
       "description": "Combine les sources téléchargées, ignore les pixels qu'une période antérieure a déjà signalés, et transforme les groupes en alertes.",
       "info_header": "À propos d'Intégrer et vectoriser",
       "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les alertes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque alerte se souvient des sources qui l'ont détectée.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels voisins deviennent des alertes. Les alertes plus petites que la **taille minimale** sont écartées ; vous pouvez limiter le nombre d'alertes, triées comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque alerte.\n\nLes pixels trop petits pour former une alerte, ou au-delà du nombre maximal d'alertes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Chaque source a un interrupteur **inclure les alertes probables** ; désactivé, ses pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les alertes examinées qu'elle écarterait. À la fin de l'exécution, Analyse s'ouvre sur le nouveau jeu.",
@@ -437,6 +441,7 @@
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… et {n} de plus",
+      "replace_split": "La répartition entre évaluateurs et ses retours en attente seront écartés.",
       "job_title": "Intégrer et vectoriser",
       "step_combine": "Combinaison des sources",
       "step_vectorize": "Vectorisation des groupes",
@@ -525,7 +530,6 @@
       "err_option_duplicate": "Deux options portent le même nom.",
       "err_option_comma": "Une option ne peut pas contenir de virgule.",
       "err_ask_for": "Choisissez au moins un verdict.",
-      "title": "Questionnaire",
       "description": "Choisissez les questions posées pour chaque alerte dans Analyse, et le modèle Word du rapport.",
       "info_header": "Le questionnaire",
       "info_md": "Chaque question apparaît dans la section Questions d'Analyse, dans cet ordre. Ses réponses sont enregistrées avec l'alerte (une colonne par question), exportées, représentées dans Aperçu et disponibles pour le rapport sous la forme `{{balise}}`. Supprimer une question conserve les réponses déjà enregistrées, mais elles ne sont plus affichées, exportées ni représentées.",
@@ -549,10 +553,114 @@
         "other": "{count} alertes de l'ensemble actif y ont répondu. Leurs réponses restent enregistrées, mais ne sont plus affichées, exportées ni représentées."
       },
       "delete_message_no_set": "Les réponses déjà enregistrées avec les alertes sont conservées, mais elles ne sont plus affichées, exportées ni représentées.",
+      "expanded": "Afficher les questions dépliées dans Analyse",
+      "expanded_hint": "Désactivé, la section Questions démarre repliée ; elle s'ouvre quand même lorsqu'un verdict exige une réponse obligatoire.",
       "template_title": "Modèle de rapport",
       "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
       "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",
-      "copied": "{placeholder} copié"
+      "copied": "{placeholder} copié",
+      "template_default": "Modèle par défaut",
+      "template_chip_default": "par défaut",
+      "template_chip_custom": "personnalisé",
+      "template_chip_missing": "introuvable",
+      "template_missing": "Le fichier a disparu : choisissez-le de nouveau, ou videz le champ pour utiliser le modèle par défaut."
+    },
+    "evaluators": {
+      "description": "Révisez seul, ou répartissez les alertes entre des évaluateurs et fusionnez ce qu'ils vous renvoient.",
+      "info_header": "Évaluation",
+      "info_md": "**Mode de revue** : en **Individuelle**, vous examinez vous-même toutes les alertes ; avec **Plusieurs évaluateurs**, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
     }
+  },
+  "evaluators": {
+    "err": {
+      "no_set": "Aucun jeu d'alertes actif à répartir. Créez-en un d'abord dans Intégrer et vectoriser.",
+      "none_eligible": "Aucune alerte à attribuer.",
+      "attribute_clash": "Ce jeu a un attribut nommé 'evaluator' ; renommez cette couche d'attributs et relancez le jeu.",
+      "store_changed": "Ce jeu d'alertes a été réécrit pendant la répartition : rien n'a donc été modifié. Réessayez.",
+      "integrating": "Ce jeu d'alertes est en cours de relance dans Intégrer et vectoriser. Réessayez une fois terminé.",
+      "duplicate_name": "« {name} » figure deux fois.",
+      "too_many": "{max} évaluateurs au plus.",
+      "no_names": "Saisissez au moins un nom.",
+      "bad_count": "Choisissez entre 1 et {max} évaluateurs."
+    },
+    "default_prefix": "Évaluateur",
+    "solo_note": "Vous examinez vous-même toutes les alertes.",
+    "multi_note": "Répartissez les alertes entre les évaluateurs et envoyez à chacun un paquet de revue.",
+    "multi_locked": "Supprimez la répartition pour passer en évaluation individuelle.",
+    "split_title": "Répartir les alertes",
+    "mode_label": "Évaluateurs par",
+    "mode_count": "Nombre",
+    "mode_names": "Noms",
+    "count_label": "Nombre d'évaluateurs",
+    "names_hint": "Les lignes vides sont ignorées.",
+    "include_reviewed": "Inclure les alertes déjà révisées",
+    "include_reviewed_hint": "Décochée, les alertes révisées restent non attribuées.",
+    "split": "Répartir",
+    "resplit": "Répartir à nouveau",
+    "remove": "Supprimer la répartition",
+    "packaged_warning": "Les paquets déjà envoyés pour cette répartition ne pourront plus être fusionnés.",
+    "split_done": {
+      "one": "Alertes réparties entre {n} évaluateur.",
+      "many": "Alertes réparties entre {n} d'évaluateurs.",
+      "other": "Alertes réparties entre {n} évaluateurs."
+    },
+    "removed": "Répartition supprimée.",
+    "remove_unrecorded": "La répartition de {project} n'a pas été supprimée : un autre projet a été ouvert, ou ses alertes n'étaient pas encore chargées. Ouvrez {project} et supprimez la répartition à nouveau.",
+    "orphan": "Les alertes de cet ensemble portent des attributions d'évaluateurs, mais le projet n'a aucune répartition enregistrée. Supprimez la répartition pour recommencer.",
+    "loading": "Chargement de l'ensemble d'alertes…",
+    "table_title": "Évaluateurs",
+    "col_name": "Évaluateur",
+    "col_assigned": "Attribuées",
+    "col_reviewed": "Révisées",
+    "col_merged": "Fusionné",
+    "unassigned": "Non attribuées",
+    "empty": "Pas encore de répartition : utilisez Répartir les alertes… pour les attribuer aux évaluateurs.",
+    "aoi_waiting": "Les paquets attendent la géométrie de l'AOI : ouvrez l'étape AOI pour la charger.",
+    "import_label": "Copie révisée (.zip)",
+    "import_hint": "Choisissez la copie révisée d'un évaluateur. Elle est prévisualisée ici avant la fusion.",
+    "preview_title": "Fusionner les révisions de {evaluator}",
+    "conflicts_label": "Alertes que vous avez révisées autrement",
+    "keep_mine": "Garder les miennes",
+    "take_theirs": "Prendre les leurs",
+    "merge": "Fusionner",
+    "merged": "{taken} révisions de {evaluator} fusionnées.",
+    "return_title": "Renvoyer les révisions",
+    "return_progress": "{reviewed} / {assigned} de vos alertes révisées",
+    "return_note": "Seules les alertes qui vous sont attribuées sont renvoyées.",
+    "return_ready": "Copie révisée prête : envoyez-la au créateur du projet.",
+    "split_unrecorded": "Les alertes de {project} ont été réparties, mais un autre projet a été ouvert avant l'enregistrement de la répartition. Rouvrez {project} et supprimez la répartition pour recommencer.",
+    "merged_unrecorded": "Les révisions de {evaluator} sont déjà dans les alertes de {project}, mais un autre projet a été ouvert avant l'enregistrement du retour.",
+    "merge_failed": "Impossible de fusionner {file} : {error}",
+    "open_split": "Répartir les alertes…",
+    "edit_split": "Modifier la répartition",
+    "edit_title": "Modifier la répartition des alertes",
+    "merge_open": "Fusionner une copie révisée…",
+    "merge_title": "Fusionner une copie révisée",
+    "generate": "Générer les paquets",
+    "regenerate": "Régénérer les paquets",
+    "generating": "Création {i} / {n}…",
+    "packages_ready": {
+      "one": "{n} paquet prêt.",
+      "many": "{n} de paquets prêts.",
+      "other": "{n} paquets prêts."
+    },
+    "packages_unrecorded": "Les paquets sont créés, mais la répartition ne les a pas enregistrés : un autre projet a été ouvert ou la répartition a changé entre-temps.",
+    "generate_first": "Générez d'abord les paquets.",
+    "package_download": "Télécharger le paquet de {evaluator}",
+    "package_outdated": "Créé avant la modification du questionnaire : générez de nouveau les paquets.",
+    "built_at": "Créé {when}",
+    "generate_return": "Générer la copie révisée",
+    "regenerate_return": "Régénérer la copie révisée",
+    "return_download": "Télécharger la copie révisée",
+    "generate_return_first": "Générez d'abord la copie révisée.",
+    "review_mode_label": "Mode de revue",
+    "review_mode_solo": "Individuelle",
+    "review_mode_multi": "Plusieurs évaluateurs",
+    "name_field": "Évaluateur {n}",
+    "add_name": "Ajouter un évaluateur",
+    "names_group": "Évaluateurs"
+  },
+  "review_copy": {
+    "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."
   }
 }

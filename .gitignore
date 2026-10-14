@@ -140,3 +140,10 @@ CLAUDE.md
 
 # Local Claude Code session data
 .claude/
+
+# leaflet-multiview JS packages (js/leaflet-multiview, js/app): node_modules is
+# installed from the committed package-lock.json files; the built bundle in
+# gui/widget/static is committed.
+js/**/node_modules/
+# the "test/" rule above would also hide the JS package's own tests
+!js/leaflet-multiview/test/

@@ -23,20 +23,15 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.scene_index import (
     INDEX_VERSION, SCENE_COLUMNS, WGS84, ChunkRecord, Coverage, PlanetState, SceneManifest, SceneTables,
-    empty_tables,
+    empty_tables, index_lock,
 )
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.scene_cache")
 
-#: One lock per project directory. Both the background widener and a
-#: reviewer's "one more month" write ``scenes.parquet``; the lock is what
-#: makes the loser merge onto the winner's rows instead of over them.
-_LOCKS: dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
-
 
 def _lock_for(pdir) -> threading.Lock:
-    """The lock that serializes ``store_chunk`` calls for one project directory.
+    """The lock that serializes ``store_chunk`` calls for one project directory
+    (``scene_index.index_lock``: a review package copies the index under it too).
 
     This is a same-process lock: it serializes threads (the background
     widener, a reviewer's "one more month"), the only kind of concurrent
@@ -52,9 +47,7 @@ def _lock_for(pdir) -> threading.Lock:
     If cross-process safety is ever needed, the stdlib escape hatch is an
     ``fcntl.flock`` on a sidecar lock file in ``imagery_dir(pdir)``.
     """
-    key = str(Path(pdir).resolve())
-    with _LOCKS_GUARD:
-        return _LOCKS.setdefault(key, threading.Lock())
+    return index_lock(pdir)
 
 
 def read_index(pdir) -> tuple[Optional[SceneTables], Optional[SceneManifest]]:

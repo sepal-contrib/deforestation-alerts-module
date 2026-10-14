@@ -10,14 +10,15 @@ dependencies change on the save, an ``asyncio.create_task``) raises out of
 the publish, as the Project dialog's list did after ``ab1d1e6``. Here every
 tile the shell mounts is rendered for real (``AboutTile``, ``ProjectDialog``,
 ``OverviewTile``, the six step tiles with pysepal's own ``AoiView``, the
-workflow header, the Analysis set-status banner) together with the five
+workflow header, the Analysis set-status banner) together with the six
 leaves ``_AppShell`` renders in its own context (``_NavBridge``,
-``_PanelBridge``, ``_ActiveSetLoader``, ``MapLegend``, compiled from
-gui/solara_app.py as tests/test_active_set_loader.py does, and
-``RemoteFactsLoader``), and a worker thread drives both entry points,
+``_ScreenBridge`` on a stand-in screen, ``_PanelBridge``,
+``_ActiveSetLoader``, ``MapLegend``, compiled from gui/solara_app.py as
+tests/test_active_set_loader.py does, and ``RemoteFactsLoader``), and a
+worker thread drives both entry points,
 ``AppState.update_project`` and ``AppState.commit``, through the changes
 each worker makes: artifacts recorded row by row, a set recorded and its
-alerts published, the navigation to Analysis, a Save under the project's
+alerts published, the navigation to the analysis screen, a Save under the project's
 writer mark, a layer build landing its legend on its own thread. Nothing may
 raise into the worker and no tile may fail its render (``render_detached``
 reports those; the report is recorded here).
@@ -84,7 +85,7 @@ from gui.store.autosave import install_autosave
 from gui.store.navigation import apply_navigation, dismiss_dialog, resolve_navigation
 from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
-from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set, rail_item_for_step, step_index
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set, rail_item_for_step
 from gui.tile.about_tile import AboutTile
 from gui.tile.alerts_step import AlertsStep
 from gui.tile.analysis.analysis_tile import build_set_status_banner
@@ -97,7 +98,6 @@ from gui.tile.prepare_step import PrepareStep
 from gui.tile.project_dialog import ProjectDialog
 from gui.widget.report_template import ReportTemplateField
 from gui.widget.set_selector import build_set_selector
-from gui.widget.stage_host import StageHost
 from gui.widget.workflow_header import WorkflowHeader
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +132,20 @@ def _shell_component(name, threads, also=()):
     }
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "gui/solara_app.py", "exec"), ns)
     return ns[name]
+
+
+class _Layout:
+    """The analysis screen's stand-in (``build_analysis_layout``'s namespace):
+    records what ``_ScreenBridge`` asks of it."""
+
+    def __init__(self):
+        self.shown, self.relabels = [], 0
+
+    def show(self, on):
+        self.shown.append(bool(on))
+
+    def relabel(self):
+        self.relabels += 1
 
 
 def _artifact(key, kind):
@@ -201,6 +215,7 @@ def shell(data_root, monkeypatch):
     unsubscribe = install_autosave(state)
     threads = []
     nav_bridge = _shell_component("_NavBridge", threads)
+    screen_bridge = _shell_component("_ScreenBridge", threads)
     panel_bridge = _shell_component("_PanelBridge", threads)
     set_loader = _shell_component("_ActiveSetLoader", threads)
     map_legend = _shell_component("MapLegend", threads, also=("legend_props",))
@@ -226,7 +241,7 @@ def shell(data_root, monkeypatch):
         layers = solara.use_memo(
             lambda: MapLayers(map_, legends=state.layer_legends, selected=state.selected_legend), [])
         tiles["map_layers"] = layers
-        stage_host = solara.use_memo(lambda: StageHost(content=[]), [])
+        layout = solara.use_memo(lambda: _Layout(), [])
 
         def _build():
             _detached("about", lambda: AboutTile())
@@ -247,18 +262,17 @@ def shell(data_root, monkeypatch):
             # panel view (it is still built above, so a publish reaches it).
             wrappers = {key: v.Html(tag="div", children=[tiles[key]])
                         for key in ("aoi", "alerts", "layers", "period", "prepare", "integrate")}
-            wrappers["analysis"] = v.Html(tag="div")
             return wrappers
 
         wrappers = solara.use_memo(_build, [])
         nav_bridge(app_state=state, nav_model=nav_model, mapapp_ref=mapapp_ref)
-        panel_bridge(app_state=state, panel_wrappers=wrappers, stage_host=stage_host, map_=map_,
-                     mapapp_ref=mapapp_ref,
+        screen_bridge(app_state=state, layout=layout)
+        panel_bridge(app_state=state, panel_wrappers=wrappers, mapapp_ref=mapapp_ref,
                      workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
         set_loader(app_state=state, layers=layers, map_=map_)
         map_legend(app_state=state, layers=layers)
         RemoteFactsLoader(app_state=state, gee_interface=gee)
-        tiles["stage_host"] = stage_host
+        tiles["layout"] = layout
 
     holder = {}
 
@@ -304,7 +318,7 @@ async def _wait(thread):
 
 def _roots(shell):
     return {name: type(c.children[0]).__name__ for name, c in shell.tiles.items() if isinstance(c, v.Html)
-            and name not in ("banner", "stage_host") and c.children}
+            and name not in ("banner", "layout") and c.children}
 
 
 def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkeypatch):
@@ -333,7 +347,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         assert set(state.project.value.artifacts) == set(_row_artifacts("GLAD-L")) | set(_row_artifacts("RADD"))
 
         # Integrate: the set recorded through update_project, its alerts published,
-        # then the navigation to Analysis, all from the worker
+        # then the navigation to the analysis screen, all from the worker
         s = _alert_set(p, ["GLAD-L", "RADD"])
         result = SimpleNamespace(artifacts={}, alert_set=s, alerts=_alerts(3, sid))
         set_store.stamp_generation(result.alerts, store)
@@ -348,8 +362,9 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         await asyncio.sleep(0.2)
         shell.settle()
         assert state.project.value.active_set == sid and state.project.value.locked
-        assert state.active_step.value == step_index("analysis")
-        assert shell.tiles["stage_host"].visible is True
+        assert state.screen.value == "analysis"
+        assert shell.tiles["layout"].shown[-1] is True
+        assert state.active_step.value == 0, "entering the analysis screen moved the workflow"
         assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == -1
 
         # A review Save: commit under the project's writer mark (record_review)
@@ -366,7 +381,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         shell.settle()
 
         # A layer build lands its legend on its own worker thread: MapLegend
-        # re-renders there (the Analysis step hides it, as the props say).
+        # re-renders there (the analysis screen hides it, as the props say).
         builds = []
         monkeypatch.setattr(map_layers, "spawn_in_context",
                             lambda target, *a, **kw: builds.append(spawn_in_context(target, *a, **kw)))

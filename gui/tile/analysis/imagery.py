@@ -38,7 +38,10 @@ second one draws the scene the timeline no longer says is chosen.
 import logging
 from contextlib import nullcontext
 
+import math
+
 import ee
+from shapely.geometry import box
 
 from deforestation_alerts.scripts.mosaics_helper import (
     SFIM_pan_sharpen,
@@ -50,6 +53,7 @@ from gui.scripts import raster_map
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
+from gui.tile.analysis.state import IMAGE_AREAS
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -164,6 +168,61 @@ def rebuild_image(source, keys, geom):
     return ee.ImageCollection([ee.Image(k) for k in keys]).mosaic().clip(geom)
 
 
+# ------------------------------------------------------------------ the area
+
+#: The download grid's cell, in metres (256 px at zoom-15 Web Mercator): the
+#: image area is snapped out to it, so it is the most the snap can add.
+GRID_M = 1 * 256 * 4.77
+
+
+def alert_extent(bb_geojson, margin_m):
+    """``(bb, grid)``: the alert's box grown by ``margin_m`` metres (an
+    ``ee.Feature``), and that box snapped out to the download grid (an
+    ``ee.Geometry``) -- the area the panes, the CNN, the GIF and the exports
+    clip their images to. Lazy: no Earth Engine call is made here."""
+    bb = ee.Feature(bb_geojson).buffer(margin_m, 1).bounds(1)
+    grid = bb.geometry().coveringGrid("EPSG:3857", GRID_M)
+    return bb, grid.geometry().bounds(1)
+
+
+def area_box(bbox, margin_m):
+    """The shapely box the granules of a larger image area are looked up in:
+    ``bbox`` grown by ``margin_m`` plus one grid cell (what the snap may add),
+    in degrees at the box's latitude."""
+    pad = margin_m + GRID_M
+    minx, miny, maxx, maxy = bbox.bounds
+    dy = pad / 111320.0
+    dx = pad / (111320.0 * max(math.cos(math.radians((miny + maxy) / 2.0)), 0.01))
+    return box(minx - dx, miny - dy, maxx + dx, maxy + dy)
+
+
+def set_image_area(widgets, analysis) -> None:
+    """Follow ``analysis.image_area`` for the alert on screen: a new clip area
+    (``widgets.actual_bb`` / ``actual_alert_grid``), the granules that fill it
+    (``imagery_ctx["area_bbox"]``, then the timeline's ``timeline_rekey``),
+    and a redraw of both panes (``area_rev``).
+
+    A CNN prediction ran on the previous area's composite, so it is dropped,
+    as an imagery change drops it -- without marking the review unsaved: the
+    area is not part of what a save stores. Ignored while the published
+    context is not the current alert's (``reset_alert`` puts the area back to
+    normal before the next alert's context exists)."""
+    ctx = widgets.imagery_ctx.value
+    geo = getattr(widgets, "actual_bb_geojson", None)
+    if ctx is None or geo is None or ctx.get("token") != analysis.alert_token.value:
+        return
+    key = analysis.image_area.value if analysis.image_area.value in IMAGE_AREAS else "normal"
+    margin = IMAGE_AREAS[key]
+    widgets.actual_bb, widgets.actual_alert_grid = alert_extent(geo, margin)
+    widgets.imagery_ctx.value = {**ctx, "area_bbox": None if key == "normal" else area_box(ctx["bbox"], margin)}
+    rekey = getattr(widgets, "timeline_rekey", None)
+    if rekey is not None:
+        rekey()
+    analysis.prediction_files.set({})
+    analysis.prediction_shapes.set({})
+    analysis.area_rev.set(analysis.area_rev.value + 1)
+
+
 # ------------------------------------------------------------------ the panes
 
 
@@ -184,15 +243,15 @@ def _wanted(analysis, token, fresh) -> bool:
 
 def _gated(map_element, analysis, token, fresh=None):
     """``map_element``'s layer adds, each run only while this rebuild is still
-    the one its pane waits for (``LockedMap.gated``, ``_wanted``); a plain map
-    (tests) adds as before."""
+    the one its pane waits for (``PaneTarget.gated``, ``_wanted``); a plain
+    stand-in (tests) adds as before."""
     gated = getattr(map_element, "gated", None)
     if gated is None:
         return nullcontext()
 
-    def _add_if_wanted(add):
+    def _add_if_wanted(write):
         analysis.apply_if_current(
-            token, lambda: add() if (fresh is None or fresh()) else None
+            token, lambda: write() if (fresh is None or fresh()) else None
         )
 
     return gated(_add_if_wanted)
@@ -254,7 +313,7 @@ def image_slider_map_callback(
 
     # Each add blocks (getMapId, the tile server) and then lands only while
     # this alert is still current: an alert change meanwhile has cleared the
-    # maps for the next one (``vis_sync.clear_alert_layers``, after
+    # views for the next one (``PaneLayers.clear("alert")``, after
     # ``reset_alert``), which must not get this alert's layers.
     with _gated(map_element, analysis, token, fresh):
         map_element.addLayer(img, vis1, "True Color", True)
@@ -268,7 +327,7 @@ def image_slider_map_callback(
                 raster_map.add_raster_layer(
                     map_element, combined, key="original-alert", name="Original Alert",
                     band=3, opacity=0.5,
-                    visible=False,  # off by default, as before; the map's layer control shows it
+                    visible=False,  # off by default, as before; the view's layer menu shows it
                 )
             except Exception:
                 logger.exception("Analysis imagery: failed to add the Original Alert layer")
@@ -348,9 +407,17 @@ def wire_panes(widgets, analysis, selected_alerts_model):
 
             spawn_in_context(_work)
 
-        return info_reactive.subscribe(_on_pick)
+        # A new image area (``set_image_area``) redraws the same pick over it.
+        off_pick = info_reactive.subscribe(_on_pick)
+        off_area = analysis.area_rev.subscribe(_on_pick)
+
+        def _off():
+            off_pick()
+            off_area()
+
+        return _off
 
     return (
-        _wire(0, analysis.before_info, analysis.before_keys, widgets.map_before),
-        _wire(1, analysis.after_info, analysis.after_keys, widgets.map_after),
+        _wire(0, analysis.before_info, analysis.before_keys, widgets.pane_before),
+        _wire(1, analysis.after_info, analysis.after_keys, widgets.pane_after),
     )

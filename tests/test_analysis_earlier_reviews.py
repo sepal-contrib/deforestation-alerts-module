@@ -4,17 +4,10 @@ import geopandas as gpd
 import solara
 from shapely.geometry import Point
 
-from gui.tile.analysis import earlier, vis_sync
-from gui.tile.analysis.earlier import EARLIER_LAYER_NAME
+from gui.tile.analysis import earlier
+from gui.tile.analysis.earlier import EARLIER_ID, EARLIER_LAYER_NAME
 from gui.tile.analysis.state import AnalysisState
-
-
-class _Map:
-    def __init__(self):
-        self.layers = ()
-
-    def add_layer(self, layer):
-        self.layers = (*self.layers, layer)
+from tests._pane_helpers import make_panes
 
 
 def _fc(n):
@@ -36,21 +29,26 @@ def _setup(monkeypatch, n=2):
                            crs="EPSG:4326")
     app_state = SimpleNamespace(alerts_gdf=solara.reactive(gdf), actual_alert_id=solara.reactive(0),
                                 project=solara.reactive(object()))
-    widgets = SimpleNamespace(map_before=_Map(), map_after=_Map())
+    widgets = SimpleNamespace(panes=make_panes())
     return widgets, AnalysisState(), app_state, calls
 
 
-def _earlier(a_map):
-    return [lyr for lyr in a_map.layers if lyr.name == EARLIER_LAYER_NAME]
+def _earlier(widgets):
+    """The overlay's spec on the views, as a list (empty when it is off)."""
+    spec = widgets.panes.spec(EARLIER_ID)
+    return [] if spec is None else [spec]
 
 
-def test_switch_on_adds_one_layer_to_both_maps(monkeypatch):
+def test_switch_on_adds_one_layer_to_every_view(monkeypatch):
     widgets, analysis, app_state, calls = _setup(monkeypatch)
     analysis.show_earlier_reviews.set(True)
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
-    for m in (widgets.map_before, widgets.map_after):
-        (layer,) = _earlier(m)
-        assert len(layer.data["features"]) == 2
+    (spec,) = _earlier(widgets)
+    assert (spec["view"], spec["group"], spec["name"]) == ("all", "earlier", EARLIER_LAYER_NAME)
+    assert spec["style"] == {"weight": 2, "fill": False}
+    assert len(spec["data"]["features"]) == 2
+    first = spec["data"]["features"][0]["properties"]
+    assert first["status"] == "Confirmed" and first["style"]["color"] == "#d32f2f"
     assert calls == [("s2", 1.0, 2.0, 1000.0)]
 
 
@@ -60,7 +58,7 @@ def test_switch_off_removes_it(monkeypatch):
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     analysis.show_earlier_reviews.set(False)
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
-    assert not _earlier(widgets.map_before) and not _earlier(widgets.map_after)
+    assert not _earlier(widgets)
 
 
 def test_a_new_distance_replaces_the_layer(monkeypatch):
@@ -70,22 +68,23 @@ def test_a_new_distance_replaces_the_layer(monkeypatch):
     analysis.earlier_radius_km.set(5)
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     assert calls[-1][3] == 5000
-    assert len(_earlier(widgets.map_before)) == 1 and len(_earlier(widgets.map_after)) == 1
+    assert widgets.panes.ids() == [EARLIER_ID]
 
 
 def test_the_next_alert_redraws_for_its_point(monkeypatch):
     widgets, analysis, app_state, calls = _setup(monkeypatch)
     analysis.show_earlier_reviews.set(True)
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
-    # what an alert change does: clear the alert layers, reset, then view
+    # what an alert change does: clear the alert layers and the overlay,
+    # reset, then view
     app_state.actual_alert_id.set(1)
-    for m in (widgets.map_before, widgets.map_after):
-        vis_sync.clear_alert_layers(m)
-        assert not _earlier(m)
+    widgets.panes.clear("alert")
+    earlier.remove_earlier_layer(widgets)
+    assert not _earlier(widgets)
     analysis.reset_alert()
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     assert (calls[-1][1], calls[-1][2]) == (3.0, 4.0)
-    assert len(_earlier(widgets.map_before)) == 1
+    assert len(_earlier(widgets)) == 1
     assert analysis.show_earlier_reviews.value is True  # the switch survives the alert
 
 
@@ -100,7 +99,7 @@ def test_a_stale_result_is_dropped(monkeypatch):
 
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", slow)
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
-    assert not _earlier(widgets.map_before) and not _earlier(widgets.map_after)
+    assert not _earlier(widgets)
 
 
 def test_none_found_reports_zero(monkeypatch):
@@ -115,7 +114,7 @@ def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
-    field = controls.children[1].children[0]
+    field = controls.field
     for bad in ("0", "abc", "51"):
         field.v_model = bad
         assert field.error_messages and analysis.earlier_radius_km.value == 1.0
@@ -174,7 +173,7 @@ def test_a_load_in_flight_does_not_re_add_the_layer_after_the_switch_goes_off(mo
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     gates[0].set()
     th.join(5)
-    assert not _earlier(widgets.map_before) and not _earlier(widgets.map_after)
+    assert not _earlier(widgets)
 
 
 def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
@@ -190,8 +189,8 @@ def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
     new.join(5)
     gates[0].set()                                    # the 1 km load ends last
     old.join(5)
-    (layer,) = _earlier(widgets.map_before)
-    assert len(layer.data["features"]) == 5
+    (spec,) = _earlier(widgets)
+    assert len(spec["data"]["features"]) == 5
 
 
 def test_the_caption_is_cleared_when_a_refresh_starts(monkeypatch):
@@ -216,11 +215,10 @@ def test_view_actual_alert_loads_off_the_calling_thread(monkeypatch):
     app_state.project = solara.reactive(None)
     monkeypatch.setattr(analysis_tile, "active_set", lambda p: None)
     monkeypatch.setattr(analysis_tile.set_store, "alerts_belong_to", lambda g, s: True)
-    monkeypatch.setattr(analysis_tile, "ee", MagicMock())
+    monkeypatch.setattr(analysis_tile, "alert_extent", lambda geo, m: (MagicMock(), MagicMock()))
     spawned = []
     monkeypatch.setattr(earlier, "spawn_in_context", lambda fn, args=(): spawned.append((fn, args)))
     widgets = MagicMock()
-    widgets.map_before.layers = widgets.map_after.layers = ()
     analysis.show_earlier_reviews.set(True)
     app_state.project = SimpleNamespace(value=SimpleNamespace(questions=[]))
     analysis_tile.view_actual_alert(widgets, app_state, analysis, SimpleNamespace(),
@@ -237,12 +235,28 @@ def test_a_raising_read_on_the_worker_is_logged_and_leaves_the_panel_usable(monk
 
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", boom)
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
-    switch = controls.children[0]
+    switch = controls.switch
     with caplog.at_level("ERROR", logger="SEPALUI.deforestation_alerts"):
         switch.v_model = True  # runs the spawned refresh, which raises
     assert any("earlier-reviews overlay failed" in r.message and r.exc_info for r in caplog.records)
-    assert _earlier(widgets.map_before) == []
+    assert _earlier(widgets) == []
     # the next refresh still works once the read recovers
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", lambda *a, **k: _fc(1))
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
-    assert len(_earlier(widgets.map_before)) == 1
+    assert len(_earlier(widgets)) == 1
+
+
+def test_the_section_badge_says_off_nearby_or_none():
+    assert earlier.badge_text(False, 3, 1.0) == earlier.t("analysis_tile.earlier.badge_off")
+    assert earlier.badge_text(True, None, 1.0) == ""  # a refresh is running
+    assert earlier.badge_text(True, 0, 2.5) == earlier.t("analysis_tile.earlier.badge_none", km="2.5")
+    assert earlier.badge_text(True, 3, 1.0) == earlier.tn("analysis_tile.earlier.badge_nearby", 3)
+
+
+def test_the_switch_and_a_result_move_the_badge(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch, n=2)
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]
+    section.switch.v_model = True
+    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 2)]

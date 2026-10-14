@@ -54,7 +54,7 @@ def build_footer(run_save, export_root, app_state, analysis):
                                 v.Icon(right=True, children=["mdi-arrow-right"])])
     save = v.Btn(outlined=True, style_="height: 44px;",
                  children=[t("analysis_tile.export_labels.save_btn")])
-    state_line = v.Html(tag="div", class_="caption mt-2", children=[])
+    state_line = v.Html(tag="div", class_="dat-caption mt-2", children=[])
 
     save.on_event("click", lambda *_: run_save(save))
     save_next.on_event("click", lambda *_: run_save(save_next, then=app_state.go_next))
@@ -71,20 +71,20 @@ def build_footer(run_save, export_root, app_state, analysis):
             # it rather than leaving the refusal to the click. Ahead of
             # "Unsaved changes": applying is what clears both.
             state_line.children = [t("analysis_tile.edition_labels.unapplied_drawing")]
-            state_line.class_ = "caption mt-2 warning--text"
+            state_line.class_ = "dat-caption mt-2 warning--text"
             return
         if analysis.dirty.value:
             state_line.children = [t("analysis_tile.verdict.unsaved")]
-            state_line.class_ = "caption mt-2 warning--text"
+            state_line.class_ = "dat-caption mt-2 warning--text"
             return
         when = analysis.last_save_time.value
         if when:
             state_line.children = [t("analysis_tile.verdict.saved_at",
                                      time=datetime.fromtimestamp(when).strftime("%H:%M"))]
-            state_line.class_ = "caption mt-2 success--text"
+            state_line.class_ = "dat-caption mt-2 success--text"
         else:
             state_line.children = []
-            state_line.class_ = "caption mt-2"
+            state_line.class_ = "dat-caption mt-2"
 
     # Registered once: the panel is built once per session.
     analysis.dirty.subscribe(_sync_state_line)

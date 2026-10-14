@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -8,17 +9,20 @@ import ipyvuetify as v
 import pytest
 import reacton
 import solara
+from pysepal.sepalwidgets.file_input import FileInput
 from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 
-from deforestation_alerts.project import io, paths
-from deforestation_alerts.project.models import AoiRecord, add_predefined_source
+from deforestation_alerts.project import io, paths, share
+from deforestation_alerts.project.models import AoiRecord, ReviewCopy, add_predefined_source
 from gui.i18n import t
+from gui.scripts.alert_filter import AlertFilter
 from gui.store.autosave import install_autosave
 from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.store.workflow_steps import step_index
 from gui.tile import project_dialog as pd
+from gui.tile.analysis.state import AnalysisState
 from gui.widget.enter_key import ENTER_DEFAULT
 
 
@@ -72,9 +76,9 @@ def test_folder_size_counts_the_files_and_never_follows_a_link(tmp_path):
 # new / duplicate, delete.
 # ---------------------------------------------------------------------------
 @solara.component
-def _Harness(app_state, dismiss):
+def _Harness(app_state, dismiss, analysis=None):
     NotificationProvider()  # the dialog's use_notifications() needs it rendered first
-    pd.ProjectDialog(app_state=app_state, dismiss=dismiss)
+    pd.ProjectDialog(app_state=app_state, dismiss=dismiss, analysis=analysis)
 
 
 @pytest.fixture
@@ -84,7 +88,11 @@ def dialog(monkeypatch, tmp_path):
     dialog itself is tested in tests/test_manage_projects.py). The delete
     confirmation is the real one."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    ns = SimpleNamespace(manage=[], dismissed=0, root=tmp_path, state=AppState())
+    ns = SimpleNamespace(manage=[], dismissed=0, root=tmp_path, state=AppState(), analysis=AnalysisState(),
+                         filters=[])
+    # The start filter's own behaviour is T5's (tests/test_alert_filter_state.py);
+    # here: which filter the dialog sets, on which AnalysisState.
+    monkeypatch.setattr(pd, "apply_start_filter", lambda analysis, f: ns.filters.append((analysis, f)))
 
     @solara.component
     def _RecorderManage(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
@@ -99,7 +107,8 @@ def dialog(monkeypatch, tmp_path):
     def _dismiss():
         ns.dismissed += 1
 
-    ns.render = lambda: reacton.render(_Harness(app_state=ns.state, dismiss=_dismiss), handle_error=False)
+    ns.render = lambda: reacton.render(_Harness(app_state=ns.state, dismiss=_dismiss, analysis=ns.analysis),
+                                       handle_error=False)
     yield ns
     unsubscribe()
 
@@ -696,6 +705,294 @@ def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
                 _button(_open_form(rc), t("common.cancel")).fire_event("click", None)
                 await _settle(lambda: not _open_form(rc).widgets, "the name form closed")
         finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_review_copy_offers_no_duplicate(dialog):
+    """Spec §6.3: Duplicate is hidden for a review copy (New and Manage stay)."""
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            p = pd.create_project("c")
+            p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
+                                       set_fingerprint="f", origin_project="orig", imported_at=datetime.now())
+            dialog.state.new_project_state(p)
+            await _settle(lambda: any(t("steps.project.manage") in w.children for w in rc.find(v.Btn).widgets),
+                          "the open project's buttons")
+            labels = [c for w in rc.find(v.Btn).widgets for c in w.children if isinstance(c, str)]
+            assert t("steps.project.new") in labels and t("steps.project.duplicate") not in labels
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------------------
+# Import (spec 2026-10-10 §6.1, §6.2): a review package becomes a review
+# copy, which opens on Analysis filtered to its evaluator.
+# ---------------------------------------------------------------------------
+def _review_copy(name="c__e01-ana", evaluator="Ana"):
+    p = pd.create_project(name)
+    p.review_copy = ReviewCopy(evaluator=evaluator, evaluator_index=1, set_id="s", split_id="sp",
+                               set_fingerprint="fp", origin_project="c", imported_at=datetime.now())
+    return p
+
+
+def _header(kind=None, evaluator="Ana"):
+    return SimpleNamespace(kind=kind or share.KIND_PACKAGE, evaluator=evaluator, split_id="sp", origin_project="c")
+
+
+async def _import_zip(rc, path):
+    _button(rc, t("steps.project.import")).fire_event("click", None)
+    await _settle(lambda: _open_form(rc).widgets, "the import form opened")
+    _open_form(rc).find(FileInput).widget.v_model = str(path)
+
+
+def _ana_filter():
+    return AlertFilter("evaluator", frozenset({"Ana"}))
+
+
+def test_import_is_offered_with_and_without_an_open_project(dialog):
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            assert _button(rc, t("steps.project.import")).block  # the empty state's column of buttons
+            dialog.state.new_project_state(pd.create_project("b"))
+            await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
+                                      for w in rc.find(v.Btn).widgets), "Import beside New and Manage")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_import_refuses_a_reviewed_copy(dialog, monkeypatch):
+    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header(kind=share.KIND_RETURN))
+    imported = []
+    monkeypatch.setattr(pd.share, "import_package", lambda path, root=None: imported.append(path))
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "c__x__e01-ana__reviewed.zip")
+            await _settle(lambda: t("share.err.is_return") in _toasts("error"), "the refusal toast")
+            assert imported == [] and dialog.state.project.value is None and dialog.dismissed == 0
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_imported_package_opens_on_analysis_filtered_to_its_evaluator(dialog, monkeypatch):
+    def _import(path, root=None):
+        made = _review_copy()
+        io.save_project(made)
+        return made
+
+    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header())
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
+    monkeypatch.setattr(pd.share, "import_package", _import)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
+                          "the copy installed")
+            assert dialog.state.current_page_view.value == "analysis_tile"
+            assert dialog.filters == [(dialog.analysis, _ana_filter())]
+            await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
+            assert t("steps.project.imported", name="c__e01-ana") in _toasts("success")
+            assert not _open_form(rc).widgets  # the import form closed too
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize("answer", ["open", "new"])
+def test_a_package_imported_before_asks_to_open_that_copy_or_import_a_new_one(dialog, monkeypatch, answer):
+    io.save_project(_review_copy())
+    made = []
+
+    def _import(path, root=None):
+        p = _review_copy("c__e01-ana-2")
+        io.save_project(p)
+        made.append(p.name)
+        return p
+
+    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header())
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: "c__e01-ana")
+    monkeypatch.setattr(pd.share, "import_package", _import)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+            message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
+            await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
+            assert made == []  # nothing imported before the answer
+            label = t("steps.project.import_open_existing") if answer == "open" else t("steps.project.import_as_new")
+            _button(_open_form(rc), label).fire_event("click", None)
+            expected = "c__e01-ana" if answer == "open" else "c__e01-ana-2"
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == expected, f"{expected} open")
+            assert made == ([] if answer == "open" else ["c__e01-ana-2"])
+            assert dialog.state.current_page_view.value == "analysis_tile"
+            assert dialog.filters[-1] == (dialog.analysis, _ana_filter())
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_open_existing_copy_on_the_open_copy_lands_again_without_a_reload(dialog, monkeypatch):
+    """Spec §6.2: the copy is open, but its user left Analysis (or cleared the
+    filter); re-picking its package and choosing Open existing copy lands it
+    again, from memory, not read back from disk."""
+    loads = []
+    monkeypatch.setattr(pd.share, "peek_header", lambda path: _header())
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: "c__e01-ana")
+    monkeypatch.setattr(pd.share, "import_package", lambda path, root=None: pytest.fail("imported"))
+    monkeypatch.setattr(pd.io, "load_project", lambda name, *a, **k: loads.append(name))
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            dialog.state.new_project_state(_review_copy())
+            dialog.state.current_page_view.value = "aoi_tile"
+            await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
+                                      for w in rc.find(v.Btn).widgets), "the open copy's buttons")
+            assert dialog.filters == []
+            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+            message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
+            await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
+            _button(_open_form(rc), t("steps.project.import_open_existing")).fire_event("click", None)
+            await _settle(lambda: dialog.state.current_page_view.value == "analysis_tile", "back on Analysis")
+            assert dialog.filters == [(dialog.analysis, _ana_filter())]
+            assert loads == [] and dialog.dismissed == 1
+            assert dialog.state.project.value.name == "c__e01-ana"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
+    io.save_project(_review_copy())
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _settle(lambda: "c__e01-ana" in (_listed(dialog) or {}), "the copy listed")
+            _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
+            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+            _open_from_manage(dialog, "c__e01-ana")
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
+                          "the copy opened")
+            assert dialog.state.current_page_view.value == "analysis_tile"
+            assert dialog.filters == [(dialog.analysis, _ana_filter())]
+            await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_import_toasts_and_opens_nothing(dialog, monkeypatch):
+    def _fail(path, root=None):
+        raise OSError("disk full")
+
+    peeked = []
+
+    def _peek(path):
+        peeked.append(path)
+        return _header()
+
+    monkeypatch.setattr(pd.share, "peek_header", _peek)
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
+    monkeypatch.setattr(pd.share, "import_package", _fail)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "p.zip")
+            await _settle(lambda: t("steps.project.import_failed", file="p.zip", error="disk full")
+                          in _toasts("error"), "the failure toast")
+            assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
+            # Still usable: the form stays open on a fresh picker, and the
+            # next pick is read (the in-flight guard was released).
+            await _settle(lambda: _open_form(rc).find(FileInput).widgets, "the picker, empty again")
+            _open_form(rc).find(FileInput).widget.v_model = str(dialog.root / "q.zip")
+            await _settle(lambda: len(peeked) == 2, "the second pick read")
+            assert peeked == [str(dialog.root / "p.zip"), str(dialog.root / "q.zip")]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize("stage", ["peek", "import"])
+def test_a_refused_package_toasts_its_own_reason_alone(dialog, monkeypatch, stage):
+    """R4: a ShareError is its own text, never wrapped in ``import_failed``."""
+    refusal = share.ShareError("share.err.import_failed", error="no manifest")
+
+    def _raise(*args, **kwargs):
+        raise refusal
+
+    monkeypatch.setattr(pd.share, "peek_header", _raise if stage == "peek" else (lambda path: _header()))
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
+    monkeypatch.setattr(pd.share, "import_package", _raise)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "p.zip")
+            text = t("share.err.import_failed", error="no manifest")
+            await _settle(lambda: text in _toasts("error"), "the refusal toast")
+            assert not any("p.zip" in m for m in _toasts("error"))  # not wrapped in steps.project.import_failed
+            assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_second_pick_while_an_import_runs_is_dropped(dialog, monkeypatch):
+    """Solara runs on_click/on_value whatever the last render disabled: the
+    in-flight guard keeps a second pick from starting a second import."""
+    release = threading.Event()
+    peeked = []
+
+    def _peek(path):
+        peeked.append(path)
+        release.wait(SETTLE_SECONDS)
+        return _header()
+
+    def _import(path, root=None):
+        made = _review_copy()
+        io.save_project(made)
+        return made
+
+    monkeypatch.setattr(pd.share, "peek_header", _peek)
+    monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
+    monkeypatch.setattr(pd.share, "import_package", _import)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            await _import_zip(rc, dialog.root / "a.zip")
+            await _settle(lambda: peeked, "the first pick read")
+            await _settle(lambda: _open_form(rc).find(FileInput).widgets, "the picker remounted")
+            _open_form(rc).find(FileInput).widget.v_model = str(dialog.root / "b.zip")
+            release.set()
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
+                          "the copy installed")
+            await asyncio.sleep(0.2)
+            assert peeked == [str(dialog.root / "a.zip")]
+        finally:
+            release.set()
             rc.close()
 
     asyncio.run(main())

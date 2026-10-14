@@ -15,6 +15,9 @@ masks, all cut to the old AOI) leave the map first, as a period's do
 ``app_state.aoi_result`` is what downloads and previews clip to, so it only
 holds a pick the open project took: the saved AOI replayed on load, or a new
 AOI once it is saved. A rejected pick leaves it alone.
+
+A review copy (spec §6.3) shows no picker: its AOI is its package's sidecar,
+never replayed from the creator's admin code or asset.
 """
 
 import asyncio
@@ -29,9 +32,11 @@ from pysepal.solara.components.aoi.aoi_spec import AoiSpec
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import cleanup, paths
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts import aoi_io
+from gui.scripts.setup_guard import banner_text
 from gui.store.project_writers import is_writing, writing
 from gui.tile.project_dialog import create_project, names_on_disk
 from gui.widget.help import StepIntro
@@ -67,7 +72,8 @@ def AoiStep(app_state, map_, gee_interface, layers):
     signal = app_state.project_loaded_signal.value
     loading = solara.use_reactive(False)
     locked = p is not None and p.locked
-    spec = AoiSpec.from_dict(p.aoi.spec) if p is not None and p.aoi and p.aoi.spec else None
+    ro = read_only(p)  # a review copy: the header's banner says why (spec §6.3)
+    spec = AoiSpec.from_dict(p.aoi.spec) if p is not None and p.aoi and p.aoi.spec and not ro else None
 
     created_here = solara.use_ref(None)  # the name of a project this step just created
     key_ref = solara.use_ref((signal, f"aoi-{signal}"))
@@ -130,6 +136,9 @@ def AoiStep(app_state, map_, gee_interface, layers):
             return
         if current.aoi is not None and current.aoi.digest == record.digest:
             app_state.aoi_result.set(result)  # a restore replaying the saved AOI
+            return
+        if read_only(current):  # spec §6.3: a review copy's AOI is the creator's
+            notifications.warning(banner_text(current))
             return
         if current.locked:
             notifications.warning(t("steps.aoi.locked"))
@@ -195,12 +204,19 @@ def AoiStep(app_state, map_, gee_interface, layers):
     )
 
     with solara.Column(style="gap:16px;").key(column_key):
-        solara.Markdown(f"### {t('steps.aoi.title')}")
         StepIntro(t("steps.aoi.description"), t("steps.aoi.info_header"), t("steps.aoi.info_md"))
-        if locked:
+        if locked and not ro:
             # Inline on purpose: a persistent state description, not the outcome
             # of an action (spec §11 routes outcomes through notifications).
             rv.Alert(type="info", dense=True, text=True, children=[t("steps.aoi.locked")])
+        if ro:
+            # A review copy's AOI is its package's sidecar (spec §5.3, §6.3):
+            # no picker, so the creator's admin code or asset is never
+            # replayed through GAUL or Earth Engine, and ``aoi_result`` stays
+            # unset (``aoi_io.ee_aoi`` then clips to the sidecar).
+            if p.aoi is not None:
+                solara.Text(p.aoi.name, style="font-weight:500;")
+            return
         # Keyed: the alert appearing above must not remount the picker (its
         # unmount clears the AOI from the map and the remount replays it).
         with rv.Html(tag="div", style_="pointer-events:none;opacity:0.6;" if locked else "").key("aoi-view"):

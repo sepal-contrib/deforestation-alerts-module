@@ -98,7 +98,7 @@ SAME_IN = {
         "steps.questionnaire.field_option", "steps.questionnaire.options_label",
         "workflow.count_sources.one", "workflow.count_sources.many", "workflow.count_sources.other",
         # "questionnaire", "question(s)" and "option(s)" are the same words in French.
-        "app.drawer_item.questionnaire", "steps.questionnaire.title", "steps.questionnaire.questions_title",
+        "app.drawer_item.questionnaire", "steps.questionnaire.questions_title",
         "steps.questionnaire.col_question", "steps.questionnaire.tag_options.one",
         "steps.questionnaire.tag_options.other", "workflow.count_questions.one",
         "workflow.count_questions.other", "analysis_tile.sections.questions",
@@ -204,6 +204,7 @@ def _dynamic_keys():
     from deforestation_alerts.project import periods
     from gui.scripts.vis_layers import KINDS, NICFI_COLLECTIONS
     from gui.scripts.vis_palettes import RAMPS, RGB_COMBOS, ROLES
+    from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
@@ -236,6 +237,8 @@ def _dynamic_keys():
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
         # gui.tile.overview_tile's export buttons
         "overview_tile.export_": ["csv", "gpkg", "geojson"],
+        # gui.tile.analysis.timeline's image-area choices
+        "analysis.timeline.area_": list(IMAGE_AREAS),
     }
 
 

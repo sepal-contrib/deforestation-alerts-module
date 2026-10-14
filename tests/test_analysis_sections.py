@@ -24,6 +24,7 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
 
 
 @pytest.fixture(autouse=True)
@@ -86,11 +87,11 @@ def _controls(tmp_path, monkeypatch):
 
     The heavy widgets are only touched inside the edit/CNN handlers (as
     tests/test_feedback_notifications.py's ``edit_tools_card`` relies on), by
-    the refine section's alert-change reset, which clears the two maps' draw
-    controls, and by ``wire_defo_layer``, which draws a set polygon on both
-    maps -- so a namespace with those four is enough to assemble the panel and
-    to drive a drawing and an alert change through it without a
-    caught-and-logged traceback in the way.
+    the refine section's alert-change reset, which clears the views' drawing,
+    and by ``wire_defo_layer``, which draws a set polygon on the views -- so a
+    namespace with real ``panes`` (headless, ``tests/_pane_helpers``) is
+    enough to assemble the panel and to drive a drawing and an alert change
+    through it without a caught-and-logged traceback in the way.
     """
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
@@ -99,11 +100,8 @@ def _controls(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
-    draw = SimpleNamespace(clear=lambda: None)
-    shown_map = SimpleNamespace(add_layer=lambda *_: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw,
-                                map_before=shown_map, map_after=shown_map),
+        widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis,
@@ -120,8 +118,10 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
-    *head, block_a, block_b, _earlier, questions, refine, footer = panel.controls.children
-    assert len(head) == 3                       # help + selector + banner
+    banner, block_a, block_b, questions, refine, earlier, footer = panel.controls.children
+    # the help, the set selector and the navigation went to the top bar
+    assert panel.sections.topnav is not None
+    assert earlier is panel.sections.earlier.root
     # What each block OWNS, named. ``facts_widgets`` returns a tuple and
     # ``verdict_widgets`` a dict, both checked by their contents below: a bare
     # ``assert <the accessor's result>`` only ever catches the AttributeError
@@ -264,3 +264,25 @@ def test_an_alert_change_takes_the_refine_badges_emphasis_with_it(tmp_path, monk
 
     assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
     assert not refine.badge.color
+
+
+def test_the_top_bar_navigation_holds_the_selector_the_queue_and_the_buttons(tmp_path, monkeypatch):
+    from gui.tile.analysis import context
+
+    panel = _controls(tmp_path, monkeypatch)
+    block_a = panel.controls.children[1]
+    prev, nxt, jump, menu, _go, _unreviewed = context.nav_widgets(block_a)
+    counter, tally, bar = context.queue_widgets(block_a)
+
+    def walk(w):
+        yield w
+        for c in getattr(w, "children", None) or []:
+            if not isinstance(c, str):
+                yield from walk(c)
+
+    inside = list(walk(panel.sections.topnav))
+    assert all(any(x is w for x in inside) for w in (prev, nxt, menu, tally, bar))
+    assert any(isinstance(w, v.Select) for w in inside)  # the alert-set selector
+    # and none of them is in the panel any more
+    in_panel = list(walk(panel.controls))
+    assert not any(x is prev or x is counter for x in in_panel)

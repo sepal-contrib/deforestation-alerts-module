@@ -10,7 +10,9 @@ import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine import grid as gridmod
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import format_number, t
+from gui.scripts.setup_guard import update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.text_style import MUTED
 
@@ -63,7 +65,7 @@ def GridForm(app_state):
         return  # being unmounted: the step shows its lock message instead
     default_res = gridmod.default_resolution(p)
     _GridFields(
-        app_state=app_state, name=p.name, bounds=tuple(p.aoi.bounds), grid=p.grid, locked=p.locked,
+        app_state=app_state, name=p.name, bounds=tuple(p.aoi.bounds), grid=p.grid, locked=p.locked or read_only(p),
         default_res=default_res,
     ).key(f"grid-{app_state.project_loaded_signal.value}-{p.aoi.digest}-{default_res}")
 
@@ -93,8 +95,8 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
             else:
                 live.grid = new
 
-        if not app_state.update_project(name, _apply):
-            return  # the project was closed or switched meanwhile
+        if not update_setup(app_state, name, _apply, notifications):
+            return  # closed or switched meanwhile, or a review copy (refused with a warning)
         if refused:
             notifications.warning(t(refused[0]))
             return

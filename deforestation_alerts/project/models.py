@@ -255,6 +255,43 @@ class AlertSetParams(BaseModel):
         return [self.attribute_config] if self.attribute_config else []
 
 
+class EvaluatorReturn(BaseModel):
+    """What merging one evaluator's reviewed copy did (spec §3, §7.4)."""
+
+    merged_at: datetime
+    taken: int  # rows written
+    unchanged: int  # rows identical to the stored row
+    conflicts: int  # rows the creator had reviewed differently
+    choice: Optional[Literal["mine", "theirs"]] = None  # None when conflicts == 0
+    ignored: int  # rows not assigned to this evaluator / unknown alert ids
+
+
+class EvaluatorSplit(BaseModel):
+    """A set's alerts dealt between evaluators (spec §3, §4.1). The store's
+    ``evaluator`` column holds each alert's name; this is the record of it."""
+
+    split_id: str  # uuid4 hex, new on every (re-)split
+    evaluators: list[str]  # unique (casefold), stripped, non-empty, 1..50
+    include_reviewed: bool = False
+    created_at: datetime
+    packaged: bool = False  # set once any package was built (re-split warns)
+    questions_digest: str = ""  # the questionnaire's digest when packaged (spec §7.1)
+    returns: dict[str, EvaluatorReturn] = Field(default_factory=dict)  # by evaluator name
+
+
+class ReviewCopy(BaseModel):
+    """What makes a project an evaluator's review copy (spec §6): the package
+    it was imported from. Setup is read-only while it is set."""
+
+    evaluator: str
+    evaluator_index: int  # 1-based position in split.evaluators (file names, spec §5)
+    set_id: str
+    split_id: str
+    set_fingerprint: str
+    origin_project: str
+    imported_at: datetime
+
+
 class AlertSet(BaseModel):
     id: str
     period_id: str
@@ -272,6 +309,9 @@ class AlertSet(BaseModel):
     last_alert_index: int = 0
     fingerprint: str
     created_at: datetime
+    #: the evaluator split (spec §3); not part of the set's fingerprint, and a
+    #: re-run builds a new AlertSet, so re-integration clears it
+    split: Optional[EvaluatorSplit] = None
 
 
 #: The stored review statuses a question can be asked for (the alert store's
@@ -362,13 +402,27 @@ class Project(BaseModel):
     active_set: Optional[str] = None
     report_template: Optional[str] = None
     questions: list[Question] = Field(default_factory=default_questions)
+    #: whether Analysis shows its Questions section open or collapsed
+    questions_expanded: bool = False
+    #: set when this project was imported from a review package (spec §6)
+    review_copy: Optional[ReviewCopy] = None
+    #: whether the Evaluators step splits the alerts between evaluators; off,
+    #: the project is a solo evaluation
+    multi_evaluator: bool = False
 
     @model_validator(mode="before")
     @classmethod
     def _periods_inherit_look_back(cls, data):
         """A period stored before look-back moved onto periods takes the
-        project's value, so its window (and every fingerprint) is unchanged."""
+        project's value, so its window (and every fingerprint) is unchanged.
+        A project stored before the evaluator switch is multi-evaluator when
+        any of its sets was split, so its Evaluators step keeps its panel."""
         if isinstance(data, dict):
+            if "multi_evaluator" not in data:
+                sets = data.get("alert_sets") or {}
+                split = any((v.get("split") if isinstance(v, dict) else getattr(v, "split", None))
+                            for v in sets.values())
+                data = {**data, "multi_evaluator": split}
             days = data.get("look_back_days", 90)
             periods_ = data.get("periods") or {}
             if any(isinstance(v, dict) and "look_back_days" not in v for v in periods_.values()):

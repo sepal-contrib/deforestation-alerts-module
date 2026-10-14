@@ -71,10 +71,19 @@
       "chip_save_failed": "error al guardar",
       "open_instead": "Abrir {name} en su lugar",
       "name_hint": "Letras, dígitos, espacios, '-' y '_'.",
-      "duplicate_failed": "No se pudo duplicar {name}: {error}"
+      "duplicate_failed": "No se pudo duplicar {name}: {error}",
+      "import": "Importar",
+      "import_title": "Importar un paquete de revisión",
+      "import_pick": "Paquete de revisión (.zip)",
+      "import_hint": "Un paquete que el creador del proyecto hizo para ti en el paso Evaluación.",
+      "import_existing_title": "Ya importado",
+      "import_existing_message": "El proyecto {name} ya contiene este paquete para {evaluator}.",
+      "import_open_existing": "Abrir la copia existente",
+      "import_as_new": "Importar como copia nueva",
+      "imported": "{name} importado.",
+      "import_failed": "Falló la importación de {file}. {error}"
     },
     "aoi": {
-      "title": "Área de interés",
       "description": "Elige el área que quieres monitorear. Se guarda con el proyecto y todas las descargas se recortan a ella.",
       "info_header": "Acerca del área de interés",
       "info_md": "Elige el área que este proyecto monitorea: un área administrativa, un polígono que dibujes o un recurso de Earth Engine. Se guarda con el proyecto en cuanto la seleccionas, y todas las descargas se recortan a ella.\n\n- La **cobertura** de cada fuente de alertas sobre esta área se comprueba una vez y se guarda en el proyecto; el paso Alertas la muestra.\n- En cuanto el proyecto tiene un conjunto de alertas, la AOI queda bloqueada: un área nueva invalidaría todas las descargas y todas las huellas. Usa **Duplicar** en el diálogo de proyecto para monitorear otra área con las mismas fuentes, máscaras, capas y cuadrícula.",
@@ -85,7 +94,6 @@
       "busy": "Un trabajo está escribiendo en este proyecto; cambia la AOI cuando termine."
     },
     "alerts": {
-      "title": "Fuentes de alertas",
       "description": "Los conjuntos de datos de alertas que este proyecto monitorea, con la parte de la AOI que cubre cada uno. Cada uno se descarga para cada período, recortado a la AOI y a las fechas del período.",
       "info_header": "Acerca de las fuentes de alertas",
       "info_md": "Una fuente de alertas es un conjunto de datos de alertas de pérdida forestal. Cada píxel de alerta es **confirmado** (confianza alta) o **probable** (confianza baja) y lleva el día en que se detectó por primera vez.\n\n- **Predefinidas:** GLAD-L (Landsat, unos 30 m), GLAD-S2 (Sentinel-2, 10 m) y RADD (Sentinel-1, 10 m). RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.\n- **Personalizadas:** una imagen o colección de imágenes de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL, leído mediante un preajuste de formato: *RADD* (banda de alerta 2 probable, 3 confirmada; fecha `yyddd`), *alertas CCDC de SEPAL* (1–2 detecciones probable, 3 o más confirmada; fecha de primera detección en años decimales) o *solo fecha* (una banda de fecha en la codificación que elijas; todo píxel con fecha está confirmado).\n\nEl chip de cada fila es la **cobertura** de la fuente: la parte de la AOI dentro de su huella. Una fuente que no cubra nada de la AOI no se puede añadir; una cobertura parcial es un aviso. Un proyecto tiene como máximo 3 fuentes predefinidas y 6 personalizadas. Una fuente personalizada se puede editar hasta que un conjunto de alertas la use; después, elimínala y añade una nueva.",
@@ -161,7 +169,6 @@
       "format_label": "Formato de las alertas"
     },
     "layers": {
-      "title": "Capas opcionales",
       "description": "Capas que ayudan a leer las alertas: una imagen de Earth Engine, un GeoTIFF de tu carpeta de SEPAL o Planet NICFI. También se pueden mostrar en los dos mapas de Análisis.",
       "info_header": "Acerca de las capas opcionales",
       "info_md": "Las capas de visualización ayudan a leer el mapa; nunca cambian las alertas.\n\n- **Imagen de Earth Engine** y **GeoTIFF** (en tu carpeta de SEPAL): una banda dibujada con una rampa de color, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- Una capa GeoTIFF: la aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
@@ -243,7 +250,6 @@
       "origin_hint": "Dónde leer el raster"
     },
     "period": {
-      "title": "Períodos",
       "description": "Cada período descarga todas las fuentes en sus fechas más los días de retrospección anteriores. Los píxeles ya reportados por los conjuntos de períodos anteriores se omiten, así que una alerta publicada tarde cae en el conjunto del siguiente período y ningún píxel se reporta dos veces.",
       "info_header": "Acerca de los períodos",
       "info_md": "Un período es una ronda de monitoreo, normalmente un mes. Para cada período, todas las fuentes se descargan en su **ventana de búsqueda**: las fechas del período más los días de **retrospección** anteriores, para que las alertas publicadas tarde también se encuentren.\n\n- Los píxeles ya reportados por los conjuntos de alertas de períodos anteriores se eliminan antes de vectorizar, así que un píxel nunca se reporta dos veces.\n- **Nuevo período** empieza el día siguiente al último período y copia las opciones de máscara de ese período.\n- Las fechas de un período no se pueden cambiar en cuanto tiene conjuntos de alertas. Un período se puede eliminar cuando no tiene conjuntos, o cuando es el último período; sus descargas y archivos se eliminan con él.\n- Selecciona una fila para convertirla en el período activo de Descargar y armonizar e Integrar y vectorizar.",
@@ -305,7 +311,6 @@
       "add": "Añadir período"
     },
     "prepare": {
-      "title": "Descargar y armonizar",
       "description": "Descarga todas las máscaras y fuentes del período activo en su propia proyección, luego las alinea con la cuadrícula del proyecto y aplica las máscaras del período (armonizar). Nada cuyas entradas no hayan cambiado se ejecuta dos veces.",
       "info_header": "Acerca de Descargar y armonizar",
       "info_md": "Este paso prepara todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente se descarga en la ventana de búsqueda del período en su propia proyección, luego se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Ejecutar … pendientes** ejecuta primero las máscaras, luego cada fuente que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
@@ -399,7 +404,6 @@
       "size_note": "{size} en disco"
     },
     "integrate": {
-      "title": "Integrar y vectorizar",
       "description": "Combina las fuentes descargadas, omite los píxeles que un período anterior ya reportó y convierte los grupos en alertas.",
       "info_header": "Acerca de Integrar y vectorizar",
       "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes limitar el número de alertas, ordenadas como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nLos píxeles demasiado pequeños para ser una alerta, o que superan el número máximo de alertas, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Cada fuente tiene un interruptor **incluir alertas probables**; desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, Análisis se abre en el nuevo conjunto.",
@@ -437,6 +441,7 @@
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
+      "replace_split": "Se descartarán el reparto entre evaluadores y sus devoluciones pendientes.",
       "job_title": "Integrar y vectorizar",
       "step_combine": "Combinando fuentes",
       "step_vectorize": "Vectorizando grupos",
@@ -525,7 +530,6 @@
       "err_option_duplicate": "Dos opciones tienen el mismo nombre.",
       "err_option_comma": "Una opción no puede contener una coma.",
       "err_ask_for": "Elija al menos un veredicto.",
-      "title": "Cuestionario",
       "description": "Elija las preguntas que se hacen para cada alerta en Análisis y la plantilla Word del informe.",
       "info_header": "El cuestionario",
       "info_md": "Cada pregunta aparece en la sección Preguntas de Análisis, en este orden. Sus respuestas se guardan con la alerta (una columna por pregunta), se exportan, se grafican en Resumen y el informe puede usarlas como `{{marcador}}`. Al eliminar una pregunta se conservan las respuestas guardadas, pero ya no se muestran, exportan ni grafican.",
@@ -549,10 +553,114 @@
         "other": "{count} alertas del conjunto activo la respondieron. Sus respuestas siguen guardadas, pero ya no se muestran, exportan ni grafican."
       },
       "delete_message_no_set": "Las respuestas ya guardadas con las alertas se conservan, pero ya no se muestran, exportan ni grafican.",
+      "expanded": "Mostrar las preguntas desplegadas en Análisis",
+      "expanded_hint": "Desactivado, la sección Preguntas empieza contraída; igual se abre cuando un veredicto necesita una respuesta obligatoria.",
       "template_title": "Plantilla del informe",
       "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
       "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",
-      "copied": "{placeholder} copiado"
+      "copied": "{placeholder} copiado",
+      "template_default": "Plantilla predeterminada",
+      "template_chip_default": "predeterminada",
+      "template_chip_custom": "propia",
+      "template_chip_missing": "no encontrada",
+      "template_missing": "El archivo ya no está: elíjalo de nuevo o vacíe el campo para usar la plantilla predeterminada."
+    },
+    "evaluators": {
+      "description": "Revisa tú solo, o reparte las alertas entre evaluadores e integra lo que te devuelvan.",
+      "info_header": "Evaluación",
+      "info_md": "**Modo de revisión**: en **Individual** revisas tú todas las alertas; con **Varios evaluadores** las alertas se reparten entre evaluadores.\n\n**Repartir alertas…** distribuye por turnos las alertas del conjunto activo, en el orden del conjunto, entre los evaluadores que cuentes o nombres. Las alertas ya revisadas quedan sin asignar salvo que las incluyas. **Editar reparto** reparte de nuevo o quita el reparto.\n\n**Generar paquetes** crea un zip por evaluador: las alertas del conjunto, el cuestionario, el AOI y la caché de escenas. El icono de nube de cada fila descarga después el zip de ese evaluador. El evaluador lo importa en el diálogo Proyecto y revisa sus alertas en Análisis.\n\n**Integrar copia revisada…** integra las revisiones que te devuelve un evaluador. Solo se toman las alertas asignadas a ese evaluador; si revisaste una de otra forma, eliges qué revisión conservar."
     }
+  },
+  "evaluators": {
+    "err": {
+      "no_set": "No hay ningún conjunto de alertas activo que repartir. Crea uno primero en Integrar y vectorizar.",
+      "none_eligible": "No hay alertas que asignar.",
+      "attribute_clash": "Este conjunto tiene un atributo llamado 'evaluator'; cambia el nombre de esa capa de atributos y vuelve a ejecutar el conjunto.",
+      "store_changed": "Este conjunto de alertas se reescribió mientras se hacía el reparto, así que no se ha cambiado nada. Inténtalo de nuevo.",
+      "integrating": "Este conjunto de alertas se está volviendo a ejecutar en Integrar y vectorizar. Inténtalo de nuevo cuando termine.",
+      "duplicate_name": "«{name}» aparece dos veces.",
+      "too_many": "Como máximo {max} evaluadores.",
+      "no_names": "Escribe al menos un nombre.",
+      "bad_count": "Elige entre 1 y {max} evaluadores."
+    },
+    "default_prefix": "Evaluador",
+    "solo_note": "Revisas tú todas las alertas.",
+    "multi_note": "Reparte las alertas entre evaluadores y envía a cada uno un paquete de revisión.",
+    "multi_locked": "Quita el reparto para pasar a evaluación individual.",
+    "split_title": "Repartir las alertas",
+    "mode_label": "Evaluadores por",
+    "mode_count": "Número",
+    "mode_names": "Nombres",
+    "count_label": "Número de evaluadores",
+    "names_hint": "Las filas vacías se omiten.",
+    "include_reviewed": "Incluir las alertas ya revisadas",
+    "include_reviewed_hint": "Sin marcar, las alertas revisadas quedan sin asignar.",
+    "split": "Repartir",
+    "resplit": "Repartir de nuevo",
+    "remove": "Quitar el reparto",
+    "packaged_warning": "Los paquetes ya enviados para este reparto dejarán de poder integrarse.",
+    "split_done": {
+      "one": "Alertas repartidas entre {n} evaluador.",
+      "many": "Alertas repartidas entre {n} de evaluadores.",
+      "other": "Alertas repartidas entre {n} evaluadores."
+    },
+    "removed": "Reparto quitado.",
+    "remove_unrecorded": "No se quitó el reparto de {project}: se abrió otro proyecto o sus alertas aún no estaban cargadas. Abre {project} y quita el reparto de nuevo.",
+    "orphan": "Las alertas de este conjunto tienen evaluadores asignados, pero el proyecto no guarda ningún reparto. Quita el reparto para empezar de nuevo.",
+    "loading": "Cargando el conjunto de alertas…",
+    "table_title": "Evaluadores",
+    "col_name": "Evaluador",
+    "col_assigned": "Asignadas",
+    "col_reviewed": "Revisadas",
+    "col_merged": "Integrado",
+    "unassigned": "Sin asignar",
+    "empty": "Aún no hay reparto: usa Repartir alertas… para asignarlas a evaluadores.",
+    "aoi_waiting": "Los paquetes esperan la geometría del AOI: abre el paso AOI para cargarla.",
+    "import_label": "Copia revisada (.zip)",
+    "import_hint": "Elige la copia revisada de un evaluador. Se previsualiza aquí antes de integrarse.",
+    "preview_title": "Integrar las revisiones de {evaluator}",
+    "conflicts_label": "Alertas que revisaste de otra forma",
+    "keep_mine": "Conservar las mías",
+    "take_theirs": "Tomar las suyas",
+    "merge": "Integrar",
+    "merged": "{taken} revisiones de {evaluator} integradas.",
+    "return_title": "Devolver las revisiones",
+    "return_progress": "{reviewed} / {assigned} de tus alertas revisadas",
+    "return_note": "Solo se devuelven las alertas que tienes asignadas.",
+    "return_ready": "Copia revisada lista: envíala al creador del proyecto.",
+    "split_unrecorded": "Las alertas de {project} se repartieron, pero se abrió otro proyecto antes de guardar el reparto. Abre {project} de nuevo y quita el reparto para empezar otra vez.",
+    "merged_unrecorded": "Las revisiones de {evaluator} ya están en las alertas de {project}, pero se abrió otro proyecto antes de guardar el registro de la devolución.",
+    "merge_failed": "No se pudo integrar {file}: {error}",
+    "open_split": "Repartir alertas…",
+    "edit_split": "Editar reparto",
+    "edit_title": "Editar el reparto",
+    "merge_open": "Integrar copia revisada…",
+    "merge_title": "Integrar una copia revisada",
+    "generate": "Generar paquetes",
+    "regenerate": "Regenerar paquetes",
+    "generating": "Creando {i} / {n}…",
+    "packages_ready": {
+      "one": "{n} paquete listo.",
+      "many": "{n} de paquetes listos.",
+      "other": "{n} paquetes listos."
+    },
+    "packages_unrecorded": "Los paquetes están creados, pero el reparto no los registró: se abrió otro proyecto o el reparto cambió entretanto.",
+    "generate_first": "Genera primero los paquetes.",
+    "package_download": "Descargar el paquete de {evaluator}",
+    "package_outdated": "Creado antes de que cambiara el cuestionario: genera los paquetes de nuevo.",
+    "built_at": "Creado {when}",
+    "generate_return": "Generar copia revisada",
+    "regenerate_return": "Regenerar copia revisada",
+    "return_download": "Descargar la copia revisada",
+    "generate_return_first": "Genera primero la copia revisada.",
+    "review_mode_label": "Modo de revisión",
+    "review_mode_solo": "Individual",
+    "review_mode_multi": "Varios evaluadores",
+    "name_field": "Evaluador {n}",
+    "add_name": "Añadir evaluador",
+    "names_group": "Evaluadores"
+  },
+  "review_copy": {
+    "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
   }
 }

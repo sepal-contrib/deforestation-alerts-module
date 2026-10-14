@@ -60,9 +60,11 @@ def test_closing_the_project_returns_the_workflow_to_the_aoi_step():
 
     s = AppState()
     s.load_project_state(_p("a"))
-    s.active_step.set(step_index("analysis"))
+    s.active_step.set(step_index("questionnaire"))
+    s.screen.set("analysis")
     s.close_project_state()
     assert s.active_step.value == 0 and STEPS[0].key == "aoi"
+    assert s.screen.value == "workflow"
     assert step_states(None)[s.active_step.value] is not StepStatus.LOCKED
 
 

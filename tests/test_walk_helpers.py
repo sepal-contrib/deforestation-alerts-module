@@ -92,3 +92,97 @@ def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
     assert phases.compact_stages([gee, tif, stale, "Prepare: ready to go"], ready) == 4
     assert phases.compact_stages([busy], running) == 2
     assert phases.compact_stages([gee], running) == 0
+
+
+# ----------------------------------------------------- the analysis screen
+#: A stand-in for the app's two screens: MapApp's wrap (the rail, the
+#: stepper in the right panel, the main map) and the analysis screen beside
+#: the rail, hidden and shown the way ``build_screen`` and the shell's
+#: stylesheet do it: the main map and the right panel hide, the rail stays.
+_SCREENS = """<!doctype html><html><head><style>
+body:has(.defo-analysis-screen--on) #map-container,
+body:has(.defo-analysis-screen--on) .right-panel { display: none; }
+</style></head><body>
+<div class="v-application"><div class="v-application--wrap">
+  <nav class="left-drawer"><div data-step-id="1">About</div></nav>
+  <div id="map-container"></div>
+  <div class="right-panel">
+    <button data-step-key="integrate" onclick="step('integrate')">integrate</button>
+    <button data-step-key="questionnaire" onclick="step('questionnaire')">questionnaire</button>
+    <p id="showing">workflow on integrate</p>
+    <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
+  </div>
+</div></div>
+<div class="defo-analysis-screen" id="screen" style="display: none;">
+  <button class="defo-back-to-workflow" onclick="closeScreen()">Workflow</button>
+  <div class="defo-analysis-right"><p>the review console</p></div>
+</div>
+<script>
+function step(key) { document.getElementById('showing').textContent = 'workflow on ' + key; }
+function openScreen() {
+  const s = document.getElementById('screen');
+  s.style.display = ''; s.classList.add('defo-analysis-screen--on');
+}
+function closeScreen() {
+  const s = document.getElementById('screen');
+  s.classList.remove('defo-analysis-screen--on'); s.style.display = 'none';
+}
+</script></body></html>"""
+
+
+@pytest.fixture(scope="module")
+def _walk_browser():
+    sync_api = pytest.importorskip("playwright.sync_api")
+    pw = sync_api.sync_playwright().start()
+    try:
+        browser = pw.chromium.launch(headless=True)
+    except sync_api.Error as exc:  # no browser installed here
+        pw.stop()
+        pytest.skip(f"no headless Chromium: {exc}")
+    yield browser
+    browser.close()
+    pw.stop()
+
+
+@pytest.fixture
+def screens(_walk_browser):
+    page = _walk_browser.new_page()
+    page.set_content(_SCREENS)
+    yield page
+    page.close()
+
+
+def _screen_on(page):
+    return page.locator(walklib.SCREEN_ON).count() == 1
+
+
+def test_the_panel_scope_follows_the_analysis_screen(screens):
+    """``PANEL`` is the workflow's right panel, and the analysis screen's
+    console while that screen shows: MapApp stays mounted beside the screen,
+    its right panel hidden, so a bare ``.right-panel`` would read the hidden
+    workflow panel."""
+    assert "workflow on integrate" in walklib.panel_text(screens)
+    assert screens.locator(f"{walklib.PANEL} p").count() == 1
+    screens.evaluate("() => openScreen()")
+    assert walklib.panel_text(screens).strip() == "the review console"
+    assert screens.locator(f"{walklib.PANEL} p").first.inner_text() == "the review console"
+
+
+def test_goto_step_reaches_analysis_through_start_analysis(screens):
+    walklib.goto_step(screens, "analysis", 100)
+    assert _screen_on(screens)
+    assert screens.locator("#showing").text_content() == "workflow on questionnaire"
+    # A workflow step from the analysis screen: back to the workflow first
+    # (the stepper is in the right panel, hidden while the screen shows), then the step.
+    walklib.goto_step(screens, "integrate", 100)
+    assert not _screen_on(screens)
+    assert "workflow on integrate" in walklib.panel_text(screens)
+
+
+def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):
+    walklib.back_to_workflow(screens, wait=100)  # on the workflow: nothing to do
+    assert not _screen_on(screens)
+    screens.evaluate("() => openScreen()")
+    walklib.back_to_workflow(screens, wait=100)
+    assert not _screen_on(screens)
+    assert screens.locator("#screen").evaluate("e => e.style.display") == "none"

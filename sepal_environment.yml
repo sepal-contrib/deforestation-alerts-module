@@ -30,6 +30,7 @@ dependencies:
   - pydantic>=2.7
   - scipy
   # GUI / widgets
+  - anywidget>=0.9  # the analysis views (gui/widget/multiview)
   - geemap>=0.35.0
   - ipyevents>=2.0
   - ipyleaflet>=0.19

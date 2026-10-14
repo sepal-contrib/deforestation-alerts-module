@@ -1,14 +1,15 @@
-"""The shell's ``_PanelBridge``, rendered for real: the Analysis stage and the
-shared map trade places in an order the frontend can act on.
+"""The shell's ``_PanelBridge``, rendered for real: the active step's wrapper
+shows, the panel keeps its Workflow title, and the ``current_page_view``
+mirror follows the step on the workflow screen only.
 
 The panel itself has one view -- the PipelineHeader over the active step's
 controls -- because the three rail items (About, Project, the Overview
-dashboard) are all MapApp dialogs.
+dashboard) are all MapApp dialogs. The analysis screen is not the panel's:
+``_ScreenBridge`` shows it (tests/test_analysis_screen.py).
 
 ``gui/solara_app.py`` cannot be imported here (it initialises Earth Engine and
 the tile transport at import), so the component's own source is compiled on its
-own, against the names it uses. The stage, the shared map and the panel
-wrappers are stand-ins that record what the bridge does to them.
+own, against the names it uses.
 """
 
 import ast
@@ -38,84 +39,39 @@ def _shell_component(name):
     return ns[name]
 
 
-class _Stage:
-    """StageHost stand-in: records every ``visible`` write, in order."""
-
-    def __init__(self, ops):
-        self._ops, self._visible = ops, False
-
-    @property
-    def visible(self):
-        return self._visible
-
-    @visible.setter
-    def visible(self, value):
-        self._visible = bool(value)
-        self._ops.append(("stage", "show" if value else "hide"))
-
-
-class _Map:
-    """Shared-map stand-in: records the hiding class going on and off."""
-
-    def __init__(self, ops):
-        self._ops, self.classes = ops, set()
-
-    def add_class(self, name):
-        self.classes.add(name)
-        self._ops.append(("map", f"+{name}"))
-
-    def remove_class(self, name):
-        self.classes.discard(name)
-        self._ops.append(("map", f"-{name}"))
-
-
 @pytest.fixture
 def bridge():
-    ops = []
-    state, stage, map_ = AppState(), _Stage(ops), _Map(ops)
+    state = AppState()
     wrappers = {s.key: SimpleNamespace(style_="") for s in STEPS}
     component = _shell_component("_PanelBridge")
     _, rc = reacton.render(
-        component(app_state=state, panel_wrappers=wrappers, stage_host=stage, map_=map_,
-                  mapapp_ref={}, workflow_config={}),
+        component(app_state=state, panel_wrappers=wrappers, mapapp_ref={}, workflow_config={}),
         handle_error=False,
     )
-    yield SimpleNamespace(state=state, stage=stage, map=map_, ops=ops)
+    yield SimpleNamespace(state=state, wrappers=wrappers)
     rc.close()
 
 
-ANALYSIS = step_index("analysis")
+def test_the_active_steps_wrapper_shows_and_the_mirror_follows(bridge):
+    bridge.state.active_step.set(step_index("integrate"))
+    assert [k for k, w in bridge.wrappers.items() if w.style_ == ""] == ["integrate"]
+    assert bridge.state.current_page_view.value == "integrate_tile"
 
 
-def _enter_analysis(b):
-    b.state.active_step.set(ANALYSIS)
-    assert b.stage.visible and "defo-map-hidden" in b.map.classes
-    del b.ops[:]
-
-
-def test_entering_analysis_shows_the_stage_before_hiding_the_shared_map(bridge):
-    del bridge.ops[:]
-    bridge.state.active_step.set(ANALYSIS)
-    assert bridge.ops == [("stage", "show"), ("map", "+defo-map-hidden")]
-
-
-@pytest.mark.parametrize(
-    "leave",
-    [
-        pytest.param(lambda s: s.active_step.set(step_index("aoi")), id="to-AOI"),
-        pytest.param(lambda s: s.active_step.set(step_index("integrate")), id="to-Integrate"),
-    ],
-)
-def test_leaving_analysis_shows_the_shared_map_before_hiding_the_stage(bridge, leave):
-    """The stage's hide nudge (a window resize) re-measures the shared map, so
-    the map must be displayed by the time the stage hides: the frontend applies
-    the two messages in this order. The other way round, leaflet kept the 0x0
-    size it measured while the map was hidden and filled only its top-left part."""
-    for _ in range(2):  # the round trip repeats the same way
-        _enter_analysis(bridge)
-        leave(bridge.state)
-        assert bridge.ops == [("map", "-defo-map-hidden"), ("stage", "hide")]
-        assert not bridge.stage.visible and "defo-map-hidden" not in bridge.map.classes
+def test_the_mirror_leaves_the_analysis_screen_alone(bridge):
+    """On the analysis screen ``current_page_view`` is "analysis_tile". A
+    write of the step's view there (a step change, or a language switch,
+    which re-runs the bridge) would make ``_NavBridge`` send the reviewer
+    back to the workflow."""
+    bridge.state.screen.set("analysis")
+    bridge.state.current_page_view.set("analysis_tile")
+    bridge.state.active_step.set(step_index("integrate"))
+    assert bridge.state.current_page_view.value == "analysis_tile"
+    # Back on the workflow (``_ScreenBridge`` mirrors the step back itself),
+    # a step change is mirrored again.
+    bridge.state.screen.set("workflow")
+    bridge.state.active_step.set(step_index("questionnaire"))
+    assert bridge.state.current_page_view.value == "questionnaire_tile"
 
 
 def test_a_language_switch_puts_the_workflow_title_back():
@@ -132,14 +88,13 @@ def test_a_language_switch_puts_the_workflow_title_back():
     set_locale("en")
     _, rc = reacton.render(
         component(app_state=state, panel_wrappers={s.key: SimpleNamespace(style_="") for s in STEPS},
-                  stage_host=_Stage([]), map_=_Map([]),
                   mapapp_ref={"widget": SimpleNamespace(right_panel=[panel])},
                   workflow_config=workflow_config),
         handle_error=False,
     )
     try:
         assert panel.config == {**workflow_config}
-        state.active_step.set(ANALYSIS)  # navigation leaves the title alone
+        state.active_step.set(step_index("questionnaire"))  # navigation leaves the title alone
         assert panel.config == {**workflow_config}
         panel.config = {"title": "stale"}  # MapApp's prop sync on the language re-render
         set_locale("fr")

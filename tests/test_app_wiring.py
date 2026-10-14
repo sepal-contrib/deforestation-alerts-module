@@ -53,7 +53,9 @@ def test_workflow_panel_is_wired():
     assert "right_panel_open=True" in src
     assert "is_pinned=False" in src
     assert 'WORKFLOW_PANEL_CONFIG = {' in src and 't("app.panel_workflow_title")' in src
-    assert "StageHost(" in src
+    assert "StageHost" not in src
+    assert "solara.display(analysis_layout.screen)" in src
+    assert "_ScreenBridge(app_state=app_state, layout=analysis_layout)" in src
     # One view: every rail item is a dialog, so the panel holds the steps alone.
     assert "{s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS}" in src
 
@@ -61,7 +63,7 @@ def test_workflow_panel_is_wired():
 def test_navigation_maps_derive_from_the_registries():
     src = _src("gui/store/navigation.py")
     assert "PAGE_VIEW_TO_WORKFLOW = {s.page_view: i for i, s in enumerate(STEPS)}" in src
-    assert "PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS}" in src
+    assert 'PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS if r.display == "dialog"}' in src
 
 
 def test_no_custom_log_console():
@@ -172,18 +174,17 @@ def test_the_overview_dialog_reviews_through_a_dismiss():
     assert "rv.Btn(" not in src
 
 
-def test_panel_bridge_drives_views_stage_and_title():
+def test_panel_bridge_drives_views_and_title():
     src = _src("gui/solara_app.py")
     body = src[src.index("def _PanelBridge("):]
     body = body[: body.index("\ninit_ee()")]
     assert "app_state.active_step.value" in body
     assert "panel_view" not in body, "the panel has one view: the rail items are dialogs"
     assert 'wrap.style_ = "" if key == spec.key else "display: none;"' in body
-    # The order of these writes is pinned by tests/test_panel_bridge.py.
-    assert "stage_host.visible = True" in body and "stage_host.visible = False" in body
-    assert 'map_.add_class("defo-map-hidden")' in body
-    assert 'map_.remove_class("defo-map-hidden")' in body
+    assert "stage_host" not in body and "defo-map-hidden" not in body
     assert "mapapp.right_panel[0].config = {**workflow_config}" in body
+    # The mirror runs on the workflow screen only (tests/test_panel_bridge.py).
+    assert 'app_state.screen.value == "workflow"' in body
     assert "app_state.current_page_view.value = " in body
 
 
@@ -201,18 +202,22 @@ def _z_index(css: str, selector: str) -> int:
     return int(re.search(r"z-index:\s*(\d+)", rules[selector]).group(1))
 
 
-def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_stage():
+def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_screen():
     """Vuetify stacks every overlay from small z-indexes, measured live in the
     app: the rail and the right panel at 6, menus from 8, pysepal's task pill
     at 170, the dialog scrim at 201 and dialogs from 202. The stage at 801
     covered the About and Project dialogs (elementFromPoint on their content
-    hit the stage's map). It must stay above the map (0) and below all of
+    hit the stage's map). The analysis screen sits right of the rail, which
+    stays usable on it (R30): it must stay above the map (0) and below all of
     them, with the rail's collapse arrow, which sits on its left edge, above
     it."""
+    from gui.tile.analysis.analysis_tile import SCREEN_CSS
+
     css = _shell_css()
-    stage = _z_index(css, ".defo-stage")
+    screen = _z_index(SCREEN_CSS, ".defo-analysis-screen")
     arrow = _z_index(css, ".v-application .sidebar-controls")
-    assert 0 < stage < arrow < 6
+    assert 0 < screen < arrow < 6
+    assert ".defo-stage" not in css and "defo-map-hidden" not in css
 
 
 def test_the_analysis_footer_is_not_white_on_the_dark_theme():
@@ -257,6 +262,7 @@ STEP_FILES = {
     "prepare": "gui/tile/prepare_step.py",
     "integrate": "gui/tile/integrate_step.py",
     "questionnaire": "gui/tile/questionnaire_step.py",
+    "evaluators": "gui/tile/evaluators_step.py",
 }
 
 
@@ -264,7 +270,7 @@ def test_workflow_tiles_open_with_description_and_info_button():
     """Spec §14 slice 6: every step shows its description and an info button."""
     from gui.store.workflow_steps import STEPS
 
-    assert set(STEP_FILES) | {"analysis"} == {s.key for s in STEPS}
+    assert set(STEP_FILES) == {s.key for s in STEPS}
     for key, rel in STEP_FILES.items():
         src = _src(rel)
         assert src.count("StepIntro(") == 1, rel
@@ -349,7 +355,7 @@ def test_removed_modules_are_gone():
 
 def test_no_traitlets_models_in_new_code():
     # Not gui/widget/enter_key.py: its VuetifyTemplate.template trait is the
-    # library boundary (Global Constraints), like stage_host.py.
+    # library boundary (Global Constraints).
     for rel in ("deforestation_alerts/project", "deforestation_alerts/engine", "gui/tile/aoi_step.py",
                 "gui/tile/alerts_step.py", "gui/tile/period_step.py", "gui/tile/prepare_step.py",
                 "gui/tile/integrate_step.py", "gui/tile/project_dialog.py", "gui/store/state_manager.py",
@@ -381,7 +387,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
         assert f"{role}=set_context," in shell, role
     assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
     assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
-    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget}' in shell
+    assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
     # The alert layers are a leaf of the shell, not of a step: a layer switched
@@ -490,7 +496,7 @@ def test_a_detached_tile_may_remount_its_root():
 
     src = _src("gui/solara_app.py")
     assert "render_fixed" not in _component_body(src, "_AppShell")
-    assert src.count("render_detached(lambda: ") == 11  # About, Project, Overview, seven steps, the header
+    assert src.count("render_detached(lambda: ") == 12  # About, Project, Overview, eight steps, the header
 
 
 def test_nothing_imports_the_workspace_module():
@@ -557,3 +563,22 @@ def test_the_title_follows_a_language_switch():
     finally:
         set_locale("en")
         rc.close()
+
+
+def test_the_evaluators_step_writes_through_the_shells_set_context():
+    """Split and merge write the store through the same SetContext and
+    AnalysisState as the review Save (spec 2026-10-10 §4.4)."""
+    shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
+    body = shell[shell.index('"evaluators": render_detached('):]
+    body = body[:body.index("[0]")]
+    for arg in ("app_state=app_state", "app_tile_model=set_context", "analysis=analysis",
+                "gee_interface=gee_interface", 't("app.drawer_item.evaluators")'):
+        assert arg in body, arg
+
+
+def test_the_project_dialog_gets_the_analysis_state():
+    """A review copy opens on Analysis filtered to its evaluator (spec 2026-10-10 §6.2)."""
+    shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
+    block = shell[shell.index("project_widget = "):shell.index("overview_widget = ")]
+    assert "analysis=analysis" in block
+    assert shell.index("analysis = solara.use_memo(AnalysisState") < shell.index("project_widget = ")

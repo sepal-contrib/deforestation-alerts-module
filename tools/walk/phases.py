@@ -36,15 +36,16 @@ def visible_btn(page, text, scope=""):
     return page.locator(f'{scope} button:has-text("{text}"):visible'.strip()).first
 
 
-# The Analysis right panel is the review console (spec 2026-10-03): block A
+# The analysis screen's right column is the review console (spec 2026-10-03): block A
 # (queue counter, navigation, facts grid + status chip), block B (the verdict)
 # and three sections -- Questions (the loss driver and every other project
 # question, spec D4), Refine polygon, and Export this alert, which sits in the
 # sticky footer above Save & next / Save (spec D6) -- whose bodies are
 # COLLAPSED (hidden with ``display``), so nothing inside them is ``:visible``
 # until the header is clicked. The retired "Alert info" card's facts live in block A.
+# Block A is a flat ``panel_block`` (a ``div.py-3``, no longer a ``v-card``).
 _BLOCK_A_JS = """
-    const card = [...document.querySelectorAll('.v-card')]
+    const card = [...document.querySelectorAll('.defo-analysis-right .py-3, .defo-analysis-right .pb-3')]
         .filter(e => e.getBoundingClientRect().width > 0)
         .filter(e => ['Source', 'Detected', 'Status'].every(w => e.textContent.includes(w)))
         .sort((a, b) => a.textContent.length - b.textContent.length)[0];
@@ -104,7 +105,7 @@ def download_btn(page):
     a build left files, and *Rebuild files* is another button
     (``.defo-rebuild``). Found by its class, not its label: "(save first)"
     shows in the label until the alert is saved."""
-    return page.locator('.v-card:has-text("Export this alert") .defo-build-tile:visible').first
+    return page.locator('.defo-analysis-right .defo-build-tile:visible').first
 
 
 def compact_stages(titles, label) -> int:
@@ -208,7 +209,7 @@ def review_and_save(page, rec, *, out):
     visible_btn(page, "True alert").click()
     page.wait_for_timeout(500)
     open_section(page, "Questions")
-    cb = page.locator('.v-card:has-text("Loss driver") .v-select__slot:visible').last
+    cb = page.locator('.defo-analysis-right .dat-question:has-text("Loss driver") .v-select__slot:visible').last
     cb.click()
     page.wait_for_timeout(700)
     page.locator('.menuable__content__active .v-list-item:has-text("Logging")').first.click()

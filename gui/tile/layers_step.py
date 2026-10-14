@@ -7,8 +7,10 @@ from datetime import date
 import solara
 from pysepal.solara.notifications import use_notifications
 
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts import legend_specs, vis_layers
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
@@ -69,15 +71,17 @@ def LayersStep(app_state, map_, gee_interface, layers):
             kept = {k: v for k, v in live.vis_layers.items() if k != previous}
             live.vis_layers = {**kept, layer.name: layer}
 
-        if app_state.update_project(p.name, _apply) and previous and layers.is_on(_key(previous)):
+        if update_setup(app_state, p.name, _apply, notifications) and previous and layers.is_on(_key(previous)):
             layers.hide(_key(previous))  # it showed the previous definition
 
     def _delete():
         name = pending_delete
         set_pending_delete(None)
+        if refuse_setup(app_state, notifications):
+            return  # a review copy keeps its layers, shown or not
         layers.hide(_key(name))
-        app_state.update_project(p.name, lambda live: setattr(
-            live, "vis_layers", {k: v for k, v in live.vis_layers.items() if k != name}))
+        update_setup(app_state, p.name, lambda live: setattr(
+            live, "vis_layers", {k: v for k, v in live.vis_layers.items() if k != name}), notifications)
 
     def _toggle(name):
         key = _key(name)
@@ -93,12 +97,18 @@ def LayersStep(app_state, map_, gee_interface, layers):
                     legend=legend_specs.vis_legend(key, layer, month=shown_month))
 
     def _edit(name):
+        if refuse_setup(app_state, notifications):
+            return
         set_editing(name)
         modal_open.set(True)
 
     def _open_add():
+        if refuse_setup(app_state, notifications):
+            return
         set_editing(None)
         modal_open.set(True)
+
+    ro = read_only(p)  # a review copy: its layers are shown, never changed (spec §6.3)
 
     rows = []
     for name, layer in sorted(p.vis_layers.items(), key=lambda kv: kv[0].casefold()):
@@ -108,15 +118,14 @@ def LayersStep(app_state, map_, gee_interface, layers):
                      "actions": [
                          {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
                           "on_click": (lambda n=name: _toggle(n))},
-                         {"kind": "edit", "on_click": (lambda n=name: _edit(n))},
-                         {"kind": "delete", "on_click": (lambda n=name: set_pending_delete(n))},
+                         {"kind": "edit", "disabled": ro, "on_click": (lambda n=name: _edit(n))},
+                         {"kind": "delete", "disabled": ro, "on_click": (lambda n=name: set_pending_delete(n))},
                      ]})
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.layers.title')}")
         StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
         solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
-                      on_click=_open_add)
+                      disabled=ro, on_click=_open_add)
         ProductTable(title=t("steps.layers.list_title"), columns=layer_columns(), rows=rows,
                      empty_text=t("steps.layers.empty"))
 

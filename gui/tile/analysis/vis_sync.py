@@ -1,4 +1,4 @@
-"""Visualization layers on the two Analysis maps (spec §10): the layers with
+"""Visualization layers on the Analysis views (spec §10): the layers with
 ``show_in_analysis``, added switched off, kept in step with the project.
 No legend there (D20).
 
@@ -6,14 +6,13 @@ The project subscription runs in the publishing thread (a worker's publish
 included, under ``AppState._lock``): it only computes the plan and hands the
 removals and the blocking builds to a ``spawn_in_context`` thread.
 
-The per-alert view clears its own layers with ``clear_alert_layers``, which
-spares the ``vis:`` keys this module keeps on the maps.
+Each layer is one spec on every view (group ``"vis"``, id ``vis:<name>``), so
+the per-alert view's ``PaneLayers.clear("alert")`` never touches it.
 """
 
 import json
 import logging
 import threading
-from contextlib import nullcontext
 from datetime import date
 
 from gui.i18n import t
@@ -25,16 +24,6 @@ from gui.scripts.vis_layers import builder, nicfi_month, nicfi_region
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 KEY_PREFIX = "vis:"
-
-
-def clear_alert_layers(map_) -> None:
-    """Remove every layer but the basemaps and the visualization layers, in
-    one write of ``map_.layers`` under the map's ``layers_lock`` (a
-    ``LockedMap``): a vis layer a worker adds meanwhile waits for the write
-    instead of being dropped by it."""
-    with getattr(map_, "layers_lock", None) or nullcontext():
-        map_.layers = tuple(lyr for lyr in map_.layers
-                            if lyr.base or str(getattr(lyr, "key", "")).startswith(KEY_PREFIX))
 
 
 def _signature(layer, project) -> str:
@@ -65,8 +54,8 @@ def plan(current: dict, want: dict) -> tuple:
 
 
 def wire(widgets, app_state, spawn=spawn_in_context):
-    """Keep both Analysis maps in step with the project; returns the unsubscribe."""
-    # What the maps carry (or are about to), key → signature. A sync updates
+    """Keep the Analysis views in step with the project; returns the unsubscribe."""
+    # What the views carry (or are about to), key → signature. A sync updates
     # it at once; a run acts on a key only while it still holds the run's view.
     current, lock = {}, threading.Lock()
     # The keys whose build failed, key → signature: toasted once, and not
@@ -74,9 +63,10 @@ def wire(widgets, app_state, spawn=spawn_in_context):
     # alert step saves the project, so a retry per sync would toast per step).
     failed = {}
     # One run at a time: two quick edits of a layer spawn two runs, which must
-    # not build the same key on the same map at once (they queue here).
+    # not build the same key at once (they queue here).
     run_lock = threading.Lock()
-    maps = (widgets.map_before, widgets.map_after)
+    # One target: a layer is one spec on every view (``PaneTarget`` on "all").
+    maps = (widgets.panes.target("all", group="vis"),)
 
     def _sync(_value=None):
         project = app_state.project.value
@@ -120,8 +110,7 @@ def wire(widgets, app_state, spawn=spawn_in_context):
         spawn(_run)
 
     def _build(layer, key, project, bounds):
-        """Build ``layer`` on both maps; None, or the error text (the second
-        map is not tried once the first failed)."""
+        """Build ``layer`` on the views; None, or the error text."""
         for m in maps:
             try:
                 m.remove_layer(key, none_ok=True)

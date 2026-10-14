@@ -73,10 +73,11 @@
     },
     "step_badge": "{n} / {total}",
     "count_empty": "rien pour l'instant",
-    "count_reviewed": {
-      "one": "{count} examinée",
-      "many": "{count} examinées",
-      "other": "{count} examinées"
+    "start_analysis": "Lancer l'analyse",
+    "count_evaluators": {
+      "one": "{count} évaluateur",
+      "many": "{count} d'évaluateurs",
+      "other": "{count} évaluateurs"
     }
   }
 }

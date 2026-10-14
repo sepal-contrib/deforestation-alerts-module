@@ -19,6 +19,7 @@ from gui.tile.analysis import analysis_tile
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis.footer import build_footer, footer_widgets
 from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
 
 
 @pytest.fixture(autouse=True)
@@ -39,11 +40,8 @@ def panel(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
-    draw = SimpleNamespace(clear=lambda: None)
-    shown_map = SimpleNamespace(add_layer=lambda *_: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw,
-                                map_before=shown_map, map_after=shown_map),
+        widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
         aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
     return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis)
@@ -95,8 +93,7 @@ def test_the_panel_order_is_head_verdict_questions_refine_footer(panel):
     from gui.tile.analysis import context, review_panel
 
     sections = analysis_tile.panel_sections(panel.controls)
-    *head, block_a, block_b, _earlier, questions, refine, footer = panel.controls.children
-    assert len(head) == 3                       # help + selector + banner
+    _banner, block_a, block_b, questions, refine, _earlier, footer = panel.controls.children
     context.facts_widgets(block_a)              # block A owns the facts...
     assert set(review_panel.verdict_widgets(block_b)) == {
         "Confirmed", "False Positive", "Need revision"}  # ...block B the verdict
@@ -108,7 +105,7 @@ def test_the_panel_order_is_head_verdict_questions_refine_footer(panel):
 
 def test_the_verdict_card_no_longer_holds_the_save(panel):
     """The Save buttons and the state line left block B for the footer."""
-    *_, block_b, _earlier, _questions, _refine, _footer = panel.controls.children
+    _banner, _block_a, block_b, *_ = panel.controls.children
     texts = _texts(block_b)
     assert "Save" not in texts and "Save & next" not in texts
 

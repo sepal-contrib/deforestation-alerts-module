@@ -9,7 +9,7 @@ sets, the active one with 90 unreviewed alerts) into its own data dir, adds a
 and reviews the first alert through it. Ten checks, each an entry in the JSON
 report with a screenshot:
 
- 1. the rail has 8 steps; Questionnaire is 7th, Analysis 8th
+ 1. the stepper has 7 steps and ends at Questionnaire, whose Next is *Start analysis*
  2. the question is added: list row, tags, ``{road_access}`` and ``{verdict}`` chips
  3. Analysis: Questions closed, badge "required missing" in orange after True alert
  4. Save & next with the answer missing: warning toast naming it, the section opens, no advance
@@ -51,7 +51,7 @@ PLACEHOLDER = "{road_access}"
 #: not the questionnaire's, so tolerated in the dark-theme check only.
 THEME_SWAP_ERROR = "Cannot set properties of null (setting '_fadeAnimated')"
 FOOTER = ".defo-analysis-footer"
-PANEL = ".right-panel"
+PANEL = w.PANEL  # the right panel, or the analysis screen's console while it shows
 
 
 # ------------------------------------------------------------------ helpers
@@ -178,9 +178,11 @@ def check_1_rail(page, rec, *, out):
     keys = step_keys(page)
     rec["steps"] = keys
     assert len(keys) == 8, keys
-    assert keys[6] == "questionnaire" and keys[7] == "analysis", keys
+    assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys, keys
     w.goto_step(page, "questionnaire", 2000)
     assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
+    # Analysis is a screen of its own: the last step's Next is *Start analysis*.
+    assert page.locator(".defo-start-analysis:visible").count() == 1, "no Start analysis on Questionnaire"
     w.shot(page, out, "01_rail_questionnaire")
 
 
@@ -213,6 +215,8 @@ def check_2_add_question(page, rec, *, out, data, template):
         assert tag in row, f"tag {tag!r} missing from {row!r}"
     assert "Needs review" not in row and "False positive" not in row and "all verdicts" not in row, row
     assert PLACEHOLDER in row, row
+    page.locator(".right-panel button.defo-template-toggle:visible").first.click()
+    page.wait_for_timeout(800)
     chips = page.evaluate("() => [...document.querySelectorAll('span[title]')].map(e => e.title)"
                           ".filter(x => x.startsWith('{'))")
     rec["chips"] = sorted(set(chips))
@@ -350,10 +354,9 @@ def check_7_build(page, rec, *, out):
             "href": tile.get_attribute("href"),
         }
     rec["tiles"] = tiles
-    for kind in ("zip", "docx"):
+    for kind in ("zip", "docx", "gif"):  # the GIF tile is a real download since feat/alert-gif
         assert re.search(r"\d+(\.\d)? (B|KB|MB|GB)", tiles[kind]["text"]), tiles[kind]
         assert not tiles[kind]["disabled"] and tiles[kind]["href"] and tiles[kind]["href"] != "#", tiles[kind]
-    assert tiles["gif"]["disabled"], tiles["gif"]
     assert page.locator(".defo-rebuild:visible").count() == 1
     rec["rebuild"] = re.sub(r"\s+", " ", page.locator(".defo-rebuild:visible").first.inner_text())
     page.wait_for_timeout(500)
@@ -437,13 +440,13 @@ def check_10_dark(page, rec, *, out):
     page.wait_for_timeout(800)
     info = page.evaluate("""s => {
         const f = document.querySelector(s);
-        const labels = [...document.querySelectorAll('.right-panel .mb-3 > .body-2')]
+        const labels = [...document.querySelectorAll('.defo-analysis-right .mb-3 > .body-2')]
             .filter(e => e.getBoundingClientRect().width > 0)
             .map(e => ({text: e.innerText, color: getComputedStyle(e).color}));
-        const radios = [...document.querySelectorAll('.right-panel .mb-3 .v-radio label')]
+        const radios = [...document.querySelectorAll('.defo-analysis-right .mb-3 .v-radio label')]
             .filter(e => e.getBoundingClientRect().width > 0)
             .map(e => ({text: e.innerText, color: getComputedStyle(e).color}));
-        const header = [...document.querySelectorAll('.right-panel button')]
+        const header = [...document.querySelectorAll('.defo-analysis-right button')]
             .find(b => b.innerText.includes('Questions'));
         return {bg: getComputedStyle(f).backgroundColor, labels, radios,
                 header: header ? getComputedStyle(header).color : null,

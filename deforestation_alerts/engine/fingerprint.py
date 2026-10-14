@@ -18,6 +18,7 @@ from typing import Optional
 
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Artifact, Period, Project
 
 
@@ -333,7 +334,12 @@ def set_status(p: Project, pdir, alert_set: AlertSet) -> Status:
     its file is gone, and so is every harmonized comparison of the period while
     a GeoTIFF mask on in it is gone (its stamp would otherwise read as an input
     change). Manifest plus ``os.stat`` only: cheap enough for a render (Task
-    34's badges read ``period_set_statuses``)."""
+    34's badges read ``period_set_statuses``).
+
+    A review copy (spec §6.3) has no artifacts or prepared data to compare
+    against: its set is CURRENT while its store is on disk, MISSING otherwise."""
+    if read_only(p):
+        return _copy_set_status(pdir, alert_set)
     period = p.periods.get(alert_set.period_id)
     if period is None:
         return Status.STALE
@@ -348,8 +354,15 @@ def period_set_statuses(p: Project, pdir, period: Period) -> dict[str, Status]:
     sets = [s for s in p.alert_sets.values() if s.period_id == period.id]
     if not sets:
         return {}
+    if read_only(p):
+        return {s.id: _copy_set_status(pdir, s) for s in sets}
     harmonized, mask_gone = period_harmonized_inputs(p, period), _mask_file_gone(p, period)
     return {s.id: _set_status(p, pdir, s, period, harmonized, mask_gone) for s in sets}
+
+
+def _copy_set_status(pdir, alert_set: AlertSet) -> Status:
+    """A review copy's set: its store on disk is all there is to check."""
+    return Status.CURRENT if (Path(pdir) / alert_set.store_rel_path).exists() else Status.MISSING
 
 
 def _mask_file_gone(p: Project, period: Period) -> bool:

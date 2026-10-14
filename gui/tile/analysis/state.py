@@ -9,8 +9,11 @@ reactive must notice "a new object" without comparing contents.
 import threading
 from dataclasses import dataclass, field
 from types import SimpleNamespace
+from typing import Optional
 
 import solara
+
+from gui.scripts.alert_filter import AlertFilter
 
 
 def _same(a, b) -> bool:
@@ -23,6 +26,12 @@ def _identity():
 
 def _plain(value=None):
     return solara.reactive(value)
+
+
+#: The image areas the timeline offers, as the margin in metres added around
+#: the alert's box before it is snapped to the download grid. ``normal`` is
+#: the margin the analysis has always used.
+IMAGE_AREAS = {"normal": 100, "large": 1000, "xlarge": 2500}
 
 
 @dataclass
@@ -68,6 +77,13 @@ class AnalysisState:
     #: the drawing session (both put the two back in step) and by
     #: ``reset_alert``.
     drawing_unapplied: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: how far around the alert its images reach: a key of ``IMAGE_AREAS``.
+    #: Per alert -- back to ``"normal"`` on every alert change -- so a large
+    #: area chosen for one alert never makes every later load and export slow.
+    image_area: solara.Reactive = field(default_factory=lambda: solara.reactive("normal"))
+    #: bumped once the views' area and both picks' keys follow a new
+    #: ``image_area`` (``imagery.set_image_area``): the panes redraw on it.
+    area_rev: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
     #: what each CNN run found, by model number: ``{1: (n_patches, area_ha)}``.
     #: Derived from the prediction the worker vectorises, beside the ``.tif``
     #: paths in ``prediction_files``.
@@ -85,12 +101,23 @@ class AnalysisState:
     #: A worker (a CNN run, an imagery fetch) captures it when it starts and
     #: drops its result once another alert is current (``apply_if_current``).
     alert_token: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
+    #: bumped when a merge rewrote the selected alert's row (spec §7.4): the
+    #: per-alert view is seeded again from the merged store. ``reset_alert``
+    #: leaves it alone (it is a request, not per-alert state).
+    reload_alert: solara.Reactive = field(default_factory=lambda: solara.reactive(0))
     #: the overlay of reviewed alerts from earlier periods near the current
     #: alert (spec §9). Session state: set by the panel's switch and distance
     #: field, kept across alert changes (the overlay follows the next alert),
     #: never saved to the project, so ``reset_alert`` leaves them alone.
     show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
+    #: the Analysis filter (spec §8): an ``alert_filter.AlertFilter`` (one
+    #: attribute, the values that match) or None. Session state: the analysis
+    #: layout binds it into ``AppState`` (``bind_alert_filter``), whose
+    #: navigation, start position and Overview Go read it; ``AppState`` clears
+    #: it on a project install and when another set's alerts arrive. Kept
+    #: across alert changes, so ``reset_alert`` leaves it alone.
+    alert_filter: solara.Reactive = field(default_factory=lambda: solara.reactive(None))
     #: counts the overlay refreshes (``earlier.refresh_earlier_reviews``): a
     #: load that finishes after a newer refresh started is dropped
     earlier_seq: int = field(default=0, repr=False)
@@ -120,6 +147,7 @@ class AnalysisState:
             # previous alert's (spec §4.4). 0.0 is the declared default and
             # the empty state the footer's save-state line reads.
             self.last_save_time.set(0.0)
+            self.image_area.set("normal")
 
     def is_current(self, token) -> bool:
         """Whether ``token`` (captured from ``alert_token``) is still the
@@ -153,6 +181,19 @@ class AnalysisState:
                 return False
             apply()
             return True
+
+
+def apply_start_filter(analysis: AnalysisState, f: Optional[AlertFilter]) -> None:
+    """Open Analysis on ``f`` (spec §6.2: a review copy opens on its
+    evaluator's alerts). Call it AFTER the project is installed
+    (``AppState.load_project_state`` clears the filter): the first set
+    published after an install keeps it, and its start alert comes from
+    ``alert_filter.start_position``. Alerts already on screen move to the
+    filter's start at once (``analysis_tile.follow_filter``, subscribed by
+    ``wire_alert_navigation``, which also resolves a filter set before it
+    ran). ``AppState`` resets the filter inside ``_install`` only, never on
+    ``project_loaded_signal``, so nothing after the install clears it."""
+    analysis.alert_filter.set(f)
 
 
 def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespace:

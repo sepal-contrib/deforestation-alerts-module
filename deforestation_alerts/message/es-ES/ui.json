@@ -87,7 +87,23 @@
       "collapse_month": "{month}. Contraer este mes.",
       "no_cloud_filter": "Un mapa base NICFI es un mosaico mensual sin dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",
       "saved_missing": "La imagen guardada no está disponible; se eligió automáticamente",
-      "swap_source": "Usar la imagen de {source} del mismo día"
+      "swap_source": "Usar la imagen de {source} del mismo día",
+      "month_before": "Añadir un mes antes",
+      "month_after": "Añadir un mes después",
+      "image_area": "Área de imagen",
+      "area_normal": "Estándar",
+      "area_large": "Grande",
+      "area_xlarge": "Muy grande",
+      "area_hint": "Hasta dónde llegan las imágenes alrededor de la alerta. Las áreas grandes tardan más en cargarse y exportarse."
+    },
+    "panes": {
+      "layers": "Capas",
+      "zoom_alert": "Acercar a la alerta",
+      "vertex_hint": "Clic derecho en un vértice para borrarlo",
+      "fill_holes": "Rellenar huecos",
+      "remove_hole": "Quitar hueco",
+      "remove_hole_hint": "Haga clic dentro de un hueco para quitarlo · Esc para salir",
+      "tile_error": "No se pudieron cargar las imágenes"
     }
   },
   "analysis_tile": {
@@ -113,7 +129,8 @@
       "previous": "Anterior",
       "next": "Siguiente",
       "jump": "Ir al número de alerta",
-      "go": "Ir"
+      "go": "Ir",
+      "next_unreviewed": "Siguiente alerta sin revisar"
     },
     "questionarie": {
       "confirmation_q": "¿Es verdadera la alerta?",
@@ -146,7 +163,8 @@
       "badge_none": "sin preguntas",
       "none": "Este proyecto no hace preguntas: añádalas en el paso Cuestionario.",
       "typed_hint": "Elija o escriba respuestas",
-      "none_for_verdict": "No se hacen preguntas para este veredicto."
+      "none_for_verdict": "No se hacen preguntas para este veredicto.",
+      "required": "Obligatoria"
     },
     "sections": {
       "export": "Exportar esta alerta",
@@ -168,10 +186,15 @@
       "questions": "Preguntas"
     },
     "edition_labels": {
-      "start_edit_button": "Comenzar dibujo",
+      "start_edit_button": "Empezar a dibujar",
       "apply_edit_button": "Guardar dibujo",
       "stop_edit_button": "Detener dibujo",
-      "unapplied_drawing": "Guarde su dibujo antes de guardar esta revisión"
+      "unapplied_drawing": "Guarde su dibujo antes de guardar esta revisión",
+      "stop_title": "¿Descartar el dibujo sin guardar?",
+      "stop_message": "Los cambios en el polígono no se han guardado con Guardar dibujo. Si se detiene ahora, se perderán.",
+      "stop_keep": "Seguir dibujando",
+      "stop_save": "Guardar y detener",
+      "stop_discard": "Descartar cambios"
     },
     "model_labels": {
       "dl_button1": "Modelo 1",
@@ -237,10 +260,35 @@
       "gif_zip_skipped": "Los archivos de la alerta están listos, pero no se pudo crear el GIF, así que el zip no lo incluye."
     },
     "earlier": {
-      "show": "Mostrar alertas revisadas de períodos anteriores",
+      "show": "Mostrar en los mapas",
       "radius": "Dentro de",
       "radius_error": "Entre 0,1 y 50 km",
-      "none": "Ninguna a menos de {km} km"
+      "title": "Revisiones anteriores",
+      "badge_off": "desactivado",
+      "badge_none": "ninguna a menos de {km} km",
+      "badge_nearby": {
+        "one": "{n} cercana",
+        "other": "{n} cercanas",
+        "many": "{n} cercanas"
+      }
+    },
+    "filter": {
+      "col_evaluator": "Evaluador",
+      "unassigned": "Sin asignar",
+      "empty_value": "(vacío)",
+      "no_matches": "Ninguna alerta coincide con este filtro",
+      "counter_outside": "– / {total}",
+      "hint": "filtradas · {total} en total",
+      "not_in_filter": "La alerta {number} no está en el filtro actual",
+      "button": "Filtrar alertas",
+      "attribute": "Atributo",
+      "values": "Valores",
+      "apply": "Aplicar",
+      "clear": "Quitar filtro",
+      "value_count": "{value} ({count})",
+      "chip": "{attribute}: {values}",
+      "more": "{values} +{count}",
+      "no_columns": "No hay ningún atributo por el que filtrar"
     }
   },
   "imagery": {

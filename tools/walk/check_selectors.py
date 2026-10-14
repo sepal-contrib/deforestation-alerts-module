@@ -62,6 +62,9 @@ WALK = [
      ("Questions", "Refine polygon", "Export this alert")),
     ("phases.analysis_jump_field (after the # toggle)", (), ("Go",)),
     ("slice5.e_sets (the set selector)", (), ("Alert set",)),
+    ("panes_walk.check_panes (start/stop drawing)", ("Refine polygon",), ("Start drawing", "Stop drawing")),
+    ("panes_walk.check_edits (start/save/stop drawing)", ("Refine polygon",),
+     ("Start drawing", "Save drawing", "Stop drawing")),
     # slice6.pick_template picks the report template in the Questionnaire
     # step now (Task 4), outside the Analysis panel this script builds.
 ]
@@ -109,16 +112,17 @@ def build_panel(tmp):
     from deforestation_alerts.project.models import Project
     from gui.store.state_manager import AppState
     from gui.tile.analysis import analysis_tile
+    from gui.tile.analysis.pane_layers import PaneLayers
     from gui.tile.analysis.state import AnalysisState
+    from gui.widget.alert_views import AlertViews
 
     now = datetime.now()
     app_state = AppState()
     app_state.new_project_state(Project(name="d", created_at=now, updated_at=now))
     model = SimpleNamespace(recipe_folder_path=tmp, custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
-    draw = SimpleNamespace(clear=lambda: None)
     controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(draw_before=draw, draw_after=draw),
+        widgets=SimpleNamespace(panes=PaneLayers(AlertViews())),
         app_state=app_state, analysis=AnalysisState(), aux_model=model,
         app_tile_model=model, id_field=v.TextField(v_model=None))
     return controls, analysis_tile.panel_sections(controls)

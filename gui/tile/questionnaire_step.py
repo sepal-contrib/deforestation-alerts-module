@@ -1,20 +1,26 @@
 """The Questionnaire step (spec D3): the questions every alert is reviewed
 with, in the order Analysis asks them, and the project's report template with
-the placeholders it can use."""
+the placeholders it can use. The last workflow step, so it ends with *Start
+analysis*."""
+
+from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
 
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
+from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t, tn
 from gui.scripts import questions as qs
 from gui.scripts.notify_bridge import current_notifier
+from gui.scripts.setup_guard import refuse_setup, update_setup
+from gui.store.workflow_steps import active_set
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.copy_chip import CopyChipWidget
 from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.question_modal import QuestionModal
-from gui.widget.report_template import ReportTemplateField
+from gui.widget.report_template import ReportTemplateField, template_state
 from gui.widget.text_style import MUTED
 
 _VERDICT_KEYS = {"Confirmed": "analysis_tile.verdict.true", "False Positive": "analysis_tile.verdict.false",
@@ -79,6 +85,57 @@ def _Placeholders(questions):
     solara.Text(t("steps.questionnaire.placeholders_review"), style=MUTED + "font-size:0.75rem;")
 
 
+#: the template line's chip per ``template_state``: its text and colour
+_TEMPLATE_CHIPS = {"default": ("steps.questionnaire.template_chip_default", None),
+                   "custom": ("steps.questionnaire.template_chip_custom", "primary"),
+                   "missing": ("steps.questionnaire.template_chip_missing", "warning")}
+
+
+@solara.component
+def _TemplateCard(app_state, questions):
+    """The report template (spec 2026-10-14 §3): one line naming it, and the
+    picker with the placeholders under its caret. A custom file that is gone
+    holds the card open (the caret disabled), so it is picked again or
+    cleared. Whether it is open is this card's own state, never the project's."""
+    p = app_state.project.value
+    expanded, set_expanded = solara.use_state(False)
+    state = template_state(p.report_template)
+    shown = expanded or state == "missing"
+    name = Path(p.report_template).name if p.report_template else t("steps.questionnaire.template_default")
+    chip_key, chip_color = _TEMPLATE_CHIPS[state]
+    with rv.Card(outlined=True, class_="pa-3"):
+        with solara.Row(style="align-items:center;gap:8px;flex-wrap:nowrap;"):
+            rv.Icon(small=True, children=["mdi-file-word-outline"])
+            with rv.Html(tag="div", style_="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;"
+                                           "white-space:nowrap;"):
+                solara.Text(t("steps.questionnaire.template_title") + " · ", style=MUTED + "font-size:0.8rem;")
+                solara.Text(name, style="font-weight:600;")
+            rv.Chip(x_small=True, outlined=True, color=chip_color, children=[t(chip_key)])
+            solara.Button("", icon_name="mdi-chevron-up" if shown else "mdi-chevron-down", icon=True, text=True,
+                          x_small=True, disabled=state == "missing", classes=["defo-template-toggle"],
+                          on_click=lambda: set_expanded(not expanded))
+        if state == "missing":
+            solara.Text(t("steps.questionnaire.template_missing"), classes=["warning--text"],
+                        style="display:block;font-size:0.75rem;")
+        if shown:
+            with solara.Column(style="gap:8px;margin-top:8px;"):
+                ReportTemplateField(app_state=app_state)
+                _Placeholders(questions=questions)
+
+
+@solara.component
+def _StartAnalysis(app_state, ready):
+    """The workflow's way into Analysis, after the last step's settings. It
+    writes ``current_page_view``, the navigation signal every other way into
+    Analysis writes; ``_NavBridge`` turns it into the analysis screen. Gated on
+    an active alert set, with the reason under it."""
+    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", block=True,
+                  disabled=not ready, classes=["defo-start-analysis"],
+                  on_click=lambda: app_state.current_page_view.set("analysis_tile"))
+    if not ready:
+        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
+
+
 @solara.component
 def QuestionnaireStep(app_state):
     p = app_state.project.value
@@ -100,7 +157,7 @@ def QuestionnaireStep(app_state):
                 out[at] = question
             live.questions = out
 
-        app_state.update_project(name, _apply)
+        update_setup(app_state, name, _apply)
 
     def _move(key, step):
         def _apply(live):
@@ -113,48 +170,55 @@ def QuestionnaireStep(app_state):
                 out[i], out[j] = out[j], out[i]
                 live.questions = out
 
-        app_state.update_project(name, _apply)
+        update_setup(app_state, name, _apply)
 
     def _delete():
         key = pending_delete
         set_pending_delete(None)
-        app_state.update_project(name, lambda live: setattr(
+        update_setup(app_state, name, lambda live: setattr(
             live, "questions", [q for q in live.questions if q.key != key]))
 
     def _edit(q):
+        if refuse_setup(app_state):
+            return
         set_editing(q)
         modal_open.set(True)
 
     def _open_add():
+        if refuse_setup(app_state):
+            return
         set_editing(None)
         modal_open.set(True)
 
+    ro = read_only(p)  # a review copy asks the creator's questions (spec §6.3)
     last = len(p.questions) - 1
     rows = [{"key": q.key,
              "cells": [{"value": qs.question_label(q), "chips": question_tags(q), "stack": True}],
              "notes": [{"text": "{" + q.key + "}", "tone": None}],
              "actions": [
-                 {"kind": "move_up", "disabled": i == 0, "on_click": (lambda k=q.key: _move(k, -1))},
-                 {"kind": "move_down", "disabled": i == last, "on_click": (lambda k=q.key: _move(k, 1))},
-                 {"kind": "edit", "on_click": (lambda q=q: _edit(q))},
-                 {"kind": "delete", "on_click": (lambda k=q.key: set_pending_delete(k))},
+                 {"kind": "move_up", "disabled": ro or i == 0, "on_click": (lambda k=q.key: _move(k, -1))},
+                 {"kind": "move_down", "disabled": ro or i == last, "on_click": (lambda k=q.key: _move(k, 1))},
+                 {"kind": "edit", "disabled": ro, "on_click": (lambda q=q: _edit(q))},
+                 {"kind": "delete", "disabled": ro, "on_click": (lambda k=q.key: set_pending_delete(k))},
              ]} for i, q in enumerate(p.questions)]
     doomed = next((q for q in p.questions if q.key == pending_delete), None)
 
     with solara.Column(style="gap:16px;"):
-        solara.Markdown(f"### {t('steps.questionnaire.title')}")
         StepIntro(t("steps.questionnaire.description"), t("steps.questionnaire.info_header"),
                   t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", small=True, outlined=True,
-                          block=True, on_click=_open_add)
+                          block=True, disabled=ro, on_click=_open_add)
             ProductTable(title=t("steps.questionnaire.questions_title"),
                          columns=[{"label": t("steps.questionnaire.col_question")}], rows=rows,
                          empty_text=t("steps.questionnaire.empty"))
-        with rv.Card(outlined=True, class_="pa-3"):
-            solara.Text(t("steps.questionnaire.template_title"), style="font-weight:600;")
-            ReportTemplateField(app_state=app_state)
-            _Placeholders(questions=p.questions)
+            rv.Switch(label=t("steps.questionnaire.expanded"), v_model=p.questions_expanded,
+                      on_v_model=lambda on: app_state.update_project(
+                          name, lambda live: setattr(live, "questions_expanded", bool(on))),
+                      dense=True, hide_details=True, class_="mt-3")
+            solara.Text(t("steps.questionnaire.expanded_hint"), style=MUTED + "font-size:0.75rem;")
+        _TemplateCard(app_state=app_state, questions=p.questions)
+        _StartAnalysis(app_state=app_state, ready=active_set(p) is not None)
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
                   columns=attribute_columns(p))

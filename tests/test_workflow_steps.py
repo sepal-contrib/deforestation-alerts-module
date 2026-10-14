@@ -21,13 +21,16 @@ def _states(p):
 
 
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire", "analysis"]
-    # Every rail item is a dialog: the Overview dashboard is the widest, over
-    # the map and the panel alike (spec §9.5). The Project dialog is
-    # spatial_risk's status block (spec D5): Manage projects and the name form
-    # open over it as dialogs of their own.
+    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire",
+                                      "evaluators"]
+    # The first three rail items are dialogs: the Overview dashboard is the
+    # widest, over the map and the panel alike (spec §9.5). The Project dialog
+    # is spatial_risk's status block (spec D5): Manage projects and the name
+    # form open over it as dialogs of their own. Analysis, before the
+    # Overview on the rail, opens its screen.
     assert [(r.key, r.step_id, r.display, r.dialog_width) for r in RAIL_ITEMS] == [
-        ("about", 1, "dialog", 1300), ("project", 2, "dialog", 560), ("overview", 3, "dialog", 1300)]
+        ("about", 1, "dialog", 1300), ("project", 2, "dialog", 560), ("analysis", 4, "screen", None),
+        ("overview", 3, "dialog", 1300)]
 
 
 def test_gates_follow_the_project(tmp_path, monkeypatch):
@@ -65,7 +68,7 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
                                  created_at=datetime.now())
     p.active_set = "x"
     s = _states(p)
-    assert s["integrate"] is StepStatus.HAS_OUTPUTS and s["analysis"] is StepStatus.HAS_OUTPUTS
+    assert s["integrate"] is StepStatus.HAS_OUTPUTS
 
 
 def test_every_label_and_lock_key_exists():
@@ -89,13 +92,33 @@ def test_every_label_and_lock_key_exists():
         resolve(r.label_key)
 
 
-def test_questionnaire_sits_before_analysis_and_counts_questions():
+def test_questionnaire_comes_before_evaluators_and_counts_questions():
+    """Analysis is a screen of its own (Questionnaire's *Start analysis*)."""
     from gui.store.workflow_steps import step_index, step_status
     keys = [s.key for s in STEPS]
-    assert keys[-2:] == ["questionnaire", "analysis"]
+    assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys
     spec = STEPS[step_index("questionnaire")]
     assert not spec.unlocked(None)
     p = _p()  # a new project holds the default questions
     assert spec.unlocked(p) and spec.count(p) == len(p.questions) > 0
     p.questions = []
     assert step_status(spec, p) is StepStatus.EMPTY
+
+
+def test_evaluators_needs_an_active_set_and_counts_evaluators():
+    from deforestation_alerts.project.models import EvaluatorSplit
+    from gui.i18n import t
+    from gui.store.workflow_steps import step_index, step_status
+    spec = STEPS[step_index("evaluators")]
+    assert (spec.page_view, spec.label_key, spec.icon) == (
+        "evaluators_tile", "app.drawer_item.evaluators", "mdi-account-multiple-outline")
+    p = _p()
+    assert not spec.unlocked(None) and not spec.unlocked(p)
+    p.alert_sets["x"] = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
+    p.active_set = "x"
+    assert spec.unlocked(p) and spec.count(p) == 0 and step_status(spec, p) is StepStatus.EMPTY
+    p.alert_sets["x"].split = EvaluatorSplit(split_id="s", evaluators=["A", "B"], created_at=datetime.now())
+    assert spec.count(p) == 2 and step_status(spec, p) is StepStatus.HAS_OUTPUTS
+    assert t(spec.count_key, count=2) == "2 evaluators"
