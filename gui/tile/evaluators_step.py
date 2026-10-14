@@ -8,9 +8,10 @@ The store is the source of truth for the assignments (its ``evaluator``
 column); the table counts them from the active set's loaded alerts. Every
 store write (split, remove, merge) goes through ``split_service`` /
 ``merge_service``, which hold the per-store lock (§4.4). Builds, reads and
-writes run off the event loop with their button loading (§9). A package or
-a reviewed copy lands in the set folder and is offered as a download link,
-as the Overview export does (``gui/tile/overview_tile.py``).
+writes run off the event loop with their button loading (§9). **Generate
+packages** builds every evaluator's zip into the set folder; each row's
+cloud icon is then that zip's download (``package_files`` finds the zips
+again by their header, so they survive a reload).
 
 ``share.build_package`` leaves the project alone: after a build this step
 records the split as packaged, with the questionnaire's digest, so a later
@@ -45,7 +46,7 @@ from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts import local_files
 from gui.i18n import format_number, t, tn
-from gui.scripts import aoi_io, merge_service, remote_facts, set_store, split_service
+from gui.scripts import aoi_io, merge_service, package_files, remote_facts, set_store, split_service
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.setup_guard import update_setup
@@ -226,15 +227,42 @@ def table_columns() -> list:
             {"label": t("evaluators.col_merged"), "width": "76px"}]
 
 
-def _table_rows(stats, unassigned, *, on_package, building, can_package) -> list:
+def found_links(zips) -> dict:
+    """The download of each built zip (``package_files.BuiltZip``) by
+    evaluator; a zip outside ``$HOME`` has no link and is left out."""
+    out = {}
+    for name, z in zips.items():
+        try:
+            entry = link_entry(z.path)
+        except ValueError:
+            continue
+        out[name] = {**entry, "outdated": z.outdated, "built_at": z.built_at}
+    return out
+
+
+def package_action(name: str, found, building) -> dict:
+    """A row's cloud icon (spec 2026-10-14 §4.4): it spins while that
+    evaluator's zip is built, is dim until one exists for this split, then
+    downloads it, amber when the questionnaire changed since."""
+    if building == name:
+        return {"kind": "download", "href": None, "loading": True,
+                "title": t("evaluators.package_download", evaluator=name)}
+    if found is None:
+        return {"kind": "download", "href": None, "title": t("evaluators.generate_first")}
+    return {"kind": "download", "href": found["url"], "file": found["file"],
+            "color": "warning" if found["outdated"] else "primary",
+            "title": t("evaluators.package_outdated") if found["outdated"]
+            else t("evaluators.package_download", evaluator=name)}
+
+
+def _table_rows(stats, unassigned, *, found, building) -> list:
     rows = [{"key": s["name"],
              "cells": [{"value": s["name"]},
                        {"value": format_number(s["assigned"])},
                        {"value": format_number(s["reviewed"])},
                        {"value": s["merged_at"].strftime("%Y-%m-%d") if s["merged_at"] else NO_VALUE,
                         "muted": s["merged_at"] is None}],
-             "actions": [{"kind": "download", "on_click": (lambda n=s["name"]: on_package(n)),
-                          "disabled": not can_package, "loading": building == s["name"]}]}
+             "actions": [package_action(s["name"], found.get(s["name"]), building)]}
             for s in stats]
     if unassigned:
         rows.append({"key": "", "actions": [],
@@ -382,7 +410,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     names_text, set_names_text = solara.use_state("")
     include, set_include = solara.use_state(False)
     building, set_building = solara.use_state(None)  # the evaluator whose package is being built
-    links, set_links = solara.use_state({})  # (split_id, evaluator) -> link entry
+    scans, set_scans = solara.use_state(0)  # bumped by each Generate run: rescan the set folder
     pending, set_pending = solara.use_state(None)  # {"preview", "file"} of the copy being merged
     split_open = solara.use_reactive(False)
     merge_open = solara.use_reactive(False)
@@ -399,14 +427,13 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
 
     def _reset():
         # Another project opened: its step starts from a fresh form, without
-        # this project's preview, links or open modal. (A ``.key(p.name)`` on
+        # this project's preview or open modal. (A ``.key(p.name)`` on
         # the panel does not remount it: reacton re-renders a child subscribed
         # to the same reactive in place, keeping its state.)
         set_mode("count")
         set_count_text("2")
         set_names_text("")
         set_include(False)
-        set_links({})
         set_pending(None)
         split_open.set(False)
         merge_open.set(False)
@@ -452,36 +479,42 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
 
     remove_task = solara.lab.use_task(_held(_remove), dependencies=None, prefer_threaded=False, raise_error=False)
 
-    async def _package(evaluator):
+    async def _generate():
+        """Every evaluator's package of the current split, in split order
+        (spec 2026-10-14 §4.4). The first failure is toasted and stops the
+        run; the zips built before it stay and are offered."""
         live = app_state.project.peek()
         snap = live.model_copy(deep=True) if live is not None else None
         shared = active_set(snap)
         if shared is None or shared.split is None:
             return
-        set_building(evaluator)
+        pdir = paths.project_dir(snap.name)
+        built = 0
         try:
-            pdir = paths.project_dir(snap.name)
             aoi = await package_aoi(snap, pdir, app_state.aoi_result.peek(), gee_interface)
             if aoi is None:
                 current_notifier().warning(t("evaluators.aoi_waiting"))
                 return
-            path = await asyncio.to_thread(build_package_file, snap, pdir, shared.id, evaluator, aoi)
-            entry = link_entry(path)
+            for name in shared.split.evaluators:
+                set_building(name)
+                await asyncio.to_thread(build_package_file, snap, pdir, shared.id, name, aoi)
+                built += 1
         except Exception as exc:  # noqa: BLE001 - a refusal (ShareError) or the disk's error: toasted
             current_notifier().error(error_text(exc))
-            return
         finally:
             set_building(None)
+            set_scans(lambda n: n + 1)
+        if not built:
+            return
         recorded = mark_packaged(app_state, snap.name, shared.id, shared.split.split_id,
                                  split_mod.questions_digest(snap.questions))
-        set_links(lambda old: {**old, (shared.split.split_id, evaluator): entry})
-        if recorded:
-            current_notifier().success(t("evaluators.package_ready", evaluator=evaluator))
-        else:  # the zip is built; the split it was made for is not the open one any more
-            current_notifier().warning(t("evaluators.package_unrecorded", evaluator=evaluator))
+        if not recorded:  # the zips are built; the split they were made for is not the open one any more
+            current_notifier().warning(t("evaluators.packages_unrecorded"))
+        elif built == len(shared.split.evaluators):
+            current_notifier().success(tn("evaluators.packages_ready", built))
 
-    package_task = solara.lab.use_task(_held(_package), dependencies=None, prefer_threaded=False,
-                                       raise_error=False)
+    generate_task = solara.lab.use_task(_held(_generate), dependencies=None, prefer_threaded=False,
+                                        raise_error=False)
 
     async def _preview(path):
         live = app_state.project.peek()
@@ -529,7 +562,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         inflight.current = True
         task(*args)
 
-    busy = split_task.pending or remove_task.pending or package_task.pending or merge_task.pending
+    busy = split_task.pending or remove_task.pending or generate_task.pending or merge_task.pending
     try:
         names, form_error = typed_evaluators(mode, count_text, names_text), None
     except split_mod.SplitError as exc:
@@ -537,6 +570,19 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     orphan = bool(split is None and gdf is not None and split_service.orphan_assignments(p, gdf))
     stats, unassigned = evaluator_rows(split, gdf)
     ready = aoi_ready(p, paths.project_dir(p.name), app_state.aoi_result.value)
+    digest = split_mod.questions_digest(p.questions)
+    # The set folder is read again only when what decides a zip's fate
+    # changes: the project, the set, the split, the questionnaire or a run.
+    found = solara.use_memo(lambda: found_links(package_files.package_zips(p, s)),
+                            [p.name, s.id, split.split_id if split is not None else None, digest, scans])
+    newest = max((f["built_at"] for f in found.values()), default=None)
+    if generate_task.pending and building in (split.evaluators if split is not None else []):
+        generate_label = t("evaluators.generating", i=split.evaluators.index(building) + 1,
+                           n=len(split.evaluators))
+    elif found:
+        generate_label = t("evaluators.regenerate")
+    else:
+        generate_label = t("evaluators.generate")
     editing = split is not None or orphan
 
     def _run(action):
@@ -579,18 +625,18 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         if orphan:
             solara.Text(t("evaluators.orphan"), classes=["warning--text"])
         ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
-                     rows=_table_rows(stats, unassigned, on_package=lambda name: _launch(package_task, name),
-                                      building=building, can_package=ready and gdf is not None and not busy),
+                     rows=_table_rows(stats, unassigned, found=found, building=building),
                      empty_text=t("evaluators.empty"), header_action=_header_action)
         if split is not None and not ready:
             solara.Text(t("evaluators.aoi_waiting"), style=MUTED + "font-size:0.75rem;")
-        for name in (split.evaluators if split is not None else []):
-            entry = links.get((split.split_id, name))
-            if entry is not None:
-                _download_link(entry, t("evaluators.package_link", file=entry["file"]),
-                               "defo-package-link").key(f"package:{name}")
+        if newest is not None:
+            solara.Text(t("evaluators.built_at", when=newest.strftime("%Y-%m-%d %H:%M")),
+                        style="display:block;" + MUTED + "font-size:0.75rem;")
         if split is not None:
             with solara.Row(style="gap:8px;flex-wrap:wrap;"):
+                solara.Button(generate_label, icon_name="mdi-package-variant-closed", color="primary", outlined=True,
+                              small=True, disabled=busy or not ready or gdf is None, classes=["defo-generate"],
+                              style="flex:1 1 150px;", on_click=lambda: _launch(generate_task))
                 solara.Button(t("evaluators.merge_open"), icon_name="mdi-call-merge", color="primary", outlined=True,
                               small=True, disabled=busy, style="flex:1 1 150px;",
                               on_click=lambda: merge_open.set(True))

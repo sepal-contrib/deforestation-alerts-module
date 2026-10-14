@@ -618,8 +618,6 @@
     "unassigned": "Non attribuées",
     "empty": "Pas encore de répartition : utilisez Répartir les alertes… pour les attribuer aux évaluateurs.",
     "aoi_waiting": "Les paquets attendent la géométrie de l'AOI : ouvrez l'étape AOI pour la charger.",
-    "package_ready": "Paquet pour {evaluator} prêt.",
-    "package_link": "Télécharger {file}",
     "import_label": "Copie révisée (.zip)",
     "import_hint": "Choisissez la copie révisée d'un évaluateur. Elle est prévisualisée ici avant la fusion.",
     "preview_title": "Fusionner les révisions de {evaluator}",
@@ -637,12 +635,24 @@
     "split_unrecorded": "Les alertes de {project} ont été réparties, mais un autre projet a été ouvert avant l'enregistrement de la répartition. Rouvrez {project} et supprimez la répartition pour recommencer.",
     "merged_unrecorded": "Les révisions de {evaluator} sont déjà dans les alertes de {project}, mais un autre projet a été ouvert avant l'enregistrement du retour.",
     "merge_failed": "Impossible de fusionner {file} : {error}",
-    "package_unrecorded": "Le paquet pour {evaluator} est créé, mais la répartition ne l'a pas enregistré : un autre projet a été ouvert ou la répartition a changé entre-temps.",
     "open_split": "Répartir les alertes…",
     "edit_split": "Modifier la répartition",
     "edit_title": "Modifier la répartition des alertes",
     "merge_open": "Fusionner une copie révisée…",
-    "merge_title": "Fusionner une copie révisée"
+    "merge_title": "Fusionner une copie révisée",
+    "generate": "Générer les paquets",
+    "regenerate": "Régénérer les paquets",
+    "generating": "Création {i} / {n}…",
+    "packages_ready": {
+      "one": "{n} paquet prêt.",
+      "many": "{n} de paquets prêts.",
+      "other": "{n} paquets prêts."
+    },
+    "packages_unrecorded": "Les paquets sont créés, mais la répartition ne les a pas enregistrés : un autre projet a été ouvert ou la répartition a changé entre-temps.",
+    "generate_first": "Générez d'abord les paquets.",
+    "package_download": "Télécharger le paquet de {evaluator}",
+    "package_outdated": "Créé avant la modification du questionnaire : générez de nouveau les paquets.",
+    "built_at": "Créé {when}"
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."

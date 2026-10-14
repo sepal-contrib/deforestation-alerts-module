@@ -594,8 +594,6 @@
     "unassigned": "Unassigned",
     "empty": "No split yet: use Split alerts… to assign them to evaluators.",
     "aoi_waiting": "Packages wait for the AOI geometry: open the AOI step to load it.",
-    "package_ready": "Package for {evaluator} ready.",
-    "package_link": "Download {file}",
     "import_label": "Reviewed copy (.zip)",
     "import_hint": "Pick one evaluator's reviewed copy. It is previewed here before it merges.",
     "preview_title": "Merge reviews from {evaluator}",
@@ -613,12 +611,23 @@
     "split_unrecorded": "The alerts of {project} were split, but another project was opened before the split was saved. Open {project} again and remove the split to start over.",
     "merged_unrecorded": "The reviews from {evaluator} are in the alerts of {project}, but another project was opened before the return record was saved.",
     "merge_failed": "{file} could not be merged: {error}",
-    "package_unrecorded": "The package for {evaluator} is built, but the split did not record it: another project was opened or the split changed meanwhile.",
     "open_split": "Split alerts…",
     "edit_split": "Edit split",
     "edit_title": "Edit the split",
     "merge_open": "Merge reviewed copy…",
-    "merge_title": "Merge a reviewed copy"
+    "merge_title": "Merge a reviewed copy",
+    "generate": "Generate packages",
+    "regenerate": "Regenerate packages",
+    "generating": "Building {i} / {n}…",
+    "packages_ready": {
+      "one": "{n} package ready.",
+      "other": "{n} packages ready."
+    },
+    "packages_unrecorded": "The packages are built, but the split did not record them: another project was opened or the split changed meanwhile.",
+    "generate_first": "Generate the packages first.",
+    "package_download": "Download {evaluator}'s package",
+    "package_outdated": "Built before the questionnaire changed: generate the packages again.",
+    "built_at": "Built {when}"
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."

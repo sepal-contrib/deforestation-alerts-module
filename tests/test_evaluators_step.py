@@ -11,6 +11,7 @@ import json
 import threading
 import time
 import tomllib
+import zipfile
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,7 +27,7 @@ from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
 from shapely.geometry import box
 
-from deforestation_alerts.project import models, paths
+from deforestation_alerts.project import models, paths, share
 from deforestation_alerts.project import split as split_mod
 from deforestation_alerts.project.models import (
     AlertSet,
@@ -182,6 +183,37 @@ def _preview(evaluator="Bo"):
     return SimpleNamespace(header=SimpleNamespace(evaluator=evaluator), rows=None, new=[12], conflicts=[13],
                            unchanged=[], ignored=[99], columns=["status"], extra_columns=["junk"],
                            questions_changed=True)
+
+
+def _clouds(rc):
+    return rc.find(v.Html, class_="defo-download-action").widgets
+
+
+def _generate_btn(rc):
+    (btn,) = [b for b in rc.find(v.Btn).widgets if "defo-generate" in (b.class_ or "")]
+    return btn
+
+
+def _package_zip(p_, set_id, evaluator, out_dir, *, split_id=None, digest=None):
+    """What ``share.build_package`` leaves in the set folder, as far as the
+    step reads it: the zip under its name, with its share.json."""
+    sp = p_.alert_sets[set_id].split
+    index = sp.evaluators.index(evaluator) + 1
+    header = share.ShareHeader(format=share.FORMAT, format_version=share.FORMAT_VERSION, kind=share.KIND_PACKAGE,
+                               app_version="test", origin_project=p_.name, set_id=set_id, set_fingerprint="fp",
+                               split_id=split_id or sp.split_id, evaluator=evaluator, evaluator_index=index,
+                               questions_digest=digest if digest is not None
+                               else split_mod.questions_digest(p_.questions),
+                               created_at=datetime.now())
+    path = Path(out_dir) / share.package_filename(p_.name, set_id, index, evaluator)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(share.HEADER_MEMBER, header.model_dump_json())
+    return path
+
+
+def _set_folder():
+    return paths.set_dir(paths.project_dir("c"), PERIOD, ["GLAD-L"])
 
 
 # ---------------------------------------------------------------- helpers
@@ -479,7 +511,9 @@ def test_the_table_lists_the_evaluators_and_the_unassigned_alerts(data_root):
     _box, rc = _render(_state(_project(split=_split()), _gdf()))
     try:
         assert {"Ana", "Bo", t("evaluators.unassigned")} <= set(_strings(rc.container))
-        assert len(_icon_buttons(rc, DOWNLOAD)) == 2  # one per evaluator, none on Unassigned
+        clouds = _clouds(rc)
+        assert len(clouds) == 2 and all(c.attributes.get("aria-disabled") == "true" for c in clouds)
+        assert all(c.attributes["title"] == t("evaluators.generate_first") for c in clouds)
     finally:
         rc.close()
 
@@ -495,13 +529,22 @@ def test_assignments_without_a_split_record_offer_remove_split(data_root, monkey
         rc.close()
 
 
-def test_a_package_download_records_the_split_as_packaged_and_offers_the_link(data_root, monkeypatch):
+def test_an_earth_engine_aoi_not_loaded_yet_holds_generate(data_root):
+    _box, rc = _render(_state(_project(split=_split(), sidecar=False), _gdf()))
+    try:
+        assert _generate_btn(rc).disabled
+        assert t("evaluators.aoi_waiting") in _strings(rc.container)
+    finally:
+        rc.close()
+
+
+def test_generate_builds_every_evaluators_package_and_the_clouds_download_them(data_root, monkeypatch):
+    built = []
+
     def _build(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version):
-        assert aoi == FC  # the sidecar
-        made = Path(out_dir) / f"c__{set_id}__e01-{evaluator.lower()}__review.zip"
-        made.parent.mkdir(parents=True, exist_ok=True)
-        made.write_bytes(b"PK")
-        return made
+        assert aoi == FC  # the sidecar, fetched once for the run
+        built.append(evaluator)
+        return _package_zip(p_, set_id, evaluator, out_dir)
 
     monkeypatch.setattr(es.share, "build_package", _build)
     s = _state(_project(split=_split()), _gdf())
@@ -509,30 +552,81 @@ def test_a_package_download_records_the_split_as_packaged_and_offers_the_link(da
     async def main():
         _box, rc = _render(s)
         try:
-            ana, _bo = _icon_buttons(rc, DOWNLOAD)
-            ana.fire_event("click", None)
-            await _settle(lambda: _links(rc, "defo-package-link"), "the package link")
-            (link,) = _links(rc, "defo-package-link")
-            name = f"c__{SET_ID}__e01-ana__review.zip"
-            path = paths.set_dir(paths.project_dir("c"), PERIOD, ["GLAD-L"]) / name
-            assert path.read_bytes() == b"PK"
-            assert link.attributes["href"].endswith("/" + local_files.home_relative(path))
-            assert link.attributes["download"] == name
+            assert t("evaluators.generate") in _strings(_generate_btn(rc))
+            _generate_btn(rc).fire_event("click", None)
+            await _settle(lambda: len([c for c in _clouds(rc) if c.tag == "a"]) == 2, "both cloud links")
+            assert built == ["Ana", "Bo"]
+            ana, bo = _clouds(rc)
+            path = _set_folder() / share.package_filename("c", SET_ID, 1, "Ana")
+            assert ana.attributes["href"].endswith("/" + local_files.home_relative(path))
+            assert ana.attributes["download"] == path.name
+            assert ana.attributes["title"] == t("evaluators.package_download", evaluator="Ana")
             split = s.project.value.alert_sets[SET_ID].split
             assert split.packaged and split.questions_digest == split_mod.questions_digest(s.project.value.questions)
-            assert t("evaluators.package_ready", evaluator="Ana") in _toasts("success")
+            assert tn("evaluators.packages_ready", 2) in _toasts("success")
+            assert t("evaluators.regenerate") in _strings(_generate_btn(rc))
+            assert any(x.startswith(t("evaluators.built_at", when="")[:5]) for x in _strings(rc.container))
         finally:
             rc.close()
 
     asyncio.run(main())
 
 
-def test_an_earth_engine_aoi_not_loaded_yet_holds_the_downloads(data_root):
-    _box, rc = _render(_state(_project(split=_split(), sidecar=False), _gdf()))
+def test_generate_stops_at_the_first_failure_and_keeps_what_it_built(data_root, monkeypatch):
+    built = []
+
+    def _build(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version):
+        if evaluator == "Bo":
+            raise ShareError("share.err.no_aoi")
+        built.append(evaluator)
+        return _package_zip(p_, set_id, evaluator, out_dir)
+
+    monkeypatch.setattr(es.share, "build_package", _build)
+    s = _state(_project(split=_split()), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _generate_btn(rc).fire_event("click", None)
+            await _settle(lambda: t("share.err.no_aoi") in _toasts("error"), "the error toast")
+            await _settle(lambda: [c.tag for c in _clouds(rc)] == ["a", "span"], "Ana's link, Bo dim")
+            assert built == ["Ana"] and not _toasts("success")
+            assert s.project.value.alert_sets[SET_ID].split.packaged  # Ana's zip is out there
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_zip_built_earlier_is_offered_after_a_reload(data_root):
+    p = _project(split=_split(packaged=True))
+    _package_zip(p, SET_ID, "Bo", _set_folder())
+    _box, rc = _render(_state(p, _gdf()))
     try:
-        downloads = _icon_buttons(rc, DOWNLOAD)
-        assert len(downloads) == 2 and all(b.disabled for b in downloads)
-        assert t("evaluators.aoi_waiting") in _strings(rc.container)
+        assert [c.tag for c in _clouds(rc)] == ["span", "a"]
+        assert t("evaluators.regenerate") in _strings(_generate_btn(rc))
+    finally:
+        rc.close()
+
+
+def test_a_zip_built_before_the_questionnaire_changed_is_amber(data_root):
+    p = _project(split=_split(packaged=True))
+    _package_zip(p, SET_ID, "Ana", _set_folder(), digest="an-older-questionnaire")
+    _box, rc = _render(_state(p, _gdf()))
+    try:
+        ana = _clouds(rc)[0]
+        assert ana.tag == "a" and ana.attributes["title"] == t("evaluators.package_outdated")
+        (icon,) = [i for i in rc.find(v.Icon).widgets if DOWNLOAD in i.children and i.color == "warning"]
+    finally:
+        rc.close()
+
+
+def test_a_zip_of_an_earlier_split_leaves_the_cloud_dim(data_root):
+    p = _project(split=_split())
+    _package_zip(p, SET_ID, "Ana", _set_folder(), split_id="an-earlier-split")
+    _box, rc = _render(_state(p, _gdf()))
+    try:
+        assert [c.tag for c in _clouds(rc)] == ["span", "span"]
     finally:
         rc.close()
 
@@ -745,14 +839,11 @@ def test_a_second_split_click_while_one_runs_is_dropped(data_root, monkeypatch):
     asyncio.run(main())
 
 
-def test_one_package_builds_at_a_time(data_root, monkeypatch):
+def test_a_second_generate_click_while_one_runs_is_dropped(data_root, monkeypatch):
     calls, release = [], threading.Event()
 
     def _made(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version=None):
-        made = Path(out_dir) / f"{evaluator}.zip"
-        made.parent.mkdir(parents=True, exist_ok=True)
-        made.write_bytes(b"PK")
-        return made
+        return _package_zip(p_, set_id, evaluator, out_dir)
 
     build = _blocking(calls, release, _made)
     monkeypatch.setattr(es.share, "build_package", lambda *a, app_version: build(*a))
@@ -761,14 +852,14 @@ def test_one_package_builds_at_a_time(data_root, monkeypatch):
     async def main():
         _box, rc = _render(s)
         try:
-            ana, bo = _icon_buttons(rc, DOWNLOAD)
-            ana.fire_event("click", None)
-            bo.fire_event("click", None)  # Ana's build is not cancelled for Bo's
+            _generate_btn(rc).fire_event("click", None)
             await _settle(lambda: calls, "Ana's build")
+            assert t("evaluators.generating", i=1, n=2) in _strings(_generate_btn(rc))
+            assert rc.find(v.ProgressCircular).widgets  # Ana's row spins
+            _generate_btn(rc).fire_event("click", None)  # while it runs
             release.set()
-            await _settle(lambda: _links(rc, "defo-package-link"), "Ana's link")
-            assert [c[3] for c in calls] == ["Ana"]
-            assert t("evaluators.package_ready", evaluator="Ana") in _toasts("success")
+            await _settle(lambda: tn("evaluators.packages_ready", 2) in _toasts("success"), "the run's end")
+            assert [c[3] for c in calls] == ["Ana", "Bo"]
         finally:
             release.set()
             rc.close()
@@ -776,27 +867,24 @@ def test_one_package_builds_at_a_time(data_root, monkeypatch):
     asyncio.run(main())
 
 
-def test_a_package_the_split_no_longer_matches_is_not_reported_recorded(data_root, monkeypatch):
+def test_a_split_replaced_while_generating_is_not_reported_recorded(data_root, monkeypatch):
     s = _state(_project(split=_split()), _gdf())
 
     def _build(p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version):
-        # The split is replaced while the zip is made.
+        # The split is replaced while the zips are made.
         _record_split(s, EvaluatorSplit(split_id="s9", evaluators=["Ana", "Bo"], created_at=datetime.now()))
-        made = Path(out_dir) / "ana.zip"
-        made.parent.mkdir(parents=True, exist_ok=True)
-        made.write_bytes(b"PK")
-        return made
+        return _package_zip(p_, set_id, evaluator, out_dir)
 
     monkeypatch.setattr(es.share, "build_package", _build)
 
     async def main():
         _box, rc = _render(s)
         try:
-            _icon_buttons(rc, DOWNLOAD)[0].fire_event("click", None)
-            await _settle(lambda: t("evaluators.package_unrecorded", evaluator="Ana") in _toasts("warning"),
-                          "the warning")
+            _generate_btn(rc).fire_event("click", None)
+            await _settle(lambda: t("evaluators.packages_unrecorded") in _toasts("warning"), "the warning")
             assert not _toasts("success")
             assert not s.project.value.alert_sets[SET_ID].split.packaged
+            assert [c.tag for c in _clouds(rc)] == ["span", "span"]  # built for s1, the table shows s9
         finally:
             rc.close()
 

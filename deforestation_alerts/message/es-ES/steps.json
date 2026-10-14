@@ -618,8 +618,6 @@
     "unassigned": "Sin asignar",
     "empty": "Aún no hay reparto: usa Repartir alertas… para asignarlas a evaluadores.",
     "aoi_waiting": "Los paquetes esperan la geometría del AOI: abre el paso AOI para cargarla.",
-    "package_ready": "Paquete para {evaluator} listo.",
-    "package_link": "Descargar {file}",
     "import_label": "Copia revisada (.zip)",
     "import_hint": "Elige la copia revisada de un evaluador. Se previsualiza aquí antes de integrarse.",
     "preview_title": "Integrar las revisiones de {evaluator}",
@@ -637,12 +635,24 @@
     "split_unrecorded": "Las alertas de {project} se repartieron, pero se abrió otro proyecto antes de guardar el reparto. Abre {project} de nuevo y quita el reparto para empezar otra vez.",
     "merged_unrecorded": "Las revisiones de {evaluator} ya están en las alertas de {project}, pero se abrió otro proyecto antes de guardar el registro de la devolución.",
     "merge_failed": "No se pudo integrar {file}: {error}",
-    "package_unrecorded": "El paquete para {evaluator} está creado, pero el reparto no lo registró: se abrió otro proyecto o el reparto cambió entretanto.",
     "open_split": "Repartir alertas…",
     "edit_split": "Editar reparto",
     "edit_title": "Editar el reparto",
     "merge_open": "Integrar copia revisada…",
-    "merge_title": "Integrar una copia revisada"
+    "merge_title": "Integrar una copia revisada",
+    "generate": "Generar paquetes",
+    "regenerate": "Regenerar paquetes",
+    "generating": "Creando {i} / {n}…",
+    "packages_ready": {
+      "one": "{n} paquete listo.",
+      "many": "{n} de paquetes listos.",
+      "other": "{n} paquetes listos."
+    },
+    "packages_unrecorded": "Los paquetes están creados, pero el reparto no los registró: se abrió otro proyecto o el reparto cambió entretanto.",
+    "generate_first": "Genera primero los paquetes.",
+    "package_download": "Descargar el paquete de {evaluator}",
+    "package_outdated": "Creado antes de que cambiara el cuestionario: genera los paquetes de nuevo.",
+    "built_at": "Creado {when}"
   },
   "review_copy": {
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
