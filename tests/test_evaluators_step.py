@@ -853,6 +853,78 @@ def test_a_second_merge_click_while_one_runs_is_dropped(data_root, monkeypatch):
     asyncio.run(main())
 
 
+def test_esc_while_a_merge_runs_keeps_the_modal_on_it(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.share, "read_return", lambda path, p, store: _preview())
+    monkeypatch.setattr(es.merge_service, "merge_return", _blocking(
+        calls, release, EvaluatorReturn(merged_at=datetime.now(), taken=2, unchanged=0, conflicts=1, ignored=1)))
+    s = _state(_project(split=_split()), _gdf())
+    zip_path = data_root / "bo__reviewed.zip"
+    zip_path.write_bytes(b"PK")
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            await _open_preview(rc, zip_path)
+            await _settle(lambda: calls, "the merge")
+            (dialog,) = [d for d in rc.find(v.Dialog).widgets if d.v_model]
+            dialog.fire_event("keydown.esc", None)
+            assert dialog.v_model and t("evaluators.merge") in _strings(rc.container)
+            release.set()
+            await _settle(lambda: _toasts("warning"), "the merge's end")
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_split_button_spins_while_a_split_runs(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.split_service, "apply_split", _blocking(calls, release, lambda st, m, names, inc: _split()))
+    s = _state(_project(), _gdf(evaluators=("",) * 4))
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            _open_split(rc)
+            _button(rc, t("evaluators.split")).fire_event("click", None)
+            await _settle(lambda: calls, "the split")
+            (btn,) = [b for b in rc.find(v.Btn).widgets if "defo-split-open" in (b.class_ or "")]
+            assert btn.loading
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_generate_spins_while_the_aoi_is_fetched(data_root, monkeypatch):
+    calls, release = [], threading.Event()
+    monkeypatch.setattr(es.share, "aoi_geojson_for_package", _blocking(calls, release, FC))
+    monkeypatch.setattr(es.share, "build_package",
+                        lambda p_, pdir, set_id, evaluator, aoi, out_dir, *, app_version:
+                        _package_zip(p_, set_id, evaluator, out_dir))
+    s = _state(_project(split=_split()), _gdf())
+
+    async def main():
+        _box, rc = _render(s)
+        try:
+            assert not _generate_btn(rc).loading
+            _generate_btn(rc).fire_event("click", None)
+            await _settle(lambda: calls, "the AOI fetch")
+            await asyncio.sleep(0.05)
+            assert _generate_btn(rc).loading and t("evaluators.generate") in _strings(_generate_btn(rc))
+            release.set()
+            await _settle(lambda: tn("evaluators.packages_ready", 2) in _toasts("success"), "the run's end")
+            assert not _generate_btn(rc).loading
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_second_split_click_while_one_runs_is_dropped(data_root, monkeypatch):
     calls, release = [], threading.Event()
     monkeypatch.setattr(es.split_service, "apply_split", _blocking(calls, release, lambda st, m, names, inc: _split()))

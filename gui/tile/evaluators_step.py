@@ -594,6 +594,9 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
                             [p.name, s.id, split.split_id if split is not None else None, digest, scans])
     newest = max((f["built_at"] for f in found.values()), default=None)
     building_name = building_here(building, p, split) if generate_task.pending else None
+    # Before its first build the run fetches the AOI: the button spins.
+    preparing = bool(generate_task.pending and split is not None
+                     and building == (p.name, split.split_id, None))
     if building_name in (split.evaluators if split is not None else []):
         generate_label = t("evaluators.generating", i=split.evaluators.index(building_name) + 1,
                            n=len(split.evaluators))
@@ -620,6 +623,12 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             _launch(preview_task, path)
 
     def _close_merge():
+        # ESC while a merge runs: the modal stays on the running merge (a pick
+        # made now would be dropped by ``_launch``). Cancel is disabled then.
+        # ``use_form_dialog`` has already set ``open_`` False: undo that.
+        if merge_task.pending:
+            merge_open.set(True)
+            return
         # A copy still being read is dropped too: cancelled, its run stops
         # before it sets the preview (``_held`` still clears ``inflight``).
         if preview_task.pending:
@@ -631,6 +640,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         solara.Button(t("evaluators.edit_split") if editing else t("evaluators.open_split"),
                       icon_name="mdi-pencil-outline" if editing else "mdi-account-multiple-plus-outline",
                       color="primary", text=True, x_small=True, disabled=busy or gdf is None,
+                      loading=split_task.pending or remove_task.pending,
                       classes=["defo-split-open"], on_click=lambda: split_open.set(True))
 
     form = {"mode": mode, "count": count_text, "names": names_text, "include": include, "set_mode": set_mode,
@@ -653,7 +663,8 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         if split is not None:
             with solara.Row(style="gap:8px;flex-wrap:wrap;"):
                 solara.Button(generate_label, icon_name="mdi-package-variant-closed", color="primary", outlined=True,
-                              small=True, disabled=busy or not ready or gdf is None, classes=["defo-generate"],
+                              small=True, loading=preparing, disabled=busy or not ready or gdf is None,
+                              classes=["defo-generate"],
                               style="flex:1 1 150px;", on_click=lambda: _launch(generate_task))
                 solara.Button(t("evaluators.merge_open"), icon_name="mdi-call-merge", color="primary", outlined=True,
                               small=True, disabled=busy, style="flex:1 1 150px;",
