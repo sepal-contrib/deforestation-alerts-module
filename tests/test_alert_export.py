@@ -9,7 +9,8 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
 from deforestation_alerts import gdal_env
-from deforestation_alerts.scripts.alert_export import export_alerts_gdf, EXPORT_FORMATS
+from deforestation_alerts.scripts.alert_export import (
+    EXPORT_FORMATS, SCOPES, export_alerts_gdf, export_name, scope_counts, scope_rows)
 
 
 def _gdf():
@@ -39,7 +40,7 @@ def _real_shape_gdf():
     return gdf
 
 
-@pytest.mark.parametrize("fmt", ["csv", "gpkg", "geojson"])
+@pytest.mark.parametrize("fmt", ["csv", "gpkg"])
 def test_export_handles_unset_alert_polygon_multirow(data_root, fmt):
     # Regression: NaN alert_polygon must not crash any export format.
     folder = data_root / "recipe_a"
@@ -56,14 +57,6 @@ def test_export_gpkg_drops_secondary_geometries(data_root):
     back = gpd.read_file(path)
     assert "point" not in back.columns and "bounding_box" not in back.columns
     assert back.geometry.iloc[0].geom_type == "Polygon"
-
-
-def test_export_geojson(data_root):
-    folder = data_root / "recipe_a"
-    path = export_alerts_gdf(_gdf(), folder, "geojson",
-                             ["GLAD-L"], "2026-01-01", "2026-06-12")
-    assert path == f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.geojson"
-    assert Path(path).exists()
 
 
 def test_export_csv_keeps_columns_as_wkt(data_root):
@@ -92,5 +85,51 @@ def test_export_leaves_only_the_export(data_root, data_files, tmp_path, monkeypa
     assert [p for p in scratch.rglob("*")] == []
 
 
+def _statuses(*statuses):
+    polys = [Polygon([(i, 0), (i + 1, 0), (i + 1, 1), (i, 1)]) for i in range(len(statuses))]
+    return gpd.GeoDataFrame({"area_ha": [1.0] * len(statuses), "status": list(statuses)},
+                            geometry=gpd.GeoSeries(polys, crs="EPSG:4326"))
+
+
 def test_export_formats_constant():
-    assert set(EXPORT_FORMATS) == {"csv", "gpkg", "geojson"}
+    assert list(EXPORT_FORMATS) == ["gpkg", "csv"]
+    assert SCOPES == ("confirmed", "reviewed", "unreviewed", "all")
+
+
+def test_scope_rows_split_by_status():
+    gdf = _statuses("Confirmed", "False Positive", "Need revision", "Not reviewed", None, "")
+    assert list(scope_rows(gdf, "confirmed").index) == [0]
+    assert list(scope_rows(gdf, "reviewed").index) == [0, 1, 2]
+    assert list(scope_rows(gdf, "unreviewed").index) == [3, 4, 5]
+    assert len(scope_rows(gdf, "all")) == 6
+    assert scope_counts(gdf) == {"confirmed": 1, "reviewed": 3, "unreviewed": 3, "all": 6}
+
+
+def test_scope_rows_without_status_column():
+    gdf = _statuses("x").drop(columns=["status"])
+    assert scope_counts(gdf) == {"confirmed": 0, "reviewed": 0, "unreviewed": 1, "all": 1}
+
+
+def test_scope_rows_rejects_an_unknown_scope():
+    with pytest.raises(ValueError):
+        scope_rows(_statuses("Confirmed"), "mine")
+
+
+def test_export_name_suffixes_every_scope_but_all():
+    assert export_name(["GLAD-L"], "2026-01-01", "2026-06-12", "gpkg") == \
+        "alerts_glad-l_2026-01-01_2026-06-12.gpkg"
+    assert export_name(["GLAD-L"], "2026-01-01", "2026-06-12", "csv", "confirmed") == \
+        "alerts_glad-l_2026-01-01_2026-06-12_confirmed.csv"
+
+
+def test_export_writes_only_the_scoped_rows(data_root):
+    folder = data_root / "recipe_a"
+    path = export_alerts_gdf(_statuses("Confirmed", "Not reviewed"), folder, "gpkg",
+                             ["GLAD-L"], "2026-01-01", "2026-06-12", scope="confirmed")
+    assert path == f"{folder}/alerts_glad-l_2026-01-01_2026-06-12_confirmed.gpkg"
+    assert list(gpd.read_file(path)["status"]) == ["Confirmed"]
+
+
+def test_export_rejects_geojson(data_root):
+    with pytest.raises(ValueError):
+        export_alerts_gdf(_gdf(), data_root / "recipe_a", "geojson", [], "", "")

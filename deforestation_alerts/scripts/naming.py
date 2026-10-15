@@ -19,14 +19,16 @@ def safe_token(text):
     return token or "na"
 
 
-def alert_artifact_name(prefix, sources, start_date, end_date, ext):
-    """Build ``<prefix>_<sources>_<start>_<end>.<ext>``.
+def alert_artifact_name(prefix, sources, start_date, end_date, ext, suffix=""):
+    """Build ``<prefix>_<sources>_<start>_<end>[_<suffix>].<ext>``.
 
     ``sources`` is a list of source labels joined by hyphens; an empty list
     falls back to ``"alerts"``. ``start_date`` / ``end_date`` are tokenized
-    (``"na"`` when blank). ``ext`` is the bare extension (no dot).
+    (``"na"`` when blank). ``ext`` is the bare extension (no dot). ``suffix``
+    is tokenized too and left out when blank.
     """
     sources_token = "-".join(safe_token(s) for s in (sources or [])) or "alerts"
     start = safe_token(start_date) if start_date else "na"
     end = safe_token(end_date) if end_date else "na"
-    return f"{prefix}_{sources_token}_{start}_{end}.{ext}"
+    tail = f"_{safe_token(suffix)}" if suffix else ""
+    return f"{prefix}_{sources_token}_{start}_{end}{tail}.{ext}"
