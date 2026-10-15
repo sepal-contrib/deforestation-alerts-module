@@ -26,6 +26,7 @@ from gui.scripts import questions as qs
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_TITLE, build_section
 from gui.tile.analysis.state import touch
+from gui.tile.analysis.widgets import _close_tree
 from gui.widget.text_style import MUTED
 
 _HIDDEN = "display: none;"
@@ -63,15 +64,6 @@ def _title(q):
     children.append(mark)
     row = v.Html(tag="div", class_="d-flex align-center mb-2", style_="gap: 8px;", children=children)
     return row, number, mark, text, required
-
-
-def _close(widget):
-    """Close ``widget`` and every widget below it (``close`` alone leaves the
-    children's comms open)."""
-    for child in getattr(widget, "children", None) or []:
-        if not isinstance(child, str):
-            _close(child)
-    widget.close()
 
 
 def _control(q, analysis, live):
@@ -176,7 +168,7 @@ def build_questions_section(app_state, analysis, *, labels=None):
         # Off the tree now: close their comms (each rebuild would leak a
         # set otherwise); ``live`` already keeps their handlers from writing.
         for wrapper in old:
-            _close(wrapper)
+            _close_tree(wrapper)
         _sync()
 
     picked = {"verdict": None}

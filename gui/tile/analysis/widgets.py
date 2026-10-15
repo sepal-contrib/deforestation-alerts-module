@@ -45,6 +45,7 @@ before/after images and their info lists live in ``AnalysisState``):
 
 import ipyvuetify as v
 import solara
+from ipywidgets import Widget
 from pysepal import sepalwidgets as sw
 
 from gui.i18n import t
@@ -54,11 +55,29 @@ from gui.widget.alert_views import AlertViews
 
 def _close_tree(widget) -> None:
     """Close ``widget`` and every widget under its ``children`` (a pysepal
-    ``Markdown`` is a layout around a flex around the rendered template)."""
+    ``Markdown`` is a layout around a flex around the rendered template), and
+    an ipywidgets ``Layout`` when it has one: ``close`` leaves that open too."""
     for child in getattr(widget, "children", None) or []:
         if not isinstance(child, str):
             _close_tree(child)
+    layout = getattr(widget, "layout", None)
+    if isinstance(layout, Widget):
+        layout.close()
     widget.close()
+
+
+def replace_children(container, kids) -> None:
+    """Set ``container.children`` to ``kids`` and close what that drops.
+
+    A widget dropped from the tree without ``close`` keeps its comm, and its
+    place in ipywidgets' registry, for the rest of the session. Compared by
+    identity: a widget ``kids`` keeps is left alone."""
+    old = list(container.children or [])
+    container.children = kids
+    keep = {id(k) for k in kids}
+    for child in old:
+        if not isinstance(child, str) and id(child) not in keep:
+            _close_tree(child)
 
 
 def info_button(description: str, header: str, md: str) -> v.Html:

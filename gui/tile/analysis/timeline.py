@@ -41,6 +41,7 @@ from deforestation_alerts.scripts.scene_index import (
 from gui.i18n import format_date, t
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.state import IMAGE_AREAS, imagery_changed
+from gui.tile.analysis.widgets import replace_children
 from gui.widget.handle_strip import HandleStrip
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -709,7 +710,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 hit, attrs,
                 None if hidden else (lambda _w, _e, _d, rid=rid: _on_stripe(rid)),
                 stripe_bar_style(row, selected=side is not None, side=side or "a"), stripe_cursor(row)))
-        lane.children = kids
+        replace_children(lane, kids)
 
     def _flag(rid) -> str:
         """What a handle's flag says about ``rid``: the day and the collection."""
@@ -786,8 +787,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 ])
             btn.on_event("click", lambda w, e, d, key=key: _expand(key))
             kids.append(btn)
-        blocks.children = [v.Html(tag="div", style_="position: relative; height: 100%; "
-                                                    "pointer-events: none", children=kids)]
+        replace_children(blocks, [v.Html(tag="div", style_="position: relative; height: 100%; "
+                                                           "pointer-events: none", children=kids)])
 
     def _render_band(segs, a0, a1):
         if a0 is None or a1 is None:
@@ -819,7 +820,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 children=[label])
             btn.on_event("click", lambda w, e, d, key=key: _collapse(key))
             kids.append(btn)
-        lane_axis.children = kids
+        replace_children(lane_axis, kids)
 
     def _publish_filter():
         target = getattr(widgets, "timeline_filter", None)
@@ -882,7 +883,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             if not blocked:
                 chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
             kids.append(chip)
-        chips.children = kids
+        replace_children(chips, kids)
 
     def _render_titles(sel):
         """Name each side's image in its own map's title.
@@ -919,7 +920,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             # the title is a wrapping flex row: the gap is what keeps the pane
             # name and the image name two words
             title.style_ = "column-gap: 10px; row-gap: 2px"
-            title.children = kids
+            replace_children(title, kids)
 
     def _render_status():
         """The index's age and the refresh's outcome, which are two facts.
@@ -953,7 +954,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             # flag alone can read ``False`` while a fetch is still running.
             kids.append(v.Html(tag="span", style_="margin-left: 8px",
                                children=[t("analysis.timeline.loading")]))
-        status.children = kids
+        replace_children(status, kids)
 
     def _ask_for_the_view():
         """Ask the loader for the months *this* alert's view needs, and no others.
@@ -1002,12 +1003,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         render()
 
     def _clear_track():
-        for host in (lane, lane_axis):
-            host.children = []
+        for host in (lane, lane_axis, blocks):
+            replace_children(host, [])
         strip.candidates = []
         strip.before = strip.after = None
         strip.gap = ""
-        blocks.children = []
         window_band.style_ = "display: none"
 
     def _make_room_for(ids):
