@@ -52,19 +52,33 @@ from gui.tile.analysis.pane_layers import PaneLayers
 from gui.widget.alert_views import AlertViews
 
 
+def _close_tree(widget) -> None:
+    """Close ``widget`` and every widget under its ``children`` (a pysepal
+    ``Markdown`` is a layout around a flex around the rendered template)."""
+    for child in getattr(widget, "children", None) or []:
+        if not isinstance(child, str):
+            _close_tree(child)
+    widget.close()
+
+
 def info_button(description: str, header: str, md: str) -> v.Html:
     """Description text + an info icon that opens a Markdown popup (raw-widget
     twin of gui.widget.help.InfoButton for builders that never render via
     reacton). Like InfoButton it closes with a Close button: Escape does not
-    reach a raw dialog that never takes the focus."""
+    reach a raw dialog that never takes the focus.
+
+    ``relabel_info(description, header, md)`` on the returned widget
+    rewrites the three texts and *Close* (a language switch)."""
     close = v.Btn(text=True, small=True, children=[t("common.close")])
+    card_title = v.CardTitle(children=[header])
+    card_text = v.CardText(children=[sw.Markdown(md)])
     dialog = v.Dialog(
         v_model=False,
         max_width="640px",
         children=[
             v.Card(children=[
-                v.CardTitle(children=[header]),
-                v.CardText(children=[sw.Markdown(md)]),
+                card_title,
+                card_text,
                 v.CardActions(style_="justify-content: flex-end;", children=[close]),
             ])
         ],
@@ -72,12 +86,32 @@ def info_button(description: str, header: str, md: str) -> v.Html:
     close.on_event("click", lambda *_: setattr(dialog, "v_model", False))
     btn = v.Btn(icon=True, small=True, children=[v.Icon(children=["mdi-information-outline"])])
     btn.on_event("click", lambda *_: setattr(dialog, "v_model", True))
-    return v.Html(
+    text = v.Html(tag="span", style_="flex: 1 1 auto;", children=[description])
+    root = v.Html(
         tag="div",
         class_="d-flex align-center px-3",
         style_="gap: 4px;",
-        children=[v.Html(tag="span", style_="flex: 1 1 auto;", children=[description]), btn, dialog],
+        children=[text, btn, dialog],
     )
+
+    shown_md = [md]
+
+    def relabel_info(description, header, md):
+        text.children = [description]
+        card_title.children = [header]
+        close.children = [t("common.close")]
+        if md != shown_md[0]:
+            # A Markdown widget renders its text once; a new text needs a new
+            # one. Close the old subtree so repeated switches leak nothing,
+            # and skip the rebuild when the text is unchanged (``relabel``
+            # also runs on every screen change).
+            (old,) = card_text.children
+            card_text.children = [sw.Markdown(md)]
+            _close_tree(old)
+            shown_md[0] = md
+
+    root.relabel_info = relabel_info
+    return root
 
 
 class AnalysisWidgets:

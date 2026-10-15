@@ -26,7 +26,9 @@ console in its right column), ``widgets``, ``show(on)`` and ``relabel()``. The
 screen's CSS (``SCREEN_CSS``) is its first child, a raw ``v.Html(tag="style")``.
 The two former ``use_effect``s are ``.subscribe`` registrations on
 ``app_state.actual_alert_id`` / ``app_state.alerts_gdf`` (each also invoked
-once immediately).
+once immediately). A raw tree never re-renders, so a language switch reaches
+it through label hooks (``labels.Labels``): each builder registers the
+function that writes its text, and ``relabel`` runs them all.
 
 Key architectural decisions (FIXED by the migration contract):
 
@@ -81,6 +83,7 @@ from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.review_save import REQUIRED_MISSING
 from gui.tile.analysis.footer import build_footer
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
 from gui.tile.analysis.state import IMAGE_AREAS
 from gui.tile.analysis.pane_layers import geojson_spec
@@ -475,7 +478,7 @@ def _open_questions_for(questions):
     return _on_refused
 
 
-def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field) -> v.Html:
+def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field, *, labels=None) -> v.Html:
     """The right panel: the head, the two blocks, two sections and the footer.
 
     In order (spec §3-§6, D4, D6): the help text with its info popup, the
@@ -494,7 +497,11 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     session (a collapse only toggles ``display``, never a ``v-if`` rebuild).
     The Questions body is the one exception: it holds no imperative state, and
     it is rebuilt when the project's questions change.
+
+    ``labels`` is the screen's ``labels.Labels``: the sub-builders register
+    their label hooks in it (a fresh one when none is given).
     """
+    labels = labels if labels is not None else Labels()
     refine = build_section(t("analysis_tile.sections.refine"), v.Html(tag="div"))
     refine_body = build_edit_tools(
         widgets=widgets, app_state=app_state, analysis=analysis,
@@ -665,7 +672,7 @@ SCREEN_CSS = (
 )
 
 
-def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamespace:
+def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None) -> SimpleNamespace:
     """The analysis screen: a full-height sibling of MapApp, right of its rail
     (spec 2026-10-08 §2.2, R30), around the analysis widgets and the review
     console.
@@ -677,7 +684,13 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
     ``relabel``. ``widgets`` needs ``panes_widget``, ``panes`` (its
     ``PaneLayers``), ``head_before``, ``head_after`` and ``timeline``.
 
-    Returns ``SimpleNamespace(screen, controls, widgets, show, relabel)``:
+    ``labels`` is the screen's ``labels.Labels``, holding the hooks its
+    builders registered; without one (a caller that did not go through
+    ``build_analysis_layout``) the screen makes its own and registers the
+    views' ``panes.relabel`` itself.
+
+    Returns ``SimpleNamespace(screen, controls, widgets, show, relabel,
+    labels)``:
 
     * ``show(on)``: on, the screen is displayed, then it gets the
       ``defo-analysis-screen--on`` class the shell's CSS hides MapApp's main
@@ -687,9 +700,12 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
       the views in it) is hidden. The views' hide nudge (a window resize,
       ``js/app/resize_nudge.js``) then finds the main map displayed and
       re-measures it; the frontend applies the two writes in this order.
-    * ``relabel()``: the back button, the title and the views' ``labels`` in
-      the current language.
+    * ``relabel()``: runs every label hook the screen's builders registered
+      (``labels.Labels``).
     """
+    if labels is None:
+        labels = Labels()
+        labels.add(widgets.panes.relabel)
     back = v.Btn(
         text=True,
         class_="defo-back-to-workflow",
@@ -702,12 +718,16 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
     topnav = getattr(panel, "topnav", None)
     # The panel's help, as the top bar's last control: the description is
     # the icon's tooltip (it no longer has a line of its own in the panel).
-    info = info_button(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md"))
+    info = info_button("", "", "")
     _span, info_btn, _dialog = info.children
     info_btn.children = [v.Icon(children=["mdi-help-circle-outline"])]
-    info_btn.attributes = {"title": t("analysis_tile.description"), "aria-label": t("analysis_tile.info_header")}
     info.children = [info_btn, _dialog]
     info.class_ = "d-flex align-center"
+
+    def _label_info():
+        info.relabel_info(t("analysis_tile.description"), t("analysis_tile.info_header"), t("analysis_tile.info_md"))
+        info_btn.attributes = {**(info_btn.attributes or {}), "title": t("analysis_tile.description"),
+                               "aria-label": t("analysis_tile.info_header")}
     if topnav is not None:
         # after the set's progress, before the navigation block
         topnav.children = [*topnav.children[:-1], info, topnav.children[-1]]
@@ -755,10 +775,15 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
         ]
         title.children = [" · ".join(part for part in parts if part)]
 
-    def relabel():
+    def _label_chrome():
         back.children = [back.children[0], t("app.panel_workflow_title")]
         _retitle()
-        widgets.panes.relabel()
+
+    labels.add(_label_info)
+    labels.add(_label_chrome)
+
+    def relabel():
+        labels.run()
 
     def _on_dark(change):
         state["dark"] = bool(change["new"])
@@ -769,9 +794,8 @@ def build_screen(widgets, controls, app_state, theme_state=None) -> SimpleNamesp
     app_state.project.subscribe(lambda _project: _retitle())
     if theme_state is not None:
         theme_state.observe(_on_dark, "dark")
-    relabel()
     _apply_classes()
-    return SimpleNamespace(screen=screen, controls=controls, widgets=widgets, show=show, relabel=relabel)
+    return SimpleNamespace(screen=screen, controls=controls, widgets=widgets, show=show, relabel=relabel, labels=labels)
 
 
 def build_analysis_layout(
@@ -786,7 +810,7 @@ def build_analysis_layout(
     """Build the analysis screen once per session (the shell memoizes it).
 
     Returns ``build_screen``'s ``SimpleNamespace(screen, controls, widgets,
-    show, relabel)``: the shell displays ``screen`` as a sibling of MapApp,
+    show, relabel, labels)``: the shell displays ``screen`` as a sibling of MapApp,
     and its ``_ScreenBridge`` calls ``show`` and ``relabel``. Built once (no
     re-render) so the sub-builders' handlers + subscriptions are wired exactly
     once and the raw widget tree survives every show and hide.
@@ -818,8 +842,11 @@ def build_analysis_layout(
         Shared app theme state: the views and the screen track the app's
         light/dark theme exactly as the shared main map does.
     """
+    # Every builder registers its label hooks here; ``relabel`` runs them.
+    labels = Labels()
     # Build the shared heavy widgets once.
     widgets = AnalysisWidgets(gee_interface=gee_interface, theme_state=theme_state)
+    labels.add(widgets.panes.relabel)
     # The visualization layers marked for Analysis, switched off on every view
     # (spec §10); the layout is built once per session, so wired once and the
     # subscription lives as long as the kernel (its unsubscribe is not kept).
@@ -882,5 +909,6 @@ def build_analysis_layout(
         aux_model=aux_model,
         app_tile_model=app_tile_model,
         id_field=id_field,
+        labels=labels,
     )
-    return build_screen(widgets, controls, app_state, theme_state)
+    return build_screen(widgets, controls, app_state, theme_state, labels=labels)

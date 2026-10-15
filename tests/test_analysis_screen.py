@@ -227,6 +227,25 @@ def test_a_language_switch_on_the_analysis_screen_stays_there():
         rc.close()
 
 
+def test_a_language_resolved_while_the_screen_is_hidden_relabels_it():
+    """The browser's language arrives after the shell's first render (pysepal
+    resolves it when the selector first mounts), while the workflow screen is
+    showing. The hidden analysis screen must take it then, not on some later
+    switch."""
+    state = AppState()
+    layout = _screen(state)
+    set_locale("en")
+    rc = _bridges(state, layout)
+    try:
+        assert state.screen.value == "workflow" and not _on(layout)
+        set_locale("fr")
+        assert _back(layout).children[-1] == "Flux de travail"
+        assert _title(layout).startswith("Analyse")
+    finally:
+        set_locale("en")
+        rc.close()
+
+
 def test_a_rail_dialog_opened_on_the_analysis_screen_keeps_the_screen():
     """R30: MapApp's rail stays usable on the screen. A rail click sets
     MapApp's step and the shell's rail mirror writes the item's page view;
@@ -438,7 +457,8 @@ def test_the_screen_follows_the_theme():
     memo = shell[shell.index("analysis_layout = solara.use_memo("):]
     memo = memo[:memo.index("dependencies=[]")]
     assert "theme_state=theme_state," in memo, "the shell must hand MapApp's theme state to the screen"
-    assert "build_screen(widgets, controls, app_state, theme_state)" in inspect.getsource(build_analysis_layout)
+    assert "build_screen(widgets, controls, app_state, theme_state, labels=labels)" in inspect.getsource(
+        build_analysis_layout)
 
 
 def test_the_title_names_the_project_and_the_active_set():
