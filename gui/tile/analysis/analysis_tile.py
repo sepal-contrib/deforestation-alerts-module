@@ -524,7 +524,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
-        on_refused=_open_questions_for(questions),
+        on_refused=_open_questions_for(questions), labels=labels,
     )
     exports.body_box.children = [export_parts.body]
     footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels)

@@ -142,6 +142,7 @@ from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis import alert_files, review_save
 from gui.tile.analysis import gif as gif_mod
 from gui.tile.analysis.file_tile import FileTile
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.paths import alert_gif_name
 from gui.tile.analysis.review_save import SaveRefused
 from gui.tile.analysis.state import capture_alert
@@ -359,6 +360,8 @@ def build_export(
     app_tile_model,
     set_badge=None,
     on_refused=None,
+    *,
+    labels=None,
 ):
     """Build and return the Export section's body and the review save runner.
 
@@ -380,7 +383,12 @@ def build_export(
 
     The alert store, the zip and the report it writes land in the active set's
     folder.
+
+    ``labels`` (a ``Labels``) gets the section's label hook: a language switch
+    rewrites the build tile, *Rebuild* and the three file tiles' words, and the
+    GIF tile's action text (a GIF still rendering included).
     """
+    labels = labels if labels is not None else Labels()
 
     # ------------------------------------------------------------------
     # The S1 layout (spec D6, the mockup's three states), created once so the
@@ -406,14 +414,12 @@ def build_export(
         ns["download_alert_data_btn"] = v.Btn(
             outlined=True, block=True, color="primary", disabled=True, class_="defo-build-tile",
             style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
-            children=[v.Icon(left=True, small=True, children=["mdi-cog"]),
-                      t("analysis_tile.export_labels.build_tile"), ns["save_first"]],
+            children=[v.Icon(left=True, small=True, children=["mdi-cog"]), "", ns["save_first"]],
         )
         ns["rebuild_btn"] = v.Btn(
             text=True, small=True, color="primary", class_="defo-rebuild",
             style_="text-transform:none;letter-spacing:normal;",
-            children=[v.Icon(left=True, small=True, children=["mdi-refresh"]),
-                      t("analysis_tile.export_labels.rebuild_tile")],
+            children=[v.Icon(left=True, small=True, children=["mdi-refresh"]), ""],
         )
         ns["files_dwn_btn"] = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
                                        t("analysis_tile.export_labels.tile_zip_detail"))
@@ -446,6 +452,9 @@ def build_export(
     built = {"saved": False, "files": 0, "rev": 0, "gif": 0, "gif_rev": 0}
     # A GIF of this section is rendering: the gate holds the button disabled.
     gif_running = {"on": False}
+    # The key of the GIF tile's action text, so a switch can reword a tile
+    # held by a running GIF (the gate skips it then). The tile starts locked.
+    gif_action = {"key": "analysis_tile.export_labels.gif_hint"}
 
     def _set_build_enabled(flag):
         """The build tile and *Rebuild* are one action (two faces of it, per
@@ -488,7 +497,8 @@ def build_export(
         if gif:
             ns["gif_dwn_btn"].set_file(None)
             # Back to the locked button; the gate reopens it if it may.
-            ns["gif_dwn_btn"].set_action(False, t("analysis_tile.export_labels.gif_hint"))
+            gif_action["key"] = "analysis_tile.export_labels.gif_hint"
+            ns["gif_dwn_btn"].set_action(False, t(gif_action["key"]))
             built["gif"] = 0
             built["gif_rev"] += 1
 
@@ -548,8 +558,34 @@ def build_export(
             return
         alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
         allowed = alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
-        ns["gif_dwn_btn"].set_action(allowed, t(
-            "analysis_tile.export_labels.tile_gif_make" if allowed else "analysis_tile.export_labels.gif_hint"))
+        gif_action["key"] = ("analysis_tile.export_labels.tile_gif_make" if allowed
+                             else "analysis_tile.export_labels.gif_hint")
+        ns["gif_dwn_btn"].set_action(allowed, t(gif_action["key"]))
+
+    def _label():
+        """The section's words in the current language. Text only, plus the
+        two audited callbacks (the gate and the badge), whose other writes are
+        derived from state a switch does not change."""
+        ns["save_first"].children = [f"({t('analysis_tile.export_labels.save_first')})"]
+        build = ns["download_alert_data_btn"]
+        build.children = [build.children[0], t("analysis_tile.export_labels.build_tile"), ns["save_first"]]
+        rebuild = ns["rebuild_btn"]
+        rebuild.children = [rebuild.children[0], t("analysis_tile.export_labels.rebuild_tile")]
+        # Literal keys (not f-strings), so the catalogue test sees each one.
+        for name, title, detail in (
+            ("files_dwn_btn", "analysis_tile.export_labels.tile_zip", "analysis_tile.export_labels.tile_zip_detail"),
+            ("report_dwn_btn", "analysis_tile.export_labels.tile_docx",
+             "analysis_tile.export_labels.tile_docx_detail"),
+            ("gif_dwn_btn", "analysis_tile.export_labels.tile_gif", "analysis_tile.export_labels.tile_gif_detail"),
+        ):
+            ns[name].set_title(t(title))
+            ns[name].set_detail(t(detail))
+        # A running GIF: the gate below returns at once, so the held tile's
+        # words are rewritten here, and nothing else on it (a no-op on a
+        # tile that links its GIF: ``set_file`` cleared its action).
+        ns["gif_dwn_btn"].relabel_action(t(gif_action["key"]))
+        _refresh_gif_gate()
+        _show_badge_for_state()
 
     # ------------------------------------------------------------------
     # An alert change takes the section back to its empty state. What it can
@@ -880,9 +916,11 @@ def build_export(
 
     _register_handlers()
 
-    # The badge's opening state, once everything it reads exists: a build is
-    # not possible until a save of this alert has landed.
-    _show_badge_for_state()
+    # The section's words and the badge's opening state, once everything they
+    # read exists: a build is not possible until a save of this alert has
+    # landed. ``add`` runs the hook now (in place of a direct badge call) and
+    # again on every language switch.
+    labels.add(_label)
 
     # ------------------------------------------------------------------
     # Layout: the section BODY — the build tile's row and the (hidden) file

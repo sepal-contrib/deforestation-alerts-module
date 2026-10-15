@@ -62,6 +62,8 @@ class FileTile(custom_sw.DownloadBtn):
         #: The warning leading the detail of a linked file, None without one.
         self.warning: Optional[str] = None
         self._detail = detail
+        #: The detail ``set_action`` wrote, None when the tile is not an action.
+        self._action: Optional[str] = None
         self._title = v.Html(tag="div", style_=_TITLE, children=[title])
         self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[detail])
         self._icon = v.Icon(small=True, class_="primary--text", children=["mdi-download"])
@@ -87,6 +89,31 @@ class FileTile(custom_sw.DownloadBtn):
         self._title.children = [title]
         return self
 
+    def _draw_meta(self):
+        """The line under the title, from the tile's state."""
+        if self._action is not None:
+            self._meta.children = [self._action]
+            return
+        line = f"{self._detail} · {self.size_text}" if self.path and self.size_text else self._detail
+        self._meta.children = ([v.Html(tag="span", class_="warning--text", children=[self.warning]), f" · {line}"]
+                               if self.path and self.warning else [line])
+
+    def set_detail(self, detail: str) -> "FileTile":
+        """The tile's own detail in another language (a language switch):
+        the file, its size, its warning and an action stay as they are."""
+        self._detail = detail
+        self._draw_meta()
+        return self
+
+    def relabel_action(self, detail: str) -> "FileTile":
+        """An action tile's text in another language. Text only: whether it
+        can be clicked, its spinner and its icon stay as they are (a running
+        GIF holds them). A tile that is not an action is left alone."""
+        if self._action is not None:
+            self._action = detail
+            self._draw_meta()
+        return self
+
     def set_file(self, path: Optional[str], detail: Optional[str] = None,
                  warning: Optional[str] = None) -> "FileTile":
         """Link ``path`` (a file in the set folder), or clear the tile (None).
@@ -105,10 +132,12 @@ class FileTile(custom_sw.DownloadBtn):
             self.warning = None
             self.size_text = ""
             self.path = None
-            self._meta.children = [self._detail]
+            self._action = None
+            self._draw_meta()
             self._icon.children = ["mdi-download"]
             return self.set_url()
         url_path = local_files.home_relative(path)
+        self._action = None
         if detail is not None:
             self._detail = detail
         self.path = path
@@ -118,9 +147,7 @@ class FileTile(custom_sw.DownloadBtn):
         except OSError:
             self.size_text = ""
         self.warning = warning
-        line = f"{self._detail} · {self.size_text}" if self.size_text else self._detail
-        self._meta.children = ([v.Html(tag="span", class_="warning--text", children=[warning]), f" · {line}"]
-                               if warning else [line])
+        self._draw_meta()
         return self.set_url(path=url_path)
 
     def set_action(self, enabled: bool, detail: str, icon: str = "mdi-filmstrip") -> "FileTile":
@@ -132,6 +159,7 @@ class FileTile(custom_sw.DownloadBtn):
             return self
         self.href = None
         self.disabled = not enabled
-        self._meta.children = [detail]
+        self._action = detail
+        self._draw_meta()
         self._icon.children = [icon]
         return self

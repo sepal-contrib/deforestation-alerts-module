@@ -1,6 +1,8 @@
 """S1 file tiles (spec D6): a disabled tile until a file is set, then a
 download link with its size."""
 
+import pytest
+
 from gui.tile.analysis.file_tile import FileTile, human_size
 
 
@@ -125,3 +127,64 @@ def test_set_title_renames_the_tile():
     tile = FileTile("csv", "CSV", "")
     tile.set_title("CSV table")
     assert "CSV table" in _strings(tile) and "CSV" in _strings(tile)
+
+
+def test_set_detail_rewrites_the_line_of_an_empty_tile():
+    tile = FileTile("zip", "Alert data", "GeoPackage")
+    tile.set_detail("GeoPackage (fr)")
+    assert tile._meta.children == ["GeoPackage (fr)"]
+
+
+def test_set_detail_leaves_an_action_tile_its_action():
+    tile = FileTile("gif", "Timelapse", "GIF")
+    tile.set_action(False, "Save first")
+    tile.set_detail("GIF (fr)")
+    assert tile._meta.children == ["Save first"]
+    tile.set_file(None)
+    assert tile._meta.children == ["GIF (fr)"]
+
+
+def test_set_detail_keeps_a_linked_file_and_its_size(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    f = tmp_path / "a.zip"
+    f.write_bytes(b"x" * 2048)
+    tile = FileTile("zip", "Alert data", "GeoPackage").set_file(str(f))
+    href = tile.href
+    tile.set_detail("GeoPackage (fr)")
+    assert tile.path == str(f) and tile.href == href
+    assert tile._meta.children == [f"GeoPackage (fr) · {tile.size_text}"]
+
+
+def test_a_refused_file_leaves_an_action_tile_its_action(monkeypatch):
+    """``set_file`` changes nothing before the path is accepted, the action
+    text included: the next relabel must not uncover the plain detail."""
+    from deforestation_alerts.scripts import local_files
+
+    def _refuse(path):
+        raise ValueError("outside the sandbox")
+
+    monkeypatch.setattr(local_files, "home_relative", _refuse)
+    tile = FileTile("gif", "Timelapse", "GIF")
+    tile.set_action(False, "Save first")
+    with pytest.raises(ValueError):
+        tile.set_file("/etc/passwd")
+    tile.set_detail("GIF (fr)")
+    assert tile.path is None and tile._meta.children == ["Save first"]
+
+
+def test_relabel_action_rewrites_only_the_action_text():
+    """A running GIF: the tile is held (disabled, loading); only its words
+    change."""
+    tile = FileTile("gif", "Timelapse", "GIF")
+    tile.set_action(True, "Make the GIF")
+    tile.disabled, tile.loading = True, True
+    icon = tile._icon.children
+    tile.relabel_action("Créer le GIF")
+    assert tile._meta.children == ["Créer le GIF"]
+    assert (tile.disabled, tile.loading, tile.href, tile._icon.children) == (True, True, None, icon)
+
+
+def test_relabel_action_leaves_a_tile_that_is_not_an_action():
+    tile = FileTile("zip", "Alert data", "GeoPackage")
+    tile.relabel_action("Créer")
+    assert tile._meta.children == ["GeoPackage"]

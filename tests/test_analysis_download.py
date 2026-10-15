@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis import alert_files
@@ -374,7 +375,7 @@ def _project_poke(app_state):
     return Project(name="t", created_at=now, updated_at=now)
 
 
-def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
+def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False, labels=None):
     """``build_export``'s arguments, wired so a save and a build run inline.
 
     What the badge says is imperative, per-alert widget state, so it is read
@@ -420,6 +421,7 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False):
         analysis=analysis,
         app_tile_model=model,
         set_badge=set_badge,
+        labels=labels,
     )
     build_btn = _build_button(parts.body)
     return SimpleNamespace(
@@ -1142,3 +1144,29 @@ def test_a_click_on_the_gif_link_makes_no_new_gif(tmp_path, monkeypatch):
     monkeypatch.setattr(gif_mod, "capture_gif", lambda *a, **k: calls.append(a))
     harness.make_gif()
     assert calls == [] and harness.gif_tile.path is not None
+
+
+def test_a_switch_while_a_gif_renders_rewords_the_tile_and_holds_it(tmp_path, monkeypatch):
+    from pysepal.i18n import set_locale
+
+    from gui.tile.analysis.labels import Labels
+
+    labels = Labels()
+    harness = _gif_harness(tmp_path, monkeypatch, defer=True, labels=labels)
+    _status(harness, "Confirmed")
+    harness.save()
+    while harness.held:
+        harness.run()
+    assert not harness.gif_tile.disabled
+    harness.make_gif()
+    assert len(harness.held) == 1 and harness.gif_tile.loading, "the GIF worker is held"
+    try:
+        set_locale("fr")
+        labels.run()
+        tile = harness.gif_tile
+        assert tile._meta.children == [t("analysis_tile.export_labels.tile_gif_make")]
+        assert tile.loading is True and tile.disabled is True and tile.path is None
+        harness.run()                        # the GIF lands after the switch
+        assert tile.path is not None and not tile.loading
+    finally:
+        set_locale("en")

@@ -287,3 +287,10 @@ def test_a_models_found_line_and_the_badge_follow_the_language(tmp_path, monkeyp
         "analysis_tile.model_labels.patches", 3), area=format_number(12.5, 1))]
     assert ns["dl2_found"].children == []
     assert english_leftovers(refine.root, "fr") == []
+
+
+def test_the_export_section_follows_the_language(tmp_path, monkeypatch):
+    built = build_layout(tmp_path, monkeypatch)
+    export = panel_sections(built.layout.controls).export
+    _switch(built)
+    assert english_leftovers(export.root, "fr") == []
