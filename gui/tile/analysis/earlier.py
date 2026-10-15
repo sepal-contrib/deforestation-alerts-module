@@ -16,6 +16,7 @@ import logging
 
 import ipyvuetify as v
 
+from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, STATUS_CODES
 from gui.i18n import t, tn
 from gui.scripts import earlier_reviews
@@ -44,6 +45,14 @@ def parse_km(text):
     except (TypeError, ValueError):
         return None
     return km if MIN_KM <= km <= MAX_KM else None
+
+
+def has_earlier_sets(p) -> bool:
+    """Whether the active set has sets of earlier periods to show reviews of:
+    without one the section has nothing to offer and is hidden."""
+    s = active_set(p) if p is not None else None
+    period = p.periods.get(s.period_id) if s is not None else None
+    return period is not None and bool(earlier_sets(p, period))
 
 
 def _style(feature, **_):
@@ -190,9 +199,19 @@ def build_earlier_controls(widgets, app_state, analysis):
         if analysis.show_earlier_reviews.value:
             spawn_in_context(_refresh)
 
+    shown_style = section.root.style_
+
+    def _sync_shown(*_):
+        shown = has_earlier_sets(app_state.project.value)
+        section.root.style_ = shown_style if shown else "display: none;"
+        if not shown and switch.v_model:
+            switch.v_model = False  # nothing to draw; ``_on_switch`` clears the overlay
+
     widgets.earlier_on_result = _result
     switch.observe(_on_switch, names="v_model")
     field_.observe(_on_km, names="v_model")
     _sync_badge()
+    app_state.project.subscribe(_sync_shown)
+    _sync_shown()
     section.switch, section.field = switch, field_
     return section

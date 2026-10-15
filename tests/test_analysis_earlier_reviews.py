@@ -25,6 +25,7 @@ def _setup(monkeypatch, n=2):
 
     monkeypatch.setattr(earlier.earlier_reviews, "near_reviews", near)
     monkeypatch.setattr(earlier, "active_set", lambda p: SimpleNamespace(id="s2"))
+    monkeypatch.setattr(earlier, "has_earlier_sets", lambda p: True)
     gdf = gpd.GeoDataFrame({"point": [Point(1, 2), Point(3, 4)]}, geometry=[Point(1, 2), Point(3, 4)],
                            crs="EPSG:4326")
     app_state = SimpleNamespace(alerts_gdf=solara.reactive(gdf), actual_alert_id=solara.reactive(0),
@@ -260,3 +261,35 @@ def test_the_switch_and_a_result_move_the_badge(monkeypatch):
     assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]
     section.switch.v_model = True
     assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 2)]
+
+
+def test_has_earlier_sets_needs_a_set_of_an_earlier_period(monkeypatch):
+    periods = {"p1": SimpleNamespace(start=1), "p2": SimpleNamespace(start=2)}
+    s1, s2 = SimpleNamespace(id="s1", period_id="p1"), SimpleNamespace(id="s2", period_id="p2")
+    only_one = SimpleNamespace(periods=periods, alert_sets={"s2": s2})
+    both = SimpleNamespace(periods=periods, alert_sets={"s1": s1, "s2": s2})
+    monkeypatch.setattr(earlier, "active_set", lambda p: s2)
+    assert not earlier.has_earlier_sets(only_one)
+    assert earlier.has_earlier_sets(both)
+    monkeypatch.setattr(earlier, "active_set", lambda p: s1)
+    assert not earlier.has_earlier_sets(both)  # s2 is later, not earlier
+    assert not earlier.has_earlier_sets(None)
+
+
+def test_the_section_is_hidden_without_earlier_sets_and_switches_off(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
+    has = {"v": True}
+    monkeypatch.setattr(earlier, "has_earlier_sets", lambda p: has["v"])
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    assert "display: none" not in section.root.style_
+    section.switch.v_model = True
+    assert _earlier(widgets)
+    has["v"] = False
+    app_state.project.set(object())
+    assert "display: none" in section.root.style_
+    assert section.switch.v_model is False and not analysis.show_earlier_reviews.value
+    assert _earlier(widgets) == []
+    has["v"] = True
+    app_state.project.set(object())
+    assert "display: none" not in section.root.style_
