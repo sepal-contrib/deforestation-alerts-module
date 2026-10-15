@@ -234,6 +234,19 @@ def test_the_analysis_footer_is_not_white_on_the_dark_theme():
     assert colour.lower() not in ("#fff", "#ffffff")
 
 
+def test_a_long_file_tile_detail_wraps_inside_the_tile():
+    """A file tile is a ``v-btn``, whose ``.v-btn__content`` is Vuetify's
+    ``flex: 1 0 auto``: it never shrinks, so a long detail line (an out-of-date
+    CSV: warning, rows, columns, date, size) pushed the download icon past the
+    tile's right edge (seen at 1000px and 500px). The shell lets it shrink, so
+    the detail wraps and the icon stays in the tile."""
+    css = _shell_css()
+    rules = {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    body = rules[".defo-file-tile .v-btn__content"]
+    assert re.search(r"flex:\s*1 1 auto", body) and re.search(r"min-width:\s*0", body)
+    assert re.search(r"max-width:\s*100%", body)
+
+
 def test_the_project_dialog_closes_itself_through_the_shell():
     shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
     assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)' in shell

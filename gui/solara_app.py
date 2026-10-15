@@ -635,6 +635,11 @@ def _AppShell():
         # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
+        # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
+        # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
+        # detail line (an out-of-date CSV) pushed the download icon out of
+        # the tile. Let it shrink, so the detail wraps instead.
+        ".defo-file-tile .v-btn__content { flex: 1 1 auto; min-width: 0; max-width: 100%; }\n"
         # Center modal dialogs over the MAP area (viewport minus the left rail):
         # `.v-dialog__content` is a fixed full-viewport flex box; shrink it by the
         # live rail width so a wide dialog (About is 1300px) is not tucked under
