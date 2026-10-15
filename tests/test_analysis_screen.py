@@ -349,11 +349,13 @@ def test_the_legend_is_hidden_on_the_analysis_screen_only():
 
 # ------------------------------------------------------------------- screen
 def _rules(css):
-    """``{selector: body}`` of a stylesheet, whitespace collapsed."""
+    """``{selector: body}`` of a stylesheet, whitespace collapsed. The rules
+    inside an at-rule (``@container``) count as rules of their own: the
+    at-rule's prelude is never taken for a selector."""
     def squash(text):
         return " ".join(text.split())
 
-    return {squash(sel): squash(body) for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    return {squash(sel): squash(body) for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css)}
 
 
 def test_only_the_main_map_and_the_right_panel_hide_under_the_screen():
@@ -370,7 +372,10 @@ def test_only_the_main_map_and_the_right_panel_hide_under_the_screen():
     on = "body:has(.defo-analysis-screen--on)"
     hide = f"{on} #map-container, {on} .right-panel, {on} .right-panel-tab"
     assert rules[hide] == "display: none !important;"
-    assert [sel for sel in rules if on in sel] == [hide], "one rule set keyed on the screen"
+    # and one that moves pysepal's log button off the timeline's corner
+    pill = f"{on} .pill-wrapper"
+    assert [sel for sel in rules if on in sel] == [hide, pill], "two rule sets keyed on the screen"
+    assert "display" not in rules[pill], "the log button moves, it is not hidden"
     hidden = [sel for sel, body in rules.items() if "display: none" in body]
     for kept in (".left-drawer", ".v-application--wrap", "sidebar-controls"):
         assert not any(kept in sel for sel in hidden), f"{kept} is hidden: the rail must stay usable"

@@ -626,6 +626,14 @@ def _AppShell():
         "body:has(.defo-analysis-screen--on) #map-container,\n"
         "body:has(.defo-analysis-screen--on) .right-panel,\n"
         "body:has(.defo-analysis-screen--on) .right-panel-tab { display: none !important; }\n"
+        # pysepal's task pill and log button stand at the right panel's edge
+        # (--sepal-notification-right-offset), which MapApp keeps reporting
+        # while the screen hides the panel: the button landed on the
+        # timeline's bottom-right corner. On the screen it sits in the empty
+        # foot of the timeline's "+1 month" column: right = the review panel
+        # (480) + the left column's padding (8) + the strip's (4) + the card
+        # border (1) + the track row's padding (8); bottom = 8 + 4 + 1 + 8.
+        "body:has(.defo-analysis-screen--on) .pill-wrapper { right: 501px !important; bottom: 21px !important; }\n"
         # The rail collapse/expand arrow sits on the screen's left edge: keep it
         # above the screen (MapApp's own value, restated here so the whole order
         # above is in one place) and below the dialogs.

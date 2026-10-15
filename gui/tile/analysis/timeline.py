@@ -537,7 +537,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     track = v.Html(tag="div", style_=_TRACK_STYLE,
                    children=[strip, window_band, lane, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
-    chips = v.Html(tag="div", style_="display: flex; align-items: center; gap: 8px", children=[])
+    chips = v.Html(tag="div", style_="display: flex; flex: 0 0 auto; align-items: center; gap: 8px", children=[])
     status = v.Html(tag="div", style_=f"font-size: 11.5px; color: {MUTED}", children=[])
 
     def _in_window():
@@ -871,7 +871,10 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                              f"border: 1.5px solid {SRC_COLOR[name]};"))
             count = f"{shown}" + (f" +{hidden}" if hidden else "")
             chip = v.Html(tag="button", attributes=attrs,
+                          # one line, at its own width: a full toolbar squeezed
+                          # the chips until "Sentinel-2" and "17 +7" broke in two
                           style_=(f"height: 28px; padding: 0 10px; border-radius: 14px; display: inline-flex; "
+                                  f"flex: 0 0 auto; white-space: nowrap; "
                                   f"align-items: center; gap: 6px; font-size: 12px; line-height: 16px; "
                                   f"cursor: {'not-allowed' if blocked else 'pointer'}; color: var(--dat-ink); "
                                   f"background: {'var(--dat-chip)' if active else 'transparent'}; "
@@ -1168,7 +1171,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         return f"{t('analysis.timeline.max_cloud')} {max_cloud.value:.0f}%"
 
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True, dense=True,
-                      class_="defo-cloud-slider", style_="flex: 0 0 230px; max-width: 230px",
+                      # gives way first on a narrow card, down to a track
+                      # still wide enough to drag beside its label
+                      class_="defo-cloud-slider", style_="flex: 0 1 230px; min-width: 170px; max-width: 230px",
                       label=_cloud_label())
     slider.on_event("change", _on_cloud)
 
@@ -1197,15 +1202,27 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     right_btn = _side("right", "›")
 
     # sentence case, not Vuetify's spaced capitals: the toolbar is full at
-    # the drawer-open width, and the slider is what gave way
+    # the drawer-open width, and the slider is what gave way. On a card too
+    # narrow for the toolbar the labels go too (``defo-tl-label``, hidden by
+    # the screen's container query), so each button carries its name in
+    # ``title`` and ``aria-label`` as well.
     _compact = "text-transform: none; letter-spacing: normal"
-    fold = v.Btn(small=True, text=True, class_="defo-tl-btn", style_=_compact,
-                 children=[v.Icon(small=True, left=True, children=["mdi-arrow-collapse-horizontal"]),
-                           t("analysis.timeline.collapse_all")])
+
+    def _fold_btn(icon, key):
+        text = t(key)
+        return v.Btn(small=True, text=True, class_="defo-tl-btn defo-tl-fold", style_=_compact,
+                     attributes={"title": text, "aria-label": text},
+                     children=[v.Icon(small=True, left=True, children=[icon]),
+                               v.Html(tag="span", class_="defo-tl-label", children=[text])])
+
+    def _label_fold(btn, key):
+        text = t(key)
+        btn.attributes = {**btn.attributes, "title": text, "aria-label": text}
+        btn.children[1].children = [text]
+
+    fold = _fold_btn("mdi-arrow-collapse-horizontal", "analysis.timeline.collapse_all")
     fold.on_event("click", lambda w, e, d: _collapse_window())
-    unfold = v.Btn(small=True, text=True, class_="defo-tl-btn", style_=_compact,
-                   children=[v.Icon(small=True, left=True, children=["mdi-arrow-expand-horizontal"]),
-                             t("analysis.timeline.expand_all")])
+    unfold = _fold_btn("mdi-arrow-expand-horizontal", "analysis.timeline.expand_all")
     unfold.on_event("click", lambda w, e, d: (collapsed.set(frozenset()), render()))
 
     # The legend is the only description of what the lanes, bands, fade and
@@ -1243,14 +1260,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                     v_model=analysis.image_area.value, dense=True, outlined=True, hide_details=True,
                     label=t("analysis.timeline.image_area"), class_="defo-area-select",
                     attributes={"title": t("analysis.timeline.area_hint")},
-                    style_="flex: 0 0 150px; max-width: 150px;")
+                    style_="flex: 0 1 150px; min-width: 120px; max-width: 150px;")
     area.observe(lambda change: analysis.image_area.set(change["new"] or "normal"), "v_model")
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
     def _label_toolbar():
         slider.label = _cloud_label()
-        fold.children = [fold.children[0], t("analysis.timeline.collapse_all")]
-        unfold.children = [unfold.children[0], t("analysis.timeline.expand_all")]
+        _label_fold(fold, "analysis.timeline.collapse_all")
+        _label_fold(unfold, "analysis.timeline.expand_all")
         legend = t("analysis.timeline.legend")
         help_badge.attributes = {**help_badge.attributes, "title": legend,
                                  "aria-label": t("analysis.timeline.legend_label")}
@@ -1265,14 +1282,24 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     labels.add(_label_toolbar)
 
     def _divider():
-        return v.Html(tag="span", style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
+        # hidden where the toolbar may wrap (the screen's container query): a
+        # divider left at the end of a line separates nothing
+        return v.Html(tag="span", class_="defo-tl-divider",
+                      style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
 
     card = v.Card(flat=True, class_="analysis-timeline", children=[
-        v.Html(tag="div", style_="display: flex; align-items: center; gap: 12px; padding: 8px 8px 6px",
+        # wraps rather than running off the card when even the icon-only
+        # toolbar does not fit
+        v.Html(tag="div", style_="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;"
+                                 " padding: 8px 8px 6px",
                children=[chips, help_badge, v.Spacer(), fold, unfold, _divider(), slider, _divider(),
                          area, status]),
         legend_text,
-        v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px 8px",
+        # tall enough, even when it holds only a one-line message, for
+        # pysepal's log button to sit under "+1 month" (the shell's
+        # ``.pill-wrapper`` rule) without covering it
+        v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px 8px;"
+                                 " min-height: 84px",
                children=[left_btn, track, message, right_btn]),
     ])
 

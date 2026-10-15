@@ -637,6 +637,14 @@ SCREEN_CSS = (
     ".analysis-panes-slot { position: relative; flex: 1 1 auto; min-height: 240px; }\n"
     ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
     ".analysis-strip { flex: 0 0 auto; padding: 0 4px 4px 4px; }\n"
+    # The timeline's toolbar needs about 1240 px with its button labels (in
+    # Spanish, measured). Narrower, the two fold buttons drop to their icons,
+    # which name themselves in a tooltip; narrower still (~860 px) the row
+    # wraps, and the dividers, which would dangle at a line's end, go.
+    ".defo-analysis-screen .analysis-timeline { container-type: inline-size; }\n"
+    "@container (max-width: 1250px) { .defo-analysis-screen .defo-tl-label { display: none; }"
+    " .defo-analysis-screen .defo-tl-fold .v-icon--left { margin-right: 0; } }\n"
+    "@container (max-width: 950px) { .defo-analysis-screen .defo-tl-divider { display: none; } }\n"
     # The strip's outline follows the theme. The views are not bordered: they
     # draw their own limit with the basemap.
     ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
