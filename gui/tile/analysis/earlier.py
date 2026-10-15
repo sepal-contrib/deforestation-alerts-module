@@ -25,6 +25,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.context import status_color, status_label_key
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, build_section
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -145,17 +146,22 @@ def badge_text(on, n, km):
 
 def _key_item(status):
     """One entry of the outline colour key: a swatch outlined in the status
-    colour (the overlay draws outlines, not fills) and the status's name."""
+    colour (the overlay draws outlines, not fills) and the status's name.
+    ``(item, text)``: ``text`` holds the name."""
     swatch = v.Html(tag="span", style_=(f"width: 12px; height: 12px; border-radius: 2px; display: inline-block;"
                                         f" border: 2px solid {status_color(status)}; margin-right: 6px;"))
-    return v.Html(tag="span", class_=f"d-inline-flex align-center {TYPE_LABEL}",
-                  children=[swatch, t(status_label_key(status))])
+    text = v.Html(tag="span", children=[t(status_label_key(status))])
+    item = v.Html(tag="span", class_=f"d-inline-flex align-center {TYPE_LABEL}", children=[swatch, text])
+    return item, text
 
 
-def build_earlier_controls(widgets, app_state, analysis):
+def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     """The *Earlier reviews* section: the switch, the distance and the key to
     the outline colours, under a header whose badge says what is shown.
-    Returns the ``build_section`` namespace plus ``switch`` and ``field``."""
+    Returns the ``build_section`` namespace plus ``switch`` and ``field``.
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): the section's words follow a language switch."""
+    labels = labels if labels is not None else Labels()
     section = build_section(t("analysis_tile.earlier.title"), v.Html(tag="div"))
     switch = v.Switch(v_model=bool(analysis.show_earlier_reviews.value), dense=True,
                       class_="mt-0 pt-0", hide_details=True, inset=True,
@@ -163,10 +169,15 @@ def build_earlier_controls(widgets, app_state, analysis):
     field_ = v.TextField(v_model=str(analysis.earlier_radius_km.value), type="number",
                          suffix="km", dense=True, hide_details="auto", outlined=True,
                          style_="max-width: 110px;", error_messages=[])
-    distance = v.Html(tag="div", class_="d-flex align-center mt-3", style_="gap: 12px;", children=[
-        v.Html(tag="span", class_=TYPE_BODY, children=[t("analysis_tile.earlier.radius")]), field_])
-    key = v.Html(tag="div", class_="mt-3", style_=_KEY_SHOWN,
-                 children=[_key_item(status) for status in LOSS_VERDICTS])
+    radius = v.Html(tag="span", class_=TYPE_BODY, children=[t("analysis_tile.earlier.radius")])
+    distance = v.Html(tag="div", class_="d-flex align-center mt-3", style_="gap: 12px;",
+                      children=[radius, field_])
+    items, key_spans = [], []
+    for status in LOSS_VERDICTS:
+        item, span = _key_item(status)
+        items.append(item)
+        key_spans.append((span, status))
+    key = v.Html(tag="div", class_="mt-3", style_=_KEY_SHOWN, children=items)
     section.body_box.children = [v.Html(tag="div", children=[switch, distance, key])]
     last = {"n": None}
 
@@ -210,7 +221,19 @@ def build_earlier_controls(widgets, app_state, analysis):
     widgets.earlier_on_result = _result
     switch.observe(_on_switch, names="v_model")
     field_.observe(_on_km, names="v_model")
-    _sync_badge()
+
+    def _label():
+        section.set_title(t("analysis_tile.earlier.title"))
+        switch.label = t("analysis_tile.earlier.show")
+        radius.children = [t("analysis_tile.earlier.radius")]
+        for span, status in key_spans:
+            span.children = [t(status_label_key(status))]
+        if field_.error_messages:
+            field_.error_messages = [t("analysis_tile.earlier.radius_error")]
+        _sync_badge()
+
+    # in place of a direct first ``_sync_badge()``: ``add`` runs it now
+    labels.add(_label)
     app_state.project.subscribe(_sync_shown)
     _sync_shown()
     section.switch, section.field = switch, field_

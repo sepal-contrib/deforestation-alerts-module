@@ -6,6 +6,7 @@ import ipyvuetify as v
 import pytest
 from pysepal.i18n import set_locale
 
+from gui.i18n import t
 from gui.tile.analysis.analysis_tile import panel_sections  # noqa: F401  (Tasks 2-6)
 from gui.tile.analysis.labels import Labels
 from tests._i18n_sweep import build_layout, english_leftovers
@@ -161,3 +162,68 @@ def test_the_set_selector_imports_first_in_a_fresh_interpreter():
     out = subprocess.run([sys.executable, "-c", "import gui.widget.set_selector"],
                          capture_output=True, text=True, cwd=root)
     assert out.returncode == 0, out.stderr[-800:]
+
+
+def test_the_panel_blocks_follow_the_language(tmp_path, monkeypatch):
+    built = build_layout(tmp_path, monkeypatch)
+    panel = panel_sections(built.layout.controls)
+    verdict = built.layout.controls.children[2]
+    _switch(built)
+    for part in (verdict, panel.questions.root, panel.earlier.root, *panel.footer.root.children[1:]):
+        assert english_leftovers(part, "fr") == []
+    # Refine's and Export's titles only: their badges and bodies are Tasks 4 and 5
+    assert panel.refine.title_span.children == [t("analysis_tile.sections.refine")]
+    assert panel.export.title_span.children == [t("analysis_tile.sections.export")]
+
+
+def _three_kinds():
+    """A radio, a chip group and a typed combobox, all on built-in options
+    (labels from the catalogue, so a switch must re-word them)."""
+    from deforestation_alerts.project.models import DRIVER_OPTIONS, Question, QuestionOption
+
+    opts = [QuestionOption(code=c, label_key=k) for c, k in DRIVER_OPTIONS[:3]]
+    label_key = "analysis_tile.questionarie.loss_driver_label"
+    return [Question(key="one", label_key=label_key, options=opts),
+            Question(key="some", label_key=label_key, multiple=True, options=opts),
+            Question(key="typed", label_key=label_key, multiple=True, allow_typed=True, options=opts)]
+
+
+def test_answers_survive_a_switch_and_nothing_is_marked_unsaved(tmp_path, monkeypatch):
+    """Review Focus 4: a radio, a chip group and a typed combobox."""
+    from deforestation_alerts.project.models import DRIVER_OPTIONS
+
+    built = build_layout(tmp_path, monkeypatch, questions=_three_kinds())
+    panel = panel_sections(built.layout.controls)
+    ctls = dict(panel.questions.controls)
+    assert (type(ctls["one"]), type(ctls["some"]), type(ctls["typed"])) == (v.RadioGroup, v.ChipGroup, v.Combobox)
+    (agri, agri_key), (grazing, grazing_key), (logging, logging_key) = DRIVER_OPTIONS[:3]
+    answers = {"one": [logging], "some": [agri, logging], "typed": [grazing, "Roads"]}
+    built.analysis.answers.set(answers)
+    built.analysis.dirty.set(False)
+    rev = built.analysis.edit_rev.value
+    _switch(built)
+    # the same answers, the same controls, nothing to save
+    assert built.analysis.answers.value == answers
+    assert built.analysis.dirty.value is False and built.analysis.edit_rev.value == rev
+    assert all(panel.questions.controls[k] is ctls[k] for k in ctls)
+    # shown in the new words; the typed entry is the reviewer's text, kept as is
+    assert ctls["one"].v_model == logging
+    assert ctls["one"].children[2].label == t(logging_key)
+    assert ctls["some"].v_model == [agri, logging]
+    assert ctls["some"].children[0].children == [t(agri_key)]
+    assert ctls["typed"].v_model == [{"text": t(grazing_key), "value": grazing}, "Roads"]
+    assert english_leftovers(panel.questions.root, "fr") == []
+
+
+def test_a_save_in_flight_keeps_its_buttons_held_across_a_switch(tmp_path, monkeypatch):
+    """Review Focus 5."""
+    built = build_layout(tmp_path, monkeypatch)
+    footer = panel_sections(built.layout.controls).footer
+    footer.save.disabled = footer.save_next.disabled = True
+    footer.save.loading = True
+    icon = footer.save_next.children[-1]
+    _switch(built)
+    assert footer.save.disabled is True and footer.save.loading is True
+    assert footer.save_next.disabled is True
+    assert footer.save_next.children[-1] is icon
+    assert footer.save_next.children[0] == t("analysis_tile.verdict.save_next")  # read in French

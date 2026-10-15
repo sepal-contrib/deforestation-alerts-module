@@ -23,6 +23,7 @@ import ipyvuetify as v
 
 from gui.i18n import t
 from gui.scripts import questions as qs
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_TITLE, build_section
 from gui.tile.analysis.state import touch
 from gui.widget.text_style import MUTED
@@ -48,17 +49,20 @@ def badge_text(questions, answers, verdict):
 def _title(q):
     """The question's header row: its number (written by ``_sync``, which
     counts the questions asked), its words, a *Required* tag and the check
-    an answer lights. ``(row, number, mark)``."""
+    an answer lights. ``(row, number, mark, text, required)``: ``text`` holds
+    the words, ``required`` is the tag (None for an optional question)."""
     number = v.Html(tag="span", class_="dat-q-num dat-num", children=[""])
-    children = [number, v.Html(tag="span", class_=TYPE_TITLE, style_="flex: 1 1 auto;",
-                               children=[qs.question_label(q)])]
+    text = v.Html(tag="span", class_=TYPE_TITLE, style_="flex: 1 1 auto;", children=[qs.question_label(q)])
+    children = [number, text]
+    required = None
     if q.required:
-        children.append(v.Chip(x_small=True, outlined=True, class_="dat-q-required",
-                               children=[t("analysis_tile.questions.required")]))
+        required = v.Chip(x_small=True, outlined=True, class_="dat-q-required",
+                          children=[t("analysis_tile.questions.required")])
+        children.append(required)
     mark = v.Icon(small=True, color="success", style_=_HIDDEN, children=["mdi-check-circle"])
     children.append(mark)
     row = v.Html(tag="div", class_="d-flex align-center mb-2", style_="gap: 8px;", children=children)
-    return row, number, mark
+    return row, number, mark, text, required
 
 
 def _close(widget):
@@ -113,12 +117,15 @@ def _show(q, ctl, codes_):
         ctl.v_model = codes_[0] if codes_ else None
 
 
-def build_questions_section(app_state, analysis):
+def build_questions_section(app_state, analysis, *, labels=None):
     """Build the section; return its ``build_section`` namespace plus the
     ``controls`` and ``wrappers`` of the current questions, by key (both
-    dicts are updated in place by a rebuild)."""
+    dicts are updated in place by a rebuild). ``labels`` is the screen's
+    ``labels.Labels`` (a fresh one when none is given): a language switch
+    re-words the questions in place."""
+    labels = labels if labels is not None else Labels()
     section = build_section(t("analysis_tile.sections.questions"), v.Html(tag="div"))
-    controls, wrappers, numbers, marks = {}, {}, {}, {}
+    controls, wrappers, numbers, marks, titles, required = {}, {}, {}, {}, {}, {}
     current = {"questions": None, "expanded": None}
     # Says why the body is empty: no question in the project, or none asked
     # for the chosen verdict.
@@ -157,11 +164,13 @@ def build_questions_section(app_state, analysis):
             return
         current["questions"] = questions
         old = list(wrappers.values())
-        controls.clear()
-        wrappers.clear()
+        for d in (controls, wrappers, numbers, marks, titles, required):
+            d.clear()
         for q in questions:
             controls[q.key] = _control(q, analysis, live=lambda ctl, key=q.key: controls.get(key) is ctl)
-            row, numbers[q.key], marks[q.key] = _title(q)
+            row, numbers[q.key], marks[q.key], titles[q.key], tag = _title(q)
+            if tag is not None:
+                required[q.key] = tag
             wrappers[q.key] = v.Html(tag="div", class_="dat-question", children=[row, controls[q.key]])
         section.body_box.children = [*wrappers.values(), note]
         # Off the tree now: close their comms (each rebuild would leak a
@@ -195,6 +204,30 @@ def build_questions_section(app_state, analysis):
     # a new alert: its first pick is a pick, even of the previous one's verdict
     analysis.alert_token.subscribe(lambda *_: picked.update(verdict=analysis.verdict.value))
     _rebuild()
+
+    def _relabel():
+        """The questions' words in the current language, in place: rebuilding
+        would close the controls a reviewer may be typing in."""
+        section.set_title(t("analysis_tile.sections.questions"))
+        for q in current["questions"] or ():
+            titles[q.key].children = [qs.question_label(q)]
+            if q.key in required:
+                required[q.key].children = [t("analysis_tile.questions.required")]
+            ctl = controls[q.key]
+            if isinstance(ctl, v.Combobox):
+                ctl.items = qs.items(q)
+                ctl.label = t("analysis_tile.questions.typed_hint")
+            elif isinstance(ctl, v.ChipGroup):
+                for chip, o in zip(ctl.children, q.options):
+                    chip.children = [qs.option_label(o)]
+            else:
+                for radio, o in zip(ctl.children, q.options):
+                    radio.label = qs.option_label(o)
+        _sync()  # the numbers, the note, the badge, and each answer shown in its new label
+
+    # Not run now: ``_rebuild`` has just written the words, and ``_relabel``
+    # reads the controls ``_rebuild`` creates.
+    labels.add(_relabel, now=False)
     return SimpleNamespace(root=section.root, set_open=section.set_open, is_open=section.is_open,
                            set_badge=section.set_badge, badge=section.badge, body_box=section.body_box,
                            controls=controls, wrappers=wrappers)

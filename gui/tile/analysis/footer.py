@@ -25,6 +25,7 @@ from types import SimpleNamespace
 import ipyvuetify as v
 
 from gui.i18n import t
+from gui.tile.analysis.labels import Labels
 
 # ``margin-bottom: -32px`` cancels the Workflow panel's own bottom space (its
 # 16px padding and the 16px under each section): a sticky element stays inside
@@ -43,12 +44,15 @@ def footer_widgets(root):
     return s["save_next"], s["save"], s["state_line"]
 
 
-def build_footer(run_save, export_root, app_state, analysis):
+def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
     """Build and return ``SimpleNamespace(root, save_next, save, state_line)``.
 
     ``run_save`` is the export section's runner (``export.make_save_runner``),
     ``export_root`` the Export section's card, placed first in the footer.
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): the buttons' words and the state line follow a language switch.
     """
+    labels = labels if labels is not None else Labels()
     save_next = v.Btn(color="primary", class_="flex-grow-1", style_="height: 44px;",
                       children=[t("analysis_tile.verdict.save_next"),
                                 v.Icon(right=True, children=["mdi-arrow-right"])])
@@ -90,7 +94,15 @@ def build_footer(run_save, export_root, app_state, analysis):
     analysis.dirty.subscribe(_sync_state_line)
     analysis.drawing_unapplied.subscribe(_sync_state_line)
     analysis.last_save_time.subscribe(_sync_state_line)
-    _sync_state_line()
+    # in place of a direct first call: ``add`` runs it now, and on a switch
+    labels.add(_sync_state_line)
+
+    def _label():
+        # text only: a save in flight keeps its buttons disabled and loading
+        save_next.children = [t("analysis_tile.verdict.save_next"), save_next.children[-1]]
+        save.children = [t("analysis_tile.export_labels.save_btn")]
+
+    labels.add(_label)
 
     root = v.Html(tag="div", class_="defo-analysis-footer", style_=FOOTER_STYLE, children=[
         export_root,

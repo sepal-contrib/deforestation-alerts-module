@@ -35,6 +35,7 @@ from deforestation_alerts.project.review_status import (
     CONFIRMED, FALSE_POSITIVE, NEED_REVISION, VERDICT_LABEL_KEYS, VERDICTS,
 )
 from gui.i18n import t
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.state import touch
 from gui.tile.analysis.section import TYPE_TITLE, panel_block
 
@@ -57,15 +58,19 @@ def verdict_widgets(card):
     return getattr(card, _SLOTS)["buttons"]
 
 
-def build_review_panel(widgets, app_state, analysis):
-    """Build and return the verdict card: its title and the three buttons."""
-    buttons = {}
+def build_review_panel(widgets, app_state, analysis, *, labels=None):
+    """Build and return the verdict card: its title and the three buttons.
+
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): the card's words are registered there for a language switch."""
+    labels = labels if labels is not None else Labels()
+    buttons, spans = {}, {}
     for status, key in REVIEW_CHOICES:
+        spans[status] = v.Html(tag="span", class_="caption ml-1", children=[t(key)])
         btn = v.Btn(
             outlined=True, color="primary", class_="flex-grow-1 pa-1",
             style_="height: 58px; text-transform: none;",
-            children=[v.Icon(small=True, children=[_ICONS[status]]),
-                      v.Html(tag="span", class_="caption ml-1", children=[t(key)])],
+            children=[v.Icon(small=True, children=[_ICONS[status]]), spans[status]],
         )
         btn.on_event("click", lambda *_, status=status: _pick(analysis, status))
         buttons[status] = btn
@@ -86,10 +91,17 @@ def build_review_panel(widgets, app_state, analysis):
     analysis.verdict.subscribe(_sync_verdict)
     _sync_verdict()
 
-    card = panel_block([
-        v.Html(tag="div", class_=TYPE_TITLE, children=[t("analysis_tile.verdict.title")]),
-        v.Html(tag="div", class_="mt-2", children=[group]),
-    ])
+    title = v.Html(tag="div", class_=TYPE_TITLE, children=[t("analysis_tile.verdict.title")])
+
+    def _label():
+        for status, key in REVIEW_CHOICES:
+            spans[status].children = [t(key)]
+        group.attributes = {**group.attributes, "aria-label": t("analysis_tile.questionarie.confirmation_q")}
+        title.children = [t("analysis_tile.verdict.title")]
+
+    labels.add(_label)
+
+    card = panel_block([title, v.Html(tag="div", class_="mt-2", children=[group])])
     setattr(card, _SLOTS, {"buttons": buttons})
     return card
 

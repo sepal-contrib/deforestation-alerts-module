@@ -515,7 +515,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Rebuilt by itself when the project's questions change; the answers it
     # shows and writes are ``analysis.answers``. Built before the export
     # section: a save refused for a required answer opens it.
-    questions = build_questions_section(app_state, analysis)
+    questions = build_questions_section(app_state, analysis, labels=labels)
 
     # Built before the footer so the footer's two Save buttons drive the
     # export section's ONE save runner: a save from either runs its post-save
@@ -527,7 +527,10 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
         on_refused=_open_questions_for(questions),
     )
     exports.body_box.children = [export_parts.body]
-    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis)
+    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels)
+    # The two titles this builder owns (their badges and bodies have their own hooks).
+    labels.add(lambda: refine.set_title(t("analysis_tile.sections.refine")))
+    labels.add(lambda: exports.set_title(t("analysis_tile.sections.export")))
 
     # The queue, the navigation and the set selector go to the screen's top
     # bar (``build_screen``); built here with the card whose subscriptions
@@ -537,14 +540,14 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     app_state.bind_alert_filter(analysis.alert_filter)
     context = build_context(app_state, id_field, labels=labels)
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
-    earlier = build_earlier_controls(widgets, app_state, analysis)
+    earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
         children=[
             build_set_status_banner(app_state, labels=labels),
             context,
-            build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis),
+            build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis, labels=labels),
             questions.root,
             refine.root,
             earlier.root,

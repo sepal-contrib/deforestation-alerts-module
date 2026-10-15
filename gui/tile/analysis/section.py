@@ -38,7 +38,8 @@ def panel_block(children, *, class_: str = "py-3"):
 def build_section(title: str, body, *, badge: str = "", open: bool = False, divided: bool = True):
     """A collapsed-by-default section. ``title`` and ``badge`` are already
     translated by the caller (nothing here resolves a message). ``divided``
-    draws the block's hairline; the footer's section has the footer's own."""
+    draws the block's hairline; the footer's section has the footer's own.
+    ``set_title`` renames it (a language switch); ``title_span`` holds the title."""
     chevron = v.Icon(small=True, children=["mdi-chevron-right"])
     badge_chip = v.Chip(
         x_small=True,
@@ -46,6 +47,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         children=[badge] if badge else [],
         style_="" if badge else _HIDDEN,
     )
+    title_span = v.Html(tag="span", class_=f"ml-2 {TYPE_TITLE}", children=[title])
     header = v.Btn(
         text=True,
         block=True,
@@ -53,7 +55,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         style_="height: 50px; justify-content: flex-start; text-transform: none;",
         children=[
             chevron,
-            v.Html(tag="span", class_=f"ml-2 {TYPE_TITLE}", children=[title]),
+            title_span,
             v.Html(tag="span", style_="flex: 1 1 auto;", children=[]),
             badge_chip,
         ],
@@ -82,6 +84,9 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         badge_chip.style_ = "" if text else _HIDDEN
         badge_chip.color = color
 
+    def set_title(text: str) -> None:
+        title_span.children = [text]
+
     header.on_event("click", lambda *_: set_open(not state["open"]))
     set_open(open)
 
@@ -94,4 +99,6 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         set_badge=set_badge,
         set_open=set_open,
         is_open=is_open,
+        set_title=set_title,
+        title_span=title_span,
     )
