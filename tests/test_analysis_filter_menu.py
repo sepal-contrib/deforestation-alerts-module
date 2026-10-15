@@ -83,6 +83,20 @@ def test_apply_sets_the_filter_moves_to_its_start_and_shows_the_chip(bar):
     assert ui.button.color == "primary" and ui.button.children[0].children == ["mdi-filter"]
 
 
+def test_the_button_keeps_one_icon_across_filter_changes(bar):
+    """The funnel only changes its glyph: a new ``v.Icon`` per change would
+    leave the old one open for the session."""
+    ui, s = bar.ui, bar.state
+    icon = ui.button.children[0]
+    for f in (AlertFilter("evaluator", frozenset({"Ana"})), None, AlertFilter("status", frozenset({"Confirmed"}))):
+        if f is None:
+            s.clear_alert_filter()
+        else:
+            s.set_alert_filter(f)
+        assert ui.button.children == [icon]
+        assert icon.children == ["mdi-filter" if f is not None else "mdi-filter-outline"]
+
+
 def test_outside_clicks_are_the_browser_watchers_to_handle(bar):
     """Vuetify would close the panel with an open list on one outside click,
     so the menu leaves outside clicks to ``OutsideClickWidget``. The browser

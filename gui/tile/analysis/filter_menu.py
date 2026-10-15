@@ -72,8 +72,10 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
     none is given): the texts are written by a hook it runs on every language
     switch."""
     labels = labels if labels is not None else Labels()
-    button = v.Btn(icon=True, v_on="menu.on", class_="defo-filter-btn",
-                   children=[v.Icon(children=["mdi-filter-outline"])])
+    # One icon for the session: a filter change rewrites its glyph (a new
+    # ``v.Icon`` each time would leave the old one open).
+    icon = v.Icon(children=["mdi-filter-outline"])
+    button = v.Btn(icon=True, v_on="menu.on", class_="defo-filter-btn", children=[icon])
     title = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     attribute = v.Select(items=[], v_model=None, dense=True, outlined=True, hide_details=True)
     values = v.Select(items=[], v_model=[], multiple=True,
@@ -148,7 +150,7 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
 
     def _sync(*_):
         f = app_state.alert_filter
-        button.children = [v.Icon(children=["mdi-filter" if f is not None else "mdi-filter-outline"])]
+        icon.children = ["mdi-filter" if f is not None else "mdi-filter-outline"]
         button.color = "primary" if f is not None else ""
         chip.children = [filter_label(app_state, f) if f is not None else ""]
         # In a review copy the chip is the only statement of whose alerts
