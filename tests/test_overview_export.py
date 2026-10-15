@@ -397,9 +397,6 @@ def test_a_folder_outside_the_download_root_still_builds_and_says_why(data_root,
     the download root) must not break the Overview: the folder chip shows the
     absolute path, a file already there is not linked (the link would 404),
     and a new write is reported as a failure that says why."""
-    from gui.scripts.error_text import error_text
-    from deforestation_alerts.errors import NotDownloadable
-
     monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_ROOT", str(data_root / "elsewhere"))
     bus, errors, join = feedback
     folder = data_root / "recipe_a"
