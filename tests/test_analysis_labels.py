@@ -6,10 +6,10 @@ import ipyvuetify as v
 import pytest
 from pysepal.i18n import set_locale
 
-from gui.i18n import t
+from gui.i18n import app_available_locales, t
 from gui.tile.analysis.analysis_tile import panel_sections  # noqa: F401  (Tasks 2-6)
 from gui.tile.analysis.labels import Labels
-from tests._i18n_sweep import build_layout, english_leftovers
+from tests._i18n_sweep import build_layout, english_leftovers, leftovers_of
 
 
 @pytest.fixture(autouse=True)
@@ -121,6 +121,14 @@ def test_the_sweep_catches_stale_text_in_every_field_it_reads():
     stale["gap"] = strip
     for field, widget in stale.items():
         assert english_leftovers(widget, "fr"), f"the sweep misses stale {field}"
+
+
+def test_the_sweep_reads_neither_stylesheets_nor_part_of_a_word():
+    """A ``<style>`` is not text anybody sees, and French "Attribut" is no
+    leftover inside the English "Attribute" a switch back to English writes."""
+    assert english_leftovers(v.Html(tag="style", children=[".dat-q-required { font-size: 12px; }"]), "fr") == []
+    set_locale("en")
+    assert leftovers_of(v.Select(label=t("analysis_tile.filter.attribute")), "fr", "en") == []
 
 
 def test_the_sweep_catches_a_stale_handle_flag():
@@ -302,3 +310,57 @@ def test_the_timeline_and_the_view_titles_follow_the_language(tmp_path, monkeypa
     _switch(built)
     for part in (w.timeline, w.head_before, w.head_after):
         assert english_leftovers(part, "fr") == []
+
+
+@pytest.mark.parametrize("locale", [c for c in app_available_locales() if c != "en"])
+def test_nothing_on_the_screen_stays_english_after_a_switch(tmp_path, monkeypatch, locale):
+    """The root-cause pin: the screen is built in English (pysepal resolves the
+    browser's language after the shell's first render), then every text has
+    to follow the switch, and the switch changes no review state."""
+    built = build_layout(tmp_path, monkeypatch)
+    analysis = built.analysis
+    before = (analysis.dirty.value, analysis.edit_rev.value, analysis.answers.value, analysis.verdict.value)
+    set_locale(locale)
+    built.layout.relabel()
+    # The facts' "Status" row label: pt-BR words analysis_tile.facts.status as
+    # "Status", the same text English uses for steps.period.col_status, so the
+    # net reads a correct label as that key's leftover. It is skipped by
+    # widget and checked exactly here instead.
+    status = _facts_status_label(built.layout.screen)
+    assert status.children == [t("analysis_tile.facts.status")]
+    assert english_leftovers(built.layout.screen, locale, skip=[(status, "children")]) == []
+    assert (analysis.dirty.value, analysis.edit_rev.value, analysis.answers.value, analysis.verdict.value) == before
+
+
+def _facts_status_label(screen):
+    """The row label beside the facts' status chip (``context._build_facts``)."""
+    for w in _walk(screen):
+        kids = list(getattr(w, "children", None) or [])
+        for label, cell in zip(kids, kids[1:]):
+            if isinstance(cell, v.Html) and cell.children and isinstance(cell.children[0], v.Chip):
+                return label
+    raise AssertionError("no facts status row on the screen")
+
+
+def test_switching_back_to_english_leaves_no_french(tmp_path, monkeypatch):
+    """There and back: French first (exactly), then English (exactly), so an
+    unchanged English screen cannot pass for a relabelled one."""
+    built = build_layout(tmp_path, monkeypatch)
+    panel = panel_sections(built.layout.controls)
+    footer, refine = panel.footer, panel.refine
+
+    def _shown():
+        return (footer.save_next.children[0], footer.save.children[0], refine.title_span.children[0])
+
+    def _expected():
+        return (t("analysis_tile.verdict.save_next"), t("analysis_tile.export_labels.save_btn"),
+                t("analysis_tile.sections.refine"))
+
+    english = _expected()
+    set_locale("fr")
+    built.layout.relabel()
+    assert _shown() == _expected() != english
+    set_locale("en")
+    built.layout.relabel()
+    assert _shown() == english
+    assert leftovers_of(built.layout.screen, "fr", "en") == []

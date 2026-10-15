@@ -92,6 +92,16 @@
 - `scripts/measure_prepare.py`, which measures one national-scale download,
   harmonize and integrate run (time, file sizes, peak memory).
 
+### Fixed
+
+- **The Analysis screen follows the language selector.** It was built once in
+  English and only its title and back button changed language, so a reviewer
+  whose browser or saved choice was Spanish, French or Portuguese saw most of
+  Analysis in English. Every label, button, tooltip, list and badge on the
+  screen now changes with the selector, without losing the alert, the
+  answers, an open drawing or a running save. A downloaded file's warning
+  line keeps its language until the files are built again.
+
 ### Changed
 
 - **Download links follow the SEPAL the app runs on.** They were built by

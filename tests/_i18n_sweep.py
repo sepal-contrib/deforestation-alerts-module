@@ -37,9 +37,11 @@ def _patterns(source, target):
         if len(literal) < 4:
             continue  # mostly placeholders: it would match anything
         rx = re.sub(r"\\\{[^}]*\\\}", ".+?", re.escape(msg))
-        out.append((len(literal), key, re.compile(rx, re.S)))
+        # Searched inside a string, the message must stand as whole words:
+        # French "Attribut" is not a leftover inside English "Attribute".
+        out.append((len(literal), key, re.compile(rx, re.S), re.compile(rf"(?<!\w){rx}(?!\w)", re.S)))
     out.sort(key=lambda p: -p[0])  # the most specific template names the hit
-    return tuple((key, n, rx) for n, key, rx in out)
+    return tuple((key, n, rx, inside) for n, key, rx, inside in out)
 
 
 def _strings(root):
@@ -49,6 +51,8 @@ def _strings(root):
         if id(w) in seen:
             continue
         seen.add(id(w))
+        if getattr(w, "tag", None) == "style":
+            continue  # a stylesheet: nobody sees or hears its text
         kids = list(getattr(w, "children", None) or [])
         for slot in getattr(w, "v_slots", None) or []:
             c = slot.get("children")
@@ -102,23 +106,28 @@ def _strings(root):
 _SEARCH_FROM = 8
 
 
-def leftovers_of(root, source, target):
+def leftovers_of(root, source, target, skip=()):
     """``[(key, widget class, where, text)]``: each string under ``root``
-    still in ``source``'s words although ``target`` words it differently."""
+    still in ``source``'s words although ``target`` words it differently.
+    ``skip`` holds ``(widget, where)`` pairs the caller has justified (matched
+    by widget identity, never by text)."""
     pats = _patterns(source, target)
+    skipped = {(id(w), where) for w, where in skip}
     hits = set()
     for w, where, text in _strings(root):
+        if (id(w), where) in skipped:
+            continue
         text = text.strip()
-        for key, literal_len, rx in pats:
-            if rx.fullmatch(text) or (literal_len >= _SEARCH_FROM and rx.search(text)):
+        for key, literal_len, rx, inside in pats:
+            if rx.fullmatch(text) or (literal_len >= _SEARCH_FROM and inside.search(text)):
                 hits.add((key, type(w).__name__, where, text))
                 break
     return sorted(hits)
 
 
-def english_leftovers(root, locale):
-    """``leftovers_of(root, "en", locale)``."""
-    return leftovers_of(root, "en", locale)
+def english_leftovers(root, locale, skip=()):
+    """``leftovers_of(root, "en", locale, skip)``."""
+    return leftovers_of(root, "en", locale, skip)
 
 
 def build_layout(tmp_path, monkeypatch, questions=None):
