@@ -130,6 +130,7 @@ from gui.i18n import format_number, t, tn
 from gui.scripts.notify_bridge import current_notifier, run_button_job, tile_progress_reporter
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, touch
@@ -219,11 +220,15 @@ def found_text(analysis, model) -> str:
              area=format_number(area, 1))
 
 
-def wire_refine_badge(analysis, set_badge, crs_of=lambda: None):
+def wire_refine_badge(analysis, set_badge, crs_of=lambda: None, *, labels=None):
     """Keep a section badge reading the drawn polygon: *nothing drawn*, or the
     shape count and the area -- the same ``calculate_total_area`` in the same
     CRS (``crs_of()``, the project's ``state.area_crs``) the save stores as
-    ``area_ha``, so the badge and the column can never disagree."""
+    ``area_ha``, so the badge and the column can never disagree.
+
+    ``labels`` is the screen's ``Labels``: ``_show`` is registered in it, so
+    the badge follows a language switch (it reads ``defo_layer`` afresh)."""
+    labels = labels if labels is not None else Labels()
 
     def _show(gdf=None):
         # Guarded like ``wire_defo_layer._on_layer``, the other
@@ -253,7 +258,7 @@ def wire_refine_badge(analysis, set_badge, crs_of=lambda: None):
     # ``touch`` on this subscription would mark every alert unsaved on sight
     # (Ruling 24). It hangs off the reviewer's own edits instead.
     analysis.defo_layer.subscribe(lambda gdf: _show(gdf))
-    _show()
+    labels.add(_show)
     return _show
 
 
@@ -375,6 +380,8 @@ def build_edit_tools(
     analysis,
     app_tile_model,
     set_badge=None,
+    *,
+    labels=None,
 ):
     """Build and return the *Refine polygon* section's BODY (OLD ``card04``).
 
@@ -387,7 +394,11 @@ def build_edit_tools(
 
     The before/after composite the CNN runs on is a file of the active set's
     folder (see ``paths.stage_alert_image``).
+
+    ``labels`` is the screen's ``Labels``: the section's text is re-worded by a
+    hook registered in it.
     """
+    labels = labels if labels is not None else Labels()
     # What each run found, by ``(alert token, model)``: the features *Add*
     # puts on the map, vectorised once by the worker. Per build (one session)
     # and cleared on every alert change, so no alert's shapes reach the next.
@@ -435,12 +446,14 @@ def build_edit_tools(
                                 children=[t("analysis_tile.edition_labels.stop_save")])
         ns["stop_discard"] = v.Btn(color="error", depressed=True, style_=_dialog_btn,
                                    children=[t("analysis_tile.edition_labels.stop_discard")])
+        ns["stop_title"] = v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
+                                       children=[t("analysis_tile.edition_labels.stop_title")])
+        ns["stop_text"] = v.CardText(style_="font-size: 14px;",
+                                     children=[t("analysis_tile.edition_labels.stop_message")])
         ns["stop_dialog"] = v.Dialog(v_model=False, max_width="480px", children=[
             v.Card(children=[
-                v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
-                            children=[t("analysis_tile.edition_labels.stop_title")]),
-                v.CardText(style_="font-size: 14px;",
-                           children=[t("analysis_tile.edition_labels.stop_message")]),
+                ns["stop_title"],
+                ns["stop_text"],
                 v.CardActions(class_="flex-wrap justify-end pa-4 pt-0",
                               children=[ns["stop_keep"], ns["stop_save"], ns["stop_discard"]]),
             ]),
@@ -472,7 +485,7 @@ def build_edit_tools(
                 color="error", disabled=False,
                 children=[v.Icon(color="white", children=["fa-solid fa-triangle-exclamation"])],
             ).hide()
-            tt_msg = sw.Tooltip(ns[f"dl{n}_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
+            ns[f"dl{n}_msg_tip"] = tt_msg = sw.Tooltip(ns[f"dl{n}_msg"], tooltip=t("analysis_tile.model_labels.dl_404"),
                                 top=True, open_delay=100, close_delay=100)
             # Always on screen, unlike OLD's hidden ``toolBarDL{n}``: OLD kept
             # *Run* inside that same toolbar, so a model could not be run
@@ -480,11 +493,13 @@ def build_edit_tools(
             # *Run* in the row, the pair is shown from the start and says what
             # it offers through ``disabled`` alone (``_sync_dl``).
             name_span = v.Html(tag="span", class_=TYPE_BODY, style_="flex: 1 1 auto;", children=[model_name])
+            ns[f"dl{n}_name"] = name_span
+            ns[f"dl{n}_name_tip"] = sw.Tooltip(name_span, tooltip=t(f"analysis_tile.model_labels.dl_hint{n}"),
+                                               top=True, open_delay=100)
             ns[f"dl{n}_found"] = v.Html(tag="div", class_=TYPE_LABEL, children=[])
             ns[f"dl{n}_row"] = v.Html(tag="div", class_="mt-3", children=[
                 v.Html(tag="div", class_="d-flex align-center flex-wrap", style_="gap: 8px;", children=[
-                    sw.Tooltip(name_span, tooltip=t(f"analysis_tile.model_labels.dl_hint{n}"),
-                               top=True, open_delay=100),
+                    ns[f"dl{n}_name_tip"],
                     ns[f"dl{n}_run"], ns[f"dl{n}_add"], ns[f"dl{n}_remove"], tt_msg,
                 ]),
                 ns[f"dl{n}_found"],
@@ -569,6 +584,28 @@ def build_edit_tools(
     def _show_found(model):
         text = found_text(analysis, model)
         ns[f"dl{model}_found"].children = [text] if text else []
+
+    def _label():
+        """A language switch: the section's text again, nothing else."""
+        ns["start_btn"].children = [t("analysis_tile.edition_labels.start_edit_button")]
+        ns["save_btn"].children = [t("analysis_tile.edition_labels.apply_edit_button")]
+        ns["stop_btn"].children = [t("analysis_tile.edition_labels.stop_edit_button")]
+        ns["stop_keep"].children = [t("analysis_tile.edition_labels.stop_keep")]
+        ns["stop_save"].children = [t("analysis_tile.edition_labels.stop_save")]
+        ns["stop_discard"].children = [t("analysis_tile.edition_labels.stop_discard")]
+        ns["stop_title"].children = [t("analysis_tile.edition_labels.stop_title")]
+        ns["stop_text"].children = [t("analysis_tile.edition_labels.stop_message")]
+        for n in (1, 2):
+            ns[f"dl{n}_name"].children = [t(f"analysis_tile.model_labels.dl_button{n}")]
+            ns[f"dl{n}_name_tip"].children = [t(f"analysis_tile.model_labels.dl_hint{n}")]
+            ns[f"dl{n}_msg_tip"].children = [t("analysis_tile.model_labels.dl_404")]
+            ns[f"dl{n}_run"].children = [t("analysis_tile.model_labels.run")]
+            ns[f"dl{n}_add"].children = [t("analysis_tile.model_labels.dl_button_add")]
+            ns[f"dl{n}_remove"].children = [t("analysis_tile.model_labels.dl_button_remove")]
+            _show_found(n)
+
+    # ``_build_widgets`` wrote the same text a moment ago, hence ``now=False``.
+    labels.add(_label, now=False)
 
     # A run belongs to the alert it started on (``token``, captured at the
     # click): one that ends after the user moved on must not record its
@@ -944,7 +981,8 @@ def build_edit_tools(
     wire_defo_layer(widgets, analysis)
 
     if set_badge is not None:
-        wire_refine_badge(analysis, set_badge, lambda: area_crs(app_state.project.value))
+        wire_refine_badge(analysis, set_badge, lambda: area_crs(app_state.project.value),
+                          labels=labels)
 
     # ------------------------------------------------------------------
     # Layout: the section's body -- the edit buttons over one row per model.

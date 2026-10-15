@@ -508,7 +508,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     refine = build_section(t("analysis_tile.sections.refine"), v.Html(tag="div"))
     refine_body = build_edit_tools(
         widgets=widgets, app_state=app_state, analysis=analysis,
-        app_tile_model=app_tile_model, set_badge=refine.set_badge,
+        app_tile_model=app_tile_model, set_badge=refine.set_badge, labels=labels,
     )
     refine.body_box.children = [refine_body]
 
