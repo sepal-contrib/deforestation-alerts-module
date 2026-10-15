@@ -434,16 +434,33 @@ def test_one_side_available_still_picks_that_side():
     assert scene_query.default_pick(sel, A0, A1) == (scene_index.row_id(S2, date(2026, 4, 2)), None)
 
 
-def test_a_single_day_window_can_return_the_same_scene_as_both_sides():
+def test_a_single_day_window_gives_a_scene_on_that_day_to_after_only():
     # When alert_date_min == alert_date_max, a scene dated exactly on that
-    # day satisfies both "<= a0" and ">= a1", so it is legally the nearest
-    # before *and* the nearest after: default_pick returns the same row id
-    # twice. This pins today's behavior for that degenerate but reachable
-    # input, rather than leaving it unexamined.
+    # day satisfies both "<= a0" and ">= a1"; picking it for both sides would
+    # be a pair that shows no change. It is the after, and the before comes
+    # from strictly earlier dates.
+    d = date(2026, 6, 15)
+    sel = _sel([(S2, "2026-06-01", 5.0), (S2, "2026-06-15", 5.0)])
+    assert scene_query.default_pick(sel, d, d) == (
+        scene_index.row_id(S2, date(2026, 6, 1)),
+        scene_index.row_id(S2, d),
+    )
+
+
+def test_a_single_day_window_with_only_a_scene_on_that_day_leaves_before_unset():
     d = date(2026, 6, 15)
     sel = _sel([(S2, "2026-06-15", 5.0)])
-    want = scene_index.row_id(S2, d)
-    assert scene_query.default_pick(sel, d, d) == (want, want)
+    assert scene_query.default_pick(sel, d, d) == (None, scene_index.row_id(S2, d))
+
+
+def test_a_single_day_window_never_picks_two_collections_on_that_day():
+    # Sentinel-2 and Landsat on the same day are different rows, but both
+    # would still be one look at the alert day.
+    d = date(2026, 6, 15)
+    sel = _sel([(S2, "2026-06-15", 5.0), (LS, "2026-06-15", 5.0), (S2, "2026-06-05", 5.0)])
+    before, after = scene_query.default_pick(sel, d, d)
+    assert before == scene_index.row_id(S2, date(2026, 6, 5))
+    assert scene_query.parse_row_id(after)[1] == d
 
 
 def test_a_single_day_window_with_scenes_only_on_either_side():

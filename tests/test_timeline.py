@@ -154,9 +154,9 @@ def test_days_apart_counts_the_gap_the_pair_brackets():
 
 
 def test_one_scene_on_both_sides_is_named_as_that_and_not_as_zero_change():
-    """``default_pick`` returns one id twice when the alert window is a single
-    day and a scene lands on it (pinned behaviour). "0 days apart" would read
-    as two images that happen to agree."""
+    """A pair saved before ``default_pick`` stopped returning one id twice for
+    a single-day window can still reopen as one image on both sides. "0 days
+    apart" would read as two images that happen to agree."""
     _sel([(S2, "2026-04-24", 8.0)])
     rid = scene_index.row_id(S2, date(2026, 4, 24))
     assert timeline.days_apart(rid, rid) == 0
@@ -870,16 +870,17 @@ def test_a_pick_of_other_imagery_is_an_unsaved_change_that_drops_the_predictions
 
 
 def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
-    """A single-day alert window with one scene on it: ``default_pick`` legally
-    returns the same id twice. Both panes then draw the identical image, which
-    is confusing unless the strip says so, so the note is rendered in the
-    warning colour the refresh failure uses -- not in the muted grey a
-    neutral "N days apart" gets."""
+    """``default_pick`` no longer pairs one image with itself, but a review
+    saved before that change can reopen on one. Both panes then draw the
+    identical image, which is confusing unless the strip says so, so the note
+    is rendered in the warning colour the refresh failure uses -- not in the
+    muted grey a neutral "N days apart" gets."""
     state = _fake_state(rows=[(S2, "2026-06-10", 8.0)])
     analysis = _fake_analysis()
     widgets = _fake_widgets()
     ctx = dict(_ctx(date_min=date(2026, 6, 10), date_max=date(2026, 6, 10)))
     ctx["token"] = analysis.alert_token.value
+    ctx["saved_before"] = ctx["saved_after"] = "Sentinel 2 2026-06-10 "
     widgets.imagery_ctx.set(ctx)
     card = timeline.build_timeline(state, analysis, widgets)
 

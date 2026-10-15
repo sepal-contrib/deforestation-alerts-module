@@ -238,11 +238,11 @@ def days_apart(before_id, after_id) -> Optional[int]:
 def pair_note(before_id, after_id) -> Optional[str]:
     """What the pair says about itself, or ``None`` until both sides are set.
 
-    ``scene_query.default_pick`` returns the *same* id on both sides when the
-    alert window is a single day and a scene lands exactly on it -- pinned
-    behaviour, because both bounds are inclusive. "0 days apart" would read as
-    two images that happen to agree, so one image on both sides is named as
-    that instead.
+    ``scene_query.default_pick`` never pairs an image with itself, but a pair
+    saved before it learned not to (a single-day alert window with a scene on
+    that day) can still reopen as one id on both sides. "0 days apart" would
+    read as two images that happen to agree, so one image on both sides is
+    named as that instead.
     """
     gap = days_apart(before_id, after_id)
     if gap is None:

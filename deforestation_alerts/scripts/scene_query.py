@@ -334,7 +334,10 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
 
     Both bounds are inclusive: a scene acquired on ``a0`` is the last look
     before the window opened, and one acquired on ``a1`` the first after it
-    closed.
+    closed. The one exception is a single-day window (``a0 == a1``): there a
+    scene on that day would satisfy both sides and be returned twice, a pair
+    that shows no change. It goes to *after* -- the first look once the alert
+    fired -- and *before* is taken from strictly earlier dates.
 
     A Planet NICFI basemap is a whole month's mosaic, not a scene that
     witnesses one date, so it is never offered as either side's default.
@@ -342,7 +345,10 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
     if sel is None or len(sel) == 0:
         return (None, None)
     usable = sel[sel["source"] != SOURCE_PLANET]
-    before_all = usable[usable["date"] <= pd.Timestamp(a0)]
+    if a0 == a1:
+        before_all = usable[usable["date"] < pd.Timestamp(a0)]
+    else:
+        before_all = usable[usable["date"] <= pd.Timestamp(a0)]
     after_all = usable[usable["date"] >= pd.Timestamp(a1)]
 
     def _nearest(part: pd.DataFrame, *, newest: bool) -> Optional[str]:
