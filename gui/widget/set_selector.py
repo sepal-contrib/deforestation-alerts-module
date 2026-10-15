@@ -19,7 +19,7 @@ import solara
 
 from deforestation_alerts.project.periods import sets_newest_first
 from gui.i18n import t, tn
-from gui.tile.analysis.labels import Labels
+from gui.widget.labels import Labels
 
 
 def set_text(project, alert_set) -> str:

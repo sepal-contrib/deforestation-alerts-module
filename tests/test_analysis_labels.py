@@ -148,3 +148,16 @@ def test_the_top_bar_and_the_facts_follow_the_language(tmp_path, monkeypatch):
     _switch(built)
     for part in (panel.topnav, banner, facts):
         assert english_leftovers(part, "fr") == []
+
+
+def test_the_set_selector_imports_first_in_a_fresh_interpreter():
+    """``gui.widget`` must not import the tile package (a cycle through
+    ``analysis_tile``, which imports the selector)."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    out = subprocess.run([sys.executable, "-c", "import gui.widget.set_selector"],
+                         capture_output=True, text=True, cwd=root)
+    assert out.returncode == 0, out.stderr[-800:]
