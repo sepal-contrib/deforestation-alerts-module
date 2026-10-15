@@ -10,6 +10,7 @@ import ipyvuetify as v
 import pytest
 from pysepal.i18n import set_locale
 
+from gui.i18n import format_number, t
 from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter
 from gui.scripts.set_context import SetContext
@@ -320,6 +321,31 @@ def test_the_jump_refuses_a_number_outside_the_filter(tmp_path, monkeypatch):
     field.v_model = 99                     # clamps to row 5: nobody's
     field.fire_event("keydown.enter", None)
     assert s.actual_alert_id.value == 4 and refusal.children == ["Alert 6 is not in the current filter"]
+
+
+def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
+    from gui.tile.analysis.labels import Labels
+
+    s, analysis = _bound(tmp_path, monkeypatch)
+    field, labels = v.TextField(v_model=None), Labels()
+    card = context.build_context(s, field, labels=labels)
+    s.alerts_gdf.set(_six())
+    _, _, _, menu, go, _ = context.nav_widgets(card)
+    refusal = context.jump_refusal(card)
+    s.actual_alert_id.set(0)
+    analysis.alert_filter.set(ANA)
+    menu.v_model = True
+    field.v_model = 4
+    go.fire_event("click", None)
+    set_locale("fr")
+    labels.run()
+    assert menu.v_model is True and field.v_model == 4
+    assert refusal.children == [t("analysis_tile.filter.not_in_filter", number=format_number(4))]
+    assert "display: none" not in refusal.style_
+    menu.v_model = False
+    menu.v_model = True                     # reopening still forgets it
+    labels.run()
+    assert refusal.children == [] and "display: none" in refusal.style_
 
 
 def test_next_unreviewed_keeps_to_the_matches(tmp_path, monkeypatch):

@@ -139,3 +139,12 @@ def test_the_sweep_catches_a_stale_handle_flag():
     set_locale("fr")
     strip.before = {"id": rid, "x": 12.5, "flag": f"5 mars · {t('analysis_tile.nav.next_unreviewed')}"}
     assert english_leftovers(strip, "fr") == [], "a fresh French flag is not a leftover"
+
+
+def test_the_top_bar_and_the_facts_follow_the_language(tmp_path, monkeypatch):
+    built = build_layout(tmp_path, monkeypatch)
+    panel = panel_sections(built.layout.controls)
+    banner, facts = built.layout.controls.children[0], built.layout.controls.children[1]
+    _switch(built)
+    for part in (panel.topnav, banner, facts):
+        assert english_leftovers(part, "fr") == []

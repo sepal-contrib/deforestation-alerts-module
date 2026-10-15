@@ -36,6 +36,7 @@ from gui.scripts.alert_filter import next_unreviewed_match
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.filter_menu import build_filter_menu
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
@@ -186,7 +187,7 @@ def facts_widgets(card):
     return slots["source"], slots["detected"], slots["chip"]
 
 
-def _build_nav(app_state, id_field, counter):
+def _build_nav(app_state, id_field, counter, labels):
     """Previous / Next, and the counter as a button that opens a small menu:
     "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
     alert". The menu floats over the panel, so opening it moves nothing.
@@ -198,27 +199,23 @@ def _build_nav(app_state, id_field, counter):
     ``.v_model``."""
     # Sized for the screen's top bar (``build_topnav``): 36 px, the bar's
     # control height, and the words kept beside the chevrons.
+    # Their words are written by the label hook below, which keeps the icons.
     prev = v.Btn(outlined=True, style_="height: 36px;",
-                 children=[v.Icon(left=True, children=["mdi-chevron-left"]),
-                           t("analysis_tile.nav.previous")])
+                 children=[v.Icon(left=True, children=["mdi-chevron-left"]), ""])
     nxt = v.Btn(outlined=True, style_="height: 36px;",
-                children=[t("analysis_tile.nav.next"),
-                          v.Icon(right=True, children=["mdi-chevron-right"])])
+                children=["", v.Icon(right=True, children=["mdi-chevron-right"])])
     prev.on_event("click", lambda *_: app_state.go_prev())
     nxt.on_event("click", lambda *_: app_state.go_next())
 
     jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn", style_="height: 36px; padding: 0 6px 0 10px;",
-                 attributes={"aria-label": t("analysis_tile.nav.jump"), "title": t("analysis_tile.nav.jump")},
                  children=[counter, v.Icon(small=True, children=["mdi-menu-down"])])
     # The menu is drawn at the app's root, outside the screen's type rules, so
     # its sizes and casing are inline.
     _btn = "text-transform: none; letter-spacing: normal; font-size: 14px;"
-    go = v.Btn(outlined=True, color="primary", style_="height: 40px; " + _btn,
-               children=[t("analysis_tile.nav.go")])
+    go = v.Btn(outlined=True, color="primary", style_="height: 40px; " + _btn, children=[])
     unreviewed = v.Btn(text=True, color="primary", small=True, class_="px-1",
-                       style_="justify-content: flex-start; " + _btn,
-                       children=[t("analysis_tile.nav.next_unreviewed")])
-    label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[t("analysis_tile.nav.jump")])
+                       style_="justify-content: flex-start; " + _btn, children=[])
+    label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     # "Alert 12 is not in the current filter": a number the filter hides is
     # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
     refusal = v.Html(tag="div", class_="error--text", style_="font-size: 12px; display: none;", children=[])
@@ -235,14 +232,20 @@ def _build_nav(app_state, id_field, counter):
                   v_slots=[{"name": "activator", "variable": "menu", "children": jump}],
                   children=[body])
 
-    def _show_refusal(text):
-        refusal.children = [text] if text else []
-        refusal.style_ = "font-size: 12px;" + ("" if text else " display: none;")
+    # The number the menu refused (1-based), kept so a language switch can
+    # word the same refusal again.
+    refused = [None]
+
+    def _show_refusal(number):
+        refused[0] = number
+        refusal.children = ([t("analysis_tile.filter.not_in_filter", number=format_number(number))]
+                            if number is not None else [])
+        refusal.style_ = "font-size: 12px;" + ("" if number is not None else " display: none;")
 
     def _on_open(change):
         if change["new"]:
             id_field.v_model = None  # the reviewer types a number, not edits the current one
-            _show_refusal("")
+            _show_refusal(None)
 
     menu.observe(_on_open, "v_model")
 
@@ -257,7 +260,7 @@ def _build_nav(app_state, id_field, counter):
             target = max(0, min(target, app_state.max_alert_id))
             mask = app_state.alert_mask()
             if target < len(mask) and not mask[target]:
-                _show_refusal(t("analysis_tile.filter.not_in_filter", number=format_number(target + 1)))
+                _show_refusal(target + 1)
                 return
         app_state.go_to(target)
         menu.v_model = False
@@ -275,11 +278,26 @@ def _build_nav(app_state, id_field, counter):
 
     unreviewed.on_event("click", _on_unreviewed)
 
+    def _label():
+        prev.children = [prev.children[0], t("analysis_tile.nav.previous")]
+        nxt.children = [t("analysis_tile.nav.next"), nxt.children[-1]]
+        jump.attributes = {**jump.attributes, "aria-label": t("analysis_tile.nav.jump"),
+                           "title": t("analysis_tile.nav.jump")}
+        go.children = [t("analysis_tile.nav.go")]
+        unreviewed.children = [t("analysis_tile.nav.next_unreviewed")]
+        label.children = [t("analysis_tile.nav.jump")]
+        if refused[0] is not None:
+            # A switch with the menu open on a refusal: the same sentence in
+            # the new language. Menu, field and visibility stay as they are.
+            refusal.children = [t("analysis_tile.filter.not_in_filter", number=format_number(refused[0]))]
+
+    labels.add(_label)
+
     return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed,
             "refusal": refusal}
 
 
-def _build_facts():
+def _build_facts(labels):
     """What the table says about the selected alert: its source, its detection
     window and a chip that names its review status and wears that status's
     colour as a swatch (the row labels are written here, once; the values are
@@ -300,8 +318,12 @@ def _build_facts():
     swatch = v.Html(tag="span", style_=_SWATCH.format(color="transparent"))
     chip = v.Chip(small=True, outlined=True, children=[swatch])
 
+    row_labels = []  # (span, key): the row names, written again on a switch
+
     def _label(key):
-        return v.Html(tag="span", class_=TYPE_LABEL, children=[t(key)])
+        span = v.Html(tag="span", class_=TYPE_LABEL, children=[])
+        row_labels.append((span, key))
+        return span
 
     grid = v.Html(
         tag="div",
@@ -313,19 +335,40 @@ def _build_facts():
             _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
         ],
     )
+
+    def _label_rows():
+        for span, key in row_labels:
+            span.children = [t(key)]
+
+    labels.add(_label_rows)
     return grid, {"source": source, "detected": detected, "chip": chip,
                   "swatch": swatch}
 
 
-def build_context(app_state, id_field) -> v.Card:
+def build_context(app_state, id_field, *, labels=None) -> v.Card:
     """Block A, built once per session; it subscribes to the alerts table and
-    the current position and refreshes itself."""
+    the current position and refreshes itself. ``labels`` is the screen's
+    ``labels.Labels`` (a fresh one when none is given)."""
+    labels = labels if labels is not None else Labels()
     counter = v.Html(tag="span", class_=f"{TYPE_TITLE} dat-num", style_="white-space: nowrap;", children=[])
     tally = v.Html(tag="span", class_=TYPE_LABEL, style_="white-space: nowrap;", children=[])
     bar = v.ProgressLinear(value=0, height=4, color="primary", rounded=True)
 
-    facts_grid, facts_slots = _build_facts()
-    nav_slots = _build_nav(app_state, id_field, counter)
+    facts_grid, facts_slots = _build_facts(labels)
+    nav_slots = _build_nav(app_state, id_field, counter, labels)
+
+    shown = [None]  # the facts on screen, for a language switch
+
+    def _write_facts(facts):
+        facts_slots["source"].children = [facts["source"]]
+        facts_slots["detected"].children = [
+            t("analysis_tile.facts.range", first=facts["first"], last=facts["last"])
+        ]
+        facts_slots["swatch"].style_ = _SWATCH.format(
+            color=status_color(facts["status"]))
+        facts_slots["chip"].children = [facts_slots["swatch"],
+                                        t(status_label_key(facts["status"]))]
+        shown[0] = facts
 
     def _refresh(*_):
         gdf = app_state.alerts_gdf.value
@@ -357,14 +400,7 @@ def build_context(app_state, id_field) -> v.Card:
         facts = facts_of(gdf, app_state.actual_alert_id.value, app_state.project.value)
         if facts is None:
             return
-        facts_slots["source"].children = [facts["source"]]
-        facts_slots["detected"].children = [
-            t("analysis_tile.facts.range", first=facts["first"], last=facts["last"])
-        ]
-        facts_slots["swatch"].style_ = _SWATCH.format(
-            color=status_color(facts["status"]))
-        facts_slots["chip"].children = [facts_slots["swatch"],
-                                        t(status_label_key(facts["status"]))]
+        _write_facts(facts)
 
     app_state.alerts_gdf.subscribe(_refresh)
     app_state.actual_alert_id.subscribe(_refresh)
@@ -372,7 +408,18 @@ def build_context(app_state, id_field) -> v.Card:
     # before it builds this block).
     if app_state.alert_filter_reactive is not None:
         app_state.alert_filter_reactive.subscribe(_refresh)
-    _refresh()
+
+    def _label_facts():
+        # The facts on screen, re-worded. They may be the previous alert's,
+        # kept by the guard in ``_refresh`` while another set's alerts are on
+        # hand, so they are rewritten from what was shown, not re-read.
+        if shown[0] is not None:
+            _write_facts(shown[0])
+
+    # ``_refresh`` writes the queue line and the counter (and, by itself, the
+    # facts); ``labels.add`` runs it once, in place of a direct call.
+    labels.add(_refresh)
+    labels.add(_label_facts)
 
     # The queue and the navigation live in the screen's top bar
     # (``build_topnav``), the facts in the panel: the card is the facts.
@@ -380,7 +427,7 @@ def build_context(app_state, id_field) -> v.Card:
     setattr(card, _SLOTS,
             {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots,
              # for ``build_topnav``'s filter control
-             "app_state": app_state})
+             "app_state": app_state, "labels": labels})
     return card
 
 
@@ -390,7 +437,7 @@ def filter_control(card):
     return getattr(card, _SLOTS).get("filter")
 
 
-def build_topnav(card, set_selector):
+def build_topnav(card, set_selector, *, labels=None):
     """The screen's top-bar navigation, from the widgets ``build_context``
     built (their handlers and subscriptions stay there): the filter control
     (``filter_menu``: the funnel button and the filter's chip), the alert-set
@@ -405,9 +452,10 @@ def build_topnav(card, set_selector):
     into ``app_state`` (``AppState.bind_alert_filter``, ``build_controls``)."""
     slots = getattr(card, _SLOTS)
     app_state = slots.get("app_state")
+    labels = labels if labels is not None else slots.get("labels") or Labels()
     control = None
     if app_state is not None and app_state.alert_filter_reactive is not None:
-        control = build_filter_menu(app_state)
+        control = build_filter_menu(app_state, labels=labels)
     slots["filter"] = control
     progress = v.Html(tag="div", class_="defo-topnav-progress", children=[slots["tally"], slots["bar"]])
     middle = v.Html(tag="div", class_="defo-topnav-pos", children=[slots["menu"]])

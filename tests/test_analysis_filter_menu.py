@@ -206,3 +206,23 @@ def test_a_start_filter_set_before_the_alerts_arrive_gets_its_chip_label_once_th
     assert ui.chip.children == ["evaluator: Ana"]
     s.alerts_gdf.set(_six())
     assert ui.chip.children == ["Evaluator: Ana"]
+
+
+def test_an_open_menu_keeps_its_unapplied_picks_across_a_switch(bar):
+    from gui.tile.analysis.labels import Labels
+    from tests._i18n_sweep import english_leftovers
+
+    labels = Labels()
+    ui = build_filter_menu(bar.state, labels=labels)
+    ui.menu.v_model = True
+    ui.attribute.v_model = "status"
+    picked = [ui.values.items[0]["value"]]
+    ui.values.v_model = picked
+    set_locale("fr")
+    labels.run()
+    assert ui.menu.v_model is True
+    assert ui.attribute.v_model == "status" and ui.values.v_model == picked
+    assert bar.analysis.alert_filter.value is None, "a switch applies nothing"
+    assert ui.attribute.items[1]["text"] == t("analysis_tile.facts.status")  # filter_columns' label
+    assert ui.apply.children == [t("analysis_tile.filter.apply")]
+    assert english_leftovers(ui.menu, "fr") == []

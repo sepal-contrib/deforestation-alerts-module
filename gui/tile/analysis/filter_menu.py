@@ -24,6 +24,7 @@ import ipyvuetify as v
 from gui.i18n import format_number, t
 from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter, filter_columns, value_choices
+from gui.tile.analysis.labels import Labels
 from gui.widget.outside_click import OutsideClickWidget
 
 #: How many values the chip names before it counts the rest ("Ana, Bruno +2").
@@ -63,25 +64,24 @@ def filter_label(app_state, f, limit=CHIP_VALUES) -> str:
     return t("analysis_tile.filter.chip", attribute=choice.label if choice is not None else f.column, values=shown)
 
 
-def build_filter_menu(app_state) -> SimpleNamespace:
+def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
     """The funnel button, its menu and the chip. Returns
     ``SimpleNamespace(root, button, menu, attribute, values, empty, apply,
     clear, chip, outside)``; ``root`` goes into the top bar, left of the set
-    selector."""
+    selector. ``labels`` is the screen's ``labels.Labels`` (a fresh one when
+    none is given): the texts are written by a hook it runs on every language
+    switch."""
+    labels = labels if labels is not None else Labels()
     button = v.Btn(icon=True, v_on="menu.on", class_="defo-filter-btn",
-                   attributes={"aria-label": t("analysis_tile.filter.button"),
-                               "title": t("analysis_tile.filter.button")},
                    children=[v.Icon(children=["mdi-filter-outline"])])
-    title = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[t("analysis_tile.filter.button")])
-    attribute = v.Select(label=t("analysis_tile.filter.attribute"), items=[], v_model=None,
-                         dense=True, outlined=True, hide_details=True)
-    values = v.Select(label=t("analysis_tile.filter.values"), items=[], v_model=[], multiple=True,
+    title = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
+    attribute = v.Select(items=[], v_model=None, dense=True, outlined=True, hide_details=True)
+    values = v.Select(items=[], v_model=[], multiple=True,
                       chips=True, small_chips=True, deletable_chips=True, dense=True, outlined=True,
                       hide_details=True)
     empty = v.Html(tag="div", style_="font-size: 12px; display: none;", children=[])
-    clear = v.Btn(text=True, style_="height: 36px; " + _BTN, children=[t("analysis_tile.filter.clear")])
-    apply = v.Btn(color="primary", depressed=True, style_="height: 36px; " + _BTN,
-                  children=[t("analysis_tile.filter.apply")])
+    clear = v.Btn(text=True, style_="height: 36px; " + _BTN, children=[])
+    apply = v.Btn(color="primary", depressed=True, style_="height: 36px; " + _BTN, children=[])
     body = v.Card(style_="width: 320px; padding: 12px; display: flex; flex-direction: column; gap: 10px;",
                   children=[
                       title, attribute, values, empty,
@@ -174,7 +174,30 @@ def build_filter_menu(app_state) -> SimpleNamespace:
     # before they are published (a review copy's start filter) is relabelled
     # when they arrive.
     app_state.alerts_gdf.subscribe(_sync)
-    _sync()
+
+    def _label():
+        button.attributes = {**button.attributes, "aria-label": t("analysis_tile.filter.button"),
+                             "title": t("analysis_tile.filter.button")}
+        title.children = [t("analysis_tile.filter.button")]
+        attribute.label = t("analysis_tile.filter.attribute")
+        values.label = t("analysis_tile.filter.values")
+        clear.children = [t("analysis_tile.filter.clear")]
+        apply.children = [t("analysis_tile.filter.apply")]
+        if menu.v_model:
+            # The open menu's lists, relabelled with the picks kept: the
+            # reviewer's unapplied choice is not the switch's to undo.
+            gdf, questions = _context(app_state)
+            columns = filter_columns(gdf, questions)
+            local.syncing = True
+            try:
+                attribute.items = [{"text": c.label, "value": c.column} for c in columns]
+                _fill_values(attribute.v_model, set(values.v_model or []))
+            finally:
+                local.syncing = False
+            empty.children = [] if columns else [t("analysis_tile.filter.no_columns")]
+
+    labels.add(_label)
+    labels.add(_sync)  # subscribed above; ``add`` runs it once, in place of a direct call
 
     root = v.Html(tag="div", class_="defo-topnav-filter", children=[menu, chip, outside])
     return SimpleNamespace(root=root, button=button, menu=menu, attribute=attribute, values=values,

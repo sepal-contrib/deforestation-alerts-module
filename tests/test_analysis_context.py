@@ -303,6 +303,25 @@ def test_another_sets_alerts_leave_the_facts_alone(tmp_path, monkeypatch):
     assert tally.children == ["1 reviewed · 1 left"]
 
 
+def test_facts_kept_through_a_set_change_follow_the_language(tmp_path, monkeypatch):
+    """The guard keeps the facts of the alert on screen while another set's
+    alerts are on hand; a switch then must still relabel them."""
+    from gui.tile.analysis.labels import Labels
+
+    s = _state(tmp_path, monkeypatch)
+    labels = Labels()
+    card = context.build_context(s, v.TextField(v_model=None), labels=labels)
+    source, detected, chip = context.facts_widgets(card)
+    s.alerts_gdf.set(_alerts(["Confirmed"]))
+    s.actual_alert_id.value = 0
+    s.alerts_gdf.value = _alerts(["Confirmed", "Not reviewed"], set_id="old")
+    set_locale("fr")
+    labels.run()
+    assert source.children == ["GLAD-L"]
+    assert detected.children == [t("analysis_tile.facts.range", first="2026-01-10", last="2026-01-20")]
+    assert chip.children[-1] == t("legend.status.confirmed")
+
+
 def test_review_counts_agrees_with_is_reviewed():
     from deforestation_alerts.project.review_status import is_reviewed
 

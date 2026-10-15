@@ -432,13 +432,16 @@ def wire_alert_navigation(widgets, app_state, analysis, app_tile_model, id_field
 _SET_STATUS_KEYS = {Status.STALE: "steps.overview.stale", Status.MISSING: "steps.overview.missing"}
 
 
-def build_set_status_banner(app_state) -> v.Html:
+def build_set_status_banner(app_state, *, labels=None) -> v.Html:
     """The spec §5.3 banner over the Analysis controls: the active set was
     built from inputs that have changed since (out of date), or its files are
     gone (missing), in the words Overview uses. It never blocks the review
     (rebuilding discards it). A raw widget, like the rest of the layout,
     updated on every project publish: the status is the manifest plus one
-    ``os.stat``, so the subscriber is cheap and calls nothing back."""
+    ``os.stat``, so the subscriber is cheap and calls nothing back.
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): ``_sync`` re-words the message on a language switch."""
+    labels = labels if labels is not None else Labels()
     banner = v.Html(tag="div", class_="warning--text px-4 py-2", children=[], style_="display: none;")
 
     def _sync(*_):
@@ -450,7 +453,7 @@ def build_set_status_banner(app_state) -> v.Html:
         banner.style_ = "" if key else "display: none;"
 
     app_state.project.subscribe(_sync)
-    _sync()
+    labels.add(_sync)
     return banner
 
 
@@ -532,14 +535,14 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Bound before block A is built, which subscribes to the bound filter
     # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
     app_state.bind_alert_filter(analysis.alert_filter)
-    context = build_context(app_state, id_field)
-    topnav = build_topnav(context, build_set_selector(app_state))
+    context = build_context(app_state, id_field, labels=labels)
+    topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
         children=[
-            build_set_status_banner(app_state),
+            build_set_status_banner(app_state, labels=labels),
             context,
             build_review_panel(widgets=widgets, app_state=app_state, analysis=analysis),
             questions.root,

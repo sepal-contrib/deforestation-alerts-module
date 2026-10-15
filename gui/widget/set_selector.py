@@ -19,6 +19,7 @@ import solara
 
 from deforestation_alerts.project.periods import sets_newest_first
 from gui.i18n import t, tn
+from gui.tile.analysis.labels import Labels
 
 
 def set_text(project, alert_set) -> str:
@@ -61,7 +62,7 @@ def SetSelector(app_state):
               outlined=True, hide_details=True)
 
 
-def build_set_selector(app_state) -> v.Select:
+def build_set_selector(app_state, *, labels=None) -> v.Select:
     """The selector as a raw widget for the Analysis controls.
 
     It follows every project publish, whichever thread publishes (a worker's
@@ -69,8 +70,12 @@ def build_set_selector(app_state) -> v.Select:
     ``build_set_status_banner``. A trait set by that sync fires the pick
     observer synchronously in the same thread; the thread-local ``syncing``
     flag keeps it from reading as the user's pick (it would otherwise select
-    the set the sync just showed, undoing a newer change made meanwhile)."""
-    select = v.Select(label=t("steps.sets.label"), items=[], v_model=None, dense=True, outlined=True,
+    the set the sync just showed, undoing a newer change made meanwhile).
+
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): its hook words the label and re-words the items."""
+    labels = labels if labels is not None else Labels()
+    select = v.Select(label="", items=[], v_model=None, dense=True, outlined=True,
                       hide_details=True, class_="px-2 pt-2", style_="display: none;")
     local = threading.local()
 
@@ -93,5 +98,10 @@ def build_set_selector(app_state) -> v.Select:
 
     select.observe(_picked, "v_model")
     app_state.project.subscribe(_sync)
-    _sync()
+
+    def _label():
+        select.label = t("steps.sets.label")
+        _sync()  # the items' text is translated by ``set_items``
+
+    labels.add(_label)
     return select
