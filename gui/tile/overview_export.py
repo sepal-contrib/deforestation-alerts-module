@@ -64,9 +64,11 @@ class ExportCard(v.Card):
     ``store`` is the set's alert store: a file older than it is out of date.
     ``project`` is the name of the project ``folder`` belongs to, marked as
     being written while a file is (spec §12), so a delete is refused instead
-    of the export re-creating the deleted folder."""
+    of the export re-creating the deleted folder. ``scope`` is the one to
+    start on (the previous card's, kept across a rebuild) when it has alerts;
+    otherwise Confirmed when it has some, else All."""
 
-    def __init__(self, gdf, folder, sources, start, end, project, questions=(), store=None):
+    def __init__(self, gdf, folder, sources, start, end, project, questions=(), store=None, scope=None):
         self._gdf, self._folder, self._sources = gdf, str(folder), list(sources)
         self._start, self._end, self._project = start, end, project
         self._questions, self._store = tuple(questions), store
@@ -86,6 +88,8 @@ class ExportCard(v.Card):
             for scope in SCOPES
         }
         default = "confirmed" if self._counts["confirmed"] else "all"
+        if scope in SCOPES and self._counts[scope]:
+            default = scope
         self.scope_group = v.ChipGroup(mandatory=True, v_model=default, active_class="primary--text",
                                        column=True, children=list(self.chips.values()))
 
@@ -183,7 +187,7 @@ class ExportCard(v.Card):
         rows = scope_rows(self._gdf, self.scope)
         area = float(rows["area_ha"].sum()) if "area_ha" in rows.columns else 0.0
         self._summary.children = [t("overview_tile.export_summary", n=format_number(len(rows)),
-                                    area=format_number(area), sources=" + ".join(self._sources),
+                                    area=format_number(area, 1), sources=" + ".join(self._sources),
                                     start=self._start, end=self._end)]
         self._scope_label.children = [t("overview_tile.export_scope")]
         for scope, chip in self.chips.items():
@@ -274,9 +278,9 @@ def _shown_folder(folder):
         return str(folder)
 
 
-def build_export_card(gdf, folder, sources, start, end, project, questions=(), store=None):
+def build_export_card(gdf, folder, sources, start, end, project, questions=(), store=None, scope=None):
     """The export card of one set (see ``ExportCard``)."""
-    return ExportCard(gdf, folder, sources, start, end, project, questions, store)
+    return ExportCard(gdf, folder, sources, start, end, project, questions, store, scope)
 
 
 def relabel_export_card(card):

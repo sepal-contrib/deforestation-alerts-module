@@ -658,10 +658,27 @@ def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(o
         store = str(set_store.store_path(p, active_set(p)))
         assert store.startswith(str(tmp_path / "d" / SET_DIR))
         assert calls == [((alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d",
-                           tuple(p.questions)), {"store": store})]
+                           tuple(p.questions)), {"store": store, "scope": None})]
         # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1
+    finally:
+        rc.close()
+
+
+def test_a_rebuilt_export_card_keeps_the_scope_the_user_picked(ov, tmp_path):
+    """A review save hands the session a new copy of the alerts, which
+    rebuilds the card; the scope the user picked must survive it."""
+    alerts = _alerts()
+    state = _state(_project(tmp_path), alerts)
+    map_, layers, rc = ov.render(state)
+    try:
+        [card] = _export_cards(rc)
+        assert card.scope == "confirmed"
+        card.scope_group.v_model = "all"
+        state.alerts_gdf.set(alerts.copy())  # what a review save does
+        [rebuilt] = _export_cards(rc)
+        assert rebuilt is not card and rebuilt.scope == "all"
     finally:
         rc.close()
 

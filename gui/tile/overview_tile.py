@@ -417,11 +417,17 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
     store = str(set_store.store_path(p, s)) if s is not None else None
+    # The card a rebuild replaces, so the new one starts on the scope the
+    # user had picked (a review save rebuilds it with the alerts' new copy).
+    last_card = solara.use_ref(None)
     export_card = solara.use_memo(
-        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions, store=store)
+        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions, store=store,
+                                  scope=last_card.current.scope if last_card.current is not None else None)
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end, questions, store],
     )
+    if export_card is not None:
+        last_card.current = export_card
 
     def _relabel_export():
         if export_card is not None:

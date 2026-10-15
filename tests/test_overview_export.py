@@ -126,11 +126,11 @@ def test_the_card_offers_two_formats_and_four_scopes(data_root):
 
 def test_the_summary_and_footer_follow_the_scope(data_root):
     card = _card(data_root / "recipe_a", _gdf("Confirmed", "Not reviewed"))
-    assert t("overview_tile.export_summary", n="1", area="1", sources="GLAD-L",
+    assert t("overview_tile.export_summary", n="1", area="1.0", sources="GLAD-L",
              start="2026-01-01", end="2026-06-12") in _text(card)
     assert f"{NAME}_confirmed" in _text(card)
     card.scope_group.v_model = "all"
-    assert t("overview_tile.export_summary", n="2", area="2", sources="GLAD-L",
+    assert t("overview_tile.export_summary", n="2", area="2.0", sources="GLAD-L",
              start="2026-01-01", end="2026-06-12") in _text(card)
     assert f"{NAME}_confirmed" not in _text(card) and NAME in _text(card)
 
@@ -418,3 +418,25 @@ def test_a_folder_outside_the_download_root_still_builds_and_says_why(data_root,
     (task,) = bus.tasks.value
     assert task.status == TaskStatus.FAILED and len(errors) == 1
     assert card.tiles["gpkg"].path is None and card.tiles["gpkg"].loading is False
+
+
+def test_the_summary_area_keeps_one_decimal(data_root):
+    """A set of small confirmed alerts must not read "0 ha"."""
+    gdf = _gdf("Confirmed")
+    gdf["area_ha"] = [0.4]
+    card = _card(data_root / "recipe_a", gdf)
+    assert t("overview_tile.export_summary", n="1", area="0.4", sources="GLAD-L",
+             start="2026-01-01", end="2026-06-12") in _text(card)
+
+
+def test_a_rebuilt_card_keeps_the_scope_it_is_given(data_root):
+    """The Overview rebuilds the card after a review save and hands it the
+    scope the user had picked; a scope with no alerts falls back to the default."""
+    folder = data_root / "recipe_a"
+    gdf = _gdf("Confirmed", "Not reviewed")
+    card = overview_export.build_export_card(gdf, str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12",
+                                             "d", scope="unreviewed")
+    assert card.scope == "unreviewed"
+    card = overview_export.build_export_card(_gdf("Confirmed"), str(folder), ["GLAD-L"], "2026-01-01",
+                                             "2026-06-12", "d", scope="unreviewed")
+    assert card.scope == "confirmed"
