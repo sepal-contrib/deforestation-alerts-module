@@ -1,11 +1,10 @@
-"""Overview export card: a click a user can actually make, and feedback.
+"""Overview export card: scope chips, file tiles, a click a user can actually
+make, and feedback (spec 2026-10-15 overview-export).
 
 The card is built by ``build_export_card`` — a module-level raw-widget builder —
-so these tests drive the REAL buttons (the same objects the right panel renders)
-rather than a handler pulled out of the component. That is the point: the
-previous card wired the click to an ``sw.DownloadBtn``, whose ``path="#"``
-default disables it in ``__init__``, so the export could never be triggered from
-the UI at all even though a direct call to the handler worked.
+so these tests drive the REAL widgets (the same objects the dialog renders)
+rather than a handler pulled out of the component: the tiles a user clicks and
+the chips they pick a scope with.
 
 The export worker runs on a real daemon thread (``spawn_in_context``) under
 ``notify_bridge.tracked_job``; the module's ``current_notifier`` is pointed at a
@@ -14,26 +13,33 @@ run publishes. Error toasts are counted on a ``Notifier.error`` spy because the
 bus replaces earlier error toasts.
 """
 
-from pathlib import Path
+import os
+import threading
+import time
 
 import geopandas as gpd
 import pytest
-from pysepal import sepalwidgets as sw
+from pysepal.i18n import set_locale
 from pysepal.solara.notifications.bus import NotificationBus
 from pysepal.solara.notifications.notifier import Notifier
 from pysepal.solara.notifications.state import TaskStatus, ToastType
 from shapely.geometry import Polygon
 
-import gui.tile.overview_tile as overview_tile
+import gui.tile.overview_export as overview_export
+from gui.i18n import t
 from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
-from gui.i18n import t
+
+NAME = "alerts_glad-l_2026-01-01_2026-06-12"
 
 
-def _gdf():
+def _gdf(*statuses):
+    statuses = statuses or ("Confirmed",)
+    polys = [Polygon([(i, 0), (i + 1, 0), (i + 1, 1), (i, 1)]) for i in range(len(statuses))]
     g = gpd.GeoDataFrame(
-        {"area_ha": [1.0], "alert_polygon": [None]},
-        geometry=gpd.GeoSeries([Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs="EPSG:4326"),
+        {"area_ha": [1.0] * len(statuses), "alert_polygon": [None] * len(statuses),
+         "status": list(statuses)},
+        geometry=gpd.GeoSeries(polys, crs="EPSG:4326"),
     )
     g["bounding_box"] = g.geometry.envelope
     g["point"] = g.geometry.representative_point()
@@ -48,7 +54,7 @@ def feedback(monkeypatch):
     errors = []
     threads = []
 
-    monkeypatch.setattr(overview_tile, "current_notifier", lambda: Notifier(bus))
+    monkeypatch.setattr(overview_export, "current_notifier", lambda: Notifier(bus))
 
     real_error = Notifier.error
 
@@ -63,7 +69,7 @@ def feedback(monkeypatch):
         threads.append(thread)
         return thread
 
-    monkeypatch.setattr(overview_tile, "spawn_in_context", _spawn)
+    monkeypatch.setattr(overview_export, "spawn_in_context", _spawn)
 
     def _join():
         for thread in threads:
@@ -74,66 +80,220 @@ def feedback(monkeypatch):
 
 
 def _non_error_toasts(bus):
-    return [
-        (t.type.value, t.message)
-        for t in bus.toasts.value
-        if t.type is not ToastType.ERROR
-    ]
+    return [(t.type.value, t.message) for t in bus.toasts.value if t.type is not ToastType.ERROR]
 
 
-def _card(folder, fmt_index=1):
-    """The real export card plus the (generate, download) pair for one format."""
-    card = overview_tile.build_export_card(
-        _gdf(), str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
+def _card(folder, gdf=None, store=None, questions=()):
+    return overview_export.build_export_card(
+        _gdf() if gdf is None else gdf, str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d",
+        questions, store=store,
     )
-    gen_row, dl_row = card.children[1], card.children[2]
-    return card, gen_row.children[fmt_index], dl_row.children[fmt_index]
 
 
-def test_the_generate_button_is_clickable_and_the_download_btn_starts_hidden(data_root):
-    """The bug: an ``sw.DownloadBtn`` built with the default ``path="#"`` is
-    disabled by its own constructor, so nothing bound to its click ever runs."""
-    card, gen_btn, dl_btn = _card(data_root / "recipe_a")
-
-    assert isinstance(gen_btn, sw.Btn) and not isinstance(gen_btn, sw.DownloadBtn)
-    # (``v.Btn.disabled`` is None until set; what matters is that it is falsy —
-    # the DownloadBtn below is explicitly True.)
-    assert not gen_btn.disabled, "the generate button must be clickable"
-    assert isinstance(dl_btn, sw.DownloadBtn)
-    assert dl_btn.disabled is True and dl_btn.viz is False
+def _text(w):
+    out = []
+    for c in getattr(w, "children", None) or []:
+        out += [c] if isinstance(c, str) else [_text(c)]
+    return " ".join(out)
 
 
-def test_a_generated_export_enables_the_download_btn_with_a_home_relative_url(
-    data_root, feedback
-):
-    """The export lands in the set folder and the DownloadBtn becomes
-    enabled + visible with a URL ``su.create_download_link`` can turn into a
-    working SEPAL link: relative to ``$HOME``."""
+def _stale_setup(folder):
+    """A confirmed-scope GeoPackage written a minute before the set's store."""
+    folder.mkdir(parents=True, exist_ok=True)
+    old = folder / f"{NAME}_confirmed.gpkg"
+    old.write_bytes(b"x")
+    store = folder / "alert_db.parquet"
+    store.write_bytes(b"x")
+    past = time.time() - 60
+    os.utime(old, (past, past))
+    return old, store
+
+
+# ---------------------------------------------------------------------------
+# What the card offers
+# ---------------------------------------------------------------------------
+def test_the_card_offers_two_formats_and_four_scopes(data_root):
+    card = _card(data_root / "recipe_a", _gdf("Confirmed", "False Positive", "Not reviewed"))
+    assert list(card.tiles) == ["gpkg", "csv"]
+    assert list(card.chips) == ["confirmed", "reviewed", "unreviewed", "all"]
+    assert card.scope == "confirmed"
+    assert t("overview_tile.export_scope_reviewed") in _text(card.chips["reviewed"])
+    assert "2" in _text(card.chips["reviewed"])
+    for tile in card.tiles.values():  # the Create face: a clickable button, no link
+        assert tile.path is None and not tile.disabled and tile.href is None
+        assert "GeoJSON" not in _text(tile)
+
+
+def test_the_summary_and_footer_follow_the_scope(data_root):
+    card = _card(data_root / "recipe_a", _gdf("Confirmed", "Not reviewed"))
+    assert t("overview_tile.export_summary", n="1", area="1", sources="GLAD-L",
+             start="2026-01-01", end="2026-06-12") in _text(card)
+    assert f"{NAME}_confirmed" in _text(card)
+    card.scope_group.v_model = "all"
+    assert t("overview_tile.export_summary", n="2", area="2", sources="GLAD-L",
+             start="2026-01-01", end="2026-06-12") in _text(card)
+    assert f"{NAME}_confirmed" not in _text(card) and NAME in _text(card)
+
+
+def test_the_folder_chip_shows_the_served_path(data_root):
+    card = _card(data_root / "recipe_a")
+    assert card.folder_chip.text == "module_results/deforestation_alerts/recipe_a"
+
+
+def test_the_default_scope_is_all_without_confirmed_alerts(data_root):
+    card = _card(data_root / "recipe_a", _gdf("Not reviewed"))
+    assert card.scope == "all"
+    assert card.chips["confirmed"].disabled and card.chips["reviewed"].disabled
+    assert not card.chips["unreviewed"].disabled and not card.chips["all"].disabled
+
+
+# ---------------------------------------------------------------------------
+# Writing a file
+# ---------------------------------------------------------------------------
+def test_a_click_writes_the_scoped_file_and_links_the_tile(data_root, feedback):
     bus, errors, join = feedback
     folder = data_root / "recipe_a"
-    card, gen_btn, dl_btn = _card(folder)
+    card = _card(folder, _gdf("Confirmed", "Not reviewed"))
 
-    gen_btn.fire_event("click", None)
+    card.tiles["gpkg"].fire_event("click", None)
     join()
 
-    expected = f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.gpkg"
-    assert Path(expected).exists()
+    path = folder / f"{NAME}_confirmed.gpkg"
+    assert path.exists() and len(gpd.read_file(path)) == 1
     assert not list(folder.glob("*.part"))
-    assert dl_btn.disabled is False and dl_btn.viz is True
-    assert dl_btn.href.endswith(
-        "module_results/deforestation_alerts/recipe_a/"
-        "alerts_glad-l_2026-01-01_2026-06-12.gpkg"
+    tile = card.tiles["gpkg"]
+    assert tile.path == str(path) and tile.disabled is False and tile.warning is None
+    assert tile.loading is False
+    assert tile.href == (
+        "/api/sandbox/jupyter/files/module_results/deforestation_alerts/recipe_a/"
+        f"{NAME}_confirmed.gpkg"
     )
-    # the generate button is released, and the run reported success
-    assert gen_btn.loading is False and gen_btn.disabled is False
     (task,) = bus.tasks.value
-    assert task.status == TaskStatus.COMPLETED
-    assert errors == []
-    assert _non_error_toasts(bus) == [
-        ("success", t("overview_tile.export_done", fmt="GPKG"))
-    ]
+    assert task.status == TaskStatus.COMPLETED and errors == []
+    assert _non_error_toasts(bus) == [("success", t("overview_tile.export_done", fmt="GPKG"))]
 
 
+def test_a_click_on_a_linked_tile_writes_nothing(data_root, feedback, monkeypatch):
+    """A tile with a file is a download link: the browser follows it, and the
+    click the kernel also hears must not start another write."""
+    _, _, join = feedback
+    folder = data_root / "recipe_a"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{NAME}_confirmed.gpkg").write_bytes(b"x")
+    calls = []
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", lambda *a, **k: calls.append(a))
+    card = _card(folder)
+    card.tiles["gpkg"].fire_event("click", None)
+    join()
+    assert calls == []
+
+
+def test_a_scope_switch_refaces_the_tiles(data_root, feedback):
+    _, _, join = feedback
+    folder = data_root / "recipe_a"
+    card = _card(folder, _gdf("Confirmed", "Not reviewed"))
+    card.tiles["csv"].fire_event("click", None)
+    join()
+    assert card.tiles["csv"].path == str(folder / f"{NAME}_confirmed.csv")
+
+    card.scope_group.v_model = "all"
+    assert card.tiles["csv"].path is None  # no all-alerts CSV yet
+    card.scope_group.v_model = "confirmed"
+    assert card.tiles["csv"].path == str(folder / f"{NAME}_confirmed.csv")
+
+
+def test_an_existing_file_is_found_as_ready(data_root):
+    """A file the previous card wrote (no scope suffix) is the "all" file."""
+    folder = data_root / "recipe_a"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{NAME}.gpkg").write_bytes(b"x")
+    card = _card(folder, _gdf("Not reviewed"))
+    assert card.scope == "all"
+    assert card.tiles["gpkg"].path == str(folder / f"{NAME}.gpkg")
+    assert card.tiles["gpkg"].warning is None and card.update_btns["gpkg"].viz is False
+
+
+def test_a_file_older_than_the_store_is_out_of_date(data_root, feedback):
+    _, _, join = feedback
+    folder = data_root / "recipe_a"
+    old, store = _stale_setup(folder)
+    card = _card(folder, store=store)
+    tile = card.tiles["gpkg"]
+    assert tile.path == str(old) and tile.warning == t("overview_tile.export_stale")
+    assert card.update_btns["gpkg"].viz is True and card.update_btns["csv"].viz is False
+
+    card.update_btns["gpkg"].fire_event("click", None)
+    join()
+
+    assert tile.path == str(old) and tile.warning is None
+    assert card.update_btns["gpkg"].viz is False
+    assert len(gpd.read_file(old)) == 1  # rewritten from the alerts
+
+
+def test_a_failed_update_keeps_the_old_file(data_root, feedback, monkeypatch):
+    _, errors, join = feedback
+    folder = data_root / "recipe_a"
+    old, store = _stale_setup(folder)
+    card = _card(folder, store=store)
+
+    def _boom(*_a, **_kw):
+        raise ValueError("disk full")
+
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _boom)
+    card.update_btns["gpkg"].fire_event("click", None)
+    join()
+
+    tile = card.tiles["gpkg"]
+    assert tile.path == str(old) and tile.warning == t("overview_tile.export_stale")
+    assert card.update_btns["gpkg"].viz is True
+    assert len(errors) == 1 and tile.loading is False
+
+
+def test_scope_is_locked_while_writing(data_root, feedback, monkeypatch):
+    _, _, join = feedback
+    gate = threading.Event()
+    seen = []
+
+    def _slow(gdf, folder, fmt, sources, start, end, scope="all"):
+        seen.append(scope)
+        gate.wait(10)
+        return f"{folder}/x.{fmt}"
+
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _slow)
+    card = _card(data_root / "recipe_a", _gdf("Confirmed", "Not reviewed"))
+    card.tiles["gpkg"].fire_event("click", None)
+    try:
+        assert all(c.disabled for c in card.chips.values())
+        assert card.tiles["gpkg"].loading is True
+        card.scope_group.v_model = "all"  # a change that slips through is undone
+        assert card.scope == "confirmed"
+    finally:
+        gate.set()
+        join()
+    assert seen == ["confirmed"]
+    assert not card.chips["confirmed"].disabled and not card.chips["all"].disabled
+
+
+def test_relabel_keeps_scope_and_files(data_root, feedback):
+    _, _, join = feedback
+    card = _card(data_root / "recipe_a", _gdf("Confirmed", "Not reviewed"))
+    card.tiles["gpkg"].fire_event("click", None)
+    join()
+    set_locale("fr")
+    try:
+        same = overview_export.relabel_export_card(card)
+        assert same is card
+        assert t("overview_tile.export_label") == "Exporter les alertes"
+        assert t("overview_tile.export_label") in _text(card)
+        assert t("overview_tile.export_scope_all") in _text(card.chips["all"])
+        assert card.scope == "confirmed" and card.tiles["gpkg"].path is not None
+    finally:
+        set_locale("en")
+
+
+# ---------------------------------------------------------------------------
+# What the file holds, and the project guard
+# ---------------------------------------------------------------------------
 def test_the_export_labels_current_questions_and_drops_deleted_ones(data_root, feedback):
     from deforestation_alerts.project.models import default_questions
     from gui.scripts import questions as questions_mod
@@ -143,13 +303,11 @@ def test_the_export_labels_current_questions_and_drops_deleted_ones(data_root, f
     gdf = _gdf()
     gdf["description"] = "logging, roads"
     gdf["q_gone"] = "x"
-    card = overview_tile.build_export_card(
-        gdf, str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d", tuple(default_questions())
-    )
-    card.children[1].children[1].fire_event("click", None)
+    card = _card(folder, gdf, questions=tuple(default_questions()))
+    card.tiles["gpkg"].fire_event("click", None)
     join()
 
-    out = gpd.read_file(f"{folder}/alerts_glad-l_2026-01-01_2026-06-12.gpkg")
+    out = gpd.read_file(folder / f"{NAME}_confirmed.gpkg")
     assert out["description"][0] == questions_mod.label(default_questions()[0], "logging, roads")
     assert "q_gone" not in out.columns
     assert errors == []
@@ -162,93 +320,65 @@ def test_the_export_marks_its_project_as_being_written(data_root, feedback, monk
     it, a half-project with no manifest."""
     from gui.store.project_writers import is_writing
 
-    bus, errors, join = feedback
-    folder = data_root / "recipe_a"
-    card, gen_btn, dl_btn = _card(folder)
+    _, errors, join = feedback
+    card = _card(data_root / "recipe_a")
     busy = []
 
-    def _export(gdf, folder_, fmt, sources, start, end):
+    def _export(gdf, folder_, fmt, sources, start, end, scope="all"):
         busy.append(is_writing("d"))
         return f"{folder_}/alerts.{fmt}"
 
-    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
-
-    gen_btn.fire_event("click", None)
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _export)
+    card.tiles["gpkg"].fire_event("click", None)
     join()
 
     assert busy == [True] and not is_writing("d")
-    assert errors == [] and dl_btn.viz is True
+    assert errors == []
 
 
-def test_a_failed_export_tells_the_user_and_leaves_the_download_btn_disabled(
+# ---------------------------------------------------------------------------
+# Failures
+# ---------------------------------------------------------------------------
+def test_a_failed_export_tells_the_user_and_leaves_the_tile_to_retry(
     data_root, feedback, monkeypatch, data_files
 ):
-    """An export that blows up used to be swallowed into the log: the user saw a
-    dead button and no explanation."""
     bus, errors, join = feedback
-    card, gen_btn, dl_btn = _card(data_root / "recipe_a", fmt_index=0)
+    card = _card(data_root / "recipe_a")
 
     def _boom(*_a, **_kw):
         raise ValueError("unsupported driver")
 
-    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
-
-    gen_btn.fire_event("click", None)
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _boom)
+    card.tiles["csv"].fire_event("click", None)
     join()
 
-    assert dl_btn.disabled is True and dl_btn.viz is False
+    tile = card.tiles["csv"]
+    assert tile.path is None and not tile.disabled and tile.loading is False
+    assert not card.chips["confirmed"].disabled and not card.chips["all"].disabled  # unlocked again
     assert data_files(data_root) == []
     (task,) = bus.tasks.value
-    assert task.status == TaskStatus.FAILED
-    assert task.error_message == "unsupported driver"
-    # exactly one error toast, published once the run was already FAILED
-    assert errors == [
-        ("unsupported driver", ERROR_TOAST_TIMEOUT, (TaskStatus.FAILED,))
-    ]
+    assert task.status == TaskStatus.FAILED and task.error_message == "unsupported driver"
+    assert errors == [("unsupported driver", ERROR_TOAST_TIMEOUT, (TaskStatus.FAILED,))]
     assert _non_error_toasts(bus) == []
-    assert gen_btn.loading is False and gen_btn.disabled is False
 
 
 def test_a_failed_export_leaves_one_traceback_in_the_server_log(
     data_root, feedback, monkeypatch, server_log
 ):
-    """``tracked_job`` logs every failure it reports, with the traceback; the
-    export worker logged the same failure again, so the server log showed
-    two tracebacks for one failed export."""
-    bus, errors, join = feedback
-    card, gen_btn, dl_btn = _card(data_root / "recipe_a", fmt_index=0)
+    _, errors, join = feedback
+    card = _card(data_root / "recipe_a")
 
     def _boom(*_a, **_kw):
         raise ValueError("unsupported driver")
 
-    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
-
-    gen_btn.fire_event("click", None)
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _boom)
+    card.tiles["csv"].fire_event("click", None)
     join()
 
     out = server_log.getvalue()
     assert out.count("Traceback (most recent call last)") == 1
     assert "failed: unsupported driver" in out and "ValueError: unsupported driver" in out
-    assert len(errors) == 1 and gen_btn.loading is False
-
-
-def test_the_download_url_carries_no_host_so_it_follows_the_sepal_the_app_runs_on(
-    data_root, feedback
-):
-    """pysepal's ``create_download_link`` hardcodes ``https://sepal.io/...``,
-    which sends a test.sepal.io user to production. The button must get the
-    root-relative route instead, resolved against whatever host serves the app."""
-    _, _, join = feedback
-    folder = data_root / "recipe_a"
-    _, gen_btn, dl_btn = _card(folder)
-
-    gen_btn.fire_event("click", None)
-    join()
-
-    assert dl_btn.href == (
-        "/api/sandbox/jupyter/files/module_results/deforestation_alerts/recipe_a/"
-        "alerts_glad-l_2026-01-01_2026-06-12.gpkg"
-    )
+    assert len(errors) == 1
 
 
 def test_the_download_url_follows_a_configured_base(data_root, feedback, monkeypatch):
@@ -256,10 +386,7 @@ def test_the_download_url_follows_a_configured_base(data_root, feedback, monkeyp
     monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_BASE", "/files")
     monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_ROOT", str(data_root))
     _, _, join = feedback
-    folder = data_root / "recipe_a"
-    _, gen_btn, dl_btn = _card(folder)
-
-    gen_btn.fire_event("click", None)
+    card = _card(data_root / "recipe_a")
+    card.tiles["gpkg"].fire_event("click", None)
     join()
-
-    assert dl_btn.href == "/files/recipe_a/alerts_glad-l_2026-01-01_2026-06-12.gpkg"
+    assert card.tiles["gpkg"].href == f"/files/recipe_a/{NAME}_confirmed.gpkg"

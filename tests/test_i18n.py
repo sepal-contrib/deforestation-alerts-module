@@ -235,8 +235,9 @@ def _dynamic_keys():
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
-        # gui.tile.overview_tile's export buttons
-        "overview_tile.export_": ["csv", "gpkg", "geojson"],
+        # gui.tile.overview_export's tiles and scope chips
+        "overview_tile.export_": ["csv", "gpkg"],
+        "overview_tile.export_scope_": ["confirmed", "reviewed", "unreviewed", "all"],
         # gui.tile.analysis.timeline's image-area choices
         "analysis.timeline.area_": list(IMAGE_AREAS),
     }

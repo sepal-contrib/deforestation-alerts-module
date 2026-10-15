@@ -49,13 +49,24 @@
     "size_range": "{lo}–{hi}",
     "answer_unknown": "Sin respuesta",
     "export_label": "Exportar alertas",
-    "export_csv": "CSV",
+    "export_csv": "Tabla CSV",
     "export_gpkg": "GeoPackage",
-    "export_geojson": "GeoJSON",
-    "export_download": "Descargar",
     "export_task_title": "Exportando alertas",
     "export_step": "Generando la exportación {fmt}…",
-    "export_done": "Exportación {fmt} lista."
+    "export_done": "Exportación {fmt} lista.",
+    "export_scope": "Alertas",
+    "export_scope_confirmed": "Confirmadas",
+    "export_scope_reviewed": "Todas revisadas",
+    "export_scope_unreviewed": "Sin revisar",
+    "export_scope_all": "Todas",
+    "export_summary": "{n} alertas · {area} ha · {sources} · {start} – {end}",
+    "export_polygons": "{n} polígonos · respuestas",
+    "export_rows": "{n} filas · todas las columnas, WKT",
+    "export_written": "{what} · {when}",
+    "export_writing": "Escribiendo {n} alertas…",
+    "export_stale": "Revisiones cambiadas desde entonces",
+    "export_update": "Actualizar",
+    "export_footer": "{name}.* · respuestas en español"
   },
   "analysis": {
     "timeline": {
