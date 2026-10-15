@@ -1,0 +1,30 @@
+{
+  "errors": {
+    "not_enough_space": "Espaço livre em disco insuficiente: são necessários {needed_gb} GB em {folder} e há {free_gb} GB livres.",
+    "off_grid": "O raster gravado em {path} não está na grade do projeto; nada foi registrado.",
+    "raw_not_as_asked": "O download {path} não é o raster Int32 de 2 bandas em {crs} que foi solicitado; nada foi registrado.",
+    "mask_not_as_asked": "O download da máscara {path} não é o raster 0/1 de 1 banda em {crs} que foi solicitado; nada foi registrado.",
+    "no_aoi_or_grid": "O projeto precisa de uma AOI e de uma grade antes de qualquer download.",
+    "source_native_unknown": "{source}: sua grade nativa (projeção e escala) é desconhecida; edite a fonte.",
+    "bands_not_loaded": "{source}: sua lista de bandas ainda não foi carregada do Earth Engine; tente novamente em instantes.",
+    "file_not_found": "Arquivo não encontrado: {path}",
+    "not_a_source": "{source} não é uma fonte deste projeto.",
+    "not_ready": "{source} não foi baixada e harmonizada para este período; execute Baixar e harmonizar primeiro.",
+    "footprint_missing": "A área de cobertura do conjunto anterior {set_id} está faltando; execute Integrar e vetorizar nesse conjunto novamente primeiro.",
+    "carry_missing": "O raster combinado do conjunto anterior {set_id} está faltando; execute Integrar e vetorizar nesse conjunto novamente primeiro.",
+    "no_sources": "Escolha pelo menos uma fonte, cada uma uma única vez.",
+    "attribute_band_missing": "O raster de atributos não tem a banda {band} (tem {bands}).",
+    "band_out_of_range": "{file} não tem a banda {band} (tem {bands}).",
+    "attribute_no_crs": "O raster de atributos {path} não tem sistema de referência de coordenadas.",
+    "no_tippecanoe": "tippecanoe não foi encontrado nem junto ao Python nem no PATH.",
+    "project_unreadable": "Não foi possível ler {path}: {error}",
+    "project_not_a_manifest": "{path} não é um manifesto de projeto deste aplicativo.",
+    "project_newer_schema": "{path} tem o esquema {found}; este aplicativo lê o esquema {expected}.",
+    "project_invalid": "{path} não é um projeto válido: {error}",
+    "no_images": "Baixe primeiro as imagens de antes e depois.",
+    "not_downloadable": "O arquivo foi gravado em {path}, mas não pode ser oferecido para download: só arquivos dentro de {root} podem ser baixados deste servidor.",
+    "folder_not_writable": "A pasta {folder} não permite gravação: as visões gerais da camada não podem ser gravadas ao lado dela.",
+    "ee_asset_not_found": "O asset {asset} do Earth Engine não existe, ou sua conta não pode lê-lo.",
+    "download_busy": "Outro download do Earth Engine ainda estava em andamento após {minutes} minutos, então {file} não foi baixado. Execute esta etapa novamente quando ele terminar."
+  }
+}

@@ -22,7 +22,7 @@ def _english():
     set_locale("en")
 
 
-@pytest.mark.parametrize("locale", ["en", "es-ES", "fr"])
+@pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
 def test_the_buttons_hold_statuses_and_show_labels(locale):
     set_locale(locale)
     app_state = AppState()

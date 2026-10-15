@@ -256,7 +256,7 @@ BULK_DELETE_ENGLISH = {
 def test_the_bulk_delete_labels_are_translated():
     labels = pane_labels()
     assert {k: labels[k] for k in BULK_DELETE_ENGLISH} == BULK_DELETE_ENGLISH
-    for locale in ("es-ES", "fr"):
+    for locale in ("es-ES", "fr", "pt-BR"):
         set_locale(locale)
         translated = pane_labels()
         for key in BULK_DELETE_ENGLISH:

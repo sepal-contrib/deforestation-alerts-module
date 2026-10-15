@@ -901,7 +901,7 @@ def _AppShell():
         right_panel_content=right_panel_content,
         right_panel_open=True,
         is_pinned=False,  # start as the 60px icon rail
-        # Offer every catalog we ship (en, es-ES, fr); without it the default
+        # Offer every catalog we ship (en, es-ES, fr, pt-BR); without it the default
         # LocaleSelect is English-only. The selector writes pysepal's Solara
         # locale, which gui.i18n.t() reads.
         locales=app_available_locales(),

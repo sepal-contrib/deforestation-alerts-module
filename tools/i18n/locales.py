@@ -1,4 +1,4 @@
-"""Keep the es-ES and fr catalogues in step with English (plan Tasks 42 and 44).
+"""Keep the es-ES, fr and pt-BR catalogues in step with English (plan Tasks 42 and 44).
 
     python -m tools.i18n.locales prune                    # drop what check() calls extra
     python -m tools.i18n.locales missing fr /tmp/fr.json  # flat {key: English} still to translate

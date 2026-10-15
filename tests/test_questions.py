@@ -114,7 +114,7 @@ def test_with_labels_keeps_a_missing_answer_missing():
     assert got[0] == "Yes" and pd.isna(got[1]) and got[2] == ""
 
 
-@pytest.mark.parametrize("code", ["es-ES", "fr"])
+@pytest.mark.parametrize("code", ["es-ES", "fr", "pt-BR"])
 def test_a_review_made_in_another_language_stores_codes(code):
     """Final review B, M2: a project reviewed in Spanish and then in French
     must not keep labels of both languages in its store."""

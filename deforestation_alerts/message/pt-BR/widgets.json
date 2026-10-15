@@ -1,0 +1,83 @@
+{
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "replace": "Substituir",
+    "delete": "Excluir",
+    "close": "Fechar",
+    "actions": "Ações",
+    "_test_fmt": "olá {name}",
+    "_test": {
+      "one": "{count} item",
+      "many": "{count} de itens",
+      "other": "{count} itens"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "Excluir?",
+    "confirm_default_message": "Esta ação não pode ser desfeita.",
+    "confirm_default_label": "Excluir"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "em execução",
+      "status_ready": "pronto",
+      "status_completed": "concluído",
+      "status_failed": "falhou",
+      "status_cancelled": "cancelado",
+      "status_stale": "desatualizado",
+      "status_missing": "ausente",
+      "status_no_data": "sem dados",
+      "status_not_covered": "não coberto",
+      "status_unchecked": "não verificado"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Selecione primeiro uma área de interesse.",
+    "lock_project": "Abra primeiro um projeto.",
+    "lock_layers": "Selecione primeiro uma área de interesse.",
+    "lock_period": "Adicione primeiro pelo menos uma fonte de alertas.",
+    "lock_prepare": "Crie ou selecione primeiro um período.",
+    "lock_integrate": "Baixe e harmonize primeiro pelo menos uma fonte.",
+    "lock_analysis": "Execute primeiro Integrar e vetorizar.",
+    "count_sources": {
+      "one": "{count} fonte",
+      "many": "{count} de fontes",
+      "other": "{count} fontes"
+    },
+    "count_layers": {
+      "one": "{count} camada",
+      "many": "{count} de camadas",
+      "other": "{count} camadas"
+    },
+    "count_questions": {
+      "one": "{count} pergunta",
+      "many": "{count} de perguntas",
+      "other": "{count} perguntas"
+    },
+    "count_periods": {
+      "one": "{count} período",
+      "many": "{count} de períodos",
+      "other": "{count} períodos"
+    },
+    "count_ready": {
+      "one": "{count} pronta",
+      "many": "{count} prontas",
+      "other": "{count} prontas"
+    },
+    "count_alerts": {
+      "one": "{count} alerta",
+      "many": "{count} de alertas",
+      "other": "{count} alertas"
+    },
+    "step_badge": "{n} / {total}",
+    "count_empty": "nada ainda",
+    "start_analysis": "Iniciar análise",
+    "count_evaluators": {
+      "one": "{count} avaliador",
+      "many": "{count} de avaliadores",
+      "other": "{count} avaliadores"
+    }
+  }
+}

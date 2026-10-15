@@ -315,7 +315,7 @@ def test_every_locale_has_the_timeline_keys():
             "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
             "legend", "legend_label", "lane_before", "lane_after",
             "set_before", "set_after", "collapsed_month", "no_cloud_filter", "swap_source"}
-    for locale in ("en", "es-ES", "fr"):
+    for locale in ("en", "es-ES", "fr", "pt-BR"):
         data = json.loads((root / locale / "ui.json").read_text())
         assert keys <= set(data["analysis"]["timeline"]), locale
 

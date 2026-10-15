@@ -255,7 +255,7 @@ def test_no_project_builds_an_empty_section():
     assert sec.controls == {} and not sec.is_open()
 
 
-@pytest.mark.parametrize("code", ["es-ES", "fr"])
+@pytest.mark.parametrize("code", ["es-ES", "fr", "pt-BR"])
 def test_the_options_read_in_this_language_and_store_codes(tmp_path, monkeypatch, code):
     """A review made in another language stores codes (final review B, M2)."""
     set_locale(code)
@@ -282,6 +282,7 @@ def test_the_options_read_in_this_language_and_store_codes(tmp_path, monkeypatch
     ("en", ["Logging", "Roads"]),
     ("es-ES", ["Tala", "Roads"]),
     ("fr", ["Exploitation forestière", "Roads"]),
+    ("pt-BR", ["Extração de madeira", "Roads"]),
 ])
 def test_a_stored_review_loads_back_as_chips_in_this_language(tmp_path, monkeypatch, code, chips):
     """The chips show labels, never codes: a reviewed alert's drivers come back

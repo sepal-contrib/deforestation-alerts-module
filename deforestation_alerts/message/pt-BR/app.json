@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "Análise de Alertas de Perda Florestal",
+    "panel_workflow_title": "Fluxo de trabalho",
+    "tile_failed": "O painel {tile} não pôde ser exibido ({error}). Recarregue a página; os detalhes estão no log do servidor.",
+    "drawer_item": {
+      "about": "Sobre",
+      "project": "Projeto",
+      "aoi": "AOI",
+      "alerts": "Alertas",
+      "layers": "Camadas opcionais",
+      "period": "Período",
+      "prepare": "Baixar e harmonizar",
+      "integrate": "Integrar e vetorizar",
+      "overview": "Visão geral",
+      "questionnaire": "Questionário",
+      "analysis": "Análise",
+      "evaluators": "Avaliação"
+    }
+  }
+}

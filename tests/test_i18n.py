@@ -15,7 +15,7 @@ from pysepal.i18n import set_locale
 
 from gui import i18n
 
-LOCALES = ["en", "es-ES", "fr"]
+LOCALES = ["en", "es-ES", "fr", "pt-BR"]
 # The generic widgets' namespaces (widgets.json): complete in every locale.
 SCAFFOLD_NAMESPACES = ["common", "dialog", "widgets", "workflow"]
 # The files whose every English key must be used by the code: the legacy
@@ -105,6 +105,16 @@ SAME_IN = {
         # "timelapse" is the word French uses (the plan's own translation).
         "analysis_tile.export_labels.tile_gif",
     },
+    "pt-BR": {
+        # "item", "status", "total", "normal", "raster" and "download" are the same
+        # words in Brazilian Portuguese; ramp names, band acronyms and R/G/B too.
+        "common._test.one", "analysis.timeline.area_normal", "analysis_tile.facts.status",
+        "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
+        "steps.prepare.col_download", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
+        "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
+        # "timelapse" is the word Brazilian Portuguese uses.
+        "analysis_tile.export_labels.tile_gif",
+    },
 }
 
 
@@ -116,7 +126,7 @@ def _letters(text: str) -> str:
     return re.sub(r"[^A-Za-z]", "", text)
 
 
-@pytest.mark.parametrize("locale", ["es-ES", "fr"])
+@pytest.mark.parametrize("locale", ["es-ES", "fr", "pt-BR"])
 def test_no_english_is_left_in_the_translations(locale):
     from pysepal.i18n.loading import load_locale
 
@@ -134,7 +144,7 @@ def test_no_english_is_left_in_the_translations(locale):
     assert not copies, f"{locale} still reads English for: {copies}"
 
 
-@pytest.mark.parametrize("locale", ["es-ES", "fr"])
+@pytest.mark.parametrize("locale", ["es-ES", "fr", "pt-BR"])
 def test_the_step_labels_are_translated(locale):
     keys = ["alerts", "layers", "period", "prepare", "integrate", "analysis", "project", "overview"]
     english = {k: i18n.t(f"app.drawer_item.{k}") for k in keys}
@@ -342,7 +352,8 @@ def test_every_english_key_of_the_legacy_files_is_used(name):
 
 
 @pytest.mark.parametrize("locale, whole, part", [
-    ("en", "12,345", "0.50"), ("es-ES", "12.345", "0,50"), ("fr", "12 345", "0,50")])
+    ("en", "12,345", "0.50"), ("es-ES", "12.345", "0,50"), ("fr", "12 345", "0,50"),
+    ("pt-BR", "12.345", "0,50")])
 def test_numbers_follow_the_language(locale, whole, part):
     set_locale(locale)
     assert i18n.format_number(12345) == whole
@@ -372,11 +383,14 @@ def test_counted_labels_agree_with_their_count():
     assert i18n.tn("steps.prepare.run_all", 2) == "Ejecutar 2 pendientes"
     assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
     assert size_text(5_400_000) == "5,4 MB"
+    set_locale("pt-BR")
+    assert i18n.tn("steps.prepare.run_all", 2) == "Executar 2 pendentes"
+    assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
 
 
 @pytest.mark.parametrize("locale, old, button", [
     ("en", "Run all", "Run … pending"), ("es-ES", "Ejecutar todo", "Ejecutar … pendientes"),
-    ("fr", "Tout exécuter", "Exécuter … en attente")])
+    ("fr", "Tout exécuter", "Exécuter … en attente"), ("pt-BR", "Executar tudo", "Executar … pendentes")])
 def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
     set_locale(locale)
     for key in ("info_md", "mask_not_ready", "masks_switched"):
@@ -386,7 +400,7 @@ def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
     assert button == f"{first}…{last}"
 
 
-@pytest.mark.parametrize("locale", ["en", "es-ES", "fr"])
+@pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
 def test_the_analysis_copy_names_the_verdict_block_and_not_its_aria_label(locale):
     """Copy that directs the reviewer may only point at what the panel SHOWS.
 

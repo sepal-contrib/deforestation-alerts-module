@@ -1,7 +1,8 @@
-"""Put or drop message keys in en, es-ES and fr at once (a dev tool for plan tasks).
+"""Put or drop message keys in en, es-ES, fr and pt-BR at once (a dev tool for plan tasks).
 
     from tools.i18n.edit import edit
-    edit("steps", put=[("steps.alerts.mode_label", "Source type", "Tipo de fuente", "Type de source")],
+    edit("steps", put=[("steps.alerts.mode_label", "Source type", "Tipo de fuente", "Type de source",
+                         "Tipo de fonte")],
          drop=["steps.alerts.col_kind"])
 
 A dotted key starts at the file's root (``steps.json`` holds ``{"steps": ...}``,
@@ -15,7 +16,7 @@ import json
 from pathlib import Path
 
 MESSAGES = Path(__file__).resolve().parents[2] / "deforestation_alerts" / "message"
-LOCALES = ("en", "es-ES", "fr")
+LOCALES = ("en", "es-ES", "fr", "pt-BR")
 
 
 def _parent(tree: dict, dotted: str, create: bool):
@@ -31,7 +32,7 @@ def _parent(tree: dict, dotted: str, create: bool):
 
 
 def edit(file: str, put=(), drop=()) -> None:
-    """``put``: ``(dotted key, en, es-ES, fr)`` tuples; ``drop``: dotted keys."""
+    """``put``: ``(dotted key, en, es-ES, fr, pt-BR)`` tuples; ``drop``: dotted keys."""
     for i, loc in enumerate(LOCALES):
         path = MESSAGES / loc / f"{file}.json"
         tree = json.loads(path.read_text(encoding="utf-8"))
