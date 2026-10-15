@@ -15,11 +15,32 @@ hook again. ``build_screen``'s ``relabel`` calls ``run``, and the shell's
 A hook writes text only (children strings, labels, hints, placeholders,
 error messages, items' text, ``title`` / ``aria-label``, tooltips), never a
 ``v_model``, ``disabled``, style, class, reactive, file or notification. The
-one exception is the existing callbacks audited in the plan (2026-10-15
-analysis-relabel, Global Constraints), each listed there with what else it
-writes and why a switch may run it: only those may be registered as they
-are, in place of their builder's trailing direct call (``add`` runs them
-once). Any other callback is audited and added to that table first.
+one exception is these audited callbacks; each writes only state derived from
+what it already shows, so a run with nothing changed writes the same values:
+
+* ``context._refresh`` — progress bar value, prev/next/unreviewed
+  ``disabled``, the id field's placeholder
+* ``context._label_facts`` (``_write_facts``) — the facts' swatch style
+* ``filter_menu._sync`` — button icon and colour, chip style
+* ``filter_menu._label`` (open menu) — attribute items, values ``v_model``
+  under ``syncing``
+* ``set_selector._sync`` — ``items``, ``v_model`` (the active set) under
+  ``syncing``
+* ``build_set_status_banner._sync`` — banner style
+* ``footer._sync_state_line`` — state line class
+* ``earlier._sync_badge`` — badge colour, key style
+* ``questions._sync`` — wrappers' style, numbers, marks, controls'
+  ``v_model`` (the saved answers; no reactive)
+* ``edit_tools.wire_refine_badge._show`` — badge colour
+* ``edit_tools._show_found`` — nothing else
+* ``export._refresh_gif_gate`` — GIF tile ``disabled``
+* ``export._show_badge_for_state`` — badge colour, toolbars show/hide, the
+  save-first style
+* ``timeline.render`` — redraws the strip (re-picks only on a new alert)
+
+Only those may be registered as they are, in place of their builder's
+trailing direct call (``add`` runs them once). Any other callback is audited
+the same way and added to this list first.
 """
 
 import logging

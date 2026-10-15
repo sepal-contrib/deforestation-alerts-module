@@ -28,7 +28,8 @@ The two former ``use_effect``s are ``.subscribe`` registrations on
 ``app_state.actual_alert_id`` / ``app_state.alerts_gdf`` (each also invoked
 once immediately). A raw tree never re-renders, so a language switch reaches
 it through label hooks (``labels.Labels``): each builder registers the
-function that writes its text, and ``relabel`` runs them all.
+function that writes its text, and ``relabel`` runs them all when the locale
+has changed.
 
 Key architectural decisions (FIXED by the migration contract):
 
@@ -75,6 +76,8 @@ from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
 )
+from pysepal.i18n import current_locale
+
 from gui.tile.analysis.context import build_context, build_topnav
 from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background, remove_earlier_layer
 from gui.tile.analysis.questions_panel import build_questions_section
@@ -707,7 +710,8 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
       ``js/app/resize_nudge.js``) then finds the main map displayed and
       re-measures it; the frontend applies the two writes in this order.
     * ``relabel()``: runs every label hook the screen's builders registered
-      (``labels.Labels``).
+      (``labels.Labels``) when the locale changed since they last ran (at
+      build time, or the previous ``relabel``); otherwise it does nothing.
     """
     if labels is None:
         labels = Labels()
@@ -787,8 +791,17 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
 
     labels.add(_label_info)
     labels.add(_label_chrome)
+    # The locale the hooks last ran for: they all ran at build time, through
+    # ``add``. The shell calls ``relabel`` on every screen change too, and
+    # some hooks are audited callbacks that do more than write text (the
+    # timeline redraws its strip), so they run again only for a new language.
+    labelled = {"locale": current_locale()}
 
     def relabel():
+        locale = current_locale()
+        if locale == labelled["locale"]:
+            return
+        labelled["locale"] = locale
         labels.run()
 
     def _on_dark(change):

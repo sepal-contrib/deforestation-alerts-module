@@ -7,7 +7,7 @@ import pytest
 from pysepal.i18n import set_locale
 
 from gui.i18n import app_available_locales, t
-from gui.tile.analysis.analysis_tile import panel_sections  # noqa: F401  (Tasks 2-6)
+from gui.tile.analysis.analysis_tile import panel_sections
 from gui.tile.analysis.labels import Labels
 from tests._i18n_sweep import build_layout, english_leftovers, leftovers_of
 
@@ -84,17 +84,37 @@ def test_the_about_dialog_stays_open_across_a_switch(tmp_path, monkeypatch):
     assert english_leftovers(dialog, "fr") == []
 
 
-def test_repeated_relabels_keep_the_about_text_widget(tmp_path, monkeypatch):
-    """``relabel`` runs on every screen change too: an unchanged text must not
-    build (and leak) a new Markdown subtree each time."""
+def test_a_relabel_runs_the_hooks_only_for_a_new_language(tmp_path, monkeypatch):
+    """The shell calls ``relabel`` on every screen change too: with the
+    language unchanged no hook runs (some redraw, like the timeline's)."""
+    built = build_layout(tmp_path, monkeypatch)
+    calls = []
+    built.layout.labels.add(lambda: calls.append(1), now=False)
+    built.layout.relabel()
+    built.layout.relabel()
+    assert calls == []
+    set_locale("fr")
+    built.layout.relabel()
+    assert calls == [1]
+    built.layout.relabel()
+    assert calls == [1]
+    set_locale("en")
+    built.layout.relabel()
+    assert calls == [1, 1]
+
+
+def test_repeated_label_runs_keep_the_about_text_widget(tmp_path, monkeypatch):
+    """A hook run with the text unchanged must not build (and leak) a new
+    Markdown subtree each time."""
     built = build_layout(tmp_path, monkeypatch)
     (dialog,) = [w for w in _walk(_topbar(built.layout)) if isinstance(w, v.Dialog)]
     card_text = [w for w in _walk(dialog) if isinstance(w, v.CardText)][0]
     set_locale("fr")
     built.layout.relabel()
     (md,) = card_text.children
-    built.layout.relabel()
-    built.layout.relabel()
+    # ``relabel`` itself skips an unchanged language: run the hooks directly.
+    built.layout.labels.run()
+    built.layout.labels.run()
     assert card_text.children[0] is md
 
 
@@ -113,6 +133,7 @@ def test_the_sweep_catches_stale_text_in_every_field_it_reads():
         "v_model": v.Combobox(v_model=[{"text": t("analysis_tile.filter.clear"), "value": 1}]),
         "title": v.Btn(attributes={"title": t("analysis_tile.filter.button")}),
         "composed": v.Html(tag="span", children=[f"{t('analysis.timeline.max_cloud')} 40%"]),
+        "glued_number": v.Html(tag="span", children=[f"{t('analysis.timeline.max_cloud')}40%"]),
         "save_first": v.Html(tag="span", children=[f"({t('analysis_tile.export_labels.save_first')})"]),
         "markdown": sw.Markdown(t("analysis_tile.info_md")),
     }

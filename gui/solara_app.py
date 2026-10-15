@@ -186,8 +186,10 @@ def _ScreenBridge(app_state, layout):
     A leaf, like ``_NavBridge``. On every screen change and every language
     switch it shows or hides the analysis screen (``layout.show``: MapApp
     stays mounted; the shell's CSS keyed on the screen's ``--on`` class hides
-    its main map and right panel, and its rail stays usable) and relabels it
-    (the back button, the title and the views' ``labels``).
+    its main map and right panel, and its rail stays usable) and calls
+    ``layout.relabel``, which rewrites the whole analysis screen's text in
+    the new language (its ``labels.Labels`` hooks) and does nothing when the
+    locale has not changed.
 
     Back on the workflow, the ``current_page_view`` mirror is put back on the
     active step's view: "analysis_tile" would otherwise stay, and the next

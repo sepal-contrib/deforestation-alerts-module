@@ -99,8 +99,7 @@
   whose browser or saved choice was Spanish, French or Portuguese saw most of
   Analysis in English. Every label, button, tooltip, list and badge on the
   screen now changes with the selector, without losing the alert, the
-  answers, an open drawing or a running save. A downloaded file's warning
-  line keeps its language until the files are built again.
+  answers, an open drawing or a running save.
 
 ### Changed
 

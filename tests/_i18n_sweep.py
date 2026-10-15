@@ -39,7 +39,10 @@ def _patterns(source, target):
         rx = re.sub(r"\\\{[^}]*\\\}", ".+?", re.escape(msg))
         # Searched inside a string, the message must stand as whole words:
         # French "Attribut" is not a leftover inside English "Attribute".
-        out.append((len(literal), key, re.compile(rx, re.S), re.compile(rf"(?<!\w){rx}(?!\w)", re.S)))
+        # Letters only bound it: a message glued to a number ("Max cloud40%")
+        # is still caught.
+        out.append((len(literal), key, re.compile(rx, re.S),
+                    re.compile(rf"(?<![^\W\d_]){rx}(?![^\W\d_])", re.S)))
     out.sort(key=lambda p: -p[0])  # the most specific template names the hit
     return tuple((key, n, rx, inside) for n, key, rx, inside in out)
 
