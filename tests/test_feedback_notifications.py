@@ -171,7 +171,7 @@ def _button(root, msg):
 
 
 # ---------------------------------------------------------------------------
-# overview_tile export card — raw widget builder, worker under tracked_job
+# overview_export card — raw widget builder, worker under run_button_job
 # ---------------------------------------------------------------------------
 def _overview_gdf():
     import geopandas as gpd
@@ -202,25 +202,30 @@ def test_overview_export_worker_log_lines_become_task_milestones(
 ):
     """The point of running the body under ``tracked_job``: an app log line the
     export emits on the worker thread shows up as a milestone of ITS task."""
-    import gui.tile.overview_tile as overview_tile
+    from pathlib import Path
 
-    feedback = _record_feedback(monkeypatch, overview_tile)
+    import gui.tile.overview_export as overview_export
+    from deforestation_alerts.scripts.alert_export import export_name
+
+    feedback = _record_feedback(monkeypatch, overview_export)
     folder = str(data_root / "recipe_a")
 
-    def _export(gdf, folder_, fmt, sources, start, end):
+    def _export(gdf, folder_, fmt, sources, start, end, scope="all"):
         logging.getLogger("SEPALUI.deforestation_alerts.alert_export").info(
             "Writing 1 alert"
         )
-        return f"{folder_}/alerts.{fmt}"
+        path = Path(folder_) / export_name(sources, start, end, fmt, scope)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+        return str(path)
 
-    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _export)
-    card = overview_tile.build_export_card(
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _export)
+    card = overview_export.build_export_card(
         _overview_gdf(), folder, ["GLAD-L"], "2026-01-01", "2026-06-12", "d"
     )
-    gen_btn = card.children[1].children[1]
-    dl_btn = card.children[2].children[1]
+    tile = card.tiles["gpkg"]
 
-    gen_btn.fire_event("click", None)
+    tile.fire_event("click", None)
     feedback.join()
 
     task = feedback.task()
@@ -230,7 +235,7 @@ def test_overview_export_worker_log_lines_become_task_milestones(
         t("overview_tile.export_step", fmt="GPKG"),
         "Writing 1 alert",
     ]
-    assert dl_btn.disabled is False and dl_btn.viz is True
+    assert tile.disabled is False and tile.path is not None
     assert feedback.toasts() == [
         ("success", t("overview_tile.export_done", fmt="GPKG"))
     ]
@@ -239,26 +244,26 @@ def test_overview_export_worker_log_lines_become_task_milestones(
 def test_overview_export_failure_fails_the_task_with_one_error_toast(
     data_root, monkeypatch
 ):
-    import gui.tile.overview_tile as overview_tile
+    import gui.tile.overview_export as overview_export
 
-    feedback = _record_feedback(monkeypatch, overview_tile)
+    feedback = _record_feedback(monkeypatch, overview_export)
 
     def _boom(*_a, **_kw):
         raise ValueError("unsupported driver")
 
-    monkeypatch.setattr(overview_tile, "export_alerts_gdf", _boom)
-    card = overview_tile.build_export_card(
+    monkeypatch.setattr(overview_export, "export_alerts_gdf", _boom)
+    card = overview_export.build_export_card(
         _overview_gdf(), str(data_root / "recipe_a"), ["GLAD-L"], "a", "b", "d"
     )
-    gen_btn = card.children[1].children[0]
-    dl_btn = card.children[2].children[0]
+    tile = card.tiles["gpkg"]
 
-    gen_btn.fire_event("click", None)
+    tile.fire_event("click", None)
     feedback.join()
 
     feedback.assert_one_error_after_fail(equals="unsupported driver")
-    assert dl_btn.disabled is True and dl_btn.viz is False
-    assert gen_btn.loading is False and gen_btn.disabled is False
+    # back in its Create face: no file, clickable again
+    assert tile.path is None and tile.href is None
+    assert tile.loading is False and tile.disabled is False
 
 
 # ---------------------------------------------------------------------------
@@ -1740,15 +1745,13 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW_LAYOUTS = [
     "gui/tile/analysis/edit_tools.py",
     "gui/tile/analysis/export.py",
-    # Hybrid: a Solara component, but its export card is a module-level raw
-    # widget builder whose worker publishes from a daemon thread, where no hook
-    # can run — so it belongs on the raw-layout side of this boundary.
-    "gui/tile/overview_tile.py",
+    # The Overview's export card: a raw widget whose writes publish from a
+    # daemon thread, where no hook can run.
+    "gui/tile/overview_export.py",
 ]
-# Raw layouts whose component also reports through the hook: the Overview's
-# map-layer warnings come from its render context (``use_notifications()``),
-# while its export card still publishes through the bridge.
-HYBRID_LAYOUTS = ["gui/tile/overview_tile.py"]
+# Raw layouts whose component also reports through the hook (none since the
+# Overview's export card moved to its own module).
+HYBRID_LAYOUTS = []
 
 
 def _src(rel):
@@ -1815,7 +1818,7 @@ def test_raw_layouts_publish_through_the_bridge_not_the_hook():
 
 def test_raw_layout_workers_use_tracked_job():
     for rel in (
-        "gui/tile/overview_tile.py",
+        "gui/tile/overview_export.py",
         "gui/tile/analysis/export.py",
         "gui/tile/analysis/edit_tools.py",
     ):

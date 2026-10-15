@@ -38,6 +38,7 @@ from deforestation_alerts.scripts.alert_export import (
 )
 from gui.i18n import format_number, t
 from gui.scripts import questions as questions_mod
+from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
 from gui.scripts.notify_bridge import current_notifier, run_button_job
 from gui.scripts.solara_threads import spawn_in_context
@@ -76,7 +77,7 @@ class ExportCard(v.Card):
 
         self._title = v.Html(tag="div", style_=_TITLE, children=[""])
         self._summary = v.Html(tag="div", style_=_NOTE, children=[""])
-        self.folder_chip = CopyChipWidget(text=local_files.home_relative(self._folder))
+        self.folder_chip = CopyChipWidget(text=_shown_folder(self._folder))
         self._scope_label = v.Html(tag="span", style_=_NOTE + "margin-right: 8px;", children=[""])
         colors = status_colors()
         self.chips = {
@@ -160,8 +161,14 @@ class ExportCard(v.Card):
             return
         stale = self._stale(path)
         when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
-        tile.set_file(str(path), detail=t("overview_tile.export_written", what=self._what(fmt), when=when),
-                      warning=t("overview_tile.export_stale") if stale else None)
+        try:
+            tile.set_file(str(path), detail=t("overview_tile.export_written", what=self._what(fmt), when=when),
+                          warning=t("overview_tile.export_stale") if stale else None)
+        except ValueError as exc:  # NotDownloadable: a link to it would 404
+            tile.set_file(None)
+            tile.set_action(False, error_text(exc), icon="mdi-link-off")
+            btn.hide()
+            return
         btn.show() if stale else btn.hide()
 
     def _lock(self, locked):
@@ -233,8 +240,11 @@ class ExportCard(v.Card):
                 # the answers in the export's language (the store keeps their
                 # codes, see gui.scripts.questions); the columns of deleted
                 # questions are left out
-                export_alerts_gdf(questions_mod.with_labels(gdf, list(questions)), self._folder, fmt,
-                                  self._sources, self._start, self._end, scope=scope)
+                path = export_alerts_gdf(questions_mod.with_labels(gdf, list(questions)), self._folder, fmt,
+                                         self._sources, self._start, self._end, scope=scope)
+            # A file the server cannot offer is a failed export, said in the
+            # task, not a tile that links nowhere (NotDownloadable).
+            local_files.home_relative(path)
             return None
 
         def _done(notifier):
@@ -253,6 +263,15 @@ class ExportCard(v.Card):
             release=_release, on_success=_done, logger=logger,
             spawn=spawn_in_context, notifier=current_notifier,
         )
+
+
+def _shown_folder(folder):
+    """The set folder as the download root sees it, or its absolute path when
+    the server does not offer it (the copy still helps a terminal user)."""
+    try:
+        return local_files.home_relative(folder)
+    except ValueError:
+        return str(folder)
 
 
 def build_export_card(gdf, folder, sources, start, end, project, questions=(), store=None):

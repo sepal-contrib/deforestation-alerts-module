@@ -36,40 +36,29 @@ Three rulings shape the component:
 
 Feedback is hybrid. The component reports its own read failure in place -- a
 dashboard with no numbers must say why where the numbers would be, not in a
-toast that scrolls away. The export card (``build_export_card``) is a
-module-level RAW ipyvuetify builder whose worker runs on a daemon thread
-(``spawn_in_context``), where no Solara hook can run, so, like
-``analysis/export``, that worker resolves a notifier from its kernel context
-(``notify_bridge.current_notifier``) and runs its body under
-``notify_bridge.tracked_job``. ``tracked_job`` opens the task, turns the
-worker thread's app log lines into its milestones, and on a failure marks it
-FAILED before publishing the one error toast.
+toast that scrolls away. The export card is ``gui.tile.overview_export``'s
+RAW ipyvuetify ``ExportCard``, whose writes run on a daemon thread under
+``notify_bridge.run_button_job`` and report through the notification bus.
 """
 
 import logging
 from contextlib import contextmanager
 
-import ipyvuetify as v
 import reacton.ipyvuetify as rv
 import solara
-from pysepal import sepalwidgets as sw
 from pysepal.i18n import current_locale
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
-from deforestation_alerts.scripts import local_files
-from deforestation_alerts.scripts.alert_export import export_alerts_gdf
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t
 from gui.scripts import alert_layers, charts, overview_data, set_store
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
-from gui.scripts.notify_bridge import current_notifier, run_button_job
 from gui.scripts.solara_threads import spawn_in_context
-from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
-from gui.widget import custom_sw
+from gui.tile.overview_export import build_export_card, relabel_export_card
 from gui.widget.set_selector import SetSelector
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview")
@@ -85,126 +74,6 @@ _HERO = "font-size: 1.5rem; font-weight: 600; line-height: 1.1;"
 _VALUE = "font-size: 1.05rem; font-weight: 600; line-height: 1.1;"
 #: How many administrative areas the table lists before it stops.
 ADMIN_LIMIT = 8
-
-
-def _bind_export(gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project, questions=()):
-    """Return the click handler that generates the ``fmt`` export and reveals its
-    download button. ``project`` is the name of the project the set folder
-    belongs to, captured when the card was built: the export marks it as
-    being written for its duration (spec §12), so a delete is refused instead
-    of the export re-creating the deleted folder.
-
-    TWO buttons, not one: ``sw.DownloadBtn`` starts life *disabled* (its default
-    ``path="#"`` makes ``set_url`` disable it), so a DownloadBtn wired to a click
-    handler can never be clicked and the export would never run. The generate
-    action therefore lives on a plain ``sw.Btn``; the DownloadBtn is built hidden
-    and is revealed — enabled, with its URL — only once a file actually exists.
-    Same pattern as ``analysis/export.py``'s save -> downloads toolbar.
-
-    Threading + feedback: writing a GPKG/GeoJSON is blocking IO,
-    so the work runs on a daemon thread via ``spawn_in_context`` (which carries
-    the kernel context ``current_notifier`` resolves the bus from), under
-    ``tracked_job``. A failure is a FAILED task + one error toast, not a silent
-    log line.
-
-    The export lands in the set folder, and the download link is relative to
-    the served root (``local_files.home_relative``): ``custom_sw.DownloadBtn``'s
-    ``set_url`` prefixes the download base, which is root-relative by default
-    (``/api/sandbox/jupyter/files/...``) so the link follows whichever SEPAL —
-    or local jupyter — is serving the app."""
-
-    def _on_click(widget, event, data):
-        gen_btn.loading = True
-        gen_btn.disabled = True
-
-        written = {}
-
-        # One opaque phase (the write), so no ``total_steps``. A failure is
-        # tracked_job's: a FAILED task and the one error toast (the raw
-        # exception text).
-        def _body(task, notifier):
-            task.step(t("overview_tile.export_step", fmt=fmt.upper()))
-            with writing(project):
-                # the answers in the export's language (the store keeps their
-                # codes, see gui.scripts.questions); the columns of deleted
-                # questions are left out
-                path = export_alerts_gdf(
-                    questions_mod.with_labels(gdf, list(questions)),
-                    folder, fmt, sources, start, end,
-                )
-            written["url"] = local_files.home_relative(path)
-            return None
-
-        def _done(notifier):
-            dl_btn.set_url(path=written["url"])
-            dl_btn.show()
-            notifier.success(t("overview_tile.export_done", fmt=fmt.upper()))
-
-        def _release():
-            gen_btn.loading = False
-            gen_btn.disabled = False
-
-        run_button_job(
-            t("overview_tile.export_task_title"), _body,
-            release=_release, on_success=_done, logger=logger,
-            spawn=spawn_in_context, notifier=current_notifier,
-        )
-
-    return _on_click
-
-
-EXPORT_FORMATS = ("csv", "gpkg", "geojson")
-
-
-def build_export_card(gdf, folder, sources, start, end, project, questions=()):
-    """Build the export card: one generate button per format + its hidden
-    DownloadBtn, revealed when that format has been written. ``project`` is
-    the name of the project ``folder`` belongs to (see ``_bind_export``);
-    ``questions`` are its questions, whose answer columns the export labels.
-
-    A module function (not inline in the component) so the buttons a user
-    actually clicks — including their enabled/hidden state — are directly
-    testable; the component only decides *whether* to show the card.
-    """
-    gen_buttons = []
-    dl_buttons = []
-    for fmt in EXPORT_FORMATS:
-        gen_btn = sw.Btn(
-            msg="", small=True, outlined=True, color="primary", class_="pa-1 ma-1"
-        )
-        dl_btn = custom_sw.DownloadBtn(text="", small=True, class_="pa-1 ma-1").hide()
-        gen_btn.on_event(
-            "click",
-            _bind_export(
-                gen_btn, dl_btn, fmt, gdf, folder, sources, start, end, project, questions
-            ),
-        )
-        gen_buttons.append(gen_btn)
-        dl_buttons.append(dl_btn)
-
-    card = v.Card(
-        class_="pa-3 ma-3",
-        hover=True,
-        children=[
-            v.CardTitle(class_="pa-1", children=[""]),
-            v.Row(class_="d-flex justify-center", children=gen_buttons),
-            v.Row(class_="d-flex justify-center", children=dl_buttons),
-        ],
-    )
-    return relabel_export_card(card)
-
-
-def relabel_export_card(card):
-    """Write the export card's labels in the current language, in place: the
-    card is built once per set, so a language switch relabels it rather than
-    rebuilding it (which would hide the download buttons already revealed)."""
-    title, gen_row, dl_row = card.children
-    title.children = [t("overview_tile.export_label")]
-    for fmt, gen_btn, dl_btn in zip(EXPORT_FORMATS, gen_row.children, dl_row.children):
-        label = t(f"overview_tile.export_{fmt}")
-        gen_btn.msg = label
-        dl_btn.children = [dl_btn.children[0], f"{t('overview_tile.export_download')} {label}"]
-    return card
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +407,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     )
 
     # The export card is built only when its inputs change, so a re-render (a
-    # project save, a measure click) keeps the download buttons already revealed.
+    # measure click) keeps a write in progress. A review save changes the
+    # alerts, which rebuilds it and re-reads which files are out of date.
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
     has_alerts = gdf is not None and len(gdf) > 0
     period = p.periods.get(s.period_id) if s is not None else None
@@ -546,10 +416,11 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     sources = tuple(s.sources) if s is not None else ()
     start = period.start.isoformat() if period is not None else ""
     end = period.end.isoformat() if period is not None else ""
+    store = str(set_store.store_path(p, s)) if s is not None else None
     export_card = solara.use_memo(
-        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions)
+        lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions, store=store)
         if s is not None and has_alerts else None,
-        [gdf, folder, sources, start, end, questions],
+        [gdf, folder, sources, start, end, questions, store],
     )
 
     def _relabel_export():

@@ -390,3 +390,31 @@ def test_the_download_url_follows_a_configured_base(data_root, feedback, monkeyp
     card.tiles["gpkg"].fire_event("click", None)
     join()
     assert card.tiles["gpkg"].href == f"/files/recipe_a/{NAME}_confirmed.gpkg"
+
+
+def test_a_folder_outside_the_download_root_still_builds_and_says_why(data_root, feedback, monkeypatch):
+    """A set folder the server cannot offer for download (a data dir outside
+    the download root) must not break the Overview: the folder chip shows the
+    absolute path, a file already there is not linked (the link would 404),
+    and a new write is reported as a failure that says why."""
+    from gui.scripts.error_text import error_text
+    from deforestation_alerts.errors import NotDownloadable
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DOWNLOAD_ROOT", str(data_root / "elsewhere"))
+    bus, errors, join = feedback
+    folder = data_root / "recipe_a"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{NAME}_confirmed.csv").write_bytes(b"x")
+
+    card = _card(folder)
+
+    assert card.folder_chip.text == str(folder)
+    csv = card.tiles["csv"]
+    assert csv.path is None and csv.disabled is True
+    assert "elsewhere" in _text(csv)  # the reason, in the tile
+
+    card.tiles["gpkg"].fire_event("click", None)
+    join()
+    (task,) = bus.tasks.value
+    assert task.status == TaskStatus.FAILED and len(errors) == 1
+    assert card.tiles["gpkg"].path is None and card.tiles["gpkg"].loading is False

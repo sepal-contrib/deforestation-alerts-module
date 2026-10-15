@@ -40,6 +40,7 @@ PROGRAMMER_ERRORS = {
     # the environment: geedim is a dependency
     ("deforestation_alerts/scripts/raster_export.py", "ImportError", "Install geedim"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),
+    ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unknown export scope"),
     ("deforestation_alerts/scripts/raster_export.py", "ValueError", "image must be an ee.Image"),
     ("deforestation_alerts/scripts/custom_sources.py", "ValueError", "custom source slot out of range"),
     ("deforestation_alerts/scripts/report_builder.py", "ValueError", "Input must be a string or a list"),

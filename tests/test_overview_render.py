@@ -46,10 +46,13 @@ from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t
 from gui.scripts import alert_layers, charts, overview_data
 from gui.scripts import questions as qs
+from gui.scripts import set_store
 from gui.scripts.map_layers import MapLayers
+from gui.store.workflow_steps import active_set
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile import overview_tile
+from gui.tile.overview_export import ExportCard
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
@@ -255,9 +258,7 @@ def _btn(rc, label):
 
 
 def _export_cards(rc):
-    return [w for w in rc.find(v.Card).widgets
-            if any(isinstance(c, v.CardTitle) and c.children == [t("overview_tile.export_label")]
-                   for c in w.children)]
+    return [w for w in rc.find(v.Card).widgets if isinstance(w, ExportCard)]
 
 
 def _figures(rc):
@@ -597,8 +598,8 @@ def test_review_alerts_closes_the_dialog_before_it_opens_analysis(ov, tmp_path):
 
 
 def test_the_export_card_follows_a_language_switch(ov, tmp_path):
-    """The export card is a raw widget built once per set (its revealed
-    download buttons must survive a re-render), so a ``set_locale`` relabels
+    """The export card is a raw widget built once per set (a write in progress
+    must survive a re-render), so a ``set_locale`` relabels
     the same card instead of rebuilding it. The slice-6 walk found its title
     still English in the French Overview."""
     state = _state(_project(tmp_path), _alerts())
@@ -611,8 +612,8 @@ def test_the_export_card_follows_a_language_switch(ov, tmp_path):
         assert cards == [card], "the card was rebuilt"
         assert t("overview_tile.export_label") == "Exporter les alertes"
         assert _export_cards(rc) == [card]
-        download = f"{t('overview_tile.export_download')} {t('overview_tile.export_csv')}"
-        assert download in _strings(card), _strings(card)
+        assert t("overview_tile.export_scope_all") in _strings(card), _strings(card)
+        assert t("overview_tile.export_csv") in _strings(card), _strings(card)
     finally:
         set_locale("en")
         rc.close()
@@ -647,12 +648,17 @@ def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
 def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(ov, tmp_path, monkeypatch):
     calls = []
     real = overview_tile.build_export_card  # a real card: the tile relabels it on a language switch
-    monkeypatch.setattr(overview_tile, "build_export_card", lambda *a: calls.append(a) or real(*a))
+    monkeypatch.setattr(overview_tile, "build_export_card",
+                        lambda *a, **k: calls.append((a, k)) or real(*a, **k))
     alerts = _alerts()
     state = _state(_project(tmp_path), alerts)
     map_, layers, rc = ov.render(state)
     try:
-        assert calls == [(alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d", tuple(state.project.value.questions))]
+        p = state.project.value
+        store = str(set_store.store_path(p, active_set(p)))
+        assert store.startswith(str(tmp_path / "d" / SET_DIR))
+        assert calls == [((alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d",
+                           tuple(p.questions)), {"store": store})]
         # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1
