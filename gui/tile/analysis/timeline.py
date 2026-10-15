@@ -39,6 +39,7 @@ from deforestation_alerts.scripts.scene_index import (
     SceneTables,
 )
 from gui.i18n import format_date, t
+from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.state import IMAGE_AREAS, imagery_changed
 from gui.widget.handle_strip import HandleStrip
 
@@ -488,7 +489,7 @@ def _button(style, attrs, handler, child_style, cursor="pointer"):
 # ---------------------------------------------------------------- the builder
 
 
-def build_timeline(app_state, analysis, widgets):
+def build_timeline(app_state, analysis, widgets, *, labels=None):
     """The strip, built once per session and re-rendered from the reactives.
 
     Returns a ``v.Card`` holding the toolbar and the track. What is selected
@@ -497,9 +498,14 @@ def build_timeline(app_state, analysis, widgets):
     describes. Every piece of state it reads is a reactive it subscribes to,
     so the only thing an alert change has to do is publish
     ``widgets.imagery_ctx``.
+
+    ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
+    given): the toolbar's text and ``render`` are registered with it, so a
+    language switch redraws the strip, the axis months and both view titles.
     """
     import solara
 
+    labels = labels if labels is not None else Labels()
     max_cloud = solara.reactive(40.0)
     sources = solara.reactive(frozenset(SRC_COLOR))
     collapsed = solara.reactive(frozenset())
@@ -1177,11 +1183,18 @@ def build_timeline(app_state, analysis, widgets):
     slider.on_event("input", _on_cloud_drag)
 
     def _side(side, arrow):
-        hint = t("analysis.timeline.month_before" if side == "left" else "analysis.timeline.month_after")
-        btn = v.Btn(small=True, text=True, class_="defo-tl-btn", attributes={"title": hint, "aria-label": hint},
-                    children=[arrow + " " + t("analysis.timeline.one_more_month")])
+        # its text comes from ``_label_side`` (the toolbar's label hook)
+        btn = v.Btn(small=True, text=True, class_="defo-tl-btn", attributes={}, children=[""])
         btn.on_event("click", lambda w, e, d, side=side: _widen(side))
         return btn
+
+    def _label_side(btn, side, arrow):
+        hint = t("analysis.timeline.month_before" if side == "left" else "analysis.timeline.month_after")
+        btn.attributes = {**btn.attributes, "title": hint, "aria-label": hint}
+        btn.children = [arrow + " " + t("analysis.timeline.one_more_month")]
+
+    left_btn = _side("left", "‹")
+    right_btn = _side("right", "›")
 
     # sentence case, not Vuetify's spaced capitals: the toolbar is full at
     # the drawer-open width, and the slider is what gave way
@@ -1219,7 +1232,7 @@ def build_timeline(app_state, analysis, widgets):
                                  "aria-expanded": "false" if shown else "true"}
         # cleared, not only hidden, for the same reason as ``message``: a
         # string left in the tree is still read by a screen reader walking it
-        legend_text.children = [] if shown else [legend]
+        legend_text.children = [] if shown else [t("analysis.timeline.legend")]
         legend_text.style_ = _LEGEND_HIDDEN if shown else _LEGEND_SHOWN
 
     help_badge.on_event("click", _toggle_legend)
@@ -1234,6 +1247,23 @@ def build_timeline(app_state, analysis, widgets):
     area.observe(lambda change: analysis.image_area.set(change["new"] or "normal"), "v_model")
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
+    def _label_toolbar():
+        slider.label = _cloud_label()
+        fold.children = [fold.children[0], t("analysis.timeline.collapse_all")]
+        unfold.children = [unfold.children[0], t("analysis.timeline.expand_all")]
+        legend = t("analysis.timeline.legend")
+        help_badge.attributes = {**help_badge.attributes, "title": legend,
+                                 "aria-label": t("analysis.timeline.legend_label")}
+        if help_badge.attributes.get("aria-expanded") == "true":
+            legend_text.children = [legend]
+        area.items = [{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS]
+        area.label = t("analysis.timeline.image_area")
+        area.attributes = {**area.attributes, "title": t("analysis.timeline.area_hint")}
+        _label_side(left_btn, "left", "‹")
+        _label_side(right_btn, "right", "›")
+
+    labels.add(_label_toolbar)
+
     def _divider():
         return v.Html(tag="span", style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
 
@@ -1243,7 +1273,7 @@ def build_timeline(app_state, analysis, widgets):
                          area, status]),
         legend_text,
         v.Html(tag="div", style_="display: flex; gap: 10px; align-items: stretch; padding: 0 8px 8px",
-               children=[_side("left", "‹"), track, message, _side("right", "›")]),
+               children=[left_btn, track, message, right_btn]),
     ])
 
     for reactive in (app_state.scene_index, app_state.scene_manifest, app_state.scene_index_error,
@@ -1251,4 +1281,9 @@ def build_timeline(app_state, analysis, widgets):
         reactive.subscribe(render)
     _publish_filter()
     render()
+    # a language switch redraws the strip: chips, lane, blocks, axis months,
+    # status and both view titles. It re-picks only on a new alert identity,
+    # and ``_resolve_restores`` leaves a pending restore pending while its row
+    # is missing, so a switch is the same as any reactive tick.
+    labels.add(render, now=False)
     return card

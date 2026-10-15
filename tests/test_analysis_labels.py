@@ -294,3 +294,11 @@ def test_the_export_section_follows_the_language(tmp_path, monkeypatch):
     export = panel_sections(built.layout.controls).export
     _switch(built)
     assert english_leftovers(export.root, "fr") == []
+
+
+def test_the_timeline_and_the_view_titles_follow_the_language(tmp_path, monkeypatch):
+    built = build_layout(tmp_path, monkeypatch)
+    w = built.layout.widgets
+    _switch(built)
+    for part in (w.timeline, w.head_before, w.head_after):
+        assert english_leftovers(part, "fr") == []

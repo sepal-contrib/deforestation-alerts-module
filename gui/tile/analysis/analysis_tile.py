@@ -889,7 +889,7 @@ def build_analysis_layout(
     # kernel, a compounding leak anywhere that re-runs per alert or per screen
     # entry. It needs no alert: an alert change reaches it through
     # ``widgets.imagery_ctx``.
-    widgets.timeline = build_timeline(app_state, analysis, widgets)
+    widgets.timeline = build_timeline(app_state, analysis, widgets, labels=labels)
 
     # One subscription per view, so a pick on the strip rebuilds that view's
     # image from its granule keys and draws it. Side-effect only (the two

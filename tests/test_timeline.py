@@ -890,6 +890,75 @@ def test_the_same_image_on_both_sides_is_flagged_rather_than_read_as_a_gap():
     assert strip.gap == note and strip.gap_warn is True
 
 
+def test_a_language_switch_relabels_a_rendered_strip_and_keeps_the_pick():
+    from gui.tile.analysis.labels import Labels
+    from pysepal.i18n import set_locale
+    from tests._i18n_sweep import english_leftovers
+
+    t = timeline.t
+    set_locale("en")
+    try:
+        labels = Labels()
+        state = _fake_state(rows=[(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)])
+        analysis = _fake_analysis()
+        widgets = _fake_widgets()
+        ctx = dict(_ctx())
+        ctx["token"] = analysis.alert_token.value
+        widgets.imagery_ctx.set(ctx)
+        card = timeline.build_timeline(state, analysis, widgets, labels=labels)
+        legend = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-controls")][0]
+        legend.fire_event("click", None)
+        before, after = analysis.before_info.value, analysis.after_info.value
+        set_locale("fr")
+        labels.run()
+        assert (analysis.before_info.value, analysis.after_info.value) == (before, after)
+        assert analysis.dirty.value is False
+        assert english_leftovers(card, "fr") == []
+        assert english_leftovers(widgets.map_title_before, "fr") == []
+        # composed text the sweep's catalogue match may not see: exact
+        slider = [w for w in _walk(card) if isinstance(w, timeline.v.Slider)][0]
+        assert slider.label == f"{t('analysis.timeline.max_cloud')} 40%"
+        # dates go through ``format_date`` and carry no catalogue text, so the
+        # sweep cannot tell a stale one: the handle flag and an axis month, exact
+        strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+        source, day = scene_query.parse_row_id(strip.before["id"])
+        assert strip.before["flag"] == f"{timeline.format_date(day, 'd MMM')} · {timeline.SRC_LABEL[source]}"
+        april = timeline.format_date(date(2026, 4, 1), "MMM")
+        assert april != "Apr"
+        axis = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-label")
+                == t("analysis.timeline.collapse_month", month=april)]
+        assert axis and axis[0].children == [april]
+    finally:
+        set_locale("en")
+
+
+def test_a_language_switch_leaves_a_pending_restore_pending():
+    """``render`` also resolves pending restores (``_resolve_restores``), so a
+    switch is a render with the saved row still missing: the side keeps
+    waiting (no automatic pick stands in), and the row's arrival still
+    restores it."""
+    from gui.tile.analysis.labels import Labels
+    from pysepal.i18n import set_locale
+
+    set_locale("en")
+    try:
+        labels = Labels()
+        rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-03-20", 5.0)]
+        state = _fake_state(index=_any_index(rows[:2]))  # without the saved row
+        analysis = _fake_analysis()
+        timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "),
+                                labels=labels)
+        assert analysis.before_info.value is None
+        set_locale("fr")
+        labels.run()
+        assert analysis.before_info.value is None, "the switch picked a stand-in"
+        assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+        state.scene_index.set(_any_index(rows))  # the row arrives
+        assert analysis.before_info.value[3] == "Sentinel 2 2026-03-20 "
+    finally:
+        set_locale("en")
+
+
 def test_an_alert_whose_dates_are_missing_publishes_no_window_rather_than_a_wrong_one():
     """``_as_date`` is what decides whether the gold alert band draws at all.
 
