@@ -59,7 +59,10 @@ class FileTile(custom_sw.DownloadBtn):
         self.kind = kind
         self.size_text = ""
         self.path: Optional[str] = None
+        #: The warning leading the detail of a linked file, None without one.
+        self.warning: Optional[str] = None
         self._detail = detail
+        self._title = v.Html(tag="div", style_=_TITLE, children=[title])
         self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[detail])
         self._icon = v.Icon(small=True, class_="primary--text", children=["mdi-download"])
         # No ``color``: an outlined primary button underlined and tinted the
@@ -73,33 +76,51 @@ class FileTile(custom_sw.DownloadBtn):
                 v.Html(tag="span", style_="position:relative;", children=[kind.upper()]),
             ]),
             v.Html(tag="div", class_="ml-3 text-left", style_="flex:1 1 auto;min-width:0;", children=[
-                v.Html(tag="div", style_=_TITLE, children=[title]),
+                self._title,
                 self._meta,
             ]),
             self._icon,
         ]
 
-    def set_file(self, path: Optional[str]) -> "FileTile":
+    def set_title(self, title: str) -> "FileTile":
+        """Rename the tile (a language switch)."""
+        self._title.children = [title]
+        return self
+
+    def set_file(self, path: Optional[str], detail: Optional[str] = None,
+                 warning: Optional[str] = None) -> "FileTile":
         """Link ``path`` (a file in the set folder), or clear the tile (None).
+
+        ``detail`` replaces the line under the title; ``warning``, when given,
+        leads it in the theme's warning colour (a file older than what it was
+        made from).
 
         Raises ``ValueError`` (``local_files.home_relative``) for a path the
         sandbox cannot serve, before anything on the tile changes: the export
         worker reports it as a FAILED build, and the tile stays as it was.
         """
         if not path:
+            if detail is not None:
+                self._detail = detail
+            self.warning = None
             self.size_text = ""
             self.path = None
             self._meta.children = [self._detail]
             self._icon.children = ["mdi-download"]
             return self.set_url()
         url_path = local_files.home_relative(path)
+        if detail is not None:
+            self._detail = detail
         self.path = path
         self._icon.children = ["mdi-download"]
         try:
             self.size_text = human_size(Path(path).stat().st_size)
         except OSError:
             self.size_text = ""
-        self._meta.children = [f"{self._detail} · {self.size_text}" if self.size_text else self._detail]
+        self.warning = warning
+        line = f"{self._detail} · {self.size_text}" if self.size_text else self._detail
+        self._meta.children = ([v.Html(tag="span", class_="warning--text", children=[warning]), f" · {line}"]
+                               if warning else [line])
         return self.set_url(path=url_path)
 
     def set_action(self, enabled: bool, detail: str, icon: str = "mdi-filmstrip") -> "FileTile":

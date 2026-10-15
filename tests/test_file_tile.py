@@ -101,3 +101,27 @@ def test_set_action_makes_a_tile_without_a_file_a_plain_button(tmp_path, monkeyp
     assert not tile.disabled and tile.path == str(f) and "mdi-download" in _strings(tile)
     tile.set_file(None)
     assert tile.path is None and tile.disabled and "mdi-download" in _strings(tile)
+
+
+def test_set_file_takes_a_new_detail_and_a_warning(tmp_path, monkeypatch):
+    """The Overview's export tiles: the line under the title says what the file
+    holds and when it was written, and an out-of-date file leads with a warning."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    f = tmp_path / "set" / "a.gpkg"
+    f.parent.mkdir()
+    f.write_bytes(b"x" * 2048)
+    tile = FileTile("gpkg", "GeoPackage", "3 polygons")
+    tile.set_file(str(f), detail="3 polygons · 2026-10-15 14:02", warning="Reviews changed since")
+    text = " ".join(_strings(tile))
+    assert "Reviews changed since" in text and "3 polygons · 2026-10-15 14:02 · 2 KB" in text
+    assert tile.warning == "Reviews changed since"
+    tile.set_file(str(f))  # no warning: the note goes, the new detail stays
+    text = " ".join(_strings(tile))
+    assert "Reviews changed since" not in text and tile.warning is None
+    assert "3 polygons · 2026-10-15 14:02 · 2 KB" in text
+
+
+def test_set_title_renames_the_tile():
+    tile = FileTile("csv", "CSV", "")
+    tile.set_title("CSV table")
+    assert "CSV table" in _strings(tile) and "CSV" in _strings(tile)
