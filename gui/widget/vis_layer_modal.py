@@ -1,6 +1,7 @@
 """Visualization-layer modal (spec §6.3): an Earth Engine image or a GeoTIFF in
-the user's SEPAL folder (one band and a colour ramp, or three bands as RGB, set
-by hand or by band roles and a standard combination) or Planet NICFI (a month,
+the user's SEPAL folder (one band, Continuous with a colour ramp or Categorical
+with a colour per class; or, for three bands or more, an RGB composite set by
+hand or by band roles and a standard combination) or Planet NICFI (a month,
 the region from the AOI centroid, access checked).
 
 It follows ``source_modal``'s rules (Task 17), on the same form frame
@@ -25,12 +26,17 @@ from deforestation_alerts.engine.user_raster import UserRasterError, band_list_r
 from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
 from deforestation_alerts.project.names import name_from_ref, suggest_name_with_tail
 from gui.i18n import t
-from gui.scripts import vis_layers, vis_palettes
+from gui.scripts import vis_classes, vis_layers, vis_palettes, vis_probes
 from gui.scripts.error_text import ee_no_access, error_text
+from gui.scripts.legend_data import format_number
+from gui.scripts.legend_specs import vis_legend
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
+from gui.widget.vis_style_fields import (
+    _RAMP_BAR, _RAMP_GRID, BandsChoice, LegendPreview, StyleTiles, card_button,
+)
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 
@@ -149,19 +155,38 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
                                   show_in_analysis=bool(show_in_analysis), **kwargs, **extra)}
 
 
-# Ramp cards (as spatial_risk's variable modal): a gradient bar over its name in
-# a bordered card; the selected card is ringed and bold.
-_RAMP_GRID = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;width:100%;"
-_RAMP_CARD = (
-    "display:block;height:auto;min-width:0;width:100%;padding:6px;"
-    "text-transform:none;letter-spacing:normal;font-weight:400;text-align:left;"
-    "border:1px solid rgba(128,128,128,0.5);border-radius:4px;background:transparent;"
-)
-_RAMP_CARD_SELECTED = "box-shadow:0 0 0 2px currentColor;font-weight:600;"
-_RAMP_BAR = (
-    "display:block;height:14px;border-radius:3px;margin-bottom:6px;"
-    "border:1px solid rgba(0,0,0,0.1);background:{gradient};"
-)
+def preview_layer(kind, style, *, band, bands, ramp, invert, palette, colormap, classes, vmin, vmax):
+    """The draft layer the form's legend preview is drawn from, coloured as
+    ``validate_vis_layer`` would save it; None while the range is invalid
+    (continuous, rgb) or no class is visible (categorical)."""
+    if style == "categorical":
+        if not vis_classes.visible_classes(classes):
+            return None
+        span = (0.0, 1.0)
+    else:
+        span = parse_range(vmin, vmax)
+        if span is None:
+            return None
+    kw = {"name": "preview", "min": span[0], "max": span[1], "style": style}
+    if style == "categorical":
+        kw["classes"] = list(classes)
+    elif style == "continuous":
+        if ramp:
+            kw["palette"] = vis_palettes.ramp_palette(ramp, invert)
+        elif palette:
+            kw["palette"] = list(palette)
+        elif not (kind == "file" and colormap):
+            kw["palette"] = vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP, invert)
+    if kind == "file":
+        if style == "rgb":
+            kw["bands"] = [i for i in (band_index(b) for b in bands) if i is not None]
+        if colormap and "palette" not in kw:
+            kw["colormap"] = colormap
+        return FileVisLayer(path="", band=band_index(band) or 1, **kw)
+    chosen = bands if style == "rgb" else (band,)
+    return GeeVisLayer(asset="", bands=[str(b) for b in chosen if b is not None], **kw)
+
+
 _FIELDSET_STYLE = ("border:1px solid rgba(128,128,128,0.6);border-radius:4px;"
                    "padding:8px 12px 4px;margin:4px 0 0;min-width:0;")
 _LEGEND_STYLE = "padding:0 4px;font-size:0.75rem;opacity:0.75;"
@@ -196,13 +221,17 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     gee0 = l0 if l0 is not None and l0.kind == "gee" else None
     file0 = l0 if l0 is not None and l0.kind == "file" else None
     raster0 = gee0 or file0
-    rgb0 = raster0 is not None and len(raster0.bands) == 3
+    style0 = vis_layers.effective_style(raster0) if raster0 is not None else "continuous"
+    rgb0 = style0 == "rgb"
     kind, set_kind = solara.use_state(l0.kind if l0 is not None else "gee")
     name, set_name = solara.use_state(l0.name if l0 is not None else "")
     asset = solara.use_reactive({"asset_id": gee0.asset, "type": "IMAGE", "column": "ALL", "value": None}
                                 if gee0 is not None else None)
     path = solara.use_reactive(file0.path if file0 is not None else "")
-    rgb, set_rgb = solara.use_state(rgb0)
+    # Two steps: keep every band (RGB) or draw one; one band is Continuous or Categorical.
+    bands_mode, set_bands_mode = solara.use_state("all" if rgb0 else "one")
+    one_style, set_one_style = solara.use_state("categorical" if style0 == "categorical" else "continuous")
+    classes, set_classes = solara.use_state(list(raster0.classes) if style0 == "categorical" else [])
     band, set_band = solara.use_state(file0.band if file0 is not None and not rgb0
                                       else gee0.bands[0] if gee0 is not None and gee0.bands and not rgb0 else None)
     red, set_red = solara.use_state(raster0.bands[0] if rgb0 else None)
@@ -247,6 +276,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                   else [{"text": n, "value": n} for n in names])
     region = vis_layers.nicfi_region(p.aoi.bounds) if p is not None and p.aoi is not None else None
     band_text = {i["value"]: i["text"] for i in band_items}
+    n_bands = len(band_items) if bands_task.finished else None
+    # RGB needs three bands: an RGB edit pointed at a smaller raster is drawn from one band
+    style = "rgb" if bands_mode == "all" and (n_bands is None or n_bands >= 3) else one_style
 
     def _apply(chosen_combo, chosen_roles):
         picked = vis_palettes.combo_bands(chosen_combo, chosen_roles)
@@ -256,9 +288,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_blue(picked[2])
         return bool(picked)
 
-    def _set_rgb(on):
-        set_rgb(on)
-        if on and l0 is None and not (red or green or blue):  # a new RGB layer starts on the first composite
+    def _set_bands_mode(value):
+        if not value:
+            return
+        set_bands_mode(value)
+        if value == "all" and not (red or green or blue):  # an RGB composite starts on the first combination
             first = vis_palettes.available_combos(roles)
             if first and _apply(first[0], roles):
                 set_combo(first[0])
@@ -277,8 +311,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         set_combo("custom")
         for setter in (set_red, set_green, set_blue):
             setter(None)
+        # spectral bands are kept as RGB; any other image draws one band (never guessed Categorical)
+        all_bands = all(r in guessed for r in ("red", "green", "blue"))
+        set_bands_mode("all" if all_bands else "one")
         first = vis_palettes.available_combos(guessed)
-        if rgb and l0 is None and first and _apply(first[0], guessed):
+        if all_bands and first and _apply(first[0], guessed):
             set_combo(first[0])
 
     solara.use_effect(_guess_roles, [tuple(i["value"] for i in band_items)])
@@ -305,7 +342,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     def _suggest(_ref):
         base = name_from_ref(ref)
-        if rgb:
+        if style == "rgb":
             # the combination's short key, so a long image name keeps a readable base
             tail = f"_{combo}" if combo != "custom" else "_rgb"
         else:
@@ -315,6 +352,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             base, tail, lambda n: vis_layers.validate_name(n, app_state.project.value, current=editing) is None,
             vis_layers.MAX_NAME)
 
+    rgb = style == "rgb"
     use_default_name(f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
                      name, set_name, _suggest)
 
@@ -325,10 +363,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             return {"error": "steps.layers.err_changed"}  # closed while the form was open
         out = await validate_vis_layer(
             gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type,
-            style="rgb" if rgb else "continuous", bands=(red, green, blue), band=band, ramp=ramp, invert=invert,
+            style=style, bands=(red, green, blue), band=band, ramp=ramp, invert=invert,
             palette=palette0 if ramp is None else (),
             colormap=old_colormap if ramp is None else None, roles=roles, combo=None if combo == "custom" else combo,
-            vmin=vmin, vmax=vmax, month=month, show_in_analysis=show, editing=editing)
+            classes=classes, vmin=vmin, vmax=vmax, month=month, show_in_analysis=show, editing=editing)
         if not open_.value:
             return None  # closed during the check (ESC or Cancel): the user cancelled
         if _scope(app_state.project.value) != scope:
@@ -359,21 +397,50 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     solara.use_effect(_on_validated, [validation.pending, validation.finished, validation.error,
                                       validation.cancelled])
 
+    async def _stretch():
+        # p2/p98 of the band over the AOI's bounds (gui/scripts/vis_probes)
+        live = app_state.project.value
+        scope = _scope(live)
+        if live is None or live.aoi is None or not ref or band is None:
+            return None
+        bounds = live.aoi.bounds
+        if kind == "gee":
+            info = await gee_interface.get_info_async(vis_probes.stretch_request(ref, [band], bounds))
+            span = vis_probes.stretch_from_info(info, [band])
+        else:
+            span = await asyncio.to_thread(vis_probes.file_stretch, ref, [band_index(band)], bounds)
+        if not open_.value or _scope(app_state.project.value) != scope:
+            return None  # closed, or the project or its AOI changed: the range is dropped
+        return {"span": span} if span is not None else {"error": "steps.layers.err_no_stretch"}
+
+    stretch_task = solara.lab.use_task(_stretch, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _on_stretched():
+        out = stretch_task.value if stretch_task.finished else None
+        if out and "span" in out:
+            lo, hi = out["span"]
+            set_vmin(_number_text(round(lo, 6)))
+            set_vmax(_number_text(round(hi, 6)))
+
+    solara.use_effect(_on_stretched, [stretch_task.pending, stretch_task.finished])
+
     def _cancel_on_unmount():
         def cleanup():
             # closing the dialog (ESC, Cancel) unmounts this form, and use_task
             # does not cancel on unmount: stop a check still running, or it
-            # would save the layer the user just cancelled
-            if validation.pending:
-                try:
-                    validation.cancel()
-                except RuntimeError:
-                    pass
+            # would save the layer the user just cancelled; stop a probe too
+            for task in (validation, stretch_task):
+                if task.pending:
+                    try:
+                        task.cancel()
+                    except RuntimeError:
+                        pass
 
         return cleanup
 
     solara.use_effect(_cancel_on_unmount, [])
-    busy = validation.pending  # fields are frozen while their values are being checked
+    # fields are frozen while their values are being checked or probed
+    busy = validation.pending or stretch_task.pending
 
     def _submit():
         if submitted.current:
@@ -404,16 +471,36 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             rv.Html(tag="legend", children=[t("steps.layers.field_ramp")], style_=_LEGEND_STYLE)
             with rv.Html(tag="div", style_=_RAMP_GRID):
                 for key in vis_palettes.RAMPS:
-                    selected = key == ramp
-                    solara.Button(
-                        children=[rv.Html(tag="span", style_="display:block;width:100%;", children=[
+                    card_button(
+                        [rv.Html(tag="span", style_="display:block;width:100%;", children=[
                             rv.Html(tag="span", style_=_RAMP_BAR.format(gradient=vis_palettes.ramp_css(key, invert))),
                             rv.Html(tag="span", children=[t(f"steps.layers.ramp_{key}")])])],
-                        on_click=lambda *_, k=key: set_ramp(k), disabled=busy, text=True,
-                        style=_RAMP_CARD + (_RAMP_CARD_SELECTED if selected else ""),
-                        classes=["dv-ramp"] + (["dv-ramp--selected"] if selected else []))
+                        selected=key == ramp, on_click=lambda *_, k=key: set_ramp(k), disabled=busy,
+                        classes=["dv-ramp"])
             rv.Switch(label=t("steps.layers.field_invert"), v_model=invert, on_v_model=set_invert, dense=True,
                       hide_details=True, disabled=busy or ramp is None, class_="mt-0 mb-1")
+
+    def _stretch_fields():
+        no_aoi = p is None or p.aoi is None
+        solara.Button(label=t("steps.layers.stretch"), icon_name="mdi-arrow-expand-horizontal",
+                      on_click=lambda: stretch_task(), outlined=True, small=True,
+                      disabled=busy or no_aoi or not ref or band is None)
+        solara.Text(t("steps.layers.stretch_hint"), style=MUTED)
+        out = stretch_task.value if stretch_task.finished else None
+        if out and "error" in out:
+            solara.Text(t(out["error"]), classes=["error--text"])
+        elif stretch_task.error:
+            solara.Text(error_text(stretch_task.exception), classes=["error--text"])
+
+    def _legend_preview():
+        draft = preview_layer(kind, style, band=band, bands=(red, green, blue), ramp=ramp, invert=invert,
+                              palette=palette0 if ramp is None else (),
+                              colormap=old_colormap if ramp is None else None, classes=classes, vmin=vmin,
+                              vmax=vmax)
+        if draft is None:
+            return
+        mid = format_number((draft.min + draft.max) / 2) if style != "categorical" else None
+        LegendPreview(spec=vis_legend("preview", draft).spec, mid=mid)
 
     def _actions():
         # spec §11: an async button is a task button. While the check runs it
@@ -439,8 +526,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                 solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                             classes=["error--text"])
         if raster:
-            rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=_set_rgb, dense=True,
-                      hide_details=True, disabled=busy)
+            if n_bands is not None and n_bands >= 3:  # RGB is offered for three bands or more
+                BandsChoice(value=bands_mode, on_value=_set_bands_mode, disabled=busy)
             if rgb:
                 solara.Text(t("steps.layers.roles_hint"), style=MUTED)
                 with rv.Row(dense=True):
@@ -459,9 +546,13 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                 _band_select(t("steps.layers.field_blue"), blue, _rgb_setter(set_blue))
                 _range_fields()
             else:
+                StyleTiles(value=one_style, on_value=set_one_style, disabled=busy)
                 _band_select(t("steps.layers.field_band"), band, set_band)
-                _ramp_fields()
-                _range_fields()
+                if style == "continuous":
+                    _ramp_fields()
+                    _range_fields()
+                    _stretch_fields()
+                _legend_preview()
         else:
             rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,
                          outlined=True, disabled=busy, placeholder="YYYY-MM", hint=t("steps.layers.month_hint"),

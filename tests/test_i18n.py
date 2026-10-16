@@ -222,6 +222,7 @@ def _dynamic_keys():
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
     from gui.widget.source_modal import ENCODINGS, FORMATS
+    from gui.widget.vis_style_fields import BANDS_MODES, STYLES
 
     return {
         "steps.integrate.set_": [Status.STALE.value, Status.MISSING.value],
@@ -250,6 +251,9 @@ def _dynamic_keys():
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
+        # gui.widget.vis_style_fields: the Bands question and the Style tiles
+        "steps.layers.bands_": list(BANDS_MODES),
+        "steps.layers.style_": list(STYLES),
         # gui.tile.overview_export's tiles and scope chips
         "overview_tile.export_": ["csv", "gpkg"],
         "overview_tile.export_scope_": ["confirmed", "reviewed", "unreviewed", "all"],

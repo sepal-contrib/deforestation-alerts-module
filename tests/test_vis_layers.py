@@ -553,6 +553,19 @@ def _icons(btn):
     return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
 
 
+def _bands_choice(rc):
+    """The Bands question's radio group (keep all bands as RGB, or one), or None when it is not asked."""
+    groups = [g for g in rc.find(v.RadioGroup).widgets
+              if {getattr(c, "value", None) for c in g.children} == {"all", "one"}]
+    return groups[0] if groups else None
+
+
+async def _pick_all_bands(rc):
+    """Answer the Bands question "Keep all for an RGB composite" once the band list asks it."""
+    assert await _settle(lambda: _bands_choice(rc) is not None)
+    _bands_choice(rc).v_model = "all"
+
+
 def _texts(rc):
     return " ".join(str(w.children) for w in rc.find(v.Html).widgets)
 
@@ -609,17 +622,19 @@ def test_a_kind_change_clears_the_band(monkeypatch):
 
 
 def test_an_edit_opens_with_the_layers_values(monkeypatch):
-    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
     p = _with_aoi()
     p.vis_layers = {"rgb": GeeVisLayer(name="rgb", asset="users/x/img", bands=["B4", "B3", "B2"], min=0, max=3000)}
-    state, open_, saved = _state(p), solara.reactive(True), []
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["B4", "B3", "B2"], p)
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, saved, editing="rgb"), handle_error=False)
+        box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                   on_save=lambda *a: saved.append(a), editing="rgb"),
+                                 handle_error=False)
         try:
             assert t("steps.layers.edit_title", name="rgb") in _texts(rc)
             assert _field(rc, "steps.layers.field_name").v_model == "rgb"
-            assert _field(rc, "steps.layers.field_rgb", v.Switch).v_model is True
+            assert await _settle(lambda: _bands_choice(rc) is not None)
+            assert _bands_choice(rc).v_model == "all"
             assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
                 "B4", "B3", "B2"]
             assert _field(rc, "steps.layers.field_max").v_model == "3000"
@@ -995,9 +1010,9 @@ def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch
         _box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
                                                     on_save=lambda *a: saved.append(a)), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
             _StubRasterInput.seen.asset.set({"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL",
                                              "value": None})
+            await _pick_all_bands(rc)
             assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
             roles = {r: _field(rc, f"steps.layers.role_{r}", v.Select).v_model for r in vis_palettes.ROLES}
             assert roles == {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
@@ -1028,12 +1043,13 @@ def test_the_default_name_follows_the_image_and_the_combination_until_typed_over
         try:
             _StubRasterInput.seen.asset.set({"asset_id": "users/x/mosaic", "type": "IMAGE", "column": "ALL",
                                              "value": None})
-            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic")
+            await _pick_all_bands(rc)  # spectral bands: already RGB, on the first combination
+            want = "mosaic_true_color"
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
+            _bands_choice(rc).v_model = "one"
             _field(rc, "steps.layers.field_band", v.Select).v_model = "B8"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
-            _field(rc, "steps.layers.field_combo", v.Select)
-            want = "mosaic_true_color"
+            _bands_choice(rc).v_model = "all"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_combo", v.Select).v_model = "false_color"
             want = "mosaic_false_color"
@@ -1062,7 +1078,7 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
         try:
             _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
             _StubRasterInput.seen.path.set(str(tif))
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
+            await _pick_all_bands(rc)
             assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == 3)
             combo = _field(rc, "steps.layers.field_combo", v.Select)
             assert [i["value"] for i in combo.items] == ["true_color", "false_color", "custom"]
