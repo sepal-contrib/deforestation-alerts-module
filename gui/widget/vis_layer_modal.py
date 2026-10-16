@@ -344,6 +344,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     solara.use_effect(_clear_probes, [kind, ref, band])
 
+    # a stretch refused for one RGB composite says nothing of another
+    solara.use_effect(lambda: set_stretch_error(None), [combo, red, green, blue])
+
     def _set_role(role, value):
         updated = {k: v for k, v in {**roles, role: value}.items() if v is not None}
         set_roles(updated)
@@ -614,7 +617,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             if n_bands is not None and n_bands >= 3:  # RGB is offered for three bands or more
                 BandsChoice(value=bands_mode, on_value=_set_bands_mode, disabled=busy)
             if rgb:
-                CompositeCards(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text, disabled=busy)
+                CompositeCards(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
+                               custom=(red, green, blue), disabled=busy)
                 RolesSummary(roles=roles, band_text=band_text, expanded=roles_open, on_expanded=set_roles_open,
                              on_role=_set_role, disabled=busy, loading=bands_task.pending)
                 with rv.Row(dense=True):  # Custom: the three bands by hand

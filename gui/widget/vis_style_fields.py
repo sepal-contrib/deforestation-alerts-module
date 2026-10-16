@@ -100,15 +100,16 @@ def channel_dot(channel: int):
 
 
 @solara.component
-def CompositeCards(combo, on_combo, roles, band_text, disabled=False):
+def CompositeCards(combo, on_combo, roles, band_text, custom=(None, None, None), disabled=False):
     """One card per standard combination (``vis_palettes.RGB_COMBOS``), then
-    Custom: its name over its three bands on red, green and blue chips. A
+    Custom (the hand-picked ``custom`` red, green and blue bands): its name over
+    its three bands on red, green and blue chips, "?" for a band not picked. A
     combination whose roles are not all detected is greyed out and disabled."""
     with rv.Html(tag="div", style_=_COMBO_GRID):
         for key in [*vis_palettes.RGB_COMBOS, "custom"]:
-            picked = vis_palettes.combo_bands(key, roles) if key != "custom" else None
+            picked = vis_palettes.combo_bands(key, roles) if key != "custom" else list(custom)
             off = key != "custom" and picked is None
-            names = [band_text.get(b, str(b)) for b in picked] if picked else ["?"] * 3
+            names = [band_text.get(b, str(b)) if b is not None else "?" for b in picked or [None] * 3]
             chips = [rv.Html(tag="span", style_=_COMBO_CHIP.format(color=CHANNEL_COLORS[i]), children=[name])
                      for i, name in enumerate(names)]
             solara.Button(
@@ -129,19 +130,25 @@ def _role_word(label: str) -> str:
 @solara.component
 def RolesSummary(roles, band_text, expanded, on_expanded, on_role, disabled=False, loading=False):
     """The bands' roles on one line ("Bands detected: B2 blue · …", or "No
-    bands recognized"), with a link that unfolds the five role selects."""
-    by_band = {b: [r for r in vis_palettes.ROLES if roles.get(r) == b] for b in band_text}
-    listed = " · ".join(f"{band_text[b]} {_role_word(t(f'steps.layers.role_{r}'))}"
-                        for b, rs in by_band.items() for r in rs)
+    bands recognized"), with a link that unfolds the five role selects. The
+    line is built from ``roles``, in the band list's order; a band the list
+    does not hold (yet: it is ``loading``) is named as it is stored."""
+    order = {b: i for i, b in enumerate(band_text)}
+    assigned = sorted(((b, r) for r in vis_palettes.ROLES if (b := roles.get(r)) is not None),
+                      key=lambda pair: order.get(pair[0], len(order)))
+    listed = " · ".join(f"{band_text.get(b, str(b))} {_role_word(t(f'steps.layers.role_{r}'))}"
+                        for b, r in assigned)
     found = bool(listed)
     # one box, keyed parts: the role selects come and go under the line
     with rv.Html(tag="div", style_="margin:4px 0;"):
         with rv.Html(tag="div", key="line", class_="dv-roles", style_=_ROLES_LINE):
-            rv.Html(tag="span", children=[
-                (t("steps.layers.roles_detected", list=listed) if found else t("steps.layers.roles_none")) + " — "])
-            solara.Button(label=t("steps.layers.roles_edit") if found else t("steps.layers.roles_set"),
-                          on_click=lambda *_: on_expanded(not expanded), text=True, small=True, color="primary",
-                          style=_LINK, classes=["dv-roles-link"])
+            if found or not loading:  # nothing is "not recognized" before the bands are read
+                rv.Html(tag="span", children=[
+                    (t("steps.layers.roles_detected", list=listed) if found else t("steps.layers.roles_none"))
+                    + " — "])
+                solara.Button(label=t("steps.layers.roles_edit") if found else t("steps.layers.roles_set"),
+                              on_click=lambda *_: on_expanded(not expanded), text=True, small=True,
+                              color="primary", style=_LINK, classes=["dv-roles-link"])
         if expanded:
             items = [{"text": text, "value": value} for value, text in band_text.items()]
             with rv.Row(dense=True, key="role-selects", class_="mt-1"):

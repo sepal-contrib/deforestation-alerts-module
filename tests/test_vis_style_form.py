@@ -396,6 +396,86 @@ def test_the_rgb_stretch_spans_the_three_bands(monkeypatch):
     asyncio.run(main())
 
 
+def test_the_custom_card_shows_its_hand_picked_bands(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _rgb_form(rc)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            _field(rc, "steps.layers.field_red", v.Select).v_model = "B8"
+            assert "B8 B3 B2" in _flat(_combo_card(rc, "custom"))
+            _field(rc, "steps.layers.field_green", v.Select).v_model = None
+            assert "B8 ? B2" in _flat(_combo_card(rc, "custom"))
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_custom_card_names_its_bands_like_the_others():
+    from gui.widget.vis_style_fields import CompositeCards
+
+    _box, rc = reacton.render(CompositeCards(combo="custom", on_combo=lambda k: None, roles={},
+                                             band_text={1: "Red", 3: "Blue"}, custom=(1, None, 3)),
+                              handle_error=False)
+    try:
+        assert "Red ? Blue" in _flat(_combo_card(rc, "custom"))
+    finally:
+        rc.close()
+
+
+def _summary(roles, band_text, loading):
+    from gui.widget.vis_style_fields import RolesSummary
+
+    return reacton.render(RolesSummary(roles=roles, band_text=band_text, expanded=False,
+                                       on_expanded=lambda x: None, on_role=lambda r, b: None, loading=loading),
+                          handle_error=False)
+
+
+def test_the_roles_line_names_the_roles_while_the_bands_load():
+    _box, rc = _summary({"red": "B4", "green": "B3", "blue": "B2"}, {}, loading=True)
+    try:
+        text = _roles_text(rc)
+        assert t("steps.layers.roles_detected", list="B4 red · B3 green · B2 blue") in text
+        assert t("steps.layers.roles_none") not in text
+    finally:
+        rc.close()
+    _box, rc = _summary({}, {}, loading=True)  # nothing yet: never "No bands recognized" while loading
+    try:
+        assert t("steps.layers.roles_none") not in _roles_text(rc)
+    finally:
+        rc.close()
+    _box, rc = _summary({"red": "B4", "nir": "B8"}, {"B8": "B8"}, loading=False)  # a band the list lacks
+    try:
+        assert t("steps.layers.roles_detected", list="B8 NIR · B4 red") in _roles_text(rc)
+    finally:
+        rc.close()
+
+
+def test_the_stretch_error_clears_when_the_composite_changes(monkeypatch):
+    async def answer(obj):
+        return {f"{b}_{p}": 5 for b in obj[2] for p in ("p2", "p98")}  # no spread
+
+    state, open_, saved, gee = _stretching(monkeypatch, S2_BANDS, answer)
+    shown = t("steps.layers.err_no_stretch")
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _rgb_form(rc)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            _button(rc, "steps.layers.stretch").fire_event("click", None)
+            assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text", children=[shown]).widgets))
+            _combo_card(rc, "false_color").fire_event("click", None)
+            assert await _settle(lambda: not rc.find(v.Html, class_="error--text", children=[shown]).widgets)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 # ---------------------------------------------------------------- the Categorical fields
 WORLDCOVER = {"hist": {"10": 3, "80": 1},
               "meta": {"Map_class_values": [10, 20, 80], "Map_class_palette": ["006400", "ffbb22", "0064c8"],
