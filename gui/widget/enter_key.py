@@ -93,6 +93,10 @@ import traitlets
 
 #: CSS class that marks a dialog's default button — the one Enter presses.
 ENTER_DEFAULT = "da-enter-default"
+#: CSS class that marks a field (or a box of fields) whose Enter is its own:
+#: Enter there never presses the dialog's default button (the field answers
+#: ``keydown.enter`` itself, as the visualization form's "Add a value").
+ENTER_OWN = "da-enter-own"
 
 # Everything lives inside module.exports: ipyvue's legacy loader (its fallback
 # today) evaluates only the object literal, so nothing may sit before it.
@@ -194,6 +198,7 @@ module.exports = {
       }
       if (target.matches(".v-dialog__content")) return true;
       if (!target.closest(".v-dialog__content")) return false;
+      if (target.closest(".da-enter-own")) return false;
       if (target.tagName !== "INPUT") return false;
       // v-select also marks v-autocomplete, v-combobox and v-overflow-btn.
       if (target.closest(".v-select")) return false;

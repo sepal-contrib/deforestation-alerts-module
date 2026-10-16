@@ -192,6 +192,11 @@ _FIELDSET_STYLE = ("border:1px solid rgba(128,128,128,0.6);border-radius:4px;"
 _LEGEND_STYLE = "padding:0 4px;font-size:0.75rem;opacity:0.75;"
 
 
+def _probe_error(err) -> str:
+    """A probe's refusal (a message key) or failure (an exception), in the current language."""
+    return t(err["key"]) if "key" in err else error_text(err["exception"])
+
+
 def _capital(text: str) -> str:
     return text[:1].upper() + text[1:]
 
@@ -232,7 +237,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     bands_mode, set_bands_mode = solara.use_state("all" if rgb0 else "one")
     one_style, set_one_style = solara.use_state("categorical" if style0 == "categorical" else "continuous")
     classes, set_classes = solara.use_state(list(raster0.classes) if style0 == "categorical" else [])
-    class_palette, set_class_palette = solara.use_state(vis_palettes.DEFAULT_QUALITATIVE)
     band, set_band = solara.use_state(file0.band if file0 is not None and not rgb0
                                       else gee0.bands[0] if gee0 is not None and gee0.bands and not rgb0 else None)
     red, set_red = solara.use_state(raster0.bands[0] if rgb0 else None)
@@ -254,7 +258,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     saved_roles = bool(raster0 is not None and raster0.roles)
     first_load = solara.use_ref(l0 is not None)  # the first band list of an edit must not touch its bands
     error, set_error = solara.use_state(None)
-    # what the probes refused, shown under their buttons until the band changes
+    # what the probes refused, shown under their buttons until the band changes:
+    # {"key": ...} or {"exception": ...}, translated as it is drawn (_probe_error)
     stretch_error, set_stretch_error = solara.use_state(None)
     classes_error, set_classes_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
@@ -435,7 +440,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     def _on_stretched():
         if stretch_task.error:
-            set_stretch_error(error_text(stretch_task.exception))
+            set_stretch_error({"exception": stretch_task.exception})
             return
         out = stretch_task.value if stretch_task.finished else None
         if out and "span" in out:
@@ -443,7 +448,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_vmin(_number_text(round(lo, 6)))
             set_vmax(_number_text(round(hi, 6)))
         elif out and "error" in out:
-            set_stretch_error(t(out["error"]))
+            set_stretch_error({"key": out["error"]})
 
     solara.use_effect(_on_stretched, [stretch_task.pending, stretch_task.finished, stretch_task.error])
 
@@ -467,13 +472,17 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     def _on_classes():
         if classes_task.error:
-            set_classes_error(error_text(classes_task.exception))
+            set_classes_error({"exception": classes_task.exception})
             return
         out = classes_task.value if classes_task.finished else None
         if out and "values" in out:
-            set_classes(vis_classes.classes_from_values(out["values"], palette=class_palette, known=out["known"]))
+            # a new find adds the new values; the listed classes keep their
+            # colours, labels and visibility (only the palette menu repaints them)
+            palette = vis_classes.palette_of(classes) or vis_palettes.DEFAULT_QUALITATIVE
+            found = vis_classes.classes_from_values(out["values"], palette=palette, known=out["known"])
+            set_classes(vis_classes.merge_found(classes, found))
         elif out and "error" in out:
-            set_classes_error(t(out["error"]))  # the list is left as it was
+            set_classes_error({"key": out["error"]})  # the list is left as it was
 
     solara.use_effect(_on_classes, [classes_task.pending, classes_task.finished, classes_task.error])
 
@@ -482,7 +491,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         task()
 
     def _pick_palette(key):
-        set_class_palette(key)
         set_classes(vis_classes.recolor(classes, key))
 
     def _cancel_on_unmount():
@@ -548,7 +556,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                       disabled=busy or no_aoi or not ref or band is None)
         solara.Text(t("steps.layers.stretch_hint"), style=MUTED)
         if stretch_error:
-            solara.Text(stretch_error, classes=["error--text"])
+            solara.Text(_probe_error(stretch_error), classes=["error--text"])
 
     def _class_fields():
         no_aoi = p is None or p.aoi is None
@@ -557,9 +565,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                       disabled=busy or no_aoi or not ref or band is None)
         solara.Text(t("steps.layers.find_classes_hint"), style=MUTED)
         if classes_error:
-            solara.Text(classes_error, classes=["error--text"])
-        ClassList(classes=classes, on_classes=set_classes, disabled=busy, palette=class_palette)
-        PaletteMenu(value=class_palette, on_value=_pick_palette, disabled=busy or not classes)
+            solara.Text(_probe_error(classes_error), classes=["error--text"])
+        # keyed on what the classes were found for: a clear also empties "Add a value" and its error
+        ClassList(classes=classes, on_classes=set_classes, disabled=busy).key(f"classes|{kind}|{ref}|{band}")
+        PaletteMenu(value=vis_classes.palette_of(classes), on_value=_pick_palette, disabled=busy or not classes)
 
     def _legend_preview():
         draft = preview_layer(kind, style, band=band, bands=(red, green, blue), ramp=ramp, invert=invert,

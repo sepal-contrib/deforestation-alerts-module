@@ -61,3 +61,19 @@ def test_qualitative_colors_cycle_and_are_bare():
     got = vis_palettes.qualitative_colors("set2", 10)
     assert len(got) == 10 and got[8] == got[0] and all(len(c) == 6 and c == c.lower() and "#" not in c for c in got)
     assert vis_palettes.qualitative_css("paired").count("#") == 12
+
+
+def test_a_new_find_keeps_the_listed_classes_and_adds_the_new_values():
+    listed = [VisClass(value=10, color="123456", label="Forest", visible=False),
+              VisClass(value=99, color="abcdef", label="by hand")]
+    found = vc.classes_from_values([10, 20], palette="set1")
+    merged = vc.merge_found(listed, found)
+    assert merged == [listed[0], found[1], listed[1]]
+
+
+def test_palette_of_names_the_palette_the_classes_are_painted_from():
+    classes = vc.classes_from_values([1, 2, 3], palette="set1")
+    assert vc.palette_of(classes) == "set1"
+    assert vc.palette_of(vc.recolor(classes, "paired")) == "paired"
+    assert vc.palette_of([classes[0].model_copy(update={"color": "000000"}), *classes[1:]]) is None
+    assert vc.palette_of([]) is None

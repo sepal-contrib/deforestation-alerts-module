@@ -13,6 +13,7 @@ import reacton
 
 from deforestation_alerts.project.models import GeeVisLayer, VisClass
 from gui.i18n import t
+from pysepal.i18n import set_locale
 from gui.scripts import vis_palettes
 from gui.widget import vis_layer_modal as vlm
 from tests.test_vis_layers import S2_BANDS, _bands_choice, _field, _flat, _gee_modal, _settle, _with_aoi
@@ -416,8 +417,14 @@ def test_changing_the_band_clears_the_found_classes(monkeypatch):
             await _categorical(rc)
             await _find(rc)
             assert await _settle(lambda: len(_labels(rc)) == 2)
+            _field(rc, "steps.layers.class_add").v_model = "80"
+            _by_class(rc, "dv-class-add")[0].fire_event("click", None)
+            assert _field(rc, "steps.layers.class_add").error_messages
             _field(rc, "steps.layers.field_band", v.Select).v_model = "other"
             assert _labels(rc) == []
+            # "Add a value" starts over with the list
+            assert _field(rc, "steps.layers.class_add").v_model == ""
+            assert _field(rc, "steps.layers.class_add").error_messages == []
             # the old band's classes are never saved on the new band
             _field(rc, "steps.layers.field_name").v_model = "wc"
             _button(rc, "steps.layers.add").fire_event("click", None)
@@ -429,6 +436,19 @@ def test_changing_the_band_clears_the_found_classes(monkeypatch):
             assert await _settle(lambda: len(_labels(rc)) == 2)
             vlm.RasterInput.seen.asset.set({**ASSET, "asset_id": "users/x/other"})
             assert await _settle(lambda: _labels(rc) == [])
+            # and so does a new kind; "Add a value" starts empty again too
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "Map"
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            _field(rc, "steps.layers.class_add").v_model = "80"
+            _by_class(rc, "dv-class-add")[0].fire_event("click", None)
+            assert _field(rc, "steps.layers.class_add").error_messages
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            assert _labels(rc) == []
+            assert _field(rc, "steps.layers.class_add").v_model == ""
+            assert _field(rc, "steps.layers.class_add").error_messages == []
         finally:
             rc.close()
 
@@ -455,6 +475,22 @@ def test_changing_the_band_clears_the_probe_errors(monkeypatch):
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
             _field(rc, "steps.layers.field_band", v.Select).v_model = "b"
             assert not _error_shown(rc, "steps.layers.err_not_integer")
+            # a new kind clears them too
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
+            await _find(rc)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            assert not _error_shown(rc, "steps.layers.err_not_integer")
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "gee"
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            [tile] = [b for b in _style_tiles(rc) if t("steps.layers.style_continuous") in _flat(b)]
+            tile.fire_event("click", None)
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
+            _button(rc, "steps.layers.stretch").fire_event("click", None)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_no_stretch"))
+            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            assert not _error_shown(rc, "steps.layers.err_no_stretch")
         finally:
             rc.close()
 
@@ -532,3 +568,123 @@ def test_closing_during_find_classes_cancels_it(monkeypatch, caplog):
     with caplog.at_level(logging.ERROR):
         asyncio.run(main())
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
+
+def test_a_new_find_keeps_the_edits_and_adds_the_new_values(monkeypatch):
+    answers = [{"hist": {"10": 3, "80": 1}, "meta": {}}, {"hist": {"10": 1, "20": 1, "80": 1}, "meta": {}}]
+
+    async def answer(obj):
+        return answers.pop(0)
+
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], answer)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["10", "80"])
+            rc.find(v.ColorPicker).widgets[0].v_model = "#123456"
+            rc.find(v.TextField, label=t("steps.layers.class_label")).widgets[1].v_model = "Water"
+            _by_class(rc, "dv-class-hide")[1].fire_event("click", None)
+            _field(rc, "steps.layers.class_add").v_model = "99"
+            _by_class(rc, "dv-class-add")[0].fire_event("click", None)
+            assert _labels(rc) == ["10", "Water", "99"]
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["10", "20", "Water", "99"])
+            assert "#123456" in _swatches(rc)[0]  # a hand-picked colour stays
+            assert _hide_icons(rc) == ["mdi-eye", "mdi-eye", "mdi-eye-off", "mdi-eye"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_enter_in_add_a_value_adds_it_and_does_not_save(monkeypatch):
+    from gui.widget.enter_key import ENTER_OWN
+
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            field = _field(rc, "steps.layers.class_add")
+            assert ENTER_OWN in field.class_.split()  # the dialog's Enter leaves it alone (enter_key)
+            field.v_model = "7"
+            field.fire_event("keydown.enter", None)
+            assert _labels(rc) == ["Tree cover", "Water", "7"]
+            await asyncio.sleep(0.05)
+            assert open_.value is True and saved == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_probe_error_follows_a_language_switch(monkeypatch):
+    fractions = {"hist": {"0.5": 1}, "meta": {}}
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(fractions))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
+            set_locale("fr")
+            assert t("steps.layers.err_not_integer").startswith("Cette bande")
+            assert _error_shown(rc, "steps.layers.err_not_integer")
+        finally:
+            set_locale("en")
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_palette_menu_selects_the_palette_the_colours_follow(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            assert _by_class(rc, "dv-palette--selected") == []  # WorldCover's own colours follow none
+            [paired] = [b for b in _by_class(rc, "dv-palette") if t("steps.layers.palette_paired") in _flat(b)]
+            paired.fire_event("click", None)
+            [selected] = _by_class(rc, "dv-palette--selected")
+            assert t("steps.layers.palette_paired") in _flat(selected)
+            rc.find(v.ColorPicker).widgets[0].v_model = "#123456"  # a hand-picked colour: none again
+            assert _by_class(rc, "dv-palette--selected") == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_geotiff_categorical_edit_keeps_its_classes(monkeypatch, tmp_path):
+    from deforestation_alerts.project.models import FileVisLayer
+    from tests.test_vis_layers import _tif
+
+    tif = _tif(tmp_path / "lc.tif", size=10, count=2)
+    p = _with_aoi()
+    p.vis_layers = {"lc": FileVisLayer(name="lc", path=str(tif), band=2, style="categorical",
+                                       classes=[VisClass(value=1, color="aa0000", label="Forest")])}
+    state, open_, saved, gee = _gee_modal(monkeypatch, [], p)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert _labels(rc) == ["Forest"]
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            await asyncio.sleep(0.05)
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == 2
+            assert _labels(rc) == ["Forest"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())

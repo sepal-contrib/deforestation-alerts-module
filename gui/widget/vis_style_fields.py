@@ -14,6 +14,7 @@ from deforestation_alerts.project.models import VisClass
 from gui.i18n import t
 from gui.scripts import vis_classes, vis_palettes
 from gui.scripts.legend_data import LegendSpec, resolve_label
+from gui.widget.enter_key import ENTER_OWN
 from gui.widget.form_dialog import field_group
 from gui.widget.text_style import MUTED
 
@@ -127,17 +128,20 @@ def _parse_value(text):
 
 
 @solara.component
-def ClassList(classes, on_classes, disabled=False, palette=vis_palettes.DEFAULT_QUALITATIVE):
+def ClassList(classes, on_classes, disabled=False):
     """One row per class (swatch, value, label, hide toggle), then "Add a value":
-    a new class takes the palette's next colour."""
+    a new class takes the next colour of the palette the classes are painted
+    from (the default palette's when they follow none). Enter in the field adds
+    the value, never presses the form's Save."""
     added, set_added = solara.use_state("")
     add_error, set_add_error = solara.use_state(None)
+    palette = vis_classes.palette_of(classes) or vis_palettes.DEFAULT_QUALITATIVE
 
     def _update(i, **changes):
         on_classes([c.model_copy(update=changes) if j == i else c for j, c in enumerate(classes)])
 
-    def _add():
-        value = _parse_value(added)
+    def _add(text):
+        value = _parse_value(text)
         if value is None or value in {c.value for c in classes}:
             set_add_error(t("steps.layers.err_class_value"))
             return
@@ -146,37 +150,48 @@ def ClassList(classes, on_classes, disabled=False, palette=vis_palettes.DEFAULT_
         set_added("")
         set_add_error(None)
 
+    # the rows sit in their own box: a row added before "Add a value" must not
+    # take its field's widget (and with it the Enter handler, use_event below)
     with rv.Html(tag="div", class_="dv-class-list", style_="margin-top:8px;"):
-        for i, c in enumerate(classes):
-            color = f"#{vis_palettes._bare(c.color)}"
-            with rv.Html(tag="div", key=f"class{c.value}", class_="dv-class-row",
-                         style_=_CLASS_ROW + ("" if c.visible else "opacity:0.45;")):
-                swatch = solara.Button(children=[], style=_CLASS_SWATCH.format(color=color), disabled=disabled,
-                                       classes=["dv-class-swatch"])
-                with solara.lab.Menu(activator=swatch, close_on_content_click=False, use_activator_width=False):
-                    rv.ColorPicker(v_model=color, on_v_model=lambda value, i=i: _update(i, color=_bare_hex(value)),
-                                   hide_inputs=True, hide_mode_switch=True, mode="hexa")
-                rv.Html(tag="span", style_=_CLASS_VALUE, children=[str(c.value)])
-                rv.TextField(label=t("steps.layers.class_label"), v_model=c.label,
-                             on_v_model=lambda value, i=i: _update(i, label=value or ""), dense=True,
-                             hide_details=True, disabled=disabled, class_="mt-0 pt-0")
-                solara.Button(icon_name="mdi-eye" if c.visible else "mdi-eye-off", icon=True, small=True,
-                              on_click=lambda *_, i=i, shown=c.visible: _update(i, visible=not shown),
-                              disabled=disabled, classes=["dv-class-hide"])
+        with rv.Html(tag="div", key="rows"):
+            for i, c in enumerate(classes):
+                color = f"#{vis_palettes._bare(c.color)}"
+                with rv.Html(tag="div", key=f"class{c.value}", class_="dv-class-row",
+                             style_=_CLASS_ROW + ("" if c.visible else "opacity:0.45;")):
+                    swatch = solara.Button(children=[], style=_CLASS_SWATCH.format(color=color), disabled=disabled,
+                                           classes=["dv-class-swatch"])
+                    with solara.lab.Menu(activator=swatch, close_on_content_click=False, use_activator_width=False):
+                        rv.ColorPicker(v_model=color, on_v_model=lambda value, i=i: _update(i, color=_bare_hex(value)),
+                                       hide_inputs=True, hide_mode_switch=True, mode="hexa")
+                    rv.Html(tag="span", style_=_CLASS_VALUE, children=[str(c.value)])
+                    rv.TextField(label=t("steps.layers.class_label"), v_model=c.label,
+                                 on_v_model=lambda value, i=i: _update(i, label=value or ""), dense=True,
+                                 hide_details=True, disabled=disabled, class_="mt-0 pt-0")
+                    solara.Button(icon_name="mdi-eye" if c.visible else "mdi-eye-off", icon=True, small=True,
+                                  on_click=lambda *_, i=i, shown=c.visible: _update(i, visible=not shown),
+                                  disabled=disabled, classes=["dv-class-hide"])
         with rv.Html(tag="div", key="add", style_=_CLASS_ROW):
-            rv.TextField(label=t("steps.layers.class_add"), v_model=added, on_v_model=set_added, type="number",
-                         dense=True, disabled=disabled or len(classes) >= vis_classes.MAX_CLASSES,
-                         error_messages=[add_error] if add_error else [], style_="max-width:12em;")
-            solara.Button(icon_name="mdi-plus", icon=True, small=True, on_click=_add,
+            field = rv.TextField(label=t("steps.layers.class_add"), v_model=added, on_v_model=set_added,
+                                 type="number", dense=True, class_=ENTER_OWN,
+                                 disabled=disabled or len(classes) >= vis_classes.MAX_CLASSES,
+                                 error_messages=[add_error] if add_error else [], style_="max-width:12em;")
+            # the widget's own value: the Enter may be handled before the typed text re-renders
+            rv.use_event(field, "keydown.enter", lambda widget, *_: _add(widget.v_model))
+            solara.Button(icon_name="mdi-plus", icon=True, small=True, on_click=lambda *_: _add(added),
                           disabled=disabled or len(classes) >= vis_classes.MAX_CLASSES, classes=["dv-class-add"])
 
 
 @solara.component
 def PaletteMenu(value, on_value, disabled=False):
-    """The qualitative palettes, each as its colour bar and name; a pick recolours every class."""
+    """The qualitative palettes, each as its colour bar and name; a pick recolours
+    every class. ``value`` is None when the classes follow no palette (their own
+    or hand-picked colours): then no palette is selected."""
+    bar = (_PALETTE_BAR.format(gradient=vis_palettes.qualitative_css(value)) if value is not None
+           else "display:none;")
+    text = t("steps.layers.palette_menu")
     activator = solara.Button(
-        children=[rv.Html(tag="span", style_=_PALETTE_BAR.format(gradient=vis_palettes.qualitative_css(value))),
-                  f"{t('steps.layers.palette_menu')}: {t(f'steps.layers.palette_{value}')}"],
+        children=[rv.Html(tag="span", style_=bar),
+                  f"{text}: {t(f'steps.layers.palette_{value}')}" if value is not None else text],
         icon_name="mdi-palette", outlined=True, small=True, disabled=disabled, classes=["dv-palette-menu"])
     with solara.lab.Menu(activator=activator, use_activator_width=False):
         with rv.List(dense=True):

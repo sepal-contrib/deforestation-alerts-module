@@ -39,6 +39,25 @@ def recolor(classes, palette: str) -> List[VisClass]:
     return [c.model_copy(update={"color": colors[i]}) for i, c in enumerate(classes)]
 
 
+def merge_found(classes, found) -> List[VisClass]:
+    """A new find merged into the listed classes, sorted by value: a listed
+    class keeps its colour, label and visibility; a found value not listed
+    comes from ``found``; a listed value not found (added by hand) stays."""
+    listed = {c.value: c for c in classes}
+    merged = {c.value: listed.get(c.value, c) for c in found}
+    merged.update({c.value: c for c in classes if c.value not in merged})
+    return [merged[v] for v in sorted(merged)]
+
+
+def palette_of(classes) -> Optional[str]:
+    """The qualitative palette the classes are painted from in list order, or None."""
+    if not classes:
+        return None
+    colors = [_bare(c.color) for c in classes]
+    return next((k for k in vis_palettes.QUALITATIVE
+                 if vis_palettes.qualitative_colors(k, len(classes)) == colors), None)
+
+
 def visible_classes(classes) -> List[VisClass]:
     return sorted((c for c in classes if c.visible), key=lambda c: c.value)
 
