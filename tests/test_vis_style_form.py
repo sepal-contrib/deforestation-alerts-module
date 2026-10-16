@@ -414,6 +414,31 @@ def test_the_custom_card_shows_its_hand_picked_bands(monkeypatch):
     asyncio.run(main())
 
 
+def test_the_band_selects_carry_their_colour_dot_as_a_class(monkeypatch):
+    """The dot is a CSS ``::before`` on the select's label, not a label slot: a
+    slot's content is dropped once the select is picked from in the browser."""
+    from gui.widget.vis_style_fields import CHANNEL_COLORS, CHANNEL_CSS
+
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _rgb_form(rc)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            for i, key in enumerate(("steps.layers.field_red", "steps.layers.field_green", "steps.layers.field_blue")):
+                select = _field(rc, key, v.Select)
+                assert f"dv-channel-{i}" in (select.class_ or "").split() and not select.v_slots
+                assert f".dv-channel-{i} .v-label::before" in CHANNEL_CSS and CHANNEL_COLORS[i] in CHANNEL_CSS
+            assert any(CHANNEL_CSS in t.template for t in rc.find(v.VuetifyTemplate).widgets)  # shipped with the form
+            # a long combination name wraps inside its card instead of running into the next one
+            assert "white-space:normal" in _combo_card(rc, "false_color").children[0].children[0].style_
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_the_custom_card_names_its_bands_like_the_others():
     from gui.widget.vis_style_fields import CompositeCards
 

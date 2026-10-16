@@ -83,8 +83,15 @@ _COMBO_CHIPS = "display:flex;gap:3px;margin-top:4px;width:100%;"
 _COMBO_CHIP = ("flex:1;text-align:center;font-size:0.6875rem;font-weight:600;border-radius:3px;padding:2px 0;"
                "color:#fff;overflow:hidden;text-overflow:ellipsis;background:{color};")
 _COMBO_OFF = "opacity:.4;"
+_COMBO_NAME = "display:block;white-space:normal;line-height:1.25;"  # a long name wraps inside its card
 CHANNEL_COLORS = ("#e53935", "#43a047", "#1e88e5")  # the red, green and blue chips and dots
-_DOT = "display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:{color};"
+# The dot that labels a red, green or blue band select (class ``dv-channel-N``):
+# drawn by CSS before the label, as a label slot loses its content in the
+# browser once the select is picked from.
+CHANNEL_CSS = " ".join(
+    f".dv-channel-{i} .v-label::before{{content:'';display:inline-block;width:10px;height:10px;"
+    f"border-radius:50%;margin-right:6px;vertical-align:baseline;background:{color};}}"
+    for i, color in enumerate(CHANNEL_COLORS))
 _ROLES_LINE = "font-size:0.8125rem;opacity:0.85;"
 _LINK = ("text-transform:none;letter-spacing:normal;padding:0 2px;min-width:0;height:auto;"
          "text-decoration:underline;vertical-align:baseline;")
@@ -94,9 +101,10 @@ def _capital(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def channel_dot(channel: int):
-    """The red (0), green (1) or blue (2) dot that labels a band select."""
-    return rv.Html(tag="span", style_=_DOT.format(color=CHANNEL_COLORS[channel]))
+def channel_class(channel: int) -> str:
+    """The class that puts the red (0), green (1) or blue (2) dot before a band
+    select's label (``CHANNEL_CSS``)."""
+    return f"dv-channel-{channel}"
 
 
 @solara.component
@@ -114,7 +122,7 @@ def CompositeCards(combo, on_combo, roles, band_text, custom=(None, None, None),
                      for i, name in enumerate(names)]
             solara.Button(
                 children=[rv.Html(tag="span", style_="display:block;width:100%;", children=[
-                    rv.Html(tag="span", children=[_capital(t(f"steps.layers.combo_{key}"))]),
+                    rv.Html(tag="span", style_=_COMBO_NAME, children=[_capital(t(f"steps.layers.combo_{key}"))]),
                     rv.Html(tag="span", style_=_COMBO_CHIPS, children=chips)])],
                 on_click=lambda *_, k=key: on_combo(k), disabled=disabled or off, text=True,
                 style=_RAMP_CARD + (_RAMP_CARD_SELECTED if key == combo else "") + (_COMBO_OFF if off else ""),

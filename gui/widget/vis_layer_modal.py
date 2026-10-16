@@ -35,8 +35,8 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
-    _RAMP_BAR, _RAMP_GRID, BandsChoice, ClassList, CompositeCards, LegendPreview, PaletteMenu, RolesSummary,
-    StyleTiles, card_button, channel_dot,
+    _RAMP_BAR, _RAMP_GRID, CHANNEL_CSS, BandsChoice, ClassList, CompositeCards, LegendPreview, PaletteMenu,
+    RolesSummary, StyleTiles, card_button, channel_class,
 )
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
@@ -531,10 +531,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
 
     def _band_select(label, value, on_value, channel=None):
-        # an RGB band's label leads with its colour dot (the label slot; ``label`` stays for screen readers)
-        slots = [{"name": "label", "children": [channel_dot(channel), label]}] if channel is not None else []
+        # an RGB band's label leads with its colour dot (CHANNEL_CSS)
         rv.Select(label=label, items=band_items, v_model=value, on_v_model=on_value, dense=True, outlined=True,
-                  loading=bands_task.pending, disabled=busy, v_slots=slots)
+                  loading=bands_task.pending, disabled=busy,
+                  class_=channel_class(channel) if channel is not None else "")
 
     def _range_fields():
         with rv.Row(dense=True):
@@ -599,6 +599,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
+        # with the form, not the band selects: the outlined label's notch is
+        # measured when a select mounts, so the dot's rule must be loaded by then
+        solara.Style(CHANNEL_CSS)
         rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
                   items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
                   dense=True, outlined=True, disabled=busy)
