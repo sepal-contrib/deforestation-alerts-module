@@ -104,6 +104,8 @@ SAME_IN = {
         "workflow.count_questions.other", "analysis_tile.sections.questions",
         # "timelapse" is the word French uses (the plan's own translation).
         "analysis_tile.export_labels.tile_gif",
+        # "classes" is the same word in French.
+        "steps.layers.summary_classes.other",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
@@ -112,6 +114,7 @@ SAME_IN = {
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
         "steps.prepare.col_download", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
         "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
+        "steps.layers.summary_classes.other",  # "classes" is the same word
         # "timelapse" is the word Brazilian Portuguese uses.
         "analysis_tile.export_labels.tile_gif",
     },

@@ -181,6 +181,11 @@
       "kind_file": "GeoTIFF",
       "kind_nicfi": "Planet NICFI",
       "summary_band": "banda {band}",
+      "summary_classes": {
+        "one": "{count} clase",
+        "many": "{count} de clases",
+        "other": "{count} clases"
+      },
       "name_empty": "Pon un nombre a la capa.",
       "name_too_long": "Como máximo 24 caracteres.",
       "name_duplicate": "Ya existe una capa con este nombre.",

@@ -181,6 +181,11 @@
       "kind_file": "GeoTIFF",
       "kind_nicfi": "Planet NICFI",
       "summary_band": "bande {band}",
+      "summary_classes": {
+        "one": "{count} classe",
+        "many": "{count} de classes",
+        "other": "{count} classes"
+      },
       "name_empty": "Donnez un nom à la couche.",
       "name_too_long": "Au plus 24 caractères.",
       "name_duplicate": "Une couche avec ce nom existe déjà.",
