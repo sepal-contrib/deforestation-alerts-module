@@ -236,3 +236,299 @@ def test_preview_layer():
     assert vlm.preview_layer("gee", "categorical", **{**kw, "classes": hidden}) is None
     shown = [VisClass(value=1, color="aa0000")]
     assert vlm.preview_layer("gee", "categorical", **{**kw, "classes": shown, "vmax": ""}).classes == shown
+
+
+# ---------------------------------------------------------------- the Categorical fields
+WORLDCOVER = {"hist": {"10": 3, "80": 1},
+              "meta": {"Map_class_values": [10, 20, 80], "Map_class_palette": ["006400", "ffbb22", "0064c8"],
+                       "Map_class_names": ["Tree cover", "Shrubland", "Water"]}}
+
+
+def _probing(monkeypatch, bands, classes_answer=None, stretch_answer=None, p=None):
+    """An Earth Engine form whose find-classes and stretch requests are answered by the given coroutines."""
+    state, open_, saved, _ = _gee_modal(monkeypatch, bands, p)
+    monkeypatch.setattr(vlm.vis_probes, "classes_request",
+                        lambda asset, band, bounds: ("CLASSES", asset, band, tuple(bounds)))
+    monkeypatch.setattr(vlm.vis_probes, "stretch_request",
+                        lambda asset, bs, bounds: ("STRETCH", asset, tuple(bs), tuple(bounds)))
+
+    async def get_info_async(obj):
+        if isinstance(obj, tuple) and obj[0] == "CLASSES":
+            return await classes_answer(obj)
+        if isinstance(obj, tuple) and obj[0] == "STRETCH":
+            return await stretch_answer(obj)
+        return bands
+
+    return state, open_, saved, SimpleNamespace(get_info_async=get_info_async)
+
+
+def _answer(info, asked=None):
+    async def answer(obj):
+        if asked is not None:
+            asked.append(obj)
+        return info
+
+    return answer
+
+
+def _by_class(rc, cls, widget=v.Btn):
+    return [w for w in rc.find(widget).widgets if cls in (w.class_ or "").split()]
+
+
+def _labels(rc):
+    return [f.v_model for f in rc.find(v.TextField, label=t("steps.layers.class_label")).widgets]
+
+
+def _swatches(rc):
+    return [b.style_ for b in _by_class(rc, "dv-class-swatch")]
+
+
+def _hide_icons(rc):
+    return [b.children[0].children[0] for b in _by_class(rc, "dv-class-hide")]
+
+
+def _error_shown(rc, key):
+    return bool(rc.find(v.Html, class_="error--text", children=[t(key)]).widgets)
+
+
+async def _categorical(rc, band="Map"):
+    """Pick the Categorical tile and ``band`` once the band list is in."""
+    vlm.RasterInput.seen.asset.set(ASSET)
+    assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) >= 1)
+    [tile] = [b for b in _style_tiles(rc) if t("steps.layers.style_categorical") in _flat(b)]
+    tile.fire_event("click", None)
+    _field(rc, "steps.layers.field_band", v.Select).v_model = band
+
+
+async def _find(rc):
+    _button(rc, "steps.layers.find_classes").fire_event("click", None)
+
+
+def test_find_classes_lists_worldcover_with_its_names(monkeypatch):
+    asked = []
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER, asked))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            assert not rc.find(v.TextField, label=t("steps.layers.field_min")).widgets  # no range for classes
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["Tree cover", "Water"])
+            assert ["#006400" in s for s in _swatches(rc)] == [True, False]
+            assert "#0064c8" in _swatches(rc)[1]
+            assert asked == [("CLASSES", "users/x/img", "Map", tuple(state.project.value.aoi.bounds))]
+            chips = _flat(_preview(rc))
+            assert "Tree cover" in chips and "Water" in chips
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_hidden_class_and_a_renamed_label_are_saved(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            _by_class(rc, "dv-class-hide")[1].fire_event("click", None)
+            assert _hide_icons(rc) == ["mdi-eye", "mdi-eye-off"]
+            rc.find(v.TextField, label=t("steps.layers.class_label")).widgets[0].v_model = "Forest"
+            _field(rc, "steps.layers.field_name").v_model = "wc"
+            _button(rc, "steps.layers.add").fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [(layer, _prev)] = saved
+            assert layer.style == "categorical" and layer.bands == ["Map"]
+            assert layer.classes == [VisClass(value=10, color="006400", label="Forest"),
+                                     VisClass(value=80, color="0064c8", label="Water", visible=False)]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_palette_menu_recolors_every_class(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            items = _by_class(rc, "dv-palette")
+            assert [_flat(b).strip() for b in items] == [t(f"steps.layers.palette_{k}")
+                                                         for k in vis_palettes.QUALITATIVE]
+            [paired] = [b for b in items if t("steps.layers.palette_paired") in _flat(b)]
+            paired.fire_event("click", None)
+            want = vis_palettes.qualitative_colors("paired", 2)
+            assert [f"#{c}" in s for c, s in zip(want, _swatches(rc))] == [True, True]
+            assert _labels(rc) == ["Tree cover", "Water"]  # labels stay
+            # the swatch's colour picker writes back bare hex, alpha dropped
+            picker = rc.find(v.ColorPicker).widgets[0]
+            picker.v_model = "#AA00BBFF"
+            assert "#aa00bb" in _swatches(rc)[0]
+            assert rc.find(v.ColorPicker).widgets[0].v_model == "#aa00bb"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_add_a_value_refuses_a_duplicate_and_appends_a_new_one(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            field = _field(rc, "steps.layers.class_add")
+            [add] = _by_class(rc, "dv-class-add")
+            for text in ("80", "2.5", ""):
+                field.v_model = text
+                add.fire_event("click", None)
+                assert _field(rc, "steps.layers.class_add").error_messages == [t("steps.layers.err_class_value")]
+                assert len(_labels(rc)) == 2
+            _field(rc, "steps.layers.class_add").v_model = "5"
+            add.fire_event("click", None)
+            assert _labels(rc) == ["Tree cover", "Water", "5"]
+            assert f"#{vis_palettes.qualitative_colors('set1', 3)[2]}" in _swatches(rc)[2]
+            assert _field(rc, "steps.layers.class_add").error_messages == []
+            assert _field(rc, "steps.layers.class_add").v_model == ""
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_changing_the_band_clears_the_found_classes(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map", "other"], _answer(WORLDCOVER))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "other"
+            assert _labels(rc) == []
+            # the old band's classes are never saved on the new band
+            _field(rc, "steps.layers.field_name").v_model = "wc"
+            _button(rc, "steps.layers.add").fire_event("click", None)
+            assert await _settle(lambda: rc.find(v.Html, children=[t("steps.layers.err_no_classes")]).widgets)
+            assert saved == []
+            # and a new raster clears them too
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "Map"
+            await _find(rc)
+            assert await _settle(lambda: len(_labels(rc)) == 2)
+            vlm.RasterInput.seen.asset.set({**ASSET, "asset_id": "users/x/other"})
+            assert await _settle(lambda: _labels(rc) == [])
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_changing_the_band_clears_the_probe_errors(monkeypatch):
+    fractions = {"hist": {"0.5": 1, "1": 2}, "meta": {}}
+    no_spread = {"a_p2": 3, "a_p98": 3}
+    state, open_, saved, gee = _probing(monkeypatch, ["a", "b"], _answer(fractions), _answer(no_spread))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
+            _button(rc, "steps.layers.stretch").fire_event("click", None)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_no_stretch"))
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "b"
+            assert not _error_shown(rc, "steps.layers.err_no_stretch")
+            await _categorical(rc, band="a")
+            await _find(rc)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "b"
+            assert not _error_shown(rc, "steps.layers.err_not_integer")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _categorical_edit():
+    p = _with_aoi()
+    p.vis_layers = {"lc": GeeVisLayer(name="lc", asset="users/x/img", bands=["Map"], style="categorical",
+                                      classes=[VisClass(value=1, color="aa0000", label="Forest"),
+                                               VisClass(value=2, color="00aa00", label="Crops", visible=False)])}
+    return p
+
+
+def test_an_edit_opens_with_its_classes(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], p=_categorical_edit())
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert _labels(rc) == ["Forest", "Crops"]
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
+            await asyncio.sleep(0.05)
+            assert _labels(rc) == ["Forest", "Crops"]  # the first band load keeps them
+            assert _hide_icons(rc) == ["mdi-eye", "mdi-eye-off"]
+            assert ["#aa0000" in s for s in _swatches(rc)] == [True, False]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_band_with_fractions_says_so_inline(monkeypatch):
+    fractions = {"hist": {"0.5": 1, "1": 2}, "meta": {}}
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(fractions), p=_categorical_edit())
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
+            await _find(rc)
+            assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
+            assert _labels(rc) == ["Forest", "Crops"]  # the list is left unchanged
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_closing_during_find_classes_cancels_it(monkeypatch, caplog):
+    asked, done, release = [], [], asyncio.Event()
+
+    async def answer(obj):
+        asked.append(obj)
+        await release.wait()
+        done.append(obj)
+        return WORLDCOVER
+
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], answer)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc)
+            await _find(rc)
+            assert await _settle(lambda: len(asked) == 1)
+            assert _field(rc, "steps.layers.field_band", v.Select).disabled is True  # frozen while it runs
+            open_.set(False)
+            release.set()
+            await asyncio.sleep(0.1)
+            assert done == [] and saved == []
+        finally:
+            rc.close()
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(main())
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []

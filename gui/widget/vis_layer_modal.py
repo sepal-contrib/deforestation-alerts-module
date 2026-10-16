@@ -35,7 +35,7 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
-    _RAMP_BAR, _RAMP_GRID, BandsChoice, LegendPreview, StyleTiles, card_button,
+    _RAMP_BAR, _RAMP_GRID, BandsChoice, ClassList, LegendPreview, PaletteMenu, StyleTiles, card_button,
 )
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
@@ -232,6 +232,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     bands_mode, set_bands_mode = solara.use_state("all" if rgb0 else "one")
     one_style, set_one_style = solara.use_state("categorical" if style0 == "categorical" else "continuous")
     classes, set_classes = solara.use_state(list(raster0.classes) if style0 == "categorical" else [])
+    class_palette, set_class_palette = solara.use_state(vis_palettes.DEFAULT_QUALITATIVE)
     band, set_band = solara.use_state(file0.band if file0 is not None and not rgb0
                                       else gee0.bands[0] if gee0 is not None and gee0.bands and not rgb0 else None)
     red, set_red = solara.use_state(raster0.bands[0] if rgb0 else None)
@@ -253,6 +254,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     saved_roles = bool(raster0 is not None and raster0.roles)
     first_load = solara.use_ref(l0 is not None)  # the first band list of an edit must not touch its bands
     error, set_error = solara.use_state(None)
+    # what the probes refused, shown under their buttons until the band changes
+    stretch_error, set_stretch_error = solara.use_state(None)
+    classes_error, set_classes_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
 
     def _set_kind(value):
@@ -319,6 +323,20 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_combo(first[0])
 
     solara.use_effect(_guess_roles, [tuple(i["value"] for i in band_items)])
+
+    probed = solara.use_ref((kind, ref, band))  # what the classes and the probe errors were found for
+
+    def _clear_probes():
+        # classes found on one band are never kept on another band, raster or
+        # kind; an edit opens on its own (kind, ref, band), so keeps its classes
+        if probed.current == (kind, ref, band):
+            return
+        probed.current = (kind, ref, band)
+        set_classes([])
+        set_classes_error(None)
+        set_stretch_error(None)
+
+    solara.use_effect(_clear_probes, [kind, ref, band])
 
     def _set_role(role, value):
         updated = {k: v for k, v in {**roles, role: value}.items() if v is not None}
@@ -416,20 +434,63 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     stretch_task = solara.lab.use_task(_stretch, dependencies=None, prefer_threaded=False, raise_error=False)
 
     def _on_stretched():
+        if stretch_task.error:
+            set_stretch_error(error_text(stretch_task.exception))
+            return
         out = stretch_task.value if stretch_task.finished else None
         if out and "span" in out:
             lo, hi = out["span"]
             set_vmin(_number_text(round(lo, 6)))
             set_vmax(_number_text(round(hi, 6)))
+        elif out and "error" in out:
+            set_stretch_error(t(out["error"]))
 
-    solara.use_effect(_on_stretched, [stretch_task.pending, stretch_task.finished])
+    solara.use_effect(_on_stretched, [stretch_task.pending, stretch_task.finished, stretch_task.error])
+
+    async def _find_classes():
+        # the band's values over the AOI's bounds, with its *_class_* names (gui/scripts/vis_probes)
+        live = app_state.project.value
+        scope = _scope(live)
+        if live is None or live.aoi is None or not ref or band is None:
+            return None
+        bounds = live.aoi.bounds
+        if kind == "gee":
+            info = await gee_interface.get_info_async(vis_probes.classes_request(ref, band, bounds))
+            out = vis_probes.classes_from_info(info, band)
+        else:
+            out = await asyncio.to_thread(vis_probes.file_classes, ref, band_index(band), bounds)
+        if not open_.value or _scope(app_state.project.value) != scope:
+            return None  # closed, or the project or its AOI changed: the classes are dropped
+        return out
+
+    classes_task = solara.lab.use_task(_find_classes, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _on_classes():
+        if classes_task.error:
+            set_classes_error(error_text(classes_task.exception))
+            return
+        out = classes_task.value if classes_task.finished else None
+        if out and "values" in out:
+            set_classes(vis_classes.classes_from_values(out["values"], palette=class_palette, known=out["known"]))
+        elif out and "error" in out:
+            set_classes_error(t(out["error"]))  # the list is left as it was
+
+    solara.use_effect(_on_classes, [classes_task.pending, classes_task.finished, classes_task.error])
+
+    def _start_probe(task, set_probe_error):
+        set_probe_error(None)
+        task()
+
+    def _pick_palette(key):
+        set_class_palette(key)
+        set_classes(vis_classes.recolor(classes, key))
 
     def _cancel_on_unmount():
         def cleanup():
             # closing the dialog (ESC, Cancel) unmounts this form, and use_task
             # does not cancel on unmount: stop a check still running, or it
             # would save the layer the user just cancelled; stop a probe too
-            for task in (validation, stretch_task):
+            for task in (validation, stretch_task, classes_task):
                 if task.pending:
                     try:
                         task.cancel()
@@ -440,7 +501,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     solara.use_effect(_cancel_on_unmount, [])
     # fields are frozen while their values are being checked or probed
-    busy = validation.pending or stretch_task.pending
+    busy = validation.pending or stretch_task.pending or classes_task.pending
 
     def _submit():
         if submitted.current:
@@ -483,14 +544,22 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _stretch_fields():
         no_aoi = p is None or p.aoi is None
         solara.Button(label=t("steps.layers.stretch"), icon_name="mdi-arrow-expand-horizontal",
-                      on_click=lambda: stretch_task(), outlined=True, small=True,
+                      on_click=lambda: _start_probe(stretch_task, set_stretch_error), outlined=True, small=True,
                       disabled=busy or no_aoi or not ref or band is None)
         solara.Text(t("steps.layers.stretch_hint"), style=MUTED)
-        out = stretch_task.value if stretch_task.finished else None
-        if out and "error" in out:
-            solara.Text(t(out["error"]), classes=["error--text"])
-        elif stretch_task.error:
-            solara.Text(error_text(stretch_task.exception), classes=["error--text"])
+        if stretch_error:
+            solara.Text(stretch_error, classes=["error--text"])
+
+    def _class_fields():
+        no_aoi = p is None or p.aoi is None
+        solara.Button(label=t("steps.layers.find_classes"), icon_name="mdi-magnify",
+                      on_click=lambda: _start_probe(classes_task, set_classes_error), outlined=True, small=True,
+                      disabled=busy or no_aoi or not ref or band is None)
+        solara.Text(t("steps.layers.find_classes_hint"), style=MUTED)
+        if classes_error:
+            solara.Text(classes_error, classes=["error--text"])
+        ClassList(classes=classes, on_classes=set_classes, disabled=busy, palette=class_palette)
+        PaletteMenu(value=class_palette, on_value=_pick_palette, disabled=busy or not classes)
 
     def _legend_preview():
         draft = preview_layer(kind, style, band=band, bands=(red, green, blue), ramp=ramp, invert=invert,
@@ -552,6 +621,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                     _ramp_fields()
                     _range_fields()
                     _stretch_fields()
+                else:
+                    _class_fields()
                 _legend_preview()
         else:
             rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,

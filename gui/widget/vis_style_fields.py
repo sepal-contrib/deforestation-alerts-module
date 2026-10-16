@@ -1,7 +1,8 @@
 """The visualization form's style fields (gui/widget/vis_layer_modal): the
 Bands question (keep every band for an RGB composite, or draw one), the Style
-tiles of a one-band layer (Continuous or Categorical), and the legend preview
-that ends a style's fields.
+tiles of a one-band layer (Continuous or Categorical), a Categorical layer's
+class list and palette menu, and the legend preview that ends a style's
+fields.
 """
 
 from typing import Optional
@@ -9,8 +10,9 @@ from typing import Optional
 import reacton.ipyvuetify as rv
 import solara
 
+from deforestation_alerts.project.models import VisClass
 from gui.i18n import t
-from gui.scripts import vis_palettes
+from gui.scripts import vis_classes, vis_palettes
 from gui.scripts.legend_data import LegendSpec, resolve_label
 from gui.widget.form_dialog import field_group
 from gui.widget.text_style import MUTED
@@ -99,3 +101,89 @@ def LegendPreview(spec: LegendSpec, mid: Optional[str] = None):
         else:
             for text in labels:
                 solara.Text(text, style=MUTED)
+
+
+# The class rows: a swatch (its colour picker in a menu), the value, the label
+# and the hide toggle; a hidden class is dimmed, as it is drawn transparent.
+_CLASS_ROW = "display:flex;align-items:center;gap:8px;"
+_CLASS_SWATCH = ("min-width:22px;width:22px;height:22px;padding:0;border-radius:4px;"
+                 "border:1px solid rgba(0,0,0,0.25);background:{color} !important;")
+_CLASS_VALUE = "min-width:3em;text-align:right;font-variant-numeric:tabular-nums;"
+_PALETTE_BAR = "display:inline-block;width:72px;height:12px;border-radius:2px;margin-right:8px;background:{gradient};"
+
+
+def _bare_hex(value: str) -> str:
+    """A picker's ``#rrggbb[aa]`` as stored: six lowercase digits, no ``#``, alpha dropped."""
+    return vis_palettes._bare(value)[:6]
+
+
+def _parse_value(text):
+    """The integer typed in "Add a value", or None when it is not a whole number."""
+    try:
+        number = float(str(text).strip())
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else None
+
+
+@solara.component
+def ClassList(classes, on_classes, disabled=False, palette=vis_palettes.DEFAULT_QUALITATIVE):
+    """One row per class (swatch, value, label, hide toggle), then "Add a value":
+    a new class takes the palette's next colour."""
+    added, set_added = solara.use_state("")
+    add_error, set_add_error = solara.use_state(None)
+
+    def _update(i, **changes):
+        on_classes([c.model_copy(update=changes) if j == i else c for j, c in enumerate(classes)])
+
+    def _add():
+        value = _parse_value(added)
+        if value is None or value in {c.value for c in classes}:
+            set_add_error(t("steps.layers.err_class_value"))
+            return
+        color = vis_palettes.qualitative_colors(palette, len(classes) + 1)[-1]
+        on_classes([*classes, VisClass(value=value, color=color, label=str(value))])
+        set_added("")
+        set_add_error(None)
+
+    with rv.Html(tag="div", class_="dv-class-list", style_="margin-top:8px;"):
+        for i, c in enumerate(classes):
+            color = f"#{vis_palettes._bare(c.color)}"
+            with rv.Html(tag="div", key=f"class{c.value}", class_="dv-class-row",
+                         style_=_CLASS_ROW + ("" if c.visible else "opacity:0.45;")):
+                swatch = solara.Button(children=[], style=_CLASS_SWATCH.format(color=color), disabled=disabled,
+                                       classes=["dv-class-swatch"])
+                with solara.lab.Menu(activator=swatch, close_on_content_click=False, use_activator_width=False):
+                    rv.ColorPicker(v_model=color, on_v_model=lambda value, i=i: _update(i, color=_bare_hex(value)),
+                                   hide_inputs=True, hide_mode_switch=True, mode="hexa")
+                rv.Html(tag="span", style_=_CLASS_VALUE, children=[str(c.value)])
+                rv.TextField(label=t("steps.layers.class_label"), v_model=c.label,
+                             on_v_model=lambda value, i=i: _update(i, label=value or ""), dense=True,
+                             hide_details=True, disabled=disabled, class_="mt-0 pt-0")
+                solara.Button(icon_name="mdi-eye" if c.visible else "mdi-eye-off", icon=True, small=True,
+                              on_click=lambda *_, i=i, shown=c.visible: _update(i, visible=not shown),
+                              disabled=disabled, classes=["dv-class-hide"])
+        with rv.Html(tag="div", key="add", style_=_CLASS_ROW):
+            rv.TextField(label=t("steps.layers.class_add"), v_model=added, on_v_model=set_added, type="number",
+                         dense=True, disabled=disabled or len(classes) >= vis_classes.MAX_CLASSES,
+                         error_messages=[add_error] if add_error else [], style_="max-width:12em;")
+            solara.Button(icon_name="mdi-plus", icon=True, small=True, on_click=_add,
+                          disabled=disabled or len(classes) >= vis_classes.MAX_CLASSES, classes=["dv-class-add"])
+
+
+@solara.component
+def PaletteMenu(value, on_value, disabled=False):
+    """The qualitative palettes, each as its colour bar and name; a pick recolours every class."""
+    activator = solara.Button(
+        children=[rv.Html(tag="span", style_=_PALETTE_BAR.format(gradient=vis_palettes.qualitative_css(value))),
+                  f"{t('steps.layers.palette_menu')}: {t(f'steps.layers.palette_{value}')}"],
+        icon_name="mdi-palette", outlined=True, small=True, disabled=disabled, classes=["dv-palette-menu"])
+    with solara.lab.Menu(activator=activator, use_activator_width=False):
+        with rv.List(dense=True):
+            for key in vis_palettes.QUALITATIVE:
+                solara.Button(
+                    children=[rv.Html(tag="span", style_=_PALETTE_BAR.format(
+                        gradient=vis_palettes.qualitative_css(key))), t(f"steps.layers.palette_{key}")],
+                    text=True, on_click=lambda *_, k=key: on_value(k), disabled=disabled,
+                    style="display:flex;justify-content:flex-start;width:100%;text-transform:none;",
+                    classes=["dv-palette"] + (["dv-palette--selected"] if key == value else []))
