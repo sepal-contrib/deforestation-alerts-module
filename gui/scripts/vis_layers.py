@@ -75,6 +75,16 @@ def ee_vis_params(layer) -> dict:
     return vis
 
 
+def effective_style(layer) -> Optional[str]:
+    """The layer's drawing style: the saved one, else read from the band count as
+    layers saved before styles were drawn. None for a NICFI basemap."""
+    if layer.kind == "nicfi":
+        return None
+    if layer.style is not None:
+        return layer.style
+    return "rgb" if len(layer.bands) == 3 else "continuous"
+
+
 def folder_writable(path) -> bool:
     """Whether the ``.ovr`` sidecar of ``path`` can be written next to it."""
     return os.access(Path(path).parent, os.W_OK)
