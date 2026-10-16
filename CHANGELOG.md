@@ -38,7 +38,7 @@
       band roles detected) or from bands picked by hand. **Stretch to the
       AOI** fills the minimum and maximum from the 2–98 % percentiles over
       the AOI's bounds (for RGB, one range across the three bands). Layers
-      saved before keep their exact look.
+      saved before this version keep their exact look.
   - Period: **several monitoring periods** (typically one a month, dates
     included at both ends), each with its own alert sets, listed with their
     window, sets and out-of-date badges; new, edit and delete follow the

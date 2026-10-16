@@ -198,3 +198,28 @@ def test_the_categorical_summary_counts_visible_classes():
                                              classes=classes)) == "band Map · 5 classes"
     assert vl.vis_layers_summary(FileVisLayer(name="c", path="/x.tif", band=2, style="categorical",
                                               classes=classes[4:])) == "band 2 · 1 class"
+
+
+def _part_names_of_two_threads(monkeypatch, module, build):
+    """The ``.part`` names ``build`` writes through ``module.os.replace``, run
+    from this thread and then a worker (both alive, so their idents differ)."""
+    import threading
+
+    seen, real = [], module.os.replace
+
+    def replace(src, dst):
+        seen.append(str(src))
+        real(src, dst)
+
+    monkeypatch.setattr(module.os, "replace", replace)
+    build()
+    worker = threading.Thread(target=build)
+    worker.start()
+    worker.join()
+    return seen
+
+
+def test_two_threads_write_the_categorical_vrt_through_their_own_part_file(tmp_path, monkeypatch):
+    tif = _tif(tmp_path / "c.tif", [[0, 10], [20, 80]])
+    seen = _part_names_of_two_threads(monkeypatch, vl, lambda: vl.categorical_vrt(tif, 1, CLASSES))
+    assert len(seen) == 2 and len(set(seen)) == 2

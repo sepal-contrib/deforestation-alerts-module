@@ -104,6 +104,8 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
             return {"error": "steps.layers.err_no_classes"}
         if len(set(values)) != len(values):
             return {"error": "steps.layers.err_duplicate_class"}
+        if len(values) > vis_classes.MAX_CLASSES:
+            return {"error": "steps.layers.err_class_limit"}
         if not any(c.visible for c in classes):
             return {"error": "steps.layers.err_no_visible_class"}
         classes = [c.model_copy(update={"color": vis_palettes._bare(c.color)}) for c in classes]

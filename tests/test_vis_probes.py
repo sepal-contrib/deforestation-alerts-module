@@ -111,3 +111,36 @@ def test_the_file_sample_is_cut_to_the_aoi(tmp_path):
     data[:, 50:] = 9  # the east half, west edge at -54.95
     path = _tif(tmp_path / "f.tif", data)
     assert vp.file_classes(path, 1, (-56.0, -26.0, -54.96, -24.0)) == {"values": [0], "known": None}
+
+
+# The histogram comes back trimmed: its size ``n`` and at most MAX_CLASSES + 1 keys.
+@pytest.mark.parametrize("info, key", [
+    ({"n": 291_752, "hist": {"0": 1, "0.0012": 2, "0.0049": 1}, "meta": {}}, "steps.layers.err_not_integer"),
+    ({"n": 60, "hist": {str(i): 1 for i in range(51)}, "meta": {}}, "steps.layers.err_too_many_classes"),
+    ({"n": 51, "hist": {str(i): 1 for i in range(50)}, "meta": {}}, "steps.layers.err_too_many_classes"),
+    ({"n": 0, "hist": {}, "meta": {}}, "steps.layers.err_no_values"),
+])
+def test_a_trimmed_histogram_is_refused_on_its_size(info, key):
+    assert vp.classes_from_info(info, "b") == {"error": key}
+
+
+def test_a_trimmed_histogram_within_the_cap_lists_its_values():
+    info = {"n": 50, "hist": {str(i): 1 for i in range(50)}, "meta": {}}
+    assert vp.classes_from_info(info, "b") == {"values": list(range(50)), "known": None}
+
+
+def test_the_class_request_trims_the_histogram_on_the_server(gee):
+    import ee
+
+    bounds = (-55.10, -10.10, -55.00, -10.00)
+    many = (ee.Image.pixelLonLat().select("longitude").multiply(1e4).int().rename("b")
+            .reproject("EPSG:4326", None, 100))  # ~110 distinct columns over the bounds
+    info = vp.classes_request(many, "b", bounds).getInfo()
+    assert info["n"] > vp.MAX_CLASSES + 1
+    assert len(info["hist"]) == vp.MAX_CLASSES + 1
+    assert vp.classes_from_info(info, "b") == {"error": "steps.layers.err_too_many_classes"}
+
+    empty = ee.Image(1).updateMask(0).rename("b")
+    info = vp.classes_request(empty, "b", bounds).getInfo()
+    assert info["n"] == 0 and info["hist"] == {}
+    assert vp.classes_from_info(info, "b") == {"error": "steps.layers.err_no_values"}

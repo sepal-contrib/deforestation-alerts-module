@@ -950,3 +950,83 @@ def test_a_geotiff_categorical_edit_keeps_its_classes(monkeypatch, tmp_path):
             rc.close()
 
     asyncio.run(main())
+
+
+def _file_edit(monkeypatch, tmp_path, style, classes=()):
+    """A form editing a two-band GeoTIFF layer on band 2, whose file probes are recorded."""
+    from deforestation_alerts.project.models import FileVisLayer
+    from tests.test_vis_layers import _tif
+
+    tif = _tif(tmp_path / "lc.tif", size=10, count=2)
+    p = _with_aoi()
+    p.vis_layers = {"lc": FileVisLayer(name="lc", path=str(tif), band=2, style=style, classes=list(classes))}
+    asked = []
+
+    def file_stretch(path, bands, bounds):
+        asked.append(("STRETCH", path, bands, tuple(bounds)))
+        return (3.0, 42.0)
+
+    def file_classes(path, band, bounds):
+        asked.append(("CLASSES", path, band, tuple(bounds)))
+        return {"values": [1, 7], "known": None}
+
+    monkeypatch.setattr(vlm.vis_probes, "file_stretch", file_stretch)
+    monkeypatch.setattr(vlm.vis_probes, "file_classes", file_classes)
+    state, open_, saved, gee = _gee_modal(monkeypatch, [], p)
+    return state, open_, saved, gee, str(tif), asked
+
+
+def test_stretch_runs_on_the_geotiff_band(monkeypatch, tmp_path):
+    state, open_, saved, gee, tif, asked = _file_edit(monkeypatch, tmp_path, "continuous")
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert await _settle(lambda: not _button(rc, "steps.layers.stretch").disabled)
+            _button(rc, "steps.layers.stretch").fire_event("click", None)
+            assert await _settle(lambda: _field(rc, "steps.layers.field_max").v_model == "42")
+            assert _field(rc, "steps.layers.field_min").v_model == "3"
+            assert asked == [("STRETCH", tif, [2], tuple(state.project.value.aoi.bounds))]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_find_classes_runs_on_the_geotiff_band(monkeypatch, tmp_path):
+    state, open_, saved, gee, tif, asked = _file_edit(
+        monkeypatch, tmp_path, "categorical", [VisClass(value=1, color="aa0000", label="Forest")])
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert await _settle(lambda: not _button(rc, "steps.layers.find_classes").disabled)
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["Forest", "7"])
+            assert asked == [("CLASSES", tif, 2, tuple(state.project.value.aoi.bounds))]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_probe_buttons_are_disabled_without_an_aoi(monkeypatch):
+    from tests.test_vis_layers import _p
+
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], _answer(WORLDCOVER), _answer({}), p=_p())
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "Map"
+            await asyncio.sleep(0.05)
+            assert _button(rc, "steps.layers.stretch").disabled is True
+            await _categorical(rc)
+            await asyncio.sleep(0.05)
+            assert _button(rc, "steps.layers.find_classes").disabled is True
+        finally:
+            rc.close()
+
+    asyncio.run(main())

@@ -200,6 +200,7 @@
       "err_no_classes": "Trouvez les classes ou ajoutez une valeur.",
       "err_duplicate_class": "Chaque valeur ne peut figurer qu'une fois.",
       "err_no_visible_class": "Affichez au moins une classe.",
+      "err_class_limit": "Une couche catégorielle compte au plus 50 classes.",
       "err_range": "Min et Max doivent être des nombres, Min inférieur à Max.",
       "err_month": "Saisissez le mois au format AAAA-MM, ou laissez-le vide.",
       "err_changed": "Le projet ou son AOI ont changé pendant la vérification ; enregistrez la couche à nouveau.",

@@ -10,6 +10,7 @@ folder).
 
 import hashlib
 import os
+import threading
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -163,7 +164,7 @@ def categorical_vrt(path, band: int, classes) -> Path:
   </VRTRasterBand>
 </VRTDataset>
 """
-    part = out.with_name(out.name + f".{os.getpid()}.part")
+    part = out.with_name(out.name + f".{os.getpid()}.{threading.get_ident()}.part")
     part.write_text(xml)
     os.replace(part, out)
     return out

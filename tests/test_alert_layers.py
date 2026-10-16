@@ -1024,3 +1024,12 @@ def test_the_states_vrt_is_rewritten_when_one_already_exists(tmp_path, scratch):
     vrt = alert_layers.states_vrt(combined, "c1")
     text = vrt.read_text()
     assert "/old/moved/folder" not in text and str(combined.resolve()) in text
+
+
+def test_two_threads_write_the_states_vrt_through_their_own_part_file(tmp_path, scratch, monkeypatch):
+    from tests.test_vis_styles import _part_names_of_two_threads
+
+    p, s = _with_states(_project(tmp_path))
+    combined = tmp_path / p.name / s.combined_rel_path
+    seen = _part_names_of_two_threads(monkeypatch, alert_layers, lambda: alert_layers.states_vrt(combined, "c1"))
+    assert len(seen) == 2 and len(set(seen)) == 2

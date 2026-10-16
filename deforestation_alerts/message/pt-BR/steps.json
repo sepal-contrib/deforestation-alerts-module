@@ -200,6 +200,7 @@
       "err_no_classes": "Encontre as classes ou adicione um valor.",
       "err_duplicate_class": "Cada valor só pode aparecer uma vez.",
       "err_no_visible_class": "Mostre pelo menos uma classe.",
+      "err_class_limit": "Uma camada categórica comporta no máximo 50 classes.",
       "err_range": "Mín. e Máx. devem ser números, com Mín. menor que Máx.",
       "err_month": "Digite o mês como AAAA-MM ou deixe vazio.",
       "err_changed": "O projeto ou sua AOI mudou durante a verificação; salve a camada novamente.",

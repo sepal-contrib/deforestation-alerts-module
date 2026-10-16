@@ -391,6 +391,7 @@ def test_a_categorical_earth_engine_layer_is_saved_with_its_classes(requests):
     ([], "steps.layers.err_no_classes"),
     ([VisClass(value=1, color="aa0000"), VisClass(value=1, color="00bb00")], "steps.layers.err_duplicate_class"),
     ([VisClass(value=1, color="aa0000", visible=False)], "steps.layers.err_no_visible_class"),
+    ([VisClass(value=v, color="aa0000") for v in range(51)], "steps.layers.err_class_limit"),
 ])
 def test_a_categorical_layer_needs_a_visible_unique_class(requests, classes, key):
     gee, calls = _gee_answering(lambda obj: ["landcover"])

@@ -200,6 +200,7 @@
       "err_no_classes": "Busca las clases o añade un valor.",
       "err_duplicate_class": "Cada valor solo puede aparecer una vez.",
       "err_no_visible_class": "Muestra al menos una clase.",
+      "err_class_limit": "Una capa categórica admite como máximo 50 clases.",
       "err_range": "Mín y Máx deben ser números, Mín menor que Máx.",
       "err_month": "Introduce el mes como AAAA-MM, o déjalo vacío.",
       "err_changed": "El proyecto o su AOI cambiaron durante la comprobación; guarda la capa de nuevo.",

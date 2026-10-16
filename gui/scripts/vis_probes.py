@@ -56,19 +56,25 @@ def stretch_from_info(info: dict, bands) -> Optional[Tuple[float, float]]:
 
 
 def classes_request(asset: str, band: str, bounds):
-    """The band's histogram over ``bounds`` and its ``*_class_*`` properties, if any."""
+    """The band's histogram over ``bounds``, trimmed on the server to its size
+    ``n`` and its first ``MAX_CLASSES + 1`` keys (a float band can hold millions),
+    and the band's ``*_class_*`` properties, if any."""
     import ee
 
     img = ee.Image(asset)
     one = img.select(band)
     hist = one.reduceRegion(reducer=ee.Reducer.frequencyHistogram(), **_region(img, band, bounds)).get(band)
+    h = ee.Dictionary(ee.Algorithms.If(hist, hist, {}))  # null when nothing is found
     meta = img.toDictionary([f"{band}_class_values", f"{band}_class_palette", f"{band}_class_names"])
-    return ee.Dictionary({"hist": hist, "meta": meta})
+    return ee.Dictionary({"n": h.size(), "hist": h.select(h.keys().slice(0, MAX_CLASSES + 1)), "meta": meta})
 
 
 def classes_from_info(info: dict, band: str) -> dict:
     """``{"values", "known"}`` from a ``classes_request`` info, or ``{"error": key}``."""
-    checked = check_values([float(k) for k in (info.get("hist") or {})])
+    hist = info.get("hist") or {}
+    checked = check_values([float(k) for k in hist])
+    if "error" not in checked and info.get("n", len(hist)) > MAX_CLASSES:
+        checked = {"error": ERR_TOO_MANY}  # the keys beyond the trimmed ones
     if "error" in checked:
         return checked
     meta = info.get("meta") or {}
