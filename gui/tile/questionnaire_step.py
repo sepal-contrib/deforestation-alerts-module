@@ -142,6 +142,9 @@ def QuestionnaireStep(app_state):
     if p is None:
         solara.Info(t("workflow.lock_project"))
         return
+    if active_set(p) is None:  # the step's gate (workflow_steps): after Integrate & vectorize
+        solara.Info(t("workflow.lock_analysis"))
+        return
     name = p.name
 
     def _save(question, previous_key):
@@ -215,7 +218,7 @@ def QuestionnaireStep(app_state):
                       dense=True, hide_details=True, class_="mt-3")
             solara.Text(t("steps.questionnaire.expanded_hint"), style=MUTED + "font-size:0.75rem;")
         _TemplateCard(app_state=app_state, questions=p.questions)
-        _StartAnalysis(app_state=app_state, ready=active_set(p) is not None)
+        _StartAnalysis(app_state=app_state, ready=True)  # the step opens only with an active set
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
                   columns=attribute_columns(p))

@@ -106,7 +106,8 @@ STEPS: List[StepSpec] = [
              count_key="workflow.count_alerts"),
     StepSpec(key="questionnaire", page_view="questionnaire_tile", label_key="app.drawer_item.questionnaire",
              icon="mdi-clipboard-list-outline",
-             unlocked=lambda p: p is not None, lock_reason_key="workflow.lock_project",
+             # its questions are asked of an alert set: after Integrate & vectorize
+             unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
              count=lambda p: len(p.questions) if p is not None else 0,
              count_key="workflow.count_questions"),
     StepSpec(key="evaluators", page_view="evaluators_tile", label_key="app.drawer_item.evaluators",

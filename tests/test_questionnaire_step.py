@@ -9,7 +9,7 @@ import reacton
 from pysepal.i18n import set_locale
 from shapely.geometry import box
 
-from deforestation_alerts.project.models import Project, Question, QuestionOption
+from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project, Question, QuestionOption
 from gui.i18n import t, tn
 from gui.store.state_manager import AppState
 from gui.tile import questionnaire_step as qstep
@@ -23,16 +23,25 @@ def _state(tmp_path, monkeypatch, questions=None):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     s = AppState()
     kw = {} if questions is None else {"questions": questions}
-    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(), **kw))
+    s.new_project_state(_with_set(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(), **kw)))
     return s
+
+
+def _with_set(p, active=True):
+    """The step opens on a project with an alert set (bug 2026-10-16)."""
+    p.alert_sets["x"] = AlertSet(id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
+    p.active_set = "x" if active else None
+    return p
 
 
 def _state_with_template(tmp_path, monkeypatch, path):
     set_locale("en")
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     s = AppState()
-    s.new_project_state(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(),
-                                report_template=str(path)))
+    s.new_project_state(_with_set(Project(name="p", created_at=datetime.now(), updated_at=datetime.now(),
+                                          report_template=str(path))))
     return s
 
 
@@ -149,9 +158,7 @@ def test_the_delete_confirmation_counts_answers_or_says_they_are_kept(tmp_path, 
     assert t("steps.questionnaire.delete_message_no_set") in text and "0 alert" not in text
 
 
-def test_the_step_needs_a_project_not_an_aoi(tmp_path, monkeypatch):
-    from gui.store.workflow_steps import STEPS, step_index
-    assert STEPS[step_index("questionnaire")].lock_reason_key == "workflow.lock_project"
+def test_the_step_needs_a_project(tmp_path, monkeypatch):
     set_locale("en")
     assert t("workflow.lock_project") == "Open a project first."
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
@@ -182,23 +189,27 @@ def test_a_hand_edited_manifest_with_clashing_keys_still_renders(tmp_path, monke
         rc.close()
 
 
-def test_the_step_ends_with_start_analysis_gated_on_an_active_set(tmp_path, monkeypatch):
+def test_without_an_active_set_the_step_says_to_integrate_first(tmp_path, monkeypatch):
+    """Bug 2026-10-16: the questionnaire opens only after Integrate &
+    vectorize. A project with sets but none active reads the same."""
+    s = _state(tmp_path, monkeypatch)
+    s.project.set(_with_set(s.project.value.model_copy(deep=True), active=False))
+    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
+    try:
+        assert t("workflow.lock_analysis") in _strings(rc.container)
+        assert t("steps.questionnaire.add") not in _strings(rc.container)
+        assert not [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
+    finally:
+        rc.close()
+
+
+def test_the_step_ends_with_start_analysis(tmp_path, monkeypatch):
     """*Start analysis* is the step's last control. It writes the navigation
-    signal (``_NavBridge`` opens the screen); with no active set it is
-    disabled, with the reason under it."""
+    signal (``_NavBridge`` opens the screen)."""
     s = _state(tmp_path, monkeypatch)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:
         (start,) = [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
-        assert start.disabled and t("workflow.lock_analysis") in _strings(rc.container)
-    finally:
-        rc.close()
-
-    monkeypatch.setattr(qstep, "active_set", lambda p: object())
-    _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
-    try:
-        btns = rc.find(v.Btn).widgets
-        (start,) = [w for w in btns if "defo-start-analysis" in (w.class_ or "")]
         assert not start.disabled and t("workflow.lock_analysis") not in _strings(rc.container)
         start.fire_event("click", None)
         assert s.current_page_view.value == "analysis_tile"
@@ -289,10 +300,10 @@ def test_a_review_copys_template_card_expands_to_the_read_only_picker(tmp_path, 
     set_locale("en")
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     s = AppState()
-    s.new_project_state(Project(
+    s.new_project_state(_with_set(Project(  # a copy holds its one set, active
         name="p", created_at=datetime.now(), updated_at=datetime.now(), report_template=str(mine),
         review_copy=ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
-                               set_fingerprint="f", origin_project="orig", imported_at=datetime.now())))
+                               set_fingerprint="f", origin_project="orig", imported_at=datetime.now()))))
     assert read_only(s.project.value)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:

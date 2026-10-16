@@ -92,6 +92,14 @@ def test_every_label_and_lock_key_exists():
         resolve(r.label_key)
 
 
+def _with_set(p):
+    p.alert_sets["x"] = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
+    p.active_set = "x"
+    return p
+
+
 def test_questionnaire_comes_before_evaluators_and_counts_questions():
     """Analysis is a screen of its own (Questionnaire's *Start analysis*)."""
     from gui.store.workflow_steps import step_index, step_status
@@ -99,10 +107,21 @@ def test_questionnaire_comes_before_evaluators_and_counts_questions():
     assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys
     spec = STEPS[step_index("questionnaire")]
     assert not spec.unlocked(None)
-    p = _p()  # a new project holds the default questions
+    p = _with_set(_p())  # a new project holds the default questions
     assert spec.unlocked(p) and spec.count(p) == len(p.questions) > 0
     p.questions = []
     assert step_status(spec, p) is StepStatus.EMPTY
+
+
+def test_questionnaire_needs_an_alert_set():
+    """Bug 2026-10-16: the questions are asked of an alert set, so the step
+    opens only once Integrate & vectorize has made one."""
+    from gui.store.workflow_steps import step_index, step_status
+    spec = STEPS[step_index("questionnaire")]
+    assert spec.lock_reason_key == "workflow.lock_analysis"
+    p = _p()
+    assert step_status(spec, p) is StepStatus.LOCKED
+    assert step_status(spec, _with_set(p)) is StepStatus.HAS_OUTPUTS
 
 
 def test_evaluators_needs_an_active_set_and_counts_evaluators():
