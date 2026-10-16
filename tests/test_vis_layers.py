@@ -18,7 +18,7 @@ from affine import Affine
 from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.project.models import (
-    AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project,
+    AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project, VisClass,
 )
 from gui.i18n import t
 from gui.scripts import vis_layers as vl
@@ -292,17 +292,19 @@ def test_an_earth_engine_image_with_one_band_and_a_ramp(requests):
     out = _check(gee, _with_aoi(), kind="gee", name=" ndvi ", ref="users/x/img", asset_type="IMAGE", band="B8",
                  vmin="0", vmax="0.8", ramp="viridis", invert=True, show_in_analysis=True)
     assert out["layer"] == GeeVisLayer(name="ndvi", asset="users/x/img", bands=["B8"], min=0, max=0.8,
-                                       palette=vis_palettes.ramp_palette("viridis", True), show_in_analysis=True)
+                                       palette=vis_palettes.ramp_palette("viridis", True), style="continuous",
+                                       show_in_analysis=True)
     assert calls == [("BANDS", "users/x/img", "IMAGE")]
 
 
 def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     gee, _ = _gee_answering(lambda obj: ["B4", "B3", "B2"])
-    out = _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    out = _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", style="rgb",
                  bands=("B4", "B3", "B2"), vmin="0", vmax="3000", ramp="viridis")
     assert out["layer"].bands == ["B4", "B3", "B2"] and out["layer"].palette == []
+    assert out["layer"].style == "rgb"
     gee, _ = _gee_answering(lambda obj: ["B4", "B3"])
-    assert _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    assert _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", style="rgb",
                   bands=("B4", "B3", "B2"), vmin="0", vmax="3000") == {"error": "steps.layers.err_bands"}
 
 
@@ -310,10 +312,10 @@ def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     ({"asset_type": "IMAGE_COLLECTION"}, "steps.layers.err_wrong_type"),
     ({"ref": None}, "steps.layers.err_incomplete"),
     ({"band": None}, "steps.layers.err_incomplete"),
-    ({"rgb": True, "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
+    ({"style": "rgb", "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
     ({"vmin": "1", "vmax": "1"}, "steps.layers.err_range"),
     ({"vmin": "", "vmax": "1"}, "steps.layers.err_range"),
-    ({"rgb": True, "bands": ("B4", "B4", "B2")}, "steps.layers.err_duplicate_bands"),  # three distinct bands
+    ({"style": "rgb", "bands": ("B4", "B4", "B2")}, "steps.layers.err_duplicate_bands"),  # three distinct bands
     ({"name": ""}, "steps.layers.name_empty"),
 ])
 def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests, over, key):
@@ -326,10 +328,10 @@ def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests
 def test_an_rgb_earth_engine_image_keeps_its_roles_and_combination(requests):
     gee, _ = _gee_answering(lambda obj: ["B2", "B3", "B4", "B8"])
     roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8"}
-    out = _check(gee, _with_aoi(), kind="gee", name="fc", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    out = _check(gee, _with_aoi(), kind="gee", name="fc", ref="users/x/img", asset_type="IMAGE", style="rgb",
                  bands=("B8", "B4", "B3"), roles=roles, combo="false_color", vmin="0", vmax="3000")
     assert out["layer"] == GeeVisLayer(name="fc", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000,
-                                       roles=roles, combo="false_color")
+                                       roles=roles, combo="false_color", style="rgb")
 
 
 def test_an_old_palette_that_is_no_ramp_is_kept_until_a_card_is_picked(requests):
@@ -345,13 +347,13 @@ def test_a_geotiff_rgb_layer(tmp_path, requests):
     tif = _tif(tmp_path / "rgb.tif", size=10, count=4)
     gee, _ = _gee_answering(lambda obj: None)
     roles = {"red": 3, "green": 2, "blue": 1, "nir": 4}
-    out = _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 2), roles=roles,
+    out = _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, 2), roles=roles,
                  combo="false_color", vmin="0", vmax="3000")
     assert out["layer"] == FileVisLayer(name="rgb", path=str(tif), bands=[4, 3, 2], min=0, max=3000, roles=roles,
-                                        combo="false_color")
-    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 5), vmin="0",
+                                        combo="false_color", style="rgb")
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, 5), vmin="0",
                   vmax="1") == {"error": "steps.layers.err_bands"}
-    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, None), vmin="0",
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, None), vmin="0",
                   vmax="1") == {"error": "steps.layers.err_incomplete"}
 
 
@@ -361,13 +363,60 @@ def test_a_geotiff_layer(tmp_path, requests):
     out = _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=2, ramp="viridis", invert=True,
                  vmin="0", vmax="45")
     assert out["layer"] == FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
-                                        palette=vis_palettes.ramp_palette("viridis", True))
+                                        palette=vis_palettes.ramp_palette("viridis", True), style="continuous")
     assert calls == []
     assert _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=3, vmin="0", vmax="1") == {
         "error": "steps.alerts.err_missing_band"}
     (tmp_path / "bad.tif").write_text("not a tiff")
     assert _check(gee, _with_aoi(), kind="file", name="height", ref=str(tmp_path / "bad.tif"), band=1, vmin="0",
                   vmax="1") == {"error": "steps.alerts.err_unreadable"}
+
+
+def test_a_categorical_earth_engine_layer_is_saved_with_its_classes(requests):
+    gee, calls = _gee_answering(lambda obj: ["landcover"])
+    classes = [VisClass(value=1, color="#AA0000", label="Forest"), VisClass(value=2, color="00BB00", visible=False)]
+    out = _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                 style="categorical", band="landcover", classes=classes, vmin="x", vmax="", ramp="viridis")
+    assert out["layer"] == GeeVisLayer(
+        name="lc", asset="users/x/img", bands=["landcover"], style="categorical", palette=[],
+        classes=[VisClass(value=1, color="aa0000", label="Forest"), VisClass(value=2, color="00bb00", visible=False)])
+    assert (out["layer"].min, out["layer"].max) == (0.0, 1.0)
+    assert calls == [("BANDS", "users/x/img", "IMAGE")]
+    gee, _ = _gee_answering(lambda obj: ["B4"])  # the band probe still runs
+    assert _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                  style="categorical", band="landcover", classes=classes) == {"error": "steps.layers.err_bands"}
+
+
+@pytest.mark.parametrize("classes, key", [
+    ([], "steps.layers.err_no_classes"),
+    ([VisClass(value=1, color="aa0000"), VisClass(value=1, color="00bb00")], "steps.layers.err_duplicate_class"),
+    ([VisClass(value=1, color="aa0000", visible=False)], "steps.layers.err_no_visible_class"),
+])
+def test_a_categorical_layer_needs_a_visible_unique_class(requests, classes, key):
+    gee, calls = _gee_answering(lambda obj: ["landcover"])
+    out = _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                 style="categorical", band="landcover", classes=classes)
+    assert out == {"error": key} and calls == []
+
+
+def test_a_categorical_geotiff_layer_checks_its_band_and_folder(tmp_path, requests):
+    tif = _tif(tmp_path / "lc.tif", size=10, count=2)
+    gee, _ = _gee_answering(lambda obj: None)
+    classes = [VisClass(value=1, color="#AA0000")]
+    kw = dict(kind="file", name="lc", style="categorical", classes=classes)
+    out = _check(gee, _with_aoi(), ref=str(tif), band=2, **kw)
+    assert out["layer"] == FileVisLayer(name="lc", path=str(tif), band=2, style="categorical", palette=[],
+                                        classes=[VisClass(value=1, color="aa0000")])
+    assert _check(gee, _with_aoi(), ref=str(tif), band=3, **kw) == {"error": "steps.alerts.err_missing_band"}
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro_tif = _tif(ro / "lc.tif", size=10)
+    ro.chmod(0o555)
+    try:
+        assert _check(gee, _with_aoi(), ref=str(ro_tif), band=1, **kw) == {
+            "error": "steps.layers.err_folder", "args": {"folder": str(ro)}}
+    finally:
+        ro.chmod(0o755)
 
 
 def test_a_geotiff_in_a_read_only_folder_is_refused_inline(tmp_path, requests):
@@ -531,7 +580,7 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
             assert await _settle(lambda: open_.value is False)
             assert saved == [(FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
                                            palette=vis_palettes.ramp_palette("terrain", True),
-                                           show_in_analysis=True), None)]
+                                           style="continuous", show_in_analysis=True), None)]
         finally:
             rc.close()
 
@@ -1024,7 +1073,8 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
             assert await _settle(lambda: open_.value is False)
             [(layer, _prev)] = saved
             assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
-                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color")
+                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color",
+                                         style="rgb")
         finally:
             rc.close()
 

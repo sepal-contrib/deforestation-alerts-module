@@ -49,19 +49,21 @@ def _number_text(value) -> str:
     return str(int(value)) if value.is_integer() else str(value)
 
 
-async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None, rgb=False,
-                             bands=(), band=None, ramp=None, invert=False, palette=(), colormap=None, roles=None,
-                             combo=None, vmin=None, vmax=None, month="", show_in_analysis=False,
-                             editing=None) -> dict:
+async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None,
+                             style="continuous", bands=(), band=None, ramp=None, invert=False, palette=(),
+                             colormap=None, roles=None, combo=None, classes=(), vmin=None, vmax=None, month="",
+                             show_in_analysis=False, editing=None) -> dict:
     """Check a visualization layer before it is saved: ``{"error": key,
     "args": {...}}`` or ``{"layer": GeeVisLayer | FileVisLayer | NicfiVisLayer}``.
 
-    ``bands`` are the three RGB bands (``rgb``); ``band`` is the one band of a
-    single-band image or of a GeoTIFF. A single band is coloured by ``ramp``
-    (``invert`` reverses it). With no ramp, the ``palette`` of a layer saved
-    before the ramps is kept, or the ``colormap`` of a GeoTIFF saved before
-    them; with none of these, the default ramp. ``roles`` and ``combo`` are
-    kept only to prefill the form when the layer is edited."""
+    ``style`` is "continuous", "categorical" or "rgb". ``bands`` are the three
+    RGB bands (style "rgb"); ``band`` is the one band of a single-band image or
+    of a GeoTIFF. A continuous band is coloured by ``ramp`` (``invert``
+    reverses it); a categorical one by its ``classes``, which have no range.
+    With no ramp, the ``palette`` of a layer saved before the ramps is kept,
+    or the ``colormap`` of a GeoTIFF saved before them; with none of these,
+    the default ramp. ``roles`` and ``combo`` are kept only to prefill the
+    form when the layer is edited."""
     name = (name or "").strip()
     error = vis_layers.validate_name(name, project, current=editing)
     if error:
@@ -80,13 +82,24 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
         if not isinstance(count, (int, float)) or count <= 0:
             return {"error": "steps.layers.err_nicfi", "args": {"region": vis_layers.region_label(region)}}
         return {"layer": NicfiVisLayer(name=name, month=month, show_in_analysis=bool(show_in_analysis))}
-    span = parse_range(vmin, vmax)
+    rgb = style == "rgb"
+    categorical = style == "categorical"
+    span = (0.0, 1.0) if categorical else parse_range(vmin, vmax)
     if span is None:
         return {"error": "steps.layers.err_range"}
     if not ref:
         return {"error": "steps.layers.err_incomplete"}
     if kind == "gee" and asset_type != "IMAGE":
         return {"error": "steps.layers.err_wrong_type"}
+    if categorical:
+        values = [c.value for c in classes]
+        if not values:
+            return {"error": "steps.layers.err_no_classes"}
+        if len(set(values)) != len(values):
+            return {"error": "steps.layers.err_duplicate_class"}
+        if not any(c.visible for c in classes):
+            return {"error": "steps.layers.err_no_visible_class"}
+        classes = [c.model_copy(update={"color": vis_palettes._bare(c.color)}) for c in classes]
     is_file = kind == "file"
     if is_file:  # a GeoTIFF band is its 1-based index (a name is left from an asset)
         chosen = [band_index(b) for b in bands] if rgb else [band_index(band)]
@@ -115,8 +128,8 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
             return {"error": error}
         if not vis_layers.folder_writable(ref):  # spec §9.1: its .ovr sidecar goes next to it
             return {"error": "steps.layers.err_folder", "args": {"folder": str(Path(ref).parent)}}
-    extra = {"roles": roles, "combo": combo} if rgb else {}
-    if rgb:
+    extra = {"roles": roles, "combo": combo} if rgb else {"classes": classes} if categorical else {}
+    if rgb or categorical:
         colours, old_colormap = [], None
     elif ramp:
         colours, old_colormap = vis_palettes.ramp_palette(ramp, invert), None
@@ -128,11 +141,11 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
         colours, old_colormap = vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP, invert), None
     if not is_file:
         return {"layer": GeeVisLayer(name=name, asset=ref, bands=chosen, min=span[0], max=span[1], palette=colours,
-                                     show_in_analysis=bool(show_in_analysis), **extra)}
+                                     style=style, show_in_analysis=bool(show_in_analysis), **extra)}
     kwargs = {"bands": chosen} if rgb else {"band": chosen[0], "palette": colours}
     if old_colormap:
         kwargs["colormap"] = old_colormap
-    return {"layer": FileVisLayer(name=name, path=ref, min=span[0], max=span[1],
+    return {"layer": FileVisLayer(name=name, path=ref, min=span[0], max=span[1], style=style,
                                   show_in_analysis=bool(show_in_analysis), **kwargs, **extra)}
 
 
@@ -311,8 +324,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if live is None or live.aoi is None:
             return {"error": "steps.layers.err_changed"}  # closed while the form was open
         out = await validate_vis_layer(
-            gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type, rgb=rgb,
-            bands=(red, green, blue), band=band, ramp=ramp, invert=invert, palette=palette0 if ramp is None else (),
+            gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type,
+            style="rgb" if rgb else "continuous", bands=(red, green, blue), band=band, ramp=ramp, invert=invert,
+            palette=palette0 if ramp is None else (),
             colormap=old_colormap if ramp is None else None, roles=roles, combo=None if combo == "custom" else combo,
             vmin=vmin, vmax=vmax, month=month, show_in_analysis=show, editing=editing)
         if not open_.value:
