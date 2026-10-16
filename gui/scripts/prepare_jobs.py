@@ -34,6 +34,12 @@ inside the tracked job, so the task pill reads "cancelled", not "completed"
 or failed row's message is translated (``_failure_text``): a coverage refusal
 reads its coverage note, an engine error that names a message key reads that
 message (``error_text``), any other error its own text.
+
+A download says how far it has got (bug 2026-10-16): pysepal's pill draws no
+progress bar, so each whole percent of the tiles goes into the task's title
+and into ``row_progress``, which the row's Download cell reads. Both go back
+when the download is done, and a milestone says the harmonize (alignment)
+has begun.
 """
 
 import asyncio
@@ -95,6 +101,13 @@ class PrepareContext:
     row_errors: Optional[solara.Reactive] = None  # {source or "@mask:<name>": message}; None in tests
     errors_lock: Any = None  # threading.Lock shared by the step's jobs around ``row_errors``
     on_warning: Any = None  # called with a warning's text; None: ``notifier.warning`` (tests record it)
+    row_progress: Optional[solara.Reactive] = None  # {progress_key: percent} of the downloads; None in tests
+
+
+def progress_key(project: str, period_id: str, kind: str, name: str) -> tuple:
+    """A row's key in ``row_progress``. A mask's is project-wide, like its
+    in-flight key: one aligned file per project, whichever period runs it."""
+    return (project, None, f"@mask:{name}") if kind == "mask" else (project, period_id, name)
 
 
 def _live(ctx: PrepareContext, scope: tuple):
@@ -205,9 +218,10 @@ def _record_in_own_project(ctx: PrepareContext, scope: tuple, arts: dict) -> Non
     _delete_refused(ctx, refused)
 
 
-def row_cells(row: PrepareRow, running: bool, label=None) -> list:
+def row_cells(row: PrepareRow, running: bool, label=None, progress=None) -> list:
     """The name and both stage cells; a row blocked by its coverage shows why
-    (not covered, no data, not checked) in both."""
+    (not covered, no data, not checked) in both. ``progress``: the running
+    download's percent, shown in its Download cell."""
     def cell(s):
         if running:
             return {"type": "status", "status": "running"}
@@ -215,7 +229,10 @@ def row_cells(row: PrepareRow, running: bool, label=None) -> list:
             return {"type": "status", "status": _BLOCKED_STATUS[row.coverage]}
         return {"type": "status", "status": CELL_STATUS[s]}
 
-    return [{"value": label or row.source}, cell(row.raw), cell(row.harmonized)]
+    download = cell(row.raw)
+    if running and progress is not None:
+        download["label"] = f"{progress}%"
+    return [{"value": label or row.source}, download, cell(row.harmonized)]
 
 
 def _failure_text(exc: BaseException) -> str:
@@ -294,6 +311,38 @@ def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> Non
                            legend=source_layers.harmonized_legend(key, name, ctx.period))
 
 
+def _set_progress(ctx: PrepareContext, key: tuple, pct: Optional[int]) -> None:
+    """Publish (``None``: drop) a row's download percent, under the lock the
+    step's jobs share: two jobs may report at once."""
+    if ctx.row_progress is None:
+        return
+    with ctx.errors_lock or contextlib.nullcontext():
+        current = dict(ctx.row_progress.value)
+        if pct is None:
+            if key not in current:
+                return
+            current.pop(key)
+        else:
+            current[key] = pct
+        ctx.row_progress.set(current)
+
+
+def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: str):
+    """The row's ``on_tiles``: its percent in the task's title and on its row,
+    until the download is done; then the title is back and ``done_step`` (the
+    harmonize, or the alignment) is the pill's milestone."""
+    def on_pct(pct):
+        if pct >= 100:
+            _set_progress(ctx, key, 100)
+            task.update(title)
+            task.step(done_step)
+            return
+        _set_progress(ctx, key, pct)
+        task.update(t("steps.prepare.job_progress", title=title, pct=pct))
+
+    return tile_progress_reporter(task, on_pct=on_pct)
+
+
 def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     """Run ``rows`` (``("mask", name)`` / ``("source", name)`` items, a bare
     string being a source) one at a time, in order: Run all puts the
@@ -306,8 +355,8 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     refuse_if_read_only(ctx.app_state.project.value)
     scope = run_scope(ctx.app_state.project.value)
     items = _items(rows)
-    with writing(ctx.name), tracked_job(ctx.notifier, t("steps.prepare.job_title"),
-                                        total_steps=len(items)) as task:
+    title = t("steps.prepare.job_title")
+    with writing(ctx.name), tracked_job(ctx.notifier, title, total_steps=len(items)) as task:
         for kind, name in items:
             if ctx.cancel.is_set():
                 raise asyncio.CancelledError()  # pysepal marks the task CANCELLED
@@ -321,6 +370,7 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
                 job = MaskJob(project=live.model_copy(deep=True), pdir=ctx.pdir, name=name, aoi=ctx.aoi,
                               force=force)
                 run, error_key = run_mask_row, f"@mask:{name}"
+                done_step = t("steps.prepare.job_align_row", mask=name)
             else:
                 src = live.sources.get(name)
                 if src is None:
@@ -331,8 +381,10 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
                                 meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
                                 else None)
                 run, error_key = run_source_row, name
+                done_step = t("steps.prepare.job_harmonize_row", source=name)
+            key = progress_key(ctx.name, ctx.period.id, kind, name)
             try:
-                arts = run(job, on_tiles=tile_progress_reporter(task))
+                arts = run(job, on_tiles=_row_reporter(ctx, task, title, key, done_step))
             except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)
                 logger.exception("row %s failed", error_key)
                 message = _failure_text(exc)
@@ -346,6 +398,10 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
                     if not _record(ctx, scope, exc.artifacts):
                         return
                 continue
+            finally:
+                # the row is over, whichever way: its percent goes with it
+                _set_progress(ctx, key, None)
+                task.update(title)
             _set_error(ctx, error_key, None)
             if not _record(ctx, scope, arts):
                 return

@@ -204,8 +204,10 @@ def _render_cell(cell: dict, first: bool):
         return
     if ctype == "status":
         status = cell.get("status", "")
-        label = status_text(status)
-        # compact: the icon alone, its label (or the cell's ``title``) as the tooltip
+        # ``label`` in place of the status's own (a download's percent)
+        label = cell.get("label") or status_text(status)
+        # compact: the icon alone, its label (or the cell's ``title``) as the tooltip;
+        # a ``label`` of its own still shows
         attributes = {"title": cell.get("title") or label} if cell.get("compact") else {}
         with rv.Html(tag="div", style_=CELL, attributes=attributes):
             rv.Icon(
@@ -213,7 +215,7 @@ def _render_cell(cell: dict, first: bool):
                 color=STATUS_COLORS.get(status, "grey"),
                 small=True,
             )
-            if not cell.get("compact"):
+            if not cell.get("compact") or cell.get("label"):
                 # clips with an ellipsis, like the name, in a narrow stage column
                 solara.Text(label, classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
         return
@@ -297,7 +299,9 @@ def ProductTable(
             "notes": [{"text": str, "tone": "info"|"warning"|"error"|
             "success"|None}], "error": str|None}]``. A status cell
             ``{"type": "status", "status", "compact": True, "title"?}`` shows
-            its icon only, with ``title`` (else its label) as the tooltip.
+            its icon only, with ``title`` (else its label) as the tooltip;
+            a ``"label"`` replaces the status's label, and shows even when
+            compact.
             Each note is a line
             under the row in its tone's colour (None: muted); ``error`` is
             one more error-tone note after them. See module docstring /

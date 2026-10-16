@@ -136,3 +136,16 @@ def test_a_stacked_cell_wraps_its_chips_under_the_name():
         assert all(isinstance(c, v.Chip) for c in line.children)
     finally:
         rc.close()
+
+
+def test_a_status_cell_shows_its_own_label_even_when_compact():
+    rows = [{"key": "a", "cells": [{"value": "GLAD-L"},
+                                   {"type": "status", "status": "running", "label": "42%"},
+                                   {"type": "status", "status": "running", "compact": True, "label": "7%"},
+                                   {"type": "status", "status": "ready", "compact": True}],
+             "actions": []}]
+    box, rc = reacton.render(ProductTable(title="t", columns=[{"label": "c"}] * 4, rows=rows, empty_text="-"))
+    try:
+        assert [s for s in _texts(box, "text--secondary") if s.endswith("%")] == ["42%", "7%"]
+    finally:
+        rc.close()

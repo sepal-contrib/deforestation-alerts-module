@@ -340,6 +340,18 @@ def test_tile_reporter_throttles_to_whole_percent():
     assert seen[-1] == 1.0
 
 
+def test_tile_reporter_hands_each_whole_percent_on():
+    """pysepal's pill draws no progress bar: the percent goes on to whoever
+    can show it (the Download & harmonize row and the pill's title)."""
+    bus = NotificationBus()
+    pcts = []
+    with Notifier(bus).track("tiles%") as task:
+        report = notify_bridge.tile_progress_reporter(task, on_pct=pcts.append)
+        for done in (1, 1, 2, 3, 4):
+            report(done, 4)
+    assert pcts == [25, 50, 75, 100]
+
+
 def test_tile_reporter_ignores_a_zero_total():
     bus = NotificationBus()
     seen = []

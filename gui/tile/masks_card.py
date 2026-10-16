@@ -25,7 +25,7 @@ from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
-from gui.scripts.prepare_jobs import CELL_STATUS
+from gui.scripts.prepare_jobs import CELL_STATUS, progress_key
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -49,10 +49,11 @@ def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None)
                                                                                mode=mode))
 
 
-def mask_status(r, busy) -> dict:
+def mask_status(r, busy, progress=None) -> dict:
     """One compact status for both stages (spec D4): running while claimed,
     else the download stage when it is not current, else the alignment
-    stage. Its tooltip names both (a GeoTIFF mask has no download)."""
+    stage. Its tooltip names both (a GeoTIFF mask has no download). A running
+    download shows its percent (``progress``) beside the icon."""
     def label(s):
         return status_text("running" if busy else CELL_STATUS[s])
 
@@ -64,11 +65,14 @@ def mask_status(r, busy) -> dict:
         shown = CELL_STATUS[r.aligned]
     parts = [] if r.raw is None else [f"{t('steps.prepare.col_download')}: {label(r.raw)}"]
     parts.append(f"{t('steps.prepare.col_align')}: {label(r.aligned)}")
-    return {"type": "status", "status": shown, "compact": True, "title": " · ".join(parts)}
+    cell = {"type": "status", "status": shown, "compact": True, "title": " · ".join(parts)}
+    if busy and progress is not None:
+        cell["label"] = f"{progress}%"
+    return cell
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,
-                    switch, refusals=0, locked=False) -> list:
+                    switch, refusals=0, locked=False, progress=None) -> list:
     """The ``ProductTable`` rows of the Masks card (spec §7.3); pure.
 
     ``running``: every claimed in-flight key (a mask row is busy whichever
@@ -77,6 +81,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
     built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``).
     ``locked``: a review copy (spec §6.3): downloads, edits, deletes and the
     Mode select are disabled; the map toggle stays for a ready local raster.
+    ``progress``: the downloads' percents, by ``prepare_jobs.progress_key``.
     """
     from gui.tile.prepare_step import mask_inflight_key  # prepare_step renders this card
 
@@ -127,7 +132,8 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
 
         out.append({
             "key": r.name,
-            "cells": [{"value": r.name}, {"type": "render", "fn": _mode_cell}, mask_status(r, busy)],
+            "cells": [{"value": r.name}, {"type": "render", "fn": _mode_cell},
+                      mask_status(r, busy, (progress or {}).get(progress_key(p.name, period.id, "mask", r.name)))],
             "notes": notes,
             "error": errors.get(f"@mask:{r.name}"),
             "actions": actions,
@@ -136,7 +142,8 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
 
 
 @solara.component
-def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, errors, on_run, on_rerun):
+def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, errors, on_run, on_rerun,
+              progress=None):
     from gui.tile.prepare_step import mask_inflight_key
 
     notifications = use_notifications()
@@ -276,7 +283,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,
                                  delete=set_pending_delete, switch=_switch, refusals=refusals,
-                                 locked=read_only(p))
+                                 locked=read_only(p), progress=progress)
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
         solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", small=True, outlined=True, block=True,

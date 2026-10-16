@@ -56,7 +56,7 @@ from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
-from gui.scripts.prepare_jobs import PrepareContext, row_cells, run_rows
+from gui.scripts.prepare_jobs import PrepareContext, progress_key, row_cells, run_rows
 from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
@@ -121,7 +121,8 @@ def _label(p, source):
     return t(catalogue.LABEL_KEYS[src.catalogue_key]) if src.kind == "predefined" else source
 
 
-def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun, toggle, locked=False) -> list:
+def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun, toggle, locked=False,
+               progress=None) -> list:
     """The ``ProductTable`` rows of the sources table (spec §7.3); pure.
 
     ``mine``: this project's and period's in-flight keys; ``errors``: the row
@@ -130,7 +131,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
     A blocked row (``PrepareRow.blocked``) cannot be run or shown; a row in
     flight cannot be started again (the claim would refuse it silently), so
     both run buttons say so, the download one with its spinner. ``locked``: a
-    review copy (spec §6.3): both run buttons are disabled.
+    review copy (spec §6.3): both run buttons are disabled. ``progress``: the
+    downloads' percents, by ``prepare_jobs.progress_key``.
 
     A source already downloaded for this window offers no Run again (user
     decision 2026-10-15): it stays only while its harmonized file needs
@@ -155,7 +157,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun,
         key = f"src:{r.source}"
         out.append({
             "key": r.source,
-            "cells": row_cells(r, running=busy, label=_label(p, r.source)),
+            "cells": row_cells(r, running=busy, label=_label(p, r.source),
+                               progress=(progress or {}).get(progress_key(p.name, period.id, "source", r.source))),
             "notes": notes,
             "error": errors.get(r.source),
             "actions": [
@@ -239,7 +242,10 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     building = layers.inflight.value
     stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
     row_errors = solara.use_reactive({})  # {scope: {row: message}}, written through _ScopedErrors
-    errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors under it
+    errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors and percents under it
+    # {prepare_jobs.progress_key: percent} of the downloads running; keyed by
+    # project and period, so a row of another scope never reads it
+    row_progress = solara.use_reactive({})
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
     # of scope forgets them all.
@@ -339,7 +345,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 return
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
                              name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
-                             row_errors=_ScopedErrors(row_errors, scope), errors_lock=errors_lock)
+                             row_errors=_ScopedErrors(row_errors, scope), errors_lock=errors_lock,
+                             row_progress=row_progress)
 
         def _job():
             try:
@@ -374,7 +381,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)),
                             rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map,
-                            locked=read_only(p))
+                            locked=read_only(p), progress=row_progress.value)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
@@ -384,7 +391,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             # reads running whichever period's job claimed it, so it gets every key
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
                       rows=plan_masks(p, pdir, period), running=running, errors=errors,
-                      on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True))
+                      on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True),
+                      progress=row_progress.value)
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
             with solara.Row(style="gap:8px;"):

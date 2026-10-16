@@ -169,6 +169,47 @@ def test_run_rows_applies_artifacts_and_stops_on_project_switch(monkeypatch, tmp
         assert saved.artifacts[key] == written["RADD"][key]  # recorded in "d"'s own manifest
 
 
+def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tmp_path):
+    """Bug 2026-10-16: a download said nothing while it ran. Its percent is
+    published by row (``row_progress``) and in the task's title, and both go
+    once the row ends; a finished download says the harmonize has begun."""
+    s = AppState()
+    s.new_project_state(_project("d", "GLAD-L"))
+    bus = NotificationBus()
+    progress = solara.reactive({})
+    key = prepare_jobs.progress_key("d", JAN.id, "source", "GLAD-L")
+    seen = []
+
+    def fake_run(job, on_tiles=None, on_wait=None):
+        for done in (1, 2, 4):
+            on_tiles(done, 4)
+            task = bus.tasks.value[-1]
+            seen.append((progress.value.get(key), task.title))
+        return _arts(job.source)
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d", notifier=Notifier(bus), row_progress=progress,
+                               errors_lock=threading.Lock()), ["GLAD-L"])
+
+    title = t("steps.prepare.job_title")
+    assert seen == [(25, t("steps.prepare.job_progress", title=title, pct=25)),
+                    (50, t("steps.prepare.job_progress", title=title, pct=50)),
+                    (100, title)]  # the download is done: the pill is back on its milestones
+    (task,) = bus.tasks.value
+    assert task.title == title and progress.value == {}
+    assert t("steps.prepare.job_harmonize_row", source="GLAD-L") in [m.message for m in task.milestones]
+
+
+def test_a_downloading_row_reads_its_percent():
+    cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered"),
+                                   running=True, progress=42)
+    assert (cells[1]["status"], cells[1]["label"]) == ("running", "42%")
+    assert cells[2]["status"] == "running" and "label" not in cells[2]
+    idle = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT, coverage="covered"),
+                                  running=False, progress=42)  # a stale percent never shows on an idle row
+    assert "label" not in idle[1]
+
+
 def test_run_rows_stops_when_the_project_is_closed(monkeypatch, tmp_path):
     s = AppState()
     d = _project("d", "GLAD-L", "RADD")

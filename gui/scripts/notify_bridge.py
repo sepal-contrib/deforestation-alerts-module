@@ -259,11 +259,15 @@ def run_button_job(title, body, *, release, on_success=None, on_refused=None, re
         release()
 
 
-def tile_progress_reporter(task):
+def tile_progress_reporter(task, on_pct=None):
     """Adapt geedim tile ticks ``(done, total)`` to ``task.set_progress``.
 
     Throttled to whole-percent changes so a many-tile export does not flood the
     bus. Safe after the task finished (pysepal's tracker ignores late calls).
+
+    pysepal's pill draws ``progress`` nowhere (an indeterminate spinner, the
+    title and the last milestone), so ``on_pct``, when given, is called with
+    each new whole percent for a caller that can show it.
     """
     last_pct = -1
 
@@ -276,5 +280,7 @@ def tile_progress_reporter(task):
             return
         last_pct = pct
         task.set_progress(done / total)
+        if on_pct is not None:
+            on_pct(pct)
 
     return on_tiles

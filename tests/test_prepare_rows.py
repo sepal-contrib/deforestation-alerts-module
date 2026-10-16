@@ -131,3 +131,21 @@ def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
     assert toggle["disabled"] and not toggle["is_on"]
     [toggle] = [a for a in _build([row], on={"src:GLAD-L"})["GLAD-L"]["actions"] if a["kind"] == "map_toggle"]
     assert toggle["is_on"] and not toggle["disabled"]
+
+
+def test_a_downloading_row_and_mask_read_their_percent():
+    """Bug 2026-10-16: the step's own rows say how far a download has got."""
+    from gui.tile.masks_card import mask_status
+
+    key = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
+    rows = [PrepareRow("RADD", Status.MISSING, Status.MISSING, "covered"),
+            PrepareRow("GLAD-L", Status.MISSING, Status.MISSING, "covered")]
+    built = _build(rows, mine={prepare_step._inflight_key("r", JAN.id, "RADD"),
+                               prepare_step._inflight_key("r", JAN.id, "GLAD-L")},
+                   progress={key: 37, ("r", "another period", "GLAD-L"): 80})
+    assert built["RADD"]["cells"][1]["label"] == "37%"
+    assert "label" not in built["GLAD-L"]["cells"][1]  # another period's percent is not this row's
+    busy = mask_status(SimpleNamespace(raw=Status.MISSING, aligned=Status.MISSING), busy=True, progress=12)
+    assert busy["label"] == "12%" and busy["compact"]
+    assert "label" not in mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False,
+                                      progress=12)
