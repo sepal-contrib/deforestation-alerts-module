@@ -314,7 +314,7 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     assert state.alerts_gdf.value is result.alerts
     # ruling #76: a fresh selection even though alert 0 was already showing
     assert picked == [-1, 0]
-    assert state.current_page_view.value == "analysis_tile"
+    assert state.current_page_view.value != "analysis_tile"  # the user stays on the step
     assert notifier.toasts == [("success", tn("steps.integrate.done", 2))]
     assert busy == [True, True] and not is_writing("d")
     assert not integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"]))
@@ -353,7 +353,7 @@ def test_a_tile_failure_warns_and_still_records_the_set(monkeypatch, tmp_path):
     assert state.project.value.active_set == "x" and state.alerts_gdf.value is result.alerts
     assert notifier.toasts == [("warning", t("steps.integrate.tiles_failed", error="tippecanoe crashed")),
                                ("success", tn("steps.integrate.done", 2))]
-    assert state.current_page_view.value == "analysis_tile"
+    assert state.current_page_view.value != "analysis_tile"  # the user stays on the step
 
 
 def test_without_tippecanoe_the_set_is_recorded_with_a_warning(monkeypatch, tmp_path):

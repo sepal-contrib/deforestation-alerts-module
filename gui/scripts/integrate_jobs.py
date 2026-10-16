@@ -56,8 +56,6 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
 
-ANALYSIS_VIEW = "analysis_tile"
-
 #: ``{(project name, set id): runs}`` of the Integrate jobs running now. A
 #: split or a merge of a set refuses to write its store while one is (spec
 #: §4.4): the run swaps a new store in and records a new set, which would
@@ -344,9 +342,11 @@ def _empty_message(result, left_out) -> str:
     return t("steps.integrate.done_empty_detail", details="; ".join(lines))
 
 
-def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left_out: Optional[dict] = None) -> None:
-    """The worker body: run the engine, build the tiles, record the set, and
-    open Analysis when there is something to review (spec §7.4 step 9).
+def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = None) -> None:
+    """The worker body: run the engine, build the tiles and record the set.
+
+    The user stays on the step (bug 2026-10-16): the new set is the active
+    one, and the Questionnaire and Evaluation steps come before Analysis.
 
     ``left_out``: the period's sources the form showed disabled, by name,
     with the reason; an empty set's toast names them. Raises
@@ -396,5 +396,3 @@ def run_integration_job(app_state, notifier, job, *, navigate: bool = True, left
                 notifier.success(tn("steps.integrate.done", result.alert_set.n_alerts))
             else:
                 notifier.info(_empty_message(result, left_out))
-        if navigate and n:
-            app_state.current_page_view.value = ANALYSIS_VIEW
