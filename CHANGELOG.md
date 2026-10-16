@@ -29,6 +29,16 @@
   - Optional layers: **visualization layers** (an Earth Engine image, a
     GeoTIFF, or Planet NICFI through Earth Engine), shown on the shared map
     with their legend and, when marked, on both Analysis maps.
+    - **Visualization styles**: one band is *Continuous* (a colour ramp
+      between a minimum and a maximum) or *Categorical* (integer classes
+      found over the AOI, at most 50, each with its colour and label and a
+      hide toggle; values not listed and hidden classes are transparent);
+      an image of three bands or more can be drawn as *RGB* from composite
+      cards (true colour, false-colour infrared, SWIR / NIR / red, from the
+      band roles detected) or from bands picked by hand. **Stretch to the
+      AOI** fills the minimum and maximum from the 2–98 % percentiles over
+      the AOI's bounds (for RGB, one range across the three bands). Layers
+      saved before keep their exact look.
   - Period: **several monitoring periods** (typically one a month, dates
     included at both ends), each with its own alert sets, listed with their
     window, sets and out-of-date badges; new, edit and delete follow the
