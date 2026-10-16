@@ -1,8 +1,8 @@
 """The visualization form's style fields (gui/widget/vis_layer_modal): the
-Bands question (keep every band for an RGB composite, or draw one), the Style
-tiles of a one-band layer (Continuous or Categorical), a Categorical layer's
-class list and palette menu, and the legend preview that ends a style's
-fields.
+Bands question (keep every band for an RGB composite, or draw one), an RGB
+layer's composite cards and band roles line, the Style tiles of a one-band
+layer (Continuous or Categorical), a Categorical layer's class list and
+palette menu, and the legend preview that ends a style's fields.
 """
 
 from typing import Optional
@@ -74,6 +74,82 @@ def StyleTiles(value, on_value, disabled=False):
                     rv.Html(tag="span", style_=_HINT, children=[t(f"steps.layers.style_{key}_hint")])])],
                 selected=key == value, on_click=lambda *_, k=key: on_value(k), disabled=disabled,
                 classes=["dv-style"])
+
+
+# The composite cards: the name over three chips (the bands drawn in red,
+# green and blue); a card whose bands are not all detected is greyed out.
+_COMBO_GRID = "display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;width:100%;margin:4px 0;"
+_COMBO_CHIPS = "display:flex;gap:3px;margin-top:4px;width:100%;"
+_COMBO_CHIP = ("flex:1;text-align:center;font-size:0.6875rem;font-weight:600;border-radius:3px;padding:2px 0;"
+               "color:#fff;overflow:hidden;text-overflow:ellipsis;background:{color};")
+_COMBO_OFF = "opacity:.4;"
+CHANNEL_COLORS = ("#e53935", "#43a047", "#1e88e5")  # the red, green and blue chips and dots
+_DOT = "display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:{color};"
+_ROLES_LINE = "font-size:0.8125rem;opacity:0.85;"
+_LINK = ("text-transform:none;letter-spacing:normal;padding:0 2px;min-width:0;height:auto;"
+         "text-decoration:underline;vertical-align:baseline;")
+
+
+def _capital(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def channel_dot(channel: int):
+    """The red (0), green (1) or blue (2) dot that labels a band select."""
+    return rv.Html(tag="span", style_=_DOT.format(color=CHANNEL_COLORS[channel]))
+
+
+@solara.component
+def CompositeCards(combo, on_combo, roles, band_text, disabled=False):
+    """One card per standard combination (``vis_palettes.RGB_COMBOS``), then
+    Custom: its name over its three bands on red, green and blue chips. A
+    combination whose roles are not all detected is greyed out and disabled."""
+    with rv.Html(tag="div", style_=_COMBO_GRID):
+        for key in [*vis_palettes.RGB_COMBOS, "custom"]:
+            picked = vis_palettes.combo_bands(key, roles) if key != "custom" else None
+            off = key != "custom" and picked is None
+            names = [band_text.get(b, str(b)) for b in picked] if picked else ["?"] * 3
+            chips = [rv.Html(tag="span", style_=_COMBO_CHIP.format(color=CHANNEL_COLORS[i]), children=[name])
+                     for i, name in enumerate(names)]
+            solara.Button(
+                children=[rv.Html(tag="span", style_="display:block;width:100%;", children=[
+                    rv.Html(tag="span", children=[_capital(t(f"steps.layers.combo_{key}"))]),
+                    rv.Html(tag="span", style_=_COMBO_CHIPS, children=chips)])],
+                on_click=lambda *_, k=key: on_combo(k), disabled=disabled or off, text=True,
+                style=_RAMP_CARD + (_RAMP_CARD_SELECTED if key == combo else "") + (_COMBO_OFF if off else ""),
+                classes=["dv-combo"] + (["dv-combo--selected"] if key == combo else [])
+                + (["dv-combo--off"] if off else [])).key(f"combo-{key}")
+
+
+def _role_word(label: str) -> str:
+    """A role's name inside a sentence: "Red" reads "red", "NIR" stays "NIR"."""
+    return label if label.isupper() else label[:1].lower() + label[1:]
+
+
+@solara.component
+def RolesSummary(roles, band_text, expanded, on_expanded, on_role, disabled=False, loading=False):
+    """The bands' roles on one line ("Bands detected: B2 blue · …", or "No
+    bands recognized"), with a link that unfolds the five role selects."""
+    by_band = {b: [r for r in vis_palettes.ROLES if roles.get(r) == b] for b in band_text}
+    listed = " · ".join(f"{band_text[b]} {_role_word(t(f'steps.layers.role_{r}'))}"
+                        for b, rs in by_band.items() for r in rs)
+    found = bool(listed)
+    # one box, keyed parts: the role selects come and go under the line
+    with rv.Html(tag="div", style_="margin:4px 0;"):
+        with rv.Html(tag="div", key="line", class_="dv-roles", style_=_ROLES_LINE):
+            rv.Html(tag="span", children=[
+                (t("steps.layers.roles_detected", list=listed) if found else t("steps.layers.roles_none")) + " — "])
+            solara.Button(label=t("steps.layers.roles_edit") if found else t("steps.layers.roles_set"),
+                          on_click=lambda *_: on_expanded(not expanded), text=True, small=True, color="primary",
+                          style=_LINK, classes=["dv-roles-link"])
+        if expanded:
+            items = [{"text": text, "value": value} for value, text in band_text.items()]
+            with rv.Row(dense=True, key="role-selects", class_="mt-1"):
+                for role in vis_palettes.ROLES:
+                    with rv.Col(cols=6):
+                        rv.Select(label=t(f"steps.layers.role_{role}"), items=items, v_model=roles.get(role),
+                                  on_v_model=lambda value, r=role: on_role(r, value), clearable=True, dense=True,
+                                  outlined=True, hide_details=True, loading=loading, disabled=disabled)
 
 
 def _css_color(color: str) -> str:

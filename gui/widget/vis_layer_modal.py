@@ -35,7 +35,8 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
-    _RAMP_BAR, _RAMP_GRID, BandsChoice, ClassList, LegendPreview, PaletteMenu, StyleTiles, card_button,
+    _RAMP_BAR, _RAMP_GRID, BandsChoice, ClassList, CompositeCards, LegendPreview, PaletteMenu, RolesSummary,
+    StyleTiles, card_button, channel_dot,
 )
 
 _MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
@@ -158,7 +159,10 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
 def preview_layer(kind, style, *, band, bands, ramp, invert, palette, colormap, classes, vmin, vmax):
     """The draft layer the form's legend preview is drawn from, coloured as
     ``validate_vis_layer`` would save it; None while the range is invalid
-    (continuous, rgb) or no class is visible (categorical)."""
+    (continuous, rgb), no class is visible (categorical) or the three bands
+    are not all chosen (rgb)."""
+    if style == "rgb" and None in ([band_index(b) for b in bands] if kind == "file" else list(bands)):
+        return None
     if style == "categorical":
         if not vis_classes.visible_classes(classes):
             return None
@@ -195,10 +199,6 @@ _LEGEND_STYLE = "padding:0 4px;font-size:0.75rem;opacity:0.75;"
 def _probe_error(err) -> str:
     """A probe's refusal (a message key) or failure (an exception), in the current language."""
     return t(err["key"]) if "key" in err else error_text(err["exception"])
-
-
-def _capital(text: str) -> str:
-    return text[:1].upper() + text[1:]
 
 
 @solara.component
@@ -244,6 +244,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     blue, set_blue = solara.use_state(raster0.bands[2] if rgb0 else None)
     roles, set_roles = solara.use_state(dict(raster0.roles) if raster0 is not None else {})
     combo, set_combo = solara.use_state((raster0.combo if raster0 is not None else None) or "custom")
+    roles_open, set_roles_open = solara.use_state(False)  # the role selects fold behind their summary line
     vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None and l0.kind != "nicfi" else "0")
     vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None and l0.kind != "nicfi" else "1")
     palette0 = raster0.palette if raster0 is not None else []
@@ -420,18 +421,22 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     solara.use_effect(_on_validated, [validation.pending, validation.finished, validation.error,
                                       validation.cancelled])
 
+    stretch_bands = [red, green, blue] if style == "rgb" else [band]
+
     async def _stretch():
-        # p2/p98 of the band over the AOI's bounds (gui/scripts/vis_probes)
+        # p2/p98 of the band over the AOI's bounds (gui/scripts/vis_probes); for
+        # RGB the lowest p2 and the highest p98 of the three bands, one shared range
         live = app_state.project.value
         scope = _scope(live)
-        if live is None or live.aoi is None or not ref or band is None:
+        if live is None or live.aoi is None or not ref or None in stretch_bands:
             return None
         bounds = live.aoi.bounds
         if kind == "gee":
-            info = await gee_interface.get_info_async(vis_probes.stretch_request(ref, [band], bounds))
-            span = vis_probes.stretch_from_info(info, [band])
+            info = await gee_interface.get_info_async(vis_probes.stretch_request(ref, stretch_bands, bounds))
+            span = vis_probes.stretch_from_info(info, stretch_bands)
         else:
-            span = await asyncio.to_thread(vis_probes.file_stretch, ref, [band_index(band)], bounds)
+            span = await asyncio.to_thread(vis_probes.file_stretch, ref, [band_index(b) for b in stretch_bands],
+                                           bounds)
         if not open_.value or _scope(app_state.project.value) != scope:
             return None  # closed, or the project or its AOI changed: the range is dropped
         return {"span": span} if span is not None else {"error": "steps.layers.err_no_stretch"}
@@ -522,9 +527,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     title = t("steps.layers.edit_title", name=editing) if l0 is not None else t("steps.layers.add_title")
     button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
 
-    def _band_select(label, value, on_value):
+    def _band_select(label, value, on_value, channel=None):
+        # an RGB band's label leads with its colour dot (the label slot; ``label`` stays for screen readers)
+        slots = [{"name": "label", "children": [channel_dot(channel), label]}] if channel is not None else []
         rv.Select(label=label, items=band_items, v_model=value, on_v_model=on_value, dense=True, outlined=True,
-                  loading=bands_task.pending, disabled=busy)
+                  loading=bands_task.pending, disabled=busy, v_slots=slots)
 
     def _range_fields():
         with rv.Row(dense=True):
@@ -553,7 +560,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         no_aoi = p is None or p.aoi is None
         solara.Button(label=t("steps.layers.stretch"), icon_name="mdi-arrow-expand-horizontal",
                       on_click=lambda: _start_probe(stretch_task, set_stretch_error), outlined=True, small=True,
-                      disabled=busy or no_aoi or not ref or band is None)
+                      disabled=busy or no_aoi or not ref or None in stretch_bands)
         solara.Text(t("steps.layers.stretch_hint"), style=MUTED)
         if stretch_error:
             solara.Text(_probe_error(stretch_error), classes=["error--text"])
@@ -607,22 +614,17 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             if n_bands is not None and n_bands >= 3:  # RGB is offered for three bands or more
                 BandsChoice(value=bands_mode, on_value=_set_bands_mode, disabled=busy)
             if rgb:
-                solara.Text(t("steps.layers.roles_hint"), style=MUTED)
-                with rv.Row(dense=True):
-                    for role in vis_palettes.ROLES:
-                        with rv.Col(cols=6):
-                            rv.Select(label=t(f"steps.layers.role_{role}"), items=band_items,
-                                      v_model=roles.get(role), on_v_model=lambda value, r=role: _set_role(r, value),
-                                      clearable=True, dense=True, outlined=True, hide_details=True,
-                                      loading=bands_task.pending, disabled=busy)
-                rv.Select(label=t("steps.layers.field_combo"), v_model=combo, on_v_model=_pick_combo,
-                          items=[{"text": _capital(t(f"steps.layers.combo_{c}")), "value": c}
-                                 for c in [*vis_palettes.available_combos(roles), "custom"]],
-                          dense=True, outlined=True, disabled=busy)
-                _band_select(t("steps.layers.field_red"), red, _rgb_setter(set_red))
-                _band_select(t("steps.layers.field_green"), green, _rgb_setter(set_green))
-                _band_select(t("steps.layers.field_blue"), blue, _rgb_setter(set_blue))
+                CompositeCards(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text, disabled=busy)
+                RolesSummary(roles=roles, band_text=band_text, expanded=roles_open, on_expanded=set_roles_open,
+                             on_role=_set_role, disabled=busy, loading=bands_task.pending)
+                with rv.Row(dense=True):  # Custom: the three bands by hand
+                    for i, (key, value, setter) in enumerate((("steps.layers.field_red", red, set_red),
+                                                              ("steps.layers.field_green", green, set_green),
+                                                              ("steps.layers.field_blue", blue, set_blue))):
+                        with rv.Col(cols=4):
+                            _band_select(t(key), value, _rgb_setter(setter), channel=i)
                 _range_fields()
+                _stretch_fields()
             else:
                 StyleTiles(value=one_style, on_value=set_one_style, disabled=busy)
                 _band_select(t("steps.layers.field_band"), band, set_band)
