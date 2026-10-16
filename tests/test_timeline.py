@@ -571,10 +571,49 @@ def test_widening_past_the_coverage_asks_the_loader_for_the_month():
     assert state.scene_window_request.value[0] < date(2026, 3, 3)
 
 
-def test_repeated_widening_on_the_same_alert_is_cumulative():
+def _side_buttons(card) -> list:
+    """The "+1 month" buttons, left then right."""
+    return [w for w in _walk(card)
+            if timeline.t("analysis.timeline.one_more_month") in _text(w)
+            and "click" in (getattr(w, "_events", None) or [])]
+
+
+def test_a_month_later_is_offered_only_once_it_has_begun():
+    # the default view ends 2026-10-23: the month after it is November
+    assert timeline.can_widen_forward((date(2026, 3, 3), date(2026, 10, 23)), date(2026, 10, 16)) is False
+    assert timeline.can_widen_forward((date(2026, 3, 3), date(2026, 10, 23)), date(2026, 11, 1)) is True
+    assert timeline.can_widen_forward((date(2026, 3, 3), date(2026, 9, 30)), date(2026, 10, 16)) is True
+    assert timeline.can_widen_forward(None, date(2026, 10, 16)) is True  # no view: nothing to judge
+
+
+def test_the_later_button_is_disabled_while_the_view_shows_the_current_month(monkeypatch):
+    """Bug 2026-10-16: "+1 month" on the right kept adding months that have
+    not happened yet, which can hold no image."""
+    monkeypatch.setattr(timeline, "today", lambda: date(2026, 10, 16))
+    state = _fake_state()
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    left, right = _side_buttons(card)
+    assert right.disabled and not left.disabled
+    right.fire_event("click", None)  # a click already on its way changes nothing
+    assert state.scene_window_request.value is None
+
+
+def test_the_later_button_turns_off_when_a_press_reaches_the_current_month(monkeypatch):
+    monkeypatch.setattr(timeline, "today", lambda: date(2026, 11, 2))
+    state = _fake_state()
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    _left, right = _side_buttons(card)
+    assert not right.disabled
+    right.fire_event("click", None)
+    assert state.scene_window_request.value[1] == date(2026, 11, 23)
+    assert right.disabled
+
+
+def test_repeated_widening_on_the_same_alert_is_cumulative(monkeypatch):
     """Two presses ask for two months, not one -- that is the feature. The
     request is recomputed from ``extra``, which grows, rather than unioned
     with whatever was there, which is what made it leak across alerts."""
+    monkeypatch.setattr(timeline, "today", lambda: date(2030, 1, 1))  # the later months have begun
     state = _fake_state()
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     buttons = [w for w in _walk(card)

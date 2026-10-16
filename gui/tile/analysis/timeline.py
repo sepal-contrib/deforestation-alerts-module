@@ -155,6 +155,24 @@ def view_window(ctx, project, extra) -> Optional[tuple[date, date]]:
             scene_query.shift_months(a1, VIEW_MONTHS + fwd))
 
 
+def today() -> date:
+    """The local date; a module function so a test can pin it."""
+    return date.today()
+
+
+def can_widen_forward(window, now: date) -> bool:
+    """Whether "+1 month" on the right would add a month that has begun.
+
+    The month after the view's last one must not lie after ``now``'s: a month
+    still to come holds no image. ``True`` without a view, where there is
+    nothing to judge (the width is kept for the next alert).
+    """
+    if window is None:
+        return True
+    following = scene_query.shift_months(window[1], 1)
+    return (following.year, following.month) <= (now.year, now.month)
+
+
 def alert_window(ctx, project) -> tuple[Optional[date], Optional[date]]:
     """The gold band's own dates, by the same fallback as ``view_window``."""
     if ctx and ctx.get("date_min") and ctx.get("date_max"):
@@ -987,8 +1005,16 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         app_state.scene_window_request.set(
             None if window is None or extra.value == (0, 0) else window)
 
+    def _later_allowed() -> bool:
+        return can_widen_forward(view_window(widgets.imagery_ctx.value, app_state.project.value, extra.value),
+                                 today())
+
     def _widen(side):
-        """One more month on ``side``, and a request for it if the cache is short."""
+        """One more month on ``side``, and a request for it if the cache is
+        short. Never a month that has not begun (``can_widen_forward``): a
+        click sent before the button was disabled is dropped here."""
+        if side == "right" and not _later_allowed():
+            return
         back, fwd = extra.value
         extra.set((back + 1, fwd) if side == "left" else (back, fwd + 1))
         _ask_for_the_view()
@@ -1100,6 +1126,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             if saved:
                 _make_room_for(saved.values())
             _ask_for_the_view()
+        # every render: a press, another alert and the date all move it
+        right_btn.disabled = not _later_allowed()
         rows, window = _in_window()
         sel = None if rows is None or window is None else _enabled(rows)
         if sel is None or len(sel) == 0:
