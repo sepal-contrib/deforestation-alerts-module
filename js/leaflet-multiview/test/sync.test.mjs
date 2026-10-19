@@ -42,8 +42,8 @@ function fakeMap(name, {w = 400, h = 300} = {}) {
       for (const e of ev.split(" ")) handlers[e] = (handlers[e] || []).filter(f => f !== fn);
       return m;
     },
-    fire(ev) {
-      for (const f of (handlers[ev] || []).slice()) f();
+    fire(ev, data) {
+      for (const f of (handlers[ev] || []).slice()) f(data);
       return m;
     },
     listenerCount(ev) {
@@ -82,6 +82,19 @@ function fakeMap(name, {w = 400, h = 300} = {}) {
       }
       m.fire("moveend");
     },
+    // An animated zoom (wheel, buttons): Leaflet fires "zoomanim" with the
+    // target at the start, and holds "zoom"/"move"/"moveend" until the CSS
+    // transition ends. Returns the function that ends it.
+    animateZoom(center, zoom) {
+      m.fire("zoomanim", {center: {lat: center[0], lng: center[1]}, zoom});
+      return () => {
+        m.center = center;
+        m.zoom = zoom;
+        m.fire("zoom");
+        m.fire("move");
+        m.fire("moveend");
+      };
+    },
   };
   return m;
 }
@@ -112,6 +125,26 @@ test("the guard drops the followers' echoes: the leader is never set, and only i
   assert.equal(a.setViewCalls, 0, "no follower event bounced back onto the leader");
   assert.ok(b.setViewCalls >= 3 && c.setViewCalls >= 3);
   assert.deepEqual(gestures, [{center: [3, 3], zoom: 2}], "one gesture: the followers' own moveends were dropped");
+});
+
+test("an animated zoom moves the followers when it starts, not when its transition ends", () => {
+  const {maps: [a, b, c], gestures, sync} = trio();
+  const end = a.animateZoom([5, 6], 9);
+  assert.deepEqual([b.center, b.zoom], [[5, 6], 9]);
+  assert.deepEqual([c.center, c.zoom], [[5, 6], 9]);
+  assert.equal(a.setViewCalls, 0, "the followers' own events did not bounce back onto the leader");
+  assert.deepEqual(gestures, [], "the gesture ends with the transition");
+  end();
+  assert.equal(a.setViewCalls, 0);
+  assert.deepEqual(sync.canonical(), {center: [5, 6], zoom: 9});
+  assert.deepEqual(gestures, [{center: [5, 6], zoom: 9}]);
+});
+
+test("while restoring, an animated zoom does not sync", () => {
+  const {maps: [a, b], sync} = trio();
+  sync.restore();
+  a.animateZoom([5, 6], 9);
+  assert.deepEqual([b.center, b.zoom], [[0, 0], 2]);
 });
 
 test("any view can lead; the end of its gesture becomes the canonical view", () => {
@@ -191,7 +224,10 @@ test("destroy detaches every listener and cancels the pending frame", () => {
   sync.restore();
   sync.destroy();
   assert.equal(frames.size, 0);
-  assert.equal(a.listenerCount("move") + a.listenerCount("zoom") + a.listenerCount("moveend"), 0);
+  assert.equal(
+    a.listenerCount("move") + a.listenerCount("zoom") + a.listenerCount("zoomanim") + a.listenerCount("moveend"),
+    0,
+  );
   a.drag([4, 4]);
   assert.deepEqual(b.center, [0, 0]);
   assert.deepEqual(gestures, []);

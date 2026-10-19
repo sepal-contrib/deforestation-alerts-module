@@ -4,6 +4,8 @@
 //   other map gets setView(..., {animate: false}) at once, so the followers
 //   track a drag frame by frame. Leaflet fires the followers' own events
 //   synchronously inside setView; ``busy`` drops them, so nothing echoes back.
+//   An animated zoom fires no "move"/"zoom" until its transition ends, so the
+//   followers jump to its target on "zoomanim", when it starts.
 // - Canonical view: the last setCanonical(), or the leader's view when a user
 //   gesture ends (its "moveend"). Nothing else writes it.
 // - restore(): after a size change every map must re-measure
@@ -39,21 +41,27 @@ export function createSync(maps, {onGestureEnd = () => {}} = {}) {
   let restoring = false; // a resize-driven re-measure is running (until the next frame)
   let pending = null; // the frame that clears ``restoring``
 
-  const followFrom = leader => {
+  const follow = (leader, center, zoom) => {
     busy = true;
     try {
-      const center = leader.getCenter();
-      const zoom = leader.getZoom();
       for (const map of maps) if (map !== leader) map.setView(center, zoom, {animate: false});
     } finally {
       busy = false;
     }
   };
 
+  const followFrom = leader => follow(leader, leader.getCenter(), leader.getZoom());
+
   const unlinks = maps.map(leader => {
     const onMove = () => {
       if (busy || restoring) return;
       followFrom(leader);
+    };
+    // An animated zoom holds the leader's "move"/"zoom" until its CSS
+    // transition ends (~250 ms); "zoomanim" carries the target at the start.
+    const onZoomAnim = e => {
+      if (busy || restoring) return;
+      follow(leader, e.center, e.zoom);
     };
     const onMoveEnd = () => {
       // ``restoring`` is checked before anything else: a resize-driven moveend
@@ -64,9 +72,11 @@ export function createSync(maps, {onGestureEnd = () => {}} = {}) {
       onGestureEnd(copy(canonical));
     };
     leader.on("move zoom", onMove);
+    leader.on("zoomanim", onZoomAnim);
     leader.on("moveend", onMoveEnd);
     return () => {
       leader.off("move zoom", onMove);
+      leader.off("zoomanim", onZoomAnim);
       leader.off("moveend", onMoveEnd);
     };
   });
