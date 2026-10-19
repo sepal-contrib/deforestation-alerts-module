@@ -49,7 +49,7 @@
       "delete_failed": "Could not delete {name}: {error}",
       "deleted": "Deleted {name}",
       "duplicate_title": "Duplicate {name}",
-      "duplicate_hint": "The copy keeps the AOI, sources and grid, without periods or alert sets.",
+      "duplicate_hint": "The copy keeps the AOI, sources, masks, layers and grid, without periods or alert sets.",
       "manage_title": "Manage projects",
       "chip_open": "open",
       "modified": "modified {time_ago}",
@@ -88,7 +88,7 @@
       "busy": "A job is writing into this project; change the AOI once it has finished."
     },
     "alerts": {
-      "description": "The alert datasets this project monitors, with the share of the AOI each one covers. Each is downloaded for every period, cut to the AOI and the period's dates.",
+      "description": "The alert datasets this project monitors, with the share of the AOI each one covers. Each is downloaded for every period, cut to the AOI and the period's search window.",
       "info_header": "About alert sources",
       "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning. A project holds at most 3 predefined and 6 custom sources. A custom source can be edited until an alert set uses it; after that, delete it and add a new one.",
       "list_title": "Sources",
@@ -164,9 +164,9 @@
       "format_help_pyeo": "total_changes: 1–2 probable, 3 or more confirmed; first_change_date_above_threshold: fractional year"
     },
     "layers": {
-      "description": "Layers that help you read the alerts: an Earth Engine image, a GeoTIFF from your SEPAL folder, or Planet NICFI. They can also be shown on the two Analysis maps.",
+      "description": "Layers that support the analysis of the alerts: an Earth Engine image, a GeoTIFF from your SEPAL folder, or Planet NICFI. They can also be shown on the two Analysis maps.",
       "info_header": "About optional layers",
-      "info_md": "Visualization layers help you read the map; they never change the alerts.\n\n- **Earth Engine image** and **GeoTIFF** (in your SEPAL folder): one band drawn with a colour ramp, or three bands as an RGB composite, between a minimum and a maximum.\n- A GeoTIFF layer: the app writes an overview file next to it, so its folder must be writable.\n- **Planet NICFI:** the monthly tropical mosaic through Earth Engine, for the month you choose or the last month of the active period. Your Earth Engine account needs NICFI access.\n\nShow a layer on this map with its row's map button; its legend appears with it. Tick **Show in Analysis** to add it, switched off, to both Analysis maps.",
+      "info_md": "Visualization layers support the analysis of the alerts; they never change them.\n\n- **Earth Engine image** and **GeoTIFF** (in your SEPAL folder): one band drawn with a colour ramp, or three bands as an RGB composite, between a minimum and a maximum.\n- A GeoTIFF layer: the app writes an overview file next to it, so its folder must be writable.\n- **Planet NICFI:** the monthly tropical mosaic through Earth Engine, for the month you choose or the last month of the active period. Your Earth Engine account needs NICFI access.\n\nShow a layer on this map with its row's map button; its legend appears with it. Tick **Show in Analysis** to add it, switched off, to both Analysis maps.",
       "list_title": "Visualization layers",
       "col_name": "Name",
       "empty": "No visualization layers.",
@@ -399,7 +399,7 @@
       "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the alerts Analysis reviews.\n\n1. The chosen sources are combined pixel by pixel; each alert remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring pixels become alerts. Alerts smaller than the **minimum size** are dropped; you can limit the number of alerts, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every alert.\n\nPixels too small to be an alert, or beyond the maximum number of alerts, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. One **include probable alerts** switch covers every chosen source (**Set per source** to choose each one); off, their probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed alerts it would discard. When the run ends, the new set becomes the active one: set up the questionnaire, then start Analysis.",
       "sources": "Sources to combine",
       "min_size": "Minimum alert size",
-      "min_size_hint": "Alert clusters smaller than this ({px} pixels on the grid) are dropped, and are left out of the set, its exports and the Overview map.",
+      "min_size_hint": "Alert clusters smaller than this ({px} pixels on the grid) are dropped, and are left out of the set, its exports and the map.",
       "include_probable": "Include probable (unconfirmed) alerts",
       "probable_per_source": "Set per source",
       "probable_mixed": "Mixed: the sources below differ.",
@@ -460,7 +460,7 @@
       "step_footprint": "Writing the footprint",
       "step_store": "Saving the alerts",
       "step_tiles": "Building map tiles",
-      "no_tippecanoe": "tippecanoe is not installed: Overview will show alert points without polygons.",
+      "no_tippecanoe": "tippecanoe is not installed: the map will show alert points without polygons.",
       "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons.",
       "done": {
         "one": "{n} alert ready for review",

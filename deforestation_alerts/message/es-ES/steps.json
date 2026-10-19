@@ -55,7 +55,7 @@
       "delete_failed": "No se pudo eliminar {name}: {error}",
       "deleted": "{name} eliminado",
       "duplicate_title": "Duplicar {name}",
-      "duplicate_hint": "La copia conserva la AOI, las fuentes y la cuadrícula, sin períodos ni conjuntos de alertas.",
+      "duplicate_hint": "La copia conserva la AOI, las fuentes, las máscaras, las capas y la cuadrícula, sin períodos ni conjuntos de alertas.",
       "manage_title": "Gestionar proyectos",
       "chip_open": "abierto",
       "modified": "modificado {time_ago}",
@@ -94,7 +94,7 @@
       "busy": "Un trabajo está escribiendo en este proyecto; cambia la AOI cuando termine."
     },
     "alerts": {
-      "description": "Los conjuntos de datos de alertas que este proyecto monitorea, con la parte de la AOI que cubre cada uno. Cada uno se descarga para cada período, recortado a la AOI y a las fechas del período.",
+      "description": "Los conjuntos de datos de alertas que este proyecto monitorea, con la parte de la AOI que cubre cada uno. Cada uno se descarga para cada período, recortado a la AOI y a la ventana de búsqueda del período.",
       "info_header": "Acerca de las fuentes de alertas",
       "info_md": "Una fuente de alertas es un conjunto de datos de alertas de pérdida forestal. Cada píxel de alerta es **confirmado** (confianza alta) o **probable** (confianza baja) y lleva el día en que se detectó por primera vez.\n\n- **Predefinidas:** GLAD-L (Landsat, unos 30 m), GLAD-S2 (Sentinel-2, 10 m) y RADD (Sentinel-1, 10 m). RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.\n- **Personalizadas:** una imagen o colección de imágenes de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL, leído mediante un preajuste de formato: *RADD* (banda de alerta 2 probable, 3 confirmada; fecha `yyddd`), *alertas CCDC de SEPAL* y *alertas PyEO de SEPAL* (1–2 detecciones probable, 3 o más confirmada; fecha de primera detección en años decimales) o *solo fecha* (una banda de fecha en la codificación que elijas; todo píxel con fecha está confirmado).\n\nEl chip de cada fila es la **cobertura** de la fuente: la parte de la AOI dentro de su huella. Una fuente que no cubra nada de la AOI no se puede añadir; una cobertura parcial es un aviso. Un proyecto tiene como máximo 3 fuentes predefinidas y 6 personalizadas. Una fuente personalizada se puede editar hasta que un conjunto de alertas la use; después, elimínala y añade una nueva.",
       "list_title": "Fuentes",
@@ -171,9 +171,9 @@
       "format_help_pyeo": "total_changes: 1–2 probable, 3 o más confirmada; first_change_date_above_threshold: año fraccionario"
     },
     "layers": {
-      "description": "Capas que ayudan a leer las alertas: una imagen de Earth Engine, un GeoTIFF de tu carpeta de SEPAL o Planet NICFI. También se pueden mostrar en los dos mapas de Análisis.",
+      "description": "Capas que apoyan el análisis de las alertas: una imagen de Earth Engine, un GeoTIFF de tu carpeta de SEPAL o Planet NICFI. También se pueden mostrar en los dos mapas de Análisis.",
       "info_header": "Acerca de las capas opcionales",
-      "info_md": "Las capas de visualización ayudan a leer el mapa; nunca cambian las alertas.\n\n- **Imagen de Earth Engine** y **GeoTIFF** (en tu carpeta de SEPAL): una banda dibujada con una rampa de color, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- Una capa GeoTIFF: la aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
+      "info_md": "Las capas de visualización apoyan el análisis de las alertas; nunca las cambian.\n\n- **Imagen de Earth Engine** y **GeoTIFF** (en tu carpeta de SEPAL): una banda dibujada con una rampa de color, o tres bandas como compuesto RGB, entre un mínimo y un máximo.\n- Una capa GeoTIFF: la aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n- **Planet NICFI:** el mosaico tropical mensual a través de Earth Engine, para el mes que elijas o el último mes del período activo. Tu cuenta de Earth Engine necesita acceso a NICFI.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
       "list_title": "Capas de visualización",
       "col_name": "Nombre",
       "empty": "No hay capas de visualización.",
@@ -414,7 +414,7 @@
       "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes limitar el número de alertas, ordenadas como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nLos píxeles demasiado pequeños para ser una alerta, o que superan el número máximo de alertas, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Un interruptor **incluir alertas probables** vale para todas las fuentes elegidas (**Definir por fuente** para elegir cada una); desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, el nuevo conjunto pasa a ser el activo: prepara el cuestionario y luego inicia Análisis.",
       "sources": "Fuentes a combinar",
       "min_size": "Tamaño mínimo de alerta",
-      "min_size_hint": "Se descartan los grupos de alertas más pequeños que esto ({px} píxeles en la cuadrícula), y quedan fuera del conjunto, de sus exportaciones y del mapa de Resumen.",
+      "min_size_hint": "Se descartan los grupos de alertas más pequeños que esto ({px} píxeles en la cuadrícula), y quedan fuera del conjunto, de sus exportaciones y del mapa.",
       "include_probable": "Incluir alertas probables (no confirmadas)",
       "probable_per_source": "Definir por fuente",
       "probable_mixed": "Mixto: las fuentes de abajo difieren.",
@@ -481,7 +481,7 @@
       "step_footprint": "Escribiendo la huella",
       "step_store": "Guardando las alertas",
       "step_tiles": "Generando las teselas del mapa",
-      "no_tippecanoe": "tippecanoe no está instalado: Resumen mostrará los puntos de alerta sin polígonos.",
+      "no_tippecanoe": "tippecanoe no está instalado: el mapa mostrará los puntos de alerta sin polígonos.",
       "tiles_failed": "No se pudieron mostrar las teselas del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
       "done": {
         "one": "{n} alerta lista para revisar",
