@@ -280,9 +280,75 @@ def test_every_month_collapsed_leaves_no_division_by_zero():
     assert all(s.ppd == 0.0 for s in segs.values())
 
 
-def test_a_track_too_narrow_for_its_collapsed_blocks_does_not_go_negative():
+def test_a_narrow_track_still_leaves_the_open_months_their_share():
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 5, 31), {(2026, 3), (2026, 4)}, 100.0)
-    assert segs[(2026, 5)].ppd == 0.0 and segs[(2026, 5)].w == 0.0
+    assert segs[(2026, 3)].w == pytest.approx(100.0 * scene_query.FOLD_SHARE / 2)
+    assert segs[(2026, 5)].w == pytest.approx(100.0 * (1 - scene_query.FOLD_SHARE))
+    assert segs[(2026, 5)].ppd > 0.0
+
+
+# A two-year alert (the reported Ghana case): 1 Jan 2023 -> 21 Dec 2024, so
+# Jan 2023..Nov 2024 fold -- 23 months, 1518 px at 66 px on a 1120 px track.
+LONG_A0, LONG_A1 = date(2023, 1, 1), date(2024, 12, 21)
+LONG_VIEW = (date(2022, 11, 1), date(2025, 2, 21))
+
+
+def _long_segments():
+    collapsed = scene_query.auto_collapsed(*LONG_VIEW, LONG_A0, LONG_A1)
+    assert len(collapsed) == 23
+    return scene_query.month_segments(*LONG_VIEW, collapsed, 1120.0)
+
+
+def test_a_long_alert_never_squeezes_the_months_around_it_to_nothing():
+    segs = _long_segments()
+    folded = [s for s in segs.values() if s.collapsed]
+    opened = [s for s in segs.values() if not s.collapsed]
+    assert sum(s.w for s in folded) == pytest.approx(1120.0 * scene_query.FOLD_SHARE)
+    assert all(s.w > 0 and s.ppd > 0 for s in opened)
+    assert sum(s.w for s in segs.values()) == pytest.approx(1120.0)  # nothing runs off the track
+    assert scene_query.x_for(segs, LONG_VIEW[1], end=True) == pytest.approx(1120.0)
+
+
+def test_a_short_alert_keeps_full_size_blocks():
+    # 7 folded months fit under the cap (462 px < 504 px): nothing changes
+    collapsed = {(2026, m) for m in range(3, 10)}
+    segs = scene_query.month_segments(date(2026, 1, 1), date(2026, 12, 31), collapsed, 1120.0)
+    assert all(segs[key].w == pytest.approx(66.0) for key in collapsed)
+
+
+# ------------------------------------------------------------ fold groups
+
+def test_narrow_folded_months_group_by_calendar_half_year():
+    groups = scene_query.fold_groups(_long_segments())
+    assert groups == [
+        [(2023, m) for m in range(1, 7)],
+        [(2023, m) for m in range(7, 13)],
+        [(2024, m) for m in range(1, 7)],
+        [(2024, m) for m in range(7, 12)],
+    ]
+
+
+def test_full_size_folded_months_stay_one_block_each():
+    collapsed = {(2026, 4), (2026, 5), (2026, 6)}
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 7, 31), collapsed, 1120.0)
+    assert scene_query.fold_groups(segs) == [[(2026, 4)], [(2026, 5)], [(2026, 6)]]
+
+
+def test_an_unfolded_half_year_comes_back_as_single_months():
+    groups = scene_query.fold_groups(_long_segments(), split={(2024, 1)})
+    assert [g for g in groups if g[0][0] == 2024 and g[0][1] <= 6] == [[(2024, m)] for m in range(1, 7)]
+    assert [(2023, m) for m in range(1, 7)] in groups  # the other halves stay grouped
+    assert [(2024, m) for m in range(7, 12)] in groups
+
+
+def test_an_open_month_breaks_a_half_year_group():
+    segs = _long_segments()
+    collapsed = {key for key, s in segs.items() if s.collapsed} - {(2023, 3)}
+    segs = scene_query.month_segments(*LONG_VIEW, collapsed, 1120.0)
+    groups = scene_query.fold_groups(segs)
+    assert [(2023, 1), (2023, 2)] in groups
+    assert [(2023, 4), (2023, 5), (2023, 6)] in groups
+    assert all((2023, 3) not in g for g in groups)
 
 
 def test_x_for_places_a_date_by_its_offset_inside_its_expanded_month():

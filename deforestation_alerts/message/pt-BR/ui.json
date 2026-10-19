@@ -95,6 +95,7 @@
       "set_before": "Definir como imagem de antes",
       "set_after": "Definir como imagem de depois",
       "collapsed_month": "{month}, {count} imagens, recolhido. Expandir este mês.",
+      "collapsed_group": "{months}, {count} imagens, recolhidos. Expandir estes meses.",
       "collapse_month": "{month}. Recolher este mês.",
       "no_cloud_filter": "Um mapa base NICFI é um mosaico mensal sem valor de nebulosidade, então o limite de nuvens nunca o oculta.",
       "saved_missing": "Imagem salva indisponível; escolhida automaticamente",

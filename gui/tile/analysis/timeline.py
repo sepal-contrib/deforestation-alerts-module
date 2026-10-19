@@ -91,6 +91,10 @@ THEME_CSS = (
     "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
 )
 HIT_PX = 11
+#: a collapsed month at least this wide carries its full label ("JUN 2026",
+#: the count, "images"); a narrower one -- a long alert's, shrunk by
+#: ``scene_query.FOLD_SHARE`` -- shows less and leaves its year to the axis
+FULL_BLOCK_PX = 52.0
 STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
 #: the order of two collections on one date: the one a drag or an arrow lands
@@ -531,6 +535,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
     after_id = solara.reactive(None)
+    #: the half-years (``scene_query.half_of``) the reviewer has unfolded into
+    #: months; reset with the collapse set
+    split = solara.reactive(frozenset())
     #: the alert the collapse set and the selection belong to, so a new alert
     #: gets its own auto-collapse instead of inheriting the last one's
     seen_alert = solara.reactive(None)
@@ -773,38 +780,82 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         collapsed.set(collapsed.value | {key})
         render()
 
+    def _split(half):
+        split.set(split.value | {half})
+        render()
+
+    def _block(x, w, aria, children, bottom):
+        return v.Html(
+            tag="button",
+            attributes={"type": "button", "aria-label": aria},
+            style_=(f"pointer-events: auto; position: absolute; left: {_pct(x):.3f}%; "
+                    f"width: {_pct(w):.3f}%; top: 0; bottom: {bottom}; cursor: pointer; overflow: hidden; "
+                    "background: repeating-linear-gradient(135deg, var(--dat-fold-a), var(--dat-fold-a) 4px, "
+                    "var(--dat-fold-b) 4px, var(--dat-fold-b) 9px); "
+                    "border-left: 1px dashed var(--dat-edge); "
+                    "border-right: 1px dashed var(--dat-edge); display: flex; flex-direction: column; "
+                    f"align-items: center; justify-content: center; gap: 3px; color: {MUTED}"),
+            children=children)
+
+    def _block_text(label, n, *, images=True):
+        kids = [v.Html(tag="span", style_="font-size: 9px; letter-spacing: 0.1em; white-space: nowrap; "
+                                          "text-transform: uppercase", children=[label]),
+                v.Html(tag="span", style_="font-size: 16px; font-weight: 600; color: var(--dat-ink); "
+                                          "line-height: 1", children=[str(n)])]
+        if images:
+            kids.append(v.Html(tag="span", style_="font-size: 8px", children=[t("analysis.timeline.images")]))
+        return kids
+
     def _render_blocks(segs, sel):
         counts = scene_query.month_counts(sel)
+        folded = [key for key, seg in sorted(segs.items()) if seg.collapsed]
+        # A long alert's months are narrower than a full block (``FOLD_SHARE``):
+        # they then sit on the lane only and leave the axis below them to the
+        # years, which their own labels no longer carry.
+        narrow = bool(folded) and segs[folded[0]].w < FULL_BLOCK_PX
+        bottom = f"{AXIS_H}px" if narrow else "0"
         kids = []
-        for key, seg in sorted(segs.items()):
-            if not seg.collapsed:
+        for group in scene_query.fold_groups(segs, split.value):
+            first, last = segs[group[0]], segs[group[-1]]
+            n = sum(counts.get(key, 0) for key in group)
+            if len(group) > 1:
+                start, end = date(first.year, first.month, 1), date(last.year, last.month, 1)
+                label = f"{format_date(start, 'MMM')} – {format_date(end, 'MMM y')}"
+                btn = _block(first.x, last.x + last.w - first.x,
+                             t("analysis.timeline.collapsed_group", months=label, count=n),
+                             _block_text(label, n), bottom)
+                btn.on_event("click", lambda w, e, d, half=scene_query.half_of(group[0]): _split(half))
+                kids.append(btn)
                 continue
             # the locale's own month name: a CLDR pattern, not strftime, which
             # would put "JUN 2026" inside a French aria-label. The visible
             # label is uppercased by CSS, so the text a screen reader reads
             # and the text interpolated into ``collapsed_month`` stay natural.
-            label = format_date(date(seg.year, seg.month, 1), "MMM y")
-            n = counts.get(key, 0)
-            btn = v.Html(
-                tag="button",
-                attributes={"type": "button",
-                            "aria-label": t("analysis.timeline.collapsed_month", month=label, count=n)},
-                style_=(f"pointer-events: auto; position: absolute; left: {_pct(seg.x):.3f}%; "
-                        f"width: {_pct(seg.w):.3f}%; top: 0; bottom: 0; cursor: pointer; "
-                        "background: repeating-linear-gradient(135deg, var(--dat-fold-a), var(--dat-fold-a) 4px, "
-                        "var(--dat-fold-b) 4px, var(--dat-fold-b) 9px); "
-                        "border-left: 1px dashed var(--dat-edge); "
-                        "border-right: 1px dashed var(--dat-edge); display: flex; flex-direction: column; "
-                        f"align-items: center; justify-content: center; gap: 3px; color: {MUTED}"),
-                children=[
-                    v.Html(tag="span", style_="font-size: 9px; letter-spacing: 0.1em; "
-                                              "text-transform: uppercase", children=[label]),
-                    v.Html(tag="span", style_="font-size: 16px; font-weight: 600; color: var(--dat-ink); "
-                                              "line-height: 1", children=[str(n)]),
-                    v.Html(tag="span", style_="font-size: 8px", children=[t("analysis.timeline.images")]),
-                ])
+            key, month = group[0], date(first.year, first.month, 1)
+            label = format_date(month, "MMM y")
+            if first.w >= FULL_BLOCK_PX:
+                text = _block_text(label, n)
+            elif first.w >= scene_query.FOLD_GROUP_BELOW_PX:
+                text = _block_text(format_date(month, "MMM"), n, images=False)
+            else:
+                text = _block_text(format_date(month, "MMMMM"), n, images=False)  # the narrow form: "J"
+            btn = _block(first.x, first.w, t("analysis.timeline.collapsed_month", month=label, count=n),
+                         text, bottom)
             btn.on_event("click", lambda w, e, d, key=key: _expand(key))
             kids.append(btn)
+        if narrow:
+            for key in folded:
+                seg = segs[key]
+                prev = segs.get((key[0], key[1] - 1))  # None for a January: a new year
+                if prev is not None and prev.collapsed:
+                    continue  # not the start of this year's folded stretch
+                kids.append(v.Html(
+                    tag="span", class_="defo-tl-year",
+                    style_=(f"position: absolute; left: {_pct(seg.x):.3f}%; bottom: 0; height: {AXIS_H}px; "
+                            "padding: 7px 0 0 4px; box-sizing: border-box; "
+                            "border-left: 1px solid var(--dat-edge); font-size: 10.5px; font-weight: 600; "
+                            "color: var(--dat-ink); white-space: nowrap"),
+                    children=[str(seg.year)]))
         replace_children(blocks, [v.Html(tag="div", style_="position: relative; height: 100%; "
                                                            "pointer-events: none", children=kids)])
 
@@ -1029,6 +1080,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if window is None or a0 is None or a1 is None:
             return
         collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
+        split.set(frozenset())
         render()
 
     def _clear_track():
@@ -1158,7 +1210,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             seen_alert.set(identity)
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
-                auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+                split.set(frozenset())
+                auto =dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
                 for lane in ("b", "a"):
                     chosen = before_id if lane == "b" else after_id
                     if lane in restoring.value:

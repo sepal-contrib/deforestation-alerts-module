@@ -314,7 +314,8 @@ def test_every_locale_has_the_timeline_keys():
     keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
             "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
             "legend", "legend_label", "lane_before", "lane_after",
-            "set_before", "set_after", "collapsed_month", "no_cloud_filter", "swap_source"}
+            "set_before", "set_after", "collapsed_month", "collapsed_group", "no_cloud_filter",
+            "swap_source"}
     for locale in ("en", "es-ES", "fr", "pt-BR"):
         data = json.loads((root / locale / "ui.json").read_text())
         assert keys <= set(data["analysis"]["timeline"]), locale
@@ -1151,6 +1152,82 @@ def test_an_index_with_no_rows_in_the_window_still_says_no_images():
     assert timeline.t("analysis.timeline.no_images") in _text(card)
     assert timeline.t("analysis.timeline.sources_off") not in _text(card)
     assert _chips(card) == [("Planet 0", True), ("Sentinel-2 0", True), ("Landsat 0", True)]
+
+
+def _long_alert_card():
+    """A two-year alert, 1 Jan 2024 -> 21 Dec 2025: 23 collapsed months, too
+    many for 66px blocks (the reported case). One image in each margin, two in
+    the first half of 2024 and one in the second."""
+    state = _fake_state(index=_index([(S2, "2023-11-15", 5.0, "W", "kA"),
+                                      (S2, "2024-03-10", 5.0, "W", "kB"),
+                                      (S2, "2024-04-02", 5.0, "W", "kC"),
+                                      (S2, "2024-08-05", 5.0, "W", "kD"),
+                                      (S2, "2026-01-10", 5.0, "W", "kE")]))
+    widgets = _fake_widgets(date_min=date(2024, 1, 1), date_max=date(2025, 12, 21))
+    return timeline.build_timeline(state, _fake_analysis(), widgets)
+
+
+def _group_label(months, count):
+    return timeline.t("analysis.timeline.collapsed_group", months=months, count=count)
+
+
+def test_a_long_alert_keeps_its_before_and_after_images_on_the_track():
+    """The reported bug: 23 blocks of 66px took 1518px of a 1120px track, the
+    margins got 0px, and the after handle sat past the right edge."""
+    card = _long_alert_card()
+    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+    assert scene_query.parse_row_id(strip.before["id"]) == (S2, date(2023, 11, 15))
+    assert scene_query.parse_row_id(strip.after["id"]) == (S2, date(2026, 1, 10))
+    assert 0 < strip.before["x"] < strip.after["x"] < 100
+    assert _count_stripes(card) == 2  # both margin images drawn, clickable
+
+
+def test_a_long_alerts_collapsed_months_are_grouped_by_half_year():
+    labels = _month_labels(_long_alert_card())
+    assert _group_label("Jan – Jun 2024", 2) in labels
+    assert _group_label("Jul – Dec 2024", 1) in labels
+    assert _group_label("Jan – Jun 2025", 0) in labels
+    assert _group_label("Jul – Nov 2025", 0) in labels
+    # no single-month block while the halves are folded
+    assert not [lab for lab in labels if lab.startswith("Mar 2024,")]
+
+
+def test_clicking_a_half_year_unfolds_it_into_months_and_the_others_stay():
+    card = _long_alert_card()
+    group = next(w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-label")
+                 == _group_label("Jan – Jun 2024", 2))
+    group.fire_event("click", None)
+    labels = _month_labels(card)
+    assert timeline.t("analysis.timeline.collapsed_month", month="Mar 2024", count=1) in labels
+    assert _group_label("Jan – Jun 2024", 2) not in labels
+    assert _group_label("Jul – Dec 2024", 1) in labels
+    # a month this narrow shows its initial and count; the rest is in its label
+    march = next(w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-label", "")
+                 .startswith("Mar 2024,"))
+    assert _text(march).split() == ["M", "1"]
+
+
+def test_a_long_alert_shows_the_year_under_its_collapsed_months():
+    card = _long_alert_card()
+    years = [_text(w) for w in _walk(card) if "defo-tl-year" in (getattr(w, "class_", "") or "")]
+    assert years == ["2024", "2025"]
+
+
+def test_a_short_alert_has_no_year_marks_or_groups():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    assert not [w for w in _walk(card) if "defo-tl-year" in (getattr(w, "class_", "") or "")]
+    assert not [lab for lab in _month_labels(card) if " – " in lab]
+
+
+def test_collapsing_the_window_again_refolds_the_half_years():
+    card = _long_alert_card()
+    group = next(w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-label")
+                 == _group_label("Jan – Jun 2024", 2))
+    group.fire_event("click", None)
+    fold = next(w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-label")
+                == timeline.t("analysis.timeline.collapse_all"))
+    fold.fire_event("click", None)
+    assert _group_label("Jan – Jun 2024", 2) in _month_labels(card)
 
 
 def test_a_collapsed_month_counts_only_the_collections_that_are_on():

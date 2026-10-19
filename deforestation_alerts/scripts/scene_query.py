@@ -198,6 +198,14 @@ def month_counts(sel: pd.DataFrame) -> dict[tuple[int, int], int]:
 # ----------------------------------------------------------------- month axis
 
 COLLAPSED_PX = 66.0
+#: the most of the track the collapsed months may take together. A long alert
+#: collapses many months, and at a fixed 66px each they crowded out the
+#: margins that hold the before and after candidates: a 24-month alert left
+#: those months 0px and drew the blocks past the track's right edge.
+FOLD_SHARE = 0.45
+#: below this width a collapsed month is too narrow to read on its own, so
+#: ``fold_groups`` draws each calendar half-year of them as one block.
+FOLD_GROUP_BELOW_PX = 30.0
 
 
 class MonthSegment(NamedTuple):
@@ -240,9 +248,10 @@ def month_segments(
 ) -> dict[tuple[int, int], MonthSegment]:
     """Lay the months of ``[start, end]`` across ``track_px`` pixels.
 
-    Collapsed months take ``collapsed_px`` each; the expanded ones divide
-    what is left in proportion to the days they show, all at one
-    pixels-per-day, so a date's position still means its date.
+    Collapsed months take ``collapsed_px`` each, but never more than
+    ``FOLD_SHARE`` of the track together; the expanded ones divide what is
+    left in proportion to the days they show, all at one pixels-per-day, so a
+    date's position still means its date.
     """
     collapsed = set(collapsed)
     keys = months_between(start, end)
@@ -255,10 +264,10 @@ def month_segments(
         spans[(year, month)] = (s, e, (e - s).days + 1)
 
     n_collapsed = sum(1 for key in keys if key in collapsed)
+    if n_collapsed:
+        collapsed_px = min(collapsed_px, track_px * FOLD_SHARE / n_collapsed)
     expanded_days = sum(spans[key][2] for key in keys if key not in collapsed)
-    # A track too narrow for its collapsed blocks would otherwise give a
-    # negative pixels-per-day and draw the later months off to the left.
-    free_px = max(0.0, track_px - collapsed_px * n_collapsed)
+    free_px = track_px - collapsed_px * n_collapsed  # never under 1 - FOLD_SHARE of it
     ppd = free_px / expanded_days if expanded_days else 0.0
 
     segments: dict[tuple[int, int], MonthSegment] = {}
@@ -294,6 +303,44 @@ def x_for(segments: dict[tuple[int, int], MonthSegment], d: date, *, end: bool =
     if seg.collapsed:
         return seg.x + (seg.w if end else 0.0)
     return seg.x + ((d - seg.start).days + (1 if end else 0)) * seg.ppd
+
+
+def half_of(key: tuple[int, int]) -> tuple[int, int]:
+    """``(year, 1)`` for January-June, ``(year, 2)`` for July-December."""
+    return (key[0], 1 if key[1] <= 6 else 2)
+
+
+def fold_groups(
+    segments: dict[tuple[int, int], MonthSegment],
+    split: Iterable[tuple[int, int]] = (),
+) -> list[list[tuple[int, int]]]:
+    """The collapsed months as the blocks to draw, in track order.
+
+    A collapsed month is its own block while it is wide enough to read
+    (``FOLD_GROUP_BELOW_PX``). Narrower than that -- a long alert, after
+    ``FOLD_SHARE`` has shrunk them -- consecutive collapsed months of one
+    calendar half-year share a block, so the strip reads "Jan - Jun 2024"
+    instead of two dozen unlabelled slivers. Calendar halves rather than runs
+    of six from the alert's start, so a block always names a half of a year.
+    A half-year in ``split`` (keys from ``half_of``), which the reviewer has
+    unfolded, comes back as single months. Only the drawing changes: every
+    month keeps its own segment, so a date's position is the same either way.
+    """
+    split = set(split)
+    keys = sorted(segments)
+    groups: list[list[tuple[int, int]]] = []
+    for i, key in enumerate(keys):
+        seg = segments[key]
+        if not seg.collapsed:
+            continue
+        last = groups[-1] if groups else None
+        joins = (seg.w < FOLD_GROUP_BELOW_PX and half_of(key) not in split and last is not None
+                 and i > 0 and last[-1] == keys[i - 1] and half_of(last[-1]) == half_of(key))
+        if joins:
+            last.append(key)
+        else:
+            groups.append([key])
+    return groups
 
 
 def auto_collapsed(start: date, end: date, a0: date, a1: date) -> set[tuple[int, int]]:
