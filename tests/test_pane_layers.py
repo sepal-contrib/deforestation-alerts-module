@@ -29,7 +29,7 @@ def test_construction_sets_the_views_the_basemaps_the_sections_and_the_labels():
     assert panes.widget.fit_bounds_views == ["after"], "zoom-to-alert sits on the after view only"
     assert panes.widget.basemap == {}, "the basemap switcher owns the basemap"
     assert panes.widget.basemap_switcher_basemaps == analysis_basemaps()
-    assert panes.widget.basemap_switcher_selected == "google", "today's basemap stays the default"
+    assert panes.widget.basemap_switcher_selected == "sepal_light", "SEPAL Light is the default"
     assert panes.widget.layer_menu_sections == ["imagery", "alerts", "optional"]
     assert panes.widget.labels == pane_labels()
     assert set(pane_labels()) >= {"layerMenu.title", "fitBounds.button", "draw.hint"}

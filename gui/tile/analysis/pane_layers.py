@@ -44,8 +44,8 @@ ESRI_IMAGERY = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Ima
 #: The one tile every basemap thumbnail shows: zoom 7 over Mato Grosso, Brazil.
 _THUMBNAIL_TILE = {"z": "7", "x": "44", "y": "68", "s": "a"}
 
-#: The basemap the views open on: the satellite basemap they always had.
-DEFAULT_BASEMAP = "google"
+#: The basemap the views open on.
+DEFAULT_BASEMAP = "sepal_light"
 
 
 def _thumbnail(url) -> str:
