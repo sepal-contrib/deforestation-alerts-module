@@ -52,6 +52,10 @@ class StepSpec:
     lock_reason_key: Optional[str] = None
     count: Callable[[Any], Union[int, str, None]] = field(default=lambda p: None)  # (project)
     count_key: Optional[str] = None  # a plural node: t(count_key, count=n)
+    # An optional step left empty counts as done once the user moved past it
+    # (a later step has outputs); its badge then reads t(passed_key).
+    passed: Callable[[Any], bool] = field(default=lambda p: False)  # (project)
+    passed_key: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,9 @@ STEPS: List[StepSpec] = [
     StepSpec(key="layers", page_view="layers_tile", label_key="app.drawer_item.layers", icon="mdi-layers-outline",
              unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_layers",
              count=lambda p: len(p.vis_layers) if p is not None else 0,
-             count_key="workflow.count_layers"),
+             count_key="workflow.count_layers",
+             # optional: skipped once a monitoring period exists (the next step's output)
+             passed=lambda p: p is not None and bool(p.periods), passed_key="workflow.count_none"),
     StepSpec(key="period", page_view="period_tile", label_key="app.drawer_item.period", icon="mdi-calendar-range",
              unlocked=lambda p: p is not None and bool(p.sources), lock_reason_key="workflow.lock_period",
              count=lambda p: len(p.periods) if p is not None else 0,
@@ -156,7 +162,7 @@ def step_status(spec: StepSpec, p) -> StepStatus:
         return StepStatus.LOCKED
     c = spec.count(p)
     has = bool(c) if isinstance(c, str) else bool(c or 0)
-    return StepStatus.HAS_OUTPUTS if has else StepStatus.EMPTY
+    return StepStatus.HAS_OUTPUTS if has or spec.passed(p) else StepStatus.EMPTY
 
 
 def step_states(p) -> List[StepStatus]:

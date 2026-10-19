@@ -73,6 +73,7 @@
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nada todavía",
+    "count_none": "ninguna",
     "start_analysis": "Iniciar análisis",
     "count_evaluators": {
       "one": "{count} evaluador",

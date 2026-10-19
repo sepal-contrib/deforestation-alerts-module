@@ -36,13 +36,16 @@ def _rgba(hex_color: str, alpha: float) -> str:
 
 
 def count_text(spec, p) -> str:
-    """Human badge for a step: outputs count, AOI name, or 'nothing yet'."""
+    """Human badge for a step: outputs count, AOI name, 'none' for an
+    optional step left empty and passed, or 'nothing yet'."""
     c = spec.count(p)
     if isinstance(c, str) and c:
         return c
     n = int(c or 0)
     if n > 0 and spec.count_key:
         return t(spec.count_key, count=n)
+    if spec.passed_key and spec.passed(p):
+        return t(spec.passed_key)
     return t("workflow.count_empty")
 
 

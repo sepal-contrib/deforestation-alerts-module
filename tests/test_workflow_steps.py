@@ -48,6 +48,8 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     p.active_period = JAN.id
     s = _states(p)
     assert s["prepare"] is StepStatus.EMPTY and s["integrate"] is StepStatus.LOCKED
+    # Optional layers, left empty, is done once the user moved on to a period
+    assert s["layers"] is StepStatus.HAS_OUTPUTS
     # one ready source unlocks Integrate
     p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=1, height=1)
     pdir = tmp_path / "demo"
@@ -147,3 +149,16 @@ def test_evaluators_needs_an_active_set_and_counts_evaluators():
     p.alert_sets["x"].split = EvaluatorSplit(split_id="s", evaluators=["A", "B"], created_at=datetime.now())
     assert spec.count(p) == 2 and step_status(spec, p) is StepStatus.HAS_OUTPUTS
     assert t(spec.count_key, count=2) == "2 evaluators"
+
+
+def test_optional_layers_left_empty_reads_none_once_a_period_exists():
+    from gui.i18n import t
+    from gui.store.workflow_steps import step_index, step_status
+    from gui.widget.pipeline_header import count_text
+    spec = STEPS[step_index("layers")]
+    p = _p()
+    p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
+    assert step_status(spec, p) is StepStatus.EMPTY and count_text(spec, p) == t("workflow.count_empty")
+    p.periods[JAN.id] = JAN
+    assert step_status(spec, p) is StepStatus.HAS_OUTPUTS
+    assert count_text(spec, p) == t("workflow.count_none") == "none"
