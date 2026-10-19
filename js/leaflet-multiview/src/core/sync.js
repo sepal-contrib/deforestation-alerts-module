@@ -4,8 +4,9 @@
 //   other map gets setView(..., {animate: false}) at once, so the followers
 //   track a drag frame by frame. Leaflet fires the followers' own events
 //   synchronously inside setView; ``busy`` drops them, so nothing echoes back.
-//   An animated zoom fires no "move"/"zoom" until its transition ends, so the
-//   followers jump to its target on "zoomanim", when it starts.
+//   An animated zoom fires no "move"/"zoom" until its transition ends: on its
+//   "zoomanim" the followers start the same animation, and until each one's
+//   own "moveend" its events are ``following``, not gestures.
 // - Canonical view: the last setCanonical(), or the leader's view when a user
 //   gesture ends (its "moveend"). Nothing else writes it.
 // - restore(): after a size change every map must re-measure
@@ -40,33 +41,42 @@ export function createSync(maps, {onGestureEnd = () => {}} = {}) {
   let busy = false; // a follower update or setCanonical is running
   let restoring = false; // a resize-driven re-measure is running (until the next frame)
   let pending = null; // the frame that clears ``restoring``
+  const following = new Set(); // maps running a zoom animation another map started
 
-  const follow = (leader, center, zoom) => {
+  const followFrom = leader => {
     busy = true;
     try {
+      const center = leader.getCenter();
+      const zoom = leader.getZoom();
       for (const map of maps) if (map !== leader) map.setView(center, zoom, {animate: false});
     } finally {
       busy = false;
     }
   };
 
-  const followFrom = leader => follow(leader, leader.getCenter(), leader.getZoom());
-
   const unlinks = maps.map(leader => {
     const onMove = () => {
-      if (busy || restoring) return;
+      if (busy || restoring || following.has(leader)) return;
       followFrom(leader);
     };
     // An animated zoom holds the leader's "move"/"zoom" until its CSS
     // transition ends (~250 ms); "zoomanim" carries the target at the start.
+    // The followers run the same animation: a zoom with {animate: false}
+    // resets the view, which drops every tile (a blank flash) before redrawing.
     const onZoomAnim = e => {
-      if (busy || restoring) return;
-      follow(leader, e.center, e.zoom);
+      if (busy || restoring || following.has(leader)) return;
+      for (const map of maps) {
+        if (map === leader) continue;
+        following.add(map);
+        // When it cannot animate, Leaflet resets at once: its moveend clears it.
+        map.setView(e.center, e.zoom, {animate: true});
+      }
     };
     const onMoveEnd = () => {
       // ``restoring`` is checked before anything else: a resize-driven moveend
       // must never reach onGestureEnd (and so never schedules a write-back).
       if (busy || restoring) return;
+      if (following.delete(leader)) return; // the end of an animation another map started
       followFrom(leader); // a moveend without a last "move" still leaves the followers in place
       canonical = viewOf(leader);
       onGestureEnd(copy(canonical));
@@ -93,6 +103,7 @@ export function createSync(maps, {onGestureEnd = () => {}} = {}) {
 
   function restore() {
     restoring = true;
+    following.clear(); // the canonical view goes back on every map anyway
     try {
       for (const map of maps) {
         if (!hasSize(map)) continue; // a hidden map keeps its last measured size
@@ -113,6 +124,7 @@ export function createSync(maps, {onGestureEnd = () => {}} = {}) {
     cancelFrame(pending);
     pending = null;
     restoring = false;
+    following.clear();
   }
 
   return {
