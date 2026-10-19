@@ -80,6 +80,17 @@ def _ready(p) -> list:
     return ready_sources(p, paths.project_dir(p.name), period)
 
 
+def _evaluator_count(p) -> int:
+    """The split's evaluators; a solo review is one evaluator, so choosing it
+    completes the step. No mode yet, or Multiple without a split, is empty."""
+    s = active_set(p)
+    if s is None:
+        return 0
+    if s.split is not None:
+        return len(s.split.evaluators)
+    return 1 if p.multi_evaluator is False else 0
+
+
 STEPS: List[StepSpec] = [
     StepSpec(key="aoi", page_view="aoi_tile", label_key="app.drawer_item.aoi", icon="mdi-map-marker",
              count=lambda p: p.aoi.name if p is not None and p.aoi else None),
@@ -113,8 +124,7 @@ STEPS: List[StepSpec] = [
     StepSpec(key="evaluators", page_view="evaluators_tile", label_key="app.drawer_item.evaluators",
              icon="mdi-account-multiple-outline",
              unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
-             count=lambda p: len(active_set(p).split.evaluators) if active_set(p) and active_set(p).split else 0,
-             count_key="workflow.count_evaluators"),
+             count=lambda p: _evaluator_count(p), count_key="workflow.count_evaluators"),
 ]
 
 RAIL_ITEMS: List[RailItem] = [

@@ -86,8 +86,8 @@ def p1_split(page, rec, *, out, data):
         "() => [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey)")))
     rec["steps"] = keys
     assert keys[-2:] == ["questionnaire", "evaluators"], keys
-    # a project without a split opens as a solo evaluation: pick multiple evaluators
-    ph.choose(page, w.en("evaluators.review_mode_label"), w.en("evaluators.review_mode_multi"), scope=RIGHT)
+    # a project without a split may have no review mode yet: check multiple evaluators
+    page.locator(f"{RIGHT} .defo-mode-multi .v-input--selection-controls__ripple").first.click()
     page.wait_for_timeout(400)
     page.locator(f"{RIGHT} button.defo-split-open:visible").first.click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the split modal")

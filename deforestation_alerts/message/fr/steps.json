@@ -587,6 +587,7 @@
       "bad_count": "Choisissez entre 1 et {max} évaluateurs."
     },
     "default_prefix": "Évaluateur",
+    "mode_unset_note": "Choisissez qui examine les alertes : vous seul ou plusieurs évaluateurs.",
     "solo_note": "Vous examinez vous-même toutes les alertes.",
     "multi_note": "Répartissez les alertes entre les évaluateurs et envoyez à chacun un paquet de revue.",
     "multi_locked": "Supprimez la répartition pour passer en évaluation individuelle.",

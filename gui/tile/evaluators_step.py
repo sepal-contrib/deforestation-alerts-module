@@ -781,29 +781,53 @@ def _ReturnPanel(app_state):
 
 
 @solara.component
+def _ModeOption(key, icon, text, checked, disabled, on_change):
+    """One review-mode checkbox, its icon and text beside it. Not in the
+    checkbox's label slot: a slotted label is dropped when the step
+    re-renders. A click on the text toggles the box, as a label would."""
+    with solara.Row(style="align-items:center;gap:0;flex-wrap:nowrap;"):
+        rv.Checkbox(v_model=checked, on_v_model=on_change, disabled=disabled, dense=True, hide_details=True,
+                    class_=f"defo-mode-{key}", style_="margin-top:0;padding-top:0;")
+        label = rv.Html(tag="span", class_="defo-mode-label",
+                        style_="display:inline-flex;align-items:center;gap:6px;"
+                               + ("opacity:0.6;" if disabled else "cursor:pointer;"),
+                        children=[rv.Icon(small=True, children=[icon]), text])
+    rv.use_event(label, "click", lambda *_: not disabled and on_change(not checked))
+
+
+@solara.component
 def _ReviewMode(app_state):
-    """Solo or multiple evaluators, as a select whose note says what the chosen
-    mode means, so the step always shows which one is on. A split holds it on
-    Multiple: switching to solo would leave alerts assigned to evaluators the
-    step no longer shows."""
+    """Solo or multiple evaluators, as two checkboxes (at most one checked)
+    whose note says what the chosen mode means. Until one is checked the
+    project has no review mode and the step stays empty; Solo completes it.
+    A split holds it on Multiple: switching to solo would leave alerts
+    assigned to evaluators the step no longer shows."""
     p = app_state.project.value
     split = active_set(p).split
-    on = bool(p.multi_evaluator)
+    mode = p.multi_evaluator
 
-    def _set(value):
-        update_setup(app_state, p.name, lambda live: setattr(live, "multi_evaluator", value == "multi"))
+    def _set(multi, checked):
+        def _apply(live):
+            if checked:
+                live.multi_evaluator = multi
+            elif live.multi_evaluator is multi:  # not the other box's re-render
+                live.multi_evaluator = None
+        update_setup(app_state, p.name, _apply)
 
     if split is not None:
         note = t("evaluators.multi_locked")
-    elif on:
+    elif mode is None:
+        note = t("evaluators.mode_unset_note")
+    elif mode:
         note = t("evaluators.multi_note")
     else:
         note = t("evaluators.solo_note")
-    rv.Select(label=t("evaluators.review_mode_label"), v_model="multi" if on else "solo", on_v_model=_set,
-              items=[{"text": t("evaluators.review_mode_solo"), "value": "solo"},
-                     {"text": t("evaluators.review_mode_multi"), "value": "multi"}],
-              prepend_inner_icon="mdi-account-group" if on else "mdi-account", disabled=split is not None,
-              dense=True, outlined=True, hide_details=True)
+    solara.Text(t("evaluators.review_mode_label"), style="display:block;font-weight:600;")
+    with solara.Row(style="gap:24px;flex-wrap:wrap;align-items:center;"):
+        for multi, icon, key, text in ((False, "mdi-account", "solo", t("evaluators.review_mode_solo")),
+                                       (True, "mdi-account-group", "multi", t("evaluators.review_mode_multi"))):
+            _ModeOption(key=key, icon=icon, text=text, checked=mode is multi, disabled=split is not None,
+                        on_change=lambda checked, m=multi: _set(m, checked))
     rv.Html(tag="div", class_="defo-mode-note", style_="margin-top:4px;" + MUTED + "font-size:0.75rem;",
             children=[note])
 

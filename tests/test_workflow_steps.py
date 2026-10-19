@@ -138,6 +138,12 @@ def test_evaluators_needs_an_active_set_and_counts_evaluators():
                                  footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
     p.active_set = "x"
     assert spec.unlocked(p) and spec.count(p) == 0 and step_status(spec, p) is StepStatus.EMPTY
+    p.multi_evaluator = True  # Multiple without a split yet: still empty
+    assert spec.count(p) == 0 and step_status(spec, p) is StepStatus.EMPTY
+    p.multi_evaluator = False  # solo: one evaluator, the step is done
+    assert spec.count(p) == 1 and step_status(spec, p) is StepStatus.HAS_OUTPUTS
+    assert t(spec.count_key, count=1) == "1 evaluator"
+    p.multi_evaluator = True
     p.alert_sets["x"].split = EvaluatorSplit(split_id="s", evaluators=["A", "B"], created_at=datetime.now())
     assert spec.count(p) == 2 and step_status(spec, p) is StepStatus.HAS_OUTPUTS
     assert t(spec.count_key, count=2) == "2 evaluators"

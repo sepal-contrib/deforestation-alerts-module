@@ -330,17 +330,23 @@ def test_the_step_waits_for_an_alert_set(data_root):
         rc.close()
 
 
-def _mode_select(rc):
-    return rc.find(v.Select, label=t("evaluators.review_mode_label"))
+def _mode_box(rc, key):
+    """The Solo (``"solo"``) or Multiple evaluators (``"multi"``) checkbox."""
+    return rc.find(v.Checkbox, class_=f"defo-mode-{key}")
 
 
-def test_the_review_mode_is_a_select_of_solo_and_multiple_evaluators(data_root):
-    _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
+def _checked(rc):
+    return [k for k in ("solo", "multi") if _mode_box(rc, k).widget.v_model]
+
+
+def test_the_review_mode_is_two_checkboxes_with_their_icons(data_root):
+    _box, rc = _render(_state(_project(multi=None), _gdf(evaluators=("",) * 4)))
     try:
-        select = _mode_select(rc).widget
-        assert [(i["value"], i["text"]) for i in select.items] == [
-            ("solo", t("evaluators.review_mode_solo")), ("multi", t("evaluators.review_mode_multi"))]
-        assert select.v_model == "solo"
+        labels = [_strings(w) for w in rc.find(v.Html, class_="defo-mode-label").widgets]
+        assert labels == [["mdi-account", t("evaluators.review_mode_solo")],
+                          ["mdi-account-group", t("evaluators.review_mode_multi")]]
+        assert _checked(rc) == []  # no mode chosen yet
+        assert _hint(rc) == t("evaluators.mode_unset_note")
     finally:
         rc.close()
 
@@ -349,7 +355,7 @@ def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
     _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
     try:
         texts = _strings(rc.container)
-        assert _mode_select(rc).widget.v_model == "solo"
+        assert _checked(rc) == ["solo"]
         assert _hint(rc) == t("evaluators.solo_note")
         assert t("evaluators.split_title") not in texts
         assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
@@ -363,13 +369,42 @@ def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root
     s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
-        _mode_select(rc).widget.v_model = "multi"
+        _mode_box(rc, "multi").widget.v_model = True
         assert s.project.value.multi_evaluator is True
+        assert _checked(rc) == ["multi"]
         assert t("evaluators.open_split") in _strings(rc.container)
         assert _hint(rc) == t("evaluators.multi_note")
-        _mode_select(rc).widget.v_model = "solo"
+        _mode_box(rc, "solo").widget.v_model = True
         assert s.project.value.multi_evaluator is False
+        assert _checked(rc) == ["solo"]
         assert t("evaluators.open_split") not in _strings(rc.container)
+    finally:
+        rc.close()
+
+
+def test_unchecking_the_mode_leaves_none_chosen(data_root):
+    s = _state(_project(multi=None), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        _mode_box(rc, "solo").widget.v_model = True
+        assert s.project.value.multi_evaluator is False
+        _mode_box(rc, "solo").widget.v_model = False
+        assert s.project.value.multi_evaluator is None
+        assert _checked(rc) == []
+        assert _hint(rc) == t("evaluators.mode_unset_note")
+    finally:
+        rc.close()
+
+
+def test_a_click_on_the_option_text_toggles_its_box(data_root):
+    s = _state(_project(multi=None), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        solo, _multi = rc.find(v.Html, class_="defo-mode-label").widgets
+        solo.fire_event("click", None)
+        assert s.project.value.multi_evaluator is False and _checked(rc) == ["solo"]
+        rc.find(v.Html, class_="defo-mode-label").widgets[0].fire_event("click", None)
+        assert s.project.value.multi_evaluator is None and _checked(rc) == []
     finally:
         rc.close()
 
@@ -377,8 +412,8 @@ def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root
 def test_a_split_holds_the_mode_on_multiple_evaluators(data_root):
     _box, rc = _render(_state(_project(split=_split()), _gdf()))
     try:
-        select = _mode_select(rc).widget
-        assert select.v_model == "multi" and select.disabled is True
+        assert _checked(rc) == ["multi"]
+        assert all(_mode_box(rc, k).widget.disabled is True for k in ("solo", "multi"))
         assert _hint(rc) == t("evaluators.multi_locked")
     finally:
         rc.close()
@@ -389,7 +424,7 @@ def test_a_review_copy_has_no_review_mode(data_root):
                       origin_project="c", imported_at=datetime.now())
     _box, rc = _render(_state(_project("c__e02-bo", split=_split(), review_copy=copy, multi=False), _gdf()))
     try:
-        assert not _mode_select(rc).widgets
+        assert not _mode_box(rc, "solo").widgets and not _mode_box(rc, "multi").widgets
         assert t("evaluators.return_title") in _strings(rc.container)
     finally:
         rc.close()

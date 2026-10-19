@@ -264,11 +264,11 @@ def test_a_period_stored_without_look_back_takes_the_projects():
     assert period.search_window() == (date(2025, 12, 1), date(2026, 1, 31))
 
 
-def test_a_new_project_is_a_solo_evaluation():
-    assert Project(name="x", created_at=NOW, updated_at=NOW).multi_evaluator is False
+def test_a_new_project_has_no_review_mode_yet():
+    assert Project(name="x", created_at=NOW, updated_at=NOW).multi_evaluator is None
 
 
-@pytest.mark.parametrize("split, expected", [(None, False), ("made", True)])
+@pytest.mark.parametrize("split, expected", [(None, None), ("made", True)])
 def test_a_project_saved_before_the_evaluator_toggle_is_multi_when_a_set_was_split(split, expected):
     from deforestation_alerts.project.models import EvaluatorSplit
 

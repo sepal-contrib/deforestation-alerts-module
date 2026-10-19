@@ -564,6 +564,7 @@
       "bad_count": "Choose between 1 and {max} evaluators."
     },
     "default_prefix": "Evaluator",
+    "mode_unset_note": "Choose who reviews the alerts: only you, or several evaluators.",
     "solo_note": "You review every alert yourself.",
     "multi_note": "Split the alerts between evaluators and send each one a review package.",
     "multi_locked": "Remove the split to switch to solo.",
