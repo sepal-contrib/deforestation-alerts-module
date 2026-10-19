@@ -174,7 +174,7 @@ def test_a_custom_earth_engine_source_downloads_at_its_native_grid(tmp_path, cov
     monkeypatch.setattr(runner.catalogue, "build_custom_image", lambda src, a, b, aoi: f"IMG:{src.name}:{a}:{b}")
     with pytest.raises(RuntimeError, match="stop here"):
         runner.run_source_row(_job(p, tmp_path, "ee radd"))
-    assert calls == [("IMG:ee radd:2025-10-03:2026-01-31", ("EPSG:4326", 10.0))]
+    assert calls == [("IMG:ee radd:2026-01-01:2026-01-31", ("EPSG:4326", 10.0))]  # no look-back by default
 
 
 def test_a_superseded_raw_file_is_deleted(tmp_path, cover, no_ee):

@@ -372,7 +372,7 @@ def test_the_modal_is_prefilled_from_the_latest_period_and_checks_the_order(env)
         assert _fields(rc)[t("steps.period.end")].error_messages == [t("steps.period.error_order")]
         _fields(rc)[t("steps.period.end")].v_model = "2026-03-31"
         _button(rc, t("steps.period.add")).fire_event("click", None)
-        assert submitted == [("2026-03-01", "2026-03-31", "90")] and open_.value is False
+        assert submitted == [("2026-03-01", "2026-03-31", "0")] and open_.value is False
     finally:
         rc.close()
 

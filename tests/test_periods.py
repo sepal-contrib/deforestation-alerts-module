@@ -230,7 +230,7 @@ def test_new_period_without_a_look_back_uses_the_projects():
 def test_a_bad_look_back_changes_nothing():
     p = _p()
     assert periods.new_period(p, "2026-01-01", "2026-01-31", "-2") == "bad_look_back"
-    assert not p.periods and p.look_back_days == 90
+    assert not p.periods and p.look_back_days == 0
 
 
 def test_a_period_with_sets_can_change_only_its_look_back(tmp_path):

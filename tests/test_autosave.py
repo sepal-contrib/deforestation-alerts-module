@@ -49,7 +49,7 @@ def test_worker_updates_save_and_the_unsubscribe_stops_saving():
     unsubscribe = install_autosave(s, save=lambda p: saved.append(p.look_back_days))
     s.new_project_state(_p("a"))
     s.update_project("a", lambda p: setattr(p, "look_back_days", 5))
-    assert saved == [90, 5]
+    assert saved == [0, 5]
     unsubscribe()
     s.update_project("a", lambda p: setattr(p, "look_back_days", 6))
-    assert saved == [90, 5]
+    assert saved == [0, 5]

@@ -74,7 +74,8 @@ def test_grid_transform_and_signature():
 def test_period_window_and_ids():
     per = Period(id=period_id(date(2026, 2, 1), date(2026, 2, 28)), start=date(2026, 2, 1), end=date(2026, 2, 28))
     assert per.id == "2026-02-01_2026-02-28"
-    assert per.search_window() == (date(2025, 11, 3), date(2026, 2, 28))
+    assert per.search_window() == (date(2026, 2, 1), date(2026, 2, 28))  # no look-back by default
+    assert per.model_copy(update={"look_back_days": 90}).search_window() == (date(2025, 11, 3), date(2026, 2, 28))
     assert set_id(per.id, ["RADD", "GLAD-L"]) == "2026-02-01_2026-02-28__glad-l-radd"
 
 

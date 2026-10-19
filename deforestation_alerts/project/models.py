@@ -177,7 +177,7 @@ class Period(BaseModel):
     id: str
     start: date
     end: date
-    look_back_days: int = 90
+    look_back_days: int = 0
     masks: dict[str, PeriodMask] = {}  # a project mask absent here is off in this period
 
     def search_window(self) -> tuple[date, date]:
@@ -390,7 +390,7 @@ class Project(BaseModel):
     masks: dict[str, MaskLayer] = {}
     vis_layers: dict[str, VisLayer] = {}
     grid: Optional[GridSpec] = None
-    look_back_days: int = 90
+    look_back_days: int = 0
     periods: dict[str, Period] = {}
     active_period: Optional[str] = None
     coverage: dict[str, SourceCoverage] = {}
@@ -421,7 +421,7 @@ class Project(BaseModel):
                 split = any((v.get("split") if isinstance(v, dict) else getattr(v, "split", None))
                             for v in sets.values())
                 data = {**data, "multi_evaluator": True if split else None}
-            days = data.get("look_back_days", 90)
+            days = data.get("look_back_days", 90)  # the default those manifests were saved with
             periods_ = data.get("periods") or {}
             if any(isinstance(v, dict) and "look_back_days" not in v for v in periods_.values()):
                 data = {**data, "periods": {k: ({**v, "look_back_days": days}
