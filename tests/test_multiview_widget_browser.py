@@ -224,6 +224,7 @@ _BASEMAPS = [{"id": "g", "name": "Google", "url": f"{TILE}#g", "attribution": "G
 def test_the_basemap_switcher_shows_the_selected_basemap_and_writes_a_click_back(mv_page):
     mount(mv_page, basemap_switcher_basemaps=_BASEMAPS, basemap_switcher_selected="e")
     assert _tiles(mv_page, "before") == ["e"] and _tiles(mv_page, "after") == ["e"]
+    mv_page.hover('.mv-view[data-view="after"] .mv-basemap--on')
     mv_page.locator('.mv-view[data-view="after"] .mv-basemap[data-id="g"]').click()
     mv_page.wait_for_timeout(100)
     assert _tiles(mv_page, "before") == ["g"] and _tiles(mv_page, "after") == ["g"]

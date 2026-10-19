@@ -182,6 +182,19 @@ def _selected(page, view_id):
                          f"{_switcher(page, view_id)} .mv-basemap--on")
 
 
+def _shown_basemaps(page, view_id):
+    """The visible thumbnails of a view's switcher, left to right."""
+    return page.evaluate("""s => [...document.querySelectorAll(s)].filter(b => b.offsetParent)
+        .sort((x, y) => x.getBoundingClientRect().left - y.getBoundingClientRect().left).map(b => b.dataset.id)""",
+                         f"{_switcher(page, view_id)} .mv-basemap")
+
+
+def _pick(page, view_id, basemap_id):
+    """Hover the view's switcher open, then click a basemap."""
+    page.hover(f'{_switcher(page, view_id)} .mv-basemap--on')
+    page.locator(f'{_switcher(page, view_id)} .mv-basemap[data-id="{basemap_id}"]').click()
+
+
 def test_the_basemap_switcher_lists_every_basemap_and_shows_the_selected_one(plain_page):
     make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS, "selected": "e"})])
     for v in "abc":
@@ -199,7 +212,7 @@ def test_the_basemap_switcher_lists_every_basemap_and_shows_the_selected_one(pla
 def test_a_click_switches_the_basemap_of_every_view_once(plain_page):
     make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS})])
     assert _basemap_urls(plain_page) == [["g"]] * 3, "no selected option: the first"
-    plain_page.locator(f'{_switcher(plain_page, "b")} .mv-basemap[data-id="e"]').click()
+    _pick(plain_page, "b", "e")
     plain_page.wait_for_timeout(100)
     assert _basemap_urls(plain_page) == [["e"]] * 3
     assert [_selected(plain_page, v) for v in "abc"] == [["e"]] * 3, "every view's switcher follows"
@@ -208,6 +221,39 @@ def test_a_click_switches_the_basemap_of_every_view_once(plain_page):
     plain_page.wait_for_timeout(100)
     assert events(plain_page, "basemapchange") == [{"id": "e"}], "the selected one again: no change"
     assert centers(plain_page)[0][2] == START["zoom"], "a click on the switcher does not zoom the map"
+
+
+def test_the_switcher_is_collapsed_until_hovered_and_closes_on_a_pick(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS, "selected": "e"})])
+    assert [_shown_basemaps(plain_page, v) for v in "abc"] == [["e"]] * 3, "collapsed: the selected one only"
+    plain_page.hover(f'{_switcher(plain_page, "a")} .mv-basemap--on')
+    assert _shown_basemaps(plain_page, "a") == ["e", "g"], "open: the selected one stays first"
+    assert _shown_basemaps(plain_page, "b") == ["e"], "the other views stay collapsed"
+    plain_page.mouse.move(400, 10)
+    assert _shown_basemaps(plain_page, "a") == ["e"], "the mouse left: collapsed again"
+    _pick(plain_page, "a", "g")
+    assert [_shown_basemaps(plain_page, v) for v in "abc"] == [["g"]] * 3, "a pick closes it"
+    assert events(plain_page, "basemapchange") == [{"id": "g"}]
+
+
+def test_the_selected_thumbnail_toggles_the_switcher_from_the_keyboard(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS})])
+    selected = f'{_switcher(plain_page, "a")} .mv-basemap--on'
+    plain_page.focus(selected)
+    plain_page.keyboard.press("Enter")
+    assert _shown_basemaps(plain_page, "a") == ["g", "e"]
+    assert plain_page.get_attribute(selected, "aria-expanded") == "true"
+    plain_page.keyboard.press("Enter")
+    assert _shown_basemaps(plain_page, "a") == ["g"], "the selected one again: closed"
+    plain_page.keyboard.press("Enter")
+    plain_page.keyboard.press("Escape")
+    assert _shown_basemaps(plain_page, "a") == ["g"]
+    assert plain_page.get_attribute(selected, "aria-expanded") == "false"
+    assert plain_page.evaluate("() => document.activeElement.dataset.id") == "g", "Escape keeps the focus"
+    plain_page.keyboard.press("Enter")
+    plain_page.evaluate("() => document.activeElement.blur()")
+    assert _shown_basemaps(plain_page, "a") == ["g"], "the focus left: closed"
+    assert events(plain_page, "basemapchange") == []
 
 
 def test_select_switches_without_an_event_and_ignores_unknown_ids(plain_page):
