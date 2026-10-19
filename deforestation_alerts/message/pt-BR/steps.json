@@ -409,18 +409,41 @@
     "integrate": {
       "description": "Combine as fontes baixadas, ignore os pixels que um período anterior já reportou e transforme os agrupamentos em alertas.",
       "info_header": "Sobre Integrar e vetorizar",
-      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os alertas que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Pixels vizinhos se tornam alertas. Os alertas menores que o **tamanho mínimo** são descartados; você pode limitar o número de alertas, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada alerta.\n\nOs pixels pequenos demais para formar um alerta, ou além do número máximo de alertas, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Cada fonte tem uma chave **incluir alertas prováveis**; desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os alertas revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
+      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os alertas que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Pixels vizinhos se tornam alertas. Os alertas menores que o **tamanho mínimo** são descartados; você pode limitar o número de alertas, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada alerta.\n\nOs pixels pequenos demais para formar um alerta, ou além do número máximo de alertas, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os alertas revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
       "sources": "Fontes a combinar",
       "min_size": "Tamanho mínimo do alerta",
       "min_size_hint": "Os agrupamentos de alertas menores que isto ({px} pixels na grade) são descartados e ficam fora do conjunto, das suas exportações e do mapa da Visão geral.",
-      "include_probable": "{source}: incluir alertas prováveis (não confirmados)",
+      "include_probable": "Incluir alertas prováveis (não confirmados)",
+      "probable_per_source": "Definir por fonte",
+      "probable_mixed": "Misto: as fontes abaixo diferem.",
+      "probable_none": "{source}: só datas, sem nível provável",
       "sorting": "Ordem",
       "sorting_1": "Alertas maiores primeiro",
       "sorting_2": "Alertas menores primeiro",
       "sorting_3": "Alertas recentes primeiro",
       "sorting_4": "Alertas mais antigos primeiro",
       "max_alerts": "Número máximo de alertas",
-      "max_alerts_hint": "0 mantém todos os alertas.",
+      "limit_alerts": "Limitar o número de alertas",
+      "max_alerts_hint_1": {
+        "one": "Mantém {n} alerta: o maior.",
+        "many": "Mantém os {n} de alertas maiores.",
+        "other": "Mantém os {n} maiores alertas."
+      },
+      "max_alerts_hint_2": {
+        "one": "Mantém {n} alerta: o menor.",
+        "many": "Mantém os {n} de alertas menores.",
+        "other": "Mantém os {n} menores alertas."
+      },
+      "max_alerts_hint_3": {
+        "one": "Mantém {n} alerta: o mais recente.",
+        "many": "Mantém os {n} de alertas mais recentes.",
+        "other": "Mantém os {n} alertas mais recentes."
+      },
+      "max_alerts_hint_4": {
+        "one": "Mantém {n} alerta: o mais antigo.",
+        "many": "Mantém os {n} de alertas mais antigos.",
+        "other": "Mantém os {n} alertas mais antigos."
+      },
       "attr_load": "Carregar bandas",
       "attr_no_source": "Escolha primeiro uma imagem ou um GeoTIFF.",
       "attr_loaded": "Bandas de {source}",
@@ -476,7 +499,7 @@
       "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "O período, a área de interesse ou a grade do projeto mudou durante a execução, então o conjunto de alertas não foi registrado. Execute Integrar e vetorizar novamente.",
       "error_min_size": "Digite um tamanho mínimo em hectares, 0 ou mais.",
-      "error_max_alerts": "Digite um número inteiro, 0 ou mais.",
+      "error_max_alerts": "Digite um número inteiro maior que 0.",
       "layer_name": "Alertas (conjunto ativo)",
       "go": "Revisar",
       "popup": "Alerta {id} · {status} · {area} ha",

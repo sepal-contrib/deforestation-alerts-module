@@ -409,18 +409,41 @@
     "integrate": {
       "description": "Combine les sources téléchargées, ignore les pixels qu'une période antérieure a déjà signalés, et transforme les groupes en alertes.",
       "info_header": "À propos d'Intégrer et vectoriser",
-      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les alertes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque alerte se souvient des sources qui l'ont détectée.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels voisins deviennent des alertes. Les alertes plus petites que la **taille minimale** sont écartées ; vous pouvez limiter le nombre d'alertes, triées comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque alerte.\n\nLes pixels trop petits pour former une alerte, ou au-delà du nombre maximal d'alertes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Chaque source a un interrupteur **inclure les alertes probables** ; désactivé, ses pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les alertes examinées qu'elle écarterait. À la fin de l'exécution, le nouveau jeu devient le jeu actif : préparez le questionnaire, puis lancez Analyse.",
+      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les alertes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque alerte se souvient des sources qui l'ont détectée.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels voisins deviennent des alertes. Les alertes plus petites que la **taille minimale** sont écartées ; vous pouvez limiter le nombre d'alertes, triées comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque alerte.\n\nLes pixels trop petits pour former une alerte, ou au-delà du nombre maximal d'alertes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Un interrupteur **inclure les alertes probables** vaut pour toutes les sources choisies (**Régler par source** pour choisir chacune) ; désactivé, leurs pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les alertes examinées qu'elle écarterait. À la fin de l'exécution, le nouveau jeu devient le jeu actif : préparez le questionnaire, puis lancez Analyse.",
       "sources": "Sources à combiner",
       "min_size": "Taille minimale d'alerte",
       "min_size_hint": "Les groupes d'alertes plus petits que cela ({px} pixels sur la grille) sont écartés, et sortent du jeu, de ses exports et de la carte Aperçu.",
-      "include_probable": "{source} : inclure les alertes probables (non confirmées)",
+      "include_probable": "Inclure les alertes probables (non confirmées)",
+      "probable_per_source": "Régler par source",
+      "probable_mixed": "Mixte : les sources ci-dessous diffèrent.",
+      "probable_none": "{source} : dates seules, pas de niveau probable",
       "sorting": "Ordre",
       "sorting_1": "Alertes les plus grandes en premier",
       "sorting_2": "Alertes les plus petites en premier",
       "sorting_3": "Alertes les plus récentes en premier",
       "sorting_4": "Alertes les plus anciennes en premier",
       "max_alerts": "Nombre maximal d'alertes",
-      "max_alerts_hint": "0 conserve toutes les alertes.",
+      "limit_alerts": "Limiter le nombre d'alertes",
+      "max_alerts_hint_1": {
+        "one": "Conserve {n} alerte : la plus grande.",
+        "many": "Conserve les {n} d'alertes les plus grandes.",
+        "other": "Conserve les {n} alertes les plus grandes."
+      },
+      "max_alerts_hint_2": {
+        "one": "Conserve {n} alerte : la plus petite.",
+        "many": "Conserve les {n} d'alertes les plus petites.",
+        "other": "Conserve les {n} alertes les plus petites."
+      },
+      "max_alerts_hint_3": {
+        "one": "Conserve {n} alerte : la plus récente.",
+        "many": "Conserve les {n} d'alertes les plus récentes.",
+        "other": "Conserve les {n} alertes les plus récentes."
+      },
+      "max_alerts_hint_4": {
+        "one": "Conserve {n} alerte : la plus ancienne.",
+        "many": "Conserve les {n} d'alertes les plus anciennes.",
+        "other": "Conserve les {n} alertes les plus anciennes."
+      },
       "attr_load": "Charger les bandes",
       "attr_no_source": "Choisissez d'abord une image ou un GeoTIFF.",
       "attr_loaded": "Bandes de {source}",
@@ -476,7 +499,7 @@
       "outcome_left_out_reason": "{source} : {reason}",
       "project_changed": "La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. Relancez Intégrer et vectoriser.",
       "error_min_size": "Saisissez une taille minimale en hectares, 0 ou plus.",
-      "error_max_alerts": "Saisissez un nombre entier, 0 ou plus.",
+      "error_max_alerts": "Saisissez un nombre entier supérieur à 0.",
       "layer_name": "Alertes (jeu actif)",
       "go": "Examiner",
       "popup": "Alerte {id} · {status} · {area} ha",

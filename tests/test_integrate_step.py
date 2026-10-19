@@ -58,27 +58,43 @@ PARAGUAY = (-55.5, -24.5, -55.0, -24.0)  # UTM 21S
 # params_from_form, reviewed_in, apply_result (brief Step 1)
 # ---------------------------------------------------------------------------
 def test_params_from_form():
-    params, err = integrate_jobs.params_from_form("0.5", 1, "0", None)
+    params, err = integrate_jobs.params_from_form("0.5", 1, None, None)  # None: no limit
     assert err is None and params.min_size_ha == 0.5 and params.max_alerts == 0
     assert params.area_mode == "aoi" and params.area_geojson is None and params.confirmed_only == []
-    assert integrate_jobs.params_from_form("-1", 1, "0", None)[1] == "steps.integrate.error_min_size"
+    assert integrate_jobs.params_from_form("-1", 1, None, None)[1] == "steps.integrate.error_min_size"
     params, err = integrate_jobs.params_from_form("1", 3, "25", None, confirmed_only=("RADD",))
     assert err is None and params.sorting == 3 and params.max_alerts == 25 and params.confirmed_only == ["RADD"]
+    assert integrate_jobs.params_from_form("1", 3, " 7 ", None)[0].max_alerts == 7
 
 
 @pytest.mark.parametrize("min_size, max_alerts, key", [
-    ("abc", "0", "steps.integrate.error_min_size"),
-    ("nan", "0", "steps.integrate.error_min_size"),  # would crash min_cluster_pixels
-    ("inf", "0", "steps.integrate.error_min_size"),
+    ("abc", None, "steps.integrate.error_min_size"),
+    ("nan", None, "steps.integrate.error_min_size"),  # would crash min_cluster_pixels
+    ("inf", None, "steps.integrate.error_min_size"),
     ("0.5", "-3", "steps.integrate.error_max_alerts"),
     ("0.5", "2.5", "steps.integrate.error_max_alerts"),
+    ("0.5", "0", "steps.integrate.error_max_alerts"),  # a limit keeps at least one alert
+    ("0.5", "", "steps.integrate.error_max_alerts"),
+    ("0.5", "abc", "steps.integrate.error_max_alerts"),
+    ("0.5", "1e3", "steps.integrate.error_max_alerts"),
 ])
 def test_params_from_form_refuses_bad_numbers(min_size, max_alerts, key):
     assert integrate_jobs.params_from_form(min_size, 1, max_alerts, None) == (None, key)
 
 
+@pytest.mark.parametrize("text, err", [
+    ("1", None), ("100", None), (" 25 ", None),
+    ("0", "steps.integrate.error_max_alerts"), ("-3", "steps.integrate.error_max_alerts"),
+    ("2.5", "steps.integrate.error_max_alerts"), ("", "steps.integrate.error_max_alerts"),
+    ("abc", "steps.integrate.error_max_alerts"), (None, "steps.integrate.error_max_alerts"),
+    ("²", "steps.integrate.error_max_alerts"),  # a digit to str.isdigit, not to int()
+])
+def test_max_alerts_error(text, err):
+    assert integrate_jobs.max_alerts_error(text) == err
+
+
 def test_params_from_form_takes_the_attribute_layers():
-    params, _ = integrate_jobs.params_from_form("0", 2, "", [{"source": "x"}])
+    params, _ = integrate_jobs.params_from_form("0", 2, None, [{"source": "x"}])
     assert params.area_geojson is None and params.max_alerts == 0
     assert params.attribute_layers == [{"source": "x"}] and params.attribute_config is None
 
@@ -87,9 +103,9 @@ def test_params_from_form_writes_the_layers_never_the_legacy_raster():
     """Spec D3: a new run writes ``attribute_layers`` and leaves
     ``attribute_config`` None; without layers the dump is the old one."""
     a, b = {"source": "a.tif", "kind": "local", "bands": []}, {"source": "users/me/b", "kind": "gee", "bands": []}
-    params, _ = integrate_jobs.params_from_form("0.5", 1, "0", (a, b))
+    params, _ = integrate_jobs.params_from_form("0.5", 1, None, (a, b))
     assert params.attribute_layers == [a, b] and params.attribute_config is None
-    params, _ = integrate_jobs.params_from_form("0.5", 1, "0", None)
+    params, _ = integrate_jobs.params_from_form("0.5", 1, None, None)
     assert params.attribute_layers == [] and "attribute_layers" not in params.model_dump(mode="json")
 
 
@@ -681,6 +697,7 @@ def test_run_starts_one_job_for_the_ticked_sources(step, tmp_path):
         assert t("steps.integrate.will_create", period=JAN.id, sources="GLAD-L + RADD") in _texts(rc)
         _field(rc, t("steps.integrate.min_size")).v_model = "1"
         assert _field(rc, t("steps.integrate.min_size")).hint == t("steps.integrate.min_size_hint", px=12)  # 30 m
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
         _field(rc, t("steps.integrate.max_alerts")).v_model = "25"
         _select(rc, t("steps.integrate.sorting")).v_model = 3
         _checkbox(rc, "RADD").v_model = False
@@ -712,22 +729,116 @@ def test_invalid_numbers_are_refused_with_a_toast(step):
         rc.close()
 
 
-def test_the_form_has_no_area_select_and_a_probable_switch_per_chosen_source(step):
+PROBABLE = t("steps.integrate.include_probable")
+PER_SOURCE = t("steps.integrate.probable_per_source")
+
+
+def _has_button(rc, label):
+    return any(label in w.children for w in rc.find(v.Btn).widgets)
+
+
+def test_the_alert_limit_is_off_until_ticked(step):
+    """Off keeps every alert; ticked, the field starts at 100 and its hint
+    follows the order."""
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        assert _checkbox(rc, t("steps.integrate.limit_alerts")).v_model is False
+        assert not [w for w in rc.find(v.TextField).widgets if w.label == t("steps.integrate.max_alerts")]
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
+        field = _field(rc, t("steps.integrate.max_alerts"))
+        assert field.v_model == "100" and field.hint == tn("steps.integrate.max_alerts_hint_1", 100)
+        assert field.error_messages == []
+        _select(rc, t("steps.integrate.sorting")).v_model = 3
+        assert _field(rc, t("steps.integrate.max_alerts")).hint == tn("steps.integrate.max_alerts_hint_3", 100)
+        _field(rc, t("steps.integrate.max_alerts")).v_model = "1"
+        assert _field(rc, t("steps.integrate.max_alerts")).hint == tn("steps.integrate.max_alerts_hint_3", 1)
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("bad", ["0", "-5", "2.5", "abc", ""])
+def test_a_bad_alert_limit_is_flagged_as_typed_and_disables_run(step, bad):
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
+        _field(rc, t("steps.integrate.max_alerts")).v_model = bad
+        assert _field(rc, t("steps.integrate.max_alerts")).error_messages == [t("steps.integrate.error_max_alerts")]
+        assert _button(rc, t("steps.integrate.run")).disabled
+        _field(rc, t("steps.integrate.max_alerts")).v_model = "7"
+        assert _field(rc, t("steps.integrate.max_alerts")).error_messages == []
+        assert not _button(rc, t("steps.integrate.run")).disabled
+    finally:
+        rc.close()
+
+
+def test_unticking_the_limit_keeps_every_alert_and_remembers_the_number(step):
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
+        _field(rc, t("steps.integrate.max_alerts")).v_model = "0"  # invalid, but hidden once unticked
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = False
+        assert not _button(rc, t("steps.integrate.run")).disabled
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
+        assert _field(rc, t("steps.integrate.max_alerts")).v_model == "0"
+        _field(rc, t("steps.integrate.max_alerts")).v_model = "40"
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = False
+        _run(rc)
+        step.run_jobs()
+        [job] = step.runs
+        assert job.params.max_alerts == 0
+        _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
+        assert _field(rc, t("steps.integrate.max_alerts")).v_model == "40"
+    finally:
+        rc.close()
+
+
+def test_one_probable_switch_covers_every_chosen_source(step):
     step.ready = ["GLAD-L", "RADD"]
     map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))
     try:
         assert not [w for w in rc.find(v.Select).widgets if w.label == "Area"]
-        radd, glad = (t("steps.integrate.include_probable", source=x) for x in ("RADD", "GLAD-L"))
-        assert _all_switches(rc)[radd].v_model is True and _all_switches(rc)[glad].v_model is True
-        _all_switches(rc)[radd].v_model = False
-        _checkbox(rc, "GLAD-L").v_model = False
-        assert glad not in _all_switches(rc)
-        _checkbox(rc, "GLAD-L").v_model = True
+        assert list(_all_switches(rc)) == [PROBABLE] and _all_switches(rc)[PROBABLE].v_model is True
+        _all_switches(rc)[PROBABLE].v_model = False
         _run(rc)
         step.run_jobs()
         [job] = step.runs
-        assert job.params.confirmed_only == ["RADD"]
+        assert job.params.confirmed_only == ["GLAD-L", "RADD"]
         assert job.params.area_mode == "aoi" and job.params.area_geojson is None
+    finally:
+        rc.close()
+
+
+def test_set_per_source_opens_a_switch_per_source_and_a_mix_stays_open(step):
+    step.ready = ["GLAD-L", "RADD", "CCDC-X"]
+    step.probable = {"CCDC-X": False}
+    map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))
+    try:
+        assert set(_all_switches(rc)) == {PROBABLE}
+        _button(rc, PER_SOURCE).fire_event("click", None)
+        assert set(_all_switches(rc)) == {PROBABLE, "GLAD-L", "RADD"}
+        assert t("steps.integrate.probable_none", source="CCDC-X") in _texts(rc)
+
+        _all_switches(rc)["RADD"].v_model = False
+        assert _all_switches(rc)[PROBABLE].v_model is False
+        assert t("steps.integrate.probable_mixed") in _texts(rc)
+        assert not _has_button(rc, PER_SOURCE)  # a mix cannot be folded away
+
+        _all_switches(rc)[PROBABLE].v_model = True  # the main switch evens them out
+        assert _all_switches(rc)["RADD"].v_model is True and _all_switches(rc)["GLAD-L"].v_model is True
+        assert t("steps.integrate.probable_mixed") not in _texts(rc)
+        _button(rc, PER_SOURCE).fire_event("click", None)  # folds
+        assert set(_all_switches(rc)) == {PROBABLE}
+
+        _button(rc, PER_SOURCE).fire_event("click", None)
+        _all_switches(rc)["GLAD-L"].v_model = False
+        _checkbox(rc, "RADD").v_model = False  # GLAD-L alone: not a mix any more
+        assert set(_all_switches(rc)) == {PROBABLE} and not _has_button(rc, PER_SOURCE)
+        assert _all_switches(rc)[PROBABLE].v_model is False
+        _checkbox(rc, "RADD").v_model = True
+        _run(rc)
+        step.run_jobs()
+        [job] = step.runs
+        assert job.params.confirmed_only == ["GLAD-L"]
     finally:
         rc.close()
 
@@ -737,7 +848,9 @@ def test_a_date_only_source_gets_no_probable_switch(step):
     step.probable = {"CCDC-X": False}
     map_, rc = _render(_state(_project("d", "GLAD-L")))
     try:
-        assert list(_all_switches(rc)) == [t("steps.integrate.include_probable", source="GLAD-L")]
+        assert list(_all_switches(rc)) == [PROBABLE] and not _has_button(rc, PER_SOURCE)
+        _checkbox(rc, "GLAD-L").v_model = False  # no source with a probable level: no switch
+        assert _all_switches(rc) == {}
     finally:
         rc.close()
 
@@ -873,14 +986,30 @@ def test_the_form_starts_from_the_active_set_and_resets_for_another_project(step
     try:
         assert _field(rc, t("steps.integrate.min_size")).v_model == "2.0"
         assert _select(rc, t("steps.integrate.sorting")).v_model == 3
+        assert _checkbox(rc, t("steps.integrate.limit_alerts")).v_model is True
         assert _field(rc, t("steps.integrate.max_alerts")).v_model == "25"
-        assert _all_switches(rc)[t("steps.integrate.include_probable", source="GLAD-L")].v_model is False
+        assert _all_switches(rc)[PROBABLE].v_model is False
         _field(rc, t("steps.integrate.min_size")).v_model = "7"
 
         state.new_project_state(_project("e", "GLAD-L"))
         assert _field(rc, t("steps.integrate.min_size")).v_model == "0.5"
         assert _select(rc, t("steps.integrate.sorting")).v_model == 1
-        assert _all_switches(rc)[t("steps.integrate.include_probable", source="GLAD-L")].v_model is True
+        assert _checkbox(rc, t("steps.integrate.limit_alerts")).v_model is False
+        assert _all_switches(rc)[PROBABLE].v_model is True
+    finally:
+        rc.close()
+
+
+def test_a_set_with_mixed_probable_choices_reopens_with_the_sources_listed(step):
+    last = AlertSetParams(confirmed_only=["RADD"])
+    state = _state(_project("d", "GLAD-L", "RADD", sets=[_set("x", 0, sources=["GLAD-L", "RADD"], params=last)]))
+    step.ready = ["GLAD-L", "RADD"]
+    map_, rc = _render(state)
+    try:
+        assert _checkbox(rc, t("steps.integrate.limit_alerts")).v_model is False
+        switches = _all_switches(rc)
+        assert switches[PROBABLE].v_model is False and t("steps.integrate.probable_mixed") in _texts(rc)
+        assert switches["GLAD-L"].v_model is True and switches["RADD"].v_model is False
     finally:
         rc.close()
 
@@ -1478,7 +1607,7 @@ def _all_switches(rc):
 
 def _switches(rc):
     """The alert-layer switches, without the per-source probable ones."""
-    probable = {t("steps.integrate.include_probable", source=s) for s in ("GLAD-L", "RADD", "CCDC-X")}
+    probable = {t("steps.integrate.include_probable"), "GLAD-L", "RADD", "CCDC-X"}
     return {k: w for k, w in _all_switches(rc).items() if k not in probable}
 
 

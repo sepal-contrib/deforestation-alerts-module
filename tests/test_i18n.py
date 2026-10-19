@@ -223,6 +223,7 @@ def _dynamic_keys():
     return {
         "steps.integrate.set_": [Status.STALE.value, Status.MISSING.value],
         "steps.integrate.sorting_": SORTINGS,
+        "steps.integrate.max_alerts_hint_": SORTINGS,
         "steps.integrate.attr_stat_": _STATS,
         # deforestation_alerts.project.periods' error keys
         "steps.period.error_": list(periods.ERRORS),

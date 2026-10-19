@@ -89,9 +89,17 @@ def is_integrating(project_name: str, set_id: str) -> bool:
         return _INTEGRATING.get((project_name, set_id), 0) > 0
 
 
+def max_alerts_error(text) -> Optional[str]:
+    """The alert limit's message key, None when ``text`` is a whole number of
+    1 or more: the field shows it as typed, Run checks it again."""
+    s = str(text if text is not None else "").strip()
+    return None if s.isascii() and s.isdigit() and int(s) >= 1 else "steps.integrate.error_max_alerts"
+
+
 def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=()):
     """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``.
 
+    ``max_alerts``: the limit as typed, or None for no limit (stored as 0).
     ``attribute_layers``: the attribute-layer configs in order (None: none). A
     new set writes them as ``attribute_layers``, never as the legacy
     ``attribute_config`` (spec D3). ``confirmed_only``: sources whose probable
@@ -103,12 +111,9 @@ def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_
         return None, "steps.integrate.error_min_size"
     if not math.isfinite(ha) or ha < 0:
         return None, "steps.integrate.error_min_size"
-    try:
-        cap = int(str(max_alerts or "0").strip())
-    except (TypeError, ValueError):
-        return None, "steps.integrate.error_max_alerts"
-    if cap < 0:
-        return None, "steps.integrate.error_max_alerts"
+    if max_alerts is not None and (err := max_alerts_error(max_alerts)):
+        return None, err
+    cap = 0 if max_alerts is None else int(str(max_alerts).strip())
     return AlertSetParams(
         min_size_ha=ha,
         sorting=int(sorting),

@@ -31,11 +31,12 @@ from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.presets import has_probable
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import set_id as make_set_id
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import alert_layers
 from gui.scripts.coverage_ui import note_text, result_note
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.integrate_jobs import (
+    max_alerts_error,
     params_from_form,
     replace_message,
     reviewed_in,
@@ -74,6 +75,18 @@ def integrate_choices(p, pdir, period) -> list:
             out.append({"source": r.source, "label": r.source, "enabled": False,
                         "note": note_text(r.notes[0]) if r.notes else ""})
     return out
+
+
+#: The alert limit a ticked "Limit the number of alerts" starts from.
+DEFAULT_LIMIT = 100
+
+
+def probable_mix(sources, probable_off) -> str:
+    """``"on"``, ``"off"`` or ``"mixed"``: whether ``sources`` (the chosen
+    ones with a probable level) all keep their probable alerts, all drop them,
+    or differ."""
+    off = sum(s in probable_off for s in sources)
+    return "on" if not off else "off" if off == len(sources) else "mixed"
 
 
 #: Edit and delete: the attribute table's actions (its budget, tests/test_table_budget.py).
@@ -134,7 +147,11 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
     min_size, set_min_size = solara.use_state(str(last.min_size_ha if last else 0.5))
     probable_off, set_probable_off = solara.use_state(set(last.confirmed_only) if last else set())
     sorting, set_sorting = solara.use_state(last.sorting if last else 1)
-    max_alerts, set_max_alerts = solara.use_state(str(last.max_alerts if last else 0))
+    # Off keeps every alert (stored as 0); the number typed survives an untick.
+    limit_on, set_limit_on = solara.use_state(bool(last and last.max_alerts > 0))
+    max_alerts, set_max_alerts = solara.use_state(str(last.max_alerts if last and last.max_alerts > 0
+                                                      else DEFAULT_LIMIT))
+    per_source, set_per_source = solara.use_state(False)  # the per-source probable switches unfolded
     # The attribute layers (spec D3) are form state until Run, like the fields
     # above. A set made before the list reopens with its one raster.
     attr_layers, set_attr_layers = solara.use_state(last.attribute_list() if last else [])
@@ -150,6 +167,14 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         min_px = min_cluster_pixels(float(min_size), resolution)
     except (TypeError, ValueError, OverflowError):
         min_px = "?"
+    limit_err = max_alerts_error(max_alerts) if limit_on else None
+    probable_capable = {c["source"] for c in choices if c.get("probable")}
+    with_probable = [s for s in chosen if s in probable_capable]
+    mix = probable_mix(with_probable, probable_off) if with_probable else None
+    show_per_source = len(with_probable) > 1 and (per_source or mix == "mixed")  # a mix stays unfolded
+
+    def _set_all_probable(on):
+        set_probable_off(lambda cur: (cur - set(with_probable)) if on else (cur | set(with_probable)))
 
     def _toggle_source(source, on):
         current = set(chosen)
@@ -178,7 +203,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
     def _on_run():
         if refuse_setup(app_state, notifications):
             return
-        params, err = params_from_form(min_size, sorting, max_alerts, attr_layers,
+        params, err = params_from_form(min_size, sorting, max_alerts if limit_on else None, attr_layers,
                                        confirmed_only=sorted(x for x in probable_off if x in chosen))
         if err:
             notifications.error(t(err))
@@ -216,18 +241,44 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
                         disabled=not c["enabled"], dense=True, hide_details=True,
                         on_v_model=lambda v, s=s: _toggle_source(s, v))
-            if s in chosen and c["probable"]:
-                rv.Switch(label=t("steps.integrate.include_probable", source=c["label"]), v_model=s not in probable_off,
-                          on_v_model=lambda v, s=s: set_probable_off(lambda cur: (cur - {s}) if v else (cur | {s})),
-                          dense=True, hide_details=True, class_="ml-6 mt-0")
+        if with_probable:
+            # One switch for every chosen source; per source only when asked
+            # for, or when the sources already differ.
+            with solara.Column(style="gap:0;"):
+                rv.Switch(label=t("steps.integrate.include_probable"), v_model=mix == "on",
+                          on_v_model=_set_all_probable, dense=True, hide_details=True, class_="mt-0")
+                if mix == "mixed":
+                    solara.Text(t("steps.integrate.probable_mixed"), style=MUTED, classes=["ml-11"])
+                elif len(with_probable) > 1:
+                    solara.Button(t("steps.integrate.probable_per_source"), text=True, x_small=True,
+                                  color="primary", classes=["ml-9", "align-self-start"],
+                                  icon_name="mdi-chevron-down" if per_source else "mdi-chevron-right",
+                                  on_click=lambda: set_per_source(not per_source))
+                if show_per_source:
+                    for c in choices:
+                        s = c["source"]
+                        if s in with_probable:
+                            rv.Switch(label=c["label"], v_model=s not in probable_off, dense=True,
+                                      hide_details=True, class_="ml-9 mt-1",
+                                      on_v_model=lambda v, s=s: set_probable_off(
+                                          lambda cur: (cur - {s}) if v else (cur | {s})))
+                        elif s in chosen:
+                            solara.Text(t("steps.integrate.probable_none", source=c["label"]), style=MUTED,
+                                        classes=["ml-9", "mt-1"])
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
                      persistent_hint=True)
         rv.Select(label=t("steps.integrate.sorting"), v_model=sorting, on_v_model=set_sorting, dense=True,
                   outlined=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
-        rv.TextField(label=t("steps.integrate.max_alerts"), v_model=max_alerts, on_v_model=set_max_alerts,
-                     type="number", dense=True, outlined=True, hint=t("steps.integrate.max_alerts_hint"),
-                     persistent_hint=True)
+        with solara.Column(style="gap:0;"):
+            rv.Checkbox(label=t("steps.integrate.limit_alerts"), v_model=limit_on, on_v_model=set_limit_on,
+                        dense=True, hide_details=True, class_="mt-0")
+            if limit_on:
+                rv.TextField(label=t("steps.integrate.max_alerts"), v_model=max_alerts, on_v_model=set_max_alerts,
+                             type="number", dense=True, outlined=True, class_="ml-8 mt-3",
+                             hint="" if limit_err else tn(f"steps.integrate.max_alerts_hint_{sorting}",
+                                                         int(str(max_alerts).strip())),
+                             persistent_hint=True, error_messages=[t(limit_err)] if limit_err else [])
         # A nested list: an outlined card (422 px of content) with an outlined Add above the table (spec D4).
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Button(t("steps.integrate.attr_add"), icon_name="mdi-plus", small=True, outlined=True,
@@ -241,7 +292,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             solara.Text(t("steps.integrate.will_create", period=period.id, sources=" + ".join(chosen)),
                         style=MUTED)
         solara.Button(t("steps.integrate.run"), color="primary", small=True, icon_name="mdi-vector-union",
-                      disabled=busy or not chosen, loading=busy, on_click=_on_run)
+                      disabled=busy or not chosen or bool(limit_err), loading=busy, on_click=_on_run)
         if has_set:
             # The alerts of the run that just finished, on the shared map. Two
             # booleans: the shell's _AlertLayers leaf owns the MapLayers calls,
