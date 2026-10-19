@@ -111,6 +111,40 @@ def test_a_menu_toggle_survives_an_update_of_that_layer_and_goes_with_it(plain_p
     assert "t" not in (mv_eval(plain_page, "(mv) => mv.overrides()").get("b") or {}), "pruned once the layer is gone"
 
 
+def _menu_rows(page, view_id):
+    """The menu's rows in order: ``"# <heading>"``, a layer's name, or ``"---"`` for a separator."""
+    return page.evaluate("""s => [...document.querySelector(s).children].map(n =>
+        n.classList.contains('leaflet-control-layers-separator') ? '---'
+        : n.classList.contains('mv-layers-section') ? '# ' + n.textContent : n.textContent.trim())""",
+                         f"{_menu(page, view_id)} .leaflet-control-layers-overlays")
+
+
+def _in(section, **kw):
+    return {"meta": {"menuSection": section}, **kw}
+
+
+def test_sections_list_their_layers_under_a_heading_in_the_configured_order(plain_page):
+    make(plain_page, _opts(), plugins=[("layerMenu", {"sections": ["imagery", "alerts", "optional"]})])
+    _set_layers(plain_page, [_tile("a1", name="Alert BB", **_in("alerts")),
+                             _tile("i1", name="True Color", **_in("imagery")),
+                             _tile("u", name="Loose"),
+                             _tile("i2", name="False Color", **_in("imagery")),
+                             _tile("x", name="Extra", **_in("extra"))])
+    assert _menu_rows(plain_page, "a") == [
+        "Loose", "---", "# imagery", "True Color", "False Color", "---", "# alerts", "Alert BB",
+        "---", "# extra", "Extra",
+    ], "unsectioned first, then the configured order, then the others; an empty section is not shown"
+    _click_checkbox(plain_page, "a", "i2")
+    assert not _shown(plain_page, "a", "i2"), "a sectioned layer toggles like any other"
+
+
+def test_section_headings_follow_set_labels(plain_page):
+    make(plain_page, _opts(), plugins=[("layerMenu", {"sections": ["imagery"]})])
+    _set_layers(plain_page, [_tile("i1", name="True Color", **_in("imagery"))])
+    mv_eval(plain_page, "(mv) => mv.setLabels({'layerMenu.section.imagery': 'Imágenes'})")
+    assert _menu_rows(plain_page, "b") == ["# Imágenes", "True Color"]
+
+
 def test_hovering_the_menu_expands_it(plain_page):
     make(plain_page, _opts(), plugins=[("layerMenu", {})])
     _set_layers(plain_page, [_tile("t", name="True colour")])
@@ -121,6 +155,85 @@ def test_hovering_the_menu_expands_it(plain_page):
     plain_page.locator(f'{_menu(plain_page, "a")} input[data-id="t"]').click()
     plain_page.wait_for_timeout(100)
     assert not _shown(plain_page, "a", "t")
+
+
+# --- basemapSwitcher ---------------------------------------------------------------
+
+BASEMAPS = [
+    {"id": "g", "name": "Google Satellite", "url": f"{TILE}#g", "attribution": "Google", "thumbnail": TILE},
+    {"id": "e", "name": "Esri World Imagery", "url": f"{TILE}#e", "attribution": "Esri", "maxZoom": 19,
+     "thumbnail": TILE},
+]
+
+
+def _switcher(page, view_id):
+    return f'.mv-view[data-view="{view_id}"] .mv-basemaps'
+
+
+def _basemap_urls(page):
+    """Per view, the URL fragments of the tile layers in the basemap pane."""
+    return mv_eval(page, """(mv) => mv.views.map(v => { const out = [];
+        v.map.eachLayer(l => { if (l instanceof mv.L.TileLayer && l.options.pane === 'mvBasemap') out.push(l._url.split('#')[1]); });
+        return out; })""")
+
+
+def _selected(page, view_id):
+    return page.evaluate("s => [...document.querySelectorAll(s)].map(b => b.dataset.id)",
+                         f"{_switcher(page, view_id)} .mv-basemap--on")
+
+
+def test_the_basemap_switcher_lists_every_basemap_and_shows_the_selected_one(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS, "selected": "e"})])
+    for v in "abc":
+        names = plain_page.evaluate("s => [...document.querySelectorAll(s)].map(b => b.textContent.trim())",
+                                    f"{_switcher(plain_page, v)} .mv-basemap")
+        assert names == ["Google Satellite", "Esri World Imagery"]
+        assert _selected(plain_page, v) == ["e"]
+    assert _basemap_urls(plain_page) == [["e"]] * 3
+    assert mv_eval(plain_page, "(mv) => mv.plugin('basemapSwitcher').selected()") == "e"
+    native = mv_eval(plain_page, """(mv) => { let z = null; mv.views[0].map.eachLayer(l => {
+        if (l.options.pane === 'mvBasemap') z = l.options.maxNativeZoom; }); return z; }""")
+    assert native == 19, "the basemap's maxZoom is its native maximum"
+
+
+def test_a_click_switches_the_basemap_of_every_view_once(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS})])
+    assert _basemap_urls(plain_page) == [["g"]] * 3, "no selected option: the first"
+    plain_page.locator(f'{_switcher(plain_page, "b")} .mv-basemap[data-id="e"]').click()
+    plain_page.wait_for_timeout(100)
+    assert _basemap_urls(plain_page) == [["e"]] * 3
+    assert [_selected(plain_page, v) for v in "abc"] == [["e"]] * 3, "every view's switcher follows"
+    assert events(plain_page, "basemapchange") == [{"id": "e"}]
+    plain_page.locator(f'{_switcher(plain_page, "a")} .mv-basemap[data-id="e"]').click()
+    plain_page.wait_for_timeout(100)
+    assert events(plain_page, "basemapchange") == [{"id": "e"}], "the selected one again: no change"
+    assert centers(plain_page)[0][2] == START["zoom"], "a click on the switcher does not zoom the map"
+
+
+def test_select_switches_without_an_event_and_ignores_unknown_ids(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS, "selected": "nope"})])
+    assert _basemap_urls(plain_page) == [["g"]] * 3, "an unknown selected option: the first"
+    mv_eval(plain_page, "(mv) => mv.plugin('basemapSwitcher').select('e')")
+    assert _basemap_urls(plain_page) == [["e"]] * 3 and _selected(plain_page, "c") == ["e"]
+    mv_eval(plain_page, "(mv) => mv.plugin('basemapSwitcher').select('nope')")
+    assert _basemap_urls(plain_page) == [["e"]] * 3
+    assert events(plain_page, "basemapchange") == []
+
+
+def test_the_basemap_switcher_follows_set_labels(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {"basemaps": BASEMAPS})])
+    assert plain_page.get_attribute(_switcher(plain_page, "a"), "aria-label") == "Basemap"
+    mv_eval(plain_page, "(mv) => mv.setLabels({'basemapSwitcher.title': 'Mapa base', 'basemapSwitcher.e': 'Esri Imágenes'})")
+    assert plain_page.get_attribute(_switcher(plain_page, "a"), "aria-label") == "Mapa base"
+    button = f'{_switcher(plain_page, "a")} .mv-basemap[data-id="e"]'
+    assert plain_page.text_content(button).strip() == "Esri Imágenes"
+    assert plain_page.get_attribute(button, "title") == "Esri Imágenes"
+
+
+def test_no_basemaps_no_switcher(plain_page):
+    make(plain_page, _opts(), plugins=[("basemapSwitcher", {})])
+    assert plain_page.locator(".mv-basemaps").count() == 0
+    assert _basemap_urls(plain_page) == [[]] * 3
 
 
 # --- fitBounds -------------------------------------------------------------------
@@ -162,7 +275,9 @@ def test_a_second_use_of_the_same_plugin_throws(plain_page):
 
 
 def test_destroy_removes_the_plugins_controls(plain_page):
-    make(plain_page, _opts(), plugins=[("layerMenu", {}), ("fitBounds", {})])
+    make(plain_page, _opts(), plugins=[("layerMenu", {}), ("fitBounds", {}),
+                                       ("basemapSwitcher", {"basemaps": BASEMAPS})])
     mv_eval(plain_page, "(mv) => mv.destroy()")
     assert plain_page.locator(".mv-layer-menu").count() == 0
     assert plain_page.locator(".mv-fit-bounds").count() == 0
+    assert plain_page.locator(".mv-basemaps").count() == 0

@@ -53,7 +53,8 @@ def test_the_reviewed_polygon_is_one_defo_spec_on_every_view():
     s.defo_layer.set(g)
     spec = panes.spec(DEFO_ID)
     assert (spec["view"], spec["name"], spec["group"]) == ("all", "Defo Layer", "alert")
-    assert spec["meta"] == {"hideWhileEditing": True}, "the drawing shows the polygon in edit mode"
+    assert spec["meta"] == {"hideWhileEditing": True, "menuSection": "alerts"}, \
+        "the drawing shows the polygon in edit mode"
     assert spec["style"] == {"color": "orange", "fillOpacity": "0"}
     assert spec["data"]["features"][0]["geometry"]["type"] == "Polygon"
     s.defo_layer.set(g)  # the same object again: not a change

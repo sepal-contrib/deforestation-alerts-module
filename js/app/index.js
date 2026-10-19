@@ -20,16 +20,23 @@ import {draw} from "../leaflet-multiview/src/plugins/draw/index.js";
 import * as drawWidget from "../leaflet-multiview/src/plugins/draw/widget.js";
 import {holes} from "../leaflet-multiview/src/plugins/holes/index.js";
 import {tileErrors} from "../leaflet-multiview/src/plugins/tile-errors/index.js";
+import {basemapSwitcher} from "../leaflet-multiview/src/plugins/basemap-switcher/index.js";
+import * as basemapSwitcherWidget from "../leaflet-multiview/src/plugins/basemap-switcher/widget.js";
 import {resizeNudge} from "./resize_nudge.js";
 
 export default createWidget({
   L,
   registry: {
-    layerMenu: {plugin: layerMenu, bind: layerMenuWidget.bind},
+    layerMenu: {plugin: layerMenu, bind: layerMenuWidget.bind, options: layerMenuWidget.options},
     fitBounds: {plugin: fitBounds, bind: fitBoundsWidget.bind, options: fitBoundsWidget.options},
     draw: {plugin: draw, bind: drawWidget.bind},
     holes: {plugin: holes}, // no traits, so no widget binding
     tileErrors: {plugin: tileErrors}, // no traits, so no widget binding
+    basemapSwitcher: {
+      plugin: basemapSwitcher,
+      bind: basemapSwitcherWidget.bind,
+      options: basemapSwitcherWidget.options,
+    },
   },
   always: [resizeNudge],
 });

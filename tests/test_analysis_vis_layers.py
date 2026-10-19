@@ -38,11 +38,11 @@ def test_a_period_month_nicfi_layer_is_rebuilt_when_the_active_period_changes():
 
 def _panes(removed, asked=None):
     """Stand-in views: ``vis_sync`` asks ``panes`` for one target (every
-    view, group ``vis``) and builds and removes on it."""
+    view, group ``vis``, the menu's Optional layers) and builds and removes on it."""
 
-    def target(view, *, group):
+    def target(view, *, group, section=None):
         if asked is not None:
-            asked.append((view, group))
+            asked.append((view, group, section))
         return SimpleNamespace(name=view,
                                remove_layer=lambda k, none_ok=False: removed.append((view, k)))
 
@@ -58,7 +58,7 @@ def test_the_sync_adds_switched_off_layers_to_every_view_and_removes_them(monkey
     layer = GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)
     state.load_project_state(_p(layer))
     unsubscribe = vis_sync.wire(widgets, state, spawn=lambda target, args=(): target(*args))
-    assert asked == [("all", "vis")], "one spec on every view, in the vis group"
+    assert asked == [("all", "vis", "optional")], "one spec on every view, in the vis group, under Optional layers"
     assert built == [("all", "vis:s2", False)]
     removed.clear()  # a build first clears its own key
     state.update_project("a", lambda p: setattr(p, "vis_layers", {}))
@@ -165,8 +165,10 @@ def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
     panes = widgets.panes
     vis = panes.spec("vis:s2")
     assert vis is not None and vis["visible"] is False and vis["view"] == "all"
+    assert vis["meta"] == {"menuSection": "optional"}
     assert panes.ids() == ["vis:s2", analysis_tile.ALERT_BB_ID]  # the old alert's box went
     assert shape(panes.spec(analysis_tile.ALERT_BB_ID)["data"]).equals(box(1, 1, 1.01, 1.01))
+    assert panes.spec(analysis_tile.ALERT_BB_ID)["meta"] == {"hideWhileEditing": True, "menuSection": "alerts"}
 
 
 def test_a_removal_that_runs_after_a_later_re_add_leaves_the_layer(monkeypatch):

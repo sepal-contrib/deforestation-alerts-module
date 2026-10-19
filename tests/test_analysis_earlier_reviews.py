@@ -46,6 +46,7 @@ def test_switch_on_adds_one_layer_to_every_view(monkeypatch):
     earlier.refresh_earlier_reviews(widgets, analysis, app_state)
     (spec,) = _earlier(widgets)
     assert (spec["view"], spec["group"], spec["name"]) == ("all", "earlier", EARLIER_LAYER_NAME)
+    assert spec["meta"] == {"menuSection": "alerts"}
     assert spec["style"] == {"weight": 2, "fill": False}
     assert len(spec["data"]["features"]) == 2
     first = spec["data"]["features"][0]["properties"]

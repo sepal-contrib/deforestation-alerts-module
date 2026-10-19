@@ -9,3 +9,4 @@ export {fitBounds} from "./plugins/fit-bounds/index.js";
 export {draw} from "./plugins/draw/index.js";
 export {holes} from "./plugins/holes/index.js";
 export {tileErrors} from "./plugins/tile-errors/index.js";
+export {basemapSwitcher} from "./plugins/basemap-switcher/index.js";

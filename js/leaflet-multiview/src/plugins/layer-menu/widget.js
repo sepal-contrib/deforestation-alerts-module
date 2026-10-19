@@ -1,4 +1,5 @@
-// The layerMenu plugin <-> the widget's ``layer_menu_toggles`` trait
+// The layerMenu plugin <-> the widget's traits: ``layer_menu_sections`` (an
+// option: the section order, read once at install) and ``layer_menu_toggles``
 // ({viewId: {layerId: bool}}, frontend-owned; Python may seed it).
 //
 // - At bind time the trait's toggles become core overrides, so a re-render
@@ -8,6 +9,10 @@
 //   view): pruneOverrides returns the same object when nothing was dropped, so
 //   a new object means there is something to write. Without this, Python would
 //   keep the stale entry and the next re-render would resurrect it.
+
+export function options(model) {
+  return {sections: model.get("layer_menu_sections") || []};
+}
 
 export function bind({model, mv}) {
   const toggles = model.get("layer_menu_toggles") || {};

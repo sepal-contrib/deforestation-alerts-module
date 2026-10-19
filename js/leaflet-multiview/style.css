@@ -61,6 +61,10 @@
 
 /* --- layerMenu (src/plugins/layer-menu) --- */
 .mv-layers-title { font-weight: 600; padding: 0 0 4px; }
+.mv-layers-section {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #777; padding: 2px 0 1px;
+}
+.mv-dark .mv-layers-section { color: #aaa; }
 .mv-layer-menu.mv-layer-menu--empty { display: none; }
 
 /* --- fitBounds (src/plugins/fit-bounds) --- */
@@ -72,6 +76,37 @@
    outside .mv-root: it carries the strip's colours itself. */
 .mv-widget { position: relative; width: 100%; height: 100%; --mv-error-bg: #b3261e; --mv-error-fg: #fff; }
 .mv-widget > .mv-widget-views { width: 100%; height: 100%; }
+
+/* --- basemapSwitcher (src/plugins/basemap-switcher) --- */
+/* Lifted above the attribution line, which a long credit stretches under it. */
+.leaflet-bottom .leaflet-control.mv-basemaps { display: flex; gap: 6px; margin-bottom: 22px; }
+.mv-root .mv-basemap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid #fff;
+  border-radius: var(--mv-radius);
+  background: #ccc;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.mv-root .mv-basemap:hover { border-color: #90caf9; }
+.mv-root .mv-basemap.mv-basemap--on { border-color: #1976d2; box-shadow: 0 0 0 2px #1976d2; }
+.mv-basemap-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mv-basemap-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px 2px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: 9px/1.15 Roboto, sans-serif;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 
 /* --- draw (src/plugins/draw) --- */
 .mv-draw-hint {

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from pysepal.i18n import set_locale
 
-from gui.tile.analysis.pane_layers import Z_BASE, geojson_spec, pane_labels, tile_spec
+from gui.tile.analysis.pane_layers import Z_BASE, analysis_basemaps, geojson_spec, pane_labels, tile_spec
 from gui.tile.analysis.state import AnalysisState
 from tests._pane_helpers import make_panes, reviewer_edits
 
@@ -23,17 +23,71 @@ def _english():
     set_locale("en")
 
 
-def test_construction_sets_the_views_the_basemap_and_the_labels():
-    from pysepal.mapping.basemaps import xyz_tiles
-
+def test_construction_sets_the_views_the_basemaps_the_sections_and_the_labels():
     panes = make_panes()
     assert panes.widget.views == [{"id": "before"}, {"id": "after"}]
     assert panes.widget.fit_bounds_views == ["after"], "zoom-to-alert sits on the after view only"
-    assert panes.widget.basemap == {"url": xyz_tiles["SATELLITE"]["url"],
-                                    "attribution": xyz_tiles["SATELLITE"]["attribution"]}
+    assert panes.widget.basemap == {}, "the basemap switcher owns the basemap"
+    assert panes.widget.basemap_switcher_basemaps == analysis_basemaps()
+    assert panes.widget.basemap_switcher_selected == "google", "today's basemap stays the default"
+    assert panes.widget.layer_menu_sections == ["imagery", "alerts", "optional"]
     assert panes.widget.labels == pane_labels()
     assert set(pane_labels()) >= {"layerMenu.title", "fitBounds.button", "draw.hint"}
     assert pane_labels()["layerMenu.title"] == "Layers"
+
+
+def test_the_basemaps_are_google_esri_and_sepals_light_and_dark():
+    from pysepal.mapping import basemaps as pysepal_basemaps
+
+    found = {b["id"]: b for b in analysis_basemaps()}
+    assert list(found) == ["google", "esri", "sepal_light", "sepal_dark"]
+    assert found["google"]["url"] == pysepal_basemaps.xyz_tiles["SATELLITE"]["url"]
+    assert found["esri"]["url"] == ("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+                                    "/tile/{z}/{y}/{x}")
+    assert found["sepal_light"]["url"] == pysepal_basemaps.BASEMAP_LIGHT
+    assert found["sepal_dark"]["url"] == pysepal_basemaps.BASEMAP_DARK
+    assert found["sepal_light"]["attribution"] == pysepal_basemaps.BASEMAP_ATTRIBUTION
+    for b in found.values():
+        assert b["attribution"] and b["name"] and b["maxZoom"] >= 16
+        assert b["thumbnail"].startswith("https://") and "{" not in b["thumbnail"], "one concrete tile"
+
+
+def test_the_basemap_and_section_labels_are_translated():
+    english = pane_labels()
+    assert english["basemapSwitcher.title"] == "Basemap"
+    assert english["basemapSwitcher.sepal_dark"] == "SEPAL Dark"
+    assert english["layerMenu.section.imagery"] == "Imagery"
+    assert english["layerMenu.section.alerts"] == "Alerts"
+    assert english["layerMenu.section.optional"] == "Optional layers"
+    set_locale("es-ES")
+    spanish = pane_labels()
+    assert spanish["basemapSwitcher.title"] == "Mapa base"
+    assert spanish["basemapSwitcher.sepal_dark"] == "SEPAL Oscuro"
+    assert spanish["layerMenu.section.optional"] == "Capas opcionales"
+    for locale in ("fr", "pt-BR"):
+        set_locale(locale)
+        translated = pane_labels()
+        for key in ("basemapSwitcher.title", "basemapSwitcher.sepal_light", "layerMenu.section.imagery"):
+            assert translated[key] != english[key], (locale, key)
+
+
+def test_a_spec_section_is_its_menu_section():
+    assert tile_spec("t", "all", URL, name="t", group="vis", section="optional")["meta"] == {
+        "menuSection": "optional"}
+    assert geojson_spec("g", "all", {}, name="g", group="alert", section="alerts",
+                        hide_while_editing=True)["meta"] == {"hideWhileEditing": True, "menuSection": "alerts"}
+
+
+def test_a_target_puts_its_layers_in_its_section_and_a_key_may_have_its_own(monkeypatch):
+    from ipyleaflet import TileLayer
+
+    panes = make_panes()
+    monkeypatch.setattr(panes, "tile_url", lambda img, vis: URL)
+    before = panes.target("before", group="alert", section="imagery", sections={"original-alert": "alerts"})
+    before.addLayer("img", {}, "True Color", True)
+    before.add_layer(TileLayer(url=URL, name="Original Alert"), key="original-alert")
+    assert panes.spec("before:True Color")["meta"] == {"menuSection": "imagery"}
+    assert panes.spec("before:original-alert")["meta"] == {"menuSection": "alerts"}
 
 
 def test_specs_carry_every_field_the_frontend_reads():

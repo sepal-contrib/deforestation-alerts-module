@@ -66,7 +66,7 @@ def wire(widgets, app_state, spawn=spawn_in_context):
     # not build the same key at once (they queue here).
     run_lock = threading.Lock()
     # One target: a layer is one spec on every view (``PaneTarget`` on "all").
-    maps = (widgets.panes.target("all", group="vis"),)
+    maps = (widgets.panes.target("all", group="vis", section="optional"),)
 
     def _sync(_value=None):
         project = app_state.project.value

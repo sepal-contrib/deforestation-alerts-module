@@ -25,7 +25,7 @@ import itertools
 import threading
 from contextlib import contextmanager
 
-from pysepal.mapping.basemaps import xyz_tiles
+from pysepal.mapping import basemaps as pysepal_basemaps
 
 from gui.i18n import t
 from gui.widget.multiview import specs as mv_specs
@@ -36,34 +36,74 @@ from gui.widget.multiview.layer_store import LayerStore
 #: Within a band, later adds draw on top (``PaneTarget`` counts up from it).
 Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000}
 
+#: The layer menu's sections, in menu order: a spec's ``section``.
+SECTIONS = ("imagery", "alerts", "optional")
+
+ESRI_IMAGERY = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+#: The one tile every basemap thumbnail shows: zoom 7 over Mato Grosso, Brazil.
+_THUMBNAIL_TILE = {"z": "7", "x": "44", "y": "68", "s": "a"}
+
+#: The basemap the views open on: the satellite basemap they always had.
+DEFAULT_BASEMAP = "google"
+
+
+def _thumbnail(url) -> str:
+    for key, value in _THUMBNAIL_TILE.items():
+        url = url.replace("{" + key + "}", value)
+    return url
+
+
+def analysis_basemaps() -> list:
+    """The basemaps of the views' switcher, in display order. SEPAL Light and
+    Dark are pysepal's: CARTO with a key, else Esri's grey canvases, which stop
+    at zoom 16 (Leaflet upscales past a basemap's ``maxZoom``)."""
+    background_zoom = 20 if pysepal_basemaps.CARTODB_BASEMAP_KEY else 16
+    background = pysepal_basemaps.BASEMAP_ATTRIBUTION
+    entries = (  # brand names are not translated
+        ("google", "Google", pysepal_basemaps.xyz_tiles["SATELLITE"]["url"], "Google", 20),
+        ("esri", "Esri", ESRI_IMAGERY, "Esri, Maxar, Earthstar Geographics, and the GIS User Community", 19),
+        ("sepal_light", t("analysis.panes.basemap_sepal_light"), pysepal_basemaps.BASEMAP_LIGHT, background,
+         background_zoom),
+        ("sepal_dark", t("analysis.panes.basemap_sepal_dark"), pysepal_basemaps.BASEMAP_DARK, background,
+         background_zoom),
+    )
+    return [{"id": id_, "name": name, "url": url, "attribution": attribution, "maxZoom": max_zoom,
+             "thumbnail": _thumbnail(url)}
+            for id_, name, url, attribution, max_zoom in entries]
+
 #: The two views, in screen order.
 _VIEWS = ({"id": "before"}, {"id": "after"})
 
 
-def _meta(hide_while_editing=False, report_errors=False) -> dict:
+def _meta(hide_while_editing=False, report_errors=False, section=None) -> dict:
     """The app's ``meta`` keys, each only when it is on."""
     meta = {}
     if hide_while_editing:
         meta["hideWhileEditing"] = True
     if report_errors:
         meta["reportErrors"] = True
+    if section:
+        meta["menuSection"] = section
     return meta
 
 
 def tile_spec(layer_id, view, url, *, name, group, visible=True, opacity=1.0, z=None, attribution="",
-              hide_while_editing=False, report_errors=False) -> dict:
-    """An XYZ tile layer on ``view`` (``"before"``, ``"after"`` or ``"all"``)."""
+              hide_while_editing=False, report_errors=False, section=None) -> dict:
+    """An XYZ tile layer on ``view`` (``"before"``, ``"after"`` or ``"all"``),
+    listed under ``section`` (one of ``SECTIONS``) in the layer menu."""
     return mv_specs.tile_spec(layer_id, view, url, name=name, group=group, visible=visible, opacity=opacity,
                               z=z, attribution=attribution,
-                              meta=_meta(hide_while_editing=hide_while_editing, report_errors=report_errors))
+                              meta=_meta(hide_while_editing=hide_while_editing, report_errors=report_errors,
+                                         section=section))
 
 
 def geojson_spec(layer_id, view, data, *, name, group, style=None, visible=True, z=None,
-                 hide_while_editing=False) -> dict:
+                 hide_while_editing=False, section=None) -> dict:
     """A GeoJSON layer on ``view``. A feature's ``properties.style`` is merged
     over ``style`` in the browser."""
     return mv_specs.geojson_spec(layer_id, view, data, name=name, group=group, style=style, visible=visible,
-                                 z=z, meta=_meta(hide_while_editing=hide_while_editing))
+                                 z=z, meta=_meta(hide_while_editing=hide_while_editing, section=section))
 
 
 def pane_labels() -> dict:
@@ -87,6 +127,11 @@ def pane_labels() -> dict:
         "holes.remove": t("analysis.panes.remove_hole"),
         "holes.hint": t("analysis.panes.remove_hole_hint"),
         "tileErrors.badge": t("analysis.panes.tile_error"),
+        "basemapSwitcher.title": t("analysis.panes.basemap"),
+        **{f"basemapSwitcher.{b['id']}": b["name"] for b in analysis_basemaps()},
+        "layerMenu.section.imagery": t("analysis.panes.section_imagery"),
+        "layerMenu.section.alerts": t("analysis.panes.section_alerts"),
+        "layerMenu.section.optional": t("analysis.panes.section_optional"),
     }
 
 
@@ -94,8 +139,9 @@ class PaneLayers:
     """Everything Python writes to the Analysis views.
 
     ``widget`` is an ``AlertViews``; construction gives it the two views, the
-    zoom-to-alert button on the after view only, the satellite basemap and
-    the translated labels.
+    zoom-to-alert button on the after view only, the basemap switcher (the
+    satellite basemap first), the layer menu's sections and the translated
+    labels.
     """
 
     def __init__(self, widget, gee_interface=None):
@@ -105,8 +151,9 @@ class PaneLayers:
         self._draw = DrawState(widget)
         widget.views = [dict(v) for v in _VIEWS]
         widget.fit_bounds_views = ["after"]
-        satellite = xyz_tiles["SATELLITE"]
-        widget.basemap = {"url": satellite["url"], "attribution": satellite["attribution"]}
+        widget.basemap_switcher_basemaps = analysis_basemaps()
+        widget.basemap_switcher_selected = DEFAULT_BASEMAP
+        widget.layer_menu_sections = list(SECTIONS)
         widget.labels = pane_labels()
 
     # ---- layers ---------------------------------------------------------
@@ -184,25 +231,32 @@ class PaneLayers:
         never after ``set_drawing``. Returns the unsubscribe."""
         return self._draw.on_edit(callback)
 
-    def target(self, view, *, group, report_errors=False):
+    def target(self, view, *, group, section=None, sections=None, report_errors=False):
         """A map-like target the layer builders add to (``PaneTarget``)."""
-        return PaneTarget(self, view, group, report_errors=report_errors)
+        return PaneTarget(self, view, group, section=section, sections=sections, report_errors=report_errors)
 
 
 class PaneTarget:
     """One view (or ``"all"``) and one group, as a map the layer builders
-    can add to. Spec ids are ``key`` on ``"all"``, else ``"<view>:<key>"``."""
+    can add to. Spec ids are ``key`` on ``"all"``, else ``"<view>:<key>"``.
+    Its layers go in the menu's ``section``; ``sections`` ({key: section})
+    puts a key in another one."""
 
-    def __init__(self, panes, view, group, report_errors=False):
+    def __init__(self, panes, view, group, section=None, sections=None, report_errors=False):
         self.panes = panes
         self.view = view
         self.group = group
+        self.section = section
+        self.sections = dict(sections or {})
         self.report_errors = bool(report_errors)
         self._gate = threading.local()
         self._seq = itertools.count()
 
     def _id(self, key) -> str:
         return key if self.view == mv_specs.ALL else f"{self.view}:{key}"
+
+    def _section(self, key):
+        return self.sections.get(key, self.section)
 
     def _z(self) -> int:
         return Z_BASE[self.group] + next(self._seq)
@@ -226,7 +280,7 @@ class PaneTarget:
         url = self.panes.tile_url(ee_object, vis_params or {})
         self._add(tile_spec(self._id(key or name), self.view, url, name=name, group=self.group,
                             visible=shown, opacity=opacity, z=self._z(), attribution="Google Earth Engine",
-                            report_errors=self.report_errors))
+                            report_errors=self.report_errors, section=self._section(key or name)))
 
     addLayer = add_ee_layer
 
@@ -236,7 +290,7 @@ class PaneTarget:
         self._add(tile_spec(self._id(key or layer.name), self.view, layer.url, name=layer.name,
                             group=self.group, visible=layer.visible, opacity=layer.opacity, z=self._z(),
                             attribution=getattr(layer, "attribution", "") or "",
-                            report_errors=self.report_errors))
+                            report_errors=self.report_errors, section=self._section(key or layer.name)))
 
     def remove_layer(self, key, none_ok=False):
         layer_id = self._id(key)

@@ -99,7 +99,7 @@ def refresh_earlier_reviews(widgets, analysis, app_state, *, on_result=None) -> 
     styled = {**data, "features": [
         {**f, "properties": {**(f.get("properties") or {}), "style": _style(f)}} for f in data["features"]]}
     spec = geojson_spec(EARLIER_ID, "all", styled, name=EARLIER_LAYER_NAME, group="earlier",
-                        style={"weight": 2, "fill": False})
+                        style={"weight": 2, "fill": False}, section="alerts")
 
     def _apply():
         if seq != analysis.earlier_seq:

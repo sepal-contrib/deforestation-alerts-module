@@ -7,14 +7,39 @@
 // A toggle sets a per-view override (mv.setLayerOverride) and emits
 // "layertoggle" {view, id, on}.
 
+//
+// Sections: a spec's meta.menuSection puts it under that section's heading,
+// labelled "layerMenu.section.<id>" (else the id). Layers with none come
+// first, with no heading; then the sections of options.sections in that
+// order, then any others in the order they first appear. A section with no
+// layer in the view is not shown.
+
 export const layerMenu = {
   name: "layerMenu",
   requires: [],
-  defaults: {},
+  defaults: {sections: []},
   labels: {title: "Layers"},
-  install(mv) {
+  install(mv, options) {
     const L = mv.L;
     const menus = [];
+    const order = Array.isArray(options.sections) ? options.sections : [];
+
+    function sectionLabel(section) {
+      const key = `section.${section}`;
+      const text = mv.label("layerMenu", key);
+      return text === key ? section : text;
+    }
+
+    // [[section or "", specs]] in display order, each non-empty.
+    function sectioned(specs) {
+      const groups = new Map([["", []], ...order.map(id => [id, []])]);
+      for (const spec of specs) {
+        const section = (spec.meta && spec.meta.menuSection) || "";
+        if (!groups.has(section)) groups.set(section, []);
+        groups.get(section).push(spec);
+      }
+      return [...groups].filter(([, members]) => members.length);
+    }
 
     function createMenu(view) {
       const container = L.DomUtil.create("div", "leaflet-control-layers mv-layer-menu");
@@ -71,22 +96,33 @@ export const layerMenu = {
         title.textContent = text;
         toggle.title = text;
         toggle.setAttribute("aria-label", text);
+        for (const heading of overlays.querySelectorAll(".mv-layers-section")) {
+          heading.textContent = sectionLabel(heading.dataset.section);
+        }
       }
 
-      // The view's layers in spec order, by name.
+      // The view's layers by name, in spec order within each section.
       function render() {
         overlays.textContent = "";
         const specs = mv.layers().filter(spec => mv.layer(view.id, spec.id) !== undefined);
         L.DomUtil[specs.length ? "removeClass" : "addClass"](container, "mv-layer-menu--empty");
-        for (const spec of specs) {
-          const label = L.DomUtil.create("label", "", overlays);
-          const row = L.DomUtil.create("span", "", label);
-          const input = L.DomUtil.create("input", "leaflet-control-layers-selector", row);
-          input.type = "checkbox";
-          input.dataset.id = spec.id;
-          const name = L.DomUtil.create("span", "", row);
-          name.textContent = ` ${spec.name || spec.id}`;
-        }
+        sectioned(specs).forEach(([section, members], i) => {
+          if (i > 0) L.DomUtil.create("div", "leaflet-control-layers-separator", overlays);
+          if (section) {
+            const heading = L.DomUtil.create("div", "mv-layers-section", overlays);
+            heading.dataset.section = section;
+            heading.textContent = sectionLabel(section);
+          }
+          for (const spec of members) {
+            const label = L.DomUtil.create("label", "", overlays);
+            const row = L.DomUtil.create("span", "", label);
+            const input = L.DomUtil.create("input", "leaflet-control-layers-selector", row);
+            input.type = "checkbox";
+            input.dataset.id = spec.id;
+            const name = L.DomUtil.create("span", "", row);
+            name.textContent = ` ${spec.name || spec.id}`;
+          }
+        });
         refreshChecks();
       }
 

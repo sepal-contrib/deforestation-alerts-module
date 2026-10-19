@@ -162,8 +162,10 @@ class AnalysisWidgets:
         self.panes_widget.add_class("analysis-views")
         self.panes = PaneLayers(self.panes_widget, gee_interface)
         # The imagery tiles report a failed load on their view (``meta.reportErrors``).
-        self.pane_before = self.panes.target("before", group="alert", report_errors=True)
-        self.pane_after = self.panes.target("after", group="alert", report_errors=True)
+        # They are the menu's Imagery, except the alert raster, an Alerts layer.
+        panes_sections = {"section": "imagery", "sections": {"original-alert": "alerts"}}
+        self.pane_before = self.panes.target("before", group="alert", report_errors=True, **panes_sections)
+        self.pane_after = self.panes.target("after", group="alert", report_errors=True, **panes_sections)
         if theme_state is not None:
             theme_state.observe(
                 lambda change: setattr(self.panes_widget, "theme", "dark" if change["new"] else "light"),

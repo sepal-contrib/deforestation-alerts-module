@@ -122,7 +122,13 @@
       "delete_all": "Delete all {n} shapes?",
       "delete_cancel": "Cancel",
       "delete_confirm": "Delete",
-      "tile_error": "Imagery failed to load"
+      "tile_error": "Imagery failed to load",
+      "basemap": "Basemap",
+      "basemap_sepal_light": "SEPAL Light",
+      "basemap_sepal_dark": "SEPAL Dark",
+      "section_imagery": "Imagery",
+      "section_alerts": "Alerts",
+      "section_optional": "Optional layers"
     }
   },
   "analysis_tile": {

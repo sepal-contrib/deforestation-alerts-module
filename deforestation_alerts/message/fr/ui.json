@@ -122,7 +122,13 @@
       "delete_all": "Supprimer les {n} formes ?",
       "delete_cancel": "Annuler",
       "delete_confirm": "Supprimer",
-      "tile_error": "Les images n'ont pas pu être chargées"
+      "tile_error": "Les images n'ont pas pu être chargées",
+      "basemap": "Fond de carte",
+      "basemap_sepal_light": "SEPAL Clair",
+      "basemap_sepal_dark": "SEPAL Sombre",
+      "section_imagery": "Imagerie",
+      "section_alerts": "Alertes",
+      "section_optional": "Couches facultatives"
     }
   },
   "analysis_tile": {

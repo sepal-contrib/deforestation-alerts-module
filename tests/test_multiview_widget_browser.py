@@ -205,6 +205,39 @@ def test_python_seeded_toggles_are_applied_at_render(mv_page):
     assert writes(mv_page, "layer_menu_toggles") == [], "nothing was pruned, so nothing is written"
 
 
+def test_layer_menu_sections_come_from_the_trait(mv_page):
+    mount(mv_page, layers=[_tile("i", name="True Color", meta={"menuSection": "imagery"}),
+                           _tile("a", name="Alert BB", meta={"menuSection": "alerts"})],
+          layer_menu_sections=["imagery", "alerts"],
+          labels={"layerMenu.section.imagery": "Imagery", "layerMenu.section.alerts": "Alerts"})
+    headings = mv_page.evaluate("""() => [...document.querySelectorAll(
+        '.mv-view[data-view="before"] .mv-layers-section')].map(n => n.textContent)""")
+    assert headings == ["Imagery", "Alerts"]
+
+
+# --- basemap switcher ---------------------------------------------------------------------
+
+_BASEMAPS = [{"id": "g", "name": "Google", "url": f"{TILE}#g", "attribution": "Google", "thumbnail": TILE},
+             {"id": "e", "name": "Esri", "url": f"{TILE}#e", "attribution": "Esri", "thumbnail": TILE}]
+
+
+def test_the_basemap_switcher_shows_the_selected_basemap_and_writes_a_click_back(mv_page):
+    mount(mv_page, basemap_switcher_basemaps=_BASEMAPS, basemap_switcher_selected="e")
+    assert _tiles(mv_page, "before") == ["e"] and _tiles(mv_page, "after") == ["e"]
+    mv_page.locator('.mv-view[data-view="after"] .mv-basemap[data-id="g"]').click()
+    mv_page.wait_for_timeout(100)
+    assert _tiles(mv_page, "before") == ["g"] and _tiles(mv_page, "after") == ["g"]
+    assert writes(mv_page, "basemap_switcher_selected") == ["g"]
+
+
+def test_a_python_basemap_choice_switches_without_a_write_back(mv_page):
+    mount(mv_page, basemap_switcher_basemaps=_BASEMAPS)
+    assert _tiles(mv_page, "before") == ["g"], "nothing selected: the first"
+    py(mv_page, "basemap_switcher_selected", "e")
+    assert _tiles(mv_page, "before") == ["e"] and _tiles(mv_page, "after") == ["e"]
+    assert writes(mv_page, "basemap_switcher_selected") == []
+
+
 # --- fit bounds ---------------------------------------------------------------------------
 
 

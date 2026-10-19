@@ -19,7 +19,8 @@ import pytest
 PKG = Path(__file__).resolve().parents[1] / "js" / "leaflet-multiview"
 
 #: The events ``make`` records into ``window.__events`` as ``[name, payload]``.
-RECORDED_EVENTS = ("viewchange", "visibilitychange", "layerschange", "labelschange", "themechange", "layertoggle")
+RECORDED_EVENTS = ("viewchange", "visibilitychange", "layerschange", "labelschange", "themechange", "layertoggle",
+                   "basemapchange")
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):

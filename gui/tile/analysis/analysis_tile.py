@@ -286,7 +286,7 @@ def view_actual_alert(
 
         # the bbox overlay on every view, hidden while the reviewer edits
         panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
-                               style=_ALERT_BB_STYLE, hide_while_editing=True))
+                               style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts"))
         # the after view's zoom-to-alert button goes back to this box
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 

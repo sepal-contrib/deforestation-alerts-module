@@ -122,7 +122,13 @@
       "delete_all": "Excluir todas as {n} formas?",
       "delete_cancel": "Cancelar",
       "delete_confirm": "Excluir",
-      "tile_error": "Não foi possível carregar as imagens"
+      "tile_error": "Não foi possível carregar as imagens",
+      "basemap": "Mapa base",
+      "basemap_sepal_light": "SEPAL Claro",
+      "basemap_sepal_dark": "SEPAL Escuro",
+      "section_imagery": "Imagens",
+      "section_alerts": "Alertas",
+      "section_optional": "Camadas opcionais"
     }
   },
   "analysis_tile": {

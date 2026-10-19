@@ -77,6 +77,9 @@ class LayerMenu(PluginMixin):
     #: the frontend (already pruned of layers that left a view); Python may
     #: seed it before the first render.
     layer_menu_toggles = traitlets.Dict().tag(sync=True)
+    #: The order of the menu's sections (a spec's ``meta["menuSection"]``),
+    #: read at render; each is labelled ``"layerMenu.section.<id>"``.
+    layer_menu_sections = traitlets.List(traitlets.Unicode()).tag(sync=True)
 
 
 class FitBounds(PluginMixin):
@@ -117,3 +120,15 @@ class TileErrors(PluginMixin):
     """A per-view badge when a tile layer fails to load (``tileErrors``). No traits."""
 
     _plugin_name = "tileErrors"
+
+
+class BasemapSwitcher(PluginMixin):
+    """Basemap thumbnails on every view; one basemap shows in all (``basemapSwitcher``)."""
+
+    _plugin_name = "basemapSwitcher"
+    #: ``[{"id", "name", "url", "attribution", "maxZoom"?, "thumbnail"?}]`` in
+    #: display order, read at render. A name is labelled ``"basemapSwitcher.<id>"``.
+    basemap_switcher_basemaps = traitlets.List(traitlets.Dict()).tag(sync=True)
+    #: The shown basemap's id, written by the frontend on a click; Python may
+    #: set it. Empty or unknown means the first basemap.
+    basemap_switcher_selected = traitlets.Unicode("").tag(sync=True)

@@ -367,7 +367,8 @@ def wire_defo_layer(widgets, analysis):
             return
         try:
             panes.add(geojson_spec(DEFO_ID, "all", json.loads(gdf.to_json()), name="Defo Layer",
-                                   group="alert", style=_DEFO_LAYER_STYLE, hide_while_editing=True))
+                                   group="alert", style=_DEFO_LAYER_STYLE, hide_while_editing=True,
+                                   section="alerts"))
         except Exception:
             logger.exception("Analysis: add_defo_layer failed")
 
