@@ -294,7 +294,7 @@
         "other": "{count} conjuntos de alertas cujos arquivos estão faltando."
       },
       "note_frozen": "Suas datas são fixas: ele tem conjuntos de alertas.",
-      "note_no_earlier": "Sem conjunto anterior: alertas da busca retroativa incluídos",
+      "note_no_earlier": "Sem conjunto anterior: todos os alertas da janela de busca são mantidos",
       "busy": "Uma tarefa está gravando neste projeto; altere ou exclua o período quando ela terminar.",
       "delete_title": "Excluir o período {period}?",
       "delete_message": "Seus downloads e arquivos harmonizados são excluídos.",

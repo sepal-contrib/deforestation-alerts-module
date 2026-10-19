@@ -284,7 +284,7 @@
         "other": "{count} alert sets whose files are missing."
       },
       "note_frozen": "Its dates are fixed: it has alert sets.",
-      "note_no_earlier": "No earlier set: look-back alerts included",
+      "note_no_earlier": "No earlier set: every alert in the search window is kept",
       "busy": "A job is writing into this project; change or delete the period once it has finished.",
       "delete_title": "Delete the period {period}?",
       "delete_message": "Its downloads and harmonized files are deleted.",

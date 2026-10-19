@@ -294,7 +294,7 @@
         "other": "{count} jeux d'alertes dont les fichiers sont manquants."
       },
       "note_frozen": "Ses dates sont fixées : elle a des jeux d'alertes.",
-      "note_no_earlier": "Aucun ensemble antérieur : alertes de la période précédente incluses",
+      "note_no_earlier": "Aucun ensemble antérieur : toutes les alertes de la fenêtre de recherche sont conservées",
       "busy": "Une tâche écrit dans ce projet ; modifiez ou supprimez la période une fois celle-ci terminée.",
       "delete_title": "Supprimer la période {period} ?",
       "delete_message": "Ses téléchargements et fichiers harmonisés sont supprimés.",
