@@ -25,6 +25,8 @@
     "admin_note": "Alertes examinées uniquement ({reviewed} sur {total}) : la zone est enregistrée lors de l'examen.",
     "admin_empty": "Aucune alerte n'a encore été examinée, donc aucune zone administrative n'est enregistrée.",
     "admin_unattributed": "Non renseigné",
+    "admin_level_country": "Pays",
+    "admin_level_1": "Province / région",
     "table_status": "État",
     "table_alerts": "Alertes",
     "table_area": "Superficie (ha)",

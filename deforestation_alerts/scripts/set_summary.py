@@ -8,9 +8,11 @@ Two details of the store shape drive this module:
 
 * ``alert_date_min`` is a **decimal year** (``year + doy/1000``, written by
   ``engine/vectorize.yyyyddd_to_decimal``), not a date.
-* the answer columns (one per question, spec D9) and ``admin1`` are written
-  per alert **during Analysis review**, so ``by_question`` and ``by_admin``
-  cover reviewed alerts only. An answer holds several comma-joined codes, and
+* the answer columns (one per question, spec D9) and the admin names are
+  written per alert **during Analysis review**, so ``by_question``,
+  ``by_admin`` and ``by_admin_level1`` cover reviewed alerts only. The admin
+  columns are off by one from FAO GAUL: ``admin1`` holds the country
+  (``ADM0_NAME``) and ``admin2`` the GAUL level 1 (``ADM1_NAME``). An answer holds several comma-joined codes, and
   an alert's full area counts once under each code it names: splitting it
   between the answers would invent a number the review never recorded.
 
@@ -34,7 +36,7 @@ from deforestation_alerts.scripts.alert_codes import parse_formatted_string
 #: on every set switch cheaper than caching the result.
 #: The answer columns are read on top of these, as the caller asks.
 SUMMARY_COLUMNS = ["alert_id", "status", "area_ha", "alert_date_min",
-                   "alert_sources", "admin1"]
+                   "alert_sources", "admin1", "admin2"]
 
 #: Upper edges of the size histogram, in hectares; the last bin is open.
 SIZE_EDGES = (0.5, 1.0, 2.0, 5.0, 10.0, 25.0)
@@ -82,8 +84,9 @@ class SetSummary:
     by_question: tuple        # ((key, ((code, area_ha, n), ...)), ...), in question order;
     #                           each breakdown area-descending
     by_source: tuple          # (combination, area_ha, n), area-descending
-    by_admin: tuple           # (admin1, area_ha, confirmed_ha, n), confirmed-descending
-    largest: Optional[tuple]  # (alert_id, area_ha, admin1, date | None)
+    by_admin: tuple           # (country, area_ha, confirmed_ha, n), confirmed-descending
+    largest: Optional[tuple]  # (alert_id, area_ha, country, date | None)
+    by_admin_level1: tuple = ()  # ("country › level 1", area_ha, confirmed_ha, n), as by_admin
 
     def breakdown(self, key: str) -> tuple:
         """The ``(code, area_ha, n)`` rows of question ``key``; ``()`` for a
@@ -157,6 +160,8 @@ def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = 
         by_source=_by_source(_column(frame, "alert_sources", n), area),
         by_admin=_by_admin(_column(frame, "admin1", n), area, code, reviewed),
         largest=_largest(frame, area, n),
+        by_admin_level1=_by_admin(_level1_names(_column(frame, "admin1", n), _column(frame, "admin2", n)),
+                                  area, code, reviewed),
     )
 
 
@@ -292,12 +297,30 @@ def _by_source(sources: list, area: list) -> tuple:
     return _ranked(table)
 
 
+def _admin_name(value) -> str:
+    """An admin cell as shown: reviews saved before the Analysis join fix
+    stored a trailing comma ("Paraguay,")."""
+    return _text(value).strip().rstrip(", ")
+
+
+def _level1_names(countries: list, level1: list) -> list:
+    """"Country › level 1" per alert: GAUL level-1 names repeat across
+    countries. An alert on a border keeps each level's names comma-joined
+    (the store does not pair them), and one without a level-1 name falls back
+    to its country."""
+    names = []
+    for country, province in zip(countries, level1):
+        country, province = _admin_name(country), _admin_name(province)
+        names.append(f"{country} › {province}" if country and province else country or province)
+    return names
+
+
 def _by_admin(names: list, area: list, code: list, reviewed: list) -> tuple:
     table = {}
     for value, a, c, keep in zip(names, area, code, reviewed):
         if not keep:
             continue  # admin1 is recorded by review only
-        key = _text(value).strip() or UNATTRIBUTED
+        key = _admin_name(value) or UNATTRIBUTED
         ha, confirmed, n = table.get(key, (0.0, 0.0, 0))
         table[key] = (ha + a, confirmed + (a if c == _CONFIRMED else 0.0), n + 1)
     return tuple((k, ha, confirmed, n) for k, (ha, confirmed, n)
@@ -314,5 +337,5 @@ def _largest(frame, area: list, n: int) -> Optional[tuple]:
         alert_id = int(ids[i])
     except (TypeError, ValueError):
         alert_id = i
-    return (alert_id, float(area[i]), _text(row.get("admin1")).strip(),
+    return (alert_id, float(area[i]), _admin_name(row.get("admin1")),
             decimal_year_to_date(row.get("alert_date_min")))

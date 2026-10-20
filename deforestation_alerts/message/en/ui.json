@@ -25,6 +25,8 @@
     "admin_note": "Reviewed alerts only ({reviewed} of {total}): the area is recorded when an alert is reviewed.",
     "admin_empty": "No alert has been reviewed yet, so no administrative area is on record.",
     "admin_unattributed": "Not recorded",
+    "admin_level_country": "Country",
+    "admin_level_1": "Province / state",
     "table_status": "Status",
     "table_alerts": "Alerts",
     "table_area": "Area (ha)",

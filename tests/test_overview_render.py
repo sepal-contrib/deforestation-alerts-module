@@ -344,6 +344,29 @@ def test_the_cards_follow_a_language_switch(ov, tmp_path):
         rc.close()
 
 
+def test_the_admin_card_switches_between_country_and_level_1(ov, tmp_path):
+    """Country by default; level 1 names its country, since GAUL level-1
+    names repeat across countries. Reviewed alerts only, either way."""
+    p = _project(tmp_path)
+    gdf = _alerts()
+    gdf["admin1"] = ["Paraguay", "Paraguay,", "Paraguay", "Brazil"]  # a pre-fix trailing comma
+    gdf["admin2"] = ["Canindeyú", "Amambay", "Canindeyú", "Acre"]
+    _write_store(tmp_path, "d", p.alert_sets[p.active_set], gdf)
+    map_, layers, rc = ov.render(_state(p, gdf))
+    try:
+        head, rows = _table(rc, t("overview_tile.admin_level_country"))
+        assert [row[0] for row in rows] == ["Paraguay"]  # Brazil's alert is not reviewed
+        assert rows[0][1:] == ["3.8", "1.5", "3"]
+
+        _btn(rc, t("overview_tile.admin_level_1")).fire_event("click", None)
+
+        head, rows = _table(rc, t("overview_tile.admin_level_1"))
+        assert {row[0]: row[1:] for row in rows} == {
+            "Paraguay › Canindeyú": ["3.5", "1.5", "2"], "Paraguay › Amambay": ["0.2", "0.0", "1"]}
+    finally:
+        rc.close()
+
+
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------

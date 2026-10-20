@@ -234,7 +234,7 @@ class _AdminLookups:
         during, self.during = self.during, None
         if during is not None:
             during()
-        return "Brasil, "
+        return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
 
 
 def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):

@@ -25,6 +25,8 @@
     "admin_note": "Solo alertas revisadas ({reviewed} de {total}): el área se registra al revisar una alerta.",
     "admin_empty": "Todavía no se ha revisado ninguna alerta, así que no hay áreas administrativas registradas.",
     "admin_unattributed": "Sin registrar",
+    "admin_level_country": "País",
+    "admin_level_1": "Provincia / departamento",
     "table_status": "Estado",
     "table_alerts": "Alertas",
     "table_area": "Superficie (ha)",

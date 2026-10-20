@@ -23,6 +23,7 @@ def _frame(**overrides):
         "alert_sources": ["GLAD-L and RADD", "RADD", "GLAD-L", "GLAD-L"],
         "description": ["logging, mining", "", "agriculture_expansion", ""],
         "admin1": ["Canindeyu", "Canindeyu", "Amambay", ""],
+        "admin2": ["", "", "", ""],
     }
     data.update(overrides)
     return pd.DataFrame(data)
@@ -221,6 +222,38 @@ def test_a_reviewed_alert_without_an_admin_name_groups_under_the_sentinel():
     assert dict((k, n) for k, _, _, n in s.by_admin) == {ss.UNATTRIBUTED: 2, "Amambay": 2}
 
 
+def test_a_trailing_comma_from_older_reviews_is_dropped():
+    """Reviews saved before the join fix stored "Paraguay," -- the same area
+    as "Paraguay", not a second row (nor a stray comma on the card)."""
+    s = ss.summarize_alerts(_frame(status=["Confirmed"] * 4,
+                                   admin1=["Paraguay,", "Paraguay", "Brazil, Paraguay,", ","]))
+    assert dict((k, n) for k, _, _, n in s.by_admin) == {"Paraguay": 2, "Brazil, Paraguay": 1,
+                                                         ss.UNATTRIBUTED: 1}
+    assert s.largest[2] == "Paraguay"
+
+
+def test_level1_names_carry_their_country():
+    """GAUL level-1 names repeat across countries, so a row names both."""
+    s = ss.summarize_alerts(_frame(admin1=["Paraguay"] * 4,
+                                   admin2=["Canindeyú", "Canindeyú,", "Amambay", "Amambay"]))
+    assert s.by_admin_level1 == (
+        ("Paraguay › Canindeyú", pytest.approx(2.25), pytest.approx(2.0), 2),
+        ("Paraguay › Amambay", pytest.approx(1.5), 0.0, 1))  # the unreviewed one is absent
+
+
+def test_level1_without_a_province_falls_back_to_the_country_or_the_sentinel():
+    s = ss.summarize_alerts(_frame(status=["Confirmed"] * 4, admin1=["Paraguay", "", None, "Brazil, Paraguay"],
+                                   admin2=["", "", None, "Acre, Alto Paraná"]))
+    assert dict((k, n) for k, _, _, n in s.by_admin_level1) == {
+        "Paraguay": 1, ss.UNATTRIBUTED: 2, "Brazil, Paraguay › Acre, Alto Paraná": 1}
+
+
+def test_a_store_without_admin2_lists_level1_by_country():
+    s = ss.summarize_alerts(_frame(status=["Confirmed"] * 4))
+    assert dict((k, n) for k, _, _, n in s.by_admin_level1) == {"Canindeyu": 2, "Amambay": 1,
+                                                                ss.UNATTRIBUTED: 1}
+
+
 # --- dates ---------------------------------------------------------------
 
 @pytest.mark.parametrize("value,expected", [
@@ -325,7 +358,7 @@ def test_the_summary_columns_are_what_a_real_store_carries():
 
     assert {"area_ha", "alert_date_min"} <= set(COLUMNS)
     assert "description" not in ss.SUMMARY_COLUMNS  # an answer column, read only when asked for
-    assert set(ss.SUMMARY_COLUMNS) - {"alert_id", "status", "alert_sources", "admin1"} <= set(COLUMNS)
+    assert set(ss.SUMMARY_COLUMNS) - {"alert_id", "status", "alert_sources", "admin1", "admin2"} <= set(COLUMNS)
 
 
 def test_the_module_does_not_import_gui_or_solara():

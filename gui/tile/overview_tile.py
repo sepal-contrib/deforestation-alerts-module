@@ -74,6 +74,10 @@ _HERO = "font-size: 1.5rem; font-weight: 600; line-height: 1.1;"
 _VALUE = "font-size: 1.05rem; font-weight: 600; line-height: 1.1;"
 #: How many administrative areas the table lists before it stops.
 ADMIN_LIMIT = 8
+#: The admin card's levels: ``(key, its summary rows' attribute)``. FAO GAUL
+#: level 2 is recorded too (``admin3``) but left out: it lists too many areas.
+ADMIN_COUNTRY, ADMIN_LEVEL_1 = "country", "level1"
+_ADMIN_ROWS = {ADMIN_COUNTRY: "by_admin", ADMIN_LEVEL_1: "by_admin_level1"}
 
 
 # ---------------------------------------------------------------------------
@@ -176,15 +180,27 @@ def _numbers_table(summary, measure: str):
     ])
 
 
-def _admin_table(summary, measure: str):
-    """Where the loss is, by the admin1 the reviewer recorded. Reviewed alerts
-    only -- nothing writes admin1 for an unreviewed alert -- so the card says
-    so and shows an empty state until there are reviews."""
+def _admin_label(level: str) -> str:
+    return t("overview_tile.admin_level_country" if level == ADMIN_COUNTRY else "overview_tile.admin_level_1")
+
+
+def _admin_level_picker(level: str, on_level):
+    """Country or FAO GAUL level 1, the same segmented buttons as the measure."""
+    with solara.Row(style="gap: 4px;"):
+        for key in (ADMIN_COUNTRY, ADMIN_LEVEL_1):
+            solara.Button(_admin_label(key), x_small=True, color="primary", outlined=level != key,
+                          on_click=lambda key=key: on_level(key))
+
+
+def _admin_table(summary, level: str):
+    """Where the loss is, by the admin names the reviewer recorded. Reviewed
+    alerts only -- nothing writes them for an unreviewed alert -- so the card
+    says so and shows an empty state until there are reviews."""
     confirmed = t("legend.status.confirmed")
-    head = (t("overview_tile.card_admin"), t("overview_tile.table_area"), confirmed,
+    head = (_admin_label(level), t("overview_tile.table_area"), confirmed,
             t("overview_tile.table_alerts"))
     rows = []
-    for name, area, confirmed_ha, n in summary.by_admin[:ADMIN_LIMIT]:
+    for name, area, confirmed_ha, n in getattr(summary, _ADMIN_ROWS[level])[:ADMIN_LIMIT]:
         label = t("overview_tile.admin_unattributed") if name == UNATTRIBUTED else name
         rows.append(rv.Html(tag="tr", children=[
             rv.Html(tag="td", children=[label]),
@@ -249,7 +265,7 @@ def _kpi_strip(summary, history, figures, measure: str):
         _kpi(t("overview_tile.kpi_largest"), value, support=support)
 
 
-def _left_column(summary, history, figures, measure: str, theme: dict):
+def _left_column(summary, history, figures, measure: str, theme: dict, admin_level: str, on_admin_level):
     with solara.Div(style=_COLUMN):
         with _card(t("overview_tile.card_status")):
             _figure_or_numbers(figures.get("status"),
@@ -271,7 +287,8 @@ def _left_column(summary, history, figures, measure: str, theme: dict):
             if not summary.by_admin:
                 solara.Text(t("overview_tile.admin_empty"), style=_NOTE)
             else:
-                _admin_table(summary, measure)
+                _admin_level_picker(admin_level, on_admin_level)
+                _admin_table(summary, admin_level)
 
 
 def _right_column(summary, figures, measure: str, questions):
@@ -343,6 +360,7 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         sends the user to Analysis, and a map switch closes it on its way on.
     """
     measure, set_measure = solara.use_state(charts.MEASURE_AREA)
+    admin_level, set_admin_level = solara.use_state(ADMIN_COUNTRY)
     read, set_read = solara.use_state(_NOTHING)
     runs = solara.use_memo(_Runs, [])
 
@@ -499,7 +517,7 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         else:
             _kpi_strip(summary, history, figures, measure)
             with solara.Row(style="gap: 10px; align-items: stretch; flex-wrap: wrap;"):
-                _left_column(summary, history, figures, measure, theme)
+                _left_column(summary, history, figures, measure, theme, admin_level, set_admin_level)
                 _right_column(summary, figures, measure, questions)
         if export_card is not None:
             # A child of a reacton element, so the raw card is part of the

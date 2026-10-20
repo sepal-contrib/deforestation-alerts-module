@@ -176,32 +176,14 @@ def save_review(alert, app_tile_model):
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
     selected_admin = adminL2.filterBounds(alert.bb.geometry())
-    at1 = selected_admin.aggregate_array("ADM0_NAME").distinct()
-    at2 = selected_admin.aggregate_array("ADM1_NAME").distinct()
-    at3 = selected_admin.aggregate_array("ADM2_NAME").distinct()
-
-    st1 = at1.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-    st2 = at2.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-    st3 = at3.iterate(
-        lambda list_element, result: ee.String(result)
-        .cat(list_element)
-        .cat(ee.String(", ")),
-        ee.String(""),
-    )
-
-    updates["admin1"] = st1.getInfo()[:-1]
-    updates["admin2"] = st2.getInfo()[:-1]
-    updates["admin3"] = st3.getInfo()[:-1]
+    # Joined server-side: the OLD iterate appended ", " after every name and
+    # sliced one character off, which left a trailing comma ("Paraguay,").
+    names = ee.Dictionary({
+        column: selected_admin.aggregate_array(field).distinct().join(", ")
+        for column, field in (("admin1", "ADM0_NAME"), ("admin2", "ADM1_NAME"),
+                              ("admin3", "ADM2_NAME"))
+    }).getInfo()  # one round trip, not three
+    updates.update(names)
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
     # A refusal: nothing is written at all -- not the store, and not the row

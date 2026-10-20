@@ -502,7 +502,7 @@ def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_
             return lambda *a, **k: self
 
         def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return "Brasil, "
+            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
 
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
@@ -2018,7 +2018,7 @@ def _save_harness(tmp_path, monkeypatch):
             return lambda *a, **k: self
 
         def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return "Brasil, "
+            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
 
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())

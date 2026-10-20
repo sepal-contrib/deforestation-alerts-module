@@ -149,7 +149,7 @@ class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
         return lambda *a, **k: self
 
     def getInfo(self):  # noqa: N802 - Earth Engine's name
-        return "Brasil, "
+        return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
 
 
 def _review_row():
@@ -256,7 +256,7 @@ def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monke
     assert gdf.at[0, "status"] == "Confirmed"
     assert gdf.at[0, "description"] == "mining"
     assert gdf.at[0, "before_img"] == "S2_before" and gdf.at[0, "after_img"] == "S2_after"
-    assert gdf.at[0, "admin1"] == "Brasil,"  # the stub's list, less its trailing space
+    assert gdf.at[0, "admin1"] == "Brasil"  # joined, no trailing comma
     # What was persisted carries the same review as the live row.
     [staged] = written
     assert staged.at[0, "status"] == "Confirmed"
