@@ -236,7 +236,8 @@ def _art(key, kind="store"):
 def _result(n):
     alerts = gpd.GeoDataFrame({"alert_id": list(range(n))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
     s = _set("x", 0).model_copy(update={"n_alerts": n})
-    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={})
+    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={},
+                           n_growth=0, n_growth_small=0)
 
 
 def _swapped_in(pdir, result):
@@ -334,6 +335,19 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     assert notifier.toasts == [("success", tn("steps.integrate.done", 2))]
     assert busy == [True, True] and not is_writing("d")
     assert not integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"]))
+
+
+def test_a_run_with_growth_alerts_says_how_many_were_linked(monkeypatch, tmp_path):
+    state = _open("d")
+    result = _result(3)
+    result.n_growth, result.n_growth_small = 2, 1
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: result)
+    _tiles(monkeypatch)
+    notifier = _Notifier()
+    integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
+    done = tn("steps.integrate.done", 3) + ". " + tn("steps.integrate.growth_linked", 2, small=1)
+    assert notifier.toasts == [("success", done)]
+    assert tn("steps.integrate.growth_linked", 2, small=1) == "Linked 2 alerts to earlier loss (1 under the minimum area)"
 
 
 def test_the_published_alerts_are_stamped_with_the_store_the_run_wrote(monkeypatch, tmp_path):

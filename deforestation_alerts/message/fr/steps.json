@@ -481,6 +481,11 @@
         "many": "{n} d'alertes prêtes à être examinées",
         "other": "{n} alertes prêtes à être examinées"
       },
+      "growth_linked": {
+        "one": "{n} alerte liée à une perte antérieure ({small} sous la surface minimale)",
+        "many": "{n} d'alertes liées à des pertes antérieures ({small} sous la surface minimale)",
+        "other": "{n} alertes liées à des pertes antérieures ({small} sous la surface minimale)"
+      },
       "done_empty": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide.",
       "done_empty_detail": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide. {details}",
       "outcome_pixels": {

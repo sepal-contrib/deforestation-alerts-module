@@ -347,6 +347,15 @@ def _empty_message(result, left_out) -> str:
     return t("steps.integrate.done_empty_detail", details="; ".join(lines))
 
 
+def _done_message(result) -> str:
+    """The toast of a run that found alerts: how many, and how many of them
+    were linked to earlier loss (spec 2026-10-20 §4.6)."""
+    lines = [tn("steps.integrate.done", result.alert_set.n_alerts)]
+    if result.n_growth:
+        lines.append(tn("steps.integrate.growth_linked", result.n_growth, small=result.n_growth_small))
+    return ". ".join(lines)
+
+
 def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = None) -> None:
     """The worker body: run the engine, build the tiles and record the set.
 
@@ -398,6 +407,6 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
             return
         if notifier is not None:
             if n:
-                notifier.success(tn("steps.integrate.done", result.alert_set.n_alerts))
+                notifier.success(_done_message(result))
             else:
                 notifier.info(_empty_message(result, left_out))

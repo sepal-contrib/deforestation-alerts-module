@@ -37,6 +37,7 @@ from deforestation_alerts.engine.fingerprint import (
     period_masks, set_inputs, store_key,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
+from deforestation_alerts.engine.growth_links import burn_touch_mask, link_parents, project_candidates
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts import gdal_env
 from deforestation_alerts.engine.raster_io import (
@@ -49,6 +50,7 @@ from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, set_id as make_set_id,
 )
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config, download_estimate
@@ -162,8 +164,9 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     return total
 
 
-def _burn(geoms, sindex, grid: GridSpec, w: Window) -> np.ndarray:
-    """The window's pixels covered by ``geoms`` (pixel-edged polygons in the grid's CRS)."""
+def _burn(geoms, sindex, grid: GridSpec, w: Window, all_touched: bool = False) -> np.ndarray:
+    """The window's pixels covered by ``geoms`` (pixel-edged polygons in the grid's CRS),
+    or, with ``all_touched``, every pixel they touch."""
     shp = (int(w.height), int(w.width))
     t = _window_transform(grid, w)
     if sindex is None:
@@ -172,16 +175,16 @@ def _burn(geoms, sindex, grid: GridSpec, w: Window) -> np.ndarray:
     if not len(idx):
         return np.zeros(shp, bool)
     return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
-                              dtype="uint8").astype(bool)
+                              all_touched=all_touched, dtype="uint8").astype(bool)
 
 
-def rasterize_footprint(gdf_grid: gpd.GeoDataFrame, grid: GridSpec, out_path) -> Path:
+def rasterize_footprint(gdf_grid: gpd.GeoDataFrame, grid: GridSpec, out_path, *, all_touched: bool = False) -> Path:
     """Burn the polygons (in the grid's CRS) into an Int32 0/1 raster on ``grid``."""
     geoms = gdf_grid.geometry
     sindex = geoms.sindex if len(geoms) else None
     with write_grid_raster(Path(out_path), grid, count=1) as dst:
         for w in _windows(grid):
-            dst.write(_burn(geoms, sindex, grid, w).astype(np.int32), 1, window=w)
+            dst.write(_burn(geoms, sindex, grid, w, all_touched).astype(np.int32), 1, window=w)
     return Path(out_path)
 
 
@@ -249,6 +252,9 @@ class IntegrationResult:
     # per chosen source {"alert_pixels", "alert_pixels_unmasked"} from its
     # harmonized file's stats; {} for a file harmonized before stats existed
     outcomes: dict[str, dict]
+    # stored alerts linked to earlier loss, and those of them under the minimum size
+    n_growth: int = 0
+    n_growth_small: int = 0
 
 
 def _staged(path: Path) -> Path:
@@ -340,7 +346,9 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     # before the gate so they do not count against it. The set's folder has
     # one writer (the ``integrate:{project}`` in-flight key).
     base = _staged(combined).with_name(_staged(combined).stem + ".base" + combined.suffix)
-    _sweep_staged({**staged, base: base})  # the base has no final name; it is swept like a staged file
+    touch = _staged(combined).with_name(_staged(combined).stem + ".touch" + combined.suffix)
+    # the base and the touch mask have no final name; they are swept like staged files
+    _sweep_staged({**staged, base: base, touch: touch})
     # A run stages the combined raster (4 bands) and the footprint (1 band);
     # the parquet store is small next to them. A replaced set's old files stay
     # beside the staged ones until the swap, hence twice their compressed
@@ -372,6 +380,9 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             raise ProjectRuleError(f"the footprint of set {s.id} is missing; re-run that set first",
                                    key="errors.footprint_missing", set_id=s.id)
         fp_paths.append(paths.resolve(pdir, art.rel_path))
+    # The earlier sets' loss-verdict alerts as reviewed now (spec 2026-10-20
+    # §4.4); their review state stays out of ``set_inputs`` (§4.5).
+    cands = project_candidates(p, pdir, period)
     carries = carry_sets(p, period, sources)
     carry_masks = []
     if carries:
@@ -401,9 +412,16 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
                 confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
+        mask = burn_touch_mask(cands, p.grid, touch)
         eligible = vectorize_alerts(
-            base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution)
+            base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution), touch_mask=mask
         )
+        touch.unlink(missing_ok=True)
+        if mask is None:
+            eligible[BELOW_MIN] = False
+        # Linked before the cut: a small cluster that finds no parent is too
+        # small again (state 2), and growth counts toward the limit (§4.3).
+        eligible = link_parents(eligible, cands, p.grid)
         vgdf = sort_and_cut(eligible, job.params.sorting, job.params.max_alerts)
         state_counts = write_states(base, p.grid, staged[combined], eligible, vgdf)
         base.unlink(missing_ok=True)
@@ -413,6 +431,8 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         # the step most likely to fail.
         step("steps.integrate.step_store")
         alerts = convert_to_geopandas(vgdf.to_crs(epsg=4326), digit_map=digit_map)
+        alerts[GROWS_FROM] = [list(links) for links in alerts[GROWS_FROM_AUTO]]
+        alerts[BELOW_MIN] = alerts[BELOW_MIN].astype(bool)
         alerts["alert_id"] = range(len(alerts))
         alerts["set_id"] = sid
         if layers:
@@ -434,6 +454,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             masks_used=_masks_applied(p, period, sources),
             footprint_from=[s.id for s in earlier],
             carried_from=[s.id for s, _ in carries],
+            parents_from=[s.id for s in earlier if s.id in {c.node.set_id for c in cands}],
             store_rel_path=paths.rel(pdir, store),
             combined_rel_path=paths.rel(pdir, combined),
             footprint_rel_path=paths.rel(pdir, footprint),
@@ -452,6 +473,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             os.replace(part, final)
     except BaseException:
         base.unlink(missing_ok=True)
+        touch.unlink(missing_ok=True)
         for part in staged.values():
             part.unlink(missing_ok=True)
         raise
@@ -463,5 +485,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         footprint_key(sid): make_artifact(footprint_key(sid), "footprint", pdir, footprint, inputs_fp),
         store_key(sid): make_artifact(store_key(sid), "store", pdir, store, inputs_fp),
     }
+    growth = alerts[GROWS_FROM_AUTO].map(bool)
     return IntegrationResult(alert_set=alert_set, artifacts=artifacts, alerts=alerts,
-                             outcomes=_outcomes(p, period, sources))
+                             outcomes=_outcomes(p, period, sources), n_growth=int(growth.sum()),
+                             n_growth_small=int((growth & alerts[BELOW_MIN]).sum()))
