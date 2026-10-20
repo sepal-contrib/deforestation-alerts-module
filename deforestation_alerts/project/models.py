@@ -291,6 +291,9 @@ class ReviewCopy(BaseModel):
     set_fingerprint: str
     origin_project: str
     imported_at: datetime
+    #: when the package's earlier-alerts snapshot was taken (spec 2026-10-20
+    #: §6.6); None for a package from before the snapshot
+    snapshot_at: Optional[datetime] = None
 
 
 class AlertSet(BaseModel):

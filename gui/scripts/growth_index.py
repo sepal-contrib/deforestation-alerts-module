@@ -4,9 +4,8 @@ The Analysis "Earlier alerts" section, the History row, the Overview card,
 exports and the Integrate Replace warning all read the project's sets through
 here. Each set's nodes (``growth.nodes_of_set``) and parent candidates are read
 once and kept, one entry per (project, set id), until the set's run id, store
-generation or grid epsg changes (as ``earlier_reviews._entry``, but without a
-size cap: every call walks every set, so an LRU smaller than the project would
-reload them all); the candidates' shapes are also kept in the grid CRS so
+generation or grid epsg changes (without a size cap: every call walks every
+set, so an LRU smaller than the project would reload them all); the candidates' shapes are also kept in the grid CRS so
 distances are cheap per alert.
 """
 

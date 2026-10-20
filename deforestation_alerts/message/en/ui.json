@@ -299,13 +299,23 @@
       "show": "Show on the maps",
       "radius": "Within",
       "radius_error": "Between 0.1 and 50 km",
-      "title": "Earlier reviews",
+      "title": "Earlier alerts",
       "badge_off": "off",
       "badge_none": "none within {km} km",
       "badge_nearby": {
-        "one": "{n} nearby",
-        "other": "{n} nearby"
-      }
+        "one": "{n} within {km} km · {linked} linked",
+        "other": "{n} within {km} km · {linked} linked"
+      },
+      "touches": "touches",
+      "via": "via #{id}",
+      "broken_rerun": "earlier set was re-run",
+      "broken_fp": "now false positive",
+      "periods": "Periods",
+      "as_of": "Earlier alerts as of {date}",
+      "none_in_copy": "No earlier alerts in this copy",
+      "legend_lines": "solid: confirmed · dashed: needs revision · thick: linked",
+      "distance_m": "{m} m",
+      "distance_km": "{km} km"
     },
     "filter": {
       "col_evaluator": "Evaluator",

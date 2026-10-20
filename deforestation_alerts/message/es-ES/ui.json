@@ -303,14 +303,24 @@
       "show": "Mostrar en los mapas",
       "radius": "Dentro de",
       "radius_error": "Entre 0,1 y 50 km",
-      "title": "Revisiones anteriores",
+      "title": "Alertas anteriores",
       "badge_off": "desactivado",
       "badge_none": "ninguna a menos de {km} km",
       "badge_nearby": {
-        "one": "{n} cercana",
-        "other": "{n} cercanas",
-        "many": "{n} cercanas"
-      }
+        "one": "{n} a menos de {km} km · vínculos: {linked}",
+        "other": "{n} a menos de {km} km · vínculos: {linked}",
+        "many": "{n} a menos de {km} km · vínculos: {linked}"
+      },
+      "touches": "toca",
+      "via": "vía #{id}",
+      "broken_rerun": "el conjunto anterior se volvió a ejecutar",
+      "broken_fp": "ahora falso positivo",
+      "periods": "Períodos",
+      "as_of": "Alertas anteriores al {date}",
+      "none_in_copy": "No hay alertas anteriores en esta copia",
+      "legend_lines": "continua: confirmada · discontinua: requiere revisión · gruesa: vinculada",
+      "distance_m": "{m} m",
+      "distance_km": "{km} km"
     },
     "filter": {
       "col_evaluator": "Evaluador",

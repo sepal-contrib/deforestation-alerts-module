@@ -126,6 +126,9 @@ class AnalysisState:
     #: never saved to the project, so ``reset_alert`` leaves them alone.
     show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
+    #: the earlier periods the *Periods* menu hides (ids): session state, all
+    #: shown by default, kept across alert changes like the switch
+    earlier_hidden_periods: solara.Reactive = field(default_factory=lambda: solara.reactive(frozenset()))
     #: the Analysis filter (spec §8): an ``alert_filter.AlertFilter`` (one
     #: attribute, the values that match) or None. Session state: the analysis
     #: layout binds it into ``AppState`` (``bind_alert_filter``), whose
@@ -133,7 +136,7 @@ class AnalysisState:
     #: it on a project install and when another set's alerts arrive. Kept
     #: across alert changes, so ``reset_alert`` leaves it alone.
     alert_filter: solara.Reactive = field(default_factory=lambda: solara.reactive(None))
-    #: counts the overlay refreshes (``earlier.refresh_earlier_reviews``): a
+    #: counts the overlay refreshes (``earlier.refresh_earlier``): a
     #: load that finishes after a newer refresh started is dropped
     earlier_seq: int = field(default=0, repr=False)
     #: serializes ``reset_alert`` with a worker's check-and-apply

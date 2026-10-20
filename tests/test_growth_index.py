@@ -224,3 +224,16 @@ def test_period_order_comes_from_candidates_only(project):
     by_key = {it.cand.key: it for it in view.items}
     assert by_key["sep#12"].state == "broken" and by_key["sep#12"].color == growth_index.OLDER_GREY
     assert by_key["aug#4"].color == growth_index.PERIOD_PALETTE[0]
+
+
+def test_candidates_come_from_earlier_periods_only(project):
+    """(from the retired ``earlier_reviews`` tests) a set of the same or a later
+    period is no parent; a missing store gives no candidates."""
+    p = project
+    stores = _stores(p)
+    stores["oct"] = _gdf([_row(1, "Confirmed", CUR)])
+    load = _loader(stores)
+    assert sorted(c.key for c in growth_index.candidates_for(p, "sep", load=load)) == ["aug#4", "aug#7"]
+    assert growth_index.candidates_for(p, "aug", load=load) == []
+    growth_index.clear_cache()
+    assert growth_index.candidates_for(p, "oct", load=lambda p_, s: None) == []

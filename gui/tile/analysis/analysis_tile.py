@@ -283,7 +283,7 @@ def view_actual_alert(
         # on would fetch tiles at the new view, from the previous set's
         # raster, which a period delete is removing (500s from the tile server)
         panes.clear("alert")
-        # the earlier-reviews overlay is the previous alert's neighbourhood:
+        # the earlier-alerts overlay is the previous alert's neighbourhood:
         # ``refresh_in_background`` below draws this alert's
         remove_earlier_layer(widgets)
 
@@ -341,12 +341,13 @@ def view_actual_alert(
         logger.exception("Analysis: view_actual_alert map update failed")
         return
 
-    # the earlier periods' reviewed alerts near this one (a no-op while the
-    # switch is off); its own guard, so a failed read never blames the maps
+    # the earlier periods' alerts near this one and its links (the list, the
+    # History row, the timeline's parent windows and, with the switch on, the
+    # layer); its own guard, so a failed read never blames the maps
     try:
         refresh_in_background(widgets, analysis, app_state)
     except Exception:
-        logger.exception("Analysis: the earlier-reviews overlay failed")
+        logger.exception("Analysis: the earlier-alerts section failed")
 
 
 def select_start_alert(app_state, app_tile_model):

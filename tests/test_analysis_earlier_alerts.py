@@ -1,0 +1,395 @@
+"""The Analysis "Earlier alerts" section and map layer (spec 2026-10-20 §6.2–6.3)."""
+
+import threading
+import time
+from datetime import date, datetime
+from types import SimpleNamespace
+
+import geopandas as gpd
+import solara
+from shapely.geometry import box
+
+from deforestation_alerts.project.growth import Candidate, Node
+from deforestation_alerts.project.models import ReviewCopy
+from gui.scripts import growth_index
+from gui.scripts.growth_index import EarlierItem, EarlierView
+from gui.tile.analysis import earlier
+from gui.tile.analysis.earlier import EARLIER_ID, EARLIER_LAYER_NAME
+from gui.tile.analysis.state import AnalysisState
+from tests._pane_helpers import make_panes
+
+AUG = SimpleNamespace(id="2026-08-01_2026-08-31", start=date(2026, 8, 1), end=date(2026, 8, 31))
+SEP = SimpleNamespace(id="2026-09-01_2026-09-30", start=date(2026, 9, 1), end=date(2026, 9, 30))
+COLORS = growth_index.period_colors([SEP.id, AUG.id])
+RUN = "20261002080000000000"
+SHAPE = box(-55.0005, -25.0, -55.0, -24.9995)
+
+
+def _cand(sid, aid, period, status="Confirmed"):
+    node = Node(set_id=sid, alert_id=aid, period_id=period.id, period_start=period.start,
+                period_end=period.end, status=status, area_ha=0.25, date_min=2026.6, date_max=2026.62,
+                shape=SHAPE, links=())
+    return Candidate(node, RUN)
+
+
+SEP12 = _cand("sep", 12, SEP)
+SEP15 = _cand("sep", 15, SEP, "Need revision")
+AUG4 = _cand("aug", 4, AUG)
+AUG7 = _cand("aug", 7, AUG)
+GONE = "old#3@19990101000000000000"
+
+
+def _view(links, auto=(SEP12.link,)):
+    """What ``earlier_view`` would answer for the draft ``links``: #12 auto (or
+    linked, or none), #15 within 1 km, #4 via #12 while #12 is linked, #7 broken
+    when the draft names it."""
+    links, auto = set(links), set(auto)
+
+    def state(c):
+        if c.link not in links:
+            return "none"
+        return "auto" if c.link in auto else "linked"
+
+    items = [EarlierItem(SEP12, 0.0, state(SEP12), None, COLORS[SEP.id]),
+             EarlierItem(SEP15, 40.0, state(SEP15), None, COLORS[SEP.id])]
+    if SEP12.link in links:
+        items.append(EarlierItem(AUG4, 50.0, "via", "sep#12", COLORS[AUG.id]))
+    if AUG7.link in links:
+        items.append(EarlierItem(AUG7, 10_000.0, "broken", None, COLORS[AUG.id]))
+    return EarlierView(items=tuple(items), n_within=2 + (SEP12.link in links),
+                       n_linked=sum(1 for it in items if it.state in ("auto", "linked")),
+                       periods=((SEP.id, SEP.start), (AUG.id, AUG.start)))
+
+
+def _setup(monkeypatch, *, project=None, view=_view):
+    calls = []
+
+    def fake_view(p, set_id, gdf, alert_id, links, auto, radius_m, **kw):
+        calls.append({"set_id": set_id, "alert_id": alert_id, "links": tuple(links),
+                      "auto": tuple(auto), "radius_m": radius_m})
+        return view(links, auto)
+
+    monkeypatch.setattr(earlier.growth_index, "earlier_view", fake_view)
+    monkeypatch.setattr(earlier.growth_index, "history_summary",
+                        lambda p, set_id, gdf, alert_id, links, **kw: ("summary", tuple(links)))
+    monkeypatch.setattr(earlier, "active_set", lambda p: SimpleNamespace(id="oct"))
+    monkeypatch.setattr(earlier, "has_earlier_sets", lambda p: True)
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
+    gdf = gpd.GeoDataFrame({"alert_id": [0, 1]}, geometry=[SHAPE, SHAPE], crs="EPSG:4326")
+    p = project if project is not None else SimpleNamespace(review_copy=None)
+    app_state = SimpleNamespace(alerts_gdf=solara.reactive(gdf), actual_alert_id=solara.reactive(1),
+                                project=solara.reactive(p))
+    widgets = SimpleNamespace(panes=make_panes())
+    return widgets, AnalysisState(), app_state, calls
+
+
+def _features(widgets):
+    spec = widgets.panes.spec(EARLIER_ID)
+    return None if spec is None else spec["data"]["features"]
+
+
+def _by_key(features):
+    return {f"{f['properties']['set_id']}#{f['properties']['alert_id']}": f for f in features}
+
+
+def test_rows_grouped_by_period_with_states(monkeypatch):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    analysis.links.set((SEP12.link, AUG7.link))
+    analysis.auto_links.set((SEP12.link,))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 1000.0
+    groups = [(g.period_id, [r.key for r in g.rows]) for g in section.groups]
+    assert groups == [(SEP.id, ["sep#12", "sep#15"]), (AUG.id, ["aug#4", "aug#7"])]
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    assert rows["sep#12"].box.v_model is True and not rows["sep#12"].box.disabled
+    assert rows["sep#15"].box.v_model is False and not rows["sep#15"].box.disabled
+    assert rows["aug#4"].box is None
+    assert rows["aug#7"].box is not None and rows["aug#7"].box.disabled
+    assert rows["sep#12"].note.children == [earlier.t("analysis_tile.earlier.touches")]
+    assert rows["sep#15"].note.children == [earlier.t("analysis_tile.earlier.distance_m", m="40")]
+    assert rows["aug#4"].note.children == [earlier.t("analysis_tile.earlier.via", id="12")]
+    assert rows["aug#7"].note.children == [earlier.t("analysis_tile.earlier.broken_rerun")]
+    assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]  # the switch is off
+    section.switch.v_model = True
+    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 3, km="1", linked=1)]
+
+
+def test_distance_and_broken_notes():
+    assert earlier.distance_text(40.4) == earlier.t("analysis_tile.earlier.distance_m", m="40")
+    assert earlier.distance_text(1234.0) == earlier.t("analysis_tile.earlier.distance_km",
+                                                      km=earlier.format_number(1.2, 1))
+    fp = EarlierItem(_cand("sep", 9, SEP, "False Positive"), 0.0, "broken", None, COLORS[SEP.id])
+    assert earlier.note_text(fp) == earlier.t("analysis_tile.earlier.broken_fp")
+
+
+def test_tick_and_untick_update_draft_links(monkeypatch):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.dirty.value is False
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    rows["sep#15"].box.v_model = True
+    assert analysis.links.value == (SEP15.link,) and analysis.dirty.value is True
+    assert calls[-1]["links"] == (SEP15.link,)  # recomputed from the draft
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    assert rows["sep#15"].box.v_model is True
+    rows["sep#15"].box.v_model = False
+    assert analysis.links.value == ()
+    assert calls[-1]["links"] == ()
+
+
+def test_row_click_zooms_both_maps(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    rows["sep#15"].text.fire_event("click", {})
+    view = widgets.panes.widget.view
+    c = SHAPE.centroid
+    assert abs(view["center"][0] - c.y) < 1e-9 and abs(view["center"][1] - c.x) < 1e-9
+    assert 14 <= view["zoom"] <= 18
+
+
+def test_layer_styles_follow_period_and_status(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.links.set((SEP12.link,))
+    analysis.show_earlier_reviews.set(True)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    spec = widgets.panes.spec(EARLIER_ID)
+    assert (spec["view"], spec["group"], spec["name"]) == ("all", "earlier", EARLIER_LAYER_NAME)
+    assert spec["meta"] == {"menuSection": "alerts"}
+    feats = _by_key(_features(widgets))
+    assert set(feats) == {"sep#12", "sep#15", "aug#4"}
+    linked, revision, via = (feats[k]["properties"]["style"] for k in ("sep#12", "sep#15", "aug#4"))
+    assert linked == {"color": COLORS[SEP.id], "weight": 4, "dashArray": None, "fill": True, "fillOpacity": 0.2}
+    assert revision == {"color": COLORS[SEP.id], "weight": 2, "dashArray": "6 4", "fill": False,
+                        "fillOpacity": 0.2}
+    assert via["color"] == COLORS[AUG.id] and via["weight"] == 2 and via["fill"] is False
+    assert feats["sep#12"]["geometry"]["type"] == "Polygon"
+
+
+def test_switch_off_removes_the_layer(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.show_earlier_reviews.set(True)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert _features(widgets)
+    analysis.show_earlier_reviews.set(False)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert _features(widgets) is None
+
+
+def test_switch_turns_on_for_growth_alert(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    assert section.switch.v_model is False
+    analysis.auto_links.set((SEP12.link,))  # what view_actual_alert seeds for a growth alert
+    assert section.switch.v_model is True and analysis.show_earlier_reviews.value is True
+    # a New alert keeps the session's value
+    analysis.reset_alert()
+    analysis.auto_links.set(())
+    assert analysis.show_earlier_reviews.value is True
+    section.switch.v_model = False
+    analysis.reset_alert()
+    assert analysis.show_earlier_reviews.value is False
+
+
+def test_periods_menu_hides_rows_and_features(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.links.set((SEP12.link,))
+    analysis.show_earlier_reviews.set(True)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert [i["value"] for i in section.periods.items] == [SEP.id, AUG.id]
+    assert section.periods.v_model == [SEP.id, AUG.id]  # all on by default
+    section.periods.v_model = [SEP.id]
+    assert analysis.earlier_hidden_periods.value == frozenset({AUG.id})
+    assert [g.period_id for g in section.groups] == [SEP.id]
+    assert set(_by_key(_features(widgets))) == {"sep#12", "sep#15"}
+    # the choice survives the next alert (session state)
+    analysis.reset_alert()
+    analysis.links.set((SEP12.link,))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert [g.period_id for g in section.groups] == [SEP.id]
+    assert section.periods.v_model == [SEP.id]
+    section.periods.v_model = [SEP.id, AUG.id]
+    assert analysis.earlier_hidden_periods.value == frozenset()
+    assert "aug#4" in _by_key(_features(widgets))
+
+
+def test_refresh_sets_history_and_parent_windows_with_switch_off(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.links.set((SEP12.link,))
+    assert analysis.show_earlier_reviews.value is False
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.history.value == ("summary", (SEP12.link,))
+    assert analysis.parent_windows.value == ((2026.6, 2026.62),)
+    assert _features(widgets) is None
+
+
+def test_broken_link_dropped_from_draft(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.links.set((SEP12.link, AUG7.link, GONE))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.links.value == (SEP12.link,)
+    assert analysis.dirty.value is False
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    assert rows["aug#7"].box.disabled  # still shown, greyed
+
+
+def test_a_copy_without_snapshot_keeps_links_it_cannot_resolve(monkeypatch):
+    rc = ReviewCopy(evaluator="a", evaluator_index=1, set_id="oct", split_id="x", set_fingerprint="f",
+                    origin_project="o", imported_at=datetime(2026, 10, 1))
+    p = SimpleNamespace(review_copy=rc)
+    widgets, analysis, app_state, _ = _setup(monkeypatch, project=p)
+    analysis.links.set((SEP12.link, GONE))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.links.value == (SEP12.link, GONE)
+
+
+def test_review_copy_lines(monkeypatch):
+    rc = ReviewCopy(evaluator="a", evaluator_index=1, set_id="oct", split_id="x", set_fingerprint="f",
+                    origin_project="o", imported_at=datetime(2026, 10, 1),
+                    snapshot_at=datetime(2026, 10, 5, 9, 0))
+    p = SimpleNamespace(review_copy=rc)
+    empty = lambda links, auto: EarlierView((), 0, 0, ())  # noqa: E731
+    widgets, analysis, app_state, _ = _setup(monkeypatch, project=p, view=empty)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    texts = [w.children[0] for w in section.copy_lines.children]
+    assert texts == [earlier.t("analysis_tile.earlier.as_of", date=earlier.format_date(date(2026, 10, 5))),
+                     earlier.t("analysis_tile.earlier.none_in_copy")]
+    assert ReviewCopy(**{**rc.model_dump(), "snapshot_at": None}).snapshot_at is None
+
+
+def test_old_review_copy_has_no_snapshot_field_value():
+    rc = ReviewCopy.model_validate({"evaluator": "a", "evaluator_index": 1, "set_id": "s", "split_id": "x",
+                                    "set_fingerprint": "f", "origin_project": "o",
+                                    "imported_at": "2026-10-01T00:00:00"})
+    assert rc.snapshot_at is None
+
+
+def test_a_stale_result_is_dropped(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    analysis.show_earlier_reviews.set(True)
+
+    def slow(p, sid, gdf, aid, links, auto, radius_m, **kw):
+        analysis.reset_alert()  # the alert changes while the read blocks
+        return _view(links, auto)
+
+    monkeypatch.setattr(earlier.growth_index, "earlier_view", slow)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert _features(widgets) is None
+    assert analysis.history.value is None
+
+
+def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    gates, radii = [], []
+
+    def blocking(p, sid, gdf, aid, links, auto, radius_m, **kw):
+        gate = threading.Event()
+        gates.append(gate)
+        radii.append(radius_m)
+        gate.wait(5)
+        return _view(links, auto) if radius_m > 1000 else EarlierView((), 0, 0, ())
+
+    monkeypatch.setattr(earlier.growth_index, "earlier_view", blocking)
+    analysis.show_earlier_reviews.set(True)
+    old = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
+    old.start()
+    _wait_for(lambda: len(gates) == 1)
+    analysis.earlier_radius_km.set(5)
+    new = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
+    new.start()
+    _wait_for(lambda: len(gates) == 2)
+    gates[1].set()
+    new.join(5)
+    gates[0].set()
+    old.join(5)
+    assert len(_features(widgets)) == 2
+
+
+def _wait_for(cond):
+    for _ in range(500):
+        if cond():
+            return
+        time.sleep(0.01)
+    raise AssertionError("timed out")
+
+
+def test_a_raising_read_is_logged_and_leaves_the_panel_usable(monkeypatch, caplog):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+
+    def boom(*a, **k):
+        raise RuntimeError("store unreadable")
+
+    monkeypatch.setattr(earlier.growth_index, "earlier_view", boom)
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    with caplog.at_level("ERROR", logger="SEPALUI.deforestation_alerts"):
+        section.switch.v_model = True
+    assert any("earlier-alerts" in r.message and r.exc_info for r in caplog.records)
+    assert _features(widgets) is None
+
+
+def test_refresh_in_background_always_loads_off_the_calling_thread(monkeypatch):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    spawned = []
+    monkeypatch.setattr(earlier, "spawn_in_context", lambda fn, args=(): spawned.append((fn, args)))
+    earlier.refresh_in_background(widgets, analysis, app_state)
+    assert calls == [] and len(spawned) == 1
+
+
+def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    controls = earlier.build_earlier_controls(widgets, app_state, analysis)
+    field = controls.field
+    for bad in ("0", "abc", "51"):
+        field.v_model = bad
+        assert field.error_messages and analysis.earlier_radius_km.value == 1.0
+    field.v_model = "2,5"
+    assert not field.error_messages and analysis.earlier_radius_km.value == 2.5
+
+
+def test_the_section_badge():
+    view = _view((SEP12.link,))
+    assert earlier.badge_text(False, view, 1.0) == earlier.t("analysis_tile.earlier.badge_off")
+    assert earlier.badge_text(True, None, 1.0) == ""
+    empty = EarlierView((), 0, 0, ())
+    assert earlier.badge_text(True, empty, 2.5) == earlier.t("analysis_tile.earlier.badge_none", km="2.5")
+    assert earlier.badge_text(True, view, 1.0) == earlier.tn("analysis_tile.earlier.badge_nearby", 3,
+                                                             km="1", linked=1)
+    assert earlier.t("analysis_tile.earlier.title") == "Earlier alerts"
+    assert earlier.tn("analysis_tile.earlier.badge_nearby", 4, km="1", linked=1) == "4 within 1 km · 1 linked"
+
+
+def test_has_earlier_sets(monkeypatch):
+    periods = {"p1": SimpleNamespace(start=1), "p2": SimpleNamespace(start=2)}
+    s1, s2 = SimpleNamespace(id="s1", period_id="p1"), SimpleNamespace(id="s2", period_id="p2")
+    only_one = SimpleNamespace(periods=periods, alert_sets={"s2": s2}, review_copy=None)
+    both = SimpleNamespace(periods=periods, alert_sets={"s1": s1, "s2": s2}, review_copy=None)
+    monkeypatch.setattr(earlier, "active_set", lambda p: s2)
+    assert not earlier.has_earlier_sets(only_one)
+    assert earlier.has_earlier_sets(both)
+    # a review copy holds one set: its earlier alerts come with the package
+    copy = SimpleNamespace(periods=periods, alert_sets={"s2": s2}, review_copy=object())
+    assert earlier.has_earlier_sets(copy)
+    monkeypatch.setattr(earlier, "active_set", lambda p: s1)
+    assert not earlier.has_earlier_sets(both)
+    assert not earlier.has_earlier_sets(None)
+
+
+def test_the_section_is_hidden_without_earlier_sets_and_switches_off(monkeypatch):
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    has = {"v": True}
+    monkeypatch.setattr(earlier, "has_earlier_sets", lambda p: has["v"])
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    assert "display: none" not in section.root.style_
+    section.switch.v_model = True
+    assert _features(widgets)
+    has["v"] = False
+    app_state.project.set(SimpleNamespace(review_copy=None, name="other"))
+    assert "display: none" in section.root.style_
+    assert section.switch.v_model is False and not analysis.show_earlier_reviews.value
+    assert _features(widgets) is None
