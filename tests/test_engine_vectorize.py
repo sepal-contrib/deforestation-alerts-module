@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from deforestation_alerts.engine import raster_io
-from deforestation_alerts.engine.vectorize import vectorize_alerts, yyyyddd_to_decimal
+from deforestation_alerts.engine.vectorize import COLUMNS, vectorize_alerts, yyyyddd_to_decimal
 from deforestation_alerts.project.models import GridSpec
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=40, height=40)
@@ -168,3 +168,61 @@ def test_a_cluster_that_meets_itself_only_in_a_later_block_is_one_alert(tmp_path
     gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, block_rows=20)
     assert len(gdf) == 1
     assert gdf.iloc[0]["count"] == 33 and gdf.iloc[0]["alert_type_unique"] == [1, 10, 100]
+
+
+def _mask(tmp_path, arr, name="mask.tif", grid=GRID):
+    out = tmp_path / name
+    with raster_io.write_grid_raster(out, grid, count=1) as dst:
+        dst.write(arr.astype("int32"), 1)
+    return out
+
+
+def test_small_cluster_touching_mask_is_kept(tmp_path):
+    a, m = _blank(), _blank()
+    a[5, 5:7] = 1  # 2 px, under the minimum
+    m[5, 6] = 1
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, touch_mask=_mask(tmp_path, m))
+    assert len(gdf) == 1
+    assert gdf.iloc[0]["count"] == 2 and bool(gdf.iloc[0]["below_min"]) is True
+
+
+def test_small_cluster_off_mask_is_dropped(tmp_path):
+    a, m = _blank(), _blank()
+    a[5, 5:7] = 1
+    m[5, 8] = 1  # two pixels away
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, touch_mask=_mask(tmp_path, m))
+    assert len(gdf) == 0 and "below_min" in gdf.columns
+
+
+def test_big_cluster_on_mask_is_not_below_min(tmp_path):
+    a, m = _blank(), _blank()
+    a[10:12, 10:13] = 1  # 6 px
+    m[10, 10] = 1
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, touch_mask=_mask(tmp_path, m))
+    assert len(gdf) == 1 and bool(gdf.iloc[0]["below_min"]) is False
+
+
+def test_touch_found_across_blocks(tmp_path):
+    a, m = _blank(), _blank()
+    a[7:10, 5] = 1  # 3 px vertical line across the row-8 block edge: 1 + 2
+    m[9, 5] = 1     # the mask meets it only in the second block
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, block_rows=8,
+                           touch_mask=_mask(tmp_path, m))
+    assert len(gdf) == 1
+    assert gdf.iloc[0]["count"] == 3 and bool(gdf.iloc[0]["below_min"]) is True
+
+
+def test_no_mask_keeps_old_columns(tmp_path):
+    a = _blank()
+    a[10:12, 10:13] = 1
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
+    assert list(gdf.columns) == COLUMNS
+
+
+def test_mask_off_the_alert_grid_is_refused(tmp_path):
+    other = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=30, height=40)
+    a = _blank()
+    a[5, 5:7] = 1
+    mask = _mask(tmp_path, np.zeros((other.height, other.width)), grid=other)
+    with pytest.raises(raster_io.GridMismatchError):
+        vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5, touch_mask=mask)
