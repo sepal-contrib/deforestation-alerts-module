@@ -16,6 +16,7 @@ from gui.scripts.set_context import SetContext
 from gui.tile.analysis import analysis_tile, context
 from gui.tile.analysis.filter_menu import build_filter_menu
 from gui.tile.analysis.state import AnalysisState
+from gui.widget.buttons import label_of
 from tests.test_analysis_context import _alerts, _state
 
 
@@ -238,5 +239,5 @@ def test_an_open_menu_keeps_its_unapplied_picks_across_a_switch(bar):
     assert ui.attribute.v_model == "status" and ui.values.v_model == picked
     assert bar.analysis.alert_filter.value is None, "a switch applies nothing"
     assert ui.attribute.items[1]["text"] == t("analysis_tile.facts.status")  # filter_columns' label
-    assert ui.apply.children == [t("analysis_tile.filter.apply")]
+    assert label_of(ui.apply) == t("analysis_tile.filter.apply")
     assert english_leftovers(ui.menu, "fr") == []

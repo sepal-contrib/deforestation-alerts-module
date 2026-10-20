@@ -1014,7 +1014,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if error:
             # The index already on screen keeps answering: this says the
             # refresh failed, not that there is nothing to look at.
-            retry = v.Btn(x_small=True, text=True, children=[t("analysis.timeline.retry")])
+            retry = v.Btn(x_small=True, text=True, class_="defo-tl-btn", children=[t("analysis.timeline.retry")])
             retry.on_event("click", lambda w, e, d: app_state.scene_index_retry.set(
                 app_state.scene_index_retry.value + 1))
             kids.append(v.Html(tag="span", style_=f"color: {WARN}; margin-left: 8px", children=[

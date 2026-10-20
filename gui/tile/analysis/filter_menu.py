@@ -25,12 +25,11 @@ from gui.i18n import format_number, t
 from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter, filter_columns, value_choices
 from gui.tile.analysis.labels import Labels
+from gui.widget.buttons import btn, set_label
 from gui.widget.outside_click import OutsideClickWidget
 
 #: How many values the chip names before it counts the rest ("Ana, Bruno +2").
 CHIP_VALUES = 2
-
-_BTN = "text-transform: none; letter-spacing: normal; font-size: 14px;"
 
 #: The panel's menu content, for ``OutsideClickWidget``.
 _PANEL_CLASS = "defo-filter-panel"
@@ -82,8 +81,9 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
                       chips=True, small_chips=True, deletable_chips=True, dense=True, outlined=True,
                       hide_details=True)
     empty = v.Html(tag="div", style_="font-size: 12px; display: none;", children=[])
-    clear = v.Btn(text=True, style_="height: 36px; " + _BTN, children=[])
-    apply = v.Btn(color="primary", depressed=True, style_="height: 36px; " + _BTN, children=[])
+    # The app's dialog actions: a text *Clear*, the filled *Apply* that commits.
+    clear = btn("tertiary")
+    apply = btn("primary", icon="mdi-filter-check-outline")
     body = v.Card(style_="width: 320px; padding: 12px; display: flex; flex-direction: column; gap: 10px;",
                   children=[
                       title, attribute, values, empty,
@@ -183,8 +183,8 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
         title.children = [t("analysis_tile.filter.button")]
         attribute.label = t("analysis_tile.filter.attribute")
         values.label = t("analysis_tile.filter.values")
-        clear.children = [t("analysis_tile.filter.clear")]
-        apply.children = [t("analysis_tile.filter.apply")]
+        set_label(clear, t("analysis_tile.filter.clear"))
+        set_label(apply, t("analysis_tile.filter.apply"))
         if menu.v_model:
             # The open menu's lists, relabelled with the picks kept: the
             # reviewer's unapplied choice is not the switch's to undo.

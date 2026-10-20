@@ -30,6 +30,19 @@ TYPE_LABEL = "dat-label"  # 12 px dimmed: field labels, hints, counts
 TYPE_CAPTION = "dat-caption"  # 12 px in the ink: state lines
 
 
+#: a badge's emphasis -> its class (``analysis_tile.SCREEN_CSS``)
+_BADGE_TONES = {"primary": "dat-badge--done", "warning": "dat-badge--warning"}
+
+
+def badge_classes(color=None) -> str:
+    """The classes of a section's badge: the workflow's filled chip (grey,
+    sentence case), tinted green for ``"primary"`` (what is done) and orange
+    for ``"warning"`` (what blocks the save). The tint is the screen's CSS,
+    not Vuetify's ``color``, whose solid fill carries white text on orange."""
+    tone = _BADGE_TONES.get(color)
+    return "dat-badge" + (f" {tone}" if tone else "")
+
+
 def panel_block(children, *, class_: str = "py-3"):
     """A flat block of the Analysis panel (see ``BLOCK_STYLE``)."""
     return v.Html(tag="div", class_=class_, style_=BLOCK_STYLE, children=children)
@@ -43,7 +56,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
     chevron = v.Icon(small=True, children=["mdi-chevron-right"])
     badge_chip = v.Chip(
         x_small=True,
-        outlined=True,
+        class_=badge_classes(None),
         children=[badge] if badge else [],
         style_="" if badge else _HIDDEN,
     )
@@ -52,7 +65,8 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         text=True,
         block=True,
         class_="px-1",
-        style_="height: 50px; justify-content: flex-start; text-transform: none;",
+        # A heading, not an action: sentence case, unlike the buttons.
+        style_="height: 50px; justify-content: flex-start; text-transform: none; letter-spacing: normal;",
         children=[
             chevron,
             title_span,
@@ -82,7 +96,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
         # piece of per-alert state no reset cleared.
         badge_chip.children = [text] if text else []
         badge_chip.style_ = "" if text else _HIDDEN
-        badge_chip.color = color
+        badge_chip.class_ = badge_classes(color)
 
     def set_title(text: str) -> None:
         title_span.children = [text]

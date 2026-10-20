@@ -9,6 +9,7 @@ from pysepal.i18n import set_locale
 from gui.i18n import app_available_locales, t
 from gui.tile.analysis.analysis_tile import panel_sections
 from gui.tile.analysis.labels import Labels
+from gui.widget.buttons import label_of
 from tests._i18n_sweep import build_layout, english_leftovers, leftovers_of
 
 
@@ -371,7 +372,7 @@ def test_switching_back_to_english_leaves_no_french(tmp_path, monkeypatch):
     footer, refine = panel.footer, panel.refine
 
     def _shown():
-        return (footer.save_next.children[0], footer.save.children[0], refine.title_span.children[0])
+        return (label_of(footer.save_next), label_of(footer.save), refine.title_span.children[0])
 
     def _expected():
         return (t("analysis_tile.verdict.save_next"), t("analysis_tile.export_labels.save_btn"),

@@ -20,6 +20,7 @@ from gui.tile.analysis import export as export_mod
 from gui.tile.analysis import review_save
 from gui.tile.analysis.footer import build_footer, footer_widgets
 from gui.tile.analysis.state import AnalysisState
+from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
 
 
@@ -82,7 +83,7 @@ def test_the_footer_is_the_panels_last_child_and_sticks(panel):
     assert save_next.color == "primary"
     # The literal English (the fixture pins the locale), not ``t()`` of the
     # same key, which passes on the ``⟦key⟧`` placeholder too.
-    assert save.children == ["Save"] and save_next.children[0] == "Save & next"
+    assert label_of(save) == "Save" and label_of(save_next) == "Save & next"
     # The order inside the footer: Export, the two buttons, the state line.
     assert save_next in footer.children[1].children and save in footer.children[1].children
     assert footer.children[2].children == [state_line]

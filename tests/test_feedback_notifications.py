@@ -1011,8 +1011,11 @@ def test_a_finished_run_offers_its_prediction_on_screen(
     slots = _slots(card)
     add, remove = slots[f"dl{model}_add"], slots[f"dl{model}_remove"]
     assert _hidden_above(card, add) == [], "Add to map is not on screen"
-    assert _hidden_above(card, remove) == [], "Remove from map is not on screen"
     assert add.disabled is False
+    # One map toggle (the tables' ``map_toggle``): *Remove* takes *Add*'s
+    # place once the prediction is in the drawing, not before
+    # (``test_add_to_map_opens_the_drawing_session_it_needs`` adds it).
+    assert remove.viz is False
 
 
 @pytest.mark.parametrize("model", [1, 2])
@@ -1555,8 +1558,11 @@ def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
     # and the edit buttons say so
     assert slots["start_btn"].disabled is True
     assert slots["save_btn"].disabled is False and slots["stop_btn"].disabled is False
-    # the pair now offers the other direction
+    # *Stop* has taken *Start*'s slot
+    assert slots["start_btn"].viz is False and slots["stop_btn"].viz is True
+    # the map toggle now offers the other direction
     assert slots["dl1_add"].disabled is True and slots["dl1_remove"].disabled is False
+    assert slots["dl1_add"].viz is False and slots["dl1_remove"].viz is True
 
     # stopping leaves edit mode and clears the drawing (the views keep a
     # drawing on screen outside edit mode, so the clear is the app's to do),
@@ -1568,6 +1574,8 @@ def test_add_to_map_opens_the_drawing_session_it_needs(monkeypatch):
     assert views.draw_edit_mode is False
     assert widgets.panes.drawing_features() == [] and views.draw["fc"]["features"] == []
     assert slots["dl1_add"].disabled is False and slots["dl1_remove"].disabled is True
+    assert slots["dl1_add"].viz is True and slots["dl1_remove"].viz is False
+    assert slots["start_btn"].viz is True and slots["stop_btn"].viz is False
 
 
 def test_start_drawing_seeds_the_stored_polygon_and_stop_clears_it():

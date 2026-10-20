@@ -281,7 +281,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
                              persistent_hint=True, error_messages=[t(limit_err)] if limit_err else [])
         # A nested list: an outlined card (422 px of content) with an outlined Add above the table (spec D4).
         with rv.Card(outlined=True, class_="pa-3"):
-            solara.Button(t("steps.integrate.attr_add"), icon_name="mdi-plus", small=True, outlined=True,
+            solara.Button(t("steps.integrate.attr_add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
                           block=True, classes=["mb-2"], on_click=lambda: _open_attr(None))
             ProductTable(title=t("steps.integrate.attr_list_title"), columns=attribute_columns(),
                          rows=attribute_rows(attr_layers, edit=_open_attr, delete=_delete_attr),

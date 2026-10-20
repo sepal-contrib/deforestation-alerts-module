@@ -146,6 +146,7 @@ from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.paths import alert_gif_name
 from gui.tile.analysis.review_save import SaveRefused
 from gui.tile.analysis.state import capture_alert
+from gui.widget.buttons import btn, set_label
 from gui.widget.text_style import MUTED
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -213,8 +214,8 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         guarded.extend(b for b in buttons if b not in guarded)
 
     def _hold(state):
-        for btn in guarded:
-            btn.disabled = state
+        for button in guarded:
+            button.disabled = state
 
     def _mark_saved(alert):
         """This alert's review is on disk: nothing unsaved left, and the
@@ -416,11 +417,9 @@ def build_export(
             style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
             children=[v.Icon(left=True, small=True, children=["mdi-cog"]), "", ns["save_first"]],
         )
-        ns["rebuild_btn"] = v.Btn(
-            text=True, small=True, color="primary", class_="defo-rebuild",
-            style_="text-transform:none;letter-spacing:normal;",
-            children=[v.Icon(left=True, small=True, children=["mdi-refresh"]), ""],
-        )
+        # A minor link under the tiles, as the workflow's *Edit split*.
+        ns["rebuild_btn"] = btn("tertiary", icon="mdi-refresh", color="primary", small=False, x_small=True,
+                                class_="defo-rebuild")
         ns["files_dwn_btn"] = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
                                        t("analysis_tile.export_labels.tile_zip_detail"))
         ns["report_dwn_btn"] = FileTile("docx", t("analysis_tile.export_labels.tile_docx"),
@@ -569,8 +568,7 @@ def build_export(
         ns["save_first"].children = [f"({t('analysis_tile.export_labels.save_first')})"]
         build = ns["download_alert_data_btn"]
         build.children = [build.children[0], t("analysis_tile.export_labels.build_tile"), ns["save_first"]]
-        rebuild = ns["rebuild_btn"]
-        rebuild.children = [rebuild.children[0], t("analysis_tile.export_labels.rebuild_tile")]
+        set_label(ns["rebuild_btn"], t("analysis_tile.export_labels.rebuild_tile"))
         # Literal keys (not f-strings), so the catalogue test sees each one.
         for name, title, detail in (
             ("files_dwn_btn", "analysis_tile.export_labels.tile_zip", "analysis_tile.export_labels.tile_zip_detail"),

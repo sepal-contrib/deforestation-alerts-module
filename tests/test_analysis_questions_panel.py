@@ -147,10 +147,10 @@ def test_the_badge_and_the_live_header_follow_the_answers(ctx):
     _s, a, sec = ctx
     # No verdict yet: every question shows, none answered, Road access required.
     assert sec.badge.children == [t("analysis_tile.questions.badge_missing", answered=0, total=3)]
-    assert sec.badge.color == "warning"
+    assert sec.badge.class_ == "dat-badge dat-badge--warning"
     a.answers.set({"road_access": ["yes"]})
     assert sec.badge.children == [t("analysis_tile.questions.badge", answered=1, total=3)]
-    assert not sec.badge.color
+    assert sec.badge.class_ == "dat-badge"
     a.verdict.set("False Positive")  # only Fire scars is asked
     assert sec.badge.children == [t("analysis_tile.questions.badge", answered=0, total=1)]
 

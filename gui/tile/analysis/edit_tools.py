@@ -135,6 +135,7 @@ from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, touch
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL
+from gui.widget.buttons import btn, set_label
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -414,39 +415,35 @@ def build_edit_tools(
         ns = {}
 
         # --- the edit buttons (start / apply / stop) ---
-        # Labelled and 44px, like the footer's Save buttons: an icon-only button
-        # whose meaning lived in a hover tooltip was unreadable on a touch
-        # screen, and there is room for the words in the panel.
-        def _edit_button(label, **kwargs):
-            return v.Btn(
-                class_="flex-grow-1", style_="height: 44px; text-transform: none;",
-                children=[label], **kwargs,
-            )
+        # Labelled, with the app's icons: an icon-only button whose meaning
+        # lived in a hover tooltip was unreadable on a touch screen. One
+        # filled button in the section, the one that commits: *Save drawing*.
+        # *Start* and *Stop* are the app's secondary buttons and share one
+        # slot (``_show_edit_slot``): only one of them is ever usable, and
+        # two buttons a row leave room for the French words in capitals.
+        def _edit_button(role, label, icon, **kwargs):
+            return btn(role, label, icon=icon, cls=_EditionButton, class_="flex-grow-1",
+                       style_="flex-basis: 0;", **kwargs)
 
-        # One filled button in the section, the one that commits: *Save
-        # drawing*. *Start* and *Stop* are outlined, like the panel's other
-        # secondary actions, so the footer's *Save & next* stays the one
-        # strong green on screen when no drawing is open.
         ns["start_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.start_edit_button"), color="primary", outlined=True)
+            "secondary", t("analysis_tile.edition_labels.start_edit_button"), "mdi-pencil-outline",
+            disabled=False)
         ns["save_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.apply_edit_button"), color="primary", disabled=True)
+            "primary", t("analysis_tile.edition_labels.apply_edit_button"), "mdi-content-save-outline")
         ns["stop_btn"] = _edit_button(
-            t("analysis_tile.edition_labels.stop_edit_button"), outlined=True, disabled=True)
+            "secondary", t("analysis_tile.edition_labels.stop_edit_button"), "mdi-stop").hide()
 
         # --- the "discard the drawing?" confirmation of *Stop Drawing* ---
         # Raw, like ``widgets.info_button``'s: the panel never renders through
         # reacton, so the Solara ``ConfirmDialog`` cannot be used here. It
         # sits in the edit row (a dialog draws nothing in place).
-        # The dialog is detached to the app root, outside the screen's type
-        # rules, so its buttons carry the sentence case inline.
-        _dialog_btn = "text-transform: none; letter-spacing: normal; font-size: 14px;"
-        ns["stop_keep"] = v.Btn(text=True, style_=_dialog_btn,
-                                children=[t("analysis_tile.edition_labels.stop_keep")])
-        ns["stop_save"] = v.Btn(outlined=True, color="primary", style_=_dialog_btn,
-                                children=[t("analysis_tile.edition_labels.stop_save")])
-        ns["stop_discard"] = v.Btn(color="error", depressed=True, style_=_dialog_btn,
-                                   children=[t("analysis_tile.edition_labels.stop_discard")])
+        # The app's confirmation (``ConfirmDialog``): a text answer that
+        # changes nothing, the outlined one, and the filled one that commits.
+        ns["stop_keep"] = btn("tertiary", t("analysis_tile.edition_labels.stop_keep"))
+        ns["stop_save"] = btn("secondary", t("analysis_tile.edition_labels.stop_save"),
+                              icon="mdi-content-save-outline")
+        ns["stop_discard"] = btn("primary", t("analysis_tile.edition_labels.stop_discard"),
+                                 icon="mdi-delete-outline", color="error")
         ns["stop_title"] = v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
                                        children=[t("analysis_tile.edition_labels.stop_title")])
         ns["stop_text"] = v.CardText(style_="font-size: 14px;",
@@ -461,25 +458,28 @@ def build_edit_tools(
         ])
         ns["edit_row"] = v.Html(
             tag="div", class_="d-flex", style_="gap: 8px;",
-            children=[ns["start_btn"], ns["save_btn"], ns["stop_btn"], ns["stop_dialog"]],
+            children=[ns["start_btn"], ns["stop_btn"], ns["save_btn"], ns["stop_dialog"]],
         )
 
-        # --- one row per CNN model: its name + Run, the add/remove pair
-        # (shown in edit mode only) and what the run found ---
+        # --- one row per CNN model: its name + Run, the map toggle and what
+        # the run found ---
+        # The map toggle is the layer and mask tables' (``product_table``'s
+        # ``map_toggle``): one icon, *Add to map* (``mdi-map-plus``) until
+        # the prediction is in the drawing, then *Remove from map*
+        # (``mdi-map-minus``), each named by its tooltip. Two widgets, so
+        # each keeps its handler and its ``disabled``; ``_sync_dl`` shows one.
+        def _map_button(icon, tip_key):
+            button = _EditionButton(icon=True, color="primary", class_="",
+                                    children=[v.Icon(children=[icon])])
+            tip = t(tip_key)
+            button.attributes = {"title": tip, "aria-label": tip}
+            return button
+
         for n, model_name in ((1, t("analysis_tile.model_labels.dl_button1")),
                               (2, t("analysis_tile.model_labels.dl_button2"))):
-            ns[f"dl{n}_run"] = v.Btn(
-                color="primary", small=True, outlined=True,
-                children=[t("analysis_tile.model_labels.run")],
-            )
-            ns[f"dl{n}_add"] = _EditionButton(
-                color="primary", outlined=True,
-                children=[t("analysis_tile.model_labels.dl_button_add")],
-            )
-            ns[f"dl{n}_remove"] = _EditionButton(
-                color="error", outlined=True,
-                children=[t("analysis_tile.model_labels.dl_button_remove")],
-            )
+            ns[f"dl{n}_run"] = btn("secondary", t("analysis_tile.model_labels.run"), icon="mdi-play")
+            ns[f"dl{n}_add"] = _map_button("mdi-map-plus", "analysis_tile.model_labels.dl_button_add")
+            ns[f"dl{n}_remove"] = _map_button("mdi-map-minus", "analysis_tile.model_labels.dl_button_remove")
             # The one button that keeps its icon and its tooltip: it IS the
             # "found nothing" warning, and it carries no state of its own.
             ns[f"dl{n}_msg"] = _EditionButton(
@@ -538,26 +538,39 @@ def build_edit_tools(
         state = dl_state[model]
         add, remove = ns[f"dl{model}_add"], ns[f"dl{model}_remove"]
         nothing_found = state["found"] is False
-        # A run that found nothing takes *Add*'s place with the warning, as in
-        # OLD.
+        # A run that found nothing shows the warning, as in OLD.
         if nothing_found:
             ns[f"dl{model}_msg"].show()
-            add.hide()
         else:
             ns[f"dl{model}_msg"].hide()
-            add.show()
+        # One map toggle on screen: *Remove* while the drawing holds this
+        # model's shapes, warning or not -- a later run that found nothing
+        # (or found something new) must not strand the ones already drawn
+        # with no button that takes them off. *Add* otherwise, unless the
+        # warning took its place.
+        if state["added"]:
+            remove.show()
+            add.hide()
+        else:
+            remove.hide()
+            if nothing_found:
+                add.hide()
+            else:
+                add.show()
         # *Add* is live for a prediction that is not in the drawing yet — it
         # opens the drawing session itself if there is none.
         add.disabled = not state["found"] or state["added"]
-        # *Remove* keeps its place whenever the drawing still holds this
-        # model's shapes, warning or not: a later run that found nothing (or
-        # found something new) must not strand the ones already drawn with no
-        # button that takes them off.
-        if state["added"] or not nothing_found:
-            remove.show()
-        else:
-            remove.hide()
         remove.disabled = not state["added"]
+
+    def _show_edit_slot(on):
+        """*Start drawing* out of a drawing session, *Stop drawing* in one:
+        the two share the edit row's first slot."""
+        if on:
+            ns["start_btn"].hide()
+            ns["stop_btn"].show()
+        else:
+            ns["stop_btn"].hide()
+            ns["start_btn"].show()
 
     def _set_found(model, found):
         """What a finished run leaves the row offering. ``added`` is left
@@ -588,21 +601,23 @@ def build_edit_tools(
 
     def _label():
         """A language switch: the section's text again, nothing else."""
-        ns["start_btn"].children = [t("analysis_tile.edition_labels.start_edit_button")]
-        ns["save_btn"].children = [t("analysis_tile.edition_labels.apply_edit_button")]
-        ns["stop_btn"].children = [t("analysis_tile.edition_labels.stop_edit_button")]
-        ns["stop_keep"].children = [t("analysis_tile.edition_labels.stop_keep")]
-        ns["stop_save"].children = [t("analysis_tile.edition_labels.stop_save")]
-        ns["stop_discard"].children = [t("analysis_tile.edition_labels.stop_discard")]
+        set_label(ns["start_btn"], t("analysis_tile.edition_labels.start_edit_button"))
+        set_label(ns["save_btn"], t("analysis_tile.edition_labels.apply_edit_button"))
+        set_label(ns["stop_btn"], t("analysis_tile.edition_labels.stop_edit_button"))
+        set_label(ns["stop_keep"], t("analysis_tile.edition_labels.stop_keep"))
+        set_label(ns["stop_save"], t("analysis_tile.edition_labels.stop_save"))
+        set_label(ns["stop_discard"], t("analysis_tile.edition_labels.stop_discard"))
         ns["stop_title"].children = [t("analysis_tile.edition_labels.stop_title")]
         ns["stop_text"].children = [t("analysis_tile.edition_labels.stop_message")]
         for n in (1, 2):
             ns[f"dl{n}_name"].children = [t(f"analysis_tile.model_labels.dl_button{n}")]
             ns[f"dl{n}_name_tip"].children = [t(f"analysis_tile.model_labels.dl_hint{n}")]
             ns[f"dl{n}_msg_tip"].children = [t("analysis_tile.model_labels.dl_404")]
-            ns[f"dl{n}_run"].children = [t("analysis_tile.model_labels.run")]
-            ns[f"dl{n}_add"].children = [t("analysis_tile.model_labels.dl_button_add")]
-            ns[f"dl{n}_remove"].children = [t("analysis_tile.model_labels.dl_button_remove")]
+            set_label(ns[f"dl{n}_run"], t("analysis_tile.model_labels.run"))
+            for part, key in (("add", "analysis_tile.model_labels.dl_button_add"),
+                              ("remove", "analysis_tile.model_labels.dl_button_remove")):
+                button = ns[f"dl{n}_{part}"]
+                button.attributes = {**button.attributes, "title": t(key), "aria-label": t(key)}
             _show_found(n)
 
     # ``_build_widgets`` wrote the same text a moment ago, hence ``now=False``.
@@ -655,6 +670,7 @@ def build_edit_tools(
             for name in ("save_btn", "stop_btn"):
                 ns[name].disabled = True
             ns["start_btn"].disabled = False
+            _show_edit_slot(False)
             panes = getattr(widgets, "panes", None)
             if panes is not None:
                 panes.set_edit_mode(False)
@@ -736,6 +752,7 @@ def build_edit_tools(
         ns["start_btn"].disabled = True
         ns["save_btn"].disabled = False
         ns["stop_btn"].disabled = False
+        _show_edit_slot(True)
 
     def _start_edition(widget, event, data):
         widget.loading = True
@@ -823,6 +840,7 @@ def build_edit_tools(
 
             ns["save_btn"].disabled = True
             ns["start_btn"].disabled = False
+            _show_edit_slot(False)
         except Exception:
             logger.exception("Analysis: stop edition failed")
         finally:

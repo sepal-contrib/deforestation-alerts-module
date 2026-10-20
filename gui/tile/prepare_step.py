@@ -399,7 +399,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 solara.Button(tn("steps.prepare.run_all", len(pending)), color="primary", small=True,
                               icon_name="mdi-play", disabled=not pending or bool(mine) or read_only(p),
                               on_click=lambda: _start(pending))
-                solara.Button(t("steps.prepare.stop"), small=True, outlined=True, disabled=not mine,
+                solara.Button(t("steps.prepare.stop"), color="primary", small=True, outlined=True, disabled=not mine,
                               on_click=lambda: stops.stop((p.name, period.id)))
             # Check again after a failed coverage check, or a failed AOI-sidecar
             # fetch that leaves the GeoTIFF rows (sources, masks on in the

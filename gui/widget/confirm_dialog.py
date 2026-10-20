@@ -112,6 +112,7 @@ def ConfirmDialog(
                     solara.Button(
                         secondary_label,
                         on_click=on_secondary,
+                        color="primary",
                         outlined=True,
                         small=True,
                     )

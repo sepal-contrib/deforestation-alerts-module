@@ -38,6 +38,7 @@ from gui.store.workflow_steps import active_set
 from gui.tile.analysis.filter_menu import build_filter_menu
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
+from gui.widget.buttons import btn, set_label
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
 #: else) can reach them without re-deriving the tree's shape.
@@ -88,6 +89,27 @@ def filtered_counter_text(mask, index: int) -> str:
     rank = int(np.searchsorted(hits, index))
     return t("analysis_tile.queue.counter", index=str(rank + 1).zfill(len(str(matches))),
              total=format_number(matches))
+
+
+_COUNTER_CLASS = f"{TYPE_TITLE} dat-num"
+
+
+def counter_chip_class(mask, index: int, total: int) -> str:
+    """How the counter is worn: ``dat-pos-chip`` (the workflow's green
+    "5 / 8" step chip) on a position, ``dat-pos-chip dat-pos-chip--off``
+    (grey) on ``– / 87`` (the alert on screen is outside the filter ``mask``),
+    and nothing on a sentence ("No alert set is loaded", "No alerts match
+    this filter"). ``mask`` is None without a filter."""
+    if total <= 0:
+        return ""
+    if mask is None:
+        return "dat-pos-chip"
+    mask = np.asarray(mask, dtype=bool)
+    if not mask.any():
+        return ""
+    if not (0 <= index < len(mask)) or not mask[index]:
+        return "dat-pos-chip dat-pos-chip--off"
+    return "dat-pos-chip"
 
 
 def filtered_tally_text(total: int, reviewed: int, all_alerts: int) -> str:
@@ -197,24 +219,19 @@ def _build_nav(app_state, id_field, counter, labels):
     (``max_alert_id`` is -1, so every press lands on 0). ``id_field`` is the
     ``v.TextField`` the tile owns, where the tests read and write
     ``.v_model``."""
-    # Sized for the screen's top bar (``build_topnav``): 36 px, the bar's
-    # control height, and the words kept beside the chevrons.
-    # Their words are written by the label hook below, which keeps the icons.
-    prev = v.Btn(outlined=True, style_="height: 36px;",
-                 children=[v.Icon(left=True, children=["mdi-chevron-left"]), ""])
-    nxt = v.Btn(outlined=True, style_="height: 36px;",
-                children=["", v.Icon(right=True, children=["mdi-chevron-right"])])
+    # The app's secondary buttons (``gui.widget.buttons``), the words kept
+    # beside the chevrons; the label hook below writes them.
+    prev = btn("secondary", icon="mdi-chevron-left")
+    nxt = btn("secondary", icon_right="mdi-chevron-right")
     prev.on_event("click", lambda *_: app_state.go_prev())
     nxt.on_event("click", lambda *_: app_state.go_next())
 
-    jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn", style_="height: 36px; padding: 0 6px 0 10px;",
+    # The counter is a chip, or a sentence, not a button's words: no capitals.
+    jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn",
+                 style_="height: 36px; padding: 0 6px 0 10px; text-transform: none; letter-spacing: normal;",
                  children=[counter, v.Icon(small=True, children=["mdi-menu-down"])])
-    # The menu is drawn at the app's root, outside the screen's type rules, so
-    # its sizes and casing are inline.
-    _btn = "text-transform: none; letter-spacing: normal; font-size: 14px;"
-    go = v.Btn(outlined=True, color="primary", style_="height: 40px; " + _btn, children=[])
-    unreviewed = v.Btn(text=True, color="primary", small=True, class_="px-1",
-                       style_="justify-content: flex-start; " + _btn, children=[])
+    go = btn("primary", icon_right="mdi-arrow-right")
+    unreviewed = btn("tertiary", color="primary", x_small=True, small=False, class_="px-1 align-self-start")
     label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     # "Alert 12 is not in the current filter": a number the filter hides is
     # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
@@ -279,12 +296,12 @@ def _build_nav(app_state, id_field, counter, labels):
     unreviewed.on_event("click", _on_unreviewed)
 
     def _label():
-        prev.children = [prev.children[0], t("analysis_tile.nav.previous")]
-        nxt.children = [t("analysis_tile.nav.next"), nxt.children[-1]]
+        set_label(prev, t("analysis_tile.nav.previous"))
+        set_label(nxt, t("analysis_tile.nav.next"))
         jump.attributes = {**jump.attributes, "aria-label": t("analysis_tile.nav.jump"),
                            "title": t("analysis_tile.nav.jump")}
-        go.children = [t("analysis_tile.nav.go")]
-        unreviewed.children = [t("analysis_tile.nav.next_unreviewed")]
+        set_label(go, t("analysis_tile.nav.go"))
+        set_label(unreviewed, t("analysis_tile.nav.next_unreviewed"))
         label.children = [t("analysis_tile.nav.jump")]
         if refused[0] is not None:
             # A switch with the menu open on a refusal: the same sentence in
@@ -350,7 +367,7 @@ def build_context(app_state, id_field, *, labels=None) -> v.Card:
     the current position and refreshes itself. ``labels`` is the screen's
     ``labels.Labels`` (a fresh one when none is given)."""
     labels = labels if labels is not None else Labels()
-    counter = v.Html(tag="span", class_=f"{TYPE_TITLE} dat-num", style_="white-space: nowrap;", children=[])
+    counter = v.Html(tag="span", class_=_COUNTER_CLASS, style_="white-space: nowrap;", children=[])
     tally = v.Html(tag="span", class_=TYPE_LABEL, style_="white-space: nowrap;", children=[])
     bar = v.ProgressLinear(value=0, height=4, color="primary", rounded=True)
 
@@ -376,6 +393,7 @@ def build_context(app_state, id_field, *, labels=None) -> v.Card:
         total, reviewed = review_counts(gdf)
         mask = app_state.alert_mask()
         filtered = app_state.alert_filter is not None and total > 0
+        counter.class_ = _COUNTER_CLASS + " " + counter_chip_class(mask if filtered else None, index, total)
         if not filtered:
             counter.children = [counter_text(index, total)]
             tally.children = [tally_text(total, reviewed)]

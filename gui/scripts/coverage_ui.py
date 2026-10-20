@@ -66,5 +66,5 @@ def CheckAgainButton(app_state, show: bool):
     if not show:
         return
     pending = app_state.coverage_pending.value or app_state.sidecar_pending.value
-    solara.Button(t("coverage.check_again"), small=True, outlined=True, icon_name="mdi-refresh", disabled=pending,
+    solara.Button(t("coverage.check_again"), color="primary", small=True, outlined=True, icon_name="mdi-refresh", disabled=pending,
                   on_click=lambda: app_state.coverage_retry.set(app_state.coverage_retry.value + 1))

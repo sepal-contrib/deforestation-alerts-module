@@ -100,6 +100,7 @@ from gui.scripts import questions
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
+from gui.widget.buttons import btn, set_label
 from gui.widget.set_selector import build_set_selector, set_text
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -652,11 +653,33 @@ SCREEN_CSS = (
     ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot { min-height: auto !important; min-width: 40px;"
     " display: flex !important; align-items: center !important; }\n"
     # The screen's one type scale (``section.TYPE_*``): 14 px titles and body,
-    # 12 px labels and badges, sentence case everywhere. Vuetify's spaced
-    # capitals on buttons and chips, and its 16 px input labels, are what
-    # made the panel read as three different apps.
-    ".defo-analysis-screen .v-btn { text-transform: none !important; letter-spacing: normal !important; }\n"
+    # 12 px labels and badges, sentence case for the words that are not
+    # buttons. Its buttons are the rest of the app's (``gui.widget.buttons``):
+    # small, in Vuetify's capitals. The timeline's toolbar keeps sentence
+    # case: it is short of width already (its labels give way below 1250 px),
+    # and it is an instrument, like the views' Leaflet controls.
+    ".defo-analysis-screen .defo-tl-btn { text-transform: none; letter-spacing: normal; }\n"
     ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"
+    # The status badges (``section.badge_classes``): the workflow's filled
+    # chips, grey for a state, light orange for what blocks the save, light
+    # green for what is done.
+    ".defo-analysis-screen .v-chip.dat-badge { border: 0 !important; background: rgba(128, 128, 128, 0.2) !important; }\n"
+    ".defo-analysis-screen .v-chip.dat-badge--warning { background: rgba(239, 138, 12, 0.16) !important;"
+    " color: #b5650a !important; font-weight: 500; }\n"
+    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--warning { color: #ffb74d !important; }\n"
+    ".defo-analysis-screen .v-chip.dat-badge--done { background: rgba(91, 182, 36, 0.16) !important;"
+    " color: #3e8a14 !important; font-weight: 500; }\n"
+    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--done { color: #8fd163 !important; }\n"
+    # The position counter (``context.build_context``), worn as the green
+    # "5 / 8" chip of the workflow's step header; grey while the alert on
+    # screen is outside the filter.
+    ".defo-analysis-screen .dat-pos-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 7px;"
+    " border-radius: 4px; background: #5bb624; color: #ffffff; font-size: 12px; font-weight: 700; }\n"
+    ".defo-analysis-screen .dat-pos-chip--off { background: rgba(128, 128, 128, 0.25); color: inherit; }\n"
+    # The verdict tiles (``review_panel``): the icon over the label, which may
+    # take two lines in capitals (Portuguese's "Precisa de revisão").
+    ".defo-analysis-screen .dat-verdict .v-btn__content { flex-direction: column; gap: 3px; white-space: normal;"
+    " line-height: 14px; font-size: 11.5px; letter-spacing: 0.06em; text-align: center; }\n"
     ".defo-analysis-screen .v-chip.v-size--x-small { font-size: 12px; height: 20px; }\n"
     ".defo-analysis-screen .v-input .v-label { font-size: 14px; }\n"
     ".defo-analysis-screen .v-select__selection, .defo-analysis-screen .v-text-field input { font-size: 14px; }\n"
@@ -724,12 +747,7 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
     if labels is None:
         labels = Labels()
         labels.add(widgets.panes.relabel)
-    back = v.Btn(
-        text=True,
-        class_="defo-back-to-workflow",
-        style_="text-transform: none;",
-        children=[v.Icon(left=True, children=["mdi-arrow-left"]), ""],
-    )
+    back = btn("tertiary", icon="mdi-arrow-left", class_="defo-back-to-workflow")
     back.on_event("click", lambda *_: app_state.screen.set("workflow"))
     title = v.Html(tag="div", class_="defo-analysis-title dat-title", children=[""])
     panel = getattr(controls, _PANEL, None)
@@ -794,7 +812,7 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
         title.children = [" · ".join(part for part in parts if part)]
 
     def _label_chrome():
-        back.children = [back.children[0], t("app.panel_workflow_title")]
+        set_label(back, t("app.panel_workflow_title"))
         _retitle()
 
     labels.add(_label_info)

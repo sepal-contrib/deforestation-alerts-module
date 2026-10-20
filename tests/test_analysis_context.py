@@ -72,6 +72,17 @@ def test_the_counter_is_one_based_and_padded_to_the_total():
     assert context.counter_text(0, 1200) == "0001 / 1,200"
 
 
+@pytest.mark.parametrize("mask, index, total, expected", [
+    (None, 4, 10, "dat-pos-chip"),                                 # a position: the green chip
+    (None, -1, 0, ""),                                             # "No alert set is loaded"
+    ([True, False, True], 2, 3, "dat-pos-chip"),                   # a match of the filter
+    ([True, False, True], 1, 3, "dat-pos-chip dat-pos-chip--off"),  # "– / 2": outside it
+    ([False, False, False], 0, 3, ""),                             # "No alerts match this filter"
+])
+def test_the_counter_wears_the_step_chip_on_a_position_only(mask, index, total, expected):
+    assert context.counter_chip_class(mask, index, total) == expected
+
+
 def test_the_counter_and_the_tally_of_an_empty_queue_say_so():
     assert context.counter_text(-1, 0) == "No alert set is loaded"
     assert context.tally_text(0, 0) == ""

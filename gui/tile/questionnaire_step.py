@@ -207,7 +207,7 @@ def QuestionnaireStep(app_state):
         StepIntro(t("steps.questionnaire.description"), t("steps.questionnaire.info_header"),
                   t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):
-            solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", small=True, outlined=True,
+            solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
                           block=True, disabled=ro, on_click=_open_add)
             ProductTable(title=t("steps.questionnaire.questions_title"),
                          columns=[{"label": t("steps.questionnaire.col_question")}], rows=rows,

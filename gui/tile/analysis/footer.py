@@ -26,6 +26,7 @@ import ipyvuetify as v
 
 from gui.i18n import t
 from gui.tile.analysis.labels import Labels
+from gui.widget.buttons import btn, set_label
 
 # ``margin-bottom: -32px`` cancels the Workflow panel's own bottom space (its
 # 16px padding and the 16px under each section): a sticky element stays inside
@@ -53,11 +54,13 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
     given): the buttons' words and the state line follow a language switch.
     """
     labels = labels if labels is not None else Labels()
-    save_next = v.Btn(color="primary", class_="flex-grow-1", style_="height: 44px;",
-                      children=[t("analysis_tile.verdict.save_next"),
-                                v.Icon(right=True, children=["mdi-arrow-right"])])
-    save = v.Btn(outlined=True, style_="height: 44px;",
-                 children=[t("analysis_tile.export_labels.save_btn")])
+    # The end of an alert's review, drawn as the workflow's *Start analysis*:
+    # the screen's one default-size (36 px) filled button. *Save* is its
+    # outlined twin.
+    save_next = btn("primary", t("analysis_tile.verdict.save_next"), icon_right="mdi-arrow-right",
+                    small=False, class_="flex-grow-1")
+    save = btn("secondary", t("analysis_tile.export_labels.save_btn"), icon="mdi-content-save-outline",
+               small=False)
     state_line = v.Html(tag="div", class_="dat-caption mt-2", children=[])
 
     save.on_event("click", lambda *_: run_save(save))
@@ -99,8 +102,8 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
 
     def _label():
         # text only: a save in flight keeps its buttons disabled and loading
-        save_next.children = [t("analysis_tile.verdict.save_next"), save_next.children[-1]]
-        save.children = [t("analysis_tile.export_labels.save_btn")]
+        set_label(save_next, t("analysis_tile.verdict.save_next"))
+        set_label(save, t("analysis_tile.export_labels.save_btn"))
 
     labels.add(_label)
 

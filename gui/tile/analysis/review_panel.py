@@ -43,10 +43,10 @@ from gui.tile.analysis.section import TYPE_TITLE, panel_block
 #: The store always gets the status; the label follows the locale.
 REVIEW_CHOICES = tuple((status, VERDICT_LABEL_KEYS[status]) for status in VERDICTS)
 
-#: status -> the icon on its button
+#: status -> the icon over its label
 _ICONS = {
-    CONFIRMED: "mdi-check-bold",
-    FALSE_POSITIVE: "mdi-close-thick",
+    CONFIRMED: "mdi-check-circle-outline",
+    FALSE_POSITIVE: "mdi-close-circle-outline",
     NEED_REVISION: "mdi-flag-outline",
 }
 
@@ -66,14 +66,19 @@ def build_review_panel(widgets, app_state, analysis, *, labels=None):
     labels = labels if labels is not None else Labels()
     buttons, spans = {}, {}
     for status, key in REVIEW_CHOICES:
-        spans[status] = v.Html(tag="span", class_="caption ml-1", children=[t(key)])
-        btn = v.Btn(
-            outlined=True, color="primary", class_="flex-grow-1 pa-1",
-            style_="height: 58px; text-transform: none;",
-            children=[v.Icon(small=True, children=[_ICONS[status]]), spans[status]],
+        # The screen's one choice tile: the app's green toggle (filled when
+        # chosen, outlined otherwise, as Overview's), in capitals, the icon
+        # over the label so the longest one (Portuguese's "Precisa de
+        # revisão") can take a second line in a third of the panel
+        # (``SCREEN_CSS``'s ``.dat-verdict``).
+        spans[status] = v.Html(tag="span", children=[t(key)])
+        button = v.Btn(
+            outlined=True, color="primary", class_="pa-1 dat-verdict",
+            style_="flex: 1 1 0; min-width: 0; height: 56px;",
+            children=[v.Icon(children=[_ICONS[status]]), spans[status]],
         )
-        btn.on_event("click", lambda *_, status=status: _pick(analysis, status))
-        buttons[status] = btn
+        button.on_event("click", lambda *_, status=status: _pick(analysis, status))
+        buttons[status] = button
 
     group = v.Html(
         tag="div", class_="d-flex", style_="gap: 6px;",
@@ -84,8 +89,8 @@ def build_review_panel(widgets, app_state, analysis, *, labels=None):
 
     def _sync_verdict(*_):
         chosen = analysis.verdict.value
-        for status, btn in buttons.items():
-            btn.outlined = status != chosen
+        for status, button in buttons.items():
+            button.outlined = status != chosen
 
     # Registered once: the panel is built once per session.
     analysis.verdict.subscribe(_sync_verdict)

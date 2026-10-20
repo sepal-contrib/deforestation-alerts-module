@@ -24,6 +24,7 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.state import AnalysisState
+from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
 
 
@@ -59,14 +60,14 @@ def test_the_badge_follows_what_it_is_told():
     s = build_section("Export this alert", v.Html(tag="div"), badge="available after save")
     assert s.badge.children == ["available after save"]
     s.set_badge("2 files ready", color="primary")
-    assert s.badge.children == ["2 files ready"] and s.badge.color == "primary"
+    assert s.badge.children == ["2 files ready"] and s.badge.class_ == "dat-badge dat-badge--done"
     # And takes it back: both consumers pass no colour for their NEUTRAL
     # states, which means "no colour" and not "keep the last one" -- the chip
     # is per-alert state, and an emphasis left standing is the previous
     # alert's. Same assertion as the facts status chip's
     # (tests/test_analysis_context.py: ``assert not chip.color``).
     s.set_badge("nothing drawn")
-    assert s.badge.children == ["nothing drawn"] and not s.badge.color
+    assert s.badge.children == ["nothing drawn"] and s.badge.class_ == "dat-badge"
     s.set_badge("")
     assert s.badge.children == [] and "display: none" in s.badge.style_
 
@@ -138,7 +139,7 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     # section. The literal English (the fixture pins the locale), not ``t()``
     # of the same key, which passes on the ``⟦key⟧`` placeholder too.
     save_next, save, _ = footer_widgets(footer)
-    assert save.children == ["Save"] and save_next.children[0] == "Save & next"
+    assert label_of(save) == "Save" and label_of(save_next) == "Save & next"
     assert [questions, refine, footer] == [panel.sections.questions.root, panel.sections.refine.root,
                                            panel.sections.footer.root]
     assert footer.children[0] is panel.sections.export.root
@@ -253,17 +254,17 @@ def test_an_alert_change_takes_the_refine_badges_emphasis_with_it(tmp_path, monk
     panel = _controls(tmp_path, monkeypatch)
     refine = panel.sections.refine
     assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
-    assert not refine.badge.color          # a fresh panel carries no emphasis
+    assert refine.badge.class_ == "dat-badge"          # a fresh panel carries no emphasis
 
     gdf = gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.01, 0.01)], crs="EPSG:4326")
     panel.analysis.defo_layer.set(gdf)     # the reviewer drew on alert 1
-    assert refine.badge.color == "primary"
+    assert refine.badge.class_ == "dat-badge dat-badge--done"
     assert "ha" in refine.badge.children[0]
 
     panel.analysis.reset_alert()           # and moved to alert 2
 
     assert refine.badge.children == [t("analysis_tile.sections.refine_empty")]
-    assert not refine.badge.color
+    assert refine.badge.class_ == "dat-badge"
 
 
 def test_the_top_bar_navigation_holds_the_selector_the_queue_and_the_buttons(tmp_path, monkeypatch):

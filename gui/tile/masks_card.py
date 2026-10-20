@@ -286,8 +286,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
                                  locked=read_only(p), progress=progress)
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
-        solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", small=True, outlined=True, block=True,
-                      disabled=read_only(p), on_click=_open_add)
+        solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
+                      block=True, disabled=read_only(p), on_click=_open_add)
         ProductTable(title=t("steps.prepare.masks_title"), columns=mask_columns(), rows=table_rows,
                      empty_text=t("steps.prepare.masks_empty"))
         solara.Text(t("steps.prepare.masks_note"), style=MUTED + "font-size:0.78rem;")
