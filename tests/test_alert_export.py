@@ -133,3 +133,17 @@ def test_export_writes_only_the_scoped_rows(data_root):
 def test_export_rejects_geojson(data_root):
     with pytest.raises(ValueError):
         export_alerts_gdf(_gdf(), data_root / "recipe_a", "geojson", [], "", "")
+
+
+@pytest.mark.parametrize("fmt", ["gpkg", "csv"])
+def test_export_has_growth_columns(data_root, fmt):
+    # a list-valued grows_from (a caller that skipped with_growth_columns) is joined with ";"
+    gdf = _gdf()
+    gdf["kind"] = ["growth"]
+    gdf["grows_from"] = pd.Series([["a#1@r", "b#2@r"]], dtype="object")
+    gdf["history_area_ha"] = [2.5]
+    path = export_alerts_gdf(gdf, data_root / "recipe_a", fmt, ["GLAD-L"], "2026-01-01", "2026-06-12")
+    back = gpd.read_file(path) if fmt == "gpkg" else pd.read_csv(path, keep_default_na=False)
+    assert back["kind"].iloc[0] == "growth"
+    assert back["grows_from"].iloc[0] == "a#1@r;b#2@r"
+    assert back["history_area_ha"].iloc[0] == 2.5

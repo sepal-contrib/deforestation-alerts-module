@@ -680,8 +680,11 @@ def test_the_export_card_writes_into_the_set_folder_named_by_sources_and_dates(o
         p = state.project.value
         store = str(set_store.store_path(p, active_set(p)))
         assert store.startswith(str(tmp_path / "d" / SET_DIR))
-        assert calls == [((alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d",
-                           tuple(p.questions)), {"store": store, "scope": None})]
+        [(args, kwargs)] = calls
+        assert args == (alerts, str(tmp_path / "d" / SET_DIR), ["GLAD-L"], "2026-01-01", "2026-01-31", "d",
+                        tuple(p.questions))
+        growth = kwargs.pop("growth")  # the export's growth columns, read on the worker
+        assert kwargs == {"store": store, "scope": None} and callable(growth)
         # a re-render with the same inputs keeps the card
         state.update_project("d", lambda p: setattr(p, "look_back_days", 30))
         assert len(calls) == 1

@@ -52,7 +52,7 @@ from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t
-from gui.scripts import alert_layers, charts, overview_data, set_store
+from gui.scripts import alert_layers, charts, growth_index, overview_data, set_store
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
@@ -440,7 +440,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     last_card = solara.use_ref(None)
     export_card = solara.use_memo(
         lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions, store=store,
-                                  scope=last_card.current.scope if last_card.current is not None else None)
+                                  scope=last_card.current.scope if last_card.current is not None else None,
+                                  growth=lambda g: growth_index.with_growth_columns(p, s.id, g))
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end, questions, store],
     )

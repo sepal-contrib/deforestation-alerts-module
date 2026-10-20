@@ -29,6 +29,7 @@ from deforestation_alerts.project.growth import (
     build_graph,
     history_area,
     is_candidate,
+    kind_of,
     links_of,
     node_key,
     nodes_of_set,
@@ -37,6 +38,7 @@ from deforestation_alerts.project.growth import (
     run_id_of,
 )
 from deforestation_alerts.project.review_status import FALSE_POSITIVE
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import store_generation
 from gui.scripts import set_store
 
@@ -374,6 +376,37 @@ def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[
     crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
     area = history_area(nodes, crs)
     return HistorySummary(area.n, area.confirmed_ha, area.unreviewed_ha, area.first_period_start)
+
+
+def with_growth_columns(p, set_id: str, gdf, *, load=set_store.load_set_alerts):
+    """A copy of ``gdf`` (the rows of ``set_id``) ready to export (spec §6.7):
+    ``kind``, ``grows_from`` as the stored links joined by ``";"`` (broken ones
+    too: the file records what is stored) and ``history_area_ha`` (the
+    ``confirmed_ha`` of the row's history, 0 for a row alone); the working
+    columns ``grows_from_auto`` and ``below_min`` are left out. The graph is
+    built once and each history's area computed once, whatever its size."""
+    out = gdf.copy()
+    graph = graph_for(p, set_id, gdf, load=load)
+    links = [links_of(cell) for cell in (out[GROWS_FROM] if GROWS_FROM in out.columns else [None] * len(out))]
+    small = out[BELOW_MIN] if BELOW_MIN in out.columns else [None] * len(out)
+    areas: dict[frozenset, float] = {}  # one area per history
+
+    def _area(alert_id) -> float:
+        members = graph.component(node_key(set_id, alert_id))
+        if members not in areas:
+            nodes = [graph.node(k) for k in members if graph.node(k) is not None]
+            if len(nodes) < 2:
+                areas[members] = 0.0
+            else:
+                shapes = [n.shape for n in nodes if n.shape is not None]
+                crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
+                areas[members] = history_area(nodes, crs).confirmed_ha
+        return areas[members]
+
+    out["kind"] = [kind_of(lk, flag) for lk, flag in zip(links, small)]
+    out[GROWS_FROM] = [";".join(lk) for lk in links]
+    out["history_area_ha"] = [_area(a) for a in out["alert_id"]]
+    return out.drop(columns=[c for c in (GROWS_FROM_AUTO, BELOW_MIN) if c in out.columns])
 
 
 def parent_windows(view: EarlierView) -> tuple[tuple[float, float], ...]:

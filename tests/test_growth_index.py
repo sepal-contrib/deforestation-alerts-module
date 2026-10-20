@@ -237,3 +237,62 @@ def test_candidates_come_from_earlier_periods_only(project):
     assert growth_index.candidates_for(p, "aug", load=load) == []
     growth_index.clear_cache()
     assert growth_index.candidates_for(p, "oct", load=lambda p_, s: None) == []
+
+
+# ---- export columns (Task 9) --------------------------------------------------
+
+def _export_gdf(p):
+    return _gdf([_row(1, "Not reviewed", CUR, links=[_link(p, "sep", 12), _link(p, "aug", 7, STALE)]),
+                 _row(2, "Not reviewed", AUG7)])
+
+
+def test_with_growth_columns_kind_links_and_history_area(project):
+    p = project
+    out = growth_index.with_growth_columns(p, "oct", _export_gdf(p), load=_loader(_stores(p)))
+    first, second = out.iloc[0], out.iloc[1]
+    assert first["kind"] == "growth"
+    assert first["grows_from"] == f"{_link(p, 'sep', 12)};{_link(p, 'aug', 7, STALE)}"  # broken kept
+    # CUR + sep#12 + aug#4 (through sep#12), all confirmed or the current one unreviewed
+    assert first["history_area_ha"] > 0
+    assert second["kind"] == "new" and second["grows_from"] == "" and second["history_area_ha"] == 0.0
+    assert "grows_from_auto" not in out.columns and "below_min" not in out.columns
+
+
+def test_with_growth_columns_small_and_dropped_columns(project):
+    p = project
+    gdf = _export_gdf(p)
+    gdf["grows_from_auto"] = [[], []]
+    gdf["below_min"] = [True, False]
+    out = growth_index.with_growth_columns(p, "oct", gdf, load=_loader(_stores(p)))
+    assert list(out["kind"]) == ["growth_small", "new"]
+    assert "grows_from_auto" not in out.columns and "below_min" not in out.columns
+    assert "grows_from_auto" in gdf.columns  # the argument is not changed
+
+
+def test_export_old_set_growth_columns(project):
+    # Review Focus 1: a store from before growth links has no growth columns
+    p = project
+    gdf = _gdf([_row(1, "Not reviewed", CUR), _row(2, "Confirmed", AUG7)]).drop(columns=["grows_from"])
+    out = growth_index.with_growth_columns(p, "oct", gdf, load=_loader({}))
+    assert list(out["kind"]) == ["new", "new"]
+    assert list(out["grows_from"]) == ["", ""]
+    assert list(out["history_area_ha"]) == [0.0, 0.0]
+
+
+def test_with_growth_columns_empty_arrow_list_column(project):
+    import pyarrow as pa
+
+    p = project
+    gdf = _gdf([_row(1, "Not reviewed", CUR)])
+    gdf["grows_from"] = pa.array([[]], type=pa.list_(pa.null())).to_pandas()
+    out = growth_index.with_growth_columns(p, "oct", gdf, load=_loader({}))
+    assert out["grows_from"].iloc[0] == "" and out["kind"].iloc[0] == "new"
+
+
+def test_with_growth_columns_loads_each_set_once(project):
+    p = project
+    calls = []
+    gdf = _gdf([_row(1, "Not reviewed", CUR, links=[_link(p, "sep", 12)]),
+                _row(2, "Not reviewed", AUG7), _row(3, "Not reviewed", SEP15)])
+    growth_index.with_growth_columns(p, "oct", gdf, load=_loader(_stores(p), calls))
+    assert sorted(calls) == ["aug", "sep"]
