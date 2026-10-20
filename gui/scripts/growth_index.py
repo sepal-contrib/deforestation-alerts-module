@@ -51,8 +51,9 @@ PERIOD_PALETTE: tuple[str, ...] = (
     "#1de9b6",  # teal
     "#ffc400",  # amber
 )
-#: The colour every period older than the palette's eight shares.
-OLDER_GREY = "#9e9e9e"
+#: The colour every period older than the palette's eight shares: a blue-grey,
+#: not the legends' "Not reviewed" grey (tests/test_legend_specs.py).
+OLDER_GREY = "#b0bec5"
 
 State = Literal["auto", "linked", "via", "none", "broken"]
 

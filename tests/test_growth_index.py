@@ -141,7 +141,7 @@ def test_period_colors_grey_after_eight():
     colors = growth_index.period_colors(ids)
     assert [colors[i] for i in ids[:8]] == list(growth_index.PERIOD_PALETTE)
     assert len(set(growth_index.PERIOD_PALETTE)) == 8
-    assert colors["p8"] == colors["p9"] == growth_index.OLDER_GREY == "#9e9e9e"
+    assert colors["p8"] == colors["p9"] == growth_index.OLDER_GREY == "#b0bec5"
 
 
 def test_cache_reloads_after_store_write(project):
