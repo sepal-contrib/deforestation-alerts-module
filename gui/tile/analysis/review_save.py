@@ -11,12 +11,16 @@ writes nothing.
 import ee
 
 from deforestation_alerts.errors import KeyedError
+import pandas as pd
+
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.growth import parse_link
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, VERDICTS
+from deforestation_alerts.project.store_schema import GROWS_FROM
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
-from gui.scripts import questions
+from gui.scripts import growth_index, questions
 from gui.scripts import set_store
 
 
@@ -73,6 +77,31 @@ def refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
         raise SaveRefused(key="analysis_tile.export_labels.save_set_changed")
     if set_store.generation_changed(alertas_gdf, paths.store_path(str(target.folder))):
         raise SaveRefused(key="analysis_tile.export_labels.save_store_changed")
+
+
+def kept_links(alert, app_tile_model, target) -> list[str]:
+    """The draft links a Save stores: those that parse and still resolve.
+    A link to a re-run set, a missing alert or a False Positive parent is
+    dropped (spec §5.3). Reads the other sets' stores, so it runs on the save
+    worker. Without a project to resolve them against only the parse is checked."""
+    draft = [link for link in (getattr(alert, "links", None) or ()) if parse_link(link) is not None]
+    state = getattr(app_tile_model, "app_state", None)
+    p = state.project.value if state is not None else None
+    if not draft or p is None or target is None:
+        return draft
+    graph = growth_index.graph_for(p, target.alert_set.id, alert.alerts)
+    return [link for link in draft if not graph.is_broken(link)]
+
+
+def _put_links(gdf, alert_id, links) -> None:
+    """Write one row's ``grows_from``. The column is object dtype: a store
+    whose Integrate linked nothing has it as ``list<null>``, which reads back
+    as empty arrays and cannot take a list of strings."""
+    if GROWS_FROM not in gdf.columns:
+        gdf[GROWS_FROM] = pd.Series([[] for _ in range(len(gdf))], index=gdf.index, dtype="object")
+    elif gdf[GROWS_FROM].dtype != object:
+        gdf[GROWS_FROM] = gdf[GROWS_FROM].astype(object)
+    gdf.at[alert_id, GROWS_FROM] = list(links)
 
 
 def review_status(confirmation) -> str:
@@ -154,6 +183,7 @@ def save_review(alert, app_tile_model):
     # from and the next save persists whole. Applied in one pass at the end,
     # once the store write has landed.
     updates = {"status": status, **answer_updates}
+    links = kept_links(alert, app_tile_model, target)
 
     # before/after image name + info. Guarded (fix round 1): both are None
     # until an image is actually picked for this alert (``AnalysisState``;
@@ -222,6 +252,7 @@ def save_review(alert, app_tile_model):
             staged[column_name] = ""  # a question added after this set was made
     for column_name, value in updates.items():
         staged.at[actual_alert_id, column_name] = value
+    _put_links(staged, actual_alert_id, links)
     write_store(staged, app_tile_model, folder=folder, target=target)
 
     # Published to the live table (in place, faithful to OLD: Overview and the
@@ -232,6 +263,7 @@ def save_review(alert, app_tile_model):
             alertas_gdf[column_name] = ""
     for column_name, value in updates.items():
         alertas_gdf.at[actual_alert_id, column_name] = value
+    _put_links(alertas_gdf, actual_alert_id, links)
     # With the store generation the write stamped on the copy
     # (``set_store.stamp_generation``): the alerts on hand ARE what is on disk
     # now, and without the stamp the live table still claims the generation

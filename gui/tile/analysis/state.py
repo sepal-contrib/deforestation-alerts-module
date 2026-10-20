@@ -8,6 +8,7 @@ reactive must notice "a new object" without comparing contents.
 
 import threading
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Optional
 
@@ -66,6 +67,19 @@ class AnalysisState:
     #: unreviewed one on nothing (spec U13). The Questions section writes it,
     #: a Save reads it at the click (``capture_alert``).
     answers: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
+    #: the growth links ticked for this alert (``"<set>#<id>@<run>"``): the
+    #: draft a Save writes to ``grows_from``, seeded from the row. A change
+    #: goes through ``set_links``, which marks the alert unsaved.
+    links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
+    #: the links Integrate found for this alert (``grows_from_auto``), what
+    #: "Reset to automatic" returns the draft to
+    auto_links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
+    #: the History row's numbers for the draft links (None: no history); the
+    #: Earlier alerts section fills it from a worker
+    history: solara.Reactive = field(default_factory=_identity)
+    #: the detection windows (start, end, as year fractions) of the linked
+    #: parents, which the timeline marks; filled with ``history``
+    parent_windows: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
     #: whether the reviewer changed the verdict, an answer or the polygon
     #: since the last save of THIS alert. Cleared by ``reset_alert`` (an alert
     #: change forgets it) and by a save that wrote.
@@ -139,6 +153,10 @@ class AnalysisState:
             self.prediction_files.set({})
             self.verdict.set(None)
             self.answers.set({})
+            self.links.set(())
+            self.auto_links.set(())
+            self.history.set(None)
+            self.parent_windows.set(())
             self.dirty.set(False)
             self.edit_rev.set(0)
             self.drawing_unapplied.set(False)
@@ -233,6 +251,7 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
             "status": analysis.verdict.value,
             "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
             "questions": list(p.questions) if p is not None else [],
+            "links": tuple(analysis.links.value),
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,
@@ -252,6 +271,15 @@ def touch(analysis: AnalysisState) -> None:
     """
     analysis.dirty.set(True)
     analysis.edit_rev.set(analysis.edit_rev.value + 1)
+
+
+def set_links(analysis: AnalysisState, links: Sequence[str]) -> None:
+    """Replace the draft growth links (duplicates dropped, order kept) and mark
+    the alert unsaved, only when they changed."""
+    new = tuple(dict.fromkeys(links))
+    if new != tuple(analysis.links.value):
+        analysis.links.set(new)
+        touch(analysis)
 
 
 def imagery_changed(analysis: AnalysisState) -> None:

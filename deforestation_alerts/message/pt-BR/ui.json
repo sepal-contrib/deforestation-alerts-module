@@ -146,7 +146,19 @@
       "source": "Fonte",
       "detected": "Detectado",
       "status": "Status",
-      "range": "{first} → {last}"
+      "range": "{first} → {last}",
+      "kind": "Tipo",
+      "history": "Histórico",
+      "kind_new": "Nova",
+      "kind_growth": "Crescimento",
+      "kind_growth_small": "Crescimento · abaixo da área mínima",
+      "kind_new_small": "Nova · abaixo da área mínima",
+      "history_text": {
+        "one": "{n} alerta · {confirmed} ha confirmados desde {since}",
+        "many": "{n} de alertas · {confirmed} ha confirmados desde {since}",
+        "other": "{n} alertas · {confirmed} ha confirmados desde {since}"
+      },
+      "history_unreviewed": " (+{ha} ha não revisados)"
     },
     "queue": {
       "counter": "{index} / {total}",

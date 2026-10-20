@@ -146,7 +146,18 @@
       "source": "Source",
       "detected": "Detected",
       "status": "Status",
-      "range": "{first} → {last}"
+      "range": "{first} → {last}",
+      "kind": "Kind",
+      "history": "History",
+      "kind_new": "New",
+      "kind_growth": "Growth",
+      "kind_growth_small": "Growth · under minimum area",
+      "kind_new_small": "New · under minimum area",
+      "history_text": {
+        "one": "{n} alert · {confirmed} ha confirmed since {since}",
+        "other": "{n} alerts · {confirmed} ha confirmed since {since}"
+      },
+      "history_unreviewed": " (+{ha} ha not reviewed)"
     },
     "queue": {
       "counter": "{index} / {total}",

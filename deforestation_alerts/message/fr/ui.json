@@ -146,7 +146,19 @@
       "source": "Source",
       "detected": "Détectée",
       "status": "Statut",
-      "range": "{first} → {last}"
+      "range": "{first} → {last}",
+      "kind": "Type",
+      "history": "Historique",
+      "kind_new": "Nouvelle",
+      "kind_growth": "Extension",
+      "kind_growth_small": "Extension · sous la surface minimale",
+      "kind_new_small": "Nouvelle · sous la surface minimale",
+      "history_text": {
+        "one": "{n} alerte · {confirmed} ha confirmés depuis {since}",
+        "many": "{n} d’alertes · {confirmed} ha confirmés depuis {since}",
+        "other": "{n} alertes · {confirmed} ha confirmés depuis {since}"
+      },
+      "history_unreviewed": " (+{ha} ha non examinés)"
     },
     "queue": {
       "counter": "{index} / {total}",
