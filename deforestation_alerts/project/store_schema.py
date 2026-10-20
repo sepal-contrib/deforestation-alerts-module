@@ -23,6 +23,14 @@ REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info",
 #: The column an evaluator split writes (``project.split``, spec §3).
 EVALUATOR = "evaluator"
 
+#: The columns Integrate writes for growth alerts (``project.growth``): the
+#: links to the parents it grows from, the automatic part of them, and whether
+#: the alert is under the minimum size.
+GROWS_FROM = "grows_from"
+GROWS_FROM_AUTO = "grows_from_auto"
+BELOW_MIN = "below_min"
+GROWTH_COLUMNS = (GROWS_FROM, GROWS_FROM_AUTO, BELOW_MIN)
+
 #: Every column a store carries before its attribute layers and its questions:
 #: ``alert_table.convert_to_geopandas`` on the vectorizer's output, plus the ids.
 STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sources",
@@ -30,4 +38,4 @@ STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sour
                  "alert_polygon", "description", "admin1", "admin2", "admin3", *ID_COLUMNS)
 
 #: The names no attribute column and no question key may take.
-RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, EVALUATOR})
+RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, EVALUATOR, *GROWTH_COLUMNS})
