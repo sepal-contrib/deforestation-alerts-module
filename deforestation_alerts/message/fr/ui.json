@@ -170,7 +170,8 @@
       "next": "Suivante",
       "jump": "Aller au numéro d'alerte",
       "go": "Aller",
-      "next_unreviewed": "Prochaine alerte non révisée"
+      "next_unreviewed": "Prochaine alerte non révisée",
+      "next_growth": "Prochaine alerte d'extension"
     },
     "questionarie": {
       "confirmation_q": "Est-ce une véritable alerte ?",

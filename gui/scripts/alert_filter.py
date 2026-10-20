@@ -10,6 +10,8 @@ columns read differently:
   counted once under each;
 - ``status`` reads every unreviewed row (empty, NaN, ``"Not reviewed"``,
   ``review_status.is_reviewed``) as ``"Not reviewed"``;
+- ``kind`` (growth alerts, never stored) is computed from ``grows_from`` and
+  ``below_min`` by ``kinds_of``; an old set is all ``"new"``;
 - ``evaluator`` (the split's column) reads a store without it as all
   unassigned (``""``).
 
@@ -26,11 +28,22 @@ import numpy as np
 import pandas as pd
 from geopandas.array import GeometryDtype
 
+from deforestation_alerts.project.growth import (
+    KIND_COLUMN,
+    KIND_GROWTH,
+    KIND_GROWTH_SMALL,
+    KIND_NEW,
+    KIND_NEW_SMALL,
+    KINDS,
+    kind_of,
+    links_of,
+)
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project.questions import column as question_column
 from deforestation_alerts.project.questions import is_answer_column
 from deforestation_alerts.project.review_status import NOT_REVIEWED, is_reviewed, reviewed_mask
 from deforestation_alerts.project.split import EVALUATOR_COLUMN
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
 from gui.i18n import t
 from gui.scripts import questions as answers
 from gui.scripts.legend_specs import STATUS_CLASSES
@@ -44,6 +57,11 @@ MAX_VALUES = 50
 #: Columns never offered: ids, the alert's own measures and dates, its
 #: sources, and the image picks a save stores.
 _EXCLUDED = frozenset({"alert_id", "set_id", "alert_sources", "alert_type_unique", "count", "area_ha"})
+
+#: kind -> the key that names it
+_KIND_KEYS = {KIND_NEW: "analysis_tile.facts.kind_new", KIND_GROWTH: "analysis_tile.facts.kind_growth",
+              KIND_GROWTH_SMALL: "analysis_tile.facts.kind_growth_small",
+              KIND_NEW_SMALL: "analysis_tile.facts.kind_new_small"}
 
 #: status code -> the legend key that names it (as ``context`` derives it)
 _STATUS_KEYS = {code: key for code, _, key in STATUS_CLASSES}
@@ -110,9 +128,20 @@ def _row_codes(series, q) -> list:
     return out
 
 
+def kinds_of(gdf) -> pd.Series:
+    """Each row's kind (``growth.KINDS``); every row ``"new"`` for a set
+    without the growth columns."""
+    n = len(gdf)
+    links = gdf[GROWS_FROM] if GROWS_FROM in gdf.columns else [None] * n
+    small = gdf[BELOW_MIN] if BELOW_MIN in gdf.columns else [None] * n
+    return pd.Series([kind_of(links_of(a), b) for a, b in zip(links, small)], index=gdf.index, dtype=object)
+
+
 def _column_texts(gdf, col: str) -> list:
     """Each row's text in a column that is not a question's."""
     n = len(gdf)
+    if col == KIND_COLUMN:
+        return kinds_of(gdf).tolist()
     if col not in gdf.columns:
         return [NOT_REVIEWED if col == STATUS_COLUMN else ""] * n
     if col == STATUS_COLUMN:
@@ -164,6 +193,9 @@ def filter_columns(gdf, questions) -> list:
     if STATUS_COLUMN in cols:
         out.append(ColumnChoice(STATUS_COLUMN, t("analysis_tile.facts.status")))
     taken = {EVALUATOR_COLUMN, STATUS_COLUMN}
+    if len(gdf) and (kinds_of(gdf) != KIND_NEW).any():
+        out.append(ColumnChoice(KIND_COLUMN, t("analysis_tile.facts.kind")))
+    taken.add(KIND_COLUMN)  # virtual: a stored column of that name is not offered twice
     for q in questions or []:
         col = question_column(q)
         if col in cols and col not in taken:
@@ -205,6 +237,8 @@ def value_choices(gdf, choice: ColumnChoice, questions) -> list:
         return [(c, answers.option_label(by_code[c]) if c in by_code else (c or _empty_label(col)), counts[c])
                 for c in order]
     counts = Counter(_column_texts(gdf, col))
+    if col == KIND_COLUMN:
+        return [(k, t(_KIND_KEYS[k]), counts[k]) for k in KINDS if k in counts]
     if col == STATUS_COLUMN:
         known = [s for s in STATUS_CODES if s in counts]
         rest = sorted((s for s in counts if s not in STATUS_CODES), key=str.casefold)
@@ -241,6 +275,22 @@ def prev_match(mask, pos: int) -> Optional[int]:
     hits = np.flatnonzero(np.asarray(mask, dtype=bool))
     before = hits[hits < pos]
     return int(before[-1]) if len(before) else None
+
+
+def next_growth_match(gdf, mask, pos: int) -> Optional[int]:
+    """The first matching growth alert (``growth`` or ``growth_small``) after
+    ``pos``, wrapping round to the start, never ``pos`` itself; None when
+    there is none."""
+    if gdf is None or not len(gdf):
+        return None
+    grows = np.asarray(mask, dtype=bool) & kinds_of(gdf).isin([KIND_GROWTH, KIND_GROWTH_SMALL]).to_numpy()
+    n = len(grows)
+    start = max(pos, -1)
+    for step in range(1, n + 1):
+        i = (start + step) % n
+        if i != pos and grows[i]:
+            return i
+    return None
 
 
 def _todo(gdf, mask) -> np.ndarray:

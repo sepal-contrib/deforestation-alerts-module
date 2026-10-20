@@ -170,7 +170,8 @@
       "next": "Siguiente",
       "jump": "Ir al número de alerta",
       "go": "Ir",
-      "next_unreviewed": "Siguiente alerta sin revisar"
+      "next_unreviewed": "Siguiente alerta sin revisar",
+      "next_growth": "Siguiente alerta de crecimiento"
     },
     "questionarie": {
       "confirmation_q": "¿Es verdadera la alerta?",

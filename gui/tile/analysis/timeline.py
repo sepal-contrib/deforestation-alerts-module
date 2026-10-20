@@ -32,6 +32,7 @@ import ipyvuetify as v
 import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
+from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_LANDSAT,
     SOURCE_PLANET,
@@ -39,6 +40,7 @@ from deforestation_alerts.scripts.scene_index import (
     SceneTables,
 )
 from gui.i18n import format_date, t
+from gui.scripts.growth_index import OLDER_GREY
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.state import IMAGE_AREAS, imagery_changed
 from gui.tile.analysis.widgets import replace_children
@@ -175,6 +177,14 @@ def can_widen_forward(window, now: date) -> bool:
         return True
     following = scene_query.shift_months(window[1], 1)
     return (following.year, following.month) <= (now.year, now.month)
+
+
+def _julian_date(julian) -> Optional[date]:
+    """An alert's Julian date (``2026.061``) as a ``date``, or None."""
+    try:
+        return date.fromisoformat(convert_julian_to_date(julian))
+    except (TypeError, ValueError):
+        return None
 
 
 def alert_window(ctx, project) -> tuple[Optional[date], Optional[date]]:
@@ -558,9 +568,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     blocks = v.Html(tag="div", style_=f"position: absolute; left: 0; right: 0; top: {RAIL_H}px; bottom: 0; "
                                       "pointer-events: none")
     window_band = v.Html(tag="div", style_="display: none")
+    #: the grey bands of the linked earlier alerts' dates (growth alerts, spec §6.5)
+    parent_bands = v.Html(tag="div", style_="display: none", children=[])
     strip = HandleStrip(on_pick=lambda side, rid: _on_drop(side, rid), rail_h=RAIL_H, lane_h=LANE_H)
     track = v.Html(tag="div", style_=_TRACK_STYLE,
-                   children=[strip, window_band, lane, lane_axis, blocks])
+                   children=[strip, parent_bands, window_band, lane, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
     chips = v.Html(tag="div", style_="display: flex; flex: 0 0 auto; align-items: center; gap: 8px", children=[])
     status = v.Html(tag="div", style_=f"font-size: 11.5px; color: {MUTED}", children=[])
@@ -871,6 +883,22 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                               f"border-left: 1px dashed {SELECTED_COLOR}aa; "
                               f"border-right: 1px dashed {SELECTED_COLOR}aa; pointer-events: none")
 
+    def _render_parent_bands(segs):
+        """One grey band per linked parent window, under the gold one."""
+        bands = []
+        for lo, hi in analysis.parent_windows.value or ():
+            d0, d1 = _julian_date(lo), _julian_date(hi)
+            if d0 is None or d1 is None:
+                continue
+            x0 = scene_query.x_for(segs, d0)
+            x1 = scene_query.x_for(segs, d1, end=True)
+            bands.append(v.Html(tag="div", style_=(
+                f"position: absolute; left: {_pct(x0):.3f}%; width: {_pct(x1 - x0):.3f}%; "
+                f"top: {RAIL_H}px; bottom: 0; background: {OLDER_GREY}26; "
+                f"border: 1px dashed {OLDER_GREY}aa; pointer-events: none")))
+        replace_children(parent_bands, bands)
+        parent_bands.style_ = "display: contents" if bands else "display: none"
+
     def _render_axis(segs):
         kids = [v.Html(tag="span", style_="position: absolute; left: 0; right: 0; top: 0; height: 1px; "
                                           "background: var(--dat-edge)")]
@@ -1090,6 +1118,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         strip.before = strip.after = None
         strip.gap = ""
         window_band.style_ = "display: none"
+        replace_children(parent_bands, [])
+        parent_bands.style_ = "display: none"
 
     def _make_room_for(ids):
         """Switch on the collections and widen the view the saved picks need
@@ -1224,6 +1254,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         _render_band(segs, a0, a1)
+        _render_parent_bands(segs)
         _render_lane(sel, segs)
         _render_strip(sel, segs)
         _render_axis(segs)
@@ -1385,7 +1416,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     ])
 
     for reactive in (app_state.scene_index, app_state.scene_manifest, app_state.scene_index_error,
-                     app_state.scene_index_pending, widgets.imagery_ctx):
+                     app_state.scene_index_pending, widgets.imagery_ctx, analysis.parent_windows):
         reactive.subscribe(render)
     _publish_filter()
     render()

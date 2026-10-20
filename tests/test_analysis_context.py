@@ -138,7 +138,7 @@ def test_the_counter_opens_the_jump_menu_and_the_field_is_one_based(tmp_path, mo
     s = _state(tmp_path, monkeypatch)
     field = v.TextField(v_model=None)
     card = context.build_context(s, field)
-    _, _, jump, menu, go, _ = context.nav_widgets(card)
+    _, _, jump, menu, go, _, _ = context.nav_widgets(card)
     counter, _, _ = context.queue_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
 
@@ -175,7 +175,7 @@ def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
 
     s = _state(tmp_path, monkeypatch)
     card = context.build_context(s, v.TextField(v_model=None))
-    *_, menu, _, unreviewed = context.nav_widgets(card)
+    *_, menu, _, unreviewed, _growth = context.nav_widgets(card)
     s.alerts_gdf.set(gdf)
     s.actual_alert_id.value = 0
     assert not unreviewed.disabled
@@ -369,3 +369,19 @@ def test_history_row_shows_summary(tmp_path, monkeypatch):
     assert slots["history"].children[0].endswith("(+1.5 ha not reviewed)")
     analysis.history.set(None)
     assert slots["history_row"].style_ == "display: none;"
+
+
+def test_kind_chip_colour_purple_for_growth_only(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    chip = getattr(card, context._SLOTS)["kind_chip"]
+    gdf = _alerts(["Not reviewed"] * 3)
+    gdf["grows_from"] = [["old#3@20250101000000000000"], ["old#3@20250101000000000000"], []]
+    gdf["below_min"] = [False, True, True]
+    s.alerts_gdf.set(gdf)
+    colours = {}
+    for index in range(3):
+        s.actual_alert_id.value = index
+        colours[index] = chip.color
+    assert colours[0] == colours[1] == context.GROWTH_PURPLE
+    assert colours[2] != context.GROWTH_PURPLE and not (colours[2] or "").startswith("#")

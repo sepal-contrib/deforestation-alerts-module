@@ -169,7 +169,8 @@
       "next": "Next",
       "jump": "Jump to alert number",
       "go": "Go",
-      "next_unreviewed": "Next unreviewed alert"
+      "next_unreviewed": "Next unreviewed alert",
+      "next_growth": "Next growth alert"
     },
     "questionarie": {
       "confirmation_q": "Is this a true alert?",
