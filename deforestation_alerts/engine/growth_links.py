@@ -16,22 +16,28 @@ from shapely import STRtree
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import paths
-from deforestation_alerts.project.growth import Candidate, candidates_of_set
+from deforestation_alerts.project.growth import Candidate, is_candidate, rows_of_set
 from deforestation_alerts.project.models import GridSpec, Period, Project
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 
 
-def project_candidates(p: Project, pdir: Path, period: Period) -> list[Candidate]:
-    """The parent candidates of ``period``: every earlier set's loss-verdict
-    alerts, as their stores hold them now. A set whose store is missing gives none."""
+def project_rows(p: Project, pdir: Path, period: Period) -> list[Candidate]:
+    """Every alert of every earlier set of ``period`` (``growth.rows_of_set``),
+    as their stores hold them now. A set whose store is missing gives none."""
     out: list[Candidate] = []
     for s in earlier_sets(p, period):
         store = paths.resolve(pdir, s.store_rel_path)
         if not store.exists():
             continue
-        out += candidates_of_set(s, p.periods[s.period_id], load_gdf_from_parquet(store))
+        out += rows_of_set(s, p.periods[s.period_id], load_gdf_from_parquet(store))
     return out
+
+
+def project_candidates(p: Project, pdir: Path, period: Period) -> list[Candidate]:
+    """The parent candidates of ``period``: every earlier set's loss-verdict
+    alerts, as their stores hold them now. A set whose store is missing gives none."""
+    return [c for c in project_rows(p, pdir, period) if is_candidate(c.node)]
 
 
 def _grid_shapes(cands: Sequence[Candidate], grid: GridSpec) -> gpd.GeoSeries:

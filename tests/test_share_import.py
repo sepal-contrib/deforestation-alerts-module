@@ -24,10 +24,12 @@ from tests._share_helpers import (
     CREATOR,
     P1,
     SET1,
+    SET2,
     SPLIT_ID,
     alerts_frame,
     make_copy,
     make_creator,
+    make_growth_creator,
     rezip,
     zip_members,
 )
@@ -291,3 +293,44 @@ def test_a_destination_outside_the_folder_is_refused(tmp_path):
         with pytest.raises(ShareError) as e:
             share._inside(folder, rel)
         assert (e.value.key, e.value.params) == ("share.err.unsafe_member", {"member": rel})
+
+
+# ---- the earlier alerts (spec 2026-10-20 §6.6) ----------------------------------------------
+
+@pytest.fixture
+def growth_package(data_root, tmp_path):
+    from gui.scripts import growth_index
+
+    growth_index.clear_cache()
+    p, pdir = make_growth_creator(data_root)
+    yield build_package(p, pdir, SET2, "Ana", AOI_FC, tmp_path / "out", app_version=APP_VERSION)
+    growth_index.clear_cache()
+
+
+def test_copy_reads_snapshot(growth_package, tmp_path):
+    from deforestation_alerts.project.growth import read_snapshot
+    from gui.scripts import growth_index
+
+    copy = import_package(growth_package)  # the data directory: growth_index reads the copy from there
+    snap = paths.project_dir(copy.name) / paths.EARLIER_SNAPSHOT
+    assert paths.EARLIER_SNAPSHOT == "earlier_alerts.parquet" and snap.is_file()
+    (tmp_path / "m.parquet").write_bytes(zip_members(growth_package)[share.EARLIER_MEMBER])
+    assert snap.read_bytes() == (tmp_path / "m.parquet").read_bytes()
+    assert copy.review_copy.snapshot_at == peek_header(growth_package).created_at
+    assert growth_index.candidates_for(copy, SET2) == read_snapshot(snap)
+    assert [c.key for c in growth_index.candidates_for(copy, SET2)] == [f"{SET1}#0", f"{SET1}#2"]
+
+
+def test_old_package_without_snapshot_imports(growth_package, tmp_path):
+    from gui.scripts import growth_index
+
+    old = rezip(growth_package, tmp_path / "old.zip", drop=(share.EARLIER_MEMBER,))
+    copy = import_package(old)
+    assert copy.review_copy.snapshot_at is None
+    assert not (paths.project_dir(copy.name) / paths.EARLIER_SNAPSHOT).exists()
+    assert growth_index.candidates_for(copy, SET2) == []
+
+
+def test_an_unreadable_snapshot_is_refused(growth_package, tmp_path, evaluator_root):
+    bad = rezip(growth_package, tmp_path / "bad.zip", replace={share.EARLIER_MEMBER: b"garbage"})
+    assert _refused(bad, evaluator_root).key == "share.err.bad_store"

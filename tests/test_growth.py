@@ -122,3 +122,43 @@ def test_history_area_unions_parallel_sets():
     assert abs(h.confirmed_ha - 1.0) < 0.05
     assert abs(h.unreviewed_ha - 1.0) < 0.05
     assert h.first_period_start == date(2026, 8, 1)
+
+
+# ---- the review package's snapshot of earlier alerts (spec §6.6) -------------
+
+def _row_of(sid, aid, status, links=(), shape=None, run="r"):
+    from deforestation_alerts.project.growth import Candidate
+
+    return Candidate(_node(sid, aid, status, links, shape), f"{run}{sid}")
+
+
+def test_snapshot_round_trip(tmp_path):
+    from dataclasses import replace
+
+    from deforestation_alerts.project.growth import read_snapshot, write_snapshot
+
+    rows = [_row_of("A", 1, CONFIRMED, shape=_sq(-57)),
+            _row_of("A", 2, FALSE_POSITIVE, links=["Z#1@rZ", "Z#2@rZ"], shape=_sq(-56.9)),
+            _row_of("B", 3, NOT_REVIEWED, shape=_sq(-56.8))]
+    rows[0] = replace(rows[0], node=replace(rows[0].node, date_min=2026.6, date_max=2026.62, area_ha=2.5))
+    path = write_snapshot(rows, tmp_path / "earlier_alerts.parquet")
+    back = read_snapshot(path)
+    assert back == rows
+    assert back[1].node.links == ("Z#1@rZ", "Z#2@rZ") and back[2].node.date_min is None
+    assert read_snapshot(write_snapshot([], tmp_path / "empty.parquet")) == []
+
+
+def test_snapshot_rows_hold_the_candidates_and_every_linked_row():
+    """Ruling 12: the eligible rows, plus every row named by a link (from the
+    shared set's alerts or from a row already in), whatever its status."""
+    from deforestation_alerts.project.growth import snapshot_rows
+
+    pool = [_row_of("A", 1, NOT_REVIEWED),                       # named via B#2 only
+            _row_of("A", 2, CONFIRMED),                          # a candidate
+            _row_of("A", 3, NOT_REVIEWED),                       # named by nothing
+            _row_of("B", 1, FALSE_POSITIVE),                     # named by the shared set
+            _row_of("B", 2, FALSE_POSITIVE, links=["A#1@rA"]),   # named by a candidate
+            _row_of("B", 3, NEED_REVISION, links=["B#2@rB", "gone#1@x"])]
+    got = snapshot_rows(pool, ["B#1@rB", "nonsense"])
+    assert [r.key for r in got] == ["A#2", "B#3", "A#1", "B#1", "B#2"]
+    assert {r.key: r.node.status for r in got}["B#1"] == FALSE_POSITIVE

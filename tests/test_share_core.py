@@ -74,7 +74,7 @@ def _refusal(path, required=PACKAGE_REQUIRED, optional=PACKAGE_OPTIONAL) -> Shar
 def test_the_allow_lists_are_the_spec_members():
     assert PACKAGE_REQUIRED == {"share.json", "project.json", "aoi.geojson", "alerts/alert_db.parquet"}
     assert PACKAGE_OPTIONAL == {"imagery/scenes.parquet", "imagery/tiles.parquet", "imagery/index.json",
-                                "template/report.docx"}
+                                "template/report.docx", "earlier_alerts.parquet"}
     assert RETURN_REQUIRED == {"share.json", "reviews.parquet"}
     assert share.HEADER_MEMBER == "share.json"
 
@@ -320,9 +320,10 @@ def test_the_return_file_name():
 def test_review_columns_follow_the_questions():
     qs = [*default_questions(), Question(key="cause", label="Cause"), Question(key="cause", label="Again")]
     assert review_columns(qs) == ["status", "description", "q_cause", "before_img", "before_img_info", "after_img",
-                                  "after_img_info", "admin1", "admin2", "admin3", "alert_polygon", "area_ha"]
+                                  "after_img_info", "admin1", "admin2", "admin3", "alert_polygon", "area_ha",
+                                  "grows_from"]
     assert review_columns([]) == ["status", "before_img", "before_img_info", "after_img", "after_img_info",
-                                  "admin1", "admin2", "admin3", "alert_polygon", "area_ha"]
+                                  "admin1", "admin2", "admin3", "alert_polygon", "area_ha", "grows_from"]
 
 
 # ---- value equality ------------------------------------------------------------------

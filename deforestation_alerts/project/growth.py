@@ -4,9 +4,10 @@ it. This module is the pure part: the link text, the alert kinds, the nodes
 and parent candidates read from a store, the link graph and the area of a
 group's history. It imports nothing from the UI."""
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import NamedTuple, Optional
 
 import numpy as np
@@ -145,7 +146,9 @@ class Node:
 
 @dataclass(frozen=True)
 class Candidate:
-    """A parent candidate: a node whose status is a loss verdict."""
+    """A parent candidate: a node whose status is a loss verdict
+    (``is_candidate``), with its set's run id. ``rows_of_set`` and a review
+    package's snapshot pair other rows the same way, to resolve links."""
 
     node: Node
     run_id: str
@@ -159,13 +162,14 @@ class Candidate:
         return self.node.link_to(self.run_id)
 
 
-def _number(row, name) -> Optional[float]:
-    if name not in row:
-        return None
-    value = row[name]
+def _float(value) -> Optional[float]:
     if value is None or value is pd.NA or pd.isna(value):
         return None
     return float(value)
+
+
+def _number(row, name) -> Optional[float]:
+    return _float(row[name]) if name in row else None
 
 
 def nodes_of_set(s: AlertSet, period: Period, gdf) -> list[Node]:
@@ -185,10 +189,20 @@ def nodes_of_set(s: AlertSet, period: Period, gdf) -> list[Node]:
     return nodes
 
 
-def candidates_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
+def is_candidate(n: Node) -> bool:
+    """A parent candidate's rule: a loss verdict with a shape."""
+    return n.status in LOSS_VERDICTS and n.shape is not None
+
+
+def rows_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
+    """Every row of a set with the set's run id, whatever its status (the
+    review package's snapshot holds such rows, ``snapshot_rows``)."""
     run_id = run_id_of(s)
-    return [Candidate(n, run_id) for n in nodes_of_set(s, period, gdf)
-            if n.status in LOSS_VERDICTS and n.shape is not None]
+    return [Candidate(n, run_id) for n in nodes_of_set(s, period, gdf)]
+
+
+def candidates_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
+    return [c for c in rows_of_set(s, period, gdf) if is_candidate(c.node)]
 
 
 class LinkGraph:
@@ -264,3 +278,74 @@ def history_area(nodes: Iterable[Node], crs: str) -> HistoryArea:
         unreviewed_ha=0.0 if unrev is None else unrev.area / 10_000,
         first_period_start=min((n.period_start for n in members), default=None),
     )
+
+
+# ---- the review package's earlier alerts (spec §6.6) --------------------------
+
+#: The snapshot's columns besides its geometry (the parent shape, EPSG:4326).
+SNAPSHOT_COLUMNS = ("set_id", "alert_id", "run_id", "period_id", "period_start", "period_end", "status",
+                    "area_ha", "date_min", "date_max", GROWS_FROM)
+
+
+def snapshot_rows(pool: Sequence[Candidate], seeds: Iterable[str]) -> list[Candidate]:
+    """What a review package carries of the earlier sets, ``pool`` (every row
+    of each, ``rows_of_set``): the parent candidates, then every row named by a
+    link, followed from ``seeds`` (the shared set's links) and from the rows
+    taken, whatever its status, so a copy resolves the links it holds as the
+    creator's project does (a false positive shows broken, an unreviewed one
+    counts as unreviewed). Pool order within each part."""
+    by_key = {r.key: r for r in pool}
+    taken = {r.key for r in pool if is_candidate(r.node)}
+    todo = [*seeds, *(lk for r in pool if r.key in taken for lk in r.node.links)]
+    named: set[str] = set()
+    while todo:
+        ref = parse_link(todo.pop())
+        key = node_key(ref.set_id, ref.alert_id) if ref is not None else None
+        if key is None or key in taken or key in named or key not in by_key:
+            continue
+        named.add(key)
+        todo.extend(by_key[key].node.links)
+    return [r for r in pool if r.key in taken] + [r for r in pool if r.key in named]
+
+
+def write_snapshot(rows: Sequence[Candidate], path: Path) -> Path:
+    """``rows`` as GeoParquet at ``path``: one row each (``SNAPSHOT_COLUMNS``,
+    the links ``";"``-joined), its parent shape the geometry."""
+    import geopandas as gpd
+
+    def _floats(values):
+        return pd.Series([np.nan if v is None else float(v) for v in values], dtype="float64")
+
+    frame = gpd.GeoDataFrame({
+        "set_id": [r.node.set_id for r in rows], "alert_id": [int(r.node.alert_id) for r in rows],
+        "run_id": [r.run_id for r in rows], "period_id": [r.node.period_id for r in rows],
+        "period_start": [r.node.period_start.isoformat() for r in rows],
+        "period_end": [r.node.period_end.isoformat() for r in rows],
+        "status": [r.node.status for r in rows], "area_ha": _floats(r.node.area_ha for r in rows),
+        "date_min": _floats(r.node.date_min for r in rows), "date_max": _floats(r.node.date_max for r in rows),
+        GROWS_FROM: [";".join(r.node.links) for r in rows],
+    }, geometry=gpd.GeoSeries([r.node.shape for r in rows], crs="EPSG:4326"))
+    frame.to_parquet(path, index=False)
+    return Path(path)
+
+
+def read_snapshot(path) -> list[Candidate]:
+    """The rows ``write_snapshot`` wrote, each a ``Candidate`` (its node and
+    its set's run id) whatever its status: only those ``is_candidate`` accepts
+    are offered to tick. Raises on a file that is not such a snapshot (a
+    missing column is a KeyError)."""
+    import geopandas as gpd
+
+    frame = gpd.read_parquet(path)
+    out = []
+    for row, shape in zip(frame[list(SNAPSHOT_COLUMNS)].itertuples(index=False), frame.geometry):
+        status = row.status if isinstance(row.status, str) and row.status else NOT_REVIEWED
+        node = Node(
+            set_id=str(row.set_id), alert_id=int(row.alert_id), period_id=str(row.period_id),
+            period_start=date.fromisoformat(str(row.period_start)),
+            period_end=date.fromisoformat(str(row.period_end)), status=status,
+            area_ha=_float(row.area_ha) or 0.0, date_min=_float(row.date_min), date_max=_float(row.date_max),
+            shape=_geometry(shape), links=tuple(links_of(row.grows_from)),
+        )
+        out.append(Candidate(node, str(row.run_id)))
+    return out

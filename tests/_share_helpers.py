@@ -179,3 +179,33 @@ def rezip(src, dst, *, replace=None, drop=()) -> Path:
     members = {k: v for k, v in zip_members(src).items() if k not in drop}
     members.update(replace or {})
     return write_zip(dst, members)
+
+
+#: The growth creator's earlier set (SET1, P1): two loss verdicts, a false
+#: positive and an unreviewed alert (spec 2026-10-20 §6.6).
+EARLIER_STATUSES = ("Confirmed", "False Positive", "Need revision", "Not reviewed")
+
+
+def make_growth_creator(root, name=CREATOR, *, links=None, earlier_links=None, statuses=EARLIER_STATUSES):
+    """A creator whose later set SET2 (P2) is split between Ana and Bo and
+    active, its alerts ``links`` (``{alert_id: [link, ...]}``) into SET1, whose
+    store holds ``statuses`` and ``earlier_links``. Returns ``(project, pdir)``."""
+    from deforestation_alerts.project.growth import run_id_of
+
+    p, pdir = make_creator(root, name, statuses=statuses, assigned=("Ana", "Bo") * 2, template=False, imagery=False)
+    run1 = run_id_of(p.alert_sets[SET1])
+    store1 = pdir / "legacy" / "alert_db.parquet"
+    earlier = alerts_frame(statuses, ("Ana", "Bo") * 2)
+    earlier["grows_from"] = [[lk.format(run=run1) for lk in (earlier_links or {}).get(i, [])]
+                             for i in range(len(statuses))]
+    save_gdf_to_parquet(earlier, store1)
+    split = EvaluatorSplit(split_id="b" * 32, evaluators=["Ana", "Bo"], created_at=NOW)
+    s2 = p.alert_sets[SET2].model_copy(update={"split": split})
+    p.alert_sets[SET2] = s2
+    p.active_set = SET2
+    later = alerts_frame(("Not reviewed",) * 4, ("Ana", "Bo") * 2, sid=SET2)
+    later["grows_from"] = [[lk.format(run=run1) for lk in (links or {}).get(i, [])] for i in range(4)]
+    later["grows_from_auto"] = [list(v) for v in later["grows_from"]]
+    save_gdf_to_parquet(later, paths.resolve(pdir, s2.store_rel_path))
+    io.save_project(p, root)
+    return p, pdir

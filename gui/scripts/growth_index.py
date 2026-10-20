@@ -21,20 +21,23 @@ import shapely.ops
 from pyproj import Transformer
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
-from deforestation_alerts.project import review_copy
+from deforestation_alerts.project import paths, review_copy
 from deforestation_alerts.project.growth import (
     Candidate,
     LinkGraph,
     Node,
     build_graph,
     history_area,
+    is_candidate,
     links_of,
     node_key,
     nodes_of_set,
     parse_link,
+    read_snapshot,
     run_id_of,
 )
-from deforestation_alerts.project.review_status import FALSE_POSITIVE, LOSS_VERDICTS
+from deforestation_alerts.project.review_status import FALSE_POSITIVE
+from deforestation_alerts.scripts.alert_store import store_generation
 from gui.scripts import set_store
 
 #: Earlier periods' colours, newest earlier period first (spec §6.3): bright
@@ -68,14 +71,24 @@ class _Entry(NamedTuple):
     metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
 
 
+class _Snapshot(NamedTuple):
+    rows: tuple             # every row of the package snapshot (growth.read_snapshot)
+    cands: tuple            # those offered to tick (growth.is_candidate)
+    metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
+
+
 #: ``{(project name, set id): (key, entry)}``; ``key`` is what the entry was read for.
 _cache: "dict[tuple, tuple[tuple, _Entry]]" = {}
+#: ``{project name: (key, snapshot)}``: a review copy's earlier alerts.
+_snapshots: "dict[str, tuple[tuple, _Snapshot]]" = {}
 _lock = threading.Lock()
+_NO_SNAPSHOT = _Snapshot((), (), None)
 
 
 def clear_cache() -> None:
     with _lock:
         _cache.clear()
+        _snapshots.clear()
 
 
 def _grid_epsg(p):
@@ -95,7 +108,7 @@ def _build(p, s, gdf) -> _Entry:
     nodes = tuple(nodes_of_set(s, period, gdf))
     run_id = run_id_of(s)
     # growth.candidates_of_set's rule, from the nodes already read (one pass over the rows)
-    cands = tuple(Candidate(n, run_id) for n in nodes if n.status in LOSS_VERDICTS and n.shape is not None)
+    cands = tuple(Candidate(n, run_id) for n in nodes if is_candidate(n))
     epsg = _grid_epsg(p)
     return _Entry(nodes, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
 
@@ -116,9 +129,37 @@ def _entry(p, s, load) -> _Entry:
     return entry
 
 
+def _snapshot(p) -> _Snapshot:
+    """A review copy's package snapshot (spec §6.6), read once per write of
+    its file (and grid epsg); empty without one."""
+    path = paths.project_dir(p.name) / paths.EARLIER_SNAPSHOT
+    key = (store_generation(path), _grid_epsg(p))
+    if key[0] is None:
+        return _NO_SNAPSHOT
+    with _lock:
+        hit = _snapshots.get(p.name)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+    rows = tuple(read_snapshot(path))
+    cands = tuple(c for c in rows if is_candidate(c.node))
+    epsg = _grid_epsg(p)
+    snap = _Snapshot(rows, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
+    with _lock:
+        _snapshots[p.name] = (key, snap)
+    return snap
+
+
+def snapshot_rows(p) -> list[Candidate]:
+    """Every row of a review copy's package snapshot, each with its set's run
+    id at packaging time, whatever its status: the earlier nodes of the copy's
+    link graph. ``[]`` without a snapshot."""
+    return list(_snapshot(p).rows)
+
+
 def snapshot_candidates(p) -> list[Candidate]:
-    """A review copy's parent candidates, from its package snapshot (spec §6.6)."""
-    return []
+    """A review copy's parent candidates, from its package snapshot (spec
+    §6.6); ``[]`` without one (a package from before the snapshot)."""
+    return list(_snapshot(p).cands)
 
 
 def _earlier(p, set_id: str) -> list:
@@ -131,7 +172,8 @@ def _candidate_pairs(p, set_id: str, load) -> list[tuple[Candidate, object]]:
     """``(candidate, its shape in the grid CRS or None)``, both read from the
     same cache entries (an entry rebuilt meanwhile cannot mismatch them)."""
     if review_copy.read_only(p):
-        return [(c, None) for c in snapshot_candidates(p)]
+        snap = _snapshot(p)
+        return list(zip(snap.cands, snap.metric) if snap.metric is not None else ((c, None) for c in snap.cands))
     pairs = []
     for s in _earlier(p, set_id):
         e = _entry(p, s, load)
@@ -153,14 +195,17 @@ def _with_links(nodes, alert_id, links):
             for n in nodes]
 
 
-def _parts(p, set_id, gdf_current, load, alert_id=None, links=None,
-           cands: Optional[list] = None) -> tuple[list[Node], dict[str, str]]:
+def _parts(p, set_id, gdf_current, load, alert_id=None, links=None) -> tuple[list[Node], dict[str, str]]:
+    """The graph's nodes and run ids. In a review copy the earlier ones are
+    the package snapshot's (every row it holds, so a link to a since false
+    positive or unreviewed parent resolves as in the creator's project), each
+    set with the run id it had at packaging time."""
     cur = p.alert_sets.get(set_id)
     period = p.periods.get(cur.period_id) if cur is not None else None
     nodes: list[Node] = []
     run_ids = {s.id: run_id_of(s) for s in p.alert_sets.values()}
     if review_copy.read_only(p):
-        for c in cands if cands is not None else snapshot_candidates(p):
+        for c in _snapshot(p).rows:
             nodes.append(c.node)
             run_ids.setdefault(c.node.set_id, c.run_id)
     for s in p.alert_sets.values():
@@ -178,7 +223,7 @@ def _graph(p, set_id, gdf_current, load, alert_id=None, links=None) -> LinkGraph
 def graph_for(p, set_id: str, gdf_current, *, load=set_store.load_set_alerts) -> LinkGraph:
     """The link graph of the whole project: ``set_id``'s live rows, every other
     set's stored rows (later and parallel sets too, so a history grows
-    forwards) and, in a review copy, the snapshot's candidates."""
+    forwards) and, in a review copy, the package snapshot's rows."""
     return _graph(p, set_id, gdf_current, load)
 
 
@@ -250,7 +295,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
     auto = set(links_of(list(auto)))
     pairs = _candidate_pairs(p, set_id, load)
     cands = [c for c, _ in pairs]
-    nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links, cands)
+    nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links)
     graph = build_graph(nodes, run_ids)
     shape = _row_shape(gdf_current, alert_id)
     crs = _metric_crs(p, shape)
