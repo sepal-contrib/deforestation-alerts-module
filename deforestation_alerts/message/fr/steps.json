@@ -468,6 +468,11 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… et {n} de plus",
       "replace_split": "La répartition entre évaluateurs et ses retours en attente seront écartés.",
+      "replace_links": {
+        "one": "{n} alerte d'une période ultérieure est liée à ce jeu ; son lien sera rompu.",
+        "many": "{n} d'alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus.",
+        "other": "{n} alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus."
+      },
       "job_title": "Intégrer et vectoriser",
       "step_combine": "Combinaison des sources",
       "step_vectorize": "Vectorisation des groupes",

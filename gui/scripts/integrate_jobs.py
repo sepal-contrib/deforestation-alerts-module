@@ -48,6 +48,7 @@ from deforestation_alerts.project.review_status import reviewed_mask
 from gui.i18n import format_number, t, tn
 from gui.scripts import set_store
 from gui.scripts.error_text import error_text
+from gui.scripts.growth_index import links_into
 from gui.scripts.legend_specs import STATUS_CLASSES
 from gui.scripts.notify_bridge import tracked_job
 from gui.store.project_writers import writing
@@ -181,14 +182,18 @@ def split_in(project, set_id: str) -> bool:
 def replace_message(project, set_id: str) -> Optional[str]:
     """The Replace confirmation's message (spec §3): one sentence for the
     reviewed alerts and one for the evaluator split a re-run of ``set_id``
-    would discard, each when it applies; None when nothing would be lost
-    (the run starts without asking)."""
+    would discard, and one for the growth links of later sets it would break
+    (growth spec §5.3), each when it applies; None when nothing would be lost
+    (the run starts without asking). Reads the other sets' stores (cached)."""
     parts = []
     reviewed = reviewed_in(project, set_id)
     if reviewed:
         parts.append(tn("steps.integrate.replace_message", reviewed))
     if split_in(project, set_id):
         parts.append(t("steps.integrate.replace_split"))
+    linked = links_into(project, set_id)
+    if linked:
+        parts.append(tn("steps.integrate.replace_links", linked))
     return " ".join(parts) or None
 
 

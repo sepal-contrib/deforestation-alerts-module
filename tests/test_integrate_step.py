@@ -144,6 +144,37 @@ def test_replace_message_names_what_a_rerun_discards():
     assert integrate_jobs.replace_message(p, "x") == tn("steps.integrate.replace_message", 2)
 
 
+def test_replace_message_warns_about_links_from_later_sets(tmp_path, monkeypatch):
+    """Growth spec §5.3: a re-run breaks the links later sets hold into it."""
+    from deforestation_alerts.project.growth import run_id_of
+    from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+    from gui.scripts import growth_index, set_store
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    growth_index.clear_cache()
+    feb = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    p.periods[JAN.id] = JAN
+    p.periods[feb.id] = feb
+    p.alert_sets["x"] = _set("x", 0)
+    p.alert_sets["y"] = _set("y", 0).model_copy(update={
+        "period_id": feb.id, "store_rel_path": f"periods/{feb.id}/sets/glad-l/alert_db.parquet"})
+    assert integrate_jobs.replace_message(p, "x") is None
+    link = f"x#0@{run_id_of(p.alert_sets['x'])}"
+    rows = [{"alert_id": i, "status": "Not reviewed", "grows_from": [link], "geometry": box(0, 0, 1, 1)}
+            for i in range(2)]
+    store = set_store.store_path(p, p.alert_sets["y"])
+    store.parent.mkdir(parents=True)
+    save_gdf_to_parquet(gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:4326"), store)
+    try:
+        assert integrate_jobs.replace_message(p, "x") == tn("steps.integrate.replace_links", 2)
+        p.alert_sets["x"] = p.alert_sets["x"].model_copy(update={"n_reviewed": 3})  # same run
+        assert integrate_jobs.replace_message(p, "x") == (
+            f"{tn('steps.integrate.replace_message', 3)} {tn('steps.integrate.replace_links', 2)}")
+    finally:
+        growth_index.clear_cache()
+
+
 def test_integrating_marks_one_set_of_one_project_and_always_releases():
     assert not integrate_jobs.is_integrating("d", "x")
     with integrate_jobs.integrating("d", "x"):

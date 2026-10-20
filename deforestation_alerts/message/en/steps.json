@@ -448,6 +448,10 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… and {n} more",
       "replace_split": "The evaluator split and its pending returns will be discarded.",
+      "replace_links": {
+        "one": "{n} alert of a later period is linked to this set; its link will break.",
+        "other": "{n} alerts of later periods are linked to this set; their links will break."
+      },
       "job_title": "Integrate & vectorize",
       "step_combine": "Combining sources",
       "step_vectorize": "Vectorizing clusters",

@@ -1,0 +1,349 @@
+"""The GUI's view of growth links (spec 2026-10-20 §5.3, §6.2–6.3). Solara-free.
+
+The Analysis "Earlier alerts" section, the History row, the Overview card,
+exports and the Integrate Replace warning all read the project's sets through
+here. Each set's nodes (``growth.nodes_of_set``) and parent candidates are read
+once and kept in a small LRU keyed by (set id, run id, store generation, grid
+epsg), as ``earlier_reviews._entry`` does; the candidates' shapes are also kept
+in the grid CRS so distances are cheap per alert.
+"""
+
+import threading
+from collections import OrderedDict
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from datetime import date
+from typing import Literal, NamedTuple, Optional
+
+import geopandas as gpd
+import shapely
+import shapely.ops
+from pyproj import Transformer
+
+from deforestation_alerts.engine.fingerprint import earlier_sets
+from deforestation_alerts.project import review_copy
+from deforestation_alerts.project.growth import (
+    Candidate,
+    LinkGraph,
+    Node,
+    build_graph,
+    history_area,
+    links_of,
+    node_key,
+    nodes_of_set,
+    parse_link,
+    run_id_of,
+)
+from deforestation_alerts.project.review_status import FALSE_POSITIVE, LOSS_VERDICTS
+from gui.scripts import set_store
+
+_MAX_SETS = 16
+
+#: Earlier periods' colours, newest earlier period first (spec §6.3): bright
+#: enough for satellite imagery, dark enough for SEPAL Light, distinct from the
+#: current alert's gold.
+PERIOD_PALETTE: tuple[str, ...] = (
+    "#00e5ff",  # cyan
+    "#ff9100",  # orange
+    "#f50057",  # magenta
+    "#76ff03",  # lime
+    "#2979ff",  # blue
+    "#d500f9",  # violet
+    "#1de9b6",  # teal
+    "#ffc400",  # amber
+)
+#: The colour every period older than the palette's eight shares.
+OLDER_GREY = "#9e9e9e"
+
+State = Literal["auto", "linked", "via", "none", "broken"]
+
+
+def period_colors(period_ids_newest_first: Sequence[str]) -> dict[str, str]:
+    return {pid: PERIOD_PALETTE[i] if i < len(PERIOD_PALETTE) else OLDER_GREY
+            for i, pid in enumerate(period_ids_newest_first)}
+
+
+class _Entry(NamedTuple):
+    nodes: tuple            # every row of the set, as growth.Node
+    cands: tuple            # the loss-verdict rows with a shape, as growth.Candidate
+    metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
+
+
+_cache: "OrderedDict[tuple, _Entry]" = OrderedDict()
+_lock = threading.Lock()
+
+
+def clear_cache() -> None:
+    with _lock:
+        _cache.clear()
+
+
+def _grid_epsg(p):
+    return p.grid.epsg if getattr(p, "grid", None) is not None else None
+
+
+def _to_crs(shapes, crs) -> list:
+    if not shapes:
+        return []
+    return list(gpd.GeoSeries(list(shapes), crs="EPSG:4326").to_crs(crs))
+
+
+def _build(p, s, gdf) -> _Entry:
+    period = p.periods.get(s.period_id)
+    if gdf is None or period is None or len(gdf) == 0:
+        return _Entry((), (), [] if _grid_epsg(p) else None)
+    nodes = tuple(nodes_of_set(s, period, gdf))
+    run_id = run_id_of(s)
+    # growth.candidates_of_set's rule, from the nodes already read (one pass over the rows)
+    cands = tuple(Candidate(n, run_id) for n in nodes if n.status in LOSS_VERDICTS and n.shape is not None)
+    epsg = _grid_epsg(p)
+    return _Entry(nodes, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
+
+
+def _entry(p, s, load) -> _Entry:
+    key = (s.id, run_id_of(s), set_store.store_generation(set_store.store_path(p, s)), _grid_epsg(p))
+    with _lock:
+        hit = _cache.get(key)
+        if hit is not None:
+            _cache.move_to_end(key)
+            return hit
+    entry = _build(p, s, load(p, s))
+    with _lock:
+        _cache[key] = entry
+        while len(_cache) > _MAX_SETS:
+            _cache.popitem(last=False)
+    return entry
+
+
+def snapshot_candidates(p) -> list[Candidate]:
+    """A review copy's parent candidates, from its package snapshot (spec §6.6)."""
+    return []
+
+
+def _earlier(p, set_id: str) -> list:
+    cur = p.alert_sets.get(set_id)
+    period = p.periods.get(cur.period_id) if cur is not None else None
+    return earlier_sets(p, period) if period is not None else []
+
+
+def candidates_for(p, set_id: str, *, load=set_store.load_set_alerts) -> list[Candidate]:
+    """The parent candidates of ``set_id``: the loss-verdict alerts of every
+    set of an earlier period, or a review copy's snapshot."""
+    if review_copy.read_only(p):
+        return snapshot_candidates(p)
+    return [c for s in _earlier(p, set_id) for c in _entry(p, s, load).cands]
+
+
+def _with_links(nodes, alert_id, links):
+    """``nodes`` with alert ``alert_id``'s links replaced by ``links`` (draft ticks)."""
+    if alert_id is None or links is None:
+        return nodes
+    return [replace(n, links=tuple(links_of(list(links)))) if n.alert_id == int(alert_id) else n
+            for n in nodes]
+
+
+def _parts(p, set_id, gdf_current, load, alert_id=None, links=None,
+           cands: Optional[list] = None) -> tuple[list[Node], dict[str, str]]:
+    cur = p.alert_sets.get(set_id)
+    period = p.periods.get(cur.period_id) if cur is not None else None
+    nodes: list[Node] = []
+    run_ids = {s.id: run_id_of(s) for s in p.alert_sets.values()}
+    if review_copy.read_only(p):
+        for c in cands if cands is not None else snapshot_candidates(p):
+            nodes.append(c.node)
+            run_ids.setdefault(c.node.set_id, c.run_id)
+    for s in p.alert_sets.values():
+        if s.id != set_id:
+            nodes.extend(_entry(p, s, load).nodes)
+    current = nodes_of_set(cur, period, gdf_current) if gdf_current is not None and period is not None else []
+    nodes.extend(_with_links(current, alert_id, links))
+    return nodes, run_ids
+
+
+def _graph(p, set_id, gdf_current, load, alert_id=None, links=None) -> LinkGraph:
+    return build_graph(*_parts(p, set_id, gdf_current, load, alert_id, links))
+
+
+def graph_for(p, set_id: str, gdf_current, *, load=set_store.load_set_alerts) -> LinkGraph:
+    """The link graph of the whole project: ``set_id``'s live rows, every other
+    set's stored rows (later and parallel sets too, so a history grows
+    forwards) and, in a review copy, the snapshot's candidates."""
+    return _graph(p, set_id, gdf_current, load)
+
+
+@dataclass(frozen=True)
+class EarlierItem:
+    cand: Candidate
+    distance_m: float
+    state: State
+    via: Optional[str]
+    color: str
+
+
+@dataclass(frozen=True)
+class EarlierView:
+    items: tuple[EarlierItem, ...]
+    n_within: int
+    n_linked: int
+    periods: tuple[tuple[str, date], ...]  # newest first
+
+
+def _row_shape(gdf, alert_id):
+    if gdf is None or len(gdf) == 0:
+        return None
+    rows = gdf[gdf["alert_id"] == int(alert_id)]
+    if rows.empty:
+        return None
+    g = rows.iloc[0].geometry
+    return None if g is None or g.is_empty else g
+
+
+def _metric_crs(p, shape):
+    epsg = _grid_epsg(p)
+    if epsg is not None or shape is None:
+        return epsg
+    return gpd.GeoSeries([shape], crs="EPSG:4326").estimate_utm_crs()
+
+
+def _distances(p, set_id, shape, crs, cands, load) -> dict:
+    """``{candidate link: metres}`` from ``shape`` (EPSG:4326) to each candidate."""
+    if shape is None or crs is None:
+        return {}
+    # a Transformer is not thread-safe: one per call, never cached
+    here = shapely.ops.transform(Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform, shape)
+    if review_copy.read_only(p) or _grid_epsg(p) is None:
+        metric = _to_crs([c.node.shape for c in cands], crs)
+    else:
+        metric = [m for s in _earlier(p, set_id) for m in _entry(p, s, load).metric]
+    return {c.link: float(d) for c, d in zip(cands, shapely.distance(metric, here))} if metric else {}
+
+
+def _via(nodes, run_ids, current: str, seeds: Sequence[str]) -> dict:
+    """``{member key: seed key}``: which of ``seeds`` (the current alert's
+    neighbours) each member of its history hangs from, the current alert left out."""
+    rest = build_graph([n for n in nodes if n.key != current], run_ids)
+    out: dict[str, str] = {}
+    for seed in seeds:
+        for key in rest.component(seed):
+            out.setdefault(key, seed)
+    return out
+
+
+def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str], auto: Sequence[str],
+                 radius_m: float, *, load=set_store.load_set_alerts) -> EarlierView:
+    """The "Earlier alerts" list of one alert (spec §6.2): candidates within
+    ``radius_m`` of its shape, every alert named by ``links`` (the draft ticks)
+    and the history members reached through another link, newest period first,
+    then nearest."""
+    links = links_of(list(links))
+    auto = set(links_of(list(auto)))
+    cands = candidates_for(p, set_id, load=load)
+    nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links, cands)
+    graph = build_graph(nodes, run_ids)
+    shape = _row_shape(gdf_current, alert_id)
+    crs = _metric_crs(p, shape)
+    dist = _distances(p, set_id, shape, crs, cands, load)
+    by_link = {c.link: c for c in cands}
+
+    items: dict[str, tuple] = {}  # link -> (candidate, state, via)
+    valid: list[str] = []
+    for link in links:
+        ref = parse_link(link)
+        if ref is None:
+            continue
+        key = node_key(ref.set_id, ref.alert_id)
+        node = graph.node(key)
+        if node is None:
+            continue  # its set is gone: nothing to show
+        broken = graph.is_broken(link) or node.status == FALSE_POSITIVE
+        cand = by_link.get(link) or Candidate(node, ref.run_id)
+        items[cand.link] = (cand, "broken" if broken else "auto" if link in auto else "linked", None)
+        if not broken:
+            valid.append(key)
+
+    current = node_key(set_id, alert_id)
+    members = graph.component(current)
+    if len(members) > 1:
+        nodes_by_key = {k: graph.node(k) for k in members if graph.node(k) is not None}
+        # neighbours: the linked parents first, then later alerts linking to this one
+        children = [k for k, n in nodes_by_key.items()
+                    if any(not graph.is_broken(lk) and node_key(*parse_link(lk)[:2]) == current for lk in n.links)]
+        hangs = _via(nodes, run_ids, current, valid + children)
+        for c in cands:
+            if c.key in members and c.link not in items and c.key not in valid:
+                items[c.link] = (c, "via", hangs.get(c.key))
+    for c in cands:
+        if c.link not in items and dist.get(c.link, float("inf")) <= radius_m:
+            items[c.link] = (c, "none", None)
+
+    periods = sorted({(c.node.period_id, c.node.period_start) for c in cands}
+                     | {(c.node.period_id, c.node.period_start) for c, _, _ in items.values()},
+                     key=lambda pp: (pp[1], pp[0]), reverse=True)
+    colors = period_colors([pid for pid, _ in periods])
+    out = []
+    for link, (c, state, via) in items.items():
+        d = dist.get(link)
+        if d is None and c.node.shape is not None and shape is not None and crs is not None:
+            d = float(shapely.distance(*_to_crs([c.node.shape, shape], crs)))
+        out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors[c.node.period_id]))
+    out.sort(key=lambda it: (-it.cand.node.period_start.toordinal(), it.distance_m))
+    return EarlierView(
+        items=tuple(out),
+        n_within=sum(1 for it in out if it.state != "broken" and it.distance_m <= radius_m),
+        n_linked=sum(1 for it in out if it.state in ("auto", "linked")),
+        periods=tuple(periods),
+    )
+
+
+@dataclass(frozen=True)
+class HistorySummary:
+    n: int
+    confirmed_ha: float
+    unreviewed_ha: float
+    since: Optional[date]
+
+
+def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str], *,
+                    load=set_store.load_set_alerts) -> Optional[HistorySummary]:
+    """The History row (spec §6.1) of one alert, with ``links`` (the draft
+    ticks) in place of its stored ones; None when it has no history."""
+    graph = _graph(p, set_id, gdf_current, load, alert_id, links)
+    members = graph.component(node_key(set_id, alert_id))
+    nodes = [graph.node(k) for k in members if graph.node(k) is not None]
+    if len(nodes) < 2:
+        return None
+    shapes = [n.shape for n in nodes if n.shape is not None]
+    crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
+    area = history_area(nodes, crs)
+    return HistorySummary(area.n, area.confirmed_ha, area.unreviewed_ha, area.first_period_start)
+
+
+def parent_windows(view: EarlierView) -> tuple[tuple[float, float], ...]:
+    """The detection windows of the linked parents (spec §6.5), merged when they overlap."""
+    spans = sorted((it.cand.node.date_min, it.cand.node.date_max) for it in view.items
+                   if it.state in ("auto", "linked")
+                   and it.cand.node.date_min is not None and it.cand.node.date_max is not None)
+    merged: list[list[float]] = []
+    for lo, hi in spans:
+        if merged and lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return tuple((lo, hi) for lo, hi in merged)
+
+
+def links_into(p, set_id: str, *, load=set_store.load_set_alerts) -> int:
+    """Rows of the other sets holding a valid link into ``set_id`` (its
+    current run): what a re-run of ``set_id`` would break (spec §5.3)."""
+    target = p.alert_sets.get(set_id)
+    if target is None:
+        return 0
+    run_id = run_id_of(target)
+
+    def _into(link) -> bool:
+        ref = parse_link(link)
+        return ref is not None and ref.set_id == set_id and ref.run_id == run_id
+
+    return sum(1 for s in p.alert_sets.values() if s.id != set_id
+               for n in _entry(p, s, load).nodes if any(_into(lk) for lk in n.links))
+

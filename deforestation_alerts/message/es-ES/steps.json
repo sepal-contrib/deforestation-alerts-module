@@ -468,6 +468,11 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
       "replace_split": "Se descartarán el reparto entre evaluadores y sus devoluciones pendientes.",
+      "replace_links": {
+        "one": "{n} alerta de un período posterior está vinculada a este conjunto; su vínculo se romperá.",
+        "many": "{n} de alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.",
+        "other": "{n} alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán."
+      },
       "job_title": "Integrar y vectorizar",
       "step_combine": "Combinando fuentes",
       "step_vectorize": "Vectorizando grupos",

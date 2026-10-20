@@ -1,0 +1,181 @@
+"""The GUI's growth index (spec 2026-10-20 §5.3, §6.2–6.3): earlier-alert
+states, history summary, period colours, the cache and links into a set."""
+
+from datetime import date, datetime
+
+import geopandas as gpd
+import pytest
+from shapely.geometry import box
+
+from deforestation_alerts.project.growth import run_id_of
+from deforestation_alerts.project.models import AlertSet, AlertSetParams, GridSpec, Period, Project
+from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+from gui.scripts import growth_index, set_store
+
+AUG = Period(id="2026-08-01_2026-08-31", start=date(2026, 8, 1), end=date(2026, 8, 31))
+SEP = Period(id="2026-09-01_2026-09-30", start=date(2026, 9, 1), end=date(2026, 9, 30))
+OCT = Period(id="2026-10-01_2026-10-31", start=date(2026, 10, 1), end=date(2026, 10, 31))
+
+# ~50 m boxes near (-55, -25), UTM 21S; 0.0004 deg of longitude is ~40 m there
+CUR = box(-55.0000, -25.0000, -54.9995, -24.9995)    # Oct #1
+SEP12 = box(-55.0005, -25.0000, -55.0000, -24.9995)  # touches CUR on its west side
+SEP15 = box(-54.9991, -25.0000, -54.9986, -24.9995)  # ~40 m east of CUR
+AUG4 = box(-55.0010, -25.0000, -55.0005, -24.9995)   # touches SEP12, ~50 m from CUR
+AUG7 = box(-54.9000, -25.0000, -54.8995, -24.9995)   # ~10 km east
+
+STALE = "19990101000000000000"
+
+
+def _set(p, sid, period, created_at):
+    p.alert_sets[sid] = AlertSet(
+        id=sid, period_id=period.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"}, params=AlertSetParams(),
+        store_rel_path=f"periods/{period.id}/{sid}/alert_db.parquet", combined_rel_path="c.tif",
+        footprint_rel_path="f.tif", fingerprint="x", created_at=created_at)
+    return p.alert_sets[sid]
+
+
+def _gdf(rows):
+    return gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:4326")
+
+
+def _row(i, status, shape, links=(), dmin=2026.6, dmax=2026.62):
+    return {"alert_id": i, "status": status, "geometry": shape, "area_ha": 0.25,
+            "alert_date_min": dmin, "alert_date_max": dmax, "grows_from": list(links)}
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    now = datetime(2026, 10, 20, 12, 0, 0)
+    p = Project(name="g", created_at=now, updated_at=now)
+    p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=1, height=1)
+    for per in (AUG, SEP, OCT):
+        p.periods[per.id] = per
+    _set(p, "aug", AUG, datetime(2026, 9, 2, 8, 0, 0))
+    _set(p, "sep", SEP, datetime(2026, 10, 2, 8, 0, 0))
+    _set(p, "oct", OCT, datetime(2026, 10, 19, 8, 0, 0))
+    growth_index.clear_cache()
+    yield p
+    growth_index.clear_cache()
+
+
+def _link(p, sid, alert_id, run_id=None):
+    return f"{sid}#{alert_id}@{run_id or run_id_of(p.alert_sets[sid])}"
+
+
+def _stores(p, *, sep12_status="Confirmed"):
+    aug = _gdf([_row(4, "Confirmed", AUG4, dmin=2026.58, dmax=2026.60),
+                _row(7, "Confirmed", AUG7, dmin=2026.58, dmax=2026.60)])
+    sep = _gdf([_row(12, sep12_status, SEP12, links=[_link(p, "aug", 4)], dmin=2026.61, dmax=2026.65),
+                _row(15, "Need revision", SEP15, dmin=2026.66, dmax=2026.70)])
+    return {"aug": aug, "sep": sep}
+
+
+def _loader(stores, calls=None):
+    def load(p_, s):
+        if calls is not None:
+            calls.append(s.id)
+        return stores.get(s.id)
+    return load
+
+
+def _current(links=()):
+    return _gdf([_row(1, "Not reviewed", CUR, links=links)])
+
+
+def test_earlier_view_states(project):
+    p = project
+    links = [_link(p, "sep", 12), _link(p, "aug", 7, STALE)]
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, [_link(p, "sep", 12)], 1000,
+                                     load=_loader(_stores(p)))
+    states = [(it.cand.key, it.state, it.via) for it in view.items]
+    assert states == [("sep#12", "auto", None), ("sep#15", "none", None),
+                      ("aug#4", "via", "sep#12"), ("aug#7", "broken", None)]
+    assert view.n_within == 3 and view.n_linked == 1
+    assert view.periods == ((SEP.id, SEP.start), (AUG.id, AUG.start))
+    by_key = {it.cand.key: it for it in view.items}
+    assert by_key["sep#12"].distance_m < 1 and 30 < by_key["sep#15"].distance_m < 50
+    assert by_key["aug#7"].cand.link == _link(p, "aug", 7, STALE)  # the link as stored
+    colors = growth_index.period_colors([SEP.id, AUG.id])
+    assert by_key["sep#12"].color == colors[SEP.id] and by_key["aug#4"].color == colors[AUG.id]
+    assert growth_index.parent_windows(view) == ((2026.61, 2026.65),)
+
+
+def test_linked_parent_now_false_positive_is_broken(project):
+    p = project
+    links = [_link(p, "sep", 12)]
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000,
+                                     load=_loader(_stores(p, sep12_status="False Positive")))
+    states = {it.cand.key: it.state for it in view.items}
+    assert states["sep#12"] == "broken" and states["aug#4"] == "none"  # FP bridges nothing
+    assert view.n_linked == 0
+    assert growth_index.history_summary(p, "oct", _current(links), 1, links,
+                                        load=_loader(_stores(p, sep12_status="False Positive"))) is None
+
+
+def test_set_rerun_breaks_links(project):
+    p = project
+    links = [_link(p, "sep", 12)]
+    stores = _stores(p)
+    assert growth_index.history_summary(p, "oct", _current(links), 1, links, load=_loader(stores)).n == 3
+    p.alert_sets["sep"] = p.alert_sets["sep"].model_copy(update={"created_at": datetime(2026, 10, 18)})
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, links, 1000, load=_loader(stores))
+    items = [(it.cand.link, it.state) for it in view.items]
+    assert (links[0], "broken") in items
+    assert (_link(p, "sep", 12), "none") in items  # the re-run's #12 can be linked anew
+    assert "via" not in {state for _, state in items}
+    assert growth_index.history_summary(p, "oct", _current(links), 1, links, load=_loader(stores)) is None
+
+
+def test_history_summary_uses_draft_links(project):
+    p = project
+    load = _loader(_stores(p))
+    assert growth_index.history_summary(p, "oct", _current(), 1, [], load=load) is None
+    summary = growth_index.history_summary(p, "oct", _current(), 1, [_link(p, "sep", 12)], load=load)
+    assert summary.n == 3 and summary.since == AUG.start
+    assert summary.confirmed_ha > 0 and summary.unreviewed_ha > 0
+
+
+def test_period_colors_grey_after_eight():
+    ids = [f"p{i}" for i in range(10)]
+    colors = growth_index.period_colors(ids)
+    assert [colors[i] for i in ids[:8]] == list(growth_index.PERIOD_PALETTE)
+    assert len(set(growth_index.PERIOD_PALETTE)) == 8
+    assert colors["p8"] == colors["p9"] == growth_index.OLDER_GREY == "#9e9e9e"
+
+
+def test_cache_reloads_after_store_write(project):
+    p = project
+    stores = _stores(p)
+    calls = []
+    load = _loader(stores, calls)
+    first = growth_index.candidates_for(p, "oct", load=load)
+    growth_index.candidates_for(p, "oct", load=load)
+    assert sorted(calls) == ["aug", "sep"]
+    assert sorted(c.key for c in first) == ["aug#4", "aug#7", "sep#12", "sep#15"]
+    store = set_store.store_path(p, p.alert_sets["sep"])
+    store.parent.mkdir(parents=True, exist_ok=True)
+    save_gdf_to_parquet(stores["sep"], store)
+    growth_index.candidates_for(p, "oct", load=load)
+    assert sorted(calls) == ["aug", "sep", "sep"]
+
+
+def test_candidates_in_a_review_copy_come_from_the_snapshot(project, monkeypatch):
+    p = project
+    monkeypatch.setattr(growth_index.review_copy, "read_only", lambda p_: True)
+    calls = []
+    assert growth_index.candidates_for(p, "oct", load=_loader(_stores(p), calls)) == []
+    assert calls == []
+
+
+def test_links_into_counts_later_rows(project):
+    p = project
+    stores = _stores(p)
+    stores["oct"] = _gdf([_row(1, "Not reviewed", CUR, links=[_link(p, "sep", 12)]),
+                          _row(2, "Not reviewed", CUR, links=[_link(p, "sep", 15, STALE)]),
+                          _row(3, "Not reviewed", CUR, links=[_link(p, "aug", 4), "garbage"]),
+                          _row(4, "Not reviewed", CUR)])
+    load = _loader(stores)
+    assert growth_index.links_into(p, "sep", load=load) == 1
+    assert growth_index.links_into(p, "aug", load=load) == 2  # sep #12 and oct #3
+    assert growth_index.links_into(p, "oct", load=load) == 0
