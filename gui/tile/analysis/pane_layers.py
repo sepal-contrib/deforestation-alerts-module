@@ -32,9 +32,15 @@ from gui.widget.multiview import specs as mv_specs
 from gui.widget.multiview.draw_state import DrawState
 from gui.widget.multiview.layer_store import LayerStore
 
-#: Draw-order bands: alert imagery < visualization layers < earlier reviews.
+#: Draw-order bands: alert imagery < visualization layers < earlier alerts <
+#: the current alert's box and reviewed polygon (spec 2026-10-20 §6.3).
 #: Within a band, later adds draw on top (``PaneTarget`` counts up from it).
-Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000}
+#: ``alert_top`` names no group: the box and the polygon stay in the "alert"
+#: group (cleared with it) and carry ``z=ALERT_TOP_Z`` explicitly. GeoJSON
+#: layers share the overlay pane and are stacked by ``z`` in the browser
+#: (``layer_view.js``, bringToFront lowest first), above every tile layer.
+Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000, "alert_top": 4_000_000}
+ALERT_TOP_Z = Z_BASE["alert_top"]
 
 #: The layer menu's sections, in menu order: a spec's ``section``.
 SECTIONS = ("imagery", "alerts", "optional")

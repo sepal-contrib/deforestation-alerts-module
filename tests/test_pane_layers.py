@@ -214,6 +214,7 @@ def test_a_target_adds_ee_layers_as_tile_specs_with_view_prefixed_ids(monkeypatc
     assert tc["url"] == f"{URL}?img" and tc["visible"] is True and fc["visible"] is False
     assert tc["view"] == "before" and tc["group"] == "alert"
     assert tc["z"] < fc["z"] < Z_BASE["vis"] <= s2["z"], "later adds on top; vis over alert imagery"
+    assert Z_BASE["alert"] < Z_BASE["vis"] < Z_BASE["earlier"] < Z_BASE["alert_top"]
     assert s2["view"] == "all" and s2["group"] == "vis" and s2["visible"] is False
     assert tc["attribution"] == "Google Earth Engine"
     assert tc["meta"] == {} and s2["meta"] == {}
@@ -327,3 +328,29 @@ def test_the_tile_error_badge_label_is_translated():
     assert pane_labels()["tileErrors.badge"] == "No se pudieron cargar las imágenes"
     set_locale("fr")
     assert pane_labels()["tileErrors.badge"] == "Les images n'ont pas pu être chargées"
+
+
+def test_earlier_alerts_draw_over_the_imagery_and_under_the_alert_box_and_polygon():
+    """Spec 2026-10-20 §6.3: the earlier outlines sit under the current
+    alert's box and reviewed polygon, over its imagery."""
+    from types import SimpleNamespace
+
+    import geopandas as gpd
+    from ipyleaflet import TileLayer
+    from shapely.geometry import box
+
+    from gui.scripts.growth_index import EarlierView
+    from gui.tile.analysis import earlier
+    from gui.tile.analysis.edit_tools import DEFO_ID, wire_defo_layer
+    from gui.tile.analysis.pane_layers import ALERT_TOP_Z
+    from gui.tile.analysis.state import AnalysisState
+
+    panes = make_panes()
+    panes.target("after", group="alert").add_layer(TileLayer(url=URL, name="True Color"), key="tc")
+    panes.add(earlier.layer_spec(EarlierView((), 0, 0, ())))
+    state = AnalysisState()
+    unsubscribe = wire_defo_layer(SimpleNamespace(panes=panes), state)
+    state.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 1, 1)], crs="EPSG:4326"))
+    unsubscribe()
+    imagery, overlay, polygon = (panes.spec(i)["z"] for i in ("after:tc", earlier.EARLIER_ID, DEFO_ID))
+    assert imagery < overlay < ALERT_TOP_Z < polygon

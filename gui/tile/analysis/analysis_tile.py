@@ -91,7 +91,7 @@ from gui.tile.analysis.footer import build_footer
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
 from gui.tile.analysis.state import IMAGE_AREAS
-from gui.tile.analysis.pane_layers import geojson_spec
+from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
 from gui.tile.analysis.timeline import build_timeline
@@ -290,9 +290,11 @@ def view_actual_alert(
         # center/zoom: one write, every view follows (``AlertViews``)
         panes.set_view((alerta.point.y, alerta.point.x), 16)
 
-        # the bbox overlay on every view, hidden while the reviewer edits
+        # the bbox overlay on every view, hidden while the reviewer edits;
+        # above the earlier alerts' outlines (``ALERT_TOP_Z``)
         panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
-                               style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts"))
+                               style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts",
+                               z=ALERT_TOP_Z))
         # the after view's zoom-to-alert button goes back to this box
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 

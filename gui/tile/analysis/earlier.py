@@ -278,7 +278,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     section.body_box.children = [v.Html(tag="div", children=[switch, distance, periods, copy_lines, items,
                                                              legend])]
     last = {"view": None, "token": None}
-    syncing = {"menu": False}
+    syncing = {"menu": False, "switch": False}
 
     def _sync_badge():
         on = bool(analysis.show_earlier_reviews.value)
@@ -382,7 +382,8 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     def _on_switch(change):
         analysis.show_earlier_reviews.set(bool(change["new"]))
         _sync_badge()
-        spawn_in_context(_refresh)
+        if not syncing["switch"]:
+            spawn_in_context(_refresh)
 
     def _on_km(change):
         km = parse_km(change["new"])
@@ -412,9 +413,16 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
         analysis.apply_if_current(token, _redraw)
 
     def _on_auto(auto):
-        # a growth alert opens with its parents on the maps (spec §6.3)
+        # A growth alert opens with its parents on the maps (spec §6.3). No
+        # refresh of its own: the alert is opening (``view_actual_alert``
+        # seeds ``auto_links``), and the open's ``refresh_in_background``,
+        # which now sees the switch on, draws the layer.
         if auto and not switch.v_model:
-            switch.v_model = True
+            syncing["switch"] = True
+            try:
+                switch.v_model = True
+            finally:
+                syncing["switch"] = False
 
     shown_style = section.root.style_
 

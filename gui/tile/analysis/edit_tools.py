@@ -131,7 +131,7 @@ from gui.scripts.notify_bridge import current_notifier, run_button_job, tile_pro
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis.labels import Labels
-from gui.tile.analysis.pane_layers import geojson_spec
+from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
 from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, touch
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL
@@ -368,7 +368,7 @@ def wire_defo_layer(widgets, analysis):
         try:
             panes.add(geojson_spec(DEFO_ID, "all", json.loads(gdf.to_json()), name="Defo Layer",
                                    group="alert", style=_DEFO_LAYER_STYLE, hide_while_editing=True,
-                                   section="alerts"))
+                                   section="alerts", z=ALERT_TOP_Z + 1))
         except Exception:
             logger.exception("Analysis: add_defo_layer failed")
 

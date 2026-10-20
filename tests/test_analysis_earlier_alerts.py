@@ -153,14 +153,14 @@ def test_row_click_zooms_both_maps(monkeypatch):
 
 def test_layer_styles_follow_period_and_status(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
-    analysis.links.set((SEP12.link,))
+    analysis.links.set((SEP12.link, AUG7.link))
     analysis.show_earlier_reviews.set(True)
     earlier.refresh_earlier(widgets, analysis, app_state)
     spec = widgets.panes.spec(EARLIER_ID)
     assert (spec["view"], spec["group"], spec["name"]) == ("all", "earlier", EARLIER_LAYER_NAME)
     assert spec["meta"] == {"menuSection": "alerts"}
     feats = _by_key(_features(widgets))
-    assert set(feats) == {"sep#12", "sep#15", "aug#4"}
+    assert set(feats) == {"sep#12", "sep#15", "aug#4"}  # broken aug#7 is listed, not drawn
     linked, revision, via = (feats[k]["properties"]["style"] for k in ("sep#12", "sep#15", "aug#4"))
     assert linked == {"color": COLORS[SEP.id], "weight": 4, "dashArray": None, "fill": True, "fillOpacity": 0.2}
     assert revision == {"color": COLORS[SEP.id], "weight": 2, "dashArray": "6 4", "fill": False,
@@ -192,6 +192,24 @@ def test_switch_turns_on_for_growth_alert(monkeypatch):
     section.switch.v_model = False
     analysis.reset_alert()
     assert analysis.show_earlier_reviews.value is False
+
+
+def test_opening_a_growth_alert_refreshes_once(monkeypatch):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    spawned = []
+
+    def spawn(target, args=()):
+        spawned.append(target)
+        target(*args)
+
+    monkeypatch.setattr(earlier, "spawn_in_context", spawn)
+    earlier.build_earlier_controls(widgets, app_state, analysis)
+    # what view_actual_alert does: seed the links, then refresh in the background
+    analysis.links.set((SEP12.link,))
+    analysis.auto_links.set((SEP12.link,))
+    earlier.refresh_in_background(widgets, analysis, app_state)
+    assert len(spawned) == 1 and len(calls) == 1
+    assert analysis.show_earlier_reviews.value is True and _features(widgets)
 
 
 def test_periods_menu_hides_rows_and_features(monkeypatch):

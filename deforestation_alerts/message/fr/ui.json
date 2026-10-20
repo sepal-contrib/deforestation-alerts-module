@@ -313,7 +313,7 @@
       },
       "touches": "touche",
       "via": "par #{id}",
-      "broken_rerun": "l’ensemble précédent a été relancé",
+      "broken_rerun": "l'ensemble précédent a été relancé",
       "broken_fp": "désormais faux positif",
       "periods": "Périodes",
       "as_of": "Alertes précédentes au {date}",
