@@ -142,14 +142,22 @@ def _alert_id(gdf, pos) -> int:
 
 
 def _kept_links(p, view, links) -> tuple:
-    """The draft ``links`` without those the view shows broken or cannot
-    resolve at all (their set is gone). In a review copy whose package has no
-    snapshot, nothing earlier resolves: those links are kept as they are."""
+    """The draft ``links`` without those broken by a re-run of their set or
+    that cannot resolve at all (their set is gone). A link to a parent that has
+    since become a false positive stays, greyed and out of the totals (spec
+    §11.5). In a review copy whose package has no snapshot, nothing earlier
+    resolves: those links are kept as they are."""
     items = {it.cand.link: it for it in view.items}
     rc = getattr(p, "review_copy", None)
     drop_missing = rc is None or getattr(rc, "snapshot_at", None) is not None
-    return tuple(lk for lk in links
-                 if (lk in items and items[lk].state != "broken") or (lk not in items and not drop_missing))
+
+    def _kept(lk):
+        if lk not in items:
+            return not drop_missing
+        item = items[lk]
+        return item.state != "broken" or item.cand.node.status == FALSE_POSITIVE
+
+    return tuple(lk for lk in links if _kept(lk))
 
 
 def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:

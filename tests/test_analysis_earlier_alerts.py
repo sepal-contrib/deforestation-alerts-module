@@ -256,6 +256,19 @@ def test_broken_link_dropped_from_draft(monkeypatch):
     assert rows["aug#7"].box.disabled  # still shown, greyed
 
 
+def test_link_to_a_since_false_positive_parent_stays(monkeypatch):
+    fp = _cand("sep", 9, SEP, "False Positive")
+
+    def view(links, auto):
+        return EarlierView((EarlierItem(fp, 0.0, "broken", None, COLORS[SEP.id]),), 0, 0, (SEP.id,))
+
+    widgets, analysis, app_state, _ = _setup(monkeypatch, view=view)
+    analysis.links.set((fp.link,))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.links.value == (fp.link,)
+    assert analysis.dirty.value is False
+
+
 def test_a_copy_without_snapshot_keeps_links_it_cannot_resolve(monkeypatch):
     rc = ReviewCopy(evaluator="a", evaluator_index=1, set_id="oct", split_id="x", set_fingerprint="f",
                     origin_project="o", imported_at=datetime(2026, 10, 1))
