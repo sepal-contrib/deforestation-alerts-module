@@ -3,13 +3,14 @@
 The Analysis "Earlier alerts" section, the History row, the Overview card,
 exports and the Integrate Replace warning all read the project's sets through
 here. Each set's nodes (``growth.nodes_of_set``) and parent candidates are read
-once and kept in a small LRU keyed by (set id, run id, store generation, grid
-epsg), as ``earlier_reviews._entry`` does; the candidates' shapes are also kept
-in the grid CRS so distances are cheap per alert.
+once and kept, one entry per (project, set id), until the set's run id, store
+generation or grid epsg changes (as ``earlier_reviews._entry``, but without a
+size cap: every call walks every set, so an LRU smaller than the project would
+reload them all); the candidates' shapes are also kept in the grid CRS so
+distances are cheap per alert.
 """
 
 import threading
-from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date
@@ -36,8 +37,6 @@ from deforestation_alerts.project.growth import (
 )
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, LOSS_VERDICTS
 from gui.scripts import set_store
-
-_MAX_SETS = 16
 
 #: Earlier periods' colours, newest earlier period first (spec §6.3): bright
 #: enough for satellite imagery, dark enough for SEPAL Light, distinct from the
@@ -69,7 +68,8 @@ class _Entry(NamedTuple):
     metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
 
 
-_cache: "OrderedDict[tuple, _Entry]" = OrderedDict()
+#: ``{(project name, set id): (key, entry)}``; ``key`` is what the entry was read for.
+_cache: "dict[tuple, tuple[tuple, _Entry]]" = {}
 _lock = threading.Lock()
 
 
@@ -101,17 +101,18 @@ def _build(p, s, gdf) -> _Entry:
 
 
 def _entry(p, s, load) -> _Entry:
-    key = (s.id, run_id_of(s), set_store.store_generation(set_store.store_path(p, s)), _grid_epsg(p))
+    slot = (p.name, s.id)
+    key = (run_id_of(s), set_store.store_generation(set_store.store_path(p, s)), _grid_epsg(p))
     with _lock:
-        hit = _cache.get(key)
-        if hit is not None:
-            _cache.move_to_end(key)
-            return hit
+        hit = _cache.get(slot)
+        if hit is not None and hit[0] == key:
+            return hit[1]
     entry = _build(p, s, load(p, s))
     with _lock:
-        _cache[key] = entry
-        while len(_cache) > _MAX_SETS:
-            _cache.popitem(last=False)
+        _cache[slot] = (key, entry)
+        # sets removed from the project are dropped with their entries
+        for gone in [k for k in _cache if k[0] == p.name and k[1] not in p.alert_sets]:
+            del _cache[gone]
     return entry
 
 
@@ -126,12 +127,22 @@ def _earlier(p, set_id: str) -> list:
     return earlier_sets(p, period) if period is not None else []
 
 
+def _candidate_pairs(p, set_id: str, load) -> list[tuple[Candidate, object]]:
+    """``(candidate, its shape in the grid CRS or None)``, both read from the
+    same cache entries (an entry rebuilt meanwhile cannot mismatch them)."""
+    if review_copy.read_only(p):
+        return [(c, None) for c in snapshot_candidates(p)]
+    pairs = []
+    for s in _earlier(p, set_id):
+        e = _entry(p, s, load)
+        pairs.extend(zip(e.cands, e.metric) if e.metric is not None else ((c, None) for c in e.cands))
+    return pairs
+
+
 def candidates_for(p, set_id: str, *, load=set_store.load_set_alerts) -> list[Candidate]:
     """The parent candidates of ``set_id``: the loss-verdict alerts of every
     set of an earlier period, or a review copy's snapshot."""
-    if review_copy.read_only(p):
-        return snapshot_candidates(p)
-    return [c for s in _earlier(p, set_id) for c in _entry(p, s, load).cands]
+    return [c for c, _ in _candidate_pairs(p, set_id, load)]
 
 
 def _with_links(nodes, alert_id, links):
@@ -205,17 +216,17 @@ def _metric_crs(p, shape):
     return gpd.GeoSeries([shape], crs="EPSG:4326").estimate_utm_crs()
 
 
-def _distances(p, set_id, shape, crs, cands, load) -> dict:
-    """``{candidate link: metres}`` from ``shape`` (EPSG:4326) to each candidate."""
-    if shape is None or crs is None:
+def _distances(pairs, shape, crs) -> dict:
+    """``{candidate link: metres}`` from ``shape`` (EPSG:4326) to each candidate
+    of ``pairs`` (``_candidate_pairs``; a missing metric shape is projected here)."""
+    if shape is None or crs is None or not pairs:
         return {}
     # a Transformer is not thread-safe: one per call, never cached
     here = shapely.ops.transform(Transformer.from_crs("EPSG:4326", crs, always_xy=True).transform, shape)
-    if review_copy.read_only(p) or _grid_epsg(p) is None:
-        metric = _to_crs([c.node.shape for c in cands], crs)
-    else:
-        metric = [m for s in _earlier(p, set_id) for m in _entry(p, s, load).metric]
-    return {c.link: float(d) for c, d in zip(cands, shapely.distance(metric, here))} if metric else {}
+    todo = [c.node.shape for c, m in pairs if m is None]
+    projected = iter(_to_crs(todo, crs))
+    metric = [m if m is not None else next(projected) for _, m in pairs]
+    return {c.link: float(d) for (c, _), d in zip(pairs, shapely.distance(metric, here))}
 
 
 def _via(nodes, run_ids, current: str, seeds: Sequence[str]) -> dict:
@@ -237,12 +248,13 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
     then nearest."""
     links = links_of(list(links))
     auto = set(links_of(list(auto)))
-    cands = candidates_for(p, set_id, load=load)
+    pairs = _candidate_pairs(p, set_id, load)
+    cands = [c for c, _ in pairs]
     nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links, cands)
     graph = build_graph(nodes, run_ids)
     shape = _row_shape(gdf_current, alert_id)
     crs = _metric_crs(p, shape)
-    dist = _distances(p, set_id, shape, crs, cands, load)
+    dist = _distances(pairs, shape, crs)
     by_link = {c.link: c for c in cands}
 
     items: dict[str, tuple] = {}  # link -> (candidate, state, via)
@@ -276,8 +288,9 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         if c.link not in items and dist.get(c.link, float("inf")) <= radius_m:
             items[c.link] = (c, "none", None)
 
-    periods = sorted({(c.node.period_id, c.node.period_start) for c in cands}
-                     | {(c.node.period_id, c.node.period_start) for c, _, _ in items.values()},
+    # the palette order comes from the candidates only, so a period keeps its
+    # colour from one alert to the next; a broken or FP item of another period is grey
+    periods = sorted({(c.node.period_id, c.node.period_start) for c in cands},
                      key=lambda pp: (pp[1], pp[0]), reverse=True)
     colors = period_colors([pid for pid, _ in periods])
     out = []
@@ -285,7 +298,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         d = dist.get(link)
         if d is None and c.node.shape is not None and shape is not None and crs is not None:
             d = float(shapely.distance(*_to_crs([c.node.shape, shape], crs)))
-        out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors[c.node.period_id]))
+        out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors.get(c.node.period_id, OLDER_GREY)))
     out.sort(key=lambda it: (-it.cand.node.period_start.toordinal(), it.distance_m))
     return EarlierView(
         items=tuple(out),

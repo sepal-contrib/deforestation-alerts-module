@@ -179,3 +179,48 @@ def test_links_into_counts_later_rows(project):
     assert growth_index.links_into(p, "sep", load=load) == 1
     assert growth_index.links_into(p, "aug", load=load) == 2  # sep #12 and oct #3
     assert growth_index.links_into(p, "oct", load=load) == 0
+
+
+def test_more_sets_than_any_cap_are_all_kept(project):
+    """Every call walks every set: none may be evicted while the project holds it."""
+    p = project
+    for i in range(20):
+        per = Period(id=f"2025-{i:02d}", start=date(2025, 1, 1 + i), end=date(2025, 1, 1 + i))
+        p.periods[per.id] = per
+        _set(p, f"old{i:02d}", per, datetime(2025, 2, 1))
+    calls = []
+    load = _loader(_stores(p), calls)
+    links = [_link(p, "sep", 12)]
+    growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000, load=load)
+    assert len(calls) == len(p.alert_sets) - 1  # every set but the current one, once
+    calls.clear()
+    growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000, load=load)
+    growth_index.history_summary(p, "oct", _current(links), 1, links, load=load)
+    assert calls == []
+    del p.alert_sets["old00"]
+    p.alert_sets["sep"] = p.alert_sets["sep"].model_copy(update={"created_at": datetime(2026, 10, 18)})
+    growth_index.candidates_for(p, "oct", load=load)
+    assert calls == ["sep"]  # a new run reloads; a removed set's entry is dropped
+    assert (p.name, "old00") not in growth_index._cache
+
+
+def test_draft_links_can_remove_a_stored_link(project):
+    p = project
+    stored = [_link(p, "sep", 12)]
+    load = _loader(_stores(p))
+    view = growth_index.earlier_view(p, "oct", _current(stored), 1, [], [], 1000, load=load)
+    states = {it.cand.key: it.state for it in view.items}
+    assert states["sep#12"] == "none" and "linked" not in states.values() and view.n_linked == 0
+    assert growth_index.history_summary(p, "oct", _current(stored), 1, [], load=load) is None
+
+
+def test_period_order_comes_from_candidates_only(project):
+    p = project
+    stores = _stores(p)
+    stores["sep"] = _gdf([_row(12, "False Positive", SEP12)])  # Sep has no candidate left
+    links = [_link(p, "sep", 12)]
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000, load=_loader(stores))
+    assert view.periods == ((AUG.id, AUG.start),)
+    by_key = {it.cand.key: it for it in view.items}
+    assert by_key["sep#12"].state == "broken" and by_key["sep#12"].color == growth_index.OLDER_GREY
+    assert by_key["aug#4"].color == growth_index.PERIOD_PALETTE[0]
