@@ -468,6 +468,10 @@
         "one": "Linked {n} alert to earlier loss ({small} under the minimum area)",
         "other": "Linked {n} alerts to earlier loss ({small} under the minimum area)"
       },
+      "growth_linked_plain": {
+        "one": "Linked {n} alert to earlier loss",
+        "other": "Linked {n} alerts to earlier loss"
+      },
       "done_empty": "No new alerts in this period: the alert set is empty.",
       "done_empty_detail": "No new alerts in this period: the alert set is empty. {details}",
       "outcome_pixels": {

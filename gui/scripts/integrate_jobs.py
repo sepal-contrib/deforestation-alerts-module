@@ -356,8 +356,10 @@ def _done_message(result) -> str:
     """The toast of a run that found alerts: how many, and how many of them
     were linked to earlier loss (spec 2026-10-20 §4.6)."""
     lines = [tn("steps.integrate.done", result.alert_set.n_alerts)]
-    if result.n_growth:
+    if result.n_growth and result.n_growth_small:
         lines.append(tn("steps.integrate.growth_linked", result.n_growth, small=result.n_growth_small))
+    elif result.n_growth:
+        lines.append(tn("steps.integrate.growth_linked_plain", result.n_growth))
     return ". ".join(lines)
 
 

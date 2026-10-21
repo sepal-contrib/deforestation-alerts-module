@@ -491,6 +491,11 @@
         "many": "Se vincularon {n} de alertas a pérdidas anteriores ({small} por debajo del área mínima)",
         "other": "Se vincularon {n} alertas a pérdidas anteriores ({small} por debajo del área mínima)"
       },
+      "growth_linked_plain": {
+        "one": "Se vinculó {n} alerta a una pérdida anterior",
+        "many": "Se vincularon {n} de alertas a pérdidas anteriores",
+        "other": "Se vincularon {n} alertas a pérdidas anteriores"
+      },
       "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",
       "outcome_pixels": {
