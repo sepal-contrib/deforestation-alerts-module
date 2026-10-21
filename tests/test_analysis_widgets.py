@@ -33,4 +33,25 @@ def test_the_views_follow_the_app_theme():
     assert w.panes_widget.theme == "light"
     theme.set_dark(True)
     assert w.panes_widget.theme == "dark"
+
+
+def test_a_sepal_basemap_follows_the_app_theme():
+    """SEPAL Dark opens in the dark theme, SEPAL Light in the light one, and a
+    theme switch swaps one for the other, whichever the reviewer picked; a
+    satellite basemap stays."""
+    theme = ThemeState(mode="dark")
+    w = AnalysisWidgets(theme_state=theme)
+    assert w.panes_widget.basemap_switcher_selected == "sepal_dark"
+    theme.set_dark(False)
+    assert w.panes_widget.basemap_switcher_selected == "sepal_light"
+    w.panes_widget.basemap_switcher_selected = "sepal_dark"  # the reviewer's pick, from the browser
+    theme.set_dark(True)
+    assert w.panes_widget.basemap_switcher_selected == "sepal_dark"
+    theme.set_dark(False)
+    assert w.panes_widget.basemap_switcher_selected == "sepal_light"
+    w.panes_widget.basemap_switcher_selected = "google"
+    theme.set_dark(True)
+    assert w.panes_widget.basemap_switcher_selected == "google"
+    assert AnalysisWidgets(theme_state=ThemeState(mode="light")).panes_widget.basemap_switcher_selected \
+        == "sepal_light"
     assert AnalysisWidgets().panes_widget.theme == "light", "no theme state: light"

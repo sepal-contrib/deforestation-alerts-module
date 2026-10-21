@@ -28,11 +28,16 @@ def _view(view):
 
 
 def tile_spec(layer_id, view, url, *, name, group=None, visible=True, opacity=1.0, z=None, attribution="",
-              meta=None) -> dict:
-    """An XYZ tile layer. ``view=None`` means ``ALL``."""
-    return {"id": layer_id, "view": _view(view), "kind": "tile", "url": url, "name": name,
+              meta=None, queued=False) -> dict:
+    """An XYZ tile layer. ``view=None`` means ``ALL``. ``queued`` loads its
+    tiles through the page's tile queue (paced, a refused tile retried); the
+    server must allow CORS."""
+    spec = {"id": layer_id, "view": _view(view), "kind": "tile", "url": url, "name": name,
             "visible": bool(visible), "opacity": float(opacity), "z": None if z is None else int(z),
             "group": group, "attribution": attribution, "meta": dict(meta or {})}
+    if queued:
+        spec["queued"] = True
+    return spec
 
 
 def geojson_spec(layer_id, view, data, *, name, group=None, style=None, visible=True, opacity=1.0, z=None,

@@ -638,7 +638,8 @@ SCREEN_CSS = (
     # positioned box and the widget fills it.
     ".analysis-panes-slot { position: relative; flex: 1 1 auto; min-height: 240px; }\n"
     ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
-    ".analysis-strip { flex: 0 0 auto; padding: 0 4px 4px 4px; }\n"
+    # The timeline spans the views' width: its edges line up with theirs.
+    ".analysis-strip { flex: 0 0 auto; padding: 0 0 4px 0; }\n"
     # The timeline's toolbar needs about 1240 px with its button labels (in
     # Spanish, measured). Narrower, the two fold buttons drop to their icons,
     # which name themselves in a tooltip; narrower still (~860 px) the row

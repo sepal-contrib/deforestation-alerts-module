@@ -106,6 +106,14 @@ def test_specs_carry_every_field_the_frontend_reads():
     assert geojson_spec("g", "all", data, name="g", group="earlier")["meta"] == {}
 
 
+def test_earth_engine_tiles_load_through_the_tile_queue():
+    """A project in restricted mode answers a burst of tile requests with 429:
+    Earth Engine layers are paced and retried in the browser (``queued``)."""
+    ee = "https://earthengine.googleapis.com/v1/projects/p/maps/abc/tiles/{z}/{x}/{y}"
+    assert tile_spec("before:True Color", "before", ee, name="True Color", group="alert")["queued"] is True
+    assert "queued" not in tile_spec("t", "all", URL, name="t", group="vis")
+
+
 def test_an_added_spec_takes_its_group_band_and_an_explicit_z_is_kept():
     panes = make_panes()
     panes.add(tile_spec("a", "all", URL, name="a", group="alert"))

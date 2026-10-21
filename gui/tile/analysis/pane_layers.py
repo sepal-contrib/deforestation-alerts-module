@@ -44,8 +44,17 @@ ESRI_IMAGERY = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Ima
 #: The one tile every basemap thumbnail shows: zoom 7 over Mato Grosso, Brazil.
 _THUMBNAIL_TILE = {"z": "7", "x": "44", "y": "68", "s": "a"}
 
-#: The basemap the views open on.
+#: The basemap the views open on (in the light theme).
 DEFAULT_BASEMAP = "sepal_light"
+
+#: SEPAL's basemap for each theme (``dark``). While one of them shows, a theme
+#: switch swaps it for the other; a satellite basemap stays as it is.
+THEME_BASEMAPS = {False: "sepal_light", True: "sepal_dark"}
+
+#: Earth Engine's tile host. Its tiles load through the views' tile queue: a
+#: project in restricted mode answers a burst of tile requests with 429, which
+#: left holes in the imagery ("Imagery failed to load").
+EE_TILES = "https://earthengine.googleapis.com/"
 
 
 def _thumbnail(url) -> str:
@@ -91,11 +100,13 @@ def _meta(hide_while_editing=False, report_errors=False, section=None) -> dict:
 def tile_spec(layer_id, view, url, *, name, group, visible=True, opacity=1.0, z=None, attribution="",
               hide_while_editing=False, report_errors=False, section=None) -> dict:
     """An XYZ tile layer on ``view`` (``"before"``, ``"after"`` or ``"all"``),
-    listed under ``section`` (one of ``SECTIONS``) in the layer menu."""
+    listed under ``section`` (one of ``SECTIONS``) in the layer menu. Earth
+    Engine tiles are queued (``EE_TILES``)."""
     return mv_specs.tile_spec(layer_id, view, url, name=name, group=group, visible=visible, opacity=opacity,
                               z=z, attribution=attribution,
                               meta=_meta(hide_while_editing=hide_while_editing, report_errors=report_errors,
-                                         section=section))
+                                         section=section),
+                              queued=str(url).startswith(EE_TILES))
 
 
 def geojson_spec(layer_id, view, data, *, name, group, style=None, visible=True, z=None,
@@ -186,6 +197,15 @@ class PaneLayers:
         else:
             map_id = image.getMapId(params)
         return map_id["tile_fetcher"].url_format
+
+    # ---- theme ----------------------------------------------------------
+    def set_theme(self, dark) -> None:
+        """The views in the app's theme: their controls, and SEPAL's basemap
+        of that theme when a SEPAL basemap is the one shown."""
+        dark = bool(dark)
+        self.widget.theme = "dark" if dark else "light"
+        if self.widget.basemap_switcher_selected in THEME_BASEMAPS.values():
+            self.widget.basemap_switcher_selected = THEME_BASEMAPS[dark]
 
     # ---- view -----------------------------------------------------------
     def set_view(self, center, zoom) -> None:

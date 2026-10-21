@@ -166,12 +166,11 @@ class AnalysisWidgets:
         panes_sections = {"section": "imagery", "sections": {"original-alert": "alerts"}}
         self.pane_before = self.panes.target("before", group="alert", report_errors=True, **panes_sections)
         self.pane_after = self.panes.target("after", group="alert", report_errors=True, **panes_sections)
+        # The views follow the app's theme, and so does a SEPAL basemap
+        # (``PaneLayers.set_theme``): SEPAL Dark in the dark theme.
         if theme_state is not None:
-            theme_state.observe(
-                lambda change: setattr(self.panes_widget, "theme", "dark" if change["new"] else "light"),
-                "dark",
-            )
-        self.panes_widget.theme = "dark" if getattr(theme_state, "dark", False) else "light"
+            theme_state.observe(lambda change: self.panes.set_theme(change["new"]), "dark")
+        self.panes.set_theme(getattr(theme_state, "dark", False))
 
         # ------------------------------------------------------------------
         # View titles, one header cell per view.

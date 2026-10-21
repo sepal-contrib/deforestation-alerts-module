@@ -2,24 +2,28 @@
 //
 // - Tile layers stack by zIndex (= spec.z) and are upscaled above their native
 //   zoom (maxNativeZoom 20 by default), so imagery is never blank when zoomed in.
+//   A tile spec with ``queued: true`` loads through the page's tile queue
+//   (``queued_tiles.js``): paced, and retried when the server refuses.
 // - GeoJSON layers are overlays: pmIgnore (Geoman never edits them) and not
 //   interactive (they never swallow the clicks the drawing relies on). Each
 //   feature's properties.style is merged over the spec's style. They share the
 //   overlay pane's SVG, so z order is applied with bringToFront, lowest first.
 import {byZ, diffLayers, layerKey} from "./layers.js";
+import {queuedTileLayer} from "./queued_tiles.js";
 
 export function createLayerView(L, map, viewId) {
   const entries = new Map(); // id -> {spec, key, layer}
 
   function build(spec) {
     if (spec.kind === "tile") {
-      return L.tileLayer(spec.url, {
+      const options = {
         opacity: spec.opacity ?? 1,
         attribution: spec.attribution || "",
         zIndex: spec.z ?? 0,
         maxZoom: spec.maxZoom ?? 24,
         maxNativeZoom: spec.maxNativeZoom ?? 20,
-      });
+      };
+      return spec.queued ? queuedTileLayer(L, spec.url, options) : L.tileLayer(spec.url, options);
     }
     if (spec.kind === "geojson") {
       const base = spec.style || {};
