@@ -181,6 +181,18 @@ def test_links_into_counts_later_rows(project):
     assert growth_index.links_into(p, "oct", load=load) == 0
 
 
+def test_links_into_reads_only_later_periods_sets(project):
+    """Only a set of a later period can hold a link into a set: an earlier or
+    a parallel set's store is not read."""
+    p = project
+    _set(p, "sep2", SEP, datetime(2026, 10, 3, 8, 0, 0))  # parallel to sep
+    stores = _stores(p)
+    stores["oct"] = _gdf([_row(1, "Not reviewed", CUR, links=[_link(p, "sep", 12)])])
+    calls = []
+    assert growth_index.links_into(p, "sep", load=_loader(stores, calls)) == 1
+    assert calls == ["oct"]
+
+
 def test_more_sets_than_any_cap_are_all_kept(project):
     """Every call walks every set: none may be evicted while the project holds it."""
     p = project

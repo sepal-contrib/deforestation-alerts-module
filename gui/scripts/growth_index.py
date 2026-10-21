@@ -499,9 +499,12 @@ def parent_windows(view: EarlierView) -> tuple[tuple[float, float], ...]:
 
 def links_into(p, set_id: str, *, load=set_store.load_set_alerts) -> int:
     """Rows of the other sets holding a valid link into ``set_id`` (its
-    current run): what a re-run of ``set_id`` would break (spec §5.3)."""
+    current run): what a re-run of ``set_id`` would break (spec §5.3). Only
+    the sets of a later period are read: no other set has ``set_id`` among
+    its earlier sets (``fingerprint.earlier_sets``)."""
     target = p.alert_sets.get(set_id)
-    if target is None:
+    period = p.periods.get(target.period_id) if target is not None else None
+    if period is None:
         return 0
     run_id = run_id_of(target)
 
@@ -509,6 +512,10 @@ def links_into(p, set_id: str, *, load=set_store.load_set_alerts) -> int:
         ref = parse_link(link)
         return ref is not None and ref.set_id == set_id and ref.run_id == run_id
 
-    return sum(1 for s in p.alert_sets.values() if s.id != set_id
+    def _later(s) -> bool:
+        other = p.periods.get(s.period_id)
+        return other is not None and other.start > period.start
+
+    return sum(1 for s in p.alert_sets.values() if s.id != set_id and _later(s)
                for n in _entry(p, s, load).nodes if any(_into(lk) for lk in n.links))
 
