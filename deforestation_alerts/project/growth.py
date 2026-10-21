@@ -168,25 +168,35 @@ def _float(value) -> Optional[float]:
     return float(value)
 
 
-def _number(row, name) -> Optional[float]:
-    return _float(row[name]) if name in row else None
+def _status(value) -> str:
+    if value is None or value is pd.NA or value == "":
+        return NOT_REVIEWED
+    try:
+        return NOT_REVIEWED if pd.isna(value) else value
+    except (TypeError, ValueError):
+        return value
 
 
 def nodes_of_set(s: AlertSet, period: Period, gdf) -> list[Node]:
-    has_links = GROWS_FROM in gdf.columns
-    nodes = []
-    for _, row in gdf.iterrows():
-        status = row["status"] if "status" in row else None
-        nodes.append(Node(
-            set_id=s.id, alert_id=int(row["alert_id"]), period_id=period.id,
-            period_start=period.start, period_end=period.end,
-            status=NOT_REVIEWED if status is None or status is pd.NA or pd.isna(status) or status == "" else status,
-            area_ha=_number(row, "area_ha") or 0.0,
-            date_min=_number(row, "alert_date_min"), date_max=_number(row, "alert_date_max"),
-            shape=parent_shape(row),
-            links=tuple(links_of(row[GROWS_FROM])) if has_links else (),
-        ))
-    return nodes
+    """Every row of ``gdf`` as a ``Node``. Column by column (``iterrows``
+    builds a Series per row, a quarter of a second on 5,000 rows)."""
+    n = len(gdf)
+
+    def col(name):
+        return list(gdf[name]) if name in gdf.columns else [None] * n
+
+    drawn = [_geometry(v) for v in gdf["alert_polygon"]] if "alert_polygon" in gdf.columns else [None] * n
+    own = [_geometry(v) for v in gdf["geometry"]] if "geometry" in gdf.columns else [None] * n
+    links = [tuple(links_of(v)) for v in gdf[GROWS_FROM]] if GROWS_FROM in gdf.columns else [()] * n
+    return [
+        Node(set_id=s.id, alert_id=int(aid), period_id=period.id,
+             period_start=period.start, period_end=period.end, status=_status(status),
+             area_ha=_float(area) or 0.0, date_min=_float(dmin), date_max=_float(dmax),
+             shape=d if d is not None else g, links=lk)
+        for aid, status, area, dmin, dmax, d, g, lk in zip(
+            gdf["alert_id"], col("status"), col("area_ha"), col("alert_date_min"), col("alert_date_max"),
+            drawn, own, links)
+    ]
 
 
 def is_candidate(n: Node) -> bool:

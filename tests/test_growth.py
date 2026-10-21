@@ -162,3 +162,47 @@ def test_snapshot_rows_hold_the_candidates_and_every_linked_row():
     got = snapshot_rows(pool, ["B#1@rB", "nonsense"])
     assert [r.key for r in got] == ["A#2", "B#3", "A#1", "B#1", "B#2"]
     assert {r.key: r.node.status for r in got}["B#1"] == FALSE_POSITIVE
+
+
+def _nodes_by_rows(s, period, gdf):
+    """``nodes_of_set`` as it was, row by row (``iterrows``): the column-wise
+    one must give exactly the same nodes."""
+    import pandas as pd
+
+    from deforestation_alerts.project.growth import Node, _float, parent_shape
+
+    def _number(row, name):
+        return _float(row[name]) if name in row else None
+
+    has_links = "grows_from" in gdf.columns
+    out = []
+    for _, row in gdf.iterrows():
+        status = row["status"] if "status" in row else None
+        out.append(Node(
+            set_id=s.id, alert_id=int(row["alert_id"]), period_id=period.id,
+            period_start=period.start, period_end=period.end,
+            status=NOT_REVIEWED if status is None or status is pd.NA or pd.isna(status) or status == "" else status,
+            area_ha=_number(row, "area_ha") or 0.0,
+            date_min=_number(row, "alert_date_min"), date_max=_number(row, "alert_date_max"),
+            shape=parent_shape(row),
+            links=tuple(links_of(row["grows_from"])) if has_links else ()))
+    return out
+
+
+def test_nodes_of_set_column_wise_matches_row_by_row():
+    from shapely.geometry import Polygon
+
+    link = "s0#1@20260101000000000000"
+    full = _gdf({
+        "alert_id": [0, 1, 2, 3, 4],
+        "status": [CONFIRMED, None, np.nan, "", FALSE_POSITIVE],
+        "area_ha": [1.5, np.nan, 0.0, 2.0, 3.0],
+        "alert_date_min": [2026.1, np.nan, 2026.2, 2026.3, 2026.4],
+        "alert_date_max": [2026.2, 2026.3, np.nan, 2026.4, 2026.5],
+        "alert_polygon": [_sq(5), None, Polygon(), _sq(6).wkb, None],
+        "grows_from": [[link], None, f"{link};{link}", np.array([link], dtype=object), []],
+        "geometry": [_sq(0), _sq(1), _sq(2), None, _sq(4)],
+    })
+    bare = _gdf({"alert_id": [7, 8], "geometry": [_sq(0), None]})
+    for g in (full, bare, full.iloc[0:0]):
+        assert nodes_of_set(_set(), _period(), g) == _nodes_by_rows(_set(), _period(), g)
