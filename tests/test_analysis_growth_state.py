@@ -75,3 +75,30 @@ def test_capture_alert_carries_the_draft_links(tmp_path, monkeypatch):
     set_links(analysis, [L1])
     alert = capture_alert(analysis, SimpleNamespace(), app_state)
     assert alert.links == (L1,)
+
+
+def _save_args(review_copy, links):
+    from gui.tile.analysis import review_save
+
+    p = SimpleNamespace(review_copy=review_copy)
+    alert = SimpleNamespace(links=links, alerts=None)
+    model = SimpleNamespace(app_state=SimpleNamespace(project=SimpleNamespace(value=p)))
+    target = SimpleNamespace(alert_set=SimpleNamespace(id="oct"))
+    return review_save, alert, model, target
+
+
+def test_save_keeps_a_copy_without_snapshot_links_as_they_are(monkeypatch):
+    """Open keeps them (``earlier._kept_links``): nothing earlier resolves in
+    such a copy, so the Save must not drop them either."""
+    review_save, alert, model, target = _save_args(SimpleNamespace(snapshot_at=None), (L1, "garbage", L2))
+    monkeypatch.setattr(review_save.growth_index, "graph_for",
+                        lambda *a, **k: SimpleNamespace(is_broken=lambda link: True))
+    assert review_save.kept_links(alert, model, target) == [L1, L2]
+
+
+def test_save_drops_unresolved_links_elsewhere(monkeypatch):
+    for rc in (None, SimpleNamespace(snapshot_at=datetime(2026, 10, 5))):
+        review_save, alert, model, target = _save_args(rc, (L1, L2))
+        monkeypatch.setattr(review_save.growth_index, "graph_for",
+                            lambda *a, **k: SimpleNamespace(is_broken=lambda link: link == L1))
+        assert review_save.kept_links(alert, model, target) == [L2]

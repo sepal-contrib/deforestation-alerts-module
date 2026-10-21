@@ -81,13 +81,20 @@ def refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
 
 def kept_links(alert, app_tile_model, target) -> list[str]:
     """The draft links a Save stores: those that parse and still resolve.
-    A link to a re-run set, a missing alert or a False Positive parent is
-    dropped (spec §5.3). Reads the other sets' stores, so it runs on the save
-    worker. Without a project to resolve them against only the parse is checked."""
+    A link to a re-run set or a missing alert is dropped (spec §5.3); one to
+    a parent that has since become a False Positive is kept (Ruling 13: greyed,
+    out of the totals, as on open). Reads the other sets' stores, so it runs
+    on the save worker. Without a project to resolve them against only the
+    parse is checked, and so in a review copy whose package has no snapshot:
+    nothing earlier resolves there, and the open keeps them as they are
+    (``earlier._kept_links``)."""
     draft = [link for link in (getattr(alert, "links", None) or ()) if parse_link(link) is not None]
     state = getattr(app_tile_model, "app_state", None)
     p = state.project.value if state is not None else None
     if not draft or p is None or target is None:
+        return draft
+    rc = getattr(p, "review_copy", None)
+    if rc is not None and getattr(rc, "snapshot_at", None) is None:
         return draft
     graph = growth_index.graph_for(p, target.alert_set.id, alert.alerts)
     return [link for link in draft if not graph.is_broken(link)]
