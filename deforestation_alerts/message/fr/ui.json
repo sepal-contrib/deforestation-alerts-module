@@ -336,6 +336,7 @@
         "many": "{n} à moins de {km} km · liens : {linked}"
       },
       "touches": "touche",
+      "touches_unlinked": "touche · non liée",
       "via": "par #{id}",
       "broken_rerun": "l'ensemble précédent a été relancé",
       "broken_fp": "désormais faux positif",

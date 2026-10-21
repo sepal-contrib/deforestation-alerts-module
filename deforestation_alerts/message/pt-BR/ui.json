@@ -336,6 +336,7 @@
         "other": "{n} a menos de {km} km · vínculos: {linked}"
       },
       "touches": "encosta",
+      "touches_unlinked": "encosta · não vinculado",
       "via": "por meio de #{id}",
       "broken_rerun": "o conjunto anterior foi executado de novo",
       "broken_fp": "agora falso positivo",

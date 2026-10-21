@@ -328,6 +328,7 @@
         "other": "{n} within {km} km · {linked} linked"
       },
       "touches": "touches",
+      "touches_unlinked": "touches · not linked",
       "via": "via #{id}",
       "broken_rerun": "earlier set was re-run",
       "broken_fp": "now false positive",

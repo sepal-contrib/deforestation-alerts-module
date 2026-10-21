@@ -239,6 +239,8 @@ class EarlierItem:
     state: State
     via: Optional[str]
     color: str
+    #: Integrate linked it (``grows_from_auto``): an untick still says *touches*
+    touches: bool = False
 
 
 @dataclass(frozen=True)
@@ -335,7 +337,8 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
             if c.key in members and c.link not in items and c.key not in valid:
                 items[c.link] = (c, "via", hangs.get(c.key))
     for c in cands:
-        if c.link not in items and dist.get(c.link, float("inf")) <= radius_m:
+        # an automatic link the reviewer unticked stays listed, whatever the distance
+        if c.link not in items and (c.link in auto or dist.get(c.link, float("inf")) <= radius_m):
             items[c.link] = (c, "none", None)
 
     # the palette order comes from the candidates only, so a period keeps its
@@ -348,7 +351,8 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         d = dist.get(link)
         if d is None and c.node.shape is not None and shape is not None and crs is not None:
             d = float(shapely.distance(*_to_crs([c.node.shape, shape], crs)))
-        out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors.get(c.node.period_id, OLDER_GREY)))
+        out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors.get(c.node.period_id, OLDER_GREY),
+                               touches=link in auto))
     out.sort(key=lambda it: (-it.cand.node.period_start.toordinal(), it.distance_m))
     return EarlierView(
         items=tuple(out),

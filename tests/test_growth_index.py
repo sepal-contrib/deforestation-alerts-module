@@ -226,6 +226,19 @@ def test_draft_links_can_remove_a_stored_link(project):
     assert growth_index.history_summary(p, "oct", _current(stored), 1, [], load=load) is None
 
 
+def test_an_unticked_automatic_link_keeps_its_touches_tag(project):
+    """``grows_from_auto`` tells an untick from "never linked" (spec §5.1)."""
+    p = project
+    auto = [_link(p, "sep", 12)]
+    view = growth_index.earlier_view(p, "oct", _current(auto), 1, [], auto, 0.1, load=_loader(_stores(p)))
+    by_key = {it.cand.key: it for it in view.items}
+    assert by_key["sep#12"].state == "none" and by_key["sep#12"].touches is True
+    assert "sep#15" not in by_key  # outside 0.1 m, never linked
+    ticked = growth_index.earlier_view(p, "oct", _current(auto), 1, auto, auto, 1000, load=_loader(_stores(p)))
+    by_key = {it.cand.key: it for it in ticked.items}
+    assert by_key["sep#12"].state == "auto" and by_key["sep#15"].touches is False
+
+
 def test_period_order_comes_from_candidates_only(project):
     p = project
     stores = _stores(p)

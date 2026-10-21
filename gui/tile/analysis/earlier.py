@@ -89,10 +89,13 @@ def distance_text(metres) -> str:
 
 
 def note_text(item) -> str:
-    """What a row says after its status: *touches* (an automatic link), *via
-    #12*, why a link is broken, or the distance."""
+    """What a row says after its status: *touches* (an automatic link),
+    *touches · not linked* (one the reviewer unticked), *via #12*, why a link
+    is broken, or the distance."""
     if item.state == "auto":
         return t("analysis_tile.earlier.touches")
+    if item.state == "none" and item.touches:
+        return t("analysis_tile.earlier.touches_unlinked")
     if item.state == "via":
         return t("analysis_tile.earlier.via", id=(item.via or "").rpartition("#")[2])
     if item.state == "broken":

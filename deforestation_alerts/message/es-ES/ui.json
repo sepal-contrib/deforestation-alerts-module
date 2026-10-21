@@ -336,6 +336,7 @@
         "many": "{n} a menos de {km} km · vínculos: {linked}"
       },
       "touches": "toca",
+      "touches_unlinked": "toca · no vinculada",
       "via": "vía #{id}",
       "broken_rerun": "el conjunto anterior se volvió a ejecutar",
       "broken_fp": "ahora falso positivo",

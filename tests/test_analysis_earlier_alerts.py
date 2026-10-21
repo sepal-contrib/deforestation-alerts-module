@@ -124,6 +124,14 @@ def test_distance_and_broken_notes():
     assert earlier.note_text(fp) == earlier.t("analysis_tile.earlier.broken_fp")
 
 
+def test_an_unticked_automatic_link_says_so():
+    item = EarlierItem(SEP12, 0.0, "none", None, COLORS[SEP.id], touches=True)
+    assert earlier.note_text(item) == earlier.t("analysis_tile.earlier.touches_unlinked")
+    assert earlier.t("analysis_tile.earlier.touches_unlinked") == "touches · not linked"
+    assert earlier.note_text(EarlierItem(SEP15, 40.0, "none", None, COLORS[SEP.id])) == earlier.t(
+        "analysis_tile.earlier.distance_m", m="40")
+
+
 def test_tick_and_untick_update_draft_links(monkeypatch):
     widgets, analysis, app_state, calls = _setup(monkeypatch)
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
