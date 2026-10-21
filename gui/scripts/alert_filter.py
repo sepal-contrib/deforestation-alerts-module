@@ -43,7 +43,7 @@ from deforestation_alerts.project.questions import column as question_column
 from deforestation_alerts.project.questions import is_answer_column
 from deforestation_alerts.project.review_status import NOT_REVIEWED, is_reviewed, reviewed_mask
 from deforestation_alerts.project.split import EVALUATOR_COLUMN
-from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWTH_COLUMNS
 from gui.i18n import t
 from gui.scripts import questions as answers
 from gui.scripts.legend_specs import STATUS_CLASSES
@@ -55,8 +55,10 @@ STATUS_COLUMN = "status"
 MAX_VALUES = 50
 
 #: Columns never offered: ids, the alert's own measures and dates, its
-#: sources, and the image picks a save stores.
-_EXCLUDED = frozenset({"alert_id", "set_id", "alert_sources", "alert_type_unique", "count", "area_ha"})
+#: sources, the image picks a save stores, and the growth columns (offered as
+#: Kind, never raw).
+_EXCLUDED = frozenset({"alert_id", "set_id", "alert_sources", "alert_type_unique", "count", "area_ha",
+                       *GROWTH_COLUMNS})
 
 #: kind -> the key that names it
 _KIND_KEYS = {KIND_NEW: "analysis_tile.facts.kind_new", KIND_GROWTH: "analysis_tile.facts.kind_growth",

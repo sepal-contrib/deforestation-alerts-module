@@ -255,6 +255,12 @@ def test_kind_filter_offered_only_with_growth():
     ]
 
 
+def test_growth_columns_are_never_offered_raw():
+    gdf = _kinds()
+    gdf["grows_from_auto"] = [[], [LINK], [], [], [LINK]]
+    assert [c.column for c in filter_columns(gdf, QS)] == ["status", "kind"]
+
+
 def test_kind_filter_absent_on_old_set():
     assert "kind" not in [c.column for c in filter_columns(_six(), QS)]
     assert "kind" not in [c.column for c in filter_columns(_alerts(status=["Not reviewed"] * 2,
