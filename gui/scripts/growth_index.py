@@ -6,12 +6,17 @@ here. Each set's nodes (``growth.nodes_of_set``) and parent candidates are read
 once and kept, one entry per (project, set id), until the set's run id, store
 generation or grid epsg changes (without a size cap: every call walks every
 set, so an LRU smaller than the project would reload them all); the candidates' shapes are also kept in the grid CRS so
-distances are cheap per alert.
+distances are cheap per alert. The current set's nodes, read from the live
+table, are kept too, while that table is the same (its store generation, else
+the object itself, and its length): a tick or the next alert only swaps the
+edited row's links (``_with_links``). One refresh builds one graph: the
+earlier view hands it to ``history_summary``.
 """
 
 import threading
+import weakref
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Literal, NamedTuple, Optional
 
@@ -44,6 +49,7 @@ from deforestation_alerts.project.review_status import FALSE_POSITIVE, NOT_REVIE
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import store_generation
 from gui.scripts import set_store
+from gui.scripts.set_store import STORE_GENERATION
 
 #: Earlier periods' colours, newest earlier period first (spec §6.3): bright
 #: enough for satellite imagery, dark enough for SEPAL Light, distinct from the
@@ -86,6 +92,9 @@ class _Snapshot(NamedTuple):
 _cache: "dict[tuple, tuple[tuple, _Entry]]" = {}
 #: ``{project name: (key, snapshot)}``: a review copy's earlier alerts.
 _snapshots: "dict[str, tuple[tuple, _Snapshot]]" = {}
+#: ``{(project name, set id): (key, table ref or None, nodes)}``: the current
+#: set's nodes, from its live table (``_current_nodes``)
+_current: "dict[tuple, tuple]" = {}
 _lock = threading.Lock()
 _NO_SNAPSHOT = _Snapshot((), (), None)
 
@@ -94,6 +103,7 @@ def clear_cache() -> None:
     with _lock:
         _cache.clear()
         _snapshots.clear()
+        _current.clear()
 
 
 def _grid_epsg(p):
@@ -200,6 +210,29 @@ def _with_links(nodes, alert_id, links):
             for n in nodes]
 
 
+def _current_nodes(p, cur, period, gdf) -> tuple:
+    """``nodes_of_set`` of the live table ``gdf`` of the current set, kept
+    while it is the same table: the same store generation (a Save stamps a new
+    one, ``review_save.save_review``), else the same object, and the same
+    length; and the same run and period."""
+    stamp = gdf.attrs.get(STORE_GENERATION)
+    key = (stamp if stamp is not None else id(gdf), len(gdf), run_id_of(cur), period)
+    slot = (p.name, cur.id)
+    with _lock:
+        hit = _current.get(slot)
+    # an id only names the table while it lives: the entry holds a weak reference to check it
+    if hit is not None and hit[0] == key and (hit[1] is None or hit[1]() is gdf):
+        return hit[2]
+    nodes = tuple(nodes_of_set(cur, period, gdf))
+    try:
+        ref = None if stamp is not None else weakref.ref(gdf)
+    except TypeError:
+        return nodes  # not weak-referenceable: not kept
+    with _lock:
+        _current[slot] = (key, ref, nodes)
+    return nodes
+
+
 def _parts(p, set_id, gdf_current, load, alert_id=None, links=None) -> tuple[list[Node], dict[str, str]]:
     """The graph's nodes and run ids. In a review copy the earlier ones are
     the package snapshot's (every row it holds, so a link to a since false
@@ -216,7 +249,7 @@ def _parts(p, set_id, gdf_current, load, alert_id=None, links=None) -> tuple[lis
     for s in p.alert_sets.values():
         if s.id != set_id:
             nodes.extend(_entry(p, s, load).nodes)
-    current = nodes_of_set(cur, period, gdf_current) if gdf_current is not None and period is not None else []
+    current = _current_nodes(p, cur, period, gdf_current) if gdf_current is not None and period is not None else ()
     nodes.extend(_with_links(current, alert_id, links))
     return nodes, run_ids
 
@@ -249,6 +282,9 @@ class EarlierView:
     n_within: int
     n_linked: int
     periods: tuple[tuple[str, date], ...]  # newest first
+    #: the link graph the view was built from (the draft links in place):
+    #: ``history_summary`` reuses it
+    graph: Optional[LinkGraph] = field(default=None, compare=False, repr=False)
 
 
 def _row_shape(gdf, alert_id):
@@ -281,13 +317,12 @@ def _distances(pairs, shape, crs) -> dict:
     return {c.link: float(d) for (c, _), d in zip(pairs, shapely.distance(metric, here))}
 
 
-def _via(nodes, run_ids, current: str, seeds: Sequence[str]) -> dict:
+def _via(graph, current: str, seeds: Sequence[str]) -> dict:
     """``{member key: seed key}``: which of ``seeds`` (the current alert's
     neighbours) each member of its history hangs from, the current alert left out."""
-    rest = build_graph([n for n in nodes if n.key != current], run_ids)
     out: dict[str, str] = {}
     for seed in seeds:
-        for key in rest.component(seed):
+        for key in graph.component(seed, without=current):
             out.setdefault(key, seed)
     return out
 
@@ -332,7 +367,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         # neighbours: the linked parents first, then later alerts linking to this one
         children = [k for k, n in nodes_by_key.items()
                     if any(not graph.is_broken(lk) and node_key(*parse_link(lk)[:2]) == current for lk in n.links)]
-        hangs = _via(nodes, run_ids, current, valid + children)
+        hangs = _via(graph, current, valid + children)
         for c in cands:
             if c.key in members and c.link not in items and c.key not in valid:
                 items[c.link] = (c, "via", hangs.get(c.key))
@@ -359,6 +394,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         n_within=sum(1 for it in out if it.state != "broken" and it.distance_m <= radius_m),
         n_linked=sum(1 for it in out if it.state in ("auto", "linked")),
         periods=tuple(periods),
+        graph=graph,
     )
 
 
@@ -379,10 +415,12 @@ class HistorySummary:
 
 
 def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str], *,
-                    load=set_store.load_set_alerts) -> Optional[HistorySummary]:
+                    load=set_store.load_set_alerts, graph: Optional[LinkGraph] = None) -> Optional[HistorySummary]:
     """The History row (spec §6.1) of one alert, with ``links`` (the draft
-    ticks) in place of its stored ones; None when it has no history."""
-    graph = _graph(p, set_id, gdf_current, load, alert_id, links)
+    ticks) in place of its stored ones; None when it has no history.
+    ``graph``: one already built for these links (``EarlierView.graph``)."""
+    if graph is None:
+        graph = _graph(p, set_id, gdf_current, load, alert_id, links)
     members = graph.component(node_key(set_id, alert_id))
     nodes = [graph.node(k) for k in members if graph.node(k) is not None]
     if len(nodes) < 2:

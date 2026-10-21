@@ -191,7 +191,7 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
     km = analysis.earlier_radius_km.value
     alert_id = _alert_id(gdf, pos)
     view = growth_index.earlier_view(p, s.id, gdf, alert_id, links, auto, km * 1000.0)
-    summary = growth_index.history_summary(p, s.id, gdf, alert_id, links)
+    summary = growth_index.history_summary(p, s.id, gdf, alert_id, links, graph=view.graph)
     windows = growth_index.parent_windows(view)
     hidden = analysis.earlier_hidden_periods.value
     kept = _kept_links(p, view, links)

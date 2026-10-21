@@ -241,15 +241,17 @@ class LinkGraph:
         n = self._nodes.get(key)
         return n is not None and n.status == FALSE_POSITIVE
 
-    def component(self, key: str) -> frozenset[str]:
+    def component(self, key: str, without: Optional[str] = None) -> frozenset[str]:
+        """The history of ``key``; ``without``: a node left out, as if it
+        were not in the graph."""
         if self._is_fp(key):
             return frozenset()
-        if key not in self._nodes:
+        if key not in self._nodes or key == without:
             return frozenset({key})
         seen, todo = {key}, [key]
         while todo:
             for nxt in self._adj[todo.pop()]:
-                if nxt not in seen and not self._is_fp(nxt):
+                if nxt not in seen and nxt != without and not self._is_fp(nxt):
                     seen.add(nxt)
                     todo.append(nxt)
         return frozenset(seen)

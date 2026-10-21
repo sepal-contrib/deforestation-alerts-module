@@ -346,3 +346,66 @@ def test_set_histories_largest_first(project):
 def test_set_histories_old_set_has_no_rows(project):
     summary = growth_index.set_histories(project, "oct", _current(), load=_loader(_stores(project)))
     assert summary == growth_index.GrowthSummary(0, 0, 0.0, 0, ())
+
+
+def test_one_refresh_builds_the_current_sets_nodes_at_most_once(project, monkeypatch):
+    """Opening an alert (or a tick) reads the current set's rows once: the
+    earlier view, the History row and the via lookup share one graph, and the
+    current set's nodes are kept while its rows stay the same."""
+    from types import SimpleNamespace
+
+    import solara
+
+    from gui.tile.analysis import earlier
+    from gui.tile.analysis.state import AnalysisState
+
+    p = project
+    built = []
+    real = growth_index.nodes_of_set
+
+    def counted(s, period, gdf):
+        built.append(s.id)
+        return real(s, period, gdf)
+
+    monkeypatch.setattr(growth_index, "nodes_of_set", counted)
+    load = _loader(_stores(p))
+    for fn in (growth_index.earlier_view, growth_index.history_summary):
+        monkeypatch.setitem(fn.__kwdefaults__, "load", load)
+    monkeypatch.setattr(earlier, "active_set", lambda p_: p_.alert_sets["oct"])
+    graphs = []
+    real_build = growth_index.build_graph
+    monkeypatch.setattr(growth_index, "build_graph", lambda *a: graphs.append(1) or real_build(*a))
+
+    links = (_link(p, "sep", 12),)
+    gdf = _gdf([_row(1, "Not reviewed", CUR, links=links), _row(2, "Not reviewed", SEP15)])
+    analysis = AnalysisState()
+    analysis.links.set(links)
+    app_state = SimpleNamespace(alerts_gdf=solara.reactive(gdf), actual_alert_id=solara.reactive(0),
+                                project=solara.reactive(p))
+    earlier.refresh_earlier(SimpleNamespace(panes=None), analysis, app_state)
+    assert built.count("oct") == 1 and len(graphs) == 1
+    assert analysis.history.value is not None and analysis.history.value.n == 3
+
+    built.clear()
+    graphs.clear()
+    analysis.links.set(())  # a tick: the same rows, another draft
+    earlier.refresh_earlier(SimpleNamespace(panes=None), analysis, app_state)
+    assert built == [] and len(graphs) == 1
+    assert analysis.history.value is None
+    # another table (Save re-publishes one) is read again
+    app_state.alerts_gdf.set(gdf.copy())
+    earlier.refresh_earlier(SimpleNamespace(panes=None), analysis, app_state)
+    assert built == ["oct"]
+
+
+def test_the_current_sets_nodes_follow_the_store_generation(project):
+    p = project
+    load = _loader(_stores(p))
+    gdf = _gdf([_row(1, "Not reviewed", CUR)])
+    gdf.attrs[set_store.STORE_GENERATION] = (1, 1)
+    link = _link(p, "sep", 12)
+    assert growth_index.history_summary(p, "oct", gdf, 1, [link], load=load).unreviewed_ha > 0
+    gdf.at[0, "status"] = "Confirmed"  # what a Save does, then it stamps the new generation
+    gdf.attrs[set_store.STORE_GENERATION] = (2, 2)
+    summary = growth_index.history_summary(p, "oct", gdf, 1, [link], load=load)
+    assert summary.n == 3 and summary.unreviewed_ha == 0
