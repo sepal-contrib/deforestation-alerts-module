@@ -6,7 +6,7 @@ the right panel's host. It re-renders when ``active_step``, ``project`` or
 ``PipelineHeader`` itself receives the ``project``/theme reactives and reads
 them again (the prop-equality-bailout rule from the scaffold).
 
-Analysis is not a step: the Questionnaire step ends with *Start analysis*,
+Analysis is not a step: the Evaluation step ends with *Start analysis*,
 and the left rail has an Analysis entry.
 
 A review copy's banner (spec §6.3) sits under the header: above every step.

@@ -92,24 +92,27 @@ def filtered_counter_text(mask, index: int) -> str:
 
 
 _COUNTER_CLASS = f"{TYPE_TITLE} dat-num"
+_ON = "dat-pos-chip primary"
 
 
 def counter_chip_class(mask, index: int, total: int) -> str:
-    """How the counter is worn: ``dat-pos-chip`` (the workflow's green
-    "5 / 8" step chip) on a position, ``dat-pos-chip dat-pos-chip--off``
+    """How the counter is worn: ``dat-pos-chip primary`` (the workflow's
+    "5 / 8" step chip, in the theme's primary colour: the theme publishes no
+    ``--v-primary-base``, so its class paints it) on a position,
+    ``dat-pos-chip dat-pos-chip--off``
     (grey) on ``– / 87`` (the alert on screen is outside the filter ``mask``),
     and nothing on a sentence ("No alert set is loaded", "No alerts match
     this filter"). ``mask`` is None without a filter."""
     if total <= 0:
         return ""
     if mask is None:
-        return "dat-pos-chip"
+        return _ON
     mask = np.asarray(mask, dtype=bool)
     if not mask.any():
         return ""
     if not (0 <= index < len(mask)) or not mask[index]:
         return "dat-pos-chip dat-pos-chip--off"
-    return "dat-pos-chip"
+    return _ON
 
 
 def filtered_tally_text(total: int, reviewed: int, all_alerts: int) -> str:
@@ -209,6 +212,9 @@ def facts_widgets(card):
     return slots["source"], slots["detected"], slots["chip"]
 
 
+_NAV_WIDTH = "min-width: 124px;"
+
+
 def _build_nav(app_state, id_field, counter, labels):
     """Previous / Next, and the counter as a button that opens a small menu:
     "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
@@ -220,9 +226,10 @@ def _build_nav(app_state, id_field, counter, labels):
     ``v.TextField`` the tile owns, where the tests read and write
     ``.v_model``."""
     # The app's secondary buttons (``gui.widget.buttons``), the words kept
-    # beside the chevrons; the label hook below writes them.
-    prev = btn("secondary", icon="mdi-chevron-left")
-    nxt = btn("secondary", icon_right="mdi-chevron-right")
+    # beside the chevrons; the label hook below writes them. One width for
+    # both, whatever their words ("Previous" is longer than "Next").
+    prev = btn("secondary", icon="mdi-chevron-left", style_=_NAV_WIDTH)
+    nxt = btn("secondary", icon_right="mdi-chevron-right", style_=_NAV_WIDTH)
     prev.on_event("click", lambda *_: app_state.go_prev())
     nxt.on_event("click", lambda *_: app_state.go_next())
 

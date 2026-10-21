@@ -21,7 +21,7 @@ step. It sits right of MapApp's rail, which stays usable on it (the rail
 dialogs, the theme toggle, the language selector); MapApp's main map and
 right panel (the pipeline header, the step panels) stay mounted, hidden,
 while it shows. ``goto_step(page, "analysis")`` opens it through
-Questionnaire's *Start analysis*; ``goto_step`` leaves it first with
+Evaluation's *Start analysis*; ``goto_step`` leaves it first with
 ``back_to_workflow`` for any other step, and ``panel_text`` reads the
 screen's console there. The rail helpers work on it as they are.
 """
@@ -304,11 +304,11 @@ def goto_step(page, key, wait=1500):
     """A workflow step by key, from the workflow or from the analysis screen.
 
     ``"analysis"`` is not a step: it is the analysis screen, which
-    Questionnaire's *Start analysis* opens (enabled once an alert set exists).
+    Evaluation's *Start analysis* opens (enabled once an alert set exists).
     """
     back_to_workflow(page)
     if key == "analysis":
-        page.locator('[data-step-key="questionnaire"]').first.click()
+        page.locator('[data-step-key="evaluators"]').first.click()
         start = page.locator(".defo-start-analysis:visible").first
         wait_for(lambda: start.count() and start.is_enabled(), 30, "Start analysis enabled")
         start.click()

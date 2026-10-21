@@ -292,7 +292,7 @@ def test_a_rail_dialog_opened_on_the_analysis_screen_keeps_the_screen():
 
 # ----------------------------------------------------------- start analysis
 def test_the_header_has_no_start_analysis_and_no_next_on_the_last_step():
-    """*Start analysis* ends the Questionnaire step now, not the header."""
+    """*Start analysis* ends the Evaluation step now, not the header."""
     from gui.widget.pipeline_header import PipelineHeader
     from tests.test_pipeline_header import _project, _reactive
 
@@ -383,10 +383,11 @@ def test_only_the_main_map_and_the_right_panel_hide_under_the_screen():
     assert "defo-map-hidden" not in css and ".defo-stage" not in css
 
     root = _rules(SCREEN_CSS)[".defo-analysis-screen"]
-    for decl in ("position: fixed;", "top: 0;", "bottom: 0;", "left: var(--sepal-drawer-width, 60px);",
-                 "right: 0;", "z-index: 4;", "transition: left 0.3s ease;"):
+    for decl in ("position: fixed;", "top: 0;", "bottom: 0;", "left: 60px;", "right: 0;", "z-index: 4;"):
         assert decl in root, f"the screen root lacks {decl!r}: it sits right of the rail, full height"
     assert "inset" not in root and "--sepal-bottom-reserved" not in root and "--sepal-right-panel-width" not in root
+    # the expanded rail opens over the screen: the screen does not follow its width
+    assert "--sepal-drawer-width" not in root and "transition" not in root
 
 
 def test_leaving_the_screen_shows_mapapp_before_hiding_the_views():

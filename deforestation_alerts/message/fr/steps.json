@@ -96,7 +96,7 @@
     "alerts": {
       "description": "Les jeux de données d'alertes que ce projet surveille, avec la part de l'AOI que chacun couvre. Chacun est téléchargé pour chaque période, découpé selon l'AOI et les dates de la période.",
       "info_header": "À propos des sources d'alertes",
-      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement. Un projet contient au plus 3 sources prédéfinies et 6 personnalisées. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, supprimez-la et ajoutez-en une nouvelle.",
+      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* et *alertes PyEO SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement. Un projet contient au plus 3 sources prédéfinies et 6 personnalisées. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, supprimez-la et ajoutez-en une nouvelle.",
       "list_title": "Sources",
       "col_source": "Source",
       "col_coverage": "Couverture",
@@ -166,7 +166,9 @@
       "mode_hint": "Une source du catalogue, ou votre propre asset Earth Engine ou GeoTIFF.",
       "predefined_hint": "Chaque source indique quelle part de l'AOI elle couvre.",
       "name_hint": "24 caractères au plus ; il nomme aussi les fichiers de la source.",
-      "format_label": "Format des alertes"
+      "format_label": "Format des alertes",
+      "format_pyeo": "Alertes PyEO SEPAL",
+      "format_help_pyeo": "total_changes : 1–2 probable, 3 ou plus confirmée ; first_change_date_above_threshold : année fractionnaire"
     },
     "layers": {
       "description": "Des couches qui aident à lire les alertes : une image Earth Engine, un GeoTIFF de votre dossier SEPAL, ou Planet NICFI. Elles peuvent aussi être affichées sur les deux cartes d'Analyse.",

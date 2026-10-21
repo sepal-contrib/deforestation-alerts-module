@@ -39,6 +39,17 @@ def test_yyddd_and_yyyyddd_validity():
 def test_alert_codes():
     assert list(presets.alert_codes(np.array([0, 1, 2, 3, 4]), "radd")) == [0, 0, 2, 1, 0]
     assert list(presets.alert_codes(np.array([0, 1, 2, 3, 7, np.nan]), "ccdc")) == [0, 2, 2, 1, 1, 0]
+    # PyEO's total_changes is a detection count, read as CCDC's
+    assert list(presets.alert_codes(np.array([0, 1, 2, 3, 7, np.nan]), "pyeo")) == [0, 2, 2, 1, 1, 0]
+
+
+def test_pyeo_reads_its_first_change_date_in_fractional_years():
+    """SEPAL's PyEO alerts: ``first_change_date_above_threshold`` is a
+    fractional year, masked (NaN in a GeoTIFF) where nothing changed."""
+    dates = np.array([2026.0, 2026.5, np.nan, 2026.5])
+    counts = np.array([3.0, 1.0, 0.0, 0.0])
+    a, d = presets.apply_preset(counts, dates, "pyeo", "decimal_year", 2026001, 2026365)
+    assert list(a) == [1, 2, 0, 0] and list(d) == [2026001, 2026183, 0, 0]
 
 
 def test_apply_preset_keeps_both_window_ends():

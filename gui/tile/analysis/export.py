@@ -415,7 +415,7 @@ def build_export(
         ns["download_alert_data_btn"] = v.Btn(
             outlined=True, block=True, color="primary", disabled=True, class_="defo-build-tile",
             style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
-            children=[v.Icon(left=True, small=True, children=["mdi-cog"]), "", ns["save_first"]],
+            children=[v.Icon(left=True, small=True, children=["mdi-cogs"]), "", ns["save_first"]],
         )
         # A minor link under the tiles, as the workflow's *Edit split*.
         ns["rebuild_btn"] = btn("tertiary", icon="mdi-refresh", color="primary", small=False, x_small=True,

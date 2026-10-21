@@ -365,6 +365,20 @@ def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
         rc.close()
 
 
+def test_start_analysis_opens_the_analysis_screen(data_root):
+    """The step ends with the workflow's one *Start analysis*, which writes the
+    navigation signal (``_NavBridge`` opens the screen)."""
+    s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        (start,) = [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
+        assert not start.disabled
+        start.fire_event("click", None)
+        assert s.current_page_view.value == "analysis_tile"
+    finally:
+        rc.close()
+
+
 def test_switching_to_multiple_evaluators_is_saved_and_shows_the_split(data_root):
     s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)

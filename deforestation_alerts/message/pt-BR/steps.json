@@ -96,7 +96,7 @@
     "alerts": {
       "description": "Os conjuntos de dados de alertas que este projeto monitora, com a parte da AOI que cada um cobre. Cada um é baixado para todos os períodos, recortado pela AOI e pelas datas do período.",
       "info_header": "Sobre as fontes de alertas",
-      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nO chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso. Um projeto tem no máximo 3 fontes predefinidas e 6 personalizadas. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, exclua-a e adicione uma nova.",
+      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* e *alertas PyEO do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nO chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso. Um projeto tem no máximo 3 fontes predefinidas e 6 personalizadas. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, exclua-a e adicione uma nova.",
       "list_title": "Fontes",
       "col_source": "Fonte",
       "col_coverage": "Cobertura",
@@ -166,7 +166,9 @@
       "mode_hint": "Uma fonte do catálogo, ou seu próprio recurso do Earth Engine ou GeoTIFF.",
       "predefined_hint": "Cada fonte mostra quanto da AOI ela cobre.",
       "name_hint": "No máximo 24 caracteres; também dá nome aos arquivos da fonte.",
-      "format_label": "Formato dos alertas"
+      "format_label": "Formato dos alertas",
+      "format_pyeo": "Alertas PyEO do SEPAL",
+      "format_help_pyeo": "total_changes: 1–2 provável, 3 ou mais confirmado; first_change_date_above_threshold: ano fracionário"
     },
     "layers": {
       "description": "Camadas que ajudam a ler os alertas: uma imagem do Earth Engine, um GeoTIFF da sua pasta do SEPAL ou Planet NICFI. Elas também podem ser exibidas nos dois mapas da Análise.",

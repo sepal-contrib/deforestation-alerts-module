@@ -23,7 +23,7 @@ PAGE_VIEW_TO_RAIL = {r.page_view: r.step_id for r in RAIL_ITEMS if r.display == 
 RAIL_STEP_TO_PAGE_VIEW = {r.step_id: r.page_view for r in RAIL_ITEMS}
 #: Page views that open a screen of their own instead of a step or a dialog.
 #: Integrate's finish, the Overview's *Review alerts* / *Go* and
-#: Questionnaire's *Start analysis* all write "analysis_tile".
+#: Evaluation's *Start analysis* all write "analysis_tile".
 PAGE_VIEW_TO_SCREEN = {"analysis_tile": "analysis"}
 
 #: ``kind`` is ``"workflow"`` (``target`` = index into STEPS), ``"rail"``

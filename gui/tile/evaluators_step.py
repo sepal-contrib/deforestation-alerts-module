@@ -52,7 +52,6 @@ from gui.scripts.setup_guard import update_setup
 from gui.scripts.solara_threads import to_thread_in_context
 from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
-from gui.tile.questionnaire_step import _StartAnalysis
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
 from gui.widget.help import StepIntro
@@ -830,6 +829,19 @@ def _ReviewMode(app_state):
                         on_change=lambda checked, m=multi: _set(m, checked))
     rv.Html(tag="div", class_="defo-mode-note", style_="margin-top:4px;" + MUTED + "font-size:0.75rem;",
             children=[note])
+
+
+@solara.component
+def _StartAnalysis(app_state, ready):
+    """The workflow's one way into Analysis, after the last step's settings. It
+    writes ``current_page_view``, the navigation signal every other way into
+    Analysis writes; ``_NavBridge`` turns it into the analysis screen. Gated on
+    an active alert set, with the reason under it."""
+    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", block=True,
+                  disabled=not ready, classes=["defo-start-analysis"],
+                  on_click=lambda: app_state.current_page_view.set("analysis_tile"))
+    if not ready:
+        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
 
 
 @solara.component

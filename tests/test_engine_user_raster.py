@@ -119,6 +119,10 @@ def test_check_discovery_accepts_ccdc_without_or_with_date_format_1():
 def test_suggestions():
     assert ur.suggest_format(["alert", "DATE", "constant"]) == "radd"
     assert ur.suggest_format(["detection_count", "first_detection_date"]) == "ccdc"
+    assert ur.suggest_format(["available_image_count", "total_changes", "first_change_date_above_threshold",
+                              "fcd_decision_map"]) == "pyeo"
+    assert ur.suggest_band_map("pyeo", ["total_changes", "first_change_date_above_threshold"]) == BandMap(
+        alert="total_changes", date="first_change_date_above_threshold")
     assert ur.suggest_format(["disturbance_date"]) == "date_only"
     assert ur.suggest_band_map("radd", ["date", "ALERT"]) == BandMap(alert="ALERT", date="date")
     assert ur.suggest_band_map("radd", ["Band 1", "Band 2"]) is None

@@ -83,7 +83,9 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
     empty = v.Html(tag="div", style_="font-size: 12px; display: none;", children=[])
     # The app's dialog actions: a text *Clear*, the filled *Apply* that commits.
     clear = btn("tertiary")
-    apply = btn("primary", icon="mdi-filter-check-outline")
+    # ``mdi-filter``: the icon font jupyter-vuetify ships (MDI 4) has no
+    # ``mdi-filter-check-outline``, which drew nothing.
+    apply = btn("primary", icon="mdi-filter")
     body = v.Card(style_="width: 320px; padding: 12px; display: flex; flex-direction: column; gap: 10px;",
                   children=[
                       title, attribute, values, empty,

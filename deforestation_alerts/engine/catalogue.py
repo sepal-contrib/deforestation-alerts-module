@@ -205,7 +205,7 @@ def build_image(key: str, win_start: date, win_end: date, aoi, meta: dict) -> ee
     return builder(win_start, win_end, aoi, meta)
 
 
-# --- custom Earth Engine sources: the three format presets (spec §7.2) -------
+# --- custom Earth Engine sources: the format presets (spec §7.2) -------------
 
 _MONTH_STARTS = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]
 
@@ -246,7 +246,7 @@ def ee_yyyyddd(band: ee.Image, encoding: str) -> ee.Image:
 def _ee_codes(alert: ee.Image, fmt: str) -> ee.Image:
     if fmt == "radd":
         return alert.remap([2, 3], [2, 1], 0)
-    if fmt == "ccdc":
+    if fmt in ("ccdc", "pyeo"):
         return alert.gte(3).add(alert.gte(1).And(alert.lt(3)).multiply(2))
     raise ValueError(f"the {fmt!r} preset has no alert band")
 

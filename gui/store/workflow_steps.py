@@ -4,8 +4,8 @@ Two registries:
 
 * ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
   Period → Download & harmonize → Integrate & vectorize → Questionnaire →
-  Evaluators). Analysis is not a step: *Start analysis* (Questionnaire,
-  Evaluators) opens its own screen (``app_state.screen``), gated by ``active_set``. Gates and counts
+  Evaluators). Analysis is not a step: *Start analysis* (the last step,
+  Evaluation) opens its own screen (``app_state.screen``), gated by ``active_set``. Gates and counts
   read only the Project. Order, labels, gates, lock reasons and
   per-step output counts derive from it; ``PipelineHeader`` and the shell
   never hand-maintain step numbers.

@@ -109,6 +109,7 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <div class="right-panel">
     <button data-step-key="integrate" onclick="step('integrate')">integrate</button>
     <button data-step-key="questionnaire" onclick="step('questionnaire')">questionnaire</button>
+    <button data-step-key="evaluators" onclick="step('evaluators')">evaluators</button>
     <p id="showing">workflow on integrate</p>
     <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
   </div>
@@ -171,7 +172,7 @@ def test_the_panel_scope_follows_the_analysis_screen(screens):
 def test_goto_step_reaches_analysis_through_start_analysis(screens):
     walklib.goto_step(screens, "analysis", 100)
     assert _screen_on(screens)
-    assert screens.locator("#showing").text_content() == "workflow on questionnaire"
+    assert screens.locator("#showing").text_content() == "workflow on evaluators"
     # A workflow step from the analysis screen: back to the workflow first
     # (the stepper is in the right panel, hidden while the screen shows), then the step.
     walklib.goto_step(screens, "integrate", 100)

@@ -54,13 +54,13 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
     given): the buttons' words and the state line follow a language switch.
     """
     labels = labels if labels is not None else Labels()
-    # The end of an alert's review, drawn as the workflow's *Start analysis*:
-    # the screen's one default-size (36 px) filled button. *Save* is its
-    # outlined twin.
+    # The end of an alert's review: the filled button, *Save* its outlined
+    # twin. The screen's size (``small``), and halves of the row, as Start /
+    # Save drawing above them (user, 2026-10-21: one button width).
     save_next = btn("primary", t("analysis_tile.verdict.save_next"), icon_right="mdi-arrow-right",
-                    small=False, class_="flex-grow-1")
+                    class_="flex-grow-1", style_="flex-basis: 0;")
     save = btn("secondary", t("analysis_tile.export_labels.save_btn"), icon="mdi-content-save-outline",
-               small=False)
+               class_="flex-grow-1", style_="flex-basis: 0;")
     state_line = v.Html(tag="div", class_="dat-caption mt-2", children=[])
 
     save.on_event("click", lambda *_: run_save(save))

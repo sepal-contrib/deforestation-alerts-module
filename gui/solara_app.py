@@ -142,7 +142,7 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
     """Programmatic navigation: tiles' ``current_page_view`` writes → shell state.
 
     Tiles signal navigation by writing ``app_state.current_page_view``
-    (a finished Integrate, the Overview's "Review"/"Go" and Questionnaire's
+    (a finished Integrate, the Overview's "Review"/"Go" and Evaluation's
     *Start analysis* → the analysis screen, the Overview's "Workflow" → the
     active step, a new or opened project → AOI). This invisible leaf
     component resolves the string to a workflow index, a rail step id or a

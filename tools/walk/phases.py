@@ -453,7 +453,7 @@ def row_text(page, name, scope=".right-panel") -> str:
 
 def row_button(page, name, icon, scope=".right-panel"):
     """A row action by its icon (ProductTable): mdi-map-plus / mdi-map-minus (show / hide),
-    mdi-cloud-download-outline (run), mdi-cloud-refresh (re-download), mdi-pencil-outline,
+    mdi-cloud-download-outline (run), mdi-cloud-sync (re-download), mdi-pencil-outline,
     mdi-delete-outline, mdi-radiobox-blank / mdi-radiobox-marked (select)."""
     return row(page, name, scope).locator(f"button:has(.{icon})").first
 

@@ -9,7 +9,7 @@ sets, the active one with 90 unreviewed alerts) into its own data dir, adds a
 and reviews the first alert through it. Ten checks, each an entry in the JSON
 report with a screenshot:
 
- 1. the stepper has 7 steps and ends at Questionnaire, whose Next is *Start analysis*
+ 1. the stepper has 7 steps and ends at Evaluation, whose Next is *Start analysis*
  2. the question is added: list row, tags, ``{road_access}`` and ``{verdict}`` chips
  3. Analysis: Questions closed, badge "required missing" in orange after True alert
  4. Save & next with the answer missing: warning toast naming it, the section opens, no advance
@@ -180,8 +180,8 @@ def check_1_rail(page, rec, *, out):
     assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys, keys
     w.goto_step(page, "questionnaire", 2000)
     assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
-    # Analysis is a screen of its own: the last step's Next is *Start analysis*.
-    assert page.locator(".defo-start-analysis:visible").count() == 1, "no Start analysis on Questionnaire"
+    # Analysis is a screen of its own: the last step (Evaluation) ends with *Start analysis*.
+    assert page.locator(".defo-start-analysis:visible").count() == 0, "Start analysis on Questionnaire"
     w.shot(page, out, "01_rail_questionnaire")
 
 

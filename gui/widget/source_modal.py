@@ -1,6 +1,6 @@
 """Add Source modal (spec §6.2): a predefined source, offered with its
 coverage of the AOI, or a custom source from an Earth Engine image or
-collection or a GeoTIFF, read through one of three format presets."""
+collection or a GeoTIFF, read through one of the format presets."""
 
 import asyncio
 from datetime import date
@@ -30,7 +30,7 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 
-FORMATS = ("radd", "ccdc", "date_only")
+FORMATS = ("radd", "ccdc", "pyeo", "date_only")
 ENCODINGS = ("yymm", "yyddd", "yyyyddd", "decimal_year")
 MAX_CUSTOM = 6
 
@@ -312,7 +312,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                       outlined=True, disabled=busy,
                       items=[{"text": t(f"steps.alerts.format_{f}"), "value": f} for f in FORMATS],
                       hint=t(f"steps.alerts.format_help_{fmt}") if fmt else "", persistent_hint=bool(fmt))
-            if fmt in ("radd", "ccdc"):
+            if fmt in ("radd", "ccdc", "pyeo"):
                 rv.Select(label=t("steps.alerts.band_alert"), items=band_items, v_model=alert_band,
                           on_v_model=set_alert_band, dense=True, outlined=True, disabled=busy)
             if fmt is not None:

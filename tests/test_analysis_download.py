@@ -488,7 +488,7 @@ def test_the_export_body_follows_the_s1_states(tmp_path, monkeypatch):
     zip_tile, docx_tile, _gif = harness.parts.tiles
     label = [c for c in harness.build_btn.children if isinstance(c, str)]
     assert label == ["Build alert files"]
-    assert harness.build_btn.children[0].children == ["mdi-cog"]
+    assert harness.build_btn.children[0].children == ["mdi-cogs"]
     assert _strings(_rebuild_button(harness.parts.body)) == ["mdi-refresh", "Rebuild files"]
 
     before = _state(harness)

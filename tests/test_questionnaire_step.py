@@ -203,16 +203,13 @@ def test_without_an_active_set_the_step_says_to_integrate_first(tmp_path, monkey
         rc.close()
 
 
-def test_the_step_ends_with_start_analysis(tmp_path, monkeypatch):
-    """*Start analysis* is the step's last control. It writes the navigation
-    signal (``_NavBridge`` opens the screen)."""
+def test_the_step_has_no_start_analysis(tmp_path, monkeypatch):
+    """*Start analysis* ends the Evaluation step, the workflow's last; the
+    Questionnaire does not repeat it."""
     s = _state(tmp_path, monkeypatch)
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:
-        (start,) = [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
-        assert not start.disabled and t("workflow.lock_analysis") not in _strings(rc.container)
-        start.fire_event("click", None)
-        assert s.current_page_view.value == "analysis_tile"
+        assert not [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
     finally:
         rc.close()
 

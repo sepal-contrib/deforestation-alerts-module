@@ -103,7 +103,7 @@ def _with_set(p):
 
 
 def test_questionnaire_comes_before_evaluators_and_counts_questions():
-    """Analysis is a screen of its own (Questionnaire's *Start analysis*)."""
+    """Analysis is a screen of its own (Evaluation's *Start analysis*)."""
     from gui.store.workflow_steps import step_index, step_status
     keys = [s.key for s in STEPS]
     assert keys[-2:] == ["questionnaire", "evaluators"] and "analysis" not in keys

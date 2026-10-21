@@ -227,7 +227,7 @@ def suggest_format(band_names) -> Optional[str]:
     """The preset whose band names (case-insensitive) are all present; else
     date-only when there is any band."""
     names = list(band_names)
-    for fmt in ("radd", "ccdc"):
+    for fmt in ("radd", "ccdc", "pyeo"):
         if all(_match(names, b) for b in PRESETS[fmt]["bands"]):
             return fmt
     return "date_only" if names else None

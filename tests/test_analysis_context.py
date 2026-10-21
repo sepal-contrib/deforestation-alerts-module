@@ -73,9 +73,9 @@ def test_the_counter_is_one_based_and_padded_to_the_total():
 
 
 @pytest.mark.parametrize("mask, index, total, expected", [
-    (None, 4, 10, "dat-pos-chip"),                                 # a position: the green chip
+    (None, 4, 10, "dat-pos-chip primary"),                         # a position: the primary chip
     (None, -1, 0, ""),                                             # "No alert set is loaded"
-    ([True, False, True], 2, 3, "dat-pos-chip"),                   # a match of the filter
+    ([True, False, True], 2, 3, "dat-pos-chip primary"),           # a match of the filter
     ([True, False, True], 1, 3, "dat-pos-chip dat-pos-chip--off"),  # "– / 2": outside it
     ([False, False, False], 0, 3, ""),                             # "No alerts match this filter"
 ])

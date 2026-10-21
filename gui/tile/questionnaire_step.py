@@ -121,19 +121,6 @@ def _TemplateCard(app_state, questions):
 
 
 @solara.component
-def _StartAnalysis(app_state, ready):
-    """The workflow's way into Analysis, after the last step's settings. It
-    writes ``current_page_view``, the navigation signal every other way into
-    Analysis writes; ``_NavBridge`` turns it into the analysis screen. Gated on
-    an active alert set, with the reason under it."""
-    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", block=True,
-                  disabled=not ready, classes=["defo-start-analysis"],
-                  on_click=lambda: app_state.current_page_view.set("analysis_tile"))
-    if not ready:
-        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
-
-
-@solara.component
 def QuestionnaireStep(app_state):
     p = app_state.project.value
     modal_open = solara.use_reactive(False)
@@ -218,7 +205,6 @@ def QuestionnaireStep(app_state):
                       dense=True, hide_details=True, class_="mt-3")
             solara.Text(t("steps.questionnaire.expanded_hint"), style=MUTED + "font-size:0.75rem;")
         _TemplateCard(app_state=app_state, questions=p.questions)
-        _StartAnalysis(app_state=app_state, ready=True)  # the step opens only with an active set
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
                   columns=attribute_columns(p))

@@ -125,7 +125,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     it wins; the Solara hook stays as the fallback for a standalone render.
 
     The last step has no *Next*: Analysis is not a step, and the
-    Questionnaire step ends with its own *Start analysis*.
+    Evaluation step ends with its own *Start analysis*.
     """
     p = project.value
     states = step_states(p)

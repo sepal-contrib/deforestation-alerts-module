@@ -62,10 +62,13 @@ class BandMap(BaseModel):
     date: BandRef
 
 
-#: The three format presets (spec §7.2): their default band names and date encoding.
+#: The format presets (spec §7.2): their default band names and date encoding.
+#: SEPAL's PyEO alerts recipe reads as its CCDC alerts do: a detection count
+#: and the first detection's date in fractional years.
 PRESETS = {
     "radd": {"bands": ("Alert", "Date"), "encoding": "yyddd"},
     "ccdc": {"bands": ("detection_count", "first_detection_date"), "encoding": "decimal_year"},
+    "pyeo": {"bands": ("total_changes", "first_change_date_above_threshold"), "encoding": "decimal_year"},
     "date_only": {"bands": (None, None), "encoding": None},
 }
 
@@ -76,7 +79,7 @@ class CustomSource(BaseModel):
     origin: Literal["gee", "file"]
     ref: str  # asset id, or absolute path
     asset_type: Literal["IMAGE", "IMAGE_COLLECTION", "FILE"] = "IMAGE"
-    format: Literal["radd", "ccdc", "date_only"]
+    format: Literal["radd", "ccdc", "pyeo", "date_only"]
     date_encoding: Literal["yyddd", "yymm", "yyyyddd", "decimal_year"] = "yyddd"
     band_map: BandMap = Field(default_factory=lambda: BandMap(alert="Alert", date="Date"))
     native: Optional[NativeGrid] = None  # discovered when the source was added (spec §6.2)

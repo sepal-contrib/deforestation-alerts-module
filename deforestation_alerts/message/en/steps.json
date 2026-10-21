@@ -90,7 +90,7 @@
     "alerts": {
       "description": "The alert datasets this project monitors, with the share of the AOI each one covers. Each is downloaded for every period, cut to the AOI and the period's dates.",
       "info_header": "About alert sources",
-      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning. A project holds at most 3 predefined and 6 custom sources. A custom source can be edited until an alert set uses it; after that, delete it and add a new one.",
+      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning. A project holds at most 3 predefined and 6 custom sources. A custom source can be edited until an alert set uses it; after that, delete it and add a new one.",
       "list_title": "Sources",
       "col_source": "Source",
       "col_coverage": "Coverage",
@@ -159,7 +159,9 @@
       "mode_hint": "A catalogue source, or your own Earth Engine asset or GeoTIFF.",
       "predefined_hint": "Each source shows how much of the AOI it covers.",
       "name_hint": "At most 24 characters; it also names the source's files.",
-      "format_label": "Alert format"
+      "format_label": "Alert format",
+      "format_pyeo": "SEPAL PyEO alerts",
+      "format_help_pyeo": "total_changes: 1–2 probable, 3 or more confirmed; first_change_date_above_threshold: fractional year"
     },
     "layers": {
       "description": "Layers that help you read the alerts: an Earth Engine image, a GeoTIFF from your SEPAL folder, or Planet NICFI. They can also be shown on the two Analysis maps.",

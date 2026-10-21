@@ -1,4 +1,4 @@
-"""The three format presets of a custom alert source, in numpy (spec §7.2).
+"""The format presets of a custom alert source, in numpy (spec §7.2).
 
 GeoTIFF sources are converted with these functions (``normalize.py``); the
 Earth Engine twins live in ``catalogue`` (``ee_yyyyddd``, ``preset_image``) and
@@ -7,7 +7,7 @@ must give the same codes and dates. Dates become the engine's integer
 after windowing only: ``to_yyyyddd`` turns |value| >= 1e7 (float32 no-data)
 into 0 and ``ee_yyyyddd`` does not, but no such value falls in a date window.
 
-The CCDC conversion adds a 0.05-day tolerance (about an hour) inside the
+The decimal-year conversion (CCDC, PyEO) adds a 0.05-day tolerance (about an hour) inside the
 floor: the literal ``floor(frac(y) * diy)`` put half of all start-of-day
 encodings one day early (float rounding), in float32 and float64. The cap at
 ``diy - 1`` keeps 31 December from becoming day 366 of a 365-day year. An
@@ -16,7 +16,7 @@ end-of-day encoding (``doy / diy``) would come out one day late (spec §15).
 
 import numpy as np
 
-FORMATS = ("radd", "ccdc", "date_only")
+FORMATS = ("radd", "ccdc", "pyeo", "date_only")
 ENCODINGS = ("yyddd", "yymm", "yyyyddd", "decimal_year")
 TOLERANCE_DAYS = 0.05
 #: day of year of each month's first day in a non-leap year, indexed by month 1..12
@@ -71,7 +71,7 @@ def alert_codes(alert, fmt: str) -> np.ndarray:
     a = np.where(np.isfinite(a), a, 0.0)
     if fmt == "radd":
         return np.where(a == 3, 1, np.where(a == 2, 2, 0)).astype(np.int32)
-    if fmt == "ccdc":
+    if fmt in ("ccdc", "pyeo"):  # a detection count: PyEO's total_changes reads as CCDC's
         return np.where(a >= 3, 1, np.where(a >= 1, 2, 0)).astype(np.int32)
     raise ValueError(f"the {fmt!r} preset has no alert band")
 
