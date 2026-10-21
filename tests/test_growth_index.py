@@ -296,3 +296,28 @@ def test_with_growth_columns_loads_each_set_once(project):
                 _row(2, "Not reviewed", AUG7), _row(3, "Not reviewed", SEP15)])
     growth_index.with_growth_columns(p, "oct", gdf, load=_loader(_stores(p), calls))
     assert sorted(calls) == ["aug", "sep"]
+
+
+def test_set_histories_largest_first(project):
+    p = project
+    near_sep15 = box(-54.9991, -24.9995, -54.9986, -24.9990)  # touches SEP15 on its north side
+    current = _gdf([
+        {**_row(1, "Confirmed", CUR, links=[_link(p, "sep", 12)]), "below_min": False},
+        {**_row(2, "Not reviewed", near_sep15, links=[_link(p, "sep", 15)]), "below_min": True},
+        {**_row(3, "Not reviewed", box(-54.8000, -25.0000, -54.7995, -24.9995)), "below_min": False},
+    ])
+    summary = growth_index.set_histories(p, "oct", current, load=_loader(_stores(p)))
+    assert (summary.n_growth, summary.n_growth_small, summary.n_reviewed) == (1, 1, 1)
+    assert summary.area_ha == pytest.approx(0.5)
+    [big, small] = summary.rows
+    assert (big.alert_id, big.n) == (1, 3)  # aug 4 + sep 12 + this set's alert
+    assert (small.alert_id, small.n) == (2, 2)
+    assert big.confirmed_ha > small.confirmed_ha > 0
+    assert big.added_ha == pytest.approx(0.27, rel=0.15)  # this set's one ~50 m box
+    assert big.first_period.startswith("2026-08-01") and big.last_period.startswith("2026-10-01")
+    assert small.first_period.startswith("2026-09-01")
+
+
+def test_set_histories_old_set_has_no_rows(project):
+    summary = growth_index.set_histories(project, "oct", _current(), load=_loader(_stores(project)))
+    assert summary == growth_index.GrowthSummary(0, 0, 0.0, 0, ())

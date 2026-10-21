@@ -32,6 +32,7 @@ from shapely.geometry import box
 from deforestation_alerts.engine.fingerprint import (
     fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
 )
+from deforestation_alerts.project.growth import run_id_of
 from deforestation_alerts.project.models import (
     AlertSet,
     AlertSetParams,
@@ -792,5 +793,63 @@ def test_no_map_switch_without_the_alerts_on_hand(ov, tmp_path):
     map_, layers, rc = ov.render(_state(_project(tmp_path), None))
     try:
         assert rc.find(v.Switch).widgets == []
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# The History card: growth alerts and the clearings they grow
+# ---------------------------------------------------------------------------
+def _growth_february(p, tmp_path):
+    """February over January's confirmed alert 0: February's alert 10 grows from
+    it, alert 11 is a new one."""
+    jan = p.alert_sets[p.active_set]
+    feb = _with_february(p, tmp_path)
+    gdf = _february_alerts()
+    gdf["grows_from"] = [f"{jan.id}#0@{run_id_of(jan)}", ""]
+    gdf["below_min"] = [False, False]
+    _write_store(tmp_path, "d", feb, gdf)
+    return feb, gdf
+
+
+def test_growth_card_hidden_without_growth(ov, tmp_path):
+    p = _project(tmp_path)
+    _with_february(p, tmp_path)  # an old set: no growth columns
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        assert t("overview_tile.card_growth") not in _texts(rc)
+    finally:
+        rc.close()
+
+
+def test_growth_card_lists_the_history_and_follows_the_measure(ov, tmp_path):
+    p = _project(tmp_path)
+    _growth_february(p, tmp_path)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _texts(rc)
+        assert t("overview_tile.card_growth") in texts
+        assert any(text.startswith("1 ") and " ha" in text for text in texts), texts
+        head, rows = _table(rc, t("overview_tile.growth_period"))
+        [[period, n, confirmed, added, _]] = rows
+        assert period == t("overview_tile.growth_range", first=f"{JAN.start} → {JAN.end}", last=f"{FEB.start} → {FEB.end}")
+        assert n == "2"
+        _btn(rc, t("overview_tile.measure_alerts")).click()
+        assert not any(" ha" in text and text.startswith("1 ") for text in _texts(rc))
+    finally:
+        rc.close()
+
+
+def test_growth_card_review_button_jumps(ov, tmp_path, monkeypatch):
+    p = _project(tmp_path)
+    feb, gdf = _growth_february(p, tmp_path)
+    calls, closed = [], []
+    monkeypatch.setattr(set_store, "go_to_alert", lambda *args: calls.append(args) or True)
+    state = _state(p, gdf)
+    map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(True))
+    try:
+        _btn(rc, t("overview_tile.growth_review")).click()
+        assert calls == [(state, "d", feb.id, 10, 0)]
+        assert closed == [True]
     finally:
         rc.close()

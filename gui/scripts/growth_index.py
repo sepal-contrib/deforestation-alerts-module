@@ -23,7 +23,10 @@ from pyproj import Transformer
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import paths, review_copy
 from deforestation_alerts.project.growth import (
+    KIND_GROWTH,
+    KIND_GROWTH_SMALL,
     Candidate,
+    HistoryArea,
     LinkGraph,
     Node,
     build_graph,
@@ -37,9 +40,10 @@ from deforestation_alerts.project.growth import (
     read_snapshot,
     run_id_of,
 )
-from deforestation_alerts.project.review_status import FALSE_POSITIVE
+from deforestation_alerts.project.review_status import FALSE_POSITIVE, NOT_REVIEWED
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import store_generation
+from gui.i18n import t
 from gui.scripts import set_store
 
 #: Earlier periods' colours, newest earlier period first (spec §6.3): bright
@@ -355,6 +359,14 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
     )
 
 
+def _area_of(p, nodes) -> HistoryArea:
+    """``growth.history_area`` of ``nodes`` in a metric CRS: the grid's, else
+    the UTM zone of the first shape (Web Mercator when there is none)."""
+    shapes = [n.shape for n in nodes if n.shape is not None]
+    crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
+    return history_area(nodes, crs)
+
+
 @dataclass(frozen=True)
 class HistorySummary:
     n: int
@@ -372,10 +384,81 @@ def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[
     nodes = [graph.node(k) for k in members if graph.node(k) is not None]
     if len(nodes) < 2:
         return None
-    shapes = [n.shape for n in nodes if n.shape is not None]
-    crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
-    area = history_area(nodes, crs)
+    area = _area_of(p, nodes)
     return HistorySummary(area.n, area.confirmed_ha, area.unreviewed_ha, area.first_period_start)
+
+
+def _links_and_small(gdf):
+    """Each row's stored links and its ``below_min`` flag (None where the
+    store has no such column: an old set)."""
+    links = [links_of(cell) for cell in (gdf[GROWS_FROM] if GROWS_FROM in gdf.columns else [None] * len(gdf))]
+    return links, gdf[BELOW_MIN] if BELOW_MIN in gdf.columns else [None] * len(gdf)
+
+
+@dataclass(frozen=True)
+class HistoryRow:
+    first_period: str
+    last_period: str
+    n: int
+    confirmed_ha: float
+    added_ha: float
+    alert_id: int
+
+
+@dataclass(frozen=True)
+class GrowthSummary:
+    n_growth: int
+    n_growth_small: int
+    area_ha: float
+    n_reviewed: int
+    rows: tuple[HistoryRow, ...]
+
+
+def _period_label(start: date, end: date) -> str:
+    return t("steps.period.range", start=start.isoformat(), end=end.isoformat())
+
+
+def set_histories(p, set_id: str, gdf, *, load=set_store.load_set_alerts, limit: int = 20) -> GrowthSummary:
+    """The Overview's History card (spec §7) for ``set_id`` (``gdf`` its rows):
+    its growth alerts, and the histories of two or more alerts that include a
+    row of it, largest confirmed area first (at most ``limit``). A history's
+    ``added_ha`` is the union of this set's own members that are not false
+    positives; its ``alert_id`` the largest of those members. Reads the other
+    sets' stores: call it from a worker thread."""
+    links, small = _links_and_small(gdf)
+    kinds = [kind_of(lk, flag) for lk, flag in zip(links, small)]
+    growing = [i for i, k in enumerate(kinds) if k in (KIND_GROWTH, KIND_GROWTH_SMALL)]
+    status = list(gdf["status"]) if "status" in gdf.columns else [None] * len(gdf)
+    area = list(gdf["area_ha"]) if "area_ha" in gdf.columns else [0.0] * len(gdf)
+    summary = dict(
+        n_growth=sum(1 for k in kinds if k == KIND_GROWTH),
+        n_growth_small=sum(1 for k in kinds if k == KIND_GROWTH_SMALL),
+        area_ha=float(sum(area[i] for i in growing)),
+        n_reviewed=sum(1 for i in growing if isinstance(status[i], str) and status[i] not in ("", NOT_REVIEWED)))
+    if not growing:
+        return GrowthSummary(rows=(), **summary)
+
+    graph = graph_for(p, set_id, gdf, load=load)
+    seen: set[frozenset] = set()
+    rows: list[HistoryRow] = []
+    for alert_id in gdf["alert_id"]:
+        members = graph.component(node_key(set_id, alert_id))
+        if members in seen:
+            continue
+        seen.add(members)
+        nodes = [graph.node(k) for k in members if graph.node(k) is not None]
+        if len(nodes) < 2:
+            continue
+        mine = [n for n in nodes if n.set_id == set_id]
+        first, last = min(nodes, key=lambda n: n.period_start), max(nodes, key=lambda n: n.period_start)
+        whole, added = _area_of(p, nodes), _area_of(p, mine)
+        rows.append(HistoryRow(
+            first_period=_period_label(first.period_start, first.period_end),
+            last_period=_period_label(last.period_start, last.period_end),
+            n=whole.n, confirmed_ha=whole.confirmed_ha, added_ha=added.confirmed_ha + added.unreviewed_ha,
+            alert_id=min(mine, key=lambda n: (-n.area_ha, n.alert_id)).alert_id))
+    rows.sort(key=lambda r: (-r.confirmed_ha, -r.added_ha, r.alert_id))
+    return GrowthSummary(rows=tuple(rows[:limit]), **summary)
 
 
 def with_growth_columns(p, set_id: str, gdf, *, load=set_store.load_set_alerts):
@@ -387,8 +470,7 @@ def with_growth_columns(p, set_id: str, gdf, *, load=set_store.load_set_alerts):
     built once and each history's area computed once, whatever its size."""
     out = gdf.copy()
     graph = graph_for(p, set_id, gdf, load=load)
-    links = [links_of(cell) for cell in (out[GROWS_FROM] if GROWS_FROM in out.columns else [None] * len(out))]
-    small = out[BELOW_MIN] if BELOW_MIN in out.columns else [None] * len(out)
+    links, small = _links_and_small(out)
     areas: dict[frozenset, float] = {}  # one area per history
 
     def _area(alert_id) -> float:
@@ -398,9 +480,7 @@ def with_growth_columns(p, set_id: str, gdf, *, load=set_store.load_set_alerts):
             if len(nodes) < 2:
                 areas[members] = 0.0
             else:
-                shapes = [n.shape for n in nodes if n.shape is not None]
-                crs = _grid_epsg(p) or (_metric_crs(p, shapes[0]) if shapes else "EPSG:3857")
-                areas[members] = history_area(nodes, crs).confirmed_ha
+                areas[members] = _area_of(p, nodes).confirmed_ha
         return areas[members]
 
     out["kind"] = [kind_of(lk, flag) for lk, flag in zip(links, small)]
