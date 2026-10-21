@@ -315,8 +315,12 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
         if it.state == "via":
             lead = v.Html(tag="span", style_="width: 24px; flex: none;")
         else:
-            box = v.Checkbox(v_model=it.state in _LINKED, disabled=it.state == "broken", dense=True,
-                             hide_details=True, class_="ma-0 pa-0")
+            # a link to a parent that has since become a false positive stays
+            # stored (Ruling 13): ticked, and the reviewer can untick it; one
+            # broken by a re-run names nothing left to tick
+            fp = it.state == "broken" and n.status == FALSE_POSITIVE
+            box = v.Checkbox(v_model=it.state in _LINKED or fp, disabled=it.state == "broken" and not fp,
+                             dense=True, hide_details=True, class_="ma-0 pa-0")
             box.observe(lambda change, link=it.cand.link: _on_tick(link, change), names="v_model")
             lead = box
         text = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", style_="cursor: pointer;",

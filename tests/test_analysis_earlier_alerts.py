@@ -105,7 +105,8 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     assert rows["sep#12"].box.v_model is True and not rows["sep#12"].box.disabled
     assert rows["sep#15"].box.v_model is False and not rows["sep#15"].box.disabled
     assert rows["aug#4"].box is None
-    assert rows["aug#7"].box is not None and rows["aug#7"].box.disabled
+    # broken by a re-run: shown, unticked, not to tick
+    assert rows["aug#7"].box is not None and rows["aug#7"].box.disabled and rows["aug#7"].box.v_model is False
     assert rows["sep#12"].note.children == [earlier.t("analysis_tile.earlier.touches")]
     assert rows["sep#15"].note.children == [earlier.t("analysis_tile.earlier.distance_m", m="40")]
     assert rows["aug#4"].note.children == [earlier.t("analysis_tile.earlier.via", id="12")]
@@ -253,7 +254,7 @@ def test_broken_link_dropped_from_draft(monkeypatch):
     assert analysis.links.value == (SEP12.link,)
     assert analysis.dirty.value is False
     rows = {r.key: r for g in section.groups for r in g.rows}
-    assert rows["aug#7"].box.disabled  # still shown, greyed
+    assert rows["aug#7"].box.disabled and rows["aug#7"].box.v_model is False  # still shown, greyed
 
 
 def test_link_to_a_since_false_positive_parent_stays(monkeypatch):
@@ -267,6 +268,26 @@ def test_link_to_a_since_false_positive_parent_stays(monkeypatch):
     earlier.refresh_earlier(widgets, analysis, app_state)
     assert analysis.links.value == (fp.link,)
     assert analysis.dirty.value is False
+
+
+def test_a_link_to_a_since_false_positive_parent_can_be_unticked(monkeypatch):
+    """Ruling 13 keeps the link stored: the reviewer clears it by hand."""
+    fp = _cand("sep", 9, SEP, "False Positive")
+
+    def view(links, auto):
+        items = (EarlierItem(fp, 0.0, "broken", None, COLORS[SEP.id]),) if fp.link in links else ()
+        return EarlierView(items, 0, 0, ((SEP.id, SEP.start),))
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch, view=view)
+    analysis.links.set((fp.link,))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    [row] = [r for g in section.groups for r in g.rows]
+    assert row.box.v_model is True and not row.box.disabled
+    assert row.note.children == [earlier.t("analysis_tile.earlier.broken_fp")]
+    row.box.v_model = False
+    assert analysis.links.value == () and analysis.dirty.value is True
+    assert calls[-1]["links"] == ()
 
 
 def test_a_copy_without_snapshot_keeps_links_it_cannot_resolve(monkeypatch):
