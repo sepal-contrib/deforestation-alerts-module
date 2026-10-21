@@ -475,3 +475,6 @@ def test_the_section_is_hidden_without_earlier_sets_and_switches_off(monkeypatch
     assert "display: none" in section.root.style_
     assert section.switch.v_model is False and not analysis.show_earlier_reviews.value
     assert _features(widgets) is None
+    assert analysis.earlier_choice.value is True  # not the reviewer's flip: their choice stays
+    earlier.seed_switch(analysis, False)  # the next New alert in a project with earlier sets
+    assert analysis.show_earlier_reviews.value is True

@@ -452,7 +452,14 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
         shown = has_earlier_sets(app_state.project.value)
         section.root.style_ = shown_style if shown else "display: none;"
         if not shown and switch.v_model:
-            switch.v_model = False  # nothing to draw; ``_on_switch`` clears the overlay
+            # nothing to draw. Not the reviewer's flip: their choice stays for
+            # the next project that has earlier sets (spec §6.3)
+            syncing["switch"] = True
+            try:
+                switch.v_model = False
+            finally:
+                syncing["switch"] = False
+            remove_earlier_layer(widgets)
 
     widgets.earlier_on_result = _result
     switch.observe(_on_switch, names="v_model")
