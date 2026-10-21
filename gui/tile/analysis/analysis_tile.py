@@ -81,7 +81,12 @@ from deforestation_alerts.scripts.mosaics_helper import (
 from pysepal.i18n import current_locale
 
 from gui.tile.analysis.context import build_context, build_topnav
-from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background, remove_earlier_layer
+from gui.tile.analysis.earlier import (
+    build_earlier_controls,
+    refresh_in_background,
+    remove_earlier_layer,
+    seed_switch,
+)
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
@@ -255,6 +260,9 @@ def view_actual_alert(
     analysis.links.set(tuple(links_of(alerta.get(GROWS_FROM))))
     analysis.auto_links.set(tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
     analysis.dirty.set(False)
+    # --- a growth alert opens with its parents on the maps; any other on the
+    # reviewer's last choice (spec §6.3) ---
+    seed_switch(analysis, bool(analysis.links.value))
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)

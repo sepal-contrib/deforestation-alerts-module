@@ -125,6 +125,9 @@ class AnalysisState:
     #: field, kept across alert changes (the overlay follows the next alert),
     #: never saved to the project, so ``reset_alert`` leaves them alone.
     show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: the reviewer's own last flip of that switch: a growth alert turns the
+    #: switch on for itself only (spec §6.3), the next other alert opens on this
+    earlier_choice: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
     #: the earlier periods the *Periods* menu hides (ids): session state, all
     #: shown by default, kept across alert changes like the switch

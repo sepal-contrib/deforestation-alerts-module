@@ -227,6 +227,14 @@ def _refresh_logged(widgets, analysis, app_state, **kw) -> None:
         logger.exception("Analysis: the earlier-alerts section failed")
 
 
+def seed_switch(analysis, growth: bool) -> None:
+    """The switch as an alert opens (spec §6.3): on for a growth alert (one
+    whose row stores links), else the reviewer's last own choice. Called by
+    ``view_actual_alert`` before its refresh, which draws the layer: no
+    refresh of its own."""
+    analysis.show_earlier_reviews.set(True if growth else bool(analysis.earlier_choice.value))
+
+
 def refresh_in_background(widgets, analysis, app_state) -> None:
     """``refresh_earlier`` for a caller on the UI / navigation thread: a
     removal (switch off) is immediate, the load goes to a worker (it runs with
@@ -398,6 +406,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
         analysis.show_earlier_reviews.set(bool(change["new"]))
         _sync_badge()
         if not syncing["switch"]:
+            analysis.earlier_choice.set(bool(change["new"]))  # the reviewer's flip
             spawn_in_context(_refresh)
 
     def _on_km(change):
@@ -427,15 +436,13 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
 
         analysis.apply_if_current(token, _redraw)
 
-    def _on_auto(auto):
-        # A growth alert opens with its parents on the maps (spec §6.3). No
-        # refresh of its own: the alert is opening (``view_actual_alert``
-        # seeds ``auto_links``), and the open's ``refresh_in_background``,
-        # which now sees the switch on, draws the layer.
-        if auto and not switch.v_model:
+    def _on_shown(on):
+        # the switch follows ``seed_switch`` as an alert opens. No refresh of
+        # its own: the open's ``refresh_in_background`` draws the layer.
+        if bool(on) != bool(switch.v_model):
             syncing["switch"] = True
             try:
-                switch.v_model = True
+                switch.v_model = bool(on)
             finally:
                 syncing["switch"] = False
 
@@ -451,7 +458,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     switch.observe(_on_switch, names="v_model")
     field_.observe(_on_km, names="v_model")
     periods.observe(_on_periods, names="v_model")
-    analysis.auto_links.subscribe(_on_auto)
+    analysis.show_earlier_reviews.subscribe(_on_shown)
 
     def _label():
         section.set_title(t("analysis_tile.earlier.title"))

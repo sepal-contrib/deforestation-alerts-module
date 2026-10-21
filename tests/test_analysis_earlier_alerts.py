@@ -188,19 +188,40 @@ def test_switch_off_removes_the_layer(monkeypatch):
     assert _features(widgets) is None
 
 
-def test_switch_turns_on_for_growth_alert(monkeypatch):
+def _open(analysis, links):
+    """What ``view_actual_alert`` does for an alert storing ``links``."""
+    analysis.reset_alert()
+    analysis.links.set(tuple(links))
+    earlier.seed_switch(analysis, bool(links))
+
+
+def test_switch_turns_on_for_growth_alert_only(monkeypatch):
+    """Spec §6.3: a growth alert opens with its parents on the maps; any other
+    alert keeps the user's last choice."""
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     assert section.switch.v_model is False
-    analysis.auto_links.set((SEP12.link,))  # what view_actual_alert seeds for a growth alert
+    _open(analysis, (SEP12.link,))  # a growth alert, its link manual (no auto links)
     assert section.switch.v_model is True and analysis.show_earlier_reviews.value is True
-    # a New alert keeps the session's value
-    analysis.reset_alert()
-    analysis.auto_links.set(())
-    assert analysis.show_earlier_reviews.value is True
-    section.switch.v_model = False
-    analysis.reset_alert()
-    assert analysis.show_earlier_reviews.value is False
+    _open(analysis, ())  # the next New alert: back to the user's choice, off
+    assert section.switch.v_model is False and analysis.show_earlier_reviews.value is False
+    section.switch.v_model = True  # the user's own choice
+    _open(analysis, ())
+    assert section.switch.v_model is True
+    _open(analysis, (SEP12.link,))
+    section.switch.v_model = False  # a manual flip on a growth alert is the user's choice too
+    _open(analysis, ())
+    assert section.switch.v_model is False and analysis.show_earlier_reviews.value is False
+    _open(analysis, (SEP12.link,))
+    assert section.switch.v_model is True
+
+
+def test_the_seeded_switch_is_not_a_refresh_of_its_own(monkeypatch):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    earlier.build_earlier_controls(widgets, app_state, analysis)
+    _open(analysis, (SEP12.link,))
+    _open(analysis, ())
+    assert calls == []
 
 
 def test_opening_a_growth_alert_refreshes_once(monkeypatch):
@@ -213,9 +234,10 @@ def test_opening_a_growth_alert_refreshes_once(monkeypatch):
 
     monkeypatch.setattr(earlier, "spawn_in_context", spawn)
     earlier.build_earlier_controls(widgets, app_state, analysis)
-    # what view_actual_alert does: seed the links, then refresh in the background
+    # what view_actual_alert does: seed the links and the switch, then refresh in the background
     analysis.links.set((SEP12.link,))
     analysis.auto_links.set((SEP12.link,))
+    earlier.seed_switch(analysis, True)
     earlier.refresh_in_background(widgets, analysis, app_state)
     assert len(spawned) == 1 and len(calls) == 1
     assert analysis.show_earlier_reviews.value is True and _features(widgets)

@@ -62,6 +62,17 @@ def test_view_seeds_links_from_row(tmp_path, monkeypatch):
     assert analysis.dirty.value is False  # viewing is not a change
 
 
+def test_opening_an_alert_seeds_the_earlier_switch(tmp_path, monkeypatch):
+    """A growth alert (stored links, Integrate's or the reviewer's) turns the
+    Earlier-alerts switch on; a New one restores the user's choice."""
+    row = {"grows_from": [np.array([L2], dtype=object)], "grows_from_auto": [np.array([], dtype=object)],
+           "below_min": [False]}
+    analysis, _ = _viewed(tmp_path, monkeypatch, row)
+    assert analysis.show_earlier_reviews.value is True
+    analysis, _ = _viewed(tmp_path, monkeypatch, {})
+    assert analysis.show_earlier_reviews.value is False
+
+
 def test_old_set_seeds_no_links(tmp_path, monkeypatch):
     analysis, app_state = _viewed(tmp_path, monkeypatch, {})
     assert analysis.links.value == () and analysis.auto_links.value == ()
