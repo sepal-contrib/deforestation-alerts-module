@@ -472,7 +472,7 @@ def test_a_copy_shows_a_link_to_a_since_false_positive_parent_as_broken(tmp_path
     view = _view(copy, state.alerts_gdf.value, [link])
     assert [(it.cand.key, it.state, it.cand.node.status) for it in view.items if it.cand.link == link] == [
         (f"{SET1}#1", "broken", "False Positive")]
-    assert earlier._kept_links(copy, view, (link,)) == ()  # dropped on open, as in the creator's project
+    assert earlier._kept_links(copy, view, (link,)) == (link,)  # kept, greyed (spec §11.5), as in the creator's project
     assert growth_index.history_summary(copy, SET2, state.alerts_gdf.value, 0, [link]) is None
     growth_index.clear_cache()
 
