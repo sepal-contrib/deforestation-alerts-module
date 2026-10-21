@@ -11,8 +11,10 @@ from typing import Optional
 import geopandas as gpd
 
 from deforestation_alerts.errors import KeyedError
+from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip
@@ -197,6 +199,11 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
             if c != active and selected_gdf[c].dtype == "geometry"
         ]
     )
+    # The growth columns as the main export writes them (spec §6.7): the
+    # links joined by ";", the working columns left out.
+    if GROWS_FROM in selected_gdf.columns:
+        selected_gdf[GROWS_FROM] = [";".join(links_of(cell)) for cell in selected_gdf[GROWS_FROM]]
+    selected_gdf = selected_gdf.drop(columns=[c for c in (GROWS_FROM_AUTO, BELOW_MIN) if c in selected_gdf.columns])
 
     gpkg_dest = folder / f"alert_{actual_alert_id}.gpkg"
     zip_dest = folder / f"alert_{actual_alert_id}.zip"
