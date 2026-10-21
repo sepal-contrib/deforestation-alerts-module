@@ -622,17 +622,15 @@ SCREEN_CSS = (
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
     ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
-    # The views run to the column's edges (user, 2026-10-21: no white bands
-    # beside the maps); the view headers and the timeline keep their inset.
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
-    " padding: 8px 0 0 0; }\n"
+    " padding: 8px; }\n"
     # The review console, at the workflow panel's width (480 px) it was laid out at.
     ".defo-analysis-right { flex: 0 0 480px; min-height: 0; overflow-y: auto; padding: 8px 16px 0 16px;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
     # One header cell per view, in a row over the views: equal halves, as the
     # views split the width (``.mv-layout-row``). min-width:0 keeps a long
     # title from widening its half.
-    ".analysis-heads { display: flex; gap: 2px; flex: 0 0 auto; padding: 0 8px; }\n"
+    ".analysis-heads { display: flex; gap: 8px; flex: 0 0 auto; }\n"
     ".analysis-heads > .analysis-mapbox { flex: 1 1 0; min-width: 0; }\n"
     ".analysis-mapbox { display: flex; flex-direction: column; }\n"
     # The views take whatever height is left. The widget sits in an
@@ -640,11 +638,7 @@ SCREEN_CSS = (
     # positioned box and the widget fills it.
     ".analysis-panes-slot { position: relative; flex: 1 1 auto; min-height: 240px; }\n"
     ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
-    ".analysis-strip { flex: 0 0 auto; padding: 0 8px 8px 8px; }\n"
-    # Two views a hairline apart, square-cornered against the column's edges
-    # (the widget's own 8 px gap and 4 px corners are for a page of its own).
-    ".defo-analysis-screen .analysis-views.mv-root, .defo-analysis-screen .analysis-views .mv-root"
-    " { --mv-gap: 2px; --mv-radius: 0; }\n"
+    ".analysis-strip { flex: 0 0 auto; padding: 0 4px 4px 4px; }\n"
     # The timeline's toolbar needs about 1240 px with its button labels (in
     # Spanish, measured). Narrower, the two fold buttons drop to their icons,
     # which name themselves in a tooltip; narrower still (~860 px) the row
