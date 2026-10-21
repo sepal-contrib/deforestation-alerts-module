@@ -51,7 +51,7 @@ from pysepal.i18n import current_locale
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
-from gui.i18n import format_date, format_number, t
+from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import alert_layers, charts, growth_index, overview_data, set_store
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
@@ -291,39 +291,48 @@ def _left_column(summary, history, figures, measure: str, theme: dict, admin_lev
                 _admin_table(summary, admin_level)
 
 
-def _growth_range(row) -> str:
-    if row.first_period == row.last_period:
-        return row.first_period
-    return t("overview_tile.growth_range", first=row.first_period, last=row.last_period)
+def _period_id_label(periods, period_id: str) -> str:
+    """A period by its id; a review copy may hold earlier periods the project
+    does not, whose ids are ``<start>_<end>``."""
+    if period_id in periods:
+        return period_label(periods[period_id])
+    start, _, end = period_id.partition("_")
+    return t("steps.period.range", start=start, end=end) if end else period_id
 
 
-def _growth_card(growth, measure: str, on_review):
+def _growth_range(row, periods) -> str:
+    first, last = (_period_id_label(periods, pid) for pid in (row.first_period, row.last_period))
+    return first if row.first_period == row.last_period else t("overview_tile.growth_range", first=first, last=last)
+
+
+def _growth_card(growth, measure: str, periods, on_review, loaded: bool):
     """The growing clearings of the set (spec 2026-10-20 §7): how many growth
     alerts it holds, and the histories they belong to, largest first, each
     with the button that opens its alert in Analysis. The headline is the
     measure's; the split under it is always counts (the store holds a growth
     alert's area, not the area of each kind)."""
     n = growth.n_growth + growth.n_growth_small
-    headline = (t("overview_tile.growth_headline_count", n=format_number(n, 0))
+    headline = (tn("overview_tile.growth_headline_count", n)
                 if measure == charts.MEASURE_ALERTS
-                else t("overview_tile.growth_headline", n=format_number(n, 0), ha=format_number(growth.area_ha, 1)))
+                else tn("overview_tile.growth_headline", n, ha=format_number(growth.area_ha, 1)))
     with _card(t("overview_tile.card_growth"), t("overview_tile.growth_note")):
         solara.Text(headline, style=_VALUE)
-        solara.Text(t("overview_tile.growth_split", growth=format_number(growth.n_growth, 0),
-                      small=format_number(growth.n_growth_small, 0),
-                      reviewed=format_number(growth.n_reviewed, 0)), style=_NOTE)
+        split = t("overview_tile.growth_split", growth=format_number(growth.n_growth, 0),
+                  small=format_number(growth.n_growth_small, 0))
+        reviewed = tn("overview_tile.growth_reviewed", growth.n_reviewed)
+        solara.Text(f"{split} · {reviewed}", style=_NOTE)
         if not growth.rows:
             return
         head = (t("overview_tile.growth_period"), t("overview_tile.table_alerts"),
                 t("overview_tile.growth_confirmed"), t("overview_tile.growth_added"), "")
         rows = [rv.Html(tag="tr", children=[
-            rv.Html(tag="td", children=[_growth_range(row)]),
+            rv.Html(tag="td", children=[_growth_range(row, periods)]),
             rv.Html(tag="td", children=[format_number(row.n, 0)]),
             rv.Html(tag="td", children=[format_number(row.confirmed_ha, 1)]),
             rv.Html(tag="td", children=[format_number(row.added_ha, 1)]),
             rv.Html(tag="td", children=[solara.Button(
                 t("overview_tile.growth_review"), x_small=True, color="primary", outlined=True,
-                on_click=lambda alert_id=row.alert_id: on_review(alert_id))]),
+                disabled=not loaded, on_click=lambda alert_id=row.alert_id: on_review(alert_id))]),
         ]).key(f"growth-{row.alert_id}") for row in growth.rows]
         rv.SimpleTable(dense=True, children=[
             rv.Html(tag="thead", children=[rv.Html(tag="tr", children=[
@@ -332,12 +341,12 @@ def _growth_card(growth, measure: str, on_review):
         ])
 
 
-def _right_column(summary, figures, measure: str, questions, growth, on_review):
+def _right_column(summary, figures, measure: str, questions, growth, periods, on_review, loaded: bool):
     with solara.Div(style=_COLUMN):
         with _card(t("overview_tile.card_numbers")):
             _numbers_table(summary, measure)
         if growth is not None and growth.n_growth + growth.n_growth_small:
-            _growth_card(growth, measure, on_review)
+            _growth_card(growth, measure, periods, on_review, loaded)
         with _card(t("overview_tile.card_timing"), t("overview_tile.timing_note")):
             _figure_or_numbers(figures.get("timing"), [])
         # One card per question, in questionnaire order (spec D9); none
@@ -582,7 +591,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             _kpi_strip(summary, history, figures, measure)
             with solara.Row(style="gap: 10px; align-items: stretch; flex-wrap: wrap;"):
                 _left_column(summary, history, figures, measure, theme, admin_level, set_admin_level)
-                _right_column(summary, figures, measure, questions, growth, _review_growth)
+                _right_column(summary, figures, measure, questions, growth, p.periods, _review_growth,
+                              has_alerts)
         if export_card is not None:
             # A child of a reacton element, so the raw card is part of the
             # rendered tree itself.

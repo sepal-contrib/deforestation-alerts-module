@@ -19,9 +19,19 @@
     "card_timing": "When the loss was detected",
     "card_sources": "By alert source",
     "card_growth": "History of growing clearings",
-    "growth_headline": "{n} growth alerts · {ha} ha",
-    "growth_headline_count": "{n} growth alerts",
-    "growth_split": "Growth: {growth} · Under minimum area: {small} · {reviewed} reviewed",
+    "growth_headline": {
+      "one": "{n} growth alert · {ha} ha",
+      "other": "{n} growth alerts · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} growth alert",
+      "other": "{n} growth alerts"
+    },
+    "growth_split": "Growth: {growth} · Under minimum area: {small}",
+    "growth_reviewed": {
+      "one": "{n} reviewed",
+      "other": "{n} reviewed"
+    },
     "growth_period": "Monitoring periods",
     "growth_range": "{first} to {last}",
     "growth_confirmed": "Confirmed (ha)",

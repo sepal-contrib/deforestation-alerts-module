@@ -829,13 +829,14 @@ def test_growth_card_lists_the_history_and_follows_the_measure(ov, tmp_path):
     try:
         texts = _texts(rc)
         assert t("overview_tile.card_growth") in texts
-        assert any(text.startswith("1 ") and " ha" in text for text in texts), texts
+        assert any(text.startswith("1 growth alert ·") and text.endswith(" ha") for text in texts), texts
+        assert "Growth: 1 · Under minimum area: 0 · 1 reviewed" in texts, texts
         head, rows = _table(rc, t("overview_tile.growth_period"))
         [[period, n, confirmed, added, _]] = rows
         assert period == t("overview_tile.growth_range", first=f"{JAN.start} → {JAN.end}", last=f"{FEB.start} → {FEB.end}")
         assert n == "2"
         _btn(rc, t("overview_tile.measure_alerts")).click()
-        assert not any(" ha" in text and text.startswith("1 ") for text in _texts(rc))
+        assert "1 growth alert" in _texts(rc)
     finally:
         rc.close()
 
@@ -851,5 +852,15 @@ def test_growth_card_review_button_jumps(ov, tmp_path, monkeypatch):
         _btn(rc, t("overview_tile.growth_review")).click()
         assert calls == [(state, "d", feb.id, 10, 0)]
         assert closed == [True]
+    finally:
+        rc.close()
+
+
+def test_growth_card_review_button_waits_for_the_alerts(ov, tmp_path):
+    p = _project(tmp_path)
+    _growth_february(p, tmp_path)
+    map_, layers, rc = ov.render(_state(p, None))  # the session holds no alerts yet
+    try:
+        assert _btn(rc, t("overview_tile.growth_review")).disabled is True
     finally:
         rc.close()

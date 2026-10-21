@@ -43,7 +43,6 @@ from deforestation_alerts.project.growth import (
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, NOT_REVIEWED
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import store_generation
-from gui.i18n import t
 from gui.scripts import set_store
 
 #: Earlier periods' colours, newest earlier period first (spec §6.3): bright
@@ -397,7 +396,7 @@ def _links_and_small(gdf):
 
 @dataclass(frozen=True)
 class HistoryRow:
-    first_period: str
+    first_period: str  # period ids; the Overview labels them
     last_period: str
     n: int
     confirmed_ha: float
@@ -412,10 +411,6 @@ class GrowthSummary:
     area_ha: float
     n_reviewed: int
     rows: tuple[HistoryRow, ...]
-
-
-def _period_label(start: date, end: date) -> str:
-    return t("steps.period.range", start=start.isoformat(), end=end.isoformat())
 
 
 def set_histories(p, set_id: str, gdf, *, load=set_store.load_set_alerts, limit: int = 20) -> GrowthSummary:
@@ -453,8 +448,7 @@ def set_histories(p, set_id: str, gdf, *, load=set_store.load_set_alerts, limit:
         first, last = min(nodes, key=lambda n: n.period_start), max(nodes, key=lambda n: n.period_start)
         whole, added = _area_of(p, nodes), _area_of(p, mine)
         rows.append(HistoryRow(
-            first_period=_period_label(first.period_start, first.period_end),
-            last_period=_period_label(last.period_start, last.period_end),
+            first_period=first.period_id, last_period=last.period_id,
             n=whole.n, confirmed_ha=whole.confirmed_ha, added_ha=added.confirmed_ha + added.unreviewed_ha,
             alert_id=min(mine, key=lambda n: (-n.area_ha, n.alert_id)).alert_id))
     rows.sort(key=lambda r: (-r.confirmed_ha, -r.added_ha, r.alert_id))

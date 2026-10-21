@@ -19,9 +19,22 @@
     "card_timing": "Cuándo se detectó la pérdida",
     "card_sources": "Por fuente de alertas",
     "card_growth": "Historial de talas que crecen",
-    "growth_headline": "{n} alertas de crecimiento · {ha} ha",
-    "growth_headline_count": "{n} alertas de crecimiento",
-    "growth_split": "Crecimiento: {growth} · Bajo el área mínima: {small} · {reviewed} revisadas",
+    "growth_headline": {
+      "one": "{n} alerta de crecimiento · {ha} ha",
+      "many": "{n} de alertas de crecimiento · {ha} ha",
+      "other": "{n} alertas de crecimiento · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} alerta de crecimiento",
+      "many": "{n} de alertas de crecimiento",
+      "other": "{n} alertas de crecimiento"
+    },
+    "growth_split": "Crecimiento: {growth} · Bajo el área mínima: {small}",
+    "growth_reviewed": {
+      "one": "{n} revisada",
+      "many": "{n} de revisadas",
+      "other": "{n} revisadas"
+    },
     "growth_period": "Periodos de monitoreo",
     "growth_range": "de {first} a {last}",
     "growth_confirmed": "Confirmadas (ha)",

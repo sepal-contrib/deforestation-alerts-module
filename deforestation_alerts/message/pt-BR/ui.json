@@ -19,9 +19,22 @@
     "card_timing": "Quando a perda foi detectada",
     "card_sources": "Por fonte de alertas",
     "card_growth": "Histórico de desmatamentos que crescem",
-    "growth_headline": "{n} alertas de crescimento · {ha} ha",
-    "growth_headline_count": "{n} alertas de crescimento",
-    "growth_split": "Crescimento: {growth} · Abaixo da área mínima: {small} · {reviewed} revisados",
+    "growth_headline": {
+      "one": "{n} alerta de crescimento · {ha} ha",
+      "many": "{n} de alertas de crescimento · {ha} ha",
+      "other": "{n} alertas de crescimento · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} alerta de crescimento",
+      "many": "{n} de alertas de crescimento",
+      "other": "{n} alertas de crescimento"
+    },
+    "growth_split": "Crescimento: {growth} · Abaixo da área mínima: {small}",
+    "growth_reviewed": {
+      "one": "{n} revisado",
+      "many": "{n} de revisados",
+      "other": "{n} revisados"
+    },
     "growth_period": "Períodos de monitoramento",
     "growth_range": "de {first} a {last}",
     "growth_confirmed": "Confirmados (ha)",

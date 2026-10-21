@@ -19,9 +19,22 @@
     "card_timing": "Quand la perte a été détectée",
     "card_sources": "Par source d'alertes",
     "card_growth": "Historique des coupes qui s'étendent",
-    "growth_headline": "{n} alertes d'extension · {ha} ha",
-    "growth_headline_count": "{n} alertes d'extension",
-    "growth_split": "Extension : {growth} · Sous la surface minimale : {small} · {reviewed} examinées",
+    "growth_headline": {
+      "one": "{n} alerte d’extension · {ha} ha",
+      "many": "{n} d’alertes d’extension · {ha} ha",
+      "other": "{n} alertes d’extension · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} alerte d’extension",
+      "many": "{n} d’alertes d’extension",
+      "other": "{n} alertes d’extension"
+    },
+    "growth_split": "Extension : {growth} · Sous la surface minimale : {small}",
+    "growth_reviewed": {
+      "one": "{n} examinée",
+      "many": "{n} d’examinées",
+      "other": "{n} examinées"
+    },
     "growth_period": "Périodes de suivi",
     "growth_range": "de {first} à {last}",
     "growth_confirmed": "Confirmés (ha)",
