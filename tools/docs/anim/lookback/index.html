@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=960, height=540" />
+    <title>Periods and look-back</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 960px; height: 540px; overflow: hidden; background: #f7f8f6; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #f7f8f6; }
+      #stage { position: absolute; inset: 0; }
+      #stage svg { display: block; width: 960px; height: 540px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="12" data-width="960" data-height="540">
+      <div id="stage"></div>
+    </div>
+    <script>
+      // The look-back: a cluster too small in period 1 is set aside; period 2's
+      // look-back brings it back, new pixels join it, and together they pass the
+      // minimum size and become an alert. Period 1's alert is never reported again.
+      // Colours: app primary green (period, alert outline), chart "lookback" grey
+      // (gui/scripts/charts.py), alert orange (gui/scripts/legend_specs.py), chart greys.
+      const GREEN = "#5bb624", GREEN_INK = "#3f8a14", LB = "#c4c7c5", RULE = "#9aa0a6", INK = "#202124",
+            ORANGE = "#ff9800", DONE = "#8a9096", CELL_BG = "#ffffff", GRID = "#e3e5e2";
+      const NS = "http://www.w3.org/2000/svg";
+      const el = (tag, attrs, parent) => {
+        const e = document.createElementNS(NS, tag);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        if (parent) parent.appendChild(e);
+        return e;
+      };
+      const svg = el("svg", { viewBox: "0 0 960 540" }, document.getElementById("stage"));
+      const defs = el("defs", {}, svg);
+      const hatch = (id, bg, fg) => {
+        const p = el("pattern", { id, width: 10, height: 10, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+        el("rect", { width: 10, height: 10, fill: bg }, p);
+        el("line", { x1: 0, y1: 0, x2: 0, y2: 10, stroke: fg, "stroke-width": 4 }, p);
+      };
+      hatch("hatch", "#eceeec", LB);      // a look-back stretch of time
+      hatch("aside", "#f1f2f0", "#b5b9b6"); // pixels set aside: too small
+
+      // ---------------------------------------------------------------- time
+      const AXIS_Y = 186, ROW_Y = [62, 128], ROW_H = 40;
+      const P = [{ a: 200, b: 500 }, { lb: 380, a: 500, b: 800 }];
+      el("line", { x1: 120, y1: AXIS_Y, x2: 870, y2: AXIS_Y, stroke: INK, "stroke-width": 3 }, svg);
+      el("path", { d: `M870 ${AXIS_Y - 9}L888 ${AXIS_Y}L870 ${AXIS_Y + 9}Z`, fill: INK }, svg);
+      for (let x = 150; x <= 850; x += 50) el("line", { x1: x, y1: AXIS_Y, x2: x, y2: AXIS_Y + 8, stroke: RULE, "stroke-width": 2 }, svg);
+      P.forEach((p, i) => {
+        const y = ROW_Y[i], g = el("g", { id: `row${i}` }, svg);
+        for (const x of [p.a, p.b]) el("line", { x1: x, y1: y + ROW_H / 2, x2: x, y2: AXIS_Y, stroke: RULE, "stroke-width": 1.5, "stroke-dasharray": "4 6" }, g);
+        if (p.lb !== undefined) {
+          el("rect", { id: "lbband", x: p.lb, y: y - ROW_H / 2, width: p.a - p.lb, height: ROW_H, fill: "url(#hatch)" }, g);
+          const by = y - ROW_H / 2 - 10;
+          el("path", { d: `M${p.lb + 2} ${by + 8}V${by}H${p.a - 2}V${by + 8}`, fill: "none", stroke: "#7c8186", "stroke-width": 3, "stroke-linejoin": "round" }, g);
+        }
+        el("rect", { x: p.a, y: y - ROW_H / 2, width: p.b - p.a, height: ROW_H, rx: 8, fill: GREEN, "fill-opacity": 0.16, stroke: GREEN, "stroke-width": 3 }, g);
+        el("circle", { cx: 70, cy: y, r: 19, fill: "#ffffff", stroke: GREEN_INK, "stroke-width": 3 }, g);
+        const t = el("text", { x: 70, y: y + 8, "text-anchor": "middle", "font-family": "sans-serif", "font-size": 22, "font-weight": 700, fill: GREEN_INK }, g);
+        t.textContent = String(i + 1);
+      });
+
+      // ---------------------------------------------------------------- map
+      const GX = 150, GY = 244, C = 30, COLS = 14, ROWS = 8;
+      el("rect", { x: GX, y: GY, width: COLS * C, height: ROWS * C, fill: CELL_BG, stroke: RULE, "stroke-width": 1.5 }, svg);
+      for (let i = 1; i < COLS; i++) el("line", { x1: GX + i * C, y1: GY, x2: GX + i * C, y2: GY + ROWS * C, stroke: GRID, "stroke-width": 1 }, svg);
+      for (let j = 1; j < ROWS; j++) el("line", { x1: GX, y1: GY + j * C, x2: GX + COLS * C, y2: GY + j * C, stroke: GRID, "stroke-width": 1 }, svg);
+      // pixels: [col, row, date x on the time axis]
+      const A = [[2, 2, 225], [3, 2, 240], [2, 3, 255], [3, 3, 270], [4, 3, 285], [3, 4, 300], [4, 4, 315], [5, 3, 330]];
+      const B = [[8, 3, 420], [9, 3, 445], [9, 4, 470]];          // late in period 1: inside period 2's look-back
+      const N = [[10, 3, 560], [10, 4, 600], [9, 5, 650], [11, 4, 700]]; // period 2, touching B
+      const gCells = el("g", {}, svg), gTicks = el("g", {}, svg), gLines = el("g", {}, svg);
+      const cell = (name, [c, r, x], k) => {
+        el("rect", { id: `${name}${k}`, class: `px ${name}`, x: GX + c * C + 2, y: GY + r * C + 2, width: C - 4, height: C - 4, rx: 3, fill: ORANGE }, gCells);
+        el("circle", { id: `t${name}${k}`, class: `tick t${name}`, cx: x, cy: AXIS_Y - 14, r: 5, fill: ORANGE }, gTicks);
+      };
+      A.forEach((p, k) => cell("A", p, k));
+      B.forEach((p, k) => cell("B", p, k));
+      N.forEach((p, k) => cell("N", p, k));
+      // the outline of a cluster: the cell edges with no neighbour in the cluster
+      const outline = (id, cells) => {
+        const has = new Set(cells.map(([c, r]) => `${c},${r}`));
+        let d = "";
+        for (const [c, r] of cells) {
+          const x = GX + c * C, y = GY + r * C;
+          if (!has.has(`${c},${r - 1}`)) d += `M${x} ${y}H${x + C}`;
+          if (!has.has(`${c},${r + 1}`)) d += `M${x} ${y + C}H${x + C}`;
+          if (!has.has(`${c - 1},${r}`)) d += `M${x} ${y}V${y + C}`;
+          if (!has.has(`${c + 1},${r}`)) d += `M${x + C} ${y}V${y + C}`;
+        }
+        return el("path", { id, d, fill: "none", stroke: GREEN_INK, "stroke-width": 4, "stroke-linecap": "square" }, gLines);
+      };
+      outline("olA", A);
+      outline("olB", B.concat(N));
+
+      // ---------------------------------------------------------------- size gauge
+      // the B cluster's size against the minimum alert size (6 pixels)
+      const GAX = 700, GAW = 46, GAB = GY + ROWS * C, UNIT = 24, MIN = 6;
+      el("rect", { x: GAX, y: GAB - 9 * UNIT, width: GAW, height: 9 * UNIT, rx: 6, fill: "#ffffff", stroke: RULE, "stroke-width": 2 }, svg);
+      const fill = el("rect", { id: "gfill", x: GAX + 4, y: GAB, width: GAW - 8, height: 0, rx: 3, fill: ORANGE }, svg);
+      const thr = el("g", { id: "thr" }, svg);
+      el("line", { x1: GAX - 16, y1: GAB - MIN * UNIT, x2: GAX + GAW + 16, y2: GAB - MIN * UNIT, stroke: INK, "stroke-width": 3, "stroke-dasharray": "8 5" }, thr);
+      el("path", { d: `M${GAX - 30} ${GAB - MIN * UNIT - 9}L${GAX - 16} ${GAB - MIN * UNIT}L${GAX - 30} ${GAB - MIN * UNIT + 9}Z`, fill: INK }, thr);
+      // a dotted lead from the cluster to its gauge
+      el("path", { id: "lead", d: `M${GX + 12 * C + 6} ${GY + 4 * C}H${GAX - 40}`, stroke: RULE, "stroke-width": 2, "stroke-dasharray": "2 6", "stroke-linecap": "round" }, svg);
+      const check = el("path", { id: "check", d: `M${GAX + 10} ${GAB - 9 * UNIT - 34}l10 10l20 -22`, fill: "none", stroke: GREEN_INK, "stroke-width": 6, "stroke-linecap": "round", "stroke-linejoin": "round" }, svg);
+      const level = (n) => ({ attr: { y: GAB - 4 - n * UNIT + 4, height: Math.max(0, n * UNIT - 4) } });
+
+      // cursor ("today"), over the time rows only
+      const cur = el("g", { id: "cur" }, svg);
+      el("line", { x1: 0, y1: 30, x2: 0, y2: AXIS_Y, stroke: INK, "stroke-width": 2.5 }, cur);
+      el("path", { d: `M-9 ${AXIS_Y + 20}L0 ${AXIS_Y + 6}L9 ${AXIS_Y + 20}Z`, fill: INK }, cur);
+
+      // ---------------------------------------------------------------- initial state
+      const X0 = 200;
+      gsap.set("#cur", { x: X0, opacity: 1 });
+      gsap.set("#row0, #row1", { opacity: 0.35 });
+      gsap.set(".px, .tick", { opacity: 0, scale: 0, transformOrigin: "50% 50%" });
+      gsap.set("#olA, #olB, #check", { opacity: 0 });
+      gsap.set("#gfill", level(0));
+
+      const tl = gsap.timeline({ paused: true });
+      const V = 125; // cursor speed, px per second
+      const pop = (sel, t) => tl.to(sel, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2.5)" }, t);
+      // period 1: its pixels appear as the cursor passes their dates
+      let t = 0.3;
+      tl.to("#row0", { opacity: 1, duration: 0.3 }, t);
+      tl.to("#cur", { x: 500, duration: 300 / V, ease: "none" }, t);
+      A.forEach((p, k) => pop(`#A${k}, #tA${k}`, t + (p[2] - X0) / V));
+      B.forEach((p, k) => {
+        pop(`#B${k}, #tB${k}`, t + (p[2] - X0) / V);
+        tl.to("#gfill", { ...level(k + 1), duration: 0.3 }, t + (p[2] - X0) / V);
+      });
+      // period 1's run: the big cluster becomes an alert, the small one is set aside
+      const t1 = t + 300 / V + 0.3;
+      tl.to("#olA", { opacity: 1, duration: 0.4 }, t1);
+      tl.to(".B", { attr: { fill: "url(#aside)" }, duration: 0.01 }, t1 + 0.5);
+      tl.to(".tB", { attr: { fill: DONE }, duration: 0.3 }, t1 + 0.5);
+      tl.to("#gfill", { attr: { fill: DONE }, duration: 0.3 }, t1 + 0.5);
+      tl.fromTo("#thr", { x: 0 }, { x: 5, duration: 0.07, repeat: 5, yoyo: true, ease: "none" }, t1 + 0.5);
+      // period 2 opens: its look-back reaches back over the set-aside pixels;
+      // the alert of period 1 is its footprint, never reported again
+      const t2 = t1 + 1.5;
+      tl.to("#row1", { opacity: 1, duration: 0.3 }, t2);
+      tl.to(".A", { attr: { fill: DONE }, opacity: 0.55, duration: 0.5 }, t2);
+      tl.to(".tA", { attr: { fill: DONE }, duration: 0.5 }, t2);
+      tl.to("#olA", { attr: { stroke: DONE }, duration: 0.5 }, t2);
+      tl.fromTo("#lbband", { opacity: 1 }, { opacity: 0.35, duration: 0.25, repeat: 3, yoyo: true }, t2 + 0.3);
+      tl.to(".B", { attr: { fill: ORANGE }, duration: 0.01 }, t2 + 0.9);
+      tl.fromTo(".B", { scale: 1 }, { scale: 1.18, duration: 0.18, repeat: 1, yoyo: true, transformOrigin: "50% 50%" }, t2 + 0.9);
+      tl.to(".tB", { attr: { fill: ORANGE }, duration: 0.3 }, t2 + 0.9);
+      tl.to("#gfill", { attr: { fill: ORANGE }, duration: 0.3 }, t2 + 0.9);
+      // period 2: new pixels join the cluster, which passes the minimum size
+      const t3 = t2 + 1.4;
+      tl.to("#cur", { x: 800, duration: 300 / V, ease: "none" }, t3);
+      N.forEach((p, k) => {
+        pop(`#N${k}, #tN${k}`, t3 + (p[2] - 500) / V);
+        tl.to("#gfill", { ...level(B.length + k + 1), duration: 0.3 }, t3 + (p[2] - 500) / V);
+      });
+      const t4 = t3 + 300 / V + 0.3;
+      tl.to("#gfill", { attr: { fill: GREEN }, duration: 0.3 }, t4);
+      tl.to("#check", { opacity: 1, duration: 0.3 }, t4);
+      tl.to("#olB", { opacity: 1, duration: 0.4 }, t4 + 0.2);
+      // back to the start
+      const R = 11.0;
+      tl.to(".px, .tick", { opacity: 0, scale: 0, duration: 0.4 }, R);
+      tl.to("#olA, #olB, #check", { opacity: 0, duration: 0.4 }, R);
+      tl.to("#gfill", { ...level(0), duration: 0.4 }, R);
+      tl.to("#row0, #row1", { opacity: 0.35, duration: 0.4 }, R);
+      tl.to("#cur", { opacity: 0, duration: 0.3 }, R);
+      tl.set(".px", { attr: { fill: ORANGE } }, R + 0.45);
+      tl.set(".tick", { attr: { fill: ORANGE } }, R + 0.45);
+      tl.set("#olA", { attr: { stroke: GREEN_INK } }, R + 0.45);
+      tl.set("#gfill", { attr: { fill: ORANGE } }, R + 0.45);
+      tl.set("#cur", { x: X0 }, R + 0.45);
+      tl.to("#cur", { opacity: 1, duration: 0.3 }, R + 0.6);
+      tl.set({}, {}, 12);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

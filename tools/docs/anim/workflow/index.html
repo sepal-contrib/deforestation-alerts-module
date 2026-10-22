@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=960, height=540" />
+    <title>Workflow steps</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* App palette: pysepal light theme primary #5BB624, chart ink/greys (gui/scripts/charts.py). */
+      :root {
+        --bg: #f7f8f6;
+        --ink: #202124;
+        --muted: #9aa0a6;
+        --line: #dadce0;
+        --off: #eef0ee;
+        --green: #5bb624;
+        --green-ink: #3f8a14;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 960px; height: 540px; overflow: hidden; background: var(--bg); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+      #rail { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+      .rail-track, .rail-fill {
+        position: absolute; left: 309px; width: 4px; border-radius: 2px;
+      }
+      .rail-track { background: var(--line); }
+      .rail-fill { background: var(--green); transform-origin: 50% 0; }
+      .node {
+        position: absolute; left: 289px; width: 44px; height: 44px; border-radius: 50%;
+        background: var(--off); border: 3px solid var(--line); color: var(--muted);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .node svg { display: block; width: 24px; height: 24px; }
+      .tile {
+        position: absolute; left: 352px; width: 320px; height: 40px; border-radius: 10px;
+        background: var(--off); border: 2px solid var(--line);
+      }
+      .bar {
+        position: absolute; left: 16px; top: 15px; width: 220px; height: 8px; border-radius: 4px;
+        background: var(--line); overflow: hidden;
+      }
+      .bar-fill { display: block; width: 100%; height: 100%; background: var(--green); transform-origin: 0 50%; }
+      .badge {
+        position: absolute; right: 12px; top: 5px; width: 28px; height: 28px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .badge svg { display: block; width: 24px; height: 24px; }
+      .lock { color: var(--muted); }
+      .check { color: #ffffff; background: var(--green); border-radius: 50%; }
+      .check svg { width: 18px; height: 18px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="9" data-width="960" data-height="540">
+      <div id="rail"></div>
+    </div>
+    <script>
+      // Material Design Icons (the app's own step icons, gui/store/workflow_steps.py).
+      const ICONS = [
+        "M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5M12,2A7,7 0 0,0 5,9C5,14.25 12,22 12,22C12,22 19,14.25 19,9A7,7 0 0,0 12,2Z",
+        "M23,12L20.56,9.22L20.9,5.54L17.29,4.72L15.4,1.54L12,3L8.6,1.54L6.71,4.72L3.1,5.53L3.44,9.21L1,12L3.44,14.78L3.1,18.47L6.71,19.29L8.6,22.47L12,21L15.4,22.46L17.29,19.28L20.9,18.46L20.56,14.78L23,12M13,17H11V15H13V17M13,13H11V7H13V13Z",
+        "M12,18.54L19.37,12.8L21,14.07L12,21.07L3,14.07L4.62,12.81L12,18.54M12,16L3,9L12,2L21,9L12,16M12,4.53L6.26,9L12,13.47L17.74,9L12,4.53Z",
+        "M9,10H7V12H9V10M13,10H11V12H13V10M17,10H15V12H17V10M19,3H18V1H16V3H8V1H6V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M19,19H5V8H19V19Z",
+        "M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.83 7.13 7.39 5.75 8.95 4.38 11 4.080V12.15L9.4 10.6L8 12L12 16L16 12L14.6 10.6L13 12.15V4.08Q15.58 4.43 17.290 6.39 19 8.35 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20Z",
+        "M3,1C1.89,1 1,1.89 1,3V14C1,15.11 1.89,16 3,16H7V20C7,21.11 7.89,22 9,22H20C21.11,22 22,21.11 22,20V9C22,7.89 21.11,7 20,7H16V3C16,1.89 15.11,1 14,1H3M3,3H14V9H20V20H9V14H3V3Z",
+        "M19 3H14.82C14.4 1.84 13.3 1 12 1S9.6 1.84 9.18 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3M12 3C12.55 3 13 3.45 13 4S12.55 5 12 5 11 4.55 11 4 11.450 3 12 3M7 7H17V5H19V19H5V5H7V7M12 17V15H17V17H12M12 11V9H17V11H12M8 12V9H7V8H9V12H8M9.25 14C9.66 14 10 14.34 10 14.75C10 14.95 9.92 15.14 9.79 15.27L8.12 17H10V18H7V17.08L9 15H7V14H9.25",
+        "M13.07 10.41A5 5 0 0 0 13.07 4.59A3.39 3.39 0 0 1 15 4A3.5 3.5 0 0 1 15 11A3.39 3.39 0 0 1 13.07 10.41M5.5 7.5A3.5 3.5 0 1 1 9 11A3.5 3.5 0 0 1 5.5 7.5M7.5 7.5A1.5 1.5 0 1 0 9 6A1.5 1.5 0 0 0 7.5 7.5M16 17V19H2V17S2 13 9 13 16 17 16 17M14 17C13.86 16.22 12.67 15 9 15S4.07 16.31 4 17M15.95 13A5.32 5.32 0 0 1 18 17V19H22V17S22 13.37 15.94 13Z",
+        "M15.5,9C16.2,9 16.79,8.76 17.27,8.27C17.76,7.79 18,7.2 18,6.5C18,5.83 17.76,5.23 17.27,4.73C16.79,4.23 16.2,4 15.5,4C14.830,4 14.23,4.23 13.73,4.73C13.23,5.23 13,5.83 13,6.5C13,7.2 13.23,7.79 13.73,8.27C14.23,8.76 14.83,9 15.5,9M19.31,8.91L22.41,12L21,13.41L17.86,10.31C17.08,10.78 16.28,11 15.47,11C14.22,11 13.16,10.58 12.3,9.7C11.45,8.83 11,7.77 11,6.5C11,5.27 11.45,4.2 12.33,3.33C13.2,2.45 14.27,2 15.5,2C16.77,2 17.83,2.45 18.7,3.33C19.58,4.2 20,5.27 20,6.5C20,7.33 19.78,8.13 19.31,8.91M16.5,18H5.5L8.25,14.5L10.22,16.83L12.940,13.31L16.5,18M18,13L20,15V20C20,20.55 19.81,21 19.41,21.4C19,21.79 18.53,22 18,22H4C3.45,22 3,21.79 2.6,21.4C2.21,21 2,20.55 2,20V6C2,5.47 2.21,5 2.6,4.59C3,4.19 3.45,4 4,4H9.5C9.2,4.64 9.03,5.31 9,6H4V20H18V13Z",
+      ];
+      const LOCK = "M12,17C10.89,17 10,16.1 10,15C10,13.89 10.89,13 12,13A2,2 0 0,1 14,15A2,2 0 0,1 12,17M18,20V10H6V20H18M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6C4.89,22 4,21.1 4,20V10C4,8.89 4.89,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z";
+      const CHECK = "M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z";
+      const svg = (d) => `<svg viewBox="0 0 24 24"><path fill="currentColor" d="${d}"/></svg>`;
+
+      const C = { off: "#eef0ee", line: "#dadce0", muted: "#9aa0a6", green: "#5bb624", greenInk: "#3f8a14", white: "#ffffff" };
+      const N = ICONS.length, PITCH = 56, TOP = 22; // 9 rows of 44 px nodes, 12 px apart
+      const rail = document.getElementById("rail");
+      const cy = (i) => TOP + i * PITCH + 22; // row centre
+      for (let i = 0; i < N - 1; i++) {
+        const h = PITCH - 44;
+        rail.insertAdjacentHTML("beforeend",
+          `<div class="rail-track" style="top:${cy(i) + 22}px;height:${h}px"></div>` +
+          `<div class="rail-fill" id="rf${i}" style="top:${cy(i) + 22}px;height:${h}px"></div>`);
+      }
+      for (let i = 0; i < N; i++) {
+        rail.insertAdjacentHTML("beforeend",
+          `<div class="node" id="n${i}" style="top:${cy(i) - 22}px">${svg(ICONS[i])}</div>` +
+          `<div class="tile" id="t${i}" style="top:${cy(i) - 20}px">` +
+          `<div class="bar"><span class="bar-fill" id="b${i}"></span></div>` +
+          `<div class="badge lock" id="l${i}">${svg(LOCK)}</div>` +
+          `<div class="badge check" id="c${i}">${svg(CHECK)}</div></div>`);
+      }
+
+      // Initial state (also the loop's last frame): step 1 open and empty, the rest locked.
+      const locked = (i) => {
+        gsap.set(`#n${i}`, { backgroundColor: C.off, borderColor: C.line, color: C.muted });
+        gsap.set(`#t${i}`, { backgroundColor: C.off, borderColor: C.line });
+        gsap.set(`#l${i}`, { opacity: 1, scale: 1 });
+      };
+      for (let i = 0; i < N; i++) {
+        locked(i);
+        gsap.set(`#b${i}`, { scaleX: 0 });
+        gsap.set(`#c${i}`, { opacity: 0, scale: 0.3 });
+        if (i < N - 1) gsap.set(`#rf${i}`, { scaleY: 0 });
+      }
+      gsap.set("#n0", { backgroundColor: C.white, borderColor: C.green, color: C.greenInk });
+      gsap.set("#t0", { backgroundColor: C.white, borderColor: C.green });
+      gsap.set("#l0", { opacity: 0, scale: 0.3 });
+
+      const tl = gsap.timeline({ paused: true });
+      const STEP = 0.74, START = 0.4;
+      for (let i = 0; i < N; i++) {
+        const t0 = START + i * STEP;
+        if (i > 0) {
+          // unlock: the previous step is done
+          tl.to(`#l${i}`, { opacity: 0, scale: 0.3, duration: 0.18, ease: "power2.in" }, t0);
+          tl.to(`#n${i}`, { backgroundColor: C.white, borderColor: C.green, color: C.greenInk, duration: 0.2 }, t0);
+          tl.to(`#t${i}`, { backgroundColor: C.white, borderColor: C.green, duration: 0.2 }, t0);
+        }
+        tl.to(`#b${i}`, { scaleX: 1, duration: 0.38, ease: "power1.inOut" }, t0 + 0.12);
+        tl.to(`#n${i}`, { backgroundColor: C.green, color: C.white, duration: 0.15 }, t0 + 0.5);
+        tl.to(`#c${i}`, { opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2.2)" }, t0 + 0.5);
+        if (i < N - 1) tl.to(`#rf${i}`, { scaleY: 1, duration: 0.12, ease: "none" }, t0 + 0.6);
+      }
+      // reset to the initial state, so the loop closes without a jump
+      const R = 7.9, RD = 0.6;
+      for (let i = 0; i < N; i++) {
+        tl.to(`#c${i}`, { opacity: 0, scale: 0.3, duration: RD * 0.6 }, R);
+        tl.to(`#b${i}`, { scaleX: 0, duration: RD, ease: "power2.inOut" }, R);
+        if (i < N - 1) tl.to(`#rf${i}`, { scaleY: 0, duration: RD, ease: "power2.inOut" }, R);
+        if (i === 0) {
+          tl.to("#n0", { backgroundColor: C.white, color: C.greenInk, duration: RD }, R);
+        } else {
+          tl.to(`#n${i}`, { backgroundColor: C.off, borderColor: C.line, color: C.muted, duration: RD }, R);
+          tl.to(`#t${i}`, { backgroundColor: C.off, borderColor: C.line, duration: RD }, R);
+          tl.to(`#l${i}`, { opacity: 1, scale: 1, duration: RD, ease: "power2.out" }, R);
+        }
+      }
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

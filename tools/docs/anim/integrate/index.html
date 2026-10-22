@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=960, height=540" />
+    <title>Integrate and vectorize</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 960px; height: 540px; overflow: hidden; background: #f7f8f6; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #f7f8f6; }
+      .layer { position: absolute; left: 242px; top: 134px; width: 476px; height: 272px; }
+      .layer svg { display: block; width: 476px; height: 272px; overflow: visible; }
+      #gauge { position: absolute; inset: 0; pointer-events: none; }
+      #gauge svg { display: block; width: 960px; height: 540px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="13" data-width="960" data-height="540">
+      <div class="layer" id="g0"></div>
+      <div class="layer" id="g1"></div>
+      <div class="layer" id="g2"></div>
+      <div class="layer" id="ov"></div>
+      <div id="gauge"></div>
+    </div>
+    <script>
+      // One alert source per colour (GLAD-L, RADD, GLAD-S2); alert orange/purple from
+      // gui/scripts/legend_specs.py, blue from the Analysis timeline, green = app primary.
+      const SRC = ["#ff9800", "#7b1fa2", "#3a6db5"];
+      const GREEN = "#5bb624", GREEN_INK = "#3f8a14", INK = "#202124", GRID = "#e3e6e3", FRAME = "#c4c7c5";
+      const COLS = 14, ROWS = 8, S = 34, W = COLS * S, H = ROWS * S;
+      // The minimum alert size, in pixels: a smaller cluster is set aside, not an alert.
+      const MIN = 4, DONE = "#8a9096", RULE = "#9aa0a6", MEASURE = "#5f6368";
+      // Pixels per source, [col,row]; clusters are 8-connected across sources.
+      const PIX = [
+        [[2, 2], [3, 2], [2, 3], [11, 3], [12, 6]],          // GLAD-L
+        [[3, 3], [4, 4], [5, 4], [8, 2], [7, 6], [8, 6]],    // RADD
+        [[8, 1], [9, 1], [9, 2], [10, 2], [8, 5]],            // GLAD-S2
+      ];
+      const START_X = [-310, 0, 310], START_SCALE = 0.6;
+      const NS = "http://www.w3.org/2000/svg";
+      const el = (tag, attrs, parent) => {
+        const e = document.createElementNS(NS, tag);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        if (parent) parent.appendChild(e);
+        return e;
+      };
+
+      // the three source grids
+      for (let s = 0; s < 3; s++) {
+        const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, document.getElementById(`g${s}`));
+        el("rect", { id: `bg${s}`, x: 0, y: 0, width: W, height: H, fill: "#ffffff" }, svg);
+        for (let c = 1; c < COLS; c++) el("line", { x1: c * S, y1: 0, x2: c * S, y2: H, stroke: GRID, "stroke-width": 1.5 }, svg);
+        for (let r = 1; r < ROWS; r++) el("line", { x1: 0, y1: r * S, x2: W, y2: r * S, stroke: GRID, "stroke-width": 1.5 }, svg);
+        for (const [c, r] of PIX[s]) el("rect", { class: "px", x: c * S + 2, y: r * S + 2, width: S - 4, height: S - 4, rx: 3, fill: SRC[s] }, svg);
+        el("rect", { id: `fr${s}`, x: 0, y: 0, width: W, height: H, rx: 4, fill: "none", stroke: SRC[s], "stroke-width": 5 }, svg);
+      }
+
+      // clusters: 8-connected components over all sources
+      const all = [];
+      PIX.forEach((list, s) => list.forEach(([c, r]) => all.push({ c, r, s })));
+      const seen = new Set(), clusters = [];
+      for (let i = 0; i < all.length; i++) {
+        if (seen.has(i)) continue;
+        const comp = [], stack = [i];
+        seen.add(i);
+        while (stack.length) {
+          const a = all[stack.pop()];
+          comp.push(a);
+          all.forEach((b, j) => {
+            if (!seen.has(j) && Math.abs(a.c - b.c) <= 1 && Math.abs(a.r - b.r) <= 1) { seen.add(j); stack.push(j); }
+          });
+        }
+        clusters.push(comp);
+      }
+
+      // overlay: neighbour links, outlines, source dots
+      const ov = el("svg", { viewBox: `0 0 ${W} ${H}` }, document.getElementById("ov"));
+      // pixels set aside: too small (the look-back and growth animations' hatch)
+      const pat = el("pattern", { id: "aside", width: 10, height: 10, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, el("defs", {}, ov));
+      el("rect", { width: 10, height: 10, fill: "#f1f2f0" }, pat);
+      el("line", { x1: 0, y1: 0, x2: 0, y2: 10, stroke: "#b5b9b6", "stroke-width": 4 }, pat);
+      const gFill = el("g", {}, ov), gLink = el("g", {}, ov), gLine = el("g", {}, ov), gDots = el("g", {}, ov);
+      const outline = (cells) => {
+        // boundary edges of the cell union, chained into closed loops
+        const key = (x, y) => `${x},${y}`, has = new Set(cells.map((p) => key(p.c, p.r)));
+        const next = new Map();
+        const add = (x1, y1, x2, y2) => { const k = key(x1, y1); if (!next.has(k)) next.set(k, []); next.get(k).push([x2, y2]); };
+        for (const { c, r } of cells) {
+          if (!has.has(key(c, r - 1))) add(c, r, c + 1, r);
+          if (!has.has(key(c + 1, r))) add(c + 1, r, c + 1, r + 1);
+          if (!has.has(key(c, r + 1))) add(c + 1, r + 1, c, r + 1);
+          if (!has.has(key(c - 1, r))) add(c, r + 1, c, r);
+        }
+        let d = "";
+        for (const start of [...next.keys()]) {
+          while (next.get(start) && next.get(start).length) {
+            let [x, y] = start.split(",").map(Number);
+            d += `M${x * S} ${y * S}`;
+            let k = start;
+            while (next.get(k) && next.get(k).length) {
+              [x, y] = next.get(k).shift();
+              d += `L${x * S} ${y * S}`;
+              k = key(x, y);
+            }
+            d += "Z";
+          }
+        }
+        return d;
+      };
+      clusters.forEach((cells, i) => {
+        const d = outline(cells);
+        // a kept cluster gets a light green fill; a small one is covered by the set-aside hatch
+        const small = cells.length < MIN;
+        el("path", { id: `pf${i}`, d, fill: small ? "url(#aside)" : GREEN, "fill-opacity": small ? 1 : 0.12, stroke: "none", opacity: 0 }, gFill);
+        // the dashed outline of the cluster being measured against the minimum size
+        el("path", { id: `pm${i}`, d, fill: "none", stroke: MEASURE, "stroke-width": 3, "stroke-dasharray": "6 5", opacity: 0 }, gLine);
+        const line = el("path", { id: `pl${i}`, d, fill: "none", stroke: GREEN_INK, "stroke-width": 4, "stroke-linejoin": "round" }, gLine);
+        const len = line.getTotalLength();
+        line.setAttribute("stroke-dasharray", `${len} ${len}`);
+        line.setAttribute("stroke-dashoffset", len);
+        const g = el("g", { id: `lk${i}` }, gLink);
+        // one link per pixel to the pixel that reached it (side neighbours first),
+        // so the corner-only contacts show as diagonal links
+        const linked = [cells[0]], rest = cells.slice(1);
+        while (rest.length) {
+          let best = null;
+          for (const q of rest) for (const p of linked) {
+            const dc = Math.abs(p.c - q.c), dr = Math.abs(p.r - q.r);
+            if (dc <= 1 && dr <= 1) { const w = dc + dr; if (!best || w < best.w) best = { p, q, w }; }
+          }
+          el("line", { x1: best.p.c * S + S / 2, y1: best.p.r * S + S / 2, x2: best.q.c * S + S / 2, y2: best.q.r * S + S / 2,
+                       stroke: INK, "stroke-width": 4, "stroke-linecap": "round" }, g);
+          for (const z of [best.p, best.q]) el("circle", { cx: z.c * S + S / 2, cy: z.r * S + S / 2, r: 4.5, fill: INK }, g);
+          linked.push(best.q); rest.splice(rest.indexOf(best.q), 1);
+        }
+        // the sources that flagged any of its pixels, as a pill of dots above it
+        const srcs = [...new Set(cells.map((p) => p.s))].sort();
+        const minC = Math.min(...cells.map((p) => p.c)), maxC = Math.max(...cells.map((p) => p.c));
+        const minR = Math.min(...cells.map((p) => p.r));
+        const cx = ((minC + maxC + 1) / 2) * S, top = minR * S - 18;
+        const pw = srcs.length * 18 + 10;
+        const pill = el("g", { id: `dp${i}` }, gDots);
+        el("rect", { x: cx - pw / 2, y: top - 12, width: pw, height: 24, rx: 12, fill: "#ffffff", stroke: GREEN_INK, "stroke-width": 2 }, pill);
+        srcs.forEach((s, k) => el("circle", { cx: cx - pw / 2 + 14 + k * 18, cy: top, r: 6.5, fill: SRC[s] }, pill));
+      });
+
+      // the size gauge, right of the grid: one cluster at a time against the minimum size
+      const gs = el("svg", { viewBox: "0 0 960 540" }, document.getElementById("gauge"));
+      const UNIT = 26, GAX = 800, GAW = 46, GAB = 134 + H, GTOP = GAB - 8 * UNIT;
+      const gauge = el("g", { id: "gg" }, gs);
+      el("rect", { x: GAX, y: GTOP, width: GAW, height: 8 * UNIT, rx: 6, fill: "#ffffff", stroke: RULE, "stroke-width": 2 }, gauge);
+      el("rect", { id: "gfill", x: GAX + 4, y: GAB, width: GAW - 8, height: 0, rx: 3, fill: MEASURE }, gauge);
+      const thr = el("g", { id: "thr" }, gauge);
+      el("line", { x1: GAX - 16, y1: GAB - MIN * UNIT, x2: GAX + GAW + 16, y2: GAB - MIN * UNIT, stroke: INK, "stroke-width": 3, "stroke-dasharray": "8 5" }, thr);
+      el("path", { d: `M${GAX - 30} ${GAB - MIN * UNIT - 9}L${GAX - 16} ${GAB - MIN * UNIT}L${GAX - 30} ${GAB - MIN * UNIT + 9}Z`, fill: INK }, thr);
+      el("path", { id: "check", d: `M${GAX + 10} ${GTOP - 34}l10 10l20 -22`, fill: "none", stroke: GREEN_INK, "stroke-width": 6, "stroke-linecap": "round", "stroke-linejoin": "round" }, gauge);
+      const level = (n) => ({ attr: { y: GAB - n * UNIT + 4, height: Math.max(0, n * UNIT - 8) } });
+      // measured left to right
+      const order = clusters.map((cells, i) => ({ i, n: cells.length, c: Math.min(...cells.map((p) => p.c)) })).sort((a, b) => a.c - b.c);
+
+      // initial state = last frame: three separate grids
+      for (let s = 0; s < 3; s++) gsap.set(`#g${s}`, { x: START_X[s], scale: START_SCALE, transformOrigin: "50% 50%" });
+      gsap.set(".px", { opacity: 1 });
+      clusters.forEach((_, i) => {
+        gsap.set(`#lk${i}`, { opacity: 0 });
+        gsap.set(`#dp${i}`, { opacity: 0, scale: 0.4, transformOrigin: "50% 50%" });
+      });
+      gsap.set("#gg", { opacity: 0 });
+      gsap.set("#check", { opacity: 0 });
+      gsap.set("#gfill", level(0));
+
+      const tl = gsap.timeline({ paused: true });
+      // 1. slide onto one grid
+      for (let s = 0; s < 3; s++) {
+        tl.to(`#g${s}`, { x: 0, scale: 1, duration: 1.3, ease: "power3.inOut" }, 0.7 + s * 0.08);
+        tl.to(`#fr${s}`, { attr: { stroke: FRAME }, duration: 1.0 }, 1.0);
+        if (s > 0) tl.to(`#bg${s}`, { opacity: 0, duration: 0.5 }, 1.0);
+      }
+      // 2. touching pixels link up (sides and corners)
+      clusters.forEach((_, i) => tl.to(`#lk${i}`, { opacity: 1, duration: 0.35 }, 2.6 + i * 0.25));
+      // 3. each cluster is measured: one at least the minimum size becomes one
+      //    polygon; a smaller one is set aside
+      tl.to("#gg", { opacity: 1, duration: 0.4 }, 2.4);
+      order.forEach(({ i, n }, k) => {
+        const t = 4.0 + k * 1.1;
+        tl.to(`#pm${i}`, { opacity: 1, duration: 0.2 }, t);
+        tl.to("#gfill", { ...level(n), duration: 0.45, ease: "power1.out" }, t);
+        tl.to(`#pm${i}`, { opacity: 0, duration: 0.3 }, t + 0.6);
+        tl.to(`#lk${i}`, { opacity: 0, duration: 0.4 }, t + 0.6);
+        tl.to(`#pf${i}`, { opacity: 1, duration: 0.4 }, t + 0.6);
+        if (n >= MIN) {
+          tl.to("#gfill", { attr: { fill: GREEN }, duration: 0.2 }, t + 0.55);
+          tl.to("#check", { opacity: 1, duration: 0.2 }, t + 0.55);
+          tl.to(`#pl${i}`, { attr: { "stroke-dashoffset": 0 }, duration: 0.6, ease: "power1.inOut" }, t + 0.55);
+        } else {
+          tl.to("#gfill", { attr: { fill: DONE }, duration: 0.2 }, t + 0.55);
+          tl.fromTo("#thr", { x: 0 }, { x: 5, duration: 0.07, repeat: 5, yoyo: true, ease: "none" }, t + 0.55);
+        }
+        tl.to("#check", { opacity: 0, duration: 0.15 }, t + 0.95);
+        tl.to("#gfill", { ...level(0), duration: 0.15 }, t + 0.95);
+        tl.set("#gfill", { attr: { fill: MEASURE } }, t + 1.1);
+      });
+      const t4 = 4.0 + order.length * 1.1;
+      tl.to(".px", { opacity: 0.6, duration: 0.6 }, t4);
+      // 4. the polygon carries a dot for every source that flagged it
+      order.filter(({ n }) => n >= MIN)
+        .forEach(({ i }, k) => tl.to(`#dp${i}`, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, t4 + 0.4 + k * 0.18));
+      // 5. back to the start
+      const R = 11.0;
+      tl.to("#gg", { opacity: 0, duration: 0.3 }, R);
+      clusters.forEach((_, i) => {
+        const len = document.getElementById(`pl${i}`).getAttribute("stroke-dasharray").split(" ")[0];
+        tl.to(`#dp${i}`, { opacity: 0, scale: 0.4, duration: 0.3 }, R);
+        tl.to(`#pl${i}`, { opacity: 0, duration: 0.4 }, R);
+        tl.set(`#pl${i}`, { attr: { "stroke-dashoffset": len }, opacity: 1 }, R + 0.45);
+        tl.to(`#pf${i}`, { opacity: 0, duration: 0.4 }, R);
+      });
+      tl.to(".px", { opacity: 1, duration: 0.4 }, R + 0.1);
+      for (let s = 0; s < 3; s++) {
+        tl.to(`#g${s}`, { x: START_X[s], scale: START_SCALE, duration: 1.1, ease: "power3.inOut" }, R + 0.5);
+        tl.to(`#fr${s}`, { attr: { stroke: SRC[s] }, duration: 0.8 }, R + 0.6);
+        if (s > 0) tl.to(`#bg${s}`, { opacity: 1, duration: 0.4 }, R + 0.6);
+      }
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
