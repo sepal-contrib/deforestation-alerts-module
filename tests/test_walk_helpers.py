@@ -110,6 +110,7 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
     <button data-step-key="integrate" onclick="step('integrate')">integrate</button>
     <button data-step-key="questionnaire" onclick="step('questionnaire')">questionnaire</button>
     <button data-step-key="evaluators" onclick="step('evaluators')">evaluators</button>
+    <span id="badge">1 / 3</span>
     <p id="showing">workflow on integrate</p>
     <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
   </div>
@@ -119,7 +120,11 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <div class="defo-analysis-right"><p>the review console</p></div>
 </div>
 <script>
-function step(key) { document.getElementById('showing').textContent = 'workflow on ' + key; }
+function step(key) {
+  document.getElementById('showing').textContent = 'workflow on ' + key;
+  document.getElementById('badge').textContent =
+    (['integrate', 'questionnaire', 'evaluators'].indexOf(key) + 1) + ' / 3';
+}
 function openScreen() {
   const s = document.getElementById('screen');
   s.style.display = ''; s.classList.add('defo-analysis-screen--on');

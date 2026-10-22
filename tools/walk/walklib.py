@@ -300,6 +300,17 @@ def back_to_workflow(page, wait=1000):
     page.wait_for_timeout(wait)
 
 
+def step_active(page, key) -> bool:
+    """Whether the Workflow panel shows step ``key``: the pipeline header's
+    position reads "<its number> / <steps>" (any language)."""
+    return page.evaluate("""key => {
+        const keys = [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
+        const label = `${keys.indexOf(key) + 1} / ${keys.length}`;
+        return keys.includes(key) && [...document.querySelectorAll('.right-panel span')].some(e =>
+            e.childElementCount === 0 && e.textContent.trim() === label && e.getBoundingClientRect().width > 0);
+    }""", key)
+
+
 def goto_step(page, key, wait=1500):
     """A workflow step by key, from the workflow or from the analysis screen.
 
@@ -309,6 +320,10 @@ def goto_step(page, key, wait=1500):
     back_to_workflow(page)
     if key == "analysis":
         page.locator('[data-step-key="evaluators"]').first.click()
+        # The button is found once the panel shows Evaluation: one found on
+        # the step before it hides before the click lands.
+        wait_for(lambda: step_active(page, "evaluators"), 30, "the Evaluation step")
+        page.wait_for_timeout(500)
         start = page.locator(".defo-start-analysis:visible").first
         wait_for(lambda: start.count() and start.is_enabled(), 30, "Start analysis enabled")
         start.click()

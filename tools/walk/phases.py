@@ -115,13 +115,55 @@ def compact_stages(titles, label) -> int:
     return sum(len(re.findall(rf": {re.escape(label)}(?= ·|$)", t or "")) for t in titles)
 
 
-def prepare_state(page):
+#: The Prepare step's labels in English (``run_all`` takes others, see
+#: ``prepare_labels``): the plural forms of the "Run {n} pending" button and
+#: the status cells' texts.
+EN_PREPARE = None
+
+
+def prepare_labels(forms, ready, running):
+    """The labels ``run_all`` reads, in one language: ``forms`` the plural
+    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` /
+    ``running`` the ``widgets.product_table.status_*`` texts."""
+    alts = "|".join(re.escape(f).replace(re.escape("{n}"), r"\d+") for f in sorted(set(forms)))
+    return {"run": re.compile(rf"^\s*(?:{alts})\s*$"), "ready": ready, "running": running}
+
+
+def en_prepare():
+    global EN_PREPARE
+    if EN_PREPARE is None:
+        from tools.walk.walklib import MESSAGES_EN
+
+        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
+        EN_PREPARE = prepare_labels(node.values(), en("widgets.product_table.status_ready"),
+                                    en("widgets.product_table.status_running"))
+    return EN_PREPARE
+
+
+def run_button(page, labels=None):
+    """The "Run {n} pending" button of the Prepare panel, found by its
+    catalogue text (any plural form) in the labels' language."""
+    labels = labels or en_prepare()
+    return page.locator(".right-panel button:visible").filter(has_text=labels["run"]).first
+
+
+def pending_count(page, labels=None) -> int:
+    """The {n} of the "Run {n} pending" button (0 when it is not shown)."""
+    btn = run_button(page, labels)
+    if not btn.count():
+        return 0
+    m = re.search(r"\d+", btn.inner_text())
+    return int(m.group()) if m else 0
+
+
+def prepare_state(page, labels=None):
     """The "ready" / "running" stages on the panel: a source row's status
     cells (their label), and a Masks row's compact status (its tooltip)."""
+    labels = labels or en_prepare()
     titles = page.locator(".right-panel [title]").evaluate_all("es => es.map(e => e.getAttribute('title'))")
     out = {}
     for state in ("ready", "running"):
-        label = en(f"widgets.product_table.status_{state}")
+        label = labels[state]
         out[state] = page.locator(f'.right-panel :text-is("{label}")').count() + compact_stages(titles, label)
     return out
 
@@ -136,20 +178,21 @@ def save_grid(page, *, resolution="30"):
     page.wait_for_timeout(1500)
 
 
-def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_done"):
+def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_done", labels=None):
     """Click "Run N pending" and wait for the job: it must start (a row reads
     running, or nothing is pending any more) and end with ``expect_ready``
     "ready" status cells (two per source row, two per Earth Engine mask row,
-    one aligned cell per GeoTIFF mask row) and no error toast."""
+    one aligned cell per GeoTIFF mask row) and no error toast. ``labels``
+    (``prepare_labels``) for a language other than English."""
     goto_step(page, "prepare", 2000)
-    run = page.locator('.right-panel button:has-text("pending"):visible').first
+    run = run_button(page, labels)
     t_run = now_ms(page)
     run.click()
     t0 = time.time()
-    wait_for(lambda: prepare_state(page)["running"] or "run 0 pending" in panel_text(page).lower(), 30,
+    wait_for(lambda: prepare_state(page, labels)["running"] or pending_count(page, labels) == 0, 30,
              "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
-        st = prepare_state(page)
+        st = prepare_state(page, labels)
         if st["ready"] >= expect_ready and not st["running"]:
             break
         if errors(toasts_since(page, t_run)) and not st["running"]:
@@ -159,7 +202,7 @@ def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_d
     rec["prepare_panel"] = panel_text(page)[:1500].replace("\n", " | ")
     rec["prepare_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
     shot(page, out, shot_name)
-    assert prepare_state(page)["ready"] >= expect_ready, rec["prepare_panel"]
+    assert prepare_state(page, labels)["ready"] >= expect_ready, rec["prepare_panel"]
     assert not errors(toasts_since(page, t_run)), rec["prepare_toasts"]
 
 
