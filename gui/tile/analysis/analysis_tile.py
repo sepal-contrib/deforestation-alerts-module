@@ -608,10 +608,14 @@ SCREEN_CSS = (
     ".defo-analysis-screen .v-application--wrap { min-height: 0 !important; }\n"
     ".defo-analysis-topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 56px;"
     " padding: 0 12px; border-bottom: 1px solid rgba(128, 128, 128, 0.25); }\n"
-    ".defo-analysis-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n"
+    # The title gives way first: with an even shrink the navigation, the
+    # wider block, lost most of the room and overflowed the screen (in
+    # Spanish with a filter chip, at 1440 px, Next was pushed off the edge).
+    ".defo-analysis-title { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;"
+    " white-space: nowrap; }\n"
     # the top bar's navigation (``context.build_topnav``)
     ".defo-analysis-screen .defo-topnav { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }\n"
-    ".defo-analysis-screen .defo-topnav-set { flex: 0 1 380px; min-width: 180px; }\n"
+    ".defo-analysis-screen .defo-topnav-set { flex: 0 1 380px; min-width: 140px; }\n"
     ".defo-analysis-screen .defo-topnav-set .v-select { padding: 0 !important; margin: 0; }\n"
     ".defo-analysis-screen .defo-jump-btn { min-width: 0 !important; }\n"
     # the filter's funnel and chip (``filter_menu``), left of the set
