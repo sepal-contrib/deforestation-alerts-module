@@ -279,22 +279,6 @@ def prev_match(mask, pos: int) -> Optional[int]:
     return int(before[-1]) if len(before) else None
 
 
-def next_growth_match(gdf, mask, pos: int) -> Optional[int]:
-    """The first matching growth alert (``growth`` or ``growth_small``) after
-    ``pos``, wrapping round to the start, never ``pos`` itself; None when
-    there is none."""
-    if gdf is None or not len(gdf):
-        return None
-    grows = np.asarray(mask, dtype=bool) & kinds_of(gdf).isin([KIND_GROWTH, KIND_GROWTH_SMALL]).to_numpy()
-    n = len(grows)
-    start = max(pos, -1)
-    for step in range(1, n + 1):
-        i = (start + step) % n
-        if i != pos and grows[i]:
-            return i
-    return None
-
-
 def _todo(gdf, mask) -> np.ndarray:
     """Matching and not reviewed (``review_status.reviewed_mask``)."""
     return np.asarray(mask, dtype=bool) & ~reviewed_mask(gdf).to_numpy(dtype=bool)

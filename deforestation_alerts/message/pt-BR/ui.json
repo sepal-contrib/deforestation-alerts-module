@@ -193,8 +193,7 @@
       "next": "Próximo",
       "jump": "Ir para o número do alerta",
       "go": "Ir",
-      "next_unreviewed": "Próximo alerta não revisado",
-      "next_growth": "Próximo alerta de crescimento"
+      "next_unreviewed": "Próximo alerta não revisado"
     },
     "questionarie": {
       "confirmation_q": "Este alerta é verdadeiro?",

@@ -103,7 +103,7 @@
     coloured by period (solid = confirmed, dashed = need revision), with a
     checkbox to link or unlink each one, saved with the review; the map
     shows them under the current alert and the timeline marks their dates.
-    A Kind filter and a *Next growth alert* button find growth alerts.
+    A Kind filter finds growth alerts.
   - A link breaks when the earlier set is re-run (the Replace dialog warns
     first) and greys out when its parent is later reviewed as a false
     positive; neither counts in histories.

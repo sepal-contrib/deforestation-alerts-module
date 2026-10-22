@@ -138,7 +138,7 @@ def test_the_counter_opens_the_jump_menu_and_the_field_is_one_based(tmp_path, mo
     s = _state(tmp_path, monkeypatch)
     field = v.TextField(v_model=None)
     card = context.build_context(s, field)
-    _, _, jump, menu, go, _, _ = context.nav_widgets(card)
+    _, _, jump, menu, go, _ = context.nav_widgets(card)
     counter, _, _ = context.queue_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
 
@@ -175,7 +175,7 @@ def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
 
     s = _state(tmp_path, monkeypatch)
     card = context.build_context(s, v.TextField(v_model=None))
-    *_, menu, _, unreviewed, _growth = context.nav_widgets(card)
+    *_, menu, _, unreviewed = context.nav_widgets(card)
     s.alerts_gdf.set(gdf)
     s.actual_alert_id.value = 0
     assert not unreviewed.disabled

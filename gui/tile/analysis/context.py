@@ -41,7 +41,7 @@ from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import set_store
-from gui.scripts.alert_filter import next_growth_match, next_unreviewed_match
+from gui.scripts.alert_filter import next_unreviewed_match
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.filter_menu import build_filter_menu
@@ -179,13 +179,12 @@ def queue_widgets(card):
 
 
 def nav_widgets(card):
-    """``(prev, next, jump, menu, go, unreviewed, growth)`` of a card built by
+    """``(prev, next, jump, menu, go, unreviewed)`` of a card built by
     ``build_context``: ``jump`` is the counter's button, which opens ``menu``
-    (the number field with ``go``, and the next-unreviewed and next-growth
-    links)."""
+    (the number field with ``go``, and the next-unreviewed link)."""
     slots = getattr(card, _SLOTS)
     return (slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"],
-            slots["unreviewed"], slots["growth"])
+            slots["unreviewed"])
 
 
 def jump_refusal(card):
@@ -221,7 +220,7 @@ def facts_widgets(card):
 def _build_nav(app_state, id_field, counter, labels):
     """Previous / Next, and the counter as a button that opens a small menu:
     "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
-    alert" and "Next growth alert". The menu floats over the panel, so opening it moves nothing.
+    alert". The menu floats over the panel, so opening it moves nothing.
 
     The field takes the 1-based number the counter shows, so ``go_to`` takes
     ``value - 1``; ``go_to`` clamps and is safe with no alerts loaded
@@ -246,8 +245,6 @@ def _build_nav(app_state, id_field, counter, labels):
     go = v.Btn(outlined=True, color="primary", style_="height: 40px; " + _btn, children=[])
     unreviewed = v.Btn(text=True, color="primary", small=True, class_="px-1",
                        style_="justify-content: flex-start; " + _btn, children=[])
-    growth = v.Btn(text=True, color="primary", small=True, class_="px-1",
-                   style_="justify-content: flex-start; " + _btn, children=[])
     label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     # "Alert 12 is not in the current filter": a number the filter hides is
     # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
@@ -260,7 +257,6 @@ def _build_nav(app_state, id_field, counter, labels):
                       refusal,
                       v.Divider(),
                       unreviewed,
-                      growth,
                   ])
     menu = v.Menu(v_model=False, offset_y=True, nudge_bottom=4, close_on_content_click=False,
                   v_slots=[{"name": "activator", "variable": "menu", "children": jump}],
@@ -312,16 +308,6 @@ def _build_nav(app_state, id_field, counter, labels):
 
     unreviewed.on_event("click", _on_unreviewed)
 
-    def _on_growth(*_):
-        # Among the filter's matches, wrapping, like Next unreviewed.
-        target = next_growth_match(app_state.alerts_gdf.value, app_state.alert_mask(),
-                                   app_state.actual_alert_id.value)
-        if target is not None:
-            app_state.go_to(target)
-        menu.v_model = False
-
-    growth.on_event("click", _on_growth)
-
     def _label():
         prev.children = [prev.children[0], t("analysis_tile.nav.previous")]
         nxt.children = [t("analysis_tile.nav.next"), nxt.children[-1]]
@@ -329,7 +315,6 @@ def _build_nav(app_state, id_field, counter, labels):
                            "title": t("analysis_tile.nav.jump")}
         go.children = [t("analysis_tile.nav.go")]
         unreviewed.children = [t("analysis_tile.nav.next_unreviewed")]
-        growth.children = [t("analysis_tile.nav.next_growth")]
         label.children = [t("analysis_tile.nav.jump")]
         if refused[0] is not None:
             # A switch with the menu open on a refusal: the same sentence in
@@ -339,7 +324,7 @@ def _build_nav(app_state, id_field, counter, labels):
     labels.add(_label)
 
     return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed,
-            "growth": growth, "refusal": refusal}
+            "refusal": refusal}
 
 
 def _build_facts(labels):
@@ -463,7 +448,6 @@ def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
         nav_slots["prev"].disabled = stuck
         nav_slots["next"].disabled = stuck
         nav_slots["unreviewed"].disabled = next_unreviewed_match(gdf, mask, index) is None
-        nav_slots["growth"].disabled = next_growth_match(gdf, mask, index) is None
         id_field.placeholder = f"1 – {format_number(total)}" if total else ""
 
         # The queue line refreshes before this guard returns: another set's

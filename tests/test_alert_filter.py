@@ -17,7 +17,6 @@ from gui.scripts.alert_filter import (
     first_unreviewed,
     kinds_of,
     match_mask,
-    next_growth_match,
     next_match,
     next_unreviewed_match,
     prev_match,
@@ -274,15 +273,3 @@ def test_kind_filter_matches():
         False, True, True, False, False]
     assert match_mask(gdf, AlertFilter("kind", frozenset({"new"})), QS).tolist() == [True, False, False, False, True]
     assert kinds_of(_six()).tolist() == ["new"] * 6
-
-
-def test_next_growth_match_wraps_and_respects_mask():
-    gdf = _kinds()
-    everything = np.ones(5, dtype=bool)
-    assert next_growth_match(gdf, everything, 0) == 1
-    assert next_growth_match(gdf, everything, 1) == 2
-    assert next_growth_match(gdf, everything, 2) == 1   # wraps, never stays
-    assert next_growth_match(gdf, np.array([True, False, True, True, True]), 0) == 2
-    assert next_growth_match(gdf, np.array([True, False, False, True, True]), 0) is None
-    assert next_growth_match(_six(), np.ones(6, dtype=bool), 0) is None
-    assert next_growth_match(None, np.ones(0, dtype=bool), -1) is None

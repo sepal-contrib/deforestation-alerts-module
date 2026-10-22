@@ -271,7 +271,7 @@ def test_the_top_bar_navigation_holds_the_selector_the_queue_and_the_buttons(tmp
 
     panel = _controls(tmp_path, monkeypatch)
     block_a = panel.controls.children[1]
-    prev, nxt, jump, menu, _go, _unreviewed, _growth = context.nav_widgets(block_a)
+    prev, nxt, jump, menu, _go, _unreviewed = context.nav_widgets(block_a)
     counter, tally, bar = context.queue_widgets(block_a)
 
     def walk(w):

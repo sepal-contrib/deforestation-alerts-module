@@ -275,7 +275,7 @@ def test_the_counter_counts_the_matches_with_the_total_as_a_hint(tmp_path, monke
 
 def test_no_match_says_so_and_disables_the_navigation(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    prev, nxt, *_, unreviewed, _growth = context.nav_widgets(card)
+    prev, nxt, *_, unreviewed = context.nav_widgets(card)
     counter, tally, _ = context.queue_widgets(card)
     s.actual_alert_id.set(1)
     analysis.alert_filter.set(AlertFilter("evaluator", frozenset({"Carla"})))
@@ -300,7 +300,7 @@ def test_the_nav_buttons_follow_the_filter(tmp_path, monkeypatch):
 
 def test_the_jump_refuses_a_number_outside_the_filter(tmp_path, monkeypatch):
     s, analysis, card, field = _block_a(tmp_path, monkeypatch)
-    _, _, _, menu, go, _, _ = context.nav_widgets(card)
+    _, _, _, menu, go, _ = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -330,7 +330,7 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
     field, labels = v.TextField(v_model=None), Labels()
     card = context.build_context(s, field, labels=labels)
     s.alerts_gdf.set(_six())
-    _, _, _, menu, go, _, _ = context.nav_widgets(card)
+    _, _, _, menu, go, _ = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -350,7 +350,7 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
 
 def test_next_unreviewed_keeps_to_the_matches(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    *_, menu, _, unreviewed, _growth = context.nav_widgets(card)
+    *_, menu, _, unreviewed = context.nav_widgets(card)
     s.actual_alert_id.set(2)
     analysis.alert_filter.set(ANA)
     menu.v_model = True
@@ -374,26 +374,3 @@ def test_save_and_next_advances_to_the_next_match(tmp_path, monkeypatch):
     analysis.alert_filter.set(ANA)
     save_next.fire_event("click", None)
     assert s.actual_alert_id.value == 2
-
-
-def test_next_growth_button_disabled_without_growth(tmp_path, monkeypatch):
-    s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    *_, menu, _, _, growth = context.nav_widgets(card)
-    s.actual_alert_id.set(0)
-    assert growth.disabled, "an old set has no growth alert"
-    gdf = _six()
-    gdf["grows_from"] = [[], ["old#3@20250101000000000000"], [], [], ["old#3@20250101000000000000"], []]
-    gdf["below_min"] = False
-    s.alerts_gdf.set(gdf)
-    s.actual_alert_id.set(0)
-    assert not growth.disabled
-    menu.v_model = True
-    growth.fire_event("click", None)
-    assert s.actual_alert_id.value == 1 and menu.v_model is False
-    analysis.alert_filter.set(ANA)            # Ana's rows: 0, 2, 4 -> only 4 grows
-    s.actual_alert_id.set(0)
-    growth.fire_event("click", None)
-    assert s.actual_alert_id.value == 4
-    analysis.alert_filter.set(AlertFilter("evaluator", frozenset({"Bruno"})))
-    s.actual_alert_id.set(1)
-    assert growth.disabled, "no growth alert among Bruno's"
