@@ -15,9 +15,9 @@ Work happens in a **project**: a folder under `~/module_results/deforestation_al
 3. **Optional layers**: visualization layers (Earth Engine, GeoTIFF or Planet NICFI) for the map and the review screen.
 4. **Period**: one or more monitoring periods, with a look-back window. An alert reported in one period is never reported again in a later one.
 5. **Download & harmonize**: each source is downloaded and aligned onto one projected grid for the project, with optional masks.
-6. **Integrate & vectorize**: the sources are combined and turned into an **alert set**. Each connected cluster of alert pixels becomes one alert, which lists every source that flagged it. Optional filters: minimum size, a drawn area, sorting, a maximum count and an attribute raster.
+6. **Integrate & vectorize**: the sources are combined and turned into an **alert set**. Each connected cluster of alert pixels becomes one alert, which lists every source that flagged it. Options: probable (unconfirmed) alerts, a minimum size, the review order, a maximum count and attribute rasters.
 7. **Questionnaire**: the questions a reviewer answers for each alert (the loss driver by default), and the report template.
 8. **Evaluation**: review alone, or split the set among several evaluators. Each evaluator gets a review package, and their reviewed copies are merged back into the set.
 9. **Analysis**: a screen that steps through the alerts. For each alert the reviewer records a verdict and answers the questions, can refine the polygon with drawing tools and two CNN models, and can export the files.
 
-**Overview** maps the active set and earlier sets, with their status and a breakdown per question. The app is available in English, Spanish and French.
+**Overview** maps the active set and earlier sets, with their status and a breakdown per question. The app is available in English, Spanish, French and Portuguese.
