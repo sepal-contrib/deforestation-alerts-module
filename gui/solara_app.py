@@ -88,6 +88,10 @@ from gui.widget.enter_key import EnterKeyListener
 from gui.widget.workflow_header import WorkflowHeader
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
+
+REPO_URL = "https://github.com/sepal-contrib/deforestation-alerts-module"
+DOCS_URL = "https://docs.sepal.io/{lang}/latest/modules/dwn/alert_module.html"
+DOCS_LANGUAGES = ("en", "es", "fr")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
@@ -893,12 +897,21 @@ def _AppShell():
     # (ruling #91). A leaf cannot set the title on the widget instead: reacton
     # re-applies MapApp's element props whenever this context renders again.
     app_title = use_app_title(app_state)
+    # The rail's Documentation link opens the user guide on docs.sepal.io, which
+    # builds it from doc/en.rst on the release branch (sepal-doc's en.json key
+    # "alert_module"). It is published in English, Spanish and French; other UI
+    # languages get the English page. DEFORESTATION_ALERTS_DOCS_URL overrides
+    # it, e.g. to preview a locally built guide; "{lang}" is filled in.
+    lang = (current_locale() or "en").split("-")[0]
+    docs_url = os.environ.get("DEFORESTATION_ALERTS_DOCS_URL", DOCS_URL)
+    docs_url = docs_url.replace("{lang}", lang if lang in DOCS_LANGUAGES else "en")
     # The floating legend, a leaf mounted before MapApp (spec §9.4).
     MapLegend(app_state=app_state, layers=layers)
     app_element = MapApp.element(
         app_title=app_title,
         app_icon="mdi-tree",
-        repo_url="https://github.com/sepal-contrib/deforestation-alerts-module",
+        repo_url=REPO_URL,
+        docs_url=docs_url,
         main_map=[map_],
         steps_data=steps_data,
         # Open the Project dialog at startup (rail step id 2): work starts by
