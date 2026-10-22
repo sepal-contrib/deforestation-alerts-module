@@ -13,16 +13,17 @@ import pytest
 from shapely.geometry import box
 
 from deforestation_alerts.project import paths, share
+from deforestation_alerts.project.growth import links_of, run_id_of
 from deforestation_alerts.project.share import ShareError, apply_return, read_return
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
 from gui.i18n import t
-from gui.scripts import integrate_jobs, merge_service, set_store
+from gui.scripts import growth_index, integrate_jobs, merge_service, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis.state import AnalysisState
-from tests._share_helpers import AOI_FC, APP_VERSION, CREATOR, SET1, make_copy, make_creator, rezip, zip_members
+from tests._share_helpers import AOI_FC, APP_VERSION, CREATOR, SET1, SET2, make_copy, make_creator, rezip, zip_members
 
 #: the creator's store: alert 0 reviewed alike, 1 Bo's, 2 reviewed otherwise, 3 not reviewed
 CREATOR_STATUSES = ("Confirmed", "Not reviewed", "Need revision", "Not reviewed")
@@ -392,3 +393,131 @@ def test_a_reload_request_views_the_current_alert_again(monkeypatch):
     assert len(views) == 1
     analysis.reload_alert.set(analysis.reload_alert.value + 1)
     assert len(views) == 2
+
+
+# ---- growth links travel with the reviews (spec 2026-10-20 §6.6) ----------------------
+
+
+def test_same_value_compares_link_lists():
+    import numpy as np
+
+    assert share.same_value(np.array(["a"]), ["a"])
+    assert share.same_value([], None)
+    assert share.same_value(np.array([], dtype=object), [])
+    assert share.same_value(["a", "b"], "a;b")
+    assert not share.same_value(["a"], ["b"])
+    assert not share.same_value(["a"], [])
+
+
+def test_return_carries_grows_from_and_merges(tmp_path, monkeypatch):
+    link = f"{SET1}#0@20261001120000000000"
+    p, _ = _creator(tmp_path, monkeypatch)
+    zp = _return(tmp_path, extra={"grows_from": [[link], [], [], []]})
+    preview = read_return(zp, p, _store(p))
+    assert "grows_from" in preview.columns and preview.new == [3]
+    merged = apply_return(_store(p), preview, "theirs")
+    assert links_of(merged.loc[merged["alert_id"] == 0, "grows_from"].iloc[0]) == [link]
+    assert [links_of(v) for v in merged["grows_from"]] == [[link], [], [], []]
+
+
+def test_a_store_with_an_all_empty_grows_from_column_takes_the_links(tmp_path, monkeypatch):
+    """Integrate stores ``grows_from`` as ``list<null>`` when it linked nothing."""
+    link = f"{SET1}#0@20261001120000000000"
+    p, pdir = _creator(tmp_path, monkeypatch, columns={"grows_from": [[], [], [], []]})
+    import pyarrow.parquet as pq
+
+    assert str(pq.read_schema(pdir / "legacy" / "alert_db.parquet").field("grows_from").type) == "list<element: null>"
+    zp = _return(tmp_path, extra={"grows_from": [[], [], [link], [link]]})
+    preview = read_return(zp, p, _store(p))
+    assert preview.unchanged == [0]  # [] against list<null>'s empty array
+    merged = apply_return(_store(p), preview, "theirs")
+    assert [links_of(v) for v in merged["grows_from"]] == [[], [], [link], [link]]
+    out = tmp_path / "merged.parquet"
+    save_gdf_to_parquet(merged, out)
+    assert [links_of(v) for v in load_gdf_from_parquet(out)["grows_from"]] == [[], [], [link], [link]]
+
+
+# ---- a review copy links against its package's earlier alerts ----------------------------
+
+
+def _open_copy(state_root, links):
+    """A growth creator whose SET2 alert 0 is linked ``links`` into SET1, its
+    package for Ana imported into the data directory and open in an AppState."""
+    from tests._share_helpers import make_growth_creator
+
+    growth_index.clear_cache()
+    creator, cpdir = make_growth_creator(state_root, links={0: links})
+    package = share.build_package(creator, cpdir, SET2, "Ana", AOI_FC, state_root.parent / "out",
+                                  app_version=APP_VERSION)
+    copy = share.import_package(package)
+    state = AppState()
+    state.load_project_state(copy)
+    s = copy.alert_sets[SET2]
+    assert set_store.publish_set_alerts(state, copy.name, s, set_store.load_set_alerts(copy, s))
+    return creator, state
+
+
+def _view(p, gdf, links):
+    return growth_index.earlier_view(p, SET2, gdf, 0, links, links, 50_000.0)  # the alerts are 0.1 deg apart
+
+
+def test_a_copy_shows_a_link_to_a_since_false_positive_parent_as_broken(tmp_path, monkeypatch):
+    from gui.tile.analysis import earlier
+
+    root = tmp_path / "data"
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
+    creator, state = _open_copy(root, [f"{SET1}#1@{{run}}"])
+    copy = state.project.value
+    link = f"{SET1}#1@{run_id_of(creator.alert_sets[SET1])}"
+    view = _view(copy, state.alerts_gdf.value, [link])
+    assert [(it.cand.key, it.state, it.cand.node.status) for it in view.items if it.cand.link == link] == [
+        (f"{SET1}#1", "broken", "False Positive")]
+    assert earlier._kept_links(copy, view, (link,)) == (link,)  # kept, greyed (spec §11.5), as in the creator's project
+    assert growth_index.history_summary(copy, SET2, state.alerts_gdf.value, 0, [link]) is None
+    growth_index.clear_cache()
+
+
+def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
+    """A copy alert linked to a Confirmed parent keeps the link through open
+    (Task 6), Save (Task 5) and the merge; a parent the evaluator ticks comes
+    back too."""
+    import types
+
+    from gui.tile.analysis import earlier, export
+    from tests.test_set_context import _AdminLookups
+
+    root = tmp_path / "data"
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
+    creator, state = _open_copy(root, [f"{SET1}#0@{{run}}"])
+    copy = state.project.value
+    run1 = run_id_of(creator.alert_sets[SET1])
+    stored, ticked = f"{SET1}#0@{run1}", f"{SET1}#2@{run1}"
+    gdf = state.alerts_gdf.value
+
+    view = _view(copy, gdf, [stored])
+    assert {it.cand.link: it.state for it in view.items}[stored] == "auto"
+    assert ticked in {it.cand.link for it in view.items}  # offered to tick
+    kept = earlier._kept_links(copy, view, (stored,))
+    assert kept == (stored,)
+    summary = growth_index.history_summary(copy, SET2, gdf, 0, [stored, ticked])
+    assert summary is not None and summary.n == 3
+
+    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    analysis = AnalysisState()
+    analysis.verdict.set("Confirmed")
+    analysis.links.set(kept + (ticked,))
+    state.actual_alert_id.set(0)
+    widgets = types.SimpleNamespace(actual_bb=types.SimpleNamespace(geometry=lambda: None))
+    assert export._save_attributes(widgets, state, analysis, SetContext(state)) is True
+    saved = set_store.load_set_alerts(copy, copy.alert_sets[SET2])
+    assert links_of(saved.loc[saved["alert_id"] == 0, "grows_from"].iloc[0]) == [stored, ticked]
+
+    zp = share.build_return(state.project.value, paths.project_dir(copy.name), tmp_path / "back",
+                            app_version=APP_VERSION)
+    cstore = set_store.load_set_alerts(creator, creator.alert_sets[SET2])
+    preview = read_return(zp, creator, cstore)
+    assert preview.new == [0]
+    merged = apply_return(cstore, preview, "theirs")
+    row = merged.loc[merged["alert_id"] == 0].iloc[0]
+    assert row["status"] == "Confirmed" and links_of(row["grows_from"]) == [stored, ticked]
+    growth_index.clear_cache()

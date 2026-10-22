@@ -8,6 +8,7 @@ reactive must notice "a new object" without comparing contents.
 
 import threading
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Optional
 
@@ -66,6 +67,19 @@ class AnalysisState:
     #: unreviewed one on nothing (spec U13). The Questions section writes it,
     #: a Save reads it at the click (``capture_alert``).
     answers: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
+    #: the growth links ticked for this alert (``"<set>#<id>@<run>"``): the
+    #: draft a Save writes to ``grows_from``, seeded from the row. A change
+    #: goes through ``set_links``, which marks the alert unsaved.
+    links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
+    #: the links Integrate found for this alert (``grows_from_auto``), what
+    #: "Reset to automatic" returns the draft to
+    auto_links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
+    #: the History row's numbers for the draft links (None: no history); the
+    #: Earlier alerts section fills it from a worker
+    history: solara.Reactive = field(default_factory=_identity)
+    #: the detection windows (start, end, as year fractions) of the linked
+    #: parents, which the timeline marks; filled with ``history``
+    parent_windows: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
     #: whether the reviewer changed the verdict, an answer or the polygon
     #: since the last save of THIS alert. Cleared by ``reset_alert`` (an alert
     #: change forgets it) and by a save that wrote.
@@ -111,7 +125,13 @@ class AnalysisState:
     #: field, kept across alert changes (the overlay follows the next alert),
     #: never saved to the project, so ``reset_alert`` leaves them alone.
     show_earlier_reviews: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
+    #: the reviewer's own last flip of that switch: a growth alert turns the
+    #: switch on for itself only (spec §6.3), the next other alert opens on this
+    earlier_choice: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
+    #: the earlier periods the *Periods* menu hides (ids): session state, all
+    #: shown by default, kept across alert changes like the switch
+    earlier_hidden_periods: solara.Reactive = field(default_factory=lambda: solara.reactive(frozenset()))
     #: the Analysis filter (spec §8): an ``alert_filter.AlertFilter`` (one
     #: attribute, the values that match) or None. Session state: the analysis
     #: layout binds it into ``AppState`` (``bind_alert_filter``), whose
@@ -119,7 +139,7 @@ class AnalysisState:
     #: it on a project install and when another set's alerts arrive. Kept
     #: across alert changes, so ``reset_alert`` leaves it alone.
     alert_filter: solara.Reactive = field(default_factory=lambda: solara.reactive(None))
-    #: counts the overlay refreshes (``earlier.refresh_earlier_reviews``): a
+    #: counts the overlay refreshes (``earlier.refresh_earlier``): a
     #: load that finishes after a newer refresh started is dropped
     earlier_seq: int = field(default=0, repr=False)
     #: serializes ``reset_alert`` with a worker's check-and-apply
@@ -139,6 +159,10 @@ class AnalysisState:
             self.prediction_files.set({})
             self.verdict.set(None)
             self.answers.set({})
+            self.links.set(())
+            self.auto_links.set(())
+            self.history.set(None)
+            self.parent_windows.set(())
             self.dirty.set(False)
             self.edit_rev.set(0)
             self.drawing_unapplied.set(False)
@@ -233,6 +257,7 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
             "status": analysis.verdict.value,
             "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
             "questions": list(p.questions) if p is not None else [],
+            "links": tuple(analysis.links.value),
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,
@@ -252,6 +277,15 @@ def touch(analysis: AnalysisState) -> None:
     """
     analysis.dirty.set(True)
     analysis.edit_rev.set(analysis.edit_rev.value + 1)
+
+
+def set_links(analysis: AnalysisState, links: Sequence[str]) -> None:
+    """Replace the draft growth links (duplicates dropped, order kept) and mark
+    the alert unsaved, only when they changed."""
+    new = tuple(dict.fromkeys(links))
+    if new != tuple(analysis.links.value):
+        analysis.links.set(new)
+        touch(analysis)
 
 
 def imagery_changed(analysis: AnalysisState) -> None:

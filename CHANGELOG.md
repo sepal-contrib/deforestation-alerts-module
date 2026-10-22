@@ -91,6 +91,27 @@
   `vectortileserver` for raster and vector tiles; GDAL display guards.
 - `scripts/measure_prepare.py`, which measures one national-scale download,
   harmonize and integrate run (time, file sizes, peak memory).
+- **Growth alerts**: Integrate looks back at the alerts of earlier periods
+  that were reviewed as Confirmed or Need revision (the reviewer's drawn shape
+  where there is one, else the detected cluster). A new cluster that touches
+  one is linked to it; a cluster under the minimum area that touches one is
+  kept as a growth alert instead of being dropped. Growth alerts count toward
+  the alert limit and are reviewed like any other alert.
+  - Analysis: the facts show the alert's Kind (New, Growth, under minimum
+    area) and its History (alerts, confirmed hectares and the first month).
+    The "Earlier alerts" section lists the earlier alerts nearby, grouped and
+    coloured by period (solid = confirmed, dashed = need revision), with a
+    checkbox to link or unlink each one, saved with the review; the map
+    shows them under the current alert and the timeline marks their dates.
+    A Kind filter finds growth alerts.
+  - A link breaks when the earlier set is re-run (the Replace dialog warns
+    first) and greys out when its parent is later reviewed as a false
+    positive; neither counts in histories.
+  - Review copies carry a snapshot of the earlier alerts, so evaluators link
+    as in the main project, and links merge back with their reviews.
+  - Overview: a History card with the set's growth alerts and its largest
+    growing clearings, each with a Review button. Exports add `kind`,
+    `grows_from` and `history_area_ha`.
 
 ### Fixed
 

@@ -15,6 +15,7 @@ from gui.scripts.alert_filter import (
     ColumnChoice,
     filter_columns,
     first_unreviewed,
+    kinds_of,
     match_mask,
     next_match,
     next_unreviewed_match,
@@ -223,3 +224,52 @@ def test_a_filter_keeps_a_matching_position_else_the_first_unreviewed_match():
     nobody = AlertFilter("evaluator", frozenset({"Carla"}))
     assert start_position(gdf, nobody, 3, QS) == 3       # nothing matches: stays
     assert start_position(gdf, nobody, 99, QS) == 5
+
+
+# ---- the Kind column (growth alerts, spec §6) -----------------------------------
+
+LINK = "old#3@20250101000000000000"
+
+
+def _kinds():
+    """Five alerts: new, growth, growth under the minimum, new under it, new."""
+    return _alerts(
+        status=["Not reviewed"] * 5,
+        grows_from=[[], [LINK], [LINK], [], None],
+        below_min=[False, False, True, True, False],
+    )
+
+
+def test_kind_filter_offered_only_with_growth():
+    cols = filter_columns(_kinds(), QS)
+    names = [c.column for c in cols]
+    assert names[names.index("status") + 1] == "kind"
+    assert next(c for c in cols if c.column == "kind").label == t("analysis_tile.facts.kind")
+    choices = value_choices(_kinds(), ColumnChoice("kind", "Kind"), QS)
+    assert [(v_, label, n) for v_, label, n in choices] == [
+        ("new", t("analysis_tile.facts.kind_new"), 2),
+        ("growth", t("analysis_tile.facts.kind_growth"), 1),
+        ("growth_small", t("analysis_tile.facts.kind_growth_small"), 1),
+        ("new_small", t("analysis_tile.facts.kind_new_small"), 1),
+    ]
+
+
+def test_growth_columns_are_never_offered_raw():
+    gdf = _kinds()
+    gdf["grows_from_auto"] = [[], [LINK], [], [], [LINK]]
+    assert [c.column for c in filter_columns(gdf, QS)] == ["status", "kind"]
+
+
+def test_kind_filter_absent_on_old_set():
+    assert "kind" not in [c.column for c in filter_columns(_six(), QS)]
+    assert "kind" not in [c.column for c in filter_columns(_alerts(status=["Not reviewed"] * 2,
+                                                                     grows_from=[[], []],
+                                                                     below_min=[False, False]), QS)]
+
+
+def test_kind_filter_matches():
+    gdf = _kinds()
+    assert match_mask(gdf, AlertFilter("kind", frozenset({"growth", "growth_small"})), QS).tolist() == [
+        False, True, True, False, False]
+    assert match_mask(gdf, AlertFilter("kind", frozenset({"new"})), QS).tolist() == [True, False, False, False, True]
+    assert kinds_of(_six()).tolist() == ["new"] * 6

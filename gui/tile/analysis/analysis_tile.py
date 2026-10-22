@@ -70,8 +70,10 @@ import ipyvuetify as v
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
+from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -79,7 +81,12 @@ from deforestation_alerts.scripts.mosaics_helper import (
 from pysepal.i18n import current_locale
 
 from gui.tile.analysis.context import build_context, build_topnav
-from gui.tile.analysis.earlier import build_earlier_controls, refresh_in_background, remove_earlier_layer
+from gui.tile.analysis.earlier import (
+    build_earlier_controls,
+    refresh_in_background,
+    remove_earlier_layer,
+    seed_switch,
+)
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
@@ -89,7 +96,7 @@ from gui.tile.analysis.footer import build_footer
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
 from gui.tile.analysis.state import IMAGE_AREAS
-from gui.tile.analysis.pane_layers import geojson_spec
+from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
 from gui.tile.analysis.timeline import build_timeline
@@ -249,7 +256,14 @@ def view_actual_alert(
     reviewed = analysis.verdict.value is not None
     analysis.answers.set({q.key: questions.codes(q, alerta.get(column(q))) for q in p.questions}
                          if reviewed and p is not None else {})
+    # --- the growth links the row stores, as the draft the reviewer edits and
+    # as what Integrate found; a set without the columns reads as none ---
+    analysis.links.set(tuple(links_of(alerta.get(GROWS_FROM))))
+    analysis.auto_links.set(tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
     analysis.dirty.set(False)
+    # --- a growth alert opens with its parents on the maps; any other on the
+    # reviewer's last choice (spec §6.3) ---
+    seed_switch(analysis, bool(analysis.links.value))
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)
@@ -278,16 +292,18 @@ def view_actual_alert(
         # on would fetch tiles at the new view, from the previous set's
         # raster, which a period delete is removing (500s from the tile server)
         panes.clear("alert")
-        # the earlier-reviews overlay is the previous alert's neighbourhood:
+        # the earlier-alerts overlay is the previous alert's neighbourhood:
         # ``refresh_in_background`` below draws this alert's
         remove_earlier_layer(widgets)
 
         # center/zoom: one write, every view follows (``AlertViews``)
         panes.set_view((alerta.point.y, alerta.point.x), 16)
 
-        # the bbox overlay on every view, hidden while the reviewer edits
+        # the bbox overlay on every view, hidden while the reviewer edits;
+        # above the earlier alerts' outlines (``ALERT_TOP_Z``)
         panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
-                               style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts"))
+                               style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts",
+                               z=ALERT_TOP_Z))
         # the after view's zoom-to-alert button goes back to this box
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 
@@ -336,12 +352,13 @@ def view_actual_alert(
         logger.exception("Analysis: view_actual_alert map update failed")
         return
 
-    # the earlier periods' reviewed alerts near this one (a no-op while the
-    # switch is off); its own guard, so a failed read never blames the maps
+    # the earlier periods' alerts near this one and its links (the list, the
+    # History row, the timeline's parent windows and, with the switch on, the
+    # layer); its own guard, so a failed read never blames the maps
     try:
         refresh_in_background(widgets, analysis, app_state)
     except Exception:
-        logger.exception("Analysis: the earlier-reviews overlay failed")
+        logger.exception("Analysis: the earlier-alerts section failed")
 
 
 def select_start_alert(app_state, app_tile_model):
@@ -542,7 +559,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Bound before block A is built, which subscribes to the bound filter
     # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
     app_state.bind_alert_filter(analysis.alert_filter)
-    context = build_context(app_state, id_field, labels=labels)
+    context = build_context(app_state, id_field, labels=labels, analysis=analysis)
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
     controls = v.Html(

@@ -12,6 +12,8 @@ from deforestation_alerts.scripts.naming import alert_artifact_name, safe_token
 DATA_DIR_ENV = "DEFORESTATION_ALERTS_DATA_DIR"
 MANIFEST = "project.json"
 AOI_SIDECAR = "aoi.geojson"
+#: A review copy's snapshot of the creator's earlier alerts (spec 2026-10-20 §6.6).
+EARLIER_SNAPSHOT = "earlier_alerts.parquet"
 
 
 def data_dir() -> Path:

@@ -450,6 +450,10 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… and {n} more",
       "replace_split": "The evaluator split and its pending returns will be discarded.",
+      "replace_links": {
+        "one": "{n} alert of a later period is linked to this set; its link will break.",
+        "other": "{n} alerts of later periods are linked to this set; their links will break."
+      },
       "job_title": "Integrate & vectorize",
       "step_combine": "Combining sources",
       "step_vectorize": "Vectorizing clusters",
@@ -461,6 +465,14 @@
       "done": {
         "one": "{n} alert ready for review",
         "other": "{n} alerts ready for review"
+      },
+      "growth_linked": {
+        "one": "Linked {n} alert to earlier loss ({small} under the minimum area)",
+        "other": "Linked {n} alerts to earlier loss ({small} under the minimum area)"
+      },
+      "growth_linked_plain": {
+        "one": "Linked {n} alert to earlier loss",
+        "other": "Linked {n} alerts to earlier loss"
       },
       "done_empty": "No new alerts in this period: the alert set is empty.",
       "done_empty_detail": "No new alerts in this period: the alert set is empty. {details}",

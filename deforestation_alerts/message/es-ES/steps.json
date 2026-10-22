@@ -470,6 +470,11 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
       "replace_split": "Se descartarán el reparto entre evaluadores y sus devoluciones pendientes.",
+      "replace_links": {
+        "one": "{n} alerta de un período posterior está vinculada a este conjunto; su vínculo se romperá.",
+        "many": "{n} de alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.",
+        "other": "{n} alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán."
+      },
       "job_title": "Integrar y vectorizar",
       "step_combine": "Combinando fuentes",
       "step_vectorize": "Vectorizando grupos",
@@ -482,6 +487,16 @@
         "one": "{n} alerta lista para revisar",
         "many": "{n} de alertas listas para revisar",
         "other": "{n} alertas listas para revisar"
+      },
+      "growth_linked": {
+        "one": "Se vinculó {n} alerta a una pérdida anterior ({small} por debajo del área mínima)",
+        "many": "Se vincularon {n} de alertas a pérdidas anteriores ({small} por debajo del área mínima)",
+        "other": "Se vincularon {n} alertas a pérdidas anteriores ({small} por debajo del área mínima)"
+      },
+      "growth_linked_plain": {
+        "one": "Se vinculó {n} alerta a una pérdida anterior",
+        "many": "Se vincularon {n} de alertas a pérdidas anteriores",
+        "other": "Se vincularon {n} alertas a pérdidas anteriores"
       },
       "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",

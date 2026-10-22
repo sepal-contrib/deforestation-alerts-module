@@ -173,6 +173,25 @@ def test_a_click_writes_the_scoped_file_and_links_the_tile(data_root, feedback):
     assert _non_error_toasts(bus) == [("success", t("overview_tile.export_done", fmt="GPKG"))]
 
 
+def test_a_click_writes_the_growth_columns_on_the_worker(data_root, feedback):
+    bus, errors, join = feedback
+    folder = data_root / "recipe_a"
+    seen = []
+
+    def growth(gdf):
+        seen.append(threading.current_thread())
+        return gdf.assign(kind="growth", grows_from="a#1@r;b#2@r", history_area_ha=3.0)
+
+    card = overview_export.build_export_card(
+        _gdf("Confirmed"), str(folder), ["GLAD-L"], "2026-01-01", "2026-06-12", "d", growth=growth)
+    card.tiles["gpkg"].fire_event("click", None)
+    join()
+
+    back = gpd.read_file(folder / f"{NAME}_confirmed.gpkg")
+    assert list(back["kind"]) == ["growth"] and list(back["grows_from"]) == ["a#1@r;b#2@r"]
+    assert errors == [] and seen and seen[0] is not threading.main_thread()
+
+
 def test_a_click_on_a_linked_tile_writes_nothing(data_root, feedback, monkeypatch):
     """A tile with a file is a download link: the browser follows it, and the
     click the kernel also hears must not start another write."""

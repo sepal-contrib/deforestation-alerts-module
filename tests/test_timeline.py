@@ -1535,3 +1535,22 @@ def test_every_colour_the_strip_draws_follows_the_theme():
     src = Path(timeline.__file__).read_text().split("THEME_CSS = (", 1)[1].split("\n)\n", 1)[1]
     for literal in ("#24221f", "#1e1c1a", "#44403a", "#f0ece6"):
         assert literal not in src
+
+
+def test_timeline_draws_parent_bands():
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_fake_state(), analysis, _fake_widgets())
+    grey = timeline.OLDER_GREY
+
+    def bands():
+        return [w for w in _walk(card) if grey + "26" in (getattr(w, "style_", None) or "")]
+
+    assert bands() == []
+    analysis.parent_windows.set(((2026.100, 2026.130), (2026.150, 2026.170)))
+    got = bands()
+    assert len(got) == 2
+    for w in got:
+        assert f"border: 1px dashed {grey}aa" in w.style_ and "#9e9e9e" not in w.style_
+    assert bands()[0].style_.index("left:") >= 0
+    analysis.parent_windows.set(())
+    assert bands() == []

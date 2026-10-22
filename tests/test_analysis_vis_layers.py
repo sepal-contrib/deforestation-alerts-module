@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from deforestation_alerts.project.models import AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project
 from gui.store.state_manager import AppState
 from gui.tile.analysis import vis_sync
+from gui.tile.analysis.pane_layers import Z_BASE
 from tests._pane_helpers import make_panes
 
 
@@ -169,6 +170,8 @@ def test_the_visualization_layers_survive_an_alert_change(monkeypatch):
     assert panes.ids() == ["vis:s2", analysis_tile.ALERT_BB_ID]  # the old alert's box went
     assert shape(panes.spec(analysis_tile.ALERT_BB_ID)["data"]).equals(box(1, 1, 1.01, 1.01))
     assert panes.spec(analysis_tile.ALERT_BB_ID)["meta"] == {"hideWhileEditing": True, "menuSection": "alerts"}
+    # over the earlier alerts' outlines (spec 2026-10-20 §6.3)
+    assert panes.spec(analysis_tile.ALERT_BB_ID)["z"] == analysis_tile.ALERT_TOP_Z > Z_BASE["earlier"]
 
 
 def test_a_removal_that_runs_after_a_later_re_add_leaves_the_layer(monkeypatch):

@@ -470,6 +470,11 @@
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… et {n} de plus",
       "replace_split": "La répartition entre évaluateurs et ses retours en attente seront écartés.",
+      "replace_links": {
+        "one": "{n} alerte d'une période ultérieure est liée à ce jeu ; son lien sera rompu.",
+        "many": "{n} d'alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus.",
+        "other": "{n} alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus."
+      },
       "job_title": "Intégrer et vectoriser",
       "step_combine": "Combinaison des sources",
       "step_vectorize": "Vectorisation des groupes",
@@ -482,6 +487,16 @@
         "one": "{n} alerte prête à être examinée",
         "many": "{n} d'alertes prêtes à être examinées",
         "other": "{n} alertes prêtes à être examinées"
+      },
+      "growth_linked": {
+        "one": "{n} alerte liée à une perte antérieure ({small} sous la surface minimale)",
+        "many": "{n} d'alertes liées à des pertes antérieures ({small} sous la surface minimale)",
+        "other": "{n} alertes liées à des pertes antérieures ({small} sous la surface minimale)"
+      },
+      "growth_linked_plain": {
+        "one": "{n} alerte liée à une perte antérieure",
+        "many": "{n} d'alertes liées à des pertes antérieures",
+        "other": "{n} alertes liées à des pertes antérieures"
       },
       "done_empty": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide.",
       "done_empty_detail": "Aucune nouvelle alerte dans cette période : le jeu d'alertes est vide. {details}",

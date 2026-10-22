@@ -9,8 +9,11 @@ one alert per code.
 Pass 1 labels the connected components of ``alert > 0`` block by block, joins
 labels that touch across a block edge with a union-find, and totals each
 component's pixel count; ``min_cluster_size`` keeps or drops whole clusters on
-that count. Pass 2 recomputes the same labels, polygonizes the pieces of the
-kept clusters, and collects per cluster its distinct codes and its date range.
+that count. With a ``touch_mask`` (earlier confirmed loss, on the same grid)
+a cluster under the minimum is kept too when any of its pixels lies on the
+mask, and ``below_min`` marks it. Pass 2 recomputes the same labels,
+polygonizes the pieces of the kept clusters, and collects per cluster its
+distinct codes and its date range.
 A cluster that block edges cut into pieces (or that meets itself only in a
 later block, like the arms of a U) is joined back by its pass-1 root.
 
@@ -23,6 +26,8 @@ Dates arrive as integer ``yyyyddd`` (spec D16) and leave as today's decimal
 ``year + doy/1000`` so everything downstream is unchanged.
 """
 
+from contextlib import ExitStack
+
 import geopandas as gpd
 import numpy as np
 import rasterio
@@ -33,6 +38,7 @@ from rasterio.windows import Window
 from scipy import ndimage
 from shapely.geometry import shape
 
+from deforestation_alerts.engine.raster_io import GridMismatchError
 from deforestation_alerts.project.store_schema import VECTOR_COLUMNS
 
 COLUMNS = list(VECTOR_COLUMNS)
@@ -91,9 +97,24 @@ def _windows(height: int, width: int, block_rows):
     return [Window(0, r, width, min(rows, height - r)) for r in range(0, height, rows)]
 
 
+def _open_mask(stack: ExitStack, touch_mask, src):
+    """The touch mask, opened, after checking it is on ``src``'s grid."""
+    msk = stack.enter_context(rasterio.open(touch_mask))
+    same_crs = msk.crs is not None and msk.crs == src.crs
+    same_shape = (msk.width, msk.height) == (src.width, src.height)
+    same_transform = msk.transform.almost_equals(src.transform, precision=1e-6)
+    if not (same_crs and same_shape and same_transform):
+        raise GridMismatchError(
+            f"{touch_mask} is not on the alert raster's grid "
+            f"(crs={same_crs}, shape={same_shape}, transform={same_transform})",
+            path=str(touch_mask),
+        )
+    return msk
+
+
 def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 8,
                      alert_band: int = 1, date_band: int = 2,
-                     block_rows: int | None = None) -> gpd.GeoDataFrame:
+                     block_rows: int | None = None, touch_mask=None) -> gpd.GeoDataFrame:
     """Polygons of the alert clusters of at least ``min_cluster_size`` pixels.
 
     One row per connected cluster of alert pixels, in the raster's CRS, with
@@ -101,9 +122,16 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
     codes (sorted), ``count`` its pixels and the dates span all of them.
     ``block_rows`` sets how many rows are read at a time (default: about 2e7
     pixels, at least 256 rows); the result does not depend on it.
+
+    ``touch_mask`` is a 1-band 0/1 raster on the same grid: a cluster under
+    the minimum that has a pixel on it is kept as well, and the output gains a
+    bool ``below_min`` column (True for the clusters kept only by the mask).
     """
     structure = _structure(connectivity)
-    with rasterio.open(raster_path) as src:
+    columns = COLUMNS if touch_mask is None else [*COLUMNS, "below_min"]
+    with ExitStack() as stack:
+        src = stack.enter_context(rasterio.open(raster_path))
+        msk = None if touch_mask is None else _open_mask(stack, touch_mask, src)
         crs, nodata, t = src.crs, src.nodata, src.transform
         to_grid = [t.a, t.b, t.d, t.e, t.c, t.f]  # pixel -> CRS, in shapely's matrix order
         windows = _windows(src.height, src.width, block_rows)
@@ -111,12 +139,14 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
         # ---- pass 1: component sizes across blocks --------------------------
         parent = np.zeros(1, dtype=np.int64)
         sizes = np.zeros(1, dtype=np.int64)
-        bases, prev_last = [], None
+        bases, hits, prev_last = [], [], None
         for w in windows:
             alert = src.read(alert_band, window=w)
             lab, n = ndimage.label(_valid(alert, nodata), structure=structure)
             base = len(parent) - 1
             bases.append(base)
+            if msk is not None and n:
+                hits.append(np.unique(_global(lab, base)[(lab > 0) & (msk.read(1, window=w) > 0)]))
             parent = np.concatenate([parent, np.arange(base + 1, base + n + 1, dtype=np.int64)])
             sizes = np.concatenate([sizes, np.bincount(lab.ravel(), minlength=n + 1)[1:]])
             if prev_last is not None:
@@ -133,7 +163,10 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
                 break
             roots = nxt
         comp_size = np.bincount(roots, weights=sizes, minlength=len(roots)).astype(np.int64)
-        keep_id = comp_size[roots] >= int(min_cluster_size)
+        touched = np.zeros(len(roots), dtype=bool)  # by root: a pixel on the mask
+        if hits:
+            touched[roots[np.concatenate(hits)]] = True
+        keep_id = (comp_size[roots] >= int(min_cluster_size)) | touched[roots]
         keep_id[0] = False
 
         # ---- pass 2: polygons, codes and dates of the kept clusters ---------
@@ -170,11 +203,12 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
             "count": int(comp_size[root]),
             "dmin": None if c["dmin"] >= _BIG else c["dmin"],
             "dmax": None if c["dmax"] <= 0 else c["dmax"],
+            "below_min": bool(comp_size[root] < int(min_cluster_size)),
         }
         for root, c in clusters.items()
     ]
     if not records:
-        return gpd.GeoDataFrame(columns=COLUMNS, geometry="geometry", crs=crs)
+        return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
     gdf = gpd.GeoDataFrame(
         {
             "geometry": gpd.GeoSeries([r["geometry"] for r in records]).affine_transform(to_grid),
@@ -191,5 +225,7 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
     else:  # the grid form refuses geographic CRSs; keep a correct fallback anyway
         utm = gdf.estimate_utm_crs()
         gdf["area_ha"] = gdf.geometry.to_crs(utm).area / 10_000.0
-    return gdf[COLUMNS]
+    if touch_mask is not None:
+        gdf["below_min"] = [r["below_min"] for r in records]
+    return gdf[columns]
 

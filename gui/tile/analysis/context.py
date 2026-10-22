@@ -27,10 +27,19 @@ panel is built once per session and a language switch never rebuilds it.
 import ipyvuetify as v
 import numpy as np
 
+from deforestation_alerts.project.growth import (
+    KIND_GROWTH,
+    KIND_GROWTH_SMALL,
+    KIND_NEW,
+    KIND_NEW_SMALL,
+    kind_of,
+    links_of,
+)
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
-from gui.i18n import format_number, t
+from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import set_store
 from gui.scripts.alert_filter import next_unreviewed_match
 from gui.scripts.legend_specs import STATUS_CLASSES, status_colors
@@ -147,7 +156,7 @@ def status_color(status) -> str:
 
 
 def facts_of(gdf, alert_id, project):
-    """``{"source", "first", "last", "status"}`` of the selected alert, or
+    """``{"source", "first", "last", "status", "kind"}`` of the selected alert, or
     ``None`` when there is nothing to show: no table, no selection, an id out
     of range, or alerts of another set than the active one — Integrate records
     a new set before it publishes that set's alerts, and Overview skips them
@@ -164,7 +173,28 @@ def facts_of(gdf, alert_id, project):
         "first": convert_julian_to_date(row["alert_date_min"]),
         "last": convert_julian_to_date(row["alert_date_max"]),
         "status": status if isinstance(status, str) and status else NOT_REVIEWED,
+        # an old set has neither column: kind_of(None, None) is "new"
+        "kind": kind_of(links_of(row.get(GROWS_FROM)), row.get(BELOW_MIN)),
     }
+
+
+#: the Kind chip's colour for the growth kinds (spec §6.1)
+GROWTH_PURPLE = "#7e57c2"
+_ROW_HIDDEN = "display: none;"
+_ROW_SHOWN = "display: contents;"
+_KIND_KEYS = {KIND_NEW: "analysis_tile.facts.kind_new", KIND_GROWTH: "analysis_tile.facts.kind_growth",
+              KIND_GROWTH_SMALL: "analysis_tile.facts.kind_growth_small",
+              KIND_NEW_SMALL: "analysis_tile.facts.kind_new_small"}
+
+
+def history_text(summary) -> str:
+    """The History row's sentence: the group's alerts, the area confirmed since
+    its first period and, when there is some, the area not reviewed yet."""
+    text = tn("analysis_tile.facts.history_text", summary.n, confirmed=format_number(summary.confirmed_ha, 1),
+              since=format_date(summary.since, "MMM y"))
+    if summary.unreviewed_ha > 0:
+        text += t("analysis_tile.facts.history_unreviewed", ha=format_number(summary.unreviewed_ha, 1))
+    return text
 
 
 def queue_widgets(card):
@@ -341,6 +371,14 @@ def _build_facts(labels):
     detected = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", children=[])
     swatch = v.Html(tag="span", style_=_SWATCH.format(color="transparent"))
     chip = v.Chip(small=True, outlined=True, children=[swatch])
+    kind_chip = v.Chip(small=True, outlined=True, dark=True, color=GROWTH_PURPLE, children=[])
+    kind_value = v.Html(tag="div", children=[kind_chip])
+    history = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", children=[])
+    # the Kind and History rows are shown only when they have something to say:
+    # `display: contents` keeps a row's label and value in the grid, `none`
+    # drops both from it
+    kind_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
+    history_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
 
     row_labels = []  # (span, key): the row names, written again on a switch
 
@@ -357,8 +395,11 @@ def _build_facts(labels):
             _label("analysis_tile.facts.source"), source,
             _label("analysis_tile.facts.detected"), detected,
             _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
+            kind_row, history_row,
         ],
     )
+    kind_row.children = [_label("analysis_tile.facts.kind"), kind_value]
+    history_row.children = [_label("analysis_tile.facts.history"), history]
 
     def _label_rows():
         for span, key in row_labels:
@@ -366,13 +407,15 @@ def _build_facts(labels):
 
     labels.add(_label_rows)
     return grid, {"source": source, "detected": detected, "chip": chip,
-                  "swatch": swatch}
+                  "swatch": swatch, "kind_row": kind_row, "kind_chip": kind_chip,
+                  "history_row": history_row, "history": history}
 
 
-def build_context(app_state, id_field, *, labels=None) -> v.Card:
+def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
     """Block A, built once per session; it subscribes to the alerts table and
     the current position and refreshes itself. ``labels`` is the screen's
-    ``labels.Labels`` (a fresh one when none is given)."""
+    ``labels.Labels`` (a fresh one when none is given); ``analysis`` is the
+    session's ``AnalysisState``, whose ``history`` the History row shows."""
     labels = labels if labels is not None else Labels()
     counter = v.Html(tag="span", class_=_COUNTER_CLASS, style_="white-space: nowrap;", children=[])
     tally = v.Html(tag="span", class_=TYPE_LABEL, style_="white-space: nowrap;", children=[])
@@ -392,7 +435,20 @@ def build_context(app_state, id_field, *, labels=None) -> v.Card:
             color=status_color(facts["status"]))
         facts_slots["chip"].children = [facts_slots["swatch"],
                                         t(status_label_key(facts["status"]))]
+        kind = facts["kind"]
+        facts_slots["kind_row"].style_ = _ROW_HIDDEN if kind == KIND_NEW else _ROW_SHOWN
+        # purple for the growth kinds only; a new alert under the minimum area
+        # wears a neutral outline (no legend colour)
+        growth = kind in (KIND_GROWTH, KIND_GROWTH_SMALL)
+        facts_slots["kind_chip"].color = GROWTH_PURPLE if growth else None
+        facts_slots["kind_chip"].dark = growth
+        facts_slots["kind_chip"].children = [t(_KIND_KEYS[kind])]
         shown[0] = facts
+
+    def _write_history(*_):
+        summary = analysis.history.value if analysis is not None else None
+        facts_slots["history_row"].style_ = _ROW_HIDDEN if summary is None else _ROW_SHOWN
+        facts_slots["history"].children = [] if summary is None else [history_text(summary)]
 
     def _refresh(*_):
         gdf = app_state.alerts_gdf.value
@@ -445,6 +501,9 @@ def build_context(app_state, id_field, *, labels=None) -> v.Card:
     # facts); ``labels.add`` runs it once, in place of a direct call.
     labels.add(_refresh)
     labels.add(_label_facts)
+    if analysis is not None:
+        analysis.history.subscribe(_write_history)
+        labels.add(_write_history)
 
     # The queue and the navigation live in the screen's top bar
     # (``build_topnav``), the facts in the panel: the card is the facts.

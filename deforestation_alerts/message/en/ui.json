@@ -18,6 +18,26 @@
     "card_numbers": "The numbers",
     "card_timing": "When the loss was detected",
     "card_sources": "By alert source",
+    "card_growth": "History of growing clearings",
+    "growth_headline": {
+      "one": "{n} growth alert · {ha} ha",
+      "other": "{n} growth alerts · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} growth alert",
+      "other": "{n} growth alerts"
+    },
+    "growth_split": "Growth: {growth} · Under minimum area: {small}",
+    "growth_reviewed": {
+      "one": "{n} reviewed",
+      "other": "{n} reviewed"
+    },
+    "growth_period": "Monitoring periods",
+    "growth_range": "{first} to {last}",
+    "growth_confirmed": "Confirmed (ha)",
+    "growth_added": "This set adds (ha)",
+    "growth_review": "Review",
+    "growth_note": "Histories that include an alert of this set, largest confirmed area first.",
     "history_one_period": "This project has one monitoring period. Add a second one and its trend is charted here.",
     "timing_note": "By the week an alert was first detected. Greyed weeks are look-back: they fall before this period started.",
     "answers_note": "Reviewed alerts only ({reviewed} of {total}). An alert with two answers is counted under each, so the bars can add up to more than the reviewed total.",
@@ -146,7 +166,18 @@
       "source": "Source",
       "detected": "Detected",
       "status": "Status",
-      "range": "{first} → {last}"
+      "range": "{first} → {last}",
+      "kind": "Kind",
+      "history": "History",
+      "kind_new": "New",
+      "kind_growth": "Growth",
+      "kind_growth_small": "Growth · under minimum area",
+      "kind_new_small": "New · under minimum area",
+      "history_text": {
+        "one": "{n} alert · {confirmed} ha confirmed since {since}",
+        "other": "{n} alerts · {confirmed} ha confirmed since {since}"
+      },
+      "history_unreviewed": " (+{ha} ha not reviewed)"
     },
     "queue": {
       "counter": "{index} / {total}",
@@ -288,13 +319,24 @@
       "show": "Show on the maps",
       "radius": "Within",
       "radius_error": "Between 0.1 and 50 km",
-      "title": "Earlier reviews",
+      "title": "Earlier alerts",
       "badge_off": "off",
       "badge_none": "none within {km} km",
       "badge_nearby": {
-        "one": "{n} nearby",
-        "other": "{n} nearby"
-      }
+        "one": "{n} within {km} km · {linked} linked",
+        "other": "{n} within {km} km · {linked} linked"
+      },
+      "touches": "touches",
+      "touches_unlinked": "touches · not linked",
+      "via": "via #{id}",
+      "broken_rerun": "earlier set was re-run",
+      "broken_fp": "now false positive",
+      "periods": "Periods",
+      "as_of": "Earlier alerts as of {date}",
+      "none_in_copy": "No earlier alerts in this copy",
+      "legend_lines": "solid: confirmed · dashed: needs revision · thick: linked",
+      "distance_m": "{m} m",
+      "distance_km": "{km} km"
     },
     "filter": {
       "col_evaluator": "Evaluator",

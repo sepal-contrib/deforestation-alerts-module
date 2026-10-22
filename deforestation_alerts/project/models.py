@@ -294,6 +294,9 @@ class ReviewCopy(BaseModel):
     set_fingerprint: str
     origin_project: str
     imported_at: datetime
+    #: when the package's earlier-alerts snapshot was taken (spec 2026-10-20
+    #: §6.6); None for a package from before the snapshot
+    snapshot_at: Optional[datetime] = None
 
 
 class AlertSet(BaseModel):
@@ -305,6 +308,7 @@ class AlertSet(BaseModel):
     masks_used: list[dict] = []  # [{"name", "mode", "content_id"}]
     footprint_from: list[str] = []  # set ids whose pixels were removed
     carried_from: list[str] = []  # set ids whose not-analysable pixels were carried in
+    parents_from: list[str] = []  # set ids whose loss-verdict alerts were growth parents (not fingerprinted)
     store_rel_path: str
     combined_rel_path: str
     footprint_rel_path: str

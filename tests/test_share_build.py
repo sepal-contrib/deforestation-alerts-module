@@ -43,6 +43,7 @@ from tests._share_helpers import (
     alerts_frame,
     make_copy,
     make_creator,
+    make_growth_creator,
     zip_members,
 )
 
@@ -115,7 +116,7 @@ def test_a_package_holds_exactly_the_allowed_members(creator, tmp_path):
     out = _build(p, pdir, tmp_path / "out")
     assert out == tmp_path / "out" / f"creator-proj__{SET1}__e01-ana__review.zip"
     with open_checked(out, PACKAGE_REQUIRED, PACKAGE_OPTIONAL) as zf:
-        assert set(zf.namelist()) == PACKAGE_REQUIRED | PACKAGE_OPTIONAL
+        assert set(zf.namelist()) == PACKAGE_REQUIRED | PACKAGE_OPTIONAL - {share.EARLIER_MEMBER}  # no earlier set
     members = zip_members(out)
     assert members["alerts/alert_db.parquet"] == (pdir / "legacy" / "alert_db.parquet").read_bytes()
     assert members["template/report.docx"] == b"not really a docx"
@@ -331,3 +332,54 @@ def test_only_a_review_copy_returns_reviews(creator, tmp_path):
 def test_read_table_reads_a_plain_parquet(tmp_path):
     pd.DataFrame({"alert_id": [1], "status": ["Confirmed"]}).to_parquet(tmp_path / "plain.parquet")
     assert read_table(tmp_path / "plain.parquet")["alert_id"].tolist() == [1]
+
+
+# ---- the earlier alerts (spec 2026-10-20 §6.6) -----------------------------------
+
+def _snapshot(zip_path, tmp_path):
+    from deforestation_alerts.project.growth import read_snapshot
+
+    dest = tmp_path / "snap.parquet"
+    dest.write_bytes(zip_members(zip_path)[share.EARLIER_MEMBER])
+    return read_snapshot(dest)
+
+
+def test_package_carries_earlier_alerts(data_root, tmp_path):
+    from deforestation_alerts.project.growth import run_id_of
+
+    p, pdir = make_growth_creator(data_root)
+    out = _build(p, pdir, tmp_path / "out", set_id=SET2)
+    assert share.EARLIER_MEMBER == "earlier_alerts.parquet" and share.EARLIER_MEMBER in share.PACKAGE_OPTIONAL
+    with open_checked(out, PACKAGE_REQUIRED, PACKAGE_OPTIONAL) as zf:
+        assert share.EARLIER_MEMBER in zf.namelist()
+    rows = _snapshot(out, tmp_path)
+    run1 = run_id_of(p.alert_sets[SET1])
+    assert [(r.key, r.node.status, r.run_id) for r in rows] == [
+        (f"{SET1}#0", "Confirmed", run1), (f"{SET1}#2", "Need revision", run1)]
+    n = rows[0].node
+    assert (n.period_id, n.period_start, n.period_end, n.area_ha) == (P1.id, P1.start, P1.end, 1.5)
+    assert n.shape.equals(alerts_frame(["x"]).geometry.iloc[0])
+
+
+def test_package_snapshot_holds_every_linked_row_whatever_its_status(data_root, tmp_path):
+    """Ruling 12: a later alert linked to a since false-positive parent, and a
+    candidate linked to an unreviewed one, keep their targets in the copy."""
+    p, pdir = make_growth_creator(data_root, links={0: [f"{SET1}#1@{{run}}"]},
+                                  earlier_links={0: [f"{SET1}#3@{{run}}"]})
+    rows = _snapshot(_build(p, pdir, tmp_path / "out", set_id=SET2), tmp_path)
+    assert [(r.key, r.node.status) for r in rows] == [
+        (f"{SET1}#0", "Confirmed"), (f"{SET1}#2", "Need revision"),
+        (f"{SET1}#1", "False Positive"), (f"{SET1}#3", "Not reviewed")]
+
+
+def test_a_package_with_no_earlier_loss_has_no_snapshot(data_root, tmp_path):
+    p, pdir = make_growth_creator(data_root, statuses=("Not reviewed", "False Positive", "Not reviewed", "Not reviewed"))
+    assert share.EARLIER_MEMBER not in zip_members(_build(p, pdir, tmp_path / "out", set_id=SET2))
+
+
+def test_a_return_carries_the_links(data_root, tmp_path):
+    p, pdir = make_copy(data_root, statuses=["Confirmed", "Not reviewed"], assigned=["Ana", "Ana"],
+                        extra={"grows_from": [["a#1@r"], []]})
+    rows = return_rows(alert_store.load_gdf_from_parquet(paths.resolve(pdir, p.alert_sets[SET1].store_rel_path)),
+                       "Ana", p.questions)
+    assert list(rows.columns)[-1] == "grows_from" and list(rows["grows_from"].iloc[0]) == ["a#1@r"]

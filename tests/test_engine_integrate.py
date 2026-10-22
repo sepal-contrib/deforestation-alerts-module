@@ -1010,3 +1010,97 @@ def test_run_integration_reads_the_period_from_the_project_not_the_jobs_copy(tmp
     stale = jan.model_copy(update={"look_back_days": 0})
     res = _run(p, tmp_path, stale, params)
     assert res.alert_set.carried_from == [dec_set.id] and res.alert_set.n_alerts == 1
+
+
+# --- Growth alerts: links to earlier loss (spec 2026-10-20 §4) -----------------------------------
+
+def _december_reviewed(tmp_path, status):
+    """December's set with one 25-px alert, reviewed ``status`` in its store."""
+    from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
+
+    p, dec, jan = _two_months(tmp_path)
+    old = _blank()
+    old[10:15, 10:15] = 1
+    _prepare_dated(p, tmp_path, dec, "GLAD-L", old, np.where(old > 0, 2025340, 0))
+    dec_set = _record(p, _run(p, tmp_path, dec, AlertSetParams(min_size_ha=0.1)))
+    store = tmp_path / dec_set.store_rel_path
+    gdf = load_gdf_from_parquet(store)
+    gdf.loc[0, "status"] = status
+    save_gdf_to_parquet(gdf, store)
+    return p, jan, dec_set
+
+
+def _january(p, tmp_path, jan, extra=None):
+    """January: a 2-px cluster edge-touching December's alert, plus ``extra``."""
+    nxt = _blank() if extra is None else extra
+    nxt[15, 10:12] = 1
+    _prepare_dated(p, tmp_path, jan, "GLAD-L", nxt, np.where(nxt > 0, 2026010, 0))
+
+
+@_LONLAT_CENTROID
+def test_small_growth_cluster_kept_next_to_confirmed_parent(tmp_path):
+    from deforestation_alerts.project.growth import run_id_of
+
+    p, jan, dec_set = _december_reviewed(tmp_path, "Confirmed")
+    _january(p, tmp_path, jan)
+    res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1))  # 10 px minimum
+    stored = gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)
+    link = f"{dec_set.id}#0@{run_id_of(dec_set)}"
+    assert len(stored) == 1 and bool(stored.iloc[0]["below_min"])
+    assert list(stored.iloc[0]["grows_from_auto"]) == [link] == list(stored.iloc[0]["grows_from"])
+    assert res.n_growth == 1 and res.n_growth_small == 1
+    assert res.alert_set.parents_from == [dec_set.id]
+    st, _, _ = _state(tmp_path, res.alert_set)
+    assert (st[15, 10:12] == integrate.STATE_ANALYSABLE).all()
+    with rasterio.open(tmp_path / res.alert_set.footprint_rel_path) as f:
+        assert int(f.read(1).sum()) == 2
+    assert _leftovers(tmp_path) == []
+
+
+@_LONLAT_CENTROID
+def test_false_positive_parent_is_ignored(tmp_path):
+    p, jan, dec_set = _december_reviewed(tmp_path, "False Positive")
+    _january(p, tmp_path, jan)
+    res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1))
+    assert len(gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)) == 0
+    assert res.n_growth == 0 and res.alert_set.parents_from == []
+    st, _, _ = _state(tmp_path, res.alert_set)
+    assert (st[15, 10:12] == integrate.STATE_TOO_SMALL).all()
+
+
+@_LONLAT_CENTROID
+def test_growth_counts_toward_alert_limit(tmp_path):
+    p, jan, dec_set = _december_reviewed(tmp_path, "Need revision")
+    big = _blank()
+    big[30:36, 30:36] = 1  # 36 px, new
+    _january(p, tmp_path, jan, big)
+    res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1, sorting=1, max_alerts=1))
+    stored = gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)
+    assert len(stored) == 1 and list(stored.iloc[0]["grows_from"]) == [] and not stored.iloc[0]["below_min"]
+    assert res.n_growth == 0
+    st, _, _ = _state(tmp_path, res.alert_set)
+    assert (st[15, 10:12] == integrate.STATE_OVER_CAP).all()
+    assert (st[30:36, 30:36] == integrate.STATE_ANALYSABLE).all()
+
+
+@_LONLAT_CENTROID
+def test_first_period_store_has_empty_growth_columns(ready_project):
+    """Review Focus 4: with no earlier set the store only gains the three columns."""
+    from deforestation_alerts.project.store_schema import GROWTH_COLUMNS
+
+    p, pdir = ready_project
+    res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
+    stored = gpd.read_parquet(pdir / res.alert_set.store_rel_path)
+    assert len(stored) == 2
+    assert [list(v) for v in stored["grows_from"]] == [[], []]
+    assert [list(v) for v in stored["grows_from_auto"]] == [[], []]
+    assert not stored["below_min"].any()
+    assert [c for c in stored.columns if c not in GROWTH_COLUMNS] == _STORE_COLUMNS_BEFORE_GROWTH
+    assert res.n_growth == 0 and res.alert_set.parents_from == []
+
+
+_STORE_COLUMNS_BEFORE_GROWTH = [
+    "geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha", "bounding_box", "point",
+    "status", "alert_sources", "before_img", "before_img_info", "after_img", "after_img_info", "alert_polygon",
+    "description", "admin1", "admin2", "admin3", "alert_id", "set_id",
+]

@@ -144,6 +144,37 @@ def test_replace_message_names_what_a_rerun_discards():
     assert integrate_jobs.replace_message(p, "x") == tn("steps.integrate.replace_message", 2)
 
 
+def test_replace_message_warns_about_links_from_later_sets(tmp_path, monkeypatch):
+    """Growth spec §5.3: a re-run breaks the links later sets hold into it."""
+    from deforestation_alerts.project.growth import run_id_of
+    from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+    from gui.scripts import growth_index, set_store
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    growth_index.clear_cache()
+    feb = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    p.periods[JAN.id] = JAN
+    p.periods[feb.id] = feb
+    p.alert_sets["x"] = _set("x", 0)
+    p.alert_sets["y"] = _set("y", 0).model_copy(update={
+        "period_id": feb.id, "store_rel_path": f"periods/{feb.id}/sets/glad-l/alert_db.parquet"})
+    assert integrate_jobs.replace_message(p, "x") is None
+    link = f"x#0@{run_id_of(p.alert_sets['x'])}"
+    rows = [{"alert_id": i, "status": "Not reviewed", "grows_from": [link], "geometry": box(0, 0, 1, 1)}
+            for i in range(2)]
+    store = set_store.store_path(p, p.alert_sets["y"])
+    store.parent.mkdir(parents=True)
+    save_gdf_to_parquet(gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:4326"), store)
+    try:
+        assert integrate_jobs.replace_message(p, "x") == tn("steps.integrate.replace_links", 2)
+        p.alert_sets["x"] = p.alert_sets["x"].model_copy(update={"n_reviewed": 3})  # same run
+        assert integrate_jobs.replace_message(p, "x") == (
+            f"{tn('steps.integrate.replace_message', 3)} {tn('steps.integrate.replace_links', 2)}")
+    finally:
+        growth_index.clear_cache()
+
+
 def test_integrating_marks_one_set_of_one_project_and_always_releases():
     assert not integrate_jobs.is_integrating("d", "x")
     with integrate_jobs.integrating("d", "x"):
@@ -236,7 +267,8 @@ def _art(key, kind="store"):
 def _result(n):
     alerts = gpd.GeoDataFrame({"alert_id": list(range(n))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
     s = _set("x", 0).model_copy(update={"n_alerts": n})
-    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={})
+    return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={},
+                           n_growth=0, n_growth_small=0)
 
 
 def _swapped_in(pdir, result):
@@ -334,6 +366,32 @@ def test_a_finished_run_records_the_set_builds_its_tiles_and_opens_analysis(monk
     assert notifier.toasts == [("success", tn("steps.integrate.done", 2))]
     assert busy == [True, True] and not is_writing("d")
     assert not integrate_jobs.is_integrating("d", make_set_id(JAN.id, ["GLAD-L"]))
+
+
+def test_a_run_with_growth_alerts_says_how_many_were_linked(monkeypatch, tmp_path):
+    state = _open("d")
+    result = _result(3)
+    result.n_growth, result.n_growth_small = 2, 1
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: result)
+    _tiles(monkeypatch)
+    notifier = _Notifier()
+    integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
+    done = tn("steps.integrate.done", 3) + ". " + tn("steps.integrate.growth_linked", 2, small=1)
+    assert notifier.toasts == [("success", done)]
+    assert tn("steps.integrate.growth_linked", 2, small=1) == "Linked 2 alerts to earlier loss (1 under the minimum area)"
+
+
+def test_growth_toast_without_small_alerts_has_no_parenthesis(monkeypatch, tmp_path):
+    state = _open("d")
+    result = _result(3)
+    result.n_growth, result.n_growth_small = 2, 0
+    monkeypatch.setattr(integrate_jobs, "run_integration", lambda job, on_step=None: result)
+    _tiles(monkeypatch)
+    notifier = _Notifier()
+    integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
+    done = tn("steps.integrate.done", 3) + ". " + tn("steps.integrate.growth_linked_plain", 2)
+    assert notifier.toasts == [("success", done)]
+    assert tn("steps.integrate.growth_linked_plain", 2) == "Linked 2 alerts to earlier loss"
 
 
 def test_the_published_alerts_are_stamped_with_the_store_the_run_wrote(monkeypatch, tmp_path):

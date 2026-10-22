@@ -18,6 +18,29 @@
     "card_numbers": "Os números",
     "card_timing": "Quando a perda foi detectada",
     "card_sources": "Por fonte de alertas",
+    "card_growth": "Histórico de desmatamentos que crescem",
+    "growth_headline": {
+      "one": "{n} alerta de crescimento · {ha} ha",
+      "many": "{n} de alertas de crescimento · {ha} ha",
+      "other": "{n} alertas de crescimento · {ha} ha"
+    },
+    "growth_headline_count": {
+      "one": "{n} alerta de crescimento",
+      "many": "{n} de alertas de crescimento",
+      "other": "{n} alertas de crescimento"
+    },
+    "growth_split": "Crescimento: {growth} · Abaixo da área mínima: {small}",
+    "growth_reviewed": {
+      "one": "{n} revisado",
+      "many": "{n} de revisados",
+      "other": "{n} revisados"
+    },
+    "growth_period": "Períodos de monitoramento",
+    "growth_range": "de {first} a {last}",
+    "growth_confirmed": "Confirmados (ha)",
+    "growth_added": "Acrescentado por este conjunto (ha)",
+    "growth_review": "Revisar",
+    "growth_note": "Históricos que incluem um alerta deste conjunto, da maior área confirmada para a menor.",
     "history_one_period": "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui.",
     "timing_note": "Pela semana em que cada alerta foi detectado pela primeira vez. As semanas em cinza são do período retrospectivo: são anteriores ao início deste período.",
     "answers_note": "Somente alertas revisados ({reviewed} de {total}). Um alerta com duas respostas é contado em cada uma, então as barras podem somar mais que o total revisado.",
@@ -146,7 +169,19 @@
       "source": "Fonte",
       "detected": "Detectado",
       "status": "Status",
-      "range": "{first} → {last}"
+      "range": "{first} → {last}",
+      "kind": "Tipo",
+      "history": "Histórico",
+      "kind_new": "Nova",
+      "kind_growth": "Crescimento",
+      "kind_growth_small": "Crescimento · abaixo da área mínima",
+      "kind_new_small": "Nova · abaixo da área mínima",
+      "history_text": {
+        "one": "{n} alerta · {confirmed} ha confirmados desde {since}",
+        "many": "{n} de alertas · {confirmed} ha confirmados desde {since}",
+        "other": "{n} alertas · {confirmed} ha confirmados desde {since}"
+      },
+      "history_unreviewed": " (+{ha} ha não revisados)"
     },
     "queue": {
       "counter": "{index} / {total}",
@@ -291,14 +326,25 @@
       "show": "Mostrar nos mapas",
       "radius": "Num raio de",
       "radius_error": "Entre 0,1 e 50 km",
-      "title": "Revisões anteriores",
+      "title": "Alertas anteriores",
       "badge_off": "desativado",
       "badge_none": "nenhum a menos de {km} km",
       "badge_nearby": {
-        "one": "{n} próximo",
-        "many": "{n} de próximos",
-        "other": "{n} próximos"
-      }
+        "one": "{n} a menos de {km} km · vínculos: {linked}",
+        "many": "{n} a menos de {km} km · vínculos: {linked}",
+        "other": "{n} a menos de {km} km · vínculos: {linked}"
+      },
+      "touches": "encosta",
+      "touches_unlinked": "encosta · não vinculado",
+      "via": "por meio de #{id}",
+      "broken_rerun": "o conjunto anterior foi executado de novo",
+      "broken_fp": "agora falso positivo",
+      "periods": "Períodos",
+      "as_of": "Alertas anteriores em {date}",
+      "none_in_copy": "Nenhum alerta anterior nesta cópia",
+      "legend_lines": "contínua: confirmado · tracejada: precisa de revisão · grossa: vinculado",
+      "distance_m": "{m} m",
+      "distance_km": "{km} km"
     },
     "filter": {
       "col_evaluator": "Avaliador",

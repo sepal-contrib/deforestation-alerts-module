@@ -66,9 +66,14 @@ class ExportCard(v.Card):
     being written while a file is (spec §12), so a delete is refused instead
     of the export re-creating the deleted folder. ``scope`` is the one to
     start on (the previous card's, kept across a rebuild) when it has alerts;
-    otherwise Confirmed when it has some, else All."""
+    otherwise Confirmed when it has some, else All. ``growth``, when given, maps
+    the alerts to the rows to export with the growth columns
+    (``growth_index.with_growth_columns``); it reads the project's stores, so
+    it runs on the write's worker."""
 
-    def __init__(self, gdf, folder, sources, start, end, project, questions=(), store=None, scope=None):
+    def __init__(self, gdf, folder, sources, start, end, project, questions=(), store=None, scope=None,
+                 growth=None):
+        self._growth = growth
         self._gdf, self._folder, self._sources = gdf, str(folder), list(sources)
         self._start, self._end, self._project = start, end, project
         self._questions, self._store = tuple(questions), store
@@ -234,17 +239,18 @@ class ExportCard(v.Card):
         tile.set_file(None)
         tile.set_action(False, t("overview_tile.export_writing", n=n), icon="mdi-progress-upload")
         tile.loading = True
-        gdf, questions = self._gdf, self._questions
+        gdf, questions, growth = self._gdf, self._questions, self._growth
 
         # One opaque phase (the write), so no ``total_steps``. A failure is
         # tracked_job's: a FAILED task and the one error toast.
         def _body(task, notifier):
             task.step(t("overview_tile.export_step", fmt=fmt.upper()))
             with writing(self._project):
+                rows = gdf if growth is None else growth(gdf)
                 # the answers in the export's language (the store keeps their
                 # codes, see gui.scripts.questions); the columns of deleted
                 # questions are left out
-                path = export_alerts_gdf(questions_mod.with_labels(gdf, list(questions)), self._folder, fmt,
+                path = export_alerts_gdf(questions_mod.with_labels(rows, list(questions)), self._folder, fmt,
                                          self._sources, self._start, self._end, scope=scope)
             # A file the server cannot offer is a failed export, said in the
             # task, not a tile that links nowhere (NotDownloadable).
@@ -278,9 +284,10 @@ def _shown_folder(folder):
         return str(folder)
 
 
-def build_export_card(gdf, folder, sources, start, end, project, questions=(), store=None, scope=None):
+def build_export_card(gdf, folder, sources, start, end, project, questions=(), store=None, scope=None,
+                      growth=None):
     """The export card of one set (see ``ExportCard``)."""
-    return ExportCard(gdf, folder, sources, start, end, project, questions, store, scope)
+    return ExportCard(gdf, folder, sources, start, end, project, questions, store, scope, growth)
 
 
 def relabel_export_card(card):

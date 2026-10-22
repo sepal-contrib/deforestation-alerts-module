@@ -14,8 +14,9 @@ from pathlib import Path
 
 import geopandas as gpd
 
+from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.review_status import CONFIRMED, reviewed_mask
-from deforestation_alerts.project.store_schema import SECONDARY_GEOM_COLUMNS
+from deforestation_alerts.project.store_schema import GROWS_FROM, SECONDARY_GEOM_COLUMNS
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import ALERT_GEOM_COLS, save_gdf_to_csv
 from deforestation_alerts.scripts.naming import alert_artifact_name
@@ -58,6 +59,8 @@ def export_alerts_gdf(gdf, folder, fmt, sources, start_date, end_date, scope="al
     """Write the ``scope`` rows of ``gdf`` into ``folder`` as ``export_name(...)``; return its path."""
     name = export_name(sources, start_date, end_date, fmt, scope)
     rows = scope_rows(gdf, scope)
+    if GROWS_FROM in rows.columns:  # a list-valued cell (a store's own) is written as the links joined by ";"
+        rows = rows.assign(**{GROWS_FROM: [";".join(links_of(c)) for c in rows[GROWS_FROM]]})
     dest = Path(folder) / name
     with local_files.scratch_dir() as scratch:
         local = scratch / name

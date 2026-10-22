@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from gui.i18n import t
@@ -331,6 +332,27 @@ def test_the_download_labels_the_questions_and_fills_their_placeholders(download
     assert "q_gone" not in gpd.read_file(ctx.folder / "alert_0.gpkg").columns
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
     assert f"PH True alert / {row['description']}" in text
+
+
+def test_the_download_writes_the_links_joined_and_no_working_growth_columns(download_ctx):
+    """As the main export (spec §6.7): ``grows_from`` joined by ``";"``,
+    without ``grows_from_auto`` and ``below_min``."""
+    import geopandas as gpd
+
+    ctx = download_ctx
+    gdf = ctx.app_state.alerts_gdf.value.copy()
+    gdf["grows_from"] = pd.Series([["sep#4@20261002080000000000", "sep#9@20261002080000000000"]]
+                                  + [[] for _ in range(len(gdf) - 1)], index=gdf.index, dtype="object")
+    gdf["grows_from_auto"] = pd.Series([["sep#4@20261002080000000000"]] + [[] for _ in range(len(gdf) - 1)],
+                                       index=gdf.index, dtype="object")
+    gdf["below_min"] = False
+    ctx.app_state.alerts_gdf.value = gdf
+
+    _run(ctx)
+
+    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
+    assert "grows_from_auto" not in back.columns and "below_min" not in back.columns
 
 
 # ---------------------------------------------------------------------------

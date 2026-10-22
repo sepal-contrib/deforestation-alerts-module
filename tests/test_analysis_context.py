@@ -338,3 +338,61 @@ def test_review_counts_agrees_with_is_reviewed():
 
     statuses = ["Not reviewed", "Confirmed", "", None, np.nan, "False Positive"]
     assert context.review_counts(_alerts(statuses)) == (6, sum(map(is_reviewed, statuses)))
+
+
+def test_kind_chip_hidden_for_new_alerts(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    slots = getattr(card, context._SLOTS)
+    gdf = _alerts(["Not reviewed", "Not reviewed", "Not reviewed"])
+    gdf["grows_from"] = [[], ["old#3@20250101000000000000"], ["old#3@20250101000000000000"]]
+    gdf["below_min"] = [False, False, True]
+    s.alerts_gdf.set(gdf)
+    for index, kind, shown, label in [(0, "new", False, None), (1, "growth", True, "Growth"),
+                                      (2, "growth_small", True, "Growth · under minimum area")]:
+        s.actual_alert_id.value = index
+        assert context.facts_of(gdf, index, s.project.value)["kind"] == kind
+        assert (slots["kind_row"].style_ == "display: contents;") is shown
+        if shown:
+            assert slots["kind_chip"].children == [label]
+
+
+def test_old_set_has_the_new_kind(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    assert context.facts_of(_alerts(["Not reviewed"]), 0, s.project.value)["kind"] == "new"
+
+
+def test_history_row_shows_summary(tmp_path, monkeypatch):
+    from datetime import date
+
+    from gui.scripts.growth_index import HistorySummary
+    from gui.tile.analysis.state import AnalysisState
+
+    s = _state(tmp_path, monkeypatch)
+    analysis = AnalysisState()
+    card = context.build_context(s, v.TextField(v_model=None), analysis=analysis)
+    slots = getattr(card, context._SLOTS)
+    assert slots["history_row"].style_ == "display: none;"
+    analysis.history.set(HistorySummary(3, 12.4, 0.0, date(2026, 8, 1)))
+    assert slots["history_row"].style_ == "display: contents;"
+    assert "3 alerts · 12.4 ha confirmed since Aug 2026" in slots["history"].children[0]
+    analysis.history.set(HistorySummary(3, 12.4, 1.5, date(2026, 8, 1)))
+    assert slots["history"].children[0].endswith("(+1.5 ha not reviewed)")
+    analysis.history.set(None)
+    assert slots["history_row"].style_ == "display: none;"
+
+
+def test_kind_chip_colour_purple_for_growth_only(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    chip = getattr(card, context._SLOTS)["kind_chip"]
+    gdf = _alerts(["Not reviewed"] * 3)
+    gdf["grows_from"] = [["old#3@20250101000000000000"], ["old#3@20250101000000000000"], []]
+    gdf["below_min"] = [False, True, True]
+    s.alerts_gdf.set(gdf)
+    colours = {}
+    for index in range(3):
+        s.actual_alert_id.value = index
+        colours[index] = chip.color
+    assert colours[0] == colours[1] == context.GROWTH_PURPLE
+    assert colours[2] != context.GROWTH_PURPLE and not (colours[2] or "").startswith("#")

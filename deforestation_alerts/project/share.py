@@ -27,13 +27,15 @@ from pydantic import BaseModel, ValidationError
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 
+from deforestation_alerts.engine.growth_links import project_rows
 from deforestation_alerts.errors import KeyedError
+from deforestation_alerts.project import growth
 from deforestation_alerts.project import io as project_io
 from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
 from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
 from deforestation_alerts.project.review_status import VERDICTS
-from deforestation_alerts.project.store_schema import REVIEW_AFTER, REVIEW_BEFORE
+from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO, REVIEW_AFTER, REVIEW_BEFORE
 from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
 from deforestation_alerts.project.review_status import is_reviewed, reviewed_mask
@@ -57,9 +59,12 @@ TILES_MEMBER = "imagery/tiles.parquet"
 INDEX_MEMBER = "imagery/index.json"
 TEMPLATE_MEMBER = "template/report.docx"
 REVIEWS_MEMBER = "reviews.parquet"
+#: The earlier sets' alerts a copy links against (spec 2026-10-20 §6.6). An
+#: older app refuses a package with it as ``share.err.unexpected_member``.
+EARLIER_MEMBER = paths.EARLIER_SNAPSHOT
 
 PACKAGE_REQUIRED = frozenset({HEADER_MEMBER, MANIFEST_MEMBER, AOI_MEMBER, STORE_MEMBER})
-PACKAGE_OPTIONAL = frozenset({SCENES_MEMBER, TILES_MEMBER, INDEX_MEMBER, TEMPLATE_MEMBER})
+PACKAGE_OPTIONAL = frozenset({SCENES_MEMBER, TILES_MEMBER, INDEX_MEMBER, TEMPLATE_MEMBER, EARLIER_MEMBER})
 RETURN_REQUIRED = frozenset({HEADER_MEMBER, REVIEWS_MEMBER})
 
 #: Uncompressed sizes a zip may declare (spec §9): per member, all together,
@@ -218,10 +223,17 @@ def _number(value) -> bool:
     return isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, (bool, np.bool_))
 
 
+def _listlike(value) -> bool:
+    return isinstance(value, (list, tuple, np.ndarray))
+
+
 def same_value(a, b) -> bool:
     """Spec §7.3: two missing values (None, NaN, pd.NA, "") are equal;
-    geometries compare by WKB; numbers with ``math.isclose(rel_tol=1e-9)``;
-    anything else by its text."""
+    lists (``grows_from``, spec 2026-10-20 §6.6) compare as their links
+    (``growth.links_of``: an empty one is missing); geometries compare by WKB;
+    numbers with ``math.isclose(rel_tol=1e-9)``; anything else by its text."""
+    if _listlike(a) or _listlike(b):
+        return growth.links_of(a) == growth.links_of(b)
     missing_a, missing_b = _missing(a), _missing(b)
     if missing_a or missing_b:
         return missing_a and missing_b
@@ -364,6 +376,19 @@ def _write_zip(path: Path, texts: dict, files: dict) -> Path:
     return path
 
 
+def _earlier_alerts(p: Project, pdir: Path, s: AlertSet, gdf, dest: Path) -> Optional[Path]:
+    """The snapshot of the earlier sets' alerts a copy of ``s`` (its alerts
+    ``gdf``) links against, written to ``dest`` (``growth.write_snapshot``):
+    the parent candidates and every row a link names (``growth.snapshot_rows``,
+    seeded with the set's ``grows_from`` and ``grows_from_auto``). None when
+    there is nothing to carry."""
+    pool = project_rows(p, pdir, p.periods[s.period_id])
+    seeds = [lk for col in (GROWS_FROM, GROWS_FROM_AUTO) if col in gdf.columns
+             for cell in gdf[col] for lk in growth.links_of(cell)]
+    rows = growth.snapshot_rows(pool, seeds)
+    return growth.write_snapshot(rows, dest) if rows else None
+
+
 def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojson: dict,
                   out_dir: Path, *, app_version: str) -> Path:
     """The review package of ``evaluator`` for set ``set_id`` (spec §5), at
@@ -397,8 +422,12 @@ def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojs
     template = Path(p.report_template) if p.report_template else None
     with local_files.scratch_dir() as tmp:
         store = _snapshot_store(paths.resolve(pdir, s.store_rel_path), tmp / "alert_db.parquet", set_id)
-        _check_assignments(load_gdf_from_parquet(store), sp)
+        gdf = load_gdf_from_parquet(store)
+        _check_assignments(gdf, sp)
         files = {STORE_MEMBER: store, **_snapshot_imagery(pdir, tmp / "imagery")}
+        earlier = _earlier_alerts(p, pdir, s, gdf, tmp / EARLIER_MEMBER)
+        if earlier is not None:
+            files[EARLIER_MEMBER] = earlier
         if template is not None and template.is_file():
             files[TEMPLATE_MEMBER] = template
         texts = {HEADER_MEMBER: header.model_dump_json(indent=2),
@@ -584,9 +613,23 @@ def _claim_folder(base: Path, header: ShareHeader) -> Path:
     raise ShareError("share.err.no_free_name", name=stem)
 
 
+def _package_earlier(zf, tmp: Path) -> Optional[Path]:
+    """The staged earlier-alerts snapshot, checked to read; None for a package
+    without one (built before it, or with no earlier alert to carry)."""
+    if EARLIER_MEMBER not in zf.namelist():
+        return None
+    staged = _extract(zf, EARLIER_MEMBER, tmp / EARLIER_MEMBER)
+    try:
+        growth.read_snapshot(staged)
+    except Exception as exc:  # noqa: BLE001 -- any unreadable snapshot is refused the same way
+        raise ShareError("share.err.bad_store", error=f"{EARLIER_MEMBER}: {exc}") from exc
+    return staged
+
+
 def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project, aoi: dict, store: Path,
-                imagery: dict, template: Optional[Path]) -> None:
-    """Every file to the destination the importer derives, then the manifest."""
+                imagery: dict, template: Optional[Path], earlier: Optional[Path] = None) -> None:
+    """Every file to the destination the importer derives, then the manifest.
+    The copy has a ``snapshot_at`` exactly when it has the earlier alerts."""
     s = manifest.alert_sets[header.set_id]
     period = manifest.periods[s.period_id]
     canonical = canonical_set_paths(s, period)
@@ -604,6 +647,8 @@ def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project
         template_dest = _inside(folder, TEMPLATE_REL)
         template_dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(template, template_dest)
+    if earlier is not None:
+        shutil.copyfile(earlier, _inside(folder, paths.EARLIER_SNAPSHOT))
     copy = manifest.model_copy(update={
         "name": folder.name,
         "alert_sets": {s.id: s.model_copy(update=canonical)},
@@ -618,7 +663,8 @@ def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project
         "review_copy": ReviewCopy(evaluator=header.evaluator, evaluator_index=header.evaluator_index,
                                   set_id=header.set_id, split_id=header.split_id,
                                   set_fingerprint=header.set_fingerprint, origin_project=header.origin_project,
-                                  imported_at=datetime.now()),
+                                  imported_at=datetime.now(),
+                                  snapshot_at=header.created_at if earlier is not None else None),
     })
     project_io.save_project(copy, base)
 
@@ -639,9 +685,10 @@ def _import(zip_path, base: Path) -> str:
         _check_store(store, header)
         imagery = _package_imagery(zf, tmp)
         template = _extract(zf, TEMPLATE_MEMBER, tmp / "report.docx") if TEMPLATE_MEMBER in zf.namelist() else None
+        earlier = _package_earlier(zf, tmp)
         folder = _claim_folder(base, header)
         try:
-            _write_copy(folder, base, header, manifest, aoi, store, imagery, template)
+            _write_copy(folder, base, header, manifest, aoi, store, imagery, template, earlier)
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
@@ -798,9 +845,14 @@ def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
 
 def _put(frame, label, col: str, value) -> None:
     """``frame.at[label, col] = value``; a missing value is written as None,
-    and a column whose dtype refuses the value (a float column of unset
-    image names) becomes object first."""
-    if value is pd.NA or (isinstance(value, float) and math.isnan(value)):
+    a list-like one (``grows_from``) as a list, and a column whose dtype
+    refuses the value (a float column of unset image names, a ``list<null>``
+    column read back as arrays) becomes object first."""
+    if _listlike(value):
+        value = list(value)
+        if frame[col].dtype != object:
+            frame[col] = frame[col].astype(object)
+    elif value is pd.NA or (isinstance(value, float) and math.isnan(value)):
         value = None
     try:
         frame.at[label, col] = value

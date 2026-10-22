@@ -51,8 +51,8 @@ from pysepal.i18n import current_locale
 from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
-from gui.i18n import format_date, format_number, t
-from gui.scripts import alert_layers, charts, overview_data, set_store
+from gui.i18n import format_date, format_number, t, tn
+from gui.scripts import alert_layers, charts, growth_index, overview_data, set_store
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
@@ -291,10 +291,62 @@ def _left_column(summary, history, figures, measure: str, theme: dict, admin_lev
                 _admin_table(summary, admin_level)
 
 
-def _right_column(summary, figures, measure: str, questions):
+def _period_id_label(periods, period_id: str) -> str:
+    """A period by its id; a review copy may hold earlier periods the project
+    does not, whose ids are ``<start>_<end>``."""
+    if period_id in periods:
+        return period_label(periods[period_id])
+    start, _, end = period_id.partition("_")
+    return t("steps.period.range", start=start, end=end) if end else period_id
+
+
+def _growth_range(row, periods) -> str:
+    first, last = (_period_id_label(periods, pid) for pid in (row.first_period, row.last_period))
+    return first if row.first_period == row.last_period else t("overview_tile.growth_range", first=first, last=last)
+
+
+def _growth_card(growth, measure: str, periods, on_review, loaded: bool):
+    """The growing clearings of the set (spec 2026-10-20 §7): how many growth
+    alerts it holds, and the histories they belong to, largest first, each
+    with the button that opens its alert in Analysis. The headline is the
+    measure's; the split under it is always counts (the store holds a growth
+    alert's area, not the area of each kind)."""
+    n = growth.n_growth + growth.n_growth_small
+    headline = (tn("overview_tile.growth_headline_count", n)
+                if measure == charts.MEASURE_ALERTS
+                else tn("overview_tile.growth_headline", n, ha=format_number(growth.area_ha, 1)))
+    with _card(t("overview_tile.card_growth"), t("overview_tile.growth_note")):
+        solara.Text(headline, style=_VALUE)
+        split = t("overview_tile.growth_split", growth=format_number(growth.n_growth, 0),
+                  small=format_number(growth.n_growth_small, 0))
+        reviewed = tn("overview_tile.growth_reviewed", growth.n_reviewed)
+        solara.Text(f"{split} · {reviewed}", style=_NOTE)
+        if not growth.rows:
+            return
+        head = (t("overview_tile.growth_period"), t("overview_tile.table_alerts"),
+                t("overview_tile.growth_confirmed"), t("overview_tile.growth_added"), "")
+        rows = [rv.Html(tag="tr", children=[
+            rv.Html(tag="td", children=[_growth_range(row, periods)]),
+            rv.Html(tag="td", children=[format_number(row.n, 0)]),
+            rv.Html(tag="td", children=[format_number(row.confirmed_ha, 1)]),
+            rv.Html(tag="td", children=[format_number(row.added_ha, 1)]),
+            rv.Html(tag="td", children=[solara.Button(
+                t("overview_tile.growth_review"), x_small=True, color="primary", outlined=True,
+                disabled=not loaded, on_click=lambda alert_id=row.alert_id: on_review(alert_id))]),
+        ]).key(f"growth-{row.alert_id}") for row in growth.rows]
+        rv.SimpleTable(dense=True, children=[
+            rv.Html(tag="thead", children=[rv.Html(tag="tr", children=[
+                rv.Html(tag="th", children=[column]) for column in head])]),
+            rv.Html(tag="tbody", children=rows),
+        ])
+
+
+def _right_column(summary, figures, measure: str, questions, growth, periods, on_review, loaded: bool):
     with solara.Div(style=_COLUMN):
         with _card(t("overview_tile.card_numbers")):
             _numbers_table(summary, measure)
+        if growth is not None and growth.n_growth + growth.n_growth_small:
+            _growth_card(growth, measure, periods, on_review, loaded)
         with _card(t("overview_tile.card_timing"), t("overview_tile.timing_note")):
             _figure_or_numbers(figures.get("timing"), [])
         # One card per question, in questionnaire order (spec D9); none
@@ -332,8 +384,9 @@ class _Runs:
         self.current = 0
 
 
-#: ``(summary key, summary, history, failure)`` before the first read lands.
-_NOTHING = (None, None, (), None)
+#: ``(summary key, summary, history, failure, growth)`` before the first read
+#: lands; ``growth`` is None when the History card could not be read.
+_NOTHING = (None, None, (), None, None)
 
 
 @solara.component
@@ -398,16 +451,25 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             except Exception as exc:  # noqa: BLE001 - said in place, where the numbers would be
                 logger.exception("could not read the alerts of set %s", alert_set.id)
                 if runs.current == run:
-                    set_read((key, None, (), error_text(exc)))
+                    set_read((key, None, (), error_text(exc), None))
                 return
+            # The History card reads the other sets' stores too; without it
+            # the dashboard is still whole, so a failure here is only logged.
+            growth = None
+            try:
+                alerts = set_store.load_set_alerts(project, alert_set)
+                if alerts is not None:
+                    growth = growth_index.set_histories(project, alert_set.id, alerts)
+            except Exception:  # noqa: BLE001 - one card, not the dashboard
+                logger.exception("could not read the history of set %s", alert_set.id)
             if runs.current == run:
-                set_read((key, summary, history, None))
+                set_read((key, summary, history, None, growth))
 
         spawn_in_context(_work)
 
     solara.use_effect(_start_read, [key, keys])
 
-    read_key, summary, history, failure = read
+    read_key, summary, history, failure, growth = read
     fresh = summary is not None and read_key == key
     series = tuple((period_label(period), item, item.n_reviewed < item.n_alerts)
                    for period, _, item in history) if fresh else ()
@@ -440,7 +502,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     last_card = solara.use_ref(None)
     export_card = solara.use_memo(
         lambda: build_export_card(gdf, folder, list(sources), start, end, p.name, questions, store=store,
-                                  scope=last_card.current.scope if last_card.current is not None else None)
+                                  scope=last_card.current.scope if last_card.current is not None else None,
+                                  growth=lambda g: growth_index.with_growth_columns(p, s.id, g))
         if s is not None and has_alerts else None,
         [gdf, folder, sources, start, end, questions, store],
     )
@@ -460,6 +523,16 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         if dismiss is not None:
             dismiss()
         app_state.current_page_view.value = "analysis_tile"
+
+    def _review_growth(alert_id):
+        # Analysis opens on this set's alert of the history; the position is
+        # its row in the alerts the session holds.
+        position = set_store.position_of(gdf, alert_id)
+        if position is None:
+            return
+        if dismiss is not None:
+            dismiss()
+        set_store.go_to_alert(app_state, p.name, s.id, alert_id, position)
 
     def _switch(reactive):
         """Flip a map-layer switch. Turning one ON closes this dialog, because
@@ -518,7 +591,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             _kpi_strip(summary, history, figures, measure)
             with solara.Row(style="gap: 10px; align-items: stretch; flex-wrap: wrap;"):
                 _left_column(summary, history, figures, measure, theme, admin_level, set_admin_level)
-                _right_column(summary, figures, measure, questions)
+                _right_column(summary, figures, measure, questions, growth, p.periods, _review_growth,
+                              has_alerts)
         if export_card is not None:
             # A child of a reacton element, so the raw card is part of the
             # rendered tree itself.
