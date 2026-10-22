@@ -1,6 +1,6 @@
-"""Visualization layers (spec §6.3): Earth Engine images, GeoTIFFs and Planet
-NICFI, on the shared map and the Analysis maps. Builders are blocking (map
-ids, tile servers): call them from a worker thread (MapLayers does).
+"""Visualization layers (spec §6.3): Earth Engine images and GeoTIFFs, on the
+shared map and the Analysis maps. Builders are blocking (map ids, tile
+servers): call them from a worker thread (MapLayers does).
 
 What a builder raises ``MapLayers`` shows as the toast (``error_text``), so
 it raises keyed errors and never translates on its worker (spec §9.1, §11: a
@@ -9,23 +9,23 @@ folder).
 """
 
 import os
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
 from deforestation_alerts.engine.raster_io import ensure_overviews
 from deforestation_alerts.errors import FolderNotWritable, UserFileMissing
 from gui.i18n import t
-from gui.scripts import legend_specs, raster_map, vis_palettes
+from gui.scripts import raster_map, vis_palettes
 from gui.scripts.legend_data import format_number
 
+#: The Planet NICFI basemaps of each region: the timeline's Planet collection
+#: (gui/scripts/scene_loader), shown when the Earth Engine account can read them.
 NICFI_COLLECTIONS = {
     "americas": "projects/planet-nicfi/assets/basemaps/americas",
     "africa": "projects/planet-nicfi/assets/basemaps/africa",
     "asia": "projects/planet-nicfi/assets/basemaps/asia",
 }
-NICFI_VIS = {"bands": ["R", "G", "B"], "min": 0, "max": 1600}  # the Analysis maps' Planet true colour
-KINDS = ("gee", "file", "nicfi")
+KINDS = ("gee", "file")
 MAX_NAME = 24
 
 
@@ -33,39 +33,6 @@ def nicfi_region(bounds) -> str:
     """Americas west of 30°W, Asia east of 60°E, else Africa: from the AOI centroid."""
     lon = (bounds[0] + bounds[2]) / 2
     return "americas" if lon < -30 else "asia" if lon > 60 else "africa"
-
-
-def region_label(region: str) -> str:
-    return t(f"steps.layers.region_{region}")
-
-
-def period_month(project, today: date) -> str:
-    """The active period's end month, else last month: the month of a NICFI
-    layer without one of its own."""
-    period = project.periods.get(project.active_period) if project.active_period else None
-    if period is not None:
-        return period.end.strftime("%Y-%m")
-    return (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-
-
-def nicfi_month(layer, project, today: date) -> str:
-    """The layer's month, else the active period's end month, else last month."""
-    return layer.month or period_month(project, today)
-
-
-def nicfi_image(region: str, month: str):
-    import ee
-
-    start = ee.Date(f"{month}-01")
-    return ee.ImageCollection(NICFI_COLLECTIONS[region]).filterDate(start, start.advance(1, "month")).first()
-
-
-def nicfi_access_request(region: str):
-    """The number of images the user can read in the region's collection (0 or
-    an Earth Engine error: no access)."""
-    import ee
-
-    return ee.ImageCollection(NICFI_COLLECTIONS[region]).limit(1).size()
 
 
 def ee_vis_params(layer) -> dict:
@@ -100,9 +67,7 @@ def _ramp_label(palette) -> Optional[str]:
 
 def vis_layers_summary(layer) -> str:
     """The layer's details note: its bands, or its band and colour ramp, and
-    its range, or the NICFI month."""
-    if layer.kind == "nicfi":
-        return layer.month or t("steps.layers.nicfi_period_month")
+    its range."""
     span = f"{format_number(layer.min)}–{format_number(layer.max)}"
     if len(layer.bands) == 3:
         return f"{t('steps.layers.summary_rgb', bands=', '.join(str(b) for b in layer.bands))} · {span}"
@@ -111,22 +76,6 @@ def vis_layers_summary(layer) -> str:
     ramp = _ramp_label(layer.palette) or (layer.colormap if not layer.palette else None)
     parts = [t("steps.layers.summary_band", band=layer.band), ramp, span]
     return " · ".join(p for p in parts if p)
-
-
-def refresh_nicfi_layers(layers, map_, project, *, today: date, notifier=None) -> None:
-    """Give every NICFI layer on the map that draws the active period's month
-    (no month of its own) the current one, image and legend. A layer is shown
-    with its month as content id, so ``refresh`` rebuilds only when the month
-    changed."""
-    if project.aoi is None:
-        return
-    month = period_month(project, today)
-    for key in sorted(layers.on.value):
-        layer = project.vis_layers.get(key[4:]) if key.startswith("vis:") else None
-        if layer is None or layer.kind != "nicfi" or layer.month:
-            continue
-        layers.refresh(key, builder(map_, layer, key, project=project, aoi_bounds=project.aoi.bounds), month,
-                       legend=legend_specs.vis_legend(key, layer, month=month), notifier=notifier)
 
 
 def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
@@ -140,10 +89,6 @@ def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
         if layer.kind == "gee":
             img = ee.Image(layer.asset).select(list(layer.bands))
             map_.add_ee_layer(img, ee_vis_params(layer), name=layer.name, key=key, shown=shown)
-        elif layer.kind == "nicfi":
-            month = nicfi_month(layer, project, date.today())
-            img = nicfi_image(nicfi_region(aoi_bounds), month)
-            map_.add_ee_layer(img, dict(NICFI_VIS), name=layer.name, key=key, shown=shown)
         else:
             if not Path(layer.path).exists():
                 raise UserFileMissing(f"file not found: {layer.path}", key="steps.layers.err_missing", path=layer.path)

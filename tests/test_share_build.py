@@ -12,7 +12,7 @@ import pytest
 
 from deforestation_alerts.project import paths, share
 from deforestation_alerts.project import split as split_mod
-from deforestation_alerts.project.models import GeeVisLayer, NicfiVisLayer
+from deforestation_alerts.project.models import GeeVisLayer
 from deforestation_alerts.project.share import (
     KIND_PACKAGE,
     KIND_RETURN,
@@ -81,8 +81,7 @@ def test_the_trimmed_manifest_drops_artifacts_coverage_file_layers_and_the_templ
     p, _ = creator
     t = trimmed_manifest(p, SET1)
     assert t.artifacts == {} and t.coverage == {}
-    assert set(t.vis_layers) == {"gee", "nicfi"}
-    assert isinstance(t.vis_layers["gee"], GeeVisLayer) and isinstance(t.vis_layers["nicfi"], NicfiVisLayer)
+    assert set(t.vis_layers) == {"gee"} and isinstance(t.vis_layers["gee"], GeeVisLayer)
     assert t.report_template is None and t.review_copy is None
     assert t.aoi.geometry_file == "aoi.geojson" and t.aoi.digest == "aoi-digest"
 

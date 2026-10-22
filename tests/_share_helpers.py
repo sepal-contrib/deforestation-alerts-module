@@ -22,7 +22,6 @@ from deforestation_alerts.project.models import (
     EvaluatorSplit,
     FileVisLayer,
     GeeVisLayer,
-    NicfiVisLayer,
     Period,
     Project,
     Question,
@@ -113,8 +112,7 @@ def make_creator(root, name=CREATOR, *, evaluators=("Ana", "Bo"), assigned=("Ana
     p.periods = {P1.id: P1, P2.id: P2}
     p.active_period = P2.id
     p.vis_layers = {"gee": GeeVisLayer(name="gee", asset="users/x/img"),
-                    "file": FileVisLayer(name="file", path="/abs/creator/layer.tif"),
-                    "nicfi": NicfiVisLayer(name="nicfi")}
+                    "file": FileVisLayer(name="file", path="/abs/creator/layer.tif")}
     p.coverage = {"GLAD-L": SourceCoverage(aoi_digest="aoi-digest", checked_on=date(2026, 10, 1), fraction=1.0)}
     p.artifacts = {"store:x": Artifact(key="store:x", kind="store", rel_path="legacy/alert_db.parquet",
                                        fingerprint="f", inputs={}, content_id="c", created_at=NOW)}

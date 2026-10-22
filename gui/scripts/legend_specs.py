@@ -122,12 +122,9 @@ def _range(vmin, vmax) -> tuple:
     return Label(literal=format_number(vmin)), Label(literal=format_number(vmax))
 
 
-def vis_legend(key: str, layer, *, month=None) -> LayerLegend:
+def vis_legend(key: str, layer) -> LayerLegend:
     name = Label(literal=layer.name)
-    if layer.kind == "nicfi":
-        spec = LegendSpec(kind="note", title=name,
-                          labels=(Label(key="legend.vis.nicfi", args=(("month", month or ""),)),))
-    elif layer.kind in ("gee", "file") and len(layer.bands) == 3:
+    if len(layer.bands) == 3:
         spec = LegendSpec(kind="note", title=name, labels=(Label(key="legend.vis.rgb", args=(
             ("bands", ", ".join(str(b) for b in layer.bands)), ("min", format_number(layer.min)), ("max", format_number(layer.max)))),))
     elif layer.kind == "gee":

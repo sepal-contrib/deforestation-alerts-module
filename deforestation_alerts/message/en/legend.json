@@ -32,8 +32,7 @@
       "earlier_set": "Earlier set · {period} · {sources}"
     },
     "vis": {
-      "rgb": "RGB composite of {bands}, {min}–{max}",
-      "nicfi": "Planet NICFI {month}, true colour"
+      "rgb": "RGB composite of {bands}, {min}–{max}"
     }
   }
 }

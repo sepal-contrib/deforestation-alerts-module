@@ -13,36 +13,29 @@ the per-alert view's ``PaneLayers.clear("alert")`` never touches it.
 import json
 import logging
 import threading
-from datetime import date
 
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
-from gui.scripts.vis_layers import builder, nicfi_month, nicfi_region
+from gui.scripts.vis_layers import builder
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 KEY_PREFIX = "vis:"
 
 
-def _signature(layer, project) -> str:
-    """The layer's definition, plus what its build resolves from the project:
-    a NICFI layer draws the AOI's region and, without a month of its own, the
-    active period's month, so a switch of either rebuilds it."""
-    definition = layer.model_dump(mode="json")
-    if layer.kind == "nicfi":
-        definition["month"] = nicfi_month(layer, project, date.today())
-        definition["region"] = nicfi_region(project.aoi.bounds)
-    return json.dumps(definition, sort_keys=True)
+def _signature(layer) -> str:
+    """The layer's definition: a change of it rebuilds the layer."""
+    return json.dumps(layer.model_dump(mode="json"), sort_keys=True)
 
 
 def wanted(project) -> dict:
     """``vis:<name>`` → the signature of each layer shown in Analysis (none
-    without an AOI: a NICFI layer draws the AOI's region)."""
+    without an AOI)."""
     if project is None or project.aoi is None:
         return {}
-    return {f"{KEY_PREFIX}{name}": _signature(layer, project)
+    return {f"{KEY_PREFIX}{name}": _signature(layer)
             for name, layer in project.vis_layers.items() if layer.show_in_analysis}
 
 

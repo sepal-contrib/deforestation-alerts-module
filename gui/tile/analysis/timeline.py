@@ -935,36 +935,26 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # on, so a disabled chip tells the reviewer what they are hiding.
         counts = scene_query.source_counts(rows) if rows is not None else {}
         planet = getattr(app_state.scene_manifest.value, "planet", None)
+        # Planet NICFI comes with the Earth Engine account: without access to
+        # the AOI's basemaps there is no Planet collection, so no Planet chip.
+        names = (SOURCE_PLANET, SOURCE_S2, SOURCE_LANDSAT) if planet is not None and planet.access \
+            else (SOURCE_S2, SOURCE_LANDSAT)
         kids = []
-        for name in (SOURCE_PLANET, SOURCE_S2, SOURCE_LANDSAT):
+        for name in names:
             on = name in sources.value
             shown, hidden = counts.get(name, (0, 0))
             label = f"{SRC_LABEL[name]} {shown}" + (f" +{hidden}" if hidden else "")
-            # NICFI is licence-gated. A toggle that does nothing because the
-            # account has no access must say so rather than read as a
-            # collection with no images this month (spec §5.4), which is why
-            # the loader records ``planet.access`` instead of only logging it.
-            blocked = name == SOURCE_PLANET and planet is not None and not planet.access
-            if name != SOURCE_PLANET:
-                title = ""
-            elif blocked:
-                title = t("steps.layers.err_nicfi", region=(planet.region or ""))
-            else:
+            attrs = {"type": "button", "aria-pressed": "true" if on else "false"}
+            if name == SOURCE_PLANET:
                 # Planet has no cloud property, so the slider never hides it.
                 title = t("analysis.timeline.no_cloud_filter")
-            attrs = {"type": "button", "aria-pressed": "true" if (on and not blocked) else "false"}
-            if title:
                 attrs["title"] = title
                 attrs["aria-label"] = f"{label}. {title}"
-            if blocked:
-                attrs["disabled"] = "disabled"
-                attrs["aria-disabled"] = "true"
             # A toggle chip in the screen's type scale: the collection's
             # colour as a dot (the colour of its stripes), its name, and the
             # count dimmed. On, it is filled; off, an empty outline.
-            active = on and not blocked
             dot = v.Html(tag="span", style_=(f"width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px; "
-                                             f"background: {SRC_COLOR[name] if active else 'transparent'}; "
+                                             f"background: {SRC_COLOR[name] if on else 'transparent'}; "
                                              f"border: 1.5px solid {SRC_COLOR[name]};"))
             count = f"{shown}" + (f" +{hidden}" if hidden else "")
             chip = v.Html(tag="button", attributes=attrs,
@@ -973,15 +963,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                           style_=(f"height: 28px; padding: 0 10px; border-radius: 14px; display: inline-flex; "
                                   f"flex: 0 0 auto; white-space: nowrap; "
                                   f"align-items: center; gap: 6px; font-size: 12px; line-height: 16px; "
-                                  f"cursor: {'not-allowed' if blocked else 'pointer'}; color: var(--dat-ink); "
-                                  f"background: {'var(--dat-chip)' if active else 'transparent'}; "
+                                  f"cursor: pointer; color: var(--dat-ink); "
+                                  f"background: {'var(--dat-chip)' if on else 'transparent'}; "
                                   f"border: 1px solid var(--dat-edge); "
-                                  f"opacity: {'0.4' if blocked else ('1' if on else '0.6')}"),
+                                  f"opacity: {'1' if on else '0.6'}"),
                           children=[dot, SRC_LABEL[name],
                                     v.Html(tag="span", style_="opacity: 0.7; font-variant-numeric: tabular-nums;",
                                            children=[count])])
-            if not blocked:
-                chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
+            chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
             kids.append(chip)
         replace_children(chips, kids)
 

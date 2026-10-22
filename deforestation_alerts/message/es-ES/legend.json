@@ -32,8 +32,7 @@
       "earlier_set": "Conjunto anterior · {period} · {sources}"
     },
     "vis": {
-      "rgb": "Compuesto RGB de {bands}, {min}–{max}",
-      "nicfi": "Planet NICFI {month}, color real"
+      "rgb": "Compuesto RGB de {bands}, {min}–{max}"
     }
   }
 }

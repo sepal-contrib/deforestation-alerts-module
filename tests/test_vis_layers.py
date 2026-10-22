@@ -18,7 +18,7 @@ from affine import Affine
 from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.project.models import (
-    AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project,
+    AoiRecord, FileVisLayer, GeeVisLayer, Period, Project,
 )
 from gui.i18n import t
 from gui.scripts import vis_layers as vl
@@ -42,13 +42,14 @@ def test_nicfi_region_from_the_aoi_centroid(bounds, region):
     assert vl.nicfi_region(bounds) == region
 
 
-def test_nicfi_month():
+def test_a_saved_nicfi_layer_is_dropped_when_the_project_loads():
+    """Planet NICFI was an optional layer kind; it now comes with the Earth
+    Engine account, as the timeline's Planet collection."""
     p = _p()
-    assert vl.nicfi_month(NicfiVisLayer(name="n", month="2025-07"), p, date(2026, 10, 1)) == "2025-07"
-    assert vl.nicfi_month(NicfiVisLayer(name="n"), p, date(2026, 10, 1)) == "2026-09"
-    per = Period(id="x", start=date(2026, 3, 1), end=date(2026, 4, 30))
-    p.periods, p.active_period = {"x": per}, "x"
-    assert vl.nicfi_month(NicfiVisLayer(name="n"), p, date(2026, 10, 1)) == "2026-04"
+    p.vis_layers = {"s2": GeeVisLayer(name="s2", asset="x", bands=["B4"])}
+    data = p.model_dump(mode="json")
+    data["vis_layers"]["planet"] = {"kind": "nicfi", "name": "planet", "month": None, "show_in_analysis": True}
+    assert set(Project.model_validate(data).vis_layers) == {"s2"}
 
 
 def test_ee_vis_params():
@@ -185,20 +186,16 @@ def test_a_missing_geotiff_is_refused_naming_the_file(tmp_path):
     assert error_text(exc.value) == t("steps.layers.err_missing", path=str(tmp_path / "gone.tif"))
 
 
-def test_earth_engine_and_nicfi_builders(gee):
+def test_the_earth_engine_builder(gee):
     map_ = _FakeMap()
     p = _with_aoi()
     p.periods, p.active_period = {"x": Period(id="x", start=date(2026, 3, 1), end=date(2026, 4, 30))}, "x"
     s2 = GeeVisLayer(name="ndvi", asset="COPERNICUS/S2_SR_HARMONIZED/20200101T135109_20200101T135546_T21JWN",
                      bands=["B8"], min=0, max=1, palette=["ffffff", "00ff00"])
     vl.builder(map_, s2, "vis:ndvi", project=p, aoi_bounds=PARAGUAY, shown=False)()
-    vl.builder(map_, NicfiVisLayer(name="planet"), "vis:planet", project=p, aoi_bounds=PARAGUAY)()
-    first, second = map_.ee_calls
+    [first] = map_.ee_calls
     assert first["vis"] == {"bands": ["B8"], "min": 0.0, "max": 1.0, "palette": ["ffffff", "00ff00"]}
     assert (first["key"], first["name"], first["shown"]) == ("vis:ndvi", "ndvi", False)
-    assert second["vis"] == vl.NICFI_VIS and (second["key"], second["shown"]) == ("vis:planet", True)
-    serialized = second["img"].serialize()
-    assert vl.NICFI_COLLECTIONS["americas"] in serialized and "2026-04-01" in serialized
 
 
 def test_the_details_cell():
@@ -215,8 +212,6 @@ def test_the_details_cell():
         f"band 2 · {t('steps.layers.ramp_greens')} · 0–45")
     assert vl.vis_layers_summary(FileVisLayer(name="t", path="/x.tif", bands=[4, 3, 2], min=0, max=3000)) == (
         "R/G/B: 4, 3, 2 · 0–3000")
-    assert vl.vis_layers_summary(NicfiVisLayer(name="n", month="2025-07")) == "2025-07"
-    assert vl.vis_layers_summary(NicfiVisLayer(name="n")) == t("steps.layers.nicfi_period_month")
 
 
 def test_a_geotiff_rgb_layer_is_drawn_with_three_bands_and_no_colormap(tmp_path, monkeypatch):
@@ -280,7 +275,6 @@ def _gee_answering(answer):
 @pytest.fixture
 def requests(monkeypatch):
     monkeypatch.setattr(vlm, "band_list_request", lambda ref, kind: ("BANDS", ref, kind))
-    monkeypatch.setattr(vl, "nicfi_access_request", lambda region: ("NICFI", region))
 
 
 def _check(gee_interface, project, **kw):
@@ -381,38 +375,6 @@ def test_a_geotiff_in_a_read_only_folder_is_refused_inline(tmp_path, requests):
         assert out == {"error": "steps.layers.err_folder", "args": {"folder": str(ro)}}
     finally:
         ro.chmod(0o755)
-
-
-def test_nicfi_checks_the_access_of_the_aois_region(requests):
-    gee, calls = _gee_answering(lambda obj: 1)
-    out = _check(gee, _with_aoi((20, -5, 25, 0)), kind="nicfi", name="planet", month="", show_in_analysis=True)
-    assert out["layer"] == NicfiVisLayer(name="planet", month=None, show_in_analysis=True)
-    assert calls == [("NICFI", "africa")]
-    out = _check(gee, _with_aoi(), kind="nicfi", name="planet", month="2025-07")
-    assert out["layer"].month == "2025-07" and calls[-1] == ("NICFI", "americas")
-    assert _check(gee, _with_aoi(), kind="nicfi", name="planet", month="2025-13") == {
-        "error": "steps.layers.err_month"}
-
-
-def test_nicfi_without_access_is_refused_naming_the_region(requests):
-    import ee
-
-    def no_access(obj):
-        raise ee.EEException("ImageCollection.load: ImageCollection asset 'projects/planet-nicfi/assets/"
-                             "basemaps/asia' not found (does not exist or caller does not have access).")
-
-    gee, _ = _gee_answering(no_access)
-    out = _check(gee, _with_aoi((100, -5, 110, 5)), kind="nicfi", name="planet")
-    assert out == {"error": "steps.layers.err_nicfi", "args": {"region": t("steps.layers.region_asia")}}
-    gee, _ = _gee_answering(lambda obj: 0)
-    assert _check(gee, _with_aoi(), kind="nicfi", name="planet")["error"] == "steps.layers.err_nicfi"
-
-    def offline(obj):
-        raise ee.EEException("Connection reset")
-
-    gee, _ = _gee_answering(offline)
-    with pytest.raises(ee.EEException):  # not a refusal: shown as it is
-        _check(gee, _with_aoi(), kind="nicfi", name="planet")
 
 
 @pytest.mark.parametrize("text, refused", [
@@ -611,11 +573,12 @@ def test_a_refused_layer_shows_translated_text_inline_and_can_be_sent_again(monk
 
 def test_what_on_save_raises_is_shown_inline(monkeypatch):
     async def fake_validate(gee_interface, project, **kw):
-        return {"layer": NicfiVisLayer(name=kw["name"])}
+        return {"layer": GeeVisLayer(name=kw["name"], asset="x")}
 
     def on_save(layer, previous):
         raise ValueError(t("steps.layers.name_duplicate"))
 
+    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
     monkeypatch.setattr(vlm, "validate_vis_layer", fake_validate)
     state, open_ = _state(_with_aoi()), solara.reactive(True)
 
@@ -623,9 +586,7 @@ def test_what_on_save_raises_is_shown_inline(monkeypatch):
         box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=object(),
                                                    on_save=on_save), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "nicfi"
-            assert t("steps.layers.region", region=t("steps.layers.region_americas")) in _texts(rc)
-            _field(rc, "steps.layers.field_name").v_model = "planet"
+            _field(rc, "steps.layers.field_name").v_model = "ndvi"
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: t("steps.layers.name_duplicate") in _texts(rc))
             assert open_.value is True
@@ -642,7 +603,7 @@ def _hanging(monkeypatch):
         asked.append(kw)
         await release.wait()
         done.append(kw)
-        return {"layer": NicfiVisLayer(name=kw["name"])}
+        return {"layer": GeeVisLayer(name=kw["name"], asset="x")}
 
     monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
     monkeypatch.setattr(vlm, "validate_vis_layer", fake_validate)
@@ -750,7 +711,7 @@ def _layers_project():
     p.vis_layers = {
         "S2": GeeVisLayer(name="S2", asset="x", bands=["B4", "B3", "B2"], min=0, max=3000, show_in_analysis=True),
         "height": FileVisLayer(name="height", path="/x.tif", colormap="terrain", min=0, max=45),
-        "planet": NicfiVisLayer(name="planet"),
+        "ndvi": GeeVisLayer(name="ndvi", asset="y", bands=["NDVI"]),
     }
     return p
 
@@ -771,16 +732,16 @@ def test_rows_show_the_kind_and_analysis_chips_and_the_details_note(monkeypatch)
     box, rc = _render_step(state, _FakeMap(), MapLayers(_FakeMap()))
     try:
         assert seen["columns"] == layers_step.layer_columns()
-        assert [r["key"] for r in seen["rows"]] == ["height", "planet", "S2"]  # by name, case-folded
+        assert [r["key"] for r in seen["rows"]] == ["height", "ndvi", "S2"]  # by name, case-folded
         s2 = next(r for r in seen["rows"] if r["key"] == "S2")
         assert s2["cells"] == [{"value": "S2", "chips": [
             {"value": t("steps.layers.kind_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
         assert s2["notes"] == [{"text": "R/G/B: B4, B3, B2 · 0–3000", "tone": None}]
         assert [a["kind"] for a in s2["actions"]] == ["map_toggle", "edit", "delete"]
         assert len(s2["actions"]) == layers_step.LAYER_ACTIONS
-        planet = next(r for r in seen["rows"] if r["key"] == "planet")
-        assert planet["cells"][0]["chips"] == [{"value": t("steps.layers.kind_nicfi")}]  # not in Analysis: no chip
-        assert planet["notes"] == [{"text": t("steps.layers.nicfi_period_month"), "tone": None}]
+        ndvi = next(r for r in seen["rows"] if r["key"] == "ndvi")
+        assert ndvi["cells"][0]["chips"] == [{"value": t("steps.layers.kind_gee")}]  # not in Analysis: no chip
+        assert ndvi["notes"] == [{"text": "NDVI · 0–1", "tone": None}]
     finally:
         rc.close()
 
@@ -799,51 +760,13 @@ def test_the_map_toggle_shows_the_layer_with_its_legend_then_hides_it(monkeypatc
     layers = MapLayers(map_)
     box, rc = _render_step(state, map_, layers)
     try:
-        _action(seen, "planet", "map_toggle")["on_click"]()
-        assert built == [("planet", "vis:planet", PARAGUAY, True)] and layers.on.value == {"vis:planet"}
+        _action(seen, "ndvi", "map_toggle")["on_click"]()
+        assert built == [("ndvi", "vis:ndvi", PARAGUAY, True)] and layers.on.value == {"vis:ndvi"}
         [legend] = layers.legends.value
-        assert legend.layer_id == "vis:planet" and dict(legend.spec.labels[0].args) == {"month": "2026-04"}
-        assert _action(seen, "planet", "map_toggle")["is_on"] is True
-        _action(seen, "planet", "map_toggle")["on_click"]()
-        assert layers.on.value == frozenset() and "vis:planet" in map_.removed and layers.legends.value == ()
-    finally:
-        rc.close()
-
-
-def test_a_period_month_nicfi_layer_follows_the_active_period(monkeypatch):
-    _sync_spawn(monkeypatch)
-    seen, _, _ = _stub_children(monkeypatch)
-    built = []
-
-    def fake_builder(map_, layer, key, *, project, aoi_bounds, shown=True):
-        def build():
-            built.append((key, vl.nicfi_month(layer, project, date.today())))
-            map_.add_layer("x", key=key)
-        return build
-
-    monkeypatch.setattr(layers_step.vis_layers, "builder", fake_builder)
-    p = _layers_project()
-    p.vis_layers["fixed"] = NicfiVisLayer(name="fixed", month="2025-01")
-    state, map_ = _state(p), _FakeMap()
-    layers = MapLayers(map_)
-    box, rc = _render_step(state, map_, layers)
-    try:
-        _action(seen, "planet", "map_toggle")["on_click"]()
-        _action(seen, "fixed", "map_toggle")["on_click"]()
-        assert built == [("vis:planet", "2026-04"), ("vis:fixed", "2025-01")]
-        assert layers.content_of("vis:planet") == "2026-04"
-
-        def _months():
-            return {lg.layer_id: dict(lg.spec.labels[0].args)["month"] for lg in layers.legends.value}
-
-        same = Period(id="s", start=date(2026, 4, 1), end=date(2026, 4, 30))  # same last month: no rebuild
-        state.update_project("v", lambda live: (live.periods.update(s=same), setattr(live, "active_period", "s")))
-        assert len(built) == 2
-        later = Period(id="y", start=date(2026, 5, 1), end=date(2026, 6, 30))
-        state.update_project("v", lambda live: (live.periods.update(y=later), setattr(live, "active_period", "y")))
-        assert built[2:] == [("vis:planet", "2026-06")]  # the layer with its own month is left alone
-        assert layers.content_of("vis:planet") == "2026-06" and layers.on.value == {"vis:planet", "vis:fixed"}
-        assert _months() == {"vis:planet": "2026-06", "vis:fixed": "2025-01"}
+        assert legend.layer_id == "vis:ndvi" and legend.spec.kind == "gradient"
+        assert _action(seen, "ndvi", "map_toggle")["is_on"] is True
+        _action(seen, "ndvi", "map_toggle")["on_click"]()
+        assert layers.on.value == frozenset() and "vis:ndvi" in map_.removed and layers.legends.value == ()
     finally:
         rc.close()
 
@@ -855,7 +778,7 @@ def test_save_adds_renames_and_drops_the_old_layer_from_the_map(monkeypatch):
     layers = MapLayers(map_)
     box, rc = _render_step(state, map_, layers)
     try:
-        new = NicfiVisLayer(name="mosaic", month="2025-01")
+        new = GeeVisLayer(name="mosaic", asset="z", bands=["B1"])
         modal["on_save"](new, None)
         assert state.project.value.vis_layers["mosaic"] == new
         layers.show("vis:height", lambda: map_.add_layer("x", key="vis:height"))
@@ -867,8 +790,8 @@ def test_save_adds_renames_and_drops_the_old_layer_from_the_map(monkeypatch):
         assert "height" not in live and live["relief"] == renamed
         assert layers.on.value == frozenset() and "vis:height" in map_.removed
         with pytest.raises(ValueError, match=t("steps.layers.name_duplicate")):  # taken meanwhile
-            modal["on_save"](NicfiVisLayer(name="s2"), None)
-        assert set(state.project.value.vis_layers) == {"S2", "planet", "mosaic", "relief"}
+            modal["on_save"](GeeVisLayer(name="s2", asset="z"), None)
+        assert set(state.project.value.vis_layers) == {"S2", "ndvi", "mosaic", "relief"}
     finally:
         rc.close()
 

@@ -212,7 +212,7 @@ def _dynamic_keys():
     every value its one placeholder takes."""
     from deforestation_alerts.engine.fingerprint import Status
     from deforestation_alerts.project import periods
-    from gui.scripts.vis_layers import KINDS, NICFI_COLLECTIONS
+    from gui.scripts.vis_layers import KINDS
     from gui.scripts.vis_palettes import RAMPS, RGB_COMBOS, ROLES
     from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
@@ -241,9 +241,8 @@ def _dynamic_keys():
         "analysis_tile.model_labels.dl_button": ["1", "2"],
         # gui.tile.masks_card's origin chip
         "steps.prepare.mask_origin_": ["gee", "file"],
-        # gui.scripts.vis_layers: the layer kinds and the NICFI regions
+        # gui.scripts.vis_layers: the layer kinds
         "steps.layers.kind_": list(KINDS),
-        "steps.layers.region_": list(NICFI_COLLECTIONS),
         # gui.widget.vis_layer_modal: the colour ramps, band roles and RGB combinations
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),

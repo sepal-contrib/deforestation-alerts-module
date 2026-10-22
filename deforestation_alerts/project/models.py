@@ -142,16 +142,7 @@ class FileVisLayer(BaseModel):
     show_in_analysis: bool = False
 
 
-class NicfiVisLayer(BaseModel):
-    kind: Literal["nicfi"] = "nicfi"
-    name: str
-    month: Optional[str] = None  # "YYYY-MM"; None = the active period's last month
-    show_in_analysis: bool = False
-
-
-VisLayer = Annotated[
-    Union[GeeVisLayer, FileVisLayer, NicfiVisLayer], Field(discriminator="kind")
-]
+VisLayer = Annotated[Union[GeeVisLayer, FileVisLayer], Field(discriminator="kind")]
 
 
 class GridSpec(BaseModel):
@@ -434,6 +425,13 @@ class Project(BaseModel):
                 data = {**data, "periods": {k: ({**v, "look_back_days": days}
                                                 if isinstance(v, dict) and "look_back_days" not in v else v)
                                             for k, v in periods_.items()}}
+            # Planet NICFI was an optional layer kind; it is now the
+            # timeline's Planet collection, shown when the Earth Engine
+            # account has access, so a saved NICFI layer is dropped.
+            layers = data.get("vis_layers") or {}
+            if any(isinstance(v, dict) and v.get("kind") == "nicfi" for v in layers.values()):
+                data = {**data, "vis_layers": {k: v for k, v in layers.items()
+                                               if not (isinstance(v, dict) and v.get("kind") == "nicfi")}}
         return data
 
     @property

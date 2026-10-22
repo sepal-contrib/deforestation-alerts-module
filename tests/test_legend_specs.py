@@ -2,7 +2,7 @@ from pathlib import Path
 
 from matplotlib.colors import to_hex
 
-from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer, PeriodMask
+from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, PeriodMask
 from gui.scripts import legend_specs as ls
 from gui.scripts import pmtiles_map, raster_map
 from gui.scripts.legend_data import to_legend_data
@@ -64,8 +64,6 @@ def test_vis_legends():
     assert ramp.kind == "gradient" and ramp.colors[0] == "#ff0000" and ramp.colors[-1] == "#0000ff"
     rgb_tif = ls.vis_legend("vis:f", FileVisLayer(name="f", path="/x.tif", bands=[4, 3, 2], min=0, max=3000)).spec
     assert rgb_tif.kind == "note" and dict(rgb_tif.labels[0].args)["bands"] == "4, 3, 2"
-    nicfi = ls.vis_legend("vis:p", NicfiVisLayer(name="p"), month="2026-03").spec
-    assert nicfi.kind == "note" and dict(nicfi.labels[0].args) == {"month": "2026-03"}
 
 
 def test_stack_order_is_a_permutation_of_the_status_codes():

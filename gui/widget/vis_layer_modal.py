@@ -1,7 +1,6 @@
 """Visualization-layer modal (spec §6.3): an Earth Engine image or a GeoTIFF in
 the user's SEPAL folder (one band and a colour ramp, or three bands as RGB, set
-by hand or by band roles and a standard combination) or Planet NICFI (a month,
-the region from the AOI centroid, access checked).
+by hand or by band roles and a standard combination).
 
 It follows ``source_modal``'s rules (Task 17), on the same form frame
 (``gui/widget/form_dialog``), as ``mask_modal`` does: the Add/Save is a
@@ -14,7 +13,6 @@ it raises translated text.
 """
 
 import asyncio
-import re
 from pathlib import Path
 
 import reacton.ipyvuetify as rv
@@ -22,17 +20,15 @@ import solara
 from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine.user_raster import UserRasterError, band_list_request, check_file, read_header
-from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
+from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer
 from deforestation_alerts.project.names import name_from_ref, suggest_name_with_tail
 from gui.i18n import t
 from gui.scripts import vis_layers, vis_palettes
-from gui.scripts.error_text import ee_no_access, error_text
+from gui.scripts.error_text import error_text
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
-
-_MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 
 
 def parse_range(vmin, vmax):
@@ -51,10 +47,10 @@ def _number_text(value) -> str:
 
 async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None, rgb=False,
                              bands=(), band=None, ramp=None, invert=False, palette=(), colormap=None, roles=None,
-                             combo=None, vmin=None, vmax=None, month="", show_in_analysis=False,
+                             combo=None, vmin=None, vmax=None, show_in_analysis=False,
                              editing=None) -> dict:
     """Check a visualization layer before it is saved: ``{"error": key,
-    "args": {...}}`` or ``{"layer": GeeVisLayer | FileVisLayer | NicfiVisLayer}``.
+    "args": {...}}`` or ``{"layer": GeeVisLayer | FileVisLayer}``.
 
     ``bands`` are the three RGB bands (``rgb``); ``band`` is the one band of a
     single-band image or of a GeoTIFF. A single band is coloured by ``ramp``
@@ -66,20 +62,6 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
     error = vis_layers.validate_name(name, project, current=editing)
     if error:
         return {"error": error}
-    if kind == "nicfi":
-        month = (month or "").strip() or None
-        if month is not None and not _MONTH.fullmatch(month):
-            return {"error": "steps.layers.err_month"}
-        region = vis_layers.nicfi_region(project.aoi.bounds)
-        try:
-            count = await gee_interface.get_info_async(vis_layers.nicfi_access_request(region))
-        except Exception as exc:  # noqa: BLE001 - no access reads as an Earth Engine error
-            if not ee_no_access(exc):
-                raise
-            count = 0
-        if not isinstance(count, (int, float)) or count <= 0:
-            return {"error": "steps.layers.err_nicfi", "args": {"region": vis_layers.region_label(region)}}
-        return {"layer": NicfiVisLayer(name=name, month=month, show_in_analysis=bool(show_in_analysis))}
     span = parse_range(vmin, vmax)
     if span is None:
         return {"error": "steps.layers.err_range"}
@@ -169,8 +151,7 @@ def VisLayerModal(open_, app_state, gee_interface, on_save, editing=None):
 
 
 def _scope(p):
-    """What the check must still match when it ends: the project and its AOI
-    (the NICFI region comes from the AOI)."""
+    """What the check must still match when it ends: the project and its AOI."""
     if p is None:
         return None
     return p.name, p.aoi.digest if p.aoi is not None else None
@@ -197,15 +178,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     blue, set_blue = solara.use_state(raster0.bands[2] if rgb0 else None)
     roles, set_roles = solara.use_state(dict(raster0.roles) if raster0 is not None else {})
     combo, set_combo = solara.use_state((raster0.combo if raster0 is not None else None) or "custom")
-    vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None and l0.kind != "nicfi" else "0")
-    vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None and l0.kind != "nicfi" else "1")
+    vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None else "0")
+    vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None else "1")
     palette0 = raster0.palette if raster0 is not None else []
     ramp0, invert0 = vis_palettes.ramp_choice(palette0)
     # A new layer starts on the default ramp. A layer saved before the ramps keeps
     # its palette or colormap until a card is picked, and preselects no card.
     ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None else vis_palettes.DEFAULT_RAMP)
     invert, set_invert = solara.use_state(invert0)
-    month, set_month = solara.use_state((l0.month or "") if l0 is not None and l0.kind == "nicfi" else "")
     show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
     old_colormap = file0.colormap if file0 is not None and not file0.palette and not file0.bands else None
     saved_roles = bool(raster0 is not None and raster0.roles)
@@ -224,15 +204,12 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_roles({})
             set_combo("custom")
 
-    raster = kind in ("gee", "file")
-    ref = ((asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value) if kind == "file"
-           else None)
+    ref = (asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if kind == "gee" else "FILE"
-    bands_task = use_band_list(gee_interface, kind if raster else "gee", ref, asset_type)
+    bands_task = use_band_list(gee_interface, kind, ref, asset_type)
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
     band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
                   else [{"text": n, "value": n} for n in names])
-    region = vis_layers.nicfi_region(p.aoi.bounds) if p is not None and p.aoi is not None else None
     band_text = {i["value"]: i["text"] for i in band_items}
 
     def _apply(chosen_combo, chosen_roles):
@@ -314,7 +291,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type, rgb=rgb,
             bands=(red, green, blue), band=band, ramp=ramp, invert=invert, palette=palette0 if ramp is None else (),
             colormap=old_colormap if ramp is None else None, roles=roles, combo=None if combo == "custom" else combo,
-            vmin=vmin, vmax=vmax, month=month, show_in_analysis=show, editing=editing)
+            vmin=vmin, vmax=vmax, show_in_analysis=show, editing=editing)
         if not open_.value:
             return None  # closed during the check (ESC or Cancel): the user cancelled
         if _scope(app_state.project.value) != scope:
@@ -416,44 +393,35 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
                      outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
                      error_messages=[t(name_error)] if name_error else [])
-        if raster:
-            RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
-                        asset_types=("IMAGE",), disabled=busy, show_origin=False)
-            if bands_task.pending:
-                solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
-            elif bands_task.error:
-                solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                            classes=["error--text"])
-        if raster:
-            rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=_set_rgb, dense=True,
-                      hide_details=True, disabled=busy)
-            if rgb:
-                solara.Text(t("steps.layers.roles_hint"), style=MUTED)
-                with rv.Row(dense=True):
-                    for role in vis_palettes.ROLES:
-                        with rv.Col(cols=6):
-                            rv.Select(label=t(f"steps.layers.role_{role}"), items=band_items,
-                                      v_model=roles.get(role), on_v_model=lambda value, r=role: _set_role(r, value),
-                                      clearable=True, dense=True, outlined=True, hide_details=True,
-                                      loading=bands_task.pending, disabled=busy)
-                rv.Select(label=t("steps.layers.field_combo"), v_model=combo, on_v_model=_pick_combo,
-                          items=[{"text": _capital(t(f"steps.layers.combo_{c}")), "value": c}
-                                 for c in [*vis_palettes.available_combos(roles), "custom"]],
-                          dense=True, outlined=True, disabled=busy)
-                _band_select(t("steps.layers.field_red"), red, _rgb_setter(set_red))
-                _band_select(t("steps.layers.field_green"), green, _rgb_setter(set_green))
-                _band_select(t("steps.layers.field_blue"), blue, _rgb_setter(set_blue))
-                _range_fields()
-            else:
-                _band_select(t("steps.layers.field_band"), band, set_band)
-                _ramp_fields()
-                _range_fields()
+        RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
+                    asset_types=("IMAGE",), disabled=busy, show_origin=False)
+        if bands_task.pending:
+            solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
+        elif bands_task.error:
+            solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
+                        classes=["error--text"])
+        rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=_set_rgb, dense=True,
+                  hide_details=True, disabled=busy)
+        if rgb:
+            solara.Text(t("steps.layers.roles_hint"), style=MUTED)
+            with rv.Row(dense=True):
+                for role in vis_palettes.ROLES:
+                    with rv.Col(cols=6):
+                        rv.Select(label=t(f"steps.layers.role_{role}"), items=band_items,
+                                  v_model=roles.get(role), on_v_model=lambda value, r=role: _set_role(r, value),
+                                  clearable=True, dense=True, outlined=True, hide_details=True,
+                                  loading=bands_task.pending, disabled=busy)
+            rv.Select(label=t("steps.layers.field_combo"), v_model=combo, on_v_model=_pick_combo,
+                      items=[{"text": _capital(t(f"steps.layers.combo_{c}")), "value": c}
+                             for c in [*vis_palettes.available_combos(roles), "custom"]],
+                      dense=True, outlined=True, disabled=busy)
+            _band_select(t("steps.layers.field_red"), red, _rgb_setter(set_red))
+            _band_select(t("steps.layers.field_green"), green, _rgb_setter(set_green))
+            _band_select(t("steps.layers.field_blue"), blue, _rgb_setter(set_blue))
+            _range_fields()
         else:
-            rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,
-                         outlined=True, disabled=busy, placeholder="YYYY-MM", hint=t("steps.layers.month_hint"),
-                         persistent_hint=True)
-            if region is not None:
-                solara.Text(t("steps.layers.region", region=vis_layers.region_label(region)),
-                            style=MUTED)
+            _band_select(t("steps.layers.field_band"), band, set_band)
+            _ramp_fields()
+            _range_fields()
         rv.Checkbox(label=t("steps.layers.field_show_in_analysis"), v_model=show, on_v_model=set_show, dense=True,
                     hide_details=True, disabled=busy)

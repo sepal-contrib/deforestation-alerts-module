@@ -185,7 +185,7 @@ def _modal_check(page, label):
 
 
 def add_layer(page, rec, *, kind, name, fill, out) -> bool:
-    """Optional layers → Add layer; False when the modal refuses (NICFI access)."""
+    """Optional layers → Add layer; False when the modal refuses it."""
     w.goto_step(page, "layers", 2000)
     ph.visible_btn(page, "Add layer", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the layer modal")
@@ -195,9 +195,9 @@ def add_layer(page, rec, *, kind, name, fill, out) -> bool:
     _modal_check(page, "Show in Analysis")
     w.shot(page, out, f"layer_modal_{name}")
     ph.primary_button(page).click()  # "Add layer": the form's Enter default
-    w.wait_for(lambda: not ph.dialog_open(page) or "has no access to Planet NICFI" in ph.modal_text(page), 180,
-               f"{name} saved or refused")
-    if ph.dialog_open(page):
+    try:
+        w.wait_for(lambda: not ph.dialog_open(page), 180, f"{name} saved")
+    except AssertionError:  # refused: the reason stays in the open form
         rec[f"{name}_refused"] = ph.modal_text(page)[:300]
         ph.modal_button(page, "Cancel").click()
         return False
@@ -241,10 +241,8 @@ def e_vis_layers(page, rec, *, out, s2):
     assert add_layer(page, rec, kind="GeoTIFF", name="slope", fill=tif, out=out)
     ph.row_button(page, "slope", "mdi-map-plus").click()
     w.wait_for(lambda: "slope" in ph.legend_text(page) and "45" in ph.legend_text(page), 180, "the slope legend")
-    nicfi = add_layer(page, rec, kind="Planet NICFI", name="nicfi", fill=lambda: None, out=out)
-    rec["nicfi"] = "shown in Analysis" if nicfi else "NOT PROVEN: the account has no Planet NICFI access"
     w.goto_step(page, "analysis", 6000)
-    wanted = ["slope"] + (["nicfi"] if nicfi else [])
+    wanted = ["slope"]
 
     def listed():
         lists = analysis_layer_controls(page)
@@ -291,9 +289,7 @@ def main(argv=None):
             browser.close()
     finally:
         w.stop_server(proc)
-    nicfi = report.get("phases", {}).get("e_vis_layers", {}).get("nicfi", "")
-    print("WALK", "PASS" if ok else "FAIL", args.out / "report.json",
-          f"(4(e) NICFI half {nicfi})" if nicfi.startswith("NOT PROVEN") else "")
+    print("WALK", "PASS" if ok else "FAIL", args.out / "report.json")
     return 0 if ok else 1
 
 
