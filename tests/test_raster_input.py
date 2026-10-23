@@ -90,3 +90,68 @@ def test_without_the_origin_only_the_picker_is_shown(pickers):
         assert pickers.file_label == t("steps.raster_input.file")
     finally:
         rc.close()
+
+
+# ------------------------------------------- the band list's shared helpers
+def _task(pending=False, finished=False, error=False, value=None, exception=None):
+    """A ``solara.lab.use_task`` result as the helpers read it."""
+    return SimpleNamespace(pending=pending, finished=finished, error=error, value=value, exception=exception)
+
+
+READING = _task(pending=True)
+FAILED = _task(error=True, exception=RuntimeError("boom"))
+READ = _task(finished=True, value=(("b1", "b2"), None))
+
+
+def test_bands_read_is_a_finished_non_empty_list():
+    assert raster_input.bands_read(READ) is True
+    assert raster_input.bands_read(READING) is False
+    assert raster_input.bands_read(FAILED) is False
+    assert raster_input.bands_read(_task(finished=True, value=((), None))) is False  # nothing picked
+    assert raster_input.bands_read(_task(finished=True, value=None)) is False
+
+
+@solara.component
+def _Status(task, ref):
+    with solara.Column():
+        raster_input.band_status(task, ref)
+
+
+def _status_texts(task, ref):
+    _box, rc = reacton.render(_Status(task, ref), handle_error=False)
+    try:
+        return [(w.children, w.class_ or None) for w in rc.find(v.Html).widgets
+                if w.children and isinstance(w.children[0], str)]
+    finally:
+        rc.close()
+
+
+def test_band_status_says_where_the_band_list_stands():
+    loading = t("steps.raster_input.bands_loading")
+    assert _status_texts(READING, "users/x/m") == [([loading], None)]
+    failed = t("steps.raster_input.bands_failed", error="boom")
+    assert _status_texts(FAILED, "users/x/m") == [([failed], "error--text")]
+    assert _status_texts(READ, "users/x/m") == []
+
+
+def test_band_status_shows_nothing_without_a_picked_raster():
+    # the task is pending for one render after the raster is cleared (mount, a
+    # Source change): no "Reading the bands…" for a raster nobody picked
+    assert _status_texts(READING, None) == []
+    assert _status_texts(READING, "") == []
+    assert _status_texts(FAILED, None) == []
+
+
+def test_band_choices_are_names_in_earth_engine_and_indexes_in_a_geotiff():
+    assert raster_input.band_choices(("B2", "B3"), None) == [("B2", "B2"), ("B3", "B3")]
+    header = SimpleNamespace(bands=[SimpleNamespace(name="Band 1", index=1), SimpleNamespace(name="water", index=2)])
+    assert raster_input.band_choices(("Band 1", "water"), header) == [("Band 1", 1), ("water", 2)]
+    assert raster_input.band_choices((), None) == []
+
+
+def test_bands_block_save_while_they_load_or_after_they_fail():
+    assert raster_input.bands_block_save(READING, "users/x/m") is True
+    assert raster_input.bands_block_save(FAILED, "users/x/m") is True
+    assert raster_input.bands_block_save(READ, "users/x/m") is False
+    # nothing picked: the form's own check says what is missing
+    assert raster_input.bands_block_save(READING, None) is False

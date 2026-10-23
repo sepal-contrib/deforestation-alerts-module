@@ -713,11 +713,6 @@ def _name_field(rc):
     return next(w for w in rc.find(v.TextField).widgets if w.label == t("steps.integrate.attr_name"))
 
 
-def _origin(rc):
-    """RasterInput's origin Select (Earth Engine / GeoTIFF)."""
-    return rc.find(v.Select, label=t("steps.raster_input.origin_label")).widget
-
-
 def _strings(widget):
     out = []
     for child in getattr(widget, "children", None) or []:
@@ -1538,6 +1533,102 @@ def test_picking_another_raster_emits_none_until_its_bands_arrive(pickers, monke
     asyncio.run(main())
 
 
+def test_a_stale_read_never_pairs_another_raster_with_its_bands(pickers, monkeypatch, tmp_path):
+    """A's read is still running when B is picked: B's bands land first, then
+    A's read ends, and no config ever pairs B with A's bands."""
+    import threading
+
+    a, b = _geotiff(tmp_path / "a.tif", ["x"]), _geotiff(tmp_path / "b.tif", ["y", "z"])
+    reading_a, release_a, read_a = threading.Event(), threading.Event(), []
+    real = attribute_form.band_keys_and_texts
+
+    def slow_for_a(src):
+        if src == str(a):
+            reading_a.set()
+            release_a.wait(5)
+            read_a.append(src)
+        return real(src)
+
+    monkeypatch.setattr(attribute_form, "band_keys_and_texts", slow_for_a)
+    seen = []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
+        try:
+            _pick_file(rc, pickers, a)
+            await _settle(reading_a.is_set)
+            pickers.path.set(str(b))
+            await _settle(lambda: seen and seen[-1] and seen[-1]["source"] == str(b))
+            release_a.set()
+            await _settle(lambda: read_a)  # A's read itself ran to its end...
+            await asyncio.sleep(0.1)
+            # ...and landed nowhere: B keeps its own bands, and A never had a config
+            assert seen[-1]["source"] == str(b) and [r["band"] for r in seen[-1]["bands"]] == ["y"]
+            assert _items(_bands_or_none(rc)) == [("y", "y"), ("z", "z")]
+            for cfg in filter(None, seen):
+                assert cfg["source"] == str(b) and {r["band"] for r in cfg["bands"]} <= {"y", "z"}, cfg
+        finally:
+            release_a.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_default_name_is_filled_on_pick(pickers, monkeypatch, tmp_path):
+    """As in the mask and visualization forms: the Layer name follows the
+    picked raster at once, before its bands are read."""
+    import threading
+
+    tif = _geotiff(tmp_path / "landcover.tif", ["lc"])
+    release = threading.Event()
+    real = attribute_form.band_keys_and_texts
+
+    def slow(src):
+        release.wait(5)
+        return real(src)
+
+    monkeypatch.setattr(attribute_form, "band_keys_and_texts", slow)
+    seen = []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
+        try:
+            _pick_file(rc, pickers, tif)
+            await _settle(lambda: _name_field(rc).v_model == "landcover")
+            assert t("steps.raster_input.bands_loading") in _texts(rc) and seen == []  # still reading
+            release.set()
+            await _settle(lambda: seen)
+            assert seen[-1]["name"] == "landcover"
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_edit_of_a_home_relative_geotiff_keeps_its_selection(pickers, monkeypatch, tmp_path):
+    """A legacy config saved as ``~/…``: the picker shows it expanded, and it
+    is still the raster the rows came from."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _geotiff(tmp_path / "lc.tif", ["lc", "wider"])
+    cfg = {"source": "~/lc.tif", "kind": "local", "name": "LC",
+           "bands": [{"band": "wider", "stat": "median", "column": "lc_wider"}]}
+    seen = []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
+        try:
+            await _settle(lambda: seen and seen[-1])
+            await asyncio.sleep(0.05)
+            assert _bands_or_none(rc).v_model == ["wider"]
+            assert [w.v_model for w in _stats(rc)] == ["median"]
+            assert [b["band"] for b in seen[-1]["bands"]] == ["wider"] and seen[-1]["bands"][0]["stat"] == "median"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_failed_read_leaves_no_config(pickers, tmp_path):
     tif = _geotiff(tmp_path / "a.tif", ["x"])
     seen = []
@@ -1574,8 +1665,9 @@ def test_a_failed_first_read_emits_nothing(pickers, tmp_path):
 
 
 def test_reloading_the_same_raster_keeps_selection_and_statistics(pickers, tmp_path):
-    """An edit opens on its saved rows, then its raster's bands are read: the
-    rows keep their selection and statistics, new bands arrive unselected."""
+    """An edit opens with nothing below the picker, then its raster's bands are
+    read: the rows keep their selection and statistics, new bands arrive
+    unselected."""
     tif = _geotiff(tmp_path / "lc.tif", ["lc", "wider"])
     cfg = {"source": str(tif), "kind": "local", "name": "LC",
            "bands": [{"band": "lc", "stat": "median", "column": "lc_lc"}]}
@@ -1586,10 +1678,11 @@ def test_reloading_the_same_raster_keeps_selection_and_statistics(pickers, tmp_p
         try:
             assert _source(rc).v_model == "file" and pickers.path.value == str(tif)
             assert _name_field(rc).v_model == "LC"
-            assert [w.v_model for w in _stats(rc)] == ["median"]  # the saved rows, before the read
+            assert _stats(rc) == [] and _bands_or_none(rc) is None  # nothing before the read
             await _settle(lambda: seen)
             assert _items(_bands_or_none(rc)) == [("lc", "lc"), ("wider", "wider")]
             assert _bands_or_none(rc).v_model == ["lc"]
+            assert [w.v_model for w in _stats(rc)] == ["median"]
             assert seen[-1] == cfg
             assert "lc_lc" in _texts(rc)  # the written column, read-only
         finally:
@@ -1826,7 +1919,7 @@ def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, 
 def test_attribute_form_keeps_a_saved_bands_projection_on_edit(pickers, monkeypatch):
     """Task 15's free-space gate reads each band's crs/scale: an edit of a
     reopened config must not drop them (it would fall back to 10 m in 4326),
-    neither while its bands are read nor after."""
+    neither while its bands are read (a rename emits the saved rows) nor after."""
     _ee_requests(monkeypatch)
     cfg = {"source": "users/me/lc", "kind": "gee",
            "bands": [{"band": "b1", "stat": "majority", "column": "b1", "crs": "EPSG:32721", "scale": 30.0}]}
@@ -1838,12 +1931,14 @@ def test_attribute_form_keeps_a_saved_bands_projection_on_edit(pickers, monkeypa
         try:
             assert _source(rc).v_model == "gee"
             assert pickers.asset.value["asset_id"] == "users/me/lc"
-            rc.find(v.Select, v_model="majority").widget.v_model = "mean"  # while the bands are read
-            assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "b1", "crs": "EPSG:32721",
+            assert _stats(rc) == []  # nothing below the picker while the bands are read
+            _name_field(rc).v_model = "LC"  # while the bands are read
+            assert seen[-1]["bands"] == [{"band": "b1", "stat": "majority", "column": "lc_b1", "crs": "EPSG:32721",
                                           "scale": 30.0}]
             release.set()
             await _settle(lambda: len(gee.asked) == 2 and len(seen) == 2)
-            assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "b1", "crs": "EPSG:32721",
+            rc.find(v.Select, v_model="majority").widget.v_model = "mean"
+            assert seen[-1]["bands"] == [{"band": "b1", "stat": "mean", "column": "lc_b1", "crs": "EPSG:32721",
                                           "scale": 30.0}]
         finally:
             release.set()

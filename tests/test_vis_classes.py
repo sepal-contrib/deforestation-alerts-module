@@ -92,6 +92,7 @@ def test_suggest_mask_band():
     assert vc.suggest_mask_band(["urban", "water_mask", "cloud_mask"]) == 1
     assert vc.suggest_mask_band(["B2", "B3", "B4"]) is None
     assert vc.suggest_mask_band(["forest", "loss"]) == 1
+    assert vc.suggest_mask_band(["loss", "datamask"]) == 1  # a mask token beats an earlier categorical name
     assert vc.suggest_mask_band(["Band 1"]) is None
     assert vc.suggest_mask_band([]) is None
 

@@ -90,7 +90,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         busy = mask_inflight_key(p.name, r.name) in running
         size = sum(a.size_bytes for k in (mask_raw_key(r.name), mask_key(r.name))
                    if (a := p.artifacts.get(k)) is not None)
-        origin = t(f"steps.prepare.mask_origin_{r.origin}")
+        origin = t(f"steps.raster_input.source_{r.origin}")  # the Source select's words
         size_note = t("steps.prepare.size_note", size=size_text(size)) if size else ""
         notes = [{"text": f"{origin} · {size_note}" if size_note else origin, "tone": None}]
         if r.file_missing:

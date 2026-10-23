@@ -420,8 +420,6 @@
       "mask_bands_pick": "{count} bandas. Elige la banda cuyos píxeles distintos de cero marcan la máscara.",
       "mask_mode_keep": "Conservar",
       "mask_mode_exclude": "Excluir",
-      "mask_origin_gee": "Earth Engine",
-      "mask_origin_file": "GeoTIFF",
       "mask_err_incomplete": "Elige un raster y su banda.",
       "mask_err_changed": "El proyecto, su AOI o su período cambiaron durante la comprobación; inténtalo de nuevo.",
       "mask_covers_none_line": "no cubre nada de la AOI: se eliminarían todas las alertas",

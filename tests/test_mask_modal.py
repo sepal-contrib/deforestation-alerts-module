@@ -290,3 +290,123 @@ def test_mask_save_disabled_while_the_bands_load(monkeypatch):
             rc.close()
 
     asyncio.run(main())
+
+
+def test_no_reading_line_without_a_picked_raster(monkeypatch):
+    """The band list's task is pending for one render after the raster is
+    cleared (at mount, after a Source change): nothing reads "Reading the
+    bands…" for a raster nobody picked."""
+    loading = t("steps.raster_input.bands_loading")
+
+    async def main():
+        rc, _ = _render(monkeypatch, _gee(monkeypatch, HANSEN))
+        try:
+            assert loading not in _texts(rc)  # at mount
+            await asyncio.sleep(0.05)
+            assert loading not in _texts(rc)
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _band(rc) is not None)
+            _source(rc).v_model = "file"
+            assert loading not in _texts(rc)  # the render of the Source change
+            await asyncio.sleep(0.05)
+            assert loading not in _texts(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_band_select_never_holds_a_value_that_is_not_an_item(monkeypatch):
+    """An edit whose saved band "b" is not in the new list: the list renders
+    once before its default lands, and the select must not show "b" then."""
+    drawn = []
+    real = mask_modal.rv.Select
+
+    def recording_select(**kw):
+        if kw.get("label") == t("steps.prepare.mask_band"):
+            drawn.append((kw["v_model"], [i["value"] for i in kw["items"]]))
+        return real(**kw)
+
+    monkeypatch.setattr(mask_modal.rv, "Select", recording_select)
+
+    async def main():
+        rc, _ = _render(monkeypatch, _gee(monkeypatch, ["a", "datamask"]), editing="forest")
+        try:
+            assert await _settle(lambda: _band(rc) is not None and _band(rc).v_model == "datamask")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+    assert drawn
+    assert all(value is None or value in values for value, values in drawn), drawn
+
+
+def _gee_per_asset(monkeypatch, bands, gates):
+    """An Earth Engine stand-in whose band list of ``asset_id`` is
+    ``bands[asset_id]``, read once ``gates[asset_id]`` (when given) is set."""
+    from gui.widget import raster_input
+
+    monkeypatch.setattr(raster_input.user_raster, "band_list_request", lambda ref, kind: ("BANDS", ref, kind))
+    done = []
+
+    async def get_info_async(obj):
+        _, ref, _kind = obj
+        if ref in gates:
+            await gates[ref].wait()
+        done.append(ref)
+        return list(bands[ref])
+
+    return SimpleNamespace(get_info_async=get_info_async, done=done)
+
+
+def test_a_late_band_list_never_lands_on_a_newer_pick(monkeypatch):
+    slow = asyncio.Event()
+    asked, fake_validate = _recording()
+
+    async def main():
+        gee = _gee_per_asset(monkeypatch, {"users/x/m": HANSEN, "users/x/other": ["B2", "B3"]},
+                             {"users/x/m": slow})
+        rc, _ = _render(monkeypatch, gee, validate=fake_validate)
+        try:
+            _name_field(rc).v_model = "m"
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: t("steps.raster_input.bands_loading") in _texts(rc))
+            _StubRasterInput.seen.asset.set(OTHER)  # picked while the first list is read
+            assert await _settle(lambda: _band(rc) is not None and _band(rc).v_model == "B2")
+            slow.set()
+            await asyncio.sleep(0.1)
+            assert [i["value"] for i in _band(rc).items] == ["B2", "B3"] and _band(rc).v_model == "B2"
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: bool(asked))
+            assert (asked[0]["ref"], asked[0]["band"]) == ("users/x/other", "B2")
+        finally:
+            slow.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_late_band_list_never_lands_after_a_source_change(monkeypatch):
+    slow = asyncio.Event()
+    asked, fake_validate = _recording()
+
+    async def main():
+        gee = _gee_per_asset(monkeypatch, {"users/x/m": HANSEN}, {"users/x/m": slow})
+        rc, _ = _render(monkeypatch, gee, validate=fake_validate)
+        try:
+            _name_field(rc).v_model = "m"
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: t("steps.raster_input.bands_loading") in _texts(rc))
+            _source(rc).v_model = "file"  # switched while the list is read
+            slow.set()
+            await asyncio.sleep(0.1)
+            assert _band(rc) is None and t("steps.prepare.mask_band_one", name="datamask") not in _texts(rc)
+            assert t("steps.raster_input.bands_loading") not in _texts(rc)
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: bool(asked))
+            assert (asked[0]["origin"], asked[0]["ref"], asked[0]["band"]) == ("file", None, None)
+        finally:
+            slow.set()
+            rc.close()
+
+    asyncio.run(main())

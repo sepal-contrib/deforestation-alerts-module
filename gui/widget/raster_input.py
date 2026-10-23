@@ -65,14 +65,19 @@ def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool =
               disabled=disabled)
 
 
-def BandStatus(task) -> None:
+def band_status(task, ref) -> None:
     """Where a form's band list stands, under the picker: "Reading the bands…"
-    while ``task`` runs, its error once it fails, nothing otherwise.
+    while ``task`` runs, its error once it fails, nothing otherwise, and
+    nothing at all while no raster (``ref``) is picked: the task restarts in
+    an effect, so it is pending for one render after the raster is cleared
+    (at mount, after a Source change).
 
     A plain function drawn into the caller's container (no wrapper, no
     component of its own). It reads only ``task.pending``, ``task.error`` and
     ``task.exception``, so it serves any ``solara.lab.use_task`` result, not
     only ``use_band_list``'s; ``bands_read`` says when that one's bands are in."""
+    if not ref:
+        return
     if task.pending:
         solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
     elif task.error:
@@ -87,6 +92,22 @@ def bands_read(task) -> bool:
     changes it still holds the previous raster's list: a caller that must show
     nothing once the raster is cleared also checks its ref."""
     return bool(task.finished and not task.error and task.value and task.value[0])
+
+
+def bands_block_save(task, ref) -> bool:
+    """Whether a form's Save waits on its band list: while the picked raster's
+    bands are read, or once they could not be. With nothing picked it does
+    not: the form's own check says what is missing."""
+    return (bool(ref) and bool(task.pending)) or bool(task.error)
+
+
+def band_choices(names, header) -> list:
+    """``use_band_list``'s ``(names, header)`` as ``[(text, value)]``, one per
+    band: an Earth Engine band is its name; a GeoTIFF band reads as its text
+    (description, else "Band N") and its value is its 1-based index."""
+    if header is not None:
+        return [(b.name, b.index) for b in header.bands]
+    return [(n, n) for n in names]
 
 
 def use_band_list(gee_interface, origin, ref, asset_type):

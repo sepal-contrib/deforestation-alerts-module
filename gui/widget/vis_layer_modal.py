@@ -31,7 +31,8 @@ from gui.scripts.legend_specs import vis_legend
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import (
-    BandStatus, RasterInput, SourceSelect, absolute, band_index, bands_read, use_band_list,
+    RasterInput, SourceSelect, absolute, band_choices, band_index, band_status, bands_block_save, bands_read,
+    use_band_list,
 )
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
@@ -266,8 +267,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         first_load.current = False  # another image: the edit's saved mode and bands are not its own
     bands_task = use_band_list(gee_interface, kind, ref, asset_type)
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
-    band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
-                  else [{"text": n, "value": n} for n in names])
+    band_items = [{"text": text, "value": value} for text, value in band_choices(names, header)]
     band_text = {i["value"]: i["text"] for i in band_items}
     n_bands = len(band_items) if bands_task.finished else None
     # nothing below the picker shows until its band list is read (spec §3)
@@ -585,7 +585,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         # a band list still being read, or that could not be read, leaves nothing to save
         SubmitTaskButton(label=t("common.save") if l0 is not None else t("steps.layers.add"),
                          icon="mdi-content-save-outline" if l0 is not None else "mdi-plus",
-                         external_busy=bool(name_error) or bool(bands_task.error) or (bool(ref) and bands_task.pending),
+                         external_busy=bool(name_error) or bands_block_save(bands_task, ref),
                          **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
@@ -599,7 +599,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         SourceSelect(origin=kind, on_origin=_set_kind, disabled=busy)
         RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
                     asset_types=("IMAGE",), disabled=busy, show_origin=False)
-        BandStatus(bands_task)
+        band_status(bands_task, ref)
         if has_bands:
             BandsField(band_items=band_items, mode=bands_mode, on_mode=_set_bands_mode, band=band, on_band=set_band,
                        rgb_found=rgb_found, disabled=busy)

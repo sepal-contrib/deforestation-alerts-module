@@ -135,8 +135,9 @@ def test_nothing_below_the_picker_before_the_bands_are_read(monkeypatch):
         _box, rc = _render(state, open_, saved, gee)
         try:
             nothing_below(rc)  # no image picked
-            vlm.RasterInput.seen.asset.set(ASSET)
             loading = t("steps.raster_input.bands_loading")
+            assert loading not in _texts(rc)  # the task is pending at mount, for no image
+            vlm.RasterInput.seen.asset.set(ASSET)
             assert await _settle(lambda: loading in _texts(rc))
             nothing_below(rc)  # the band list is loading
             release.set()

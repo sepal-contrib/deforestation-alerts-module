@@ -103,7 +103,7 @@ def test_an_earth_engine_mask_row_reads_both_stages_and_can_be_shown_before_alig
     assert out["cells"][2] == {"type": "status", "status": "missing", "compact": True,
                                "title": f"{t('steps.prepare.col_download')}: {missing} · "
                                         f"{t('steps.prepare.col_align')}: {missing}"}
-    assert out["notes"][0] == {"text": t("steps.prepare.mask_origin_gee"), "tone": None}  # no size yet
+    assert out["notes"][0] == {"text": t("steps.raster_input.source_gee"), "tone": None}  # no size yet
     kinds = [a["kind"] for a in out["actions"]]
     assert kinds == ["download", "redownload", "map_toggle", "edit", "delete"]
     assert len(kinds) == masks_card.MASK_ACTIONS  # the budget's count is the most a row has
@@ -182,7 +182,7 @@ def test_the_size_sums_the_masks_download_and_aligned_file():
         p, "/tmp/x", FEB, [MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")],
         running=set(), errors={}, on=set(), building=set(), run=None, rerun=None, toggle=None, edit=None,
         delete=None, switch=None)
-    assert row["notes"][0] == {"text": f"{t('steps.prepare.mask_origin_gee')} · "
+    assert row["notes"][0] == {"text": f"{t('steps.raster_input.source_gee')} · "
                                        f"{t('steps.prepare.size_note', size='5.0 MB')}", "tone": None}
 
 

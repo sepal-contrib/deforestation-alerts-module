@@ -34,7 +34,8 @@ from gui.scripts.vis_classes import suggest_mask_band
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
 from gui.widget.raster_input import (
-    BandStatus, RasterInput, SourceSelect, absolute, band_index, bands_read, use_band_list,
+    RasterInput, SourceSelect, absolute, band_choices, band_index, band_status, bands_block_save, bands_read,
+    use_band_list,
 )
 from gui.widget.text_style import MUTED
 
@@ -126,9 +127,9 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
     # nothing that depends on the bands shows until they are read; in the render
     # where the raster changes the task still holds the previous one's list
     has_bands = bool(ref) and bands_read(bands_task)
-    names, header = bands_task.value if has_bands else ((), None)
     # a GeoTIFF band reads as its text (description, else "Band N"); its value is its 1-based index
-    choices = ([(b.name, b.index) for b in header.bands] if header is not None else [(n, n) for n in names])
+    choices = band_choices(*bands_task.value) if has_bands else []
+    values = [value for _, value in choices]
     suggested = suggest_mask_band([text for text, _ in choices])
     items = [{"text": t("steps.layers.suggested", text=text) if i == suggested else text, "value": value}
              for i, (text, value) in enumerate(choices)]
@@ -136,7 +137,6 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
     def _default_band():
         # a new band list starts on the suggested band, else the first; an
         # edit's first list keeps its saved band while that band is in it
-        values = [value for _, value in choices]
         if not values:
             return
         if first_load.current:
@@ -145,7 +145,7 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
                 return
         set_band(values[suggested] if suggested is not None else values[0])
 
-    solara.use_effect(_default_band, [tuple(value for _, value in choices)])
+    solara.use_effect(_default_band, [tuple(values)])
 
     async def _validate():
         live = app_state.project.value
@@ -220,8 +220,7 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
         # a band list still being read, or that could not be read, leaves nothing to save
         SubmitTaskButton(label=t("steps.alerts.save") if m0 is not None else t("steps.prepare.mask_add"),
                          icon="mdi-content-save-outline" if m0 is not None else "mdi-plus",
-                         external_busy=bool(name_error) or bool(bands_task.error)
-                         or (bool(ref) and bands_task.pending), **button)
+                         external_busy=bool(name_error) or bands_block_save(bands_task, ref), **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
@@ -231,13 +230,15 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
         SourceSelect(origin=origin, on_origin=_set_origin, disabled=busy)
         RasterInput(gee_interface=gee_interface, origin=origin, on_origin=_set_origin, asset=asset, path=path,
                     disabled=busy, show_origin=False)
-        BandStatus(bands_task)
+        band_status(bands_task, ref)
         if len(choices) == 1:
             solara.Text(t("steps.prepare.mask_band_one", name=choices[0][0]), style=MUTED)
         elif choices:
             hint = (t("steps.prepare.mask_bands_suggested", count=len(choices), name=choices[suggested][0])
                     if suggested is not None else t("steps.prepare.mask_bands_pick", count=len(choices)))
-            rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band, on_v_model=set_band,
+            # never a value that is not an item: a new list renders once before its default lands
+            rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band if band in values else None,
+                      on_v_model=set_band,
                       dense=True, outlined=True, hint=hint, persistent_hint=True, disabled=busy)
         if m0 is None:  # an edit changes the definition; each period keeps its own mode
             with field_group(t("steps.prepare.mask_mode_label")):

@@ -405,8 +405,6 @@
       "mask_bands_pick": "{count} bands. Pick the one whose non-zero pixels mark the mask.",
       "mask_mode_keep": "Keep",
       "mask_mode_exclude": "Exclude",
-      "mask_origin_gee": "Earth Engine",
-      "mask_origin_file": "GeoTIFF",
       "mask_err_incomplete": "Pick a raster and its band.",
       "mask_err_changed": "The project, its AOI or its period changed during the check; try again.",
       "mask_covers_none_line": "covers none of the AOI: every alert would be removed",
