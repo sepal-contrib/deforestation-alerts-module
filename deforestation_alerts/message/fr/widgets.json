@@ -30,7 +30,22 @@
       "status_missing": "manquante",
       "status_no_data": "aucune donnée",
       "status_not_covered": "non couverte",
-      "status_unchecked": "non vérifiée"
+      "status_unchecked": "non vérifiée",
+      "action_edit": "Modifier",
+      "action_delete": "Supprimer",
+      "action_download": "Télécharger",
+      "action_redownload": "Télécharger à nouveau",
+      "action_cancel": "Arrêter",
+      "action_open": "Ouvrir",
+      "action_dismiss": "Ignorer",
+      "action_move_up": "Monter",
+      "action_move_down": "Descendre",
+      "action_show": "Afficher sur la carte",
+      "action_hide": "Masquer de la carte",
+      "action_select": "Rendre actif",
+      "action_info": "Détails",
+      "action_refresh": "Télécharger à nouveau",
+      "action_menu": "Plus d'actions"
     }
   },
   "workflow": {

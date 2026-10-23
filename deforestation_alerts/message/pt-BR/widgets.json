@@ -30,7 +30,22 @@
       "status_missing": "ausente",
       "status_no_data": "sem dados",
       "status_not_covered": "não coberto",
-      "status_unchecked": "não verificado"
+      "status_unchecked": "não verificado",
+      "action_edit": "Editar",
+      "action_delete": "Excluir",
+      "action_download": "Baixar",
+      "action_redownload": "Baixar novamente",
+      "action_cancel": "Parar",
+      "action_open": "Abrir",
+      "action_dismiss": "Dispensar",
+      "action_move_up": "Mover para cima",
+      "action_move_down": "Mover para baixo",
+      "action_show": "Mostrar no mapa",
+      "action_hide": "Ocultar do mapa",
+      "action_select": "Tornar ativo",
+      "action_info": "Detalhes",
+      "action_refresh": "Baixar novamente",
+      "action_menu": "Mais ações"
     }
   },
   "workflow": {

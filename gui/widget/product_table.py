@@ -16,6 +16,7 @@ from typing import Callable, Optional
 
 import reacton.ipyvuetify as rv
 import solara
+from reacton import ipyvue
 
 from gui.i18n import t
 
@@ -40,6 +41,9 @@ HEADER_CELL = (
 )
 # Full-width line under a row (grid rows have no subtitle slot): its notes.
 ERROR_LINE = "grid-column:1/-1;padding:0 8px 5px;font-size:0.75rem;"
+SUBTITLE = "font-size:11px;line-height:1.3;" + NAME_TEXT
+PROGRESS_TRACK = "width:100px;height:3px;border-radius:2px;background:rgba(0,0,0,0.12);overflow:hidden;"
+VERB = "text-transform:none;letter-spacing:normal;font-size:11.5px;padding:0 10px;height:24px;"
 
 #: Vuetify text classes of an under-row note's tone (None: muted)
 NOTE_CLASSES = {"info": "info--text", "warning": "warning--text", "error": "error--text",
@@ -50,6 +54,7 @@ NOTE_CLASSES = {"info": "info--text", "warning": "warning--text", "error": "erro
 # the width it gets: the Workflow panel's content, or an outlined card's
 # (``pa-3`` and a 1px border on each side) inside it.
 ACTION_PX = 24  # one x-small icon button
+STATUS_PX = 128  # a state cell: icon, label and progress bar
 PANEL_CONTENT_PX = 448
 CARD_CONTENT_PX = 422
 MIN_FLEX_PX = 120
@@ -119,6 +124,9 @@ _ACTION_ICONS = {
     "dismiss": "mdi-close",
     "move_up": "mdi-arrow-up",
     "move_down": "mdi-arrow-down",
+    "info": "mdi-information-outline",
+    "refresh": "mdi-refresh",
+    "menu": "mdi-dots-vertical",
 }
 
 
@@ -219,6 +227,39 @@ def _render_cell(cell: dict, first: bool):
                 # clips with an ellipsis, like the name, in a narrow stage column
                 solara.Text(label, classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
         return
+    if ctype == "title":
+        # the name over a one-line subtitle (tone: warning / error), whole in its tooltip
+        sub = str(cell.get("subtitle", ""))
+        tone = NOTE_CLASSES.get(cell.get("subtitle_tone"), "text--secondary")
+        with rv.Html(tag="div", style_=STACK_CELL + "gap:0;"):
+            solara.Text(str(cell.get("value", "")), style=NAME_TEXT)
+            rv.Html(tag="div", class_=tone, style_=SUBTITLE, attributes={"title": sub}, children=[sub])
+        return
+    if ctype == "state":
+        attributes = {"title": cell["title"]} if cell.get("title") else {}
+        with rv.Html(tag="div", style_=STACK_CELL + "gap:2px;", attributes=attributes):
+            with rv.Html(tag="div", style_=CELL):
+                rv.Icon(children=[cell["icon"]], color=cell.get("color"), small=True)
+                solara.Text(cell.get("label", ""), classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
+            if cell.get("progress") is not None:
+                with rv.Html(tag="div", style_=PROGRESS_TRACK):
+                    rv.Html(tag="div", style_=f"width:{cell['progress']}%;height:100%;", class_="primary")
+        return
+    if ctype == "verb":
+        attributes = {"title": cell["title"]} if cell.get("title") else {}
+        with rv.Html(tag="div", style_=CELL, attributes=attributes):
+            solara.Button(
+                cell["label"],
+                icon_name=cell["icon"],
+                on_click=cell["on_click"],
+                outlined=True,
+                rounded=True,
+                small=True,
+                color=cell.get("color"),
+                disabled=cell.get("disabled", False),
+                style=VERB,
+            )
+        return
     if ctype == "chip":
         with rv.Html(tag="div", style_=CELL):
             _render_chip(cell)
@@ -250,20 +291,65 @@ def _render_cell(cell: dict, first: bool):
             _render_chip(item)
 
 
+def action_title(act: dict) -> str:
+    """An action's tooltip: its ``title``, else its kind's
+    (``widgets.product_table.action_<kind>``; a map toggle says show or hide)."""
+    if act.get("title"):
+        return act["title"]
+    kind = act["kind"]
+    if kind == "map_toggle":
+        kind = "hide" if act.get("is_on") else "show"
+    return t(f"widgets.product_table.action_{kind}")
+
+
+# The span around an action button holds its tooltip: a disabled v-btn takes
+# no pointer events, so its own title would never show.
+ACTION_TIP = "display:inline-flex;"
+
+
 def _render_action(act: dict, key: str = ""):
     if "href" in act:
         link_action(act, key)
         return
+    tip = action_title(act)
+    with rv.Html(tag="span", attributes={"title": tip, "aria-label": tip}, style_=ACTION_TIP).key(f"{key}tip"):
+        _render_button(act)
+
+
+@solara.component
+def _MenuItem(item: dict):
+    color = item.get("color")
+    row = rv.ListItem(
+        dense=True,
+        disabled=item.get("disabled", False),
+        children=[
+            rv.ListItemIcon(children=[rv.Icon(children=[item["icon"]], small=True, color=color)], style_="margin-right:8px;"),
+            rv.ListItemTitle(children=[item["label"]], class_=f"{color}--text" if color else ""),
+        ],
+    )
+    ipyvue.use_event(row, "click", lambda *_: item["on_click"]())
+    return row
+
+
+def _render_button(act: dict):
     kind = act["kind"]
     is_on = act.get("is_on", False)
     if "color" in act:
         color = act["color"]
-    elif kind in ("map_toggle", "select"):
+    elif kind in ("map_toggle", "select", "info"):
         color = "primary" if is_on else "grey darken-1"
     elif kind in ("download", "open"):
         color = "primary"
     else:
         color = None
+    if kind == "menu":
+        activator = rv.Btn(icon=True, text=True, x_small=True, color=color, disabled=act.get("disabled", False),
+                           children=[rv.Icon(children=[action_icon(kind)], small=True)])
+        with rv.Menu(offset_y=True, left=True, v_slots=[{"name": "activator", "variable": "menu", "children": activator}]):
+            with rv.List(dense=True):
+                for item in act.get("items", []):
+                    _MenuItem(item)
+        return
     solara.Button(
         "",
         icon_name=action_icon(kind, is_on),
@@ -305,7 +391,8 @@ def ProductTable(
             Each note is a line
             under the row in its tone's colour (None: muted); ``error`` is
             one more error-tone note after them. See module docstring /
-            spec for CellSpec and ActionSpec shapes.
+            spec for CellSpec and ActionSpec shapes. An action's ``title``
+            is its tooltip (default: its kind's, ``action_title``).
         empty_text: grey placeholder when there are no rows.
         collapsible: show the collapse chevron (expanded by default).
         show_actions: False = read-only mode (Summary popup).

@@ -224,7 +224,7 @@ def _dynamic_keys():
     from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
-    from gui.widget.product_table import STATUS_ICONS
+    from gui.widget.product_table import _ACTION_ICONS, STATUS_ICONS
     from gui.widget.source_modal import ENCODINGS, FORMATS
     from gui.widget.vis_style_fields import BANDS_MODES, STYLES
 
@@ -238,6 +238,7 @@ def _dynamic_keys():
         # engine.grid.validate_projection's error keys
         "steps.prepare.grid_": ["need_epsg", "bad_epsg", "geographic", "bad_resolution"],
         "widgets.product_table.status_": list(STATUS_ICONS),
+        "widgets.product_table.action_": [*_ACTION_ICONS, "show", "hide", "select"],
         "legend.mask.": ["keep", "exclude", "off"],
         # gui.widget.source_modal's format presets and date encodings
         "steps.alerts.format_": list(FORMATS),

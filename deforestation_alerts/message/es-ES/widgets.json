@@ -30,7 +30,22 @@
       "status_missing": "falta",
       "status_no_data": "sin datos",
       "status_not_covered": "no cubierta",
-      "status_unchecked": "sin comprobar"
+      "status_unchecked": "sin comprobar",
+      "action_edit": "Editar",
+      "action_delete": "Eliminar",
+      "action_download": "Descargar",
+      "action_redownload": "Descargar de nuevo",
+      "action_cancel": "Detener",
+      "action_open": "Abrir",
+      "action_dismiss": "Descartar",
+      "action_move_up": "Subir",
+      "action_move_down": "Bajar",
+      "action_show": "Mostrar en el mapa",
+      "action_hide": "Ocultar del mapa",
+      "action_select": "Activar",
+      "action_info": "Detalles",
+      "action_refresh": "Descargar de nuevo",
+      "action_menu": "Más acciones"
     }
   },
   "workflow": {
