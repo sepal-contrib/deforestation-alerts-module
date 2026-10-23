@@ -50,7 +50,6 @@ import threading
 import solara
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import UNCHECKED
 from deforestation_alerts.engine.fingerprint import (
     AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, period_masks, raw_key, status,
@@ -65,13 +64,14 @@ from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, progress_key, run_rows
-from gui.scripts.prepare_view import source_state, source_subtitle
+from gui.scripts.prepare_view import row_status_label, source_details, source_label, source_state, source_subtitle
 from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
 from gui.tile.masks_card import MasksCard
 from gui.widget.batch_footer import BatchFooter, footer_counts
+from gui.widget.details_dialog import DetailsDialog
 from gui.widget.grid_form import GridForm
 from gui.widget.help import StepIntro
 from gui.widget.product_table import STATUS_PX, ProductTable
@@ -145,11 +145,6 @@ def aoi_key(project: str) -> str:
     return f"prep:{project}:@aoi"
 
 
-def _label(p, source):
-    src = p.sources[source]
-    return t(catalogue.LABEL_KEYS[src.catalogue_key]) if src.kind == "predefined" else source
-
-
 def _art(p, key):
     """The artifact under ``key``; a slice-1 ``no_data`` record reads as none (``status``)."""
     art = p.artifacts.get(key)
@@ -204,7 +199,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
         reason = source_reason(p, period, r.source) if not (r.ready or r.blocked) else None
         subtitle, tone = source_subtitle(r, file_source=file_source, raw_art=raw_art, harm_art=harm_art,
                                          reason=reason, stage=stage, queued=busy and stage is None, pct=pct)
-        title = {"type": "title", "value": _label(p, r.source), "subtitle": subtitle}
+        title = {"type": "title", "value": source_label(p.sources[r.source]), "subtitle": subtitle}
         if tone:
             title["subtitle_tone"] = tone
         state = source_state(r, file_source=file_source, stage=stage, queued=busy and stage is None, pct=pct,
@@ -303,6 +298,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     # {prepare_jobs.progress_key: percent} of the downloads running; keyed by
     # project and period, so a row of another scope never reads it
     row_progress = solara.use_reactive({})
+    info_source, set_info_source = solara.use_state(None)  # the source whose Details dialog is open
     row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
     batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
     # A row's error belongs to the project and period it ran for: a job writes
@@ -462,11 +458,22 @@ def PrepareStep(app_state, map_, gee_interface, layers):
              "disabled": masks_pend or read_only(p),
              "title": t("steps.prepare.redownload_all_masks") if masks_pend else ""}] if redownload else []
 
+    shown = info_source if info_source in by_source else None  # the dialog goes with its row
+
+    def _toggle_info(source):
+        set_info_source(None if source == shown else source)
+
+    details = None
+    if shown is not None:
+        row = by_source[shown]
+        details = source_details(p, period, shown, row, source_reason(p, period, shown),
+                                 row_status_label(row, is_file_source(p.sources[shown])))
+
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
-                            # Details, Download again and Delete files land with their dialogs
-                            on_info=lambda s: None, on_refresh=lambda s: None, on_delete=lambda s: None,
-                            stages=stages, info_open=None, locked=read_only(p), progress=row_progress.value)
+                            # Download again and Delete files land with their dialogs
+                            on_info=_toggle_info, on_refresh=lambda s: None, on_delete=lambda s: None,
+                            stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
@@ -480,6 +487,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                       progress=row_progress.value)
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
+            DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_source(None))
             BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
                         on_run=lambda: _start(pending), on_stop=lambda: stops.stop((p.name, period.id)),
                         # Run stays off while the scope holds keys its rows no longer show (a mask removed)

@@ -110,6 +110,8 @@ SAME_IN = {
         "steps.layers.summary_classes.other",
         # "source" and "composite" (an RGB composite) are the same words in French.
         "steps.raster_input.field_source", "steps.layers.field_composite",
+        # "catalogue", "format" and "source" are the same words in French.
+        "steps.prepare.f_catalogue", "steps.prepare.f_format", "steps.prepare.sec_source",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
@@ -121,6 +123,8 @@ SAME_IN = {
         "steps.layers.summary_classes.other",  # "classes" is the same word
         # "timelapse" is the word Brazilian Portuguese uses.
         "analysis_tile.export_labels.tile_gif",
+        # "download" is the same word in Brazilian Portuguese.
+        "steps.prepare.sec_download",
     },
 }
 

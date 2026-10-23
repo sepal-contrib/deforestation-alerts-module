@@ -907,6 +907,26 @@ def test_a_row_error_recorded_after_a_period_switch_stays_with_its_period(step, 
         rc.close()
 
 
+def test_the_info_action_opens_the_details_dialog_and_toggles_it(step):
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+
+    def details():
+        return next(d for d in rc.find(v.Dialog).widgets if d.max_width == 480)
+
+    try:
+        assert not _act(step.table[-1][0], "info")["is_on"] and not details().v_model
+        _act(step.table[-1][0], "info")["on_click"]()
+        assert _act(step.table[-1][0], "info")["is_on"] and details().v_model
+        assert t("steps.prepare.not_run") in str(details().children)
+        _act(step.table[-1][0], "info")["on_click"]()  # the same ⓘ again closes it
+        assert not _act(step.table[-1][0], "info")["is_on"] and not details().v_model
+    finally:
+        rc.close()
+
+
 def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, monkeypatch):
     import gui.scripts.map_layers as ml
 
