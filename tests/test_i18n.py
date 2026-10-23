@@ -74,7 +74,9 @@ def test_the_catalogue_is_complete_in_every_locale():
 PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", "SEPAL", "GeoTIFF", "GeoPackage",
                 "EPSG", "UTM", "CCDC", "Sentinel-1", "Sentinel-2", "Landsat", "Hansen", "PMTiles", "tippecanoe",
                 "Python", "PATH", "Word", ".docx", "CSV", "GPKG", "GeoJSON", "GIF", "yyddd", "yymm", "yyyyddd", "Int32",
-                "uint8", "AOI", "GB", "MB", "ha", "px", "m")
+                "uint8", "AOI", "GB", "MB", "ha", "px", "m",
+                # matplotlib's qualitative palettes, by their own names
+                "Set1", "Set2", "Tab10", "Paired")
 #: Translations rightly identical to English (a cognate such as French
 #: "Source" or "Total", Spanish "Total"). Add a key only when the word is the
 #: same in that language, never to silence the test.
@@ -90,9 +92,9 @@ SAME_IN = {
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
-        # ramp names and the SWIR acronym are the same in French
+        # ramp names, the SWIR acronym and "Palette" are the same in French
         "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",
-        "steps.layers.ramp_viridis", "steps.layers.role_swir",
+        "steps.layers.ramp_viridis", "steps.layers.role_swir", "steps.layers.palette_menu",
         "steps.prepare.col_source", "steps.project.count_sources.one", "steps.project.count_sources.many",
         "steps.project.count_sources.other", "steps.questionnaire.field_label",
         "steps.questionnaire.field_option", "steps.questionnaire.options_label",
@@ -104,6 +106,8 @@ SAME_IN = {
         "workflow.count_questions.other", "analysis_tile.sections.questions",
         # "timelapse" is the word French uses (the plan's own translation).
         "analysis_tile.export_labels.tile_gif",
+        # "classes" is the same word in French.
+        "steps.layers.summary_classes.other",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
@@ -112,6 +116,7 @@ SAME_IN = {
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
         "steps.prepare.col_download", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
         "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
+        "steps.layers.summary_classes.other",  # "classes" is the same word
         # "timelapse" is the word Brazilian Portuguese uses.
         "analysis_tile.export_labels.tile_gif",
     },
@@ -213,12 +218,13 @@ def _dynamic_keys():
     from deforestation_alerts.engine.fingerprint import Status
     from deforestation_alerts.project import periods
     from gui.scripts.vis_layers import KINDS
-    from gui.scripts.vis_palettes import RAMPS, RGB_COMBOS, ROLES
+    from gui.scripts.vis_palettes import QUALITATIVE, RAMPS, RGB_COMBOS, ROLES
     from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.widget.product_table import STATUS_ICONS
     from gui.widget.source_modal import ENCODINGS, FORMATS
+    from gui.widget.vis_style_fields import BANDS_MODES, STYLES
 
     return {
         "steps.integrate.set_": [Status.STALE.value, Status.MISSING.value],
@@ -247,6 +253,11 @@ def _dynamic_keys():
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
+        # gui.widget.vis_style_fields: the Bands question and the Style tiles
+        "steps.layers.bands_": list(BANDS_MODES),
+        "steps.layers.style_": list(STYLES),
+        # ... and the Categorical palette menu
+        "steps.layers.palette_": list(QUALITATIVE),
         # gui.tile.overview_export's tiles and scope chips
         "overview_tile.export_": ["csv", "gpkg"],
         "overview_tile.export_scope_": ["confirmed", "reviewed", "unreviewed", "all"],

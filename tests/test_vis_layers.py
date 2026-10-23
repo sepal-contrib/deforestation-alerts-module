@@ -18,7 +18,7 @@ from affine import Affine
 from pysepal.solara.notifications import NotificationProvider
 
 from deforestation_alerts.project.models import (
-    AoiRecord, FileVisLayer, GeeVisLayer, Period, Project,
+    AoiRecord, FileVisLayer, GeeVisLayer, Period, Project, VisClass,
 )
 from gui.i18n import t
 from gui.scripts import vis_layers as vl
@@ -286,17 +286,19 @@ def test_an_earth_engine_image_with_one_band_and_a_ramp(requests):
     out = _check(gee, _with_aoi(), kind="gee", name=" ndvi ", ref="users/x/img", asset_type="IMAGE", band="B8",
                  vmin="0", vmax="0.8", ramp="viridis", invert=True, show_in_analysis=True)
     assert out["layer"] == GeeVisLayer(name="ndvi", asset="users/x/img", bands=["B8"], min=0, max=0.8,
-                                       palette=vis_palettes.ramp_palette("viridis", True), show_in_analysis=True)
+                                       palette=vis_palettes.ramp_palette("viridis", True), style="continuous",
+                                       show_in_analysis=True)
     assert calls == [("BANDS", "users/x/img", "IMAGE")]
 
 
 def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     gee, _ = _gee_answering(lambda obj: ["B4", "B3", "B2"])
-    out = _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    out = _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", style="rgb",
                  bands=("B4", "B3", "B2"), vmin="0", vmax="3000", ramp="viridis")
     assert out["layer"].bands == ["B4", "B3", "B2"] and out["layer"].palette == []
+    assert out["layer"].style == "rgb"
     gee, _ = _gee_answering(lambda obj: ["B4", "B3"])
-    assert _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    assert _check(gee, _with_aoi(), kind="gee", name="rgb", ref="users/x/img", asset_type="IMAGE", style="rgb",
                   bands=("B4", "B3", "B2"), vmin="0", vmax="3000") == {"error": "steps.layers.err_bands"}
 
 
@@ -304,10 +306,10 @@ def test_an_rgb_image_drops_the_palette_and_checks_every_band(requests):
     ({"asset_type": "IMAGE_COLLECTION"}, "steps.layers.err_wrong_type"),
     ({"ref": None}, "steps.layers.err_incomplete"),
     ({"band": None}, "steps.layers.err_incomplete"),
-    ({"rgb": True, "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
+    ({"style": "rgb", "bands": ("B4", None, "B2")}, "steps.layers.err_incomplete"),
     ({"vmin": "1", "vmax": "1"}, "steps.layers.err_range"),
     ({"vmin": "", "vmax": "1"}, "steps.layers.err_range"),
-    ({"rgb": True, "bands": ("B4", "B4", "B2")}, "steps.layers.err_duplicate_bands"),  # three distinct bands
+    ({"style": "rgb", "bands": ("B4", "B4", "B2")}, "steps.layers.err_duplicate_bands"),  # three distinct bands
     ({"name": ""}, "steps.layers.name_empty"),
 ])
 def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests, over, key):
@@ -320,10 +322,10 @@ def test_an_incomplete_earth_engine_layer_is_refused_before_any_request(requests
 def test_an_rgb_earth_engine_image_keeps_its_roles_and_combination(requests):
     gee, _ = _gee_answering(lambda obj: ["B2", "B3", "B4", "B8"])
     roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8"}
-    out = _check(gee, _with_aoi(), kind="gee", name="fc", ref="users/x/img", asset_type="IMAGE", rgb=True,
+    out = _check(gee, _with_aoi(), kind="gee", name="fc", ref="users/x/img", asset_type="IMAGE", style="rgb",
                  bands=("B8", "B4", "B3"), roles=roles, combo="false_color", vmin="0", vmax="3000")
     assert out["layer"] == GeeVisLayer(name="fc", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000,
-                                       roles=roles, combo="false_color")
+                                       roles=roles, combo="false_color", style="rgb")
 
 
 def test_an_old_palette_that_is_no_ramp_is_kept_until_a_card_is_picked(requests):
@@ -339,13 +341,13 @@ def test_a_geotiff_rgb_layer(tmp_path, requests):
     tif = _tif(tmp_path / "rgb.tif", size=10, count=4)
     gee, _ = _gee_answering(lambda obj: None)
     roles = {"red": 3, "green": 2, "blue": 1, "nir": 4}
-    out = _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 2), roles=roles,
+    out = _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, 2), roles=roles,
                  combo="false_color", vmin="0", vmax="3000")
     assert out["layer"] == FileVisLayer(name="rgb", path=str(tif), bands=[4, 3, 2], min=0, max=3000, roles=roles,
-                                        combo="false_color")
-    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, 5), vmin="0",
+                                        combo="false_color", style="rgb")
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, 5), vmin="0",
                   vmax="1") == {"error": "steps.layers.err_bands"}
-    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), rgb=True, bands=(4, 3, None), vmin="0",
+    assert _check(gee, _with_aoi(), kind="file", name="rgb", ref=str(tif), style="rgb", bands=(4, 3, None), vmin="0",
                   vmax="1") == {"error": "steps.layers.err_incomplete"}
 
 
@@ -355,13 +357,61 @@ def test_a_geotiff_layer(tmp_path, requests):
     out = _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=2, ramp="viridis", invert=True,
                  vmin="0", vmax="45")
     assert out["layer"] == FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
-                                        palette=vis_palettes.ramp_palette("viridis", True))
+                                        palette=vis_palettes.ramp_palette("viridis", True), style="continuous")
     assert calls == []
     assert _check(gee, _with_aoi(), kind="file", name="height", ref=str(tif), band=3, vmin="0", vmax="1") == {
         "error": "steps.alerts.err_missing_band"}
     (tmp_path / "bad.tif").write_text("not a tiff")
     assert _check(gee, _with_aoi(), kind="file", name="height", ref=str(tmp_path / "bad.tif"), band=1, vmin="0",
                   vmax="1") == {"error": "steps.alerts.err_unreadable"}
+
+
+def test_a_categorical_earth_engine_layer_is_saved_with_its_classes(requests):
+    gee, calls = _gee_answering(lambda obj: ["landcover"])
+    classes = [VisClass(value=1, color="#AA0000", label="Forest"), VisClass(value=2, color="00BB00", visible=False)]
+    out = _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                 style="categorical", band="landcover", classes=classes, vmin="x", vmax="", ramp="viridis")
+    assert out["layer"] == GeeVisLayer(
+        name="lc", asset="users/x/img", bands=["landcover"], style="categorical", palette=[],
+        classes=[VisClass(value=1, color="aa0000", label="Forest"), VisClass(value=2, color="00bb00", visible=False)])
+    assert (out["layer"].min, out["layer"].max) == (0.0, 1.0)
+    assert calls == [("BANDS", "users/x/img", "IMAGE")]
+    gee, _ = _gee_answering(lambda obj: ["B4"])  # the band probe still runs
+    assert _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                  style="categorical", band="landcover", classes=classes) == {"error": "steps.layers.err_bands"}
+
+
+@pytest.mark.parametrize("classes, key", [
+    ([], "steps.layers.err_no_classes"),
+    ([VisClass(value=1, color="aa0000"), VisClass(value=1, color="00bb00")], "steps.layers.err_duplicate_class"),
+    ([VisClass(value=1, color="aa0000", visible=False)], "steps.layers.err_no_visible_class"),
+    ([VisClass(value=v, color="aa0000") for v in range(51)], "steps.layers.err_class_limit"),
+])
+def test_a_categorical_layer_needs_a_visible_unique_class(requests, classes, key):
+    gee, calls = _gee_answering(lambda obj: ["landcover"])
+    out = _check(gee, _with_aoi(), kind="gee", name="lc", ref="users/x/img", asset_type="IMAGE",
+                 style="categorical", band="landcover", classes=classes)
+    assert out == {"error": key} and calls == []
+
+
+def test_a_categorical_geotiff_layer_checks_its_band_and_folder(tmp_path, requests):
+    tif = _tif(tmp_path / "lc.tif", size=10, count=2)
+    gee, _ = _gee_answering(lambda obj: None)
+    classes = [VisClass(value=1, color="#AA0000")]
+    kw = dict(kind="file", name="lc", style="categorical", classes=classes)
+    out = _check(gee, _with_aoi(), ref=str(tif), band=2, **kw)
+    assert out["layer"] == FileVisLayer(name="lc", path=str(tif), band=2, style="categorical", palette=[],
+                                        classes=[VisClass(value=1, color="aa0000")])
+    assert _check(gee, _with_aoi(), ref=str(tif), band=3, **kw) == {"error": "steps.alerts.err_missing_band"}
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro_tif = _tif(ro / "lc.tif", size=10)
+    ro.chmod(0o555)
+    try:
+        assert _check(gee, _with_aoi(), ref=str(ro_tif), band=1, **kw) == {
+            "error": "steps.layers.err_folder", "args": {"folder": str(ro)}}
+    finally:
+        ro.chmod(0o755)
 
 
 def test_a_geotiff_in_a_read_only_folder_is_refused_inline(tmp_path, requests):
@@ -466,6 +516,19 @@ def _icons(btn):
     return [c.children[0] for c in btn.children if isinstance(c, v.Icon)]
 
 
+def _bands_choice(rc):
+    """The Bands question's radio group (keep all bands as RGB, or one), or None when it is not asked."""
+    groups = [g for g in rc.find(v.RadioGroup).widgets
+              if {getattr(c, "value", None) for c in g.children} == {"all", "one"}]
+    return groups[0] if groups else None
+
+
+async def _pick_all_bands(rc):
+    """Answer the Bands question "Keep all for an RGB composite" once the band list asks it."""
+    assert await _settle(lambda: _bands_choice(rc) is not None)
+    _bands_choice(rc).v_model = "all"
+
+
 def _texts(rc):
     return " ".join(str(w.children) for w in rc.find(v.Html).widgets)
 
@@ -493,7 +556,7 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
             assert await _settle(lambda: open_.value is False)
             assert saved == [(FileVisLayer(name="height", path=str(tif), band=2, min=0, max=45,
                                            palette=vis_palettes.ramp_palette("terrain", True),
-                                           show_in_analysis=True), None)]
+                                           style="continuous", show_in_analysis=True), None)]
         finally:
             rc.close()
 
@@ -522,17 +585,19 @@ def test_a_kind_change_clears_the_band(monkeypatch):
 
 
 def test_an_edit_opens_with_the_layers_values(monkeypatch):
-    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
     p = _with_aoi()
     p.vis_layers = {"rgb": GeeVisLayer(name="rgb", asset="users/x/img", bands=["B4", "B3", "B2"], min=0, max=3000)}
-    state, open_, saved = _state(p), solara.reactive(True), []
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["B4", "B3", "B2"], p)
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, saved, editing="rgb"), handle_error=False)
+        box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                   on_save=lambda *a: saved.append(a), editing="rgb"),
+                                 handle_error=False)
         try:
             assert t("steps.layers.edit_title", name="rgb") in _texts(rc)
             assert _field(rc, "steps.layers.field_name").v_model == "rgb"
-            assert _field(rc, "steps.layers.field_rgb", v.Switch).v_model is True
+            assert await _settle(lambda: _bands_choice(rc) is not None)
+            assert _bands_choice(rc).v_model == "all"
             assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
                 "B4", "B3", "B2"]
             assert _field(rc, "steps.layers.field_max").v_model == "3000"
@@ -862,6 +927,59 @@ def test_the_ramp_cards_start_on_grayscale_and_an_edit_prefills_ramp_and_invert(
     asyncio.run(main())
 
 
+def _combo_cards(rc):
+    return [b for b in rc.find(v.Btn).widgets if "dv-combo" in (b.class_ or "").split()]
+
+
+def _combo_card(rc, key):
+    """The composite card of ``key`` (a ``vis_palettes.RGB_COMBOS`` key or "custom")."""
+    [card] = [b for b in _combo_cards(rc) if _flat(b).startswith(_capital_text(f"steps.layers.combo_{key}"))]
+    return card
+
+
+def _capital_text(key):
+    text = t(key)
+    return text[:1].upper() + text[1:]
+
+
+def _card_has(card, cls):
+    return cls in (card.class_ or "").split()
+
+
+def _selected_combo(rc):
+    """The key of the selected composite card, or None."""
+    for key in [*vis_palettes.RGB_COMBOS, "custom"]:
+        if _card_has(_combo_card(rc, key), "dv-combo--selected"):
+            return key
+    return None
+
+
+def _enabled_combos(rc):
+    return [k for k in [*vis_palettes.RGB_COMBOS, "custom"] if not _card_has(_combo_card(rc, k), "dv-combo--off")]
+
+
+def _rgb(rc):
+    return [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")]
+
+
+def _roles_link(rc):
+    """The "edit" / "set them" link of the band roles line, or None."""
+    links = [b for b in rc.find(v.Btn).widgets if "dv-roles-link" in (b.class_ or "").split()]
+    return links[0] if links else None
+
+
+def _role_selects(rc):
+    return rc.find(v.Select, label=t("steps.layers.role_red")).widgets
+
+
+async def _open_roles(rc):
+    """Unfold the band roles behind the summary line."""
+    assert await _settle(lambda: _roles_link(rc) is not None)
+    if not _role_selects(rc):
+        _roles_link(rc).fire_event("click", None)
+    assert _role_selects(rc)
+
+
 def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch):
     state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
 
@@ -869,24 +987,22 @@ def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch
         _box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
                                                     on_save=lambda *a: saved.append(a)), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
             _StubRasterInput.seen.asset.set({"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL",
                                              "value": None})
-            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
+            await _pick_all_bands(rc)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            await _open_roles(rc)
             roles = {r: _field(rc, f"steps.layers.role_{r}", v.Select).v_model for r in vis_palettes.ROLES}
             assert roles == {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
-            combo = _field(rc, "steps.layers.field_combo", v.Select)
-            assert [i["value"] for i in combo.items] == ["true_color", "false_color", "swir", "custom"]
-            combo.v_model = "swir"
-            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
-                "B11", "B8", "B4"]
+            assert _enabled_combos(rc) == ["true_color", "false_color", "swir", "custom"]
+            _combo_card(rc, "swir").fire_event("click", None)
+            assert _rgb(rc) == ["B11", "B8", "B4"]
             _field(rc, "steps.layers.role_nir", v.Select).v_model = "B2"  # a role moves: the combination re-applies
-            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
-                "B11", "B2", "B4"]
+            assert _rgb(rc) == ["B11", "B2", "B4"]
+            assert "B2" in _flat(_combo_card(rc, "false_color"))  # the cards follow the roles
             _field(rc, "steps.layers.role_swir", v.Select).v_model = None  # swir no longer possible
-            assert _field(rc, "steps.layers.field_combo", v.Select).v_model == "custom"
-            assert [i["value"] for i in _field(rc, "steps.layers.field_combo", v.Select).items] == [
-                "true_color", "false_color", "custom"]
+            assert _selected_combo(rc) == "custom"
+            assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
         finally:
             rc.close()
 
@@ -902,18 +1018,19 @@ def test_the_default_name_follows_the_image_and_the_combination_until_typed_over
         try:
             _StubRasterInput.seen.asset.set({"asset_id": "users/x/mosaic", "type": "IMAGE", "column": "ALL",
                                              "value": None})
-            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic")
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "B8"
-            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
-            _field(rc, "steps.layers.field_combo", v.Select)
+            await _pick_all_bands(rc)  # spectral bands: already RGB, on the first combination
             want = "mosaic_true_color"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
-            _field(rc, "steps.layers.field_combo", v.Select).v_model = "false_color"
+            _bands_choice(rc).v_model = "one"
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "B8"
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
+            _bands_choice(rc).v_model = "all"
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
+            _combo_card(rc, "false_color").fire_event("click", None)
             want = "mosaic_false_color"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_name").v_model = "mine"
-            _field(rc, "steps.layers.field_combo", v.Select).v_model = "swir"
+            _combo_card(rc, "swir").fire_event("click", None)
             await asyncio.sleep(0.1)
             assert _field(rc, "steps.layers.field_name").v_model == "mine"
         finally:
@@ -936,18 +1053,19 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
         try:
             _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
             _StubRasterInput.seen.path.set(str(tif))
-            _field(rc, "steps.layers.field_rgb", v.Switch).v_model = True
+            await _pick_all_bands(rc)
+            await _open_roles(rc)
             assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == 3)
-            combo = _field(rc, "steps.layers.field_combo", v.Select)
-            assert [i["value"] for i in combo.items] == ["true_color", "false_color", "custom"]
-            combo.v_model = "false_color"
+            assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
+            _combo_card(rc, "false_color").fire_event("click", None)
             _field(rc, "steps.layers.field_name").v_model = "fc"
             _field(rc, "steps.layers.field_max").v_model = "3000"
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             [(layer, _prev)] = saved
             assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
-                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color")
+                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color",
+                                         style="rgb")
         finally:
             rc.close()
 
@@ -964,9 +1082,9 @@ def test_editing_an_rgb_layer_saved_before_the_roles_keeps_its_bands(monkeypatch
                                                     on_save=lambda *a: saved.append(a), editing="rgb"),
                                   handle_error=False)
         try:
+            await _open_roles(rc)
             assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
-            assert [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")] == [
-                "B8", "B4", "B3"]
+            assert _rgb(rc) == ["B8", "B4", "B3"]
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             assert saved[0][0].bands == ["B8", "B4", "B3"]

@@ -11,6 +11,7 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 
 from gui.scripts.legend_data import Label, LegendSpec, format_number, gradient_colors
 from gui.scripts.legend_registry import LayerLegend
+from gui.scripts.vis_classes import legend_colors_labels
 from gui.scripts.vis_palettes import ramp_colormap
 
 #: (code, colour, label key): source confidence, for every source and the combined display band
@@ -123,8 +124,14 @@ def _range(vmin, vmax) -> tuple:
 
 
 def vis_legend(key: str, layer) -> LayerLegend:
+    from gui.scripts.vis_layers import effective_style  # vis_layers imports this module (via raster_map)
+
     name = Label(literal=layer.name)
-    if len(layer.bands) == 3:
+    style = effective_style(layer)
+    if style == "categorical":  # one chip per visible class
+        colors, labels = legend_colors_labels(layer.classes)
+        spec = LegendSpec(kind="chips", title=name, colors=colors, labels=tuple(Label(literal=x) for x in labels))
+    elif style == "rgb":
         spec = LegendSpec(kind="note", title=name, labels=(Label(key="legend.vis.rgb", args=(
             ("bands", ", ".join(str(b) for b in layer.bands)), ("min", format_number(layer.min)), ("max", format_number(layer.max)))),))
     elif layer.kind == "gee":

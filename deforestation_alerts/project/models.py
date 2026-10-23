@@ -114,6 +114,18 @@ class PeriodMask(BaseModel):
     mode: Literal["keep", "exclude"] = "keep"
 
 
+VisStyle = Literal["continuous", "categorical", "rgb"]
+
+
+class VisClass(BaseModel):
+    """One class of a categorical visualization layer: a pixel value and its colour."""
+
+    value: int
+    color: str  # bare hex, no "#" (the Earth Engine palette form)
+    label: str = ""
+    visible: bool = True
+
+
 class GeeVisLayer(BaseModel):
     kind: Literal["gee"] = "gee"
     name: str
@@ -124,6 +136,8 @@ class GeeVisLayer(BaseModel):
     palette: list[str] = []
     roles: dict[str, str] = {}  # RGB band roles and combination: they only prefill the dialog on edit
     combo: Optional[str] = None
+    style: Optional[VisStyle] = None  # None: a layer saved before styles, read by its band count
+    classes: list[VisClass] = []  # categorical style: one entry per drawn class
     show_in_analysis: bool = False
 
 
@@ -139,6 +153,8 @@ class FileVisLayer(BaseModel):
     combo: Optional[str] = None
     min: float = 0.0
     max: float = 1.0
+    style: Optional[VisStyle] = None  # None: a layer saved before styles, read by its band count
+    classes: list[VisClass] = []  # categorical style: one entry per drawn class
     show_in_analysis: bool = False
 
 
