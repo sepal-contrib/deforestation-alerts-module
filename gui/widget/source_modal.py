@@ -148,13 +148,6 @@ def _encoding_label(encoding) -> str:
     return t(f"steps.alerts.encoding_{encoding}").split(" (")[0]
 
 
-def _scope(p):
-    """What a date-value read must still match when it ends: the project and its AOI."""
-    if p is None:
-        return None
-    return p.name, p.aoi.digest if p.aoi is not None else None
-
-
 def use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_type):
     """Hook: the custom form's raster block, everything below the picker.
 
@@ -205,7 +198,13 @@ def use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_
         set_date_band(values[0] if len(values) == 1 else _value_of(when))
         set_encoding(None)
 
+    # the raster and band list the fields were last set from: a date band is
+    # read only on that list's raster, never in the renders where the list is
+    # stale (the raster just changed) or just landed (its defaults not yet set)
+    listed, set_listed = solara.use_state(None)
+
     def _on_bands():
+        set_listed((ref, tuple(choices)))
         if not values or own.current:
             return  # no list yet, or the edit's own raster keeps its saved bands
         _apply("date_only" if len(values) == 1 else suggest_format(texts))
@@ -232,16 +231,18 @@ def use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_
 
     p = app_state.project.value
     aoi = p.aoi if p is not None else None
-    reads_dates = (has_bands and fmt == "date_only" and date_band is not None and date_band in values
-                   and not own.current and aoi is not None)
+    reads_dates = (has_bands and listed == (ref, tuple(choices)) and fmt == "date_only" and date_band is not None
+                   and date_band in values and not own.current and aoi is not None)
     key = (origin, ref, asset_type, date_band, aoi.digest) if reads_dates else None
 
     async def _read_dates():
         if key is None:
             return None
         live = app_state.project.value
-        scope = _scope(live)
         where, raster, kind, band, _digest = key
+        # the values are those of the AOI read here: tagged with its digest, a
+        # read of an AOI that moved since the key was taken matches no key
+        read_key = (where, raster, kind, band, live.aoi.digest)
         bounds = live.aoi.bounds
         try:
             if where == "gee":
@@ -253,9 +254,10 @@ def use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_
                                                        bounds)}
         except Exception as exc:  # noqa: BLE001 - shown as a line; the user picks the encoding
             out = {"error": exc}
-        if not open_.value or _scope(app_state.project.value) != scope:
-            return None  # closed, or the project or its AOI changed: the values are dropped
-        return {"key": key, **out}
+        if not open_.value:
+            return None  # closed: the values are dropped
+        # another project name over the same AOI keeps them; a new AOI is a new key, read again
+        return {"key": read_key, **out}
 
     # the key holds the AOI's digest, which a worker's publish can move: start
     # the read only from a render on the loop (gui/scripts/solara_threads)

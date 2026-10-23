@@ -1069,6 +1069,55 @@ def test_a_late_read_does_not_land_on_a_newer_raster(monkeypatch):
     asyncio.run(main())
 
 
+def test_a_new_raster_never_reads_the_old_date_band_on_it(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, {"users/x/a": ["a_date", "x"], "users/x/b": ["b_date", "x"]},
+                  dates={("users/x/a", "a_date"): (2501, 2510), ("users/x/a", "x"): (1, 87),
+                         ("users/x/b", "b_date"): (25003, 25296)})
+        # every render's date-read key: a key starts a read, even one cancelled before its request
+        keys, real = [], sm.use_loop_dependencies
+        monkeypatch.setattr(sm, "use_loop_dependencies", lambda deps: keys.append(deps[0]) or real(deps))
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yymm")
+            _date(rc).v_model = "x"  # a band the next raster has too, not its suggestion
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).hint == t(
+                "steps.alerts.dates_odd", lo="1", hi="87"))
+            _StubRasterInput.seen.asset.set(OTHER)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yyddd")
+            assert [(c[1], c[3]) for c in _date_reads(gee)] == [
+                ("users/x/a", "a_date"), ("users/x/a", "x"), ("users/x/b", "b_date")]
+            assert [k for k in keys if k is not None and k[1] == "users/x/b" and k[3] != "b_date"] == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_project_rename_during_the_date_read_does_not_hold_save(monkeypatch):
+    release = asyncio.Event()
+
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date"], dates={("users/x/a", "alert_date"): (2501, 2510)},
+                  gates={("users/x/a", "alert_date"): release})
+        rc, seen = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            reading = t("steps.alerts.dates_loading")
+            assert await _settle(lambda: reading in _texts(rc))
+            # the same AOI (digest) under another name: the read still holds
+            seen.state.project.value = seen.state.project.value.model_copy(update={"name": "renamed"})
+            release.set()
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yymm")
+            assert reading not in _texts(rc) and _submit_btn(rc).disabled is False
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_geotiff_without_band_names_leaves_the_date_band_to_the_user(tmp_path, monkeypatch):
     path = _dated_tif(tmp_path / "stack.tif", [[0, 87], [2025032, 2025301], [1, 3]])
 
