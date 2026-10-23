@@ -603,6 +603,15 @@ def _button(rc, label):
     return next(w for w in rc.find(v.Btn).widgets if label in w.children)
 
 
+def _stop_shown(rc) -> bool:
+    """The footer's Stop replaces Run while this scope has a job."""
+    return any(t("steps.prepare.footer_stop") in w.children for w in rc.find(v.Btn).widgets)
+
+
+def _run_all_shown(rc, n) -> bool:
+    return any(tn("steps.prepare.run_all", n) in w.children for w in rc.find(v.Btn).widgets)
+
+
 def _toasts(kind):
     return [toast.message for toast in get_current_bus().toasts.value if toast.type.value == kind]
 
@@ -762,7 +771,7 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
         on_run()
         assert step.jobs == []  # ...so a second click is a no-op
         assert _queued(step.table[-1][0])
-        assert _button(rc, tn("steps.prepare.run_all", 1)).disabled
+        assert _stop_shown(rc) and not _run_all_shown(rc, 1)
 
         state.new_project_state(_project("b", "GLAD-L", bounds=PARAGUAY, grid=True))
         assert _offers_run(step.table[-1][0])
@@ -793,9 +802,7 @@ def test_stop_reaches_a_job_after_another_row_started(step, monkeypatch):
         contexts[tuple(sources)] = ctx
         if sources == ["GLAD-L"]:  # still in its current row
             _run(step.table[-1][1])  # RADD starts its own job
-            stop = _button(rc, t("steps.prepare.stop"))
-            assert not stop.disabled
-            stop.fire_event("click", None)
+            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
 
     monkeypatch.setattr(prepare_step, "run_rows", blocked_mid_row)
     try:
@@ -804,7 +811,7 @@ def test_stop_reaches_a_job_after_another_row_started(step, monkeypatch):
         assert set(contexts) == {("GLAD-L",), ("RADD",)}
         assert contexts[("GLAD-L",)].cancel.is_set()  # the first job stops after this row
         assert contexts[("RADD",)].cancel.is_set()  # and so does every job of this project and period
-        assert _button(rc, t("steps.prepare.stop")).disabled  # every job ended
+        assert not _stop_shown(rc)  # every job ended
     finally:
         rc.close()
 
@@ -832,7 +839,7 @@ def test_stop_in_one_project_leaves_another_projects_job_running(step, monkeypat
         state.new_project_state(_project("b", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
         _run(step.table[-1][0])  # b's job, started last
         state.new_project_state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-        _button(rc, t("steps.prepare.stop")).fire_event("click", None)
+        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
         _run(step.table[-1][1])  # a's RADD job, while GLAD-L's still runs
         step.run_jobs()
 
@@ -1120,7 +1127,7 @@ def test_stop_ends_the_job_quietly_and_gives_its_rows_back(step, monkeypatch):
         assert _queued(step.table[-1][0])
         step.run_jobs()  # no CancelledError escapes the worker
         assert _offers_run(step.table[-1][0])
-        assert _button(rc, t("steps.prepare.stop")).disabled and _toasts("error") == []
+        assert not _stop_shown(rc) and _toasts("error") == []
     finally:
         rc.close()
 
@@ -1396,12 +1403,12 @@ def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step,
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
                            prepare_step._inflight_key("d", JAN.id, "GLAD-L"))]
-        assert not _button(rc, t("steps.prepare.stop")).disabled  # the job's keys are this period's
-        assert _button(rc, tn("steps.prepare.run_all", 2)).disabled
+        assert _stop_shown(rc)  # the job's keys are this period's
+        assert not _run_all_shown(rc, 2)
         step.run_jobs()
         [(ctx, items, force)] = step.started
         assert items == [("mask", "forest"), "GLAD-L"] and not force and ctx.aoi == "AOI"
-        assert _button(rc, t("steps.prepare.stop")).disabled
+        assert not _stop_shown(rc)
     finally:
         rc.close()
 
@@ -1416,6 +1423,94 @@ def test_a_source_run_runs_its_stale_masks_first(step, monkeypatch):
         _run(step.table[-1][0])  # Run
         step.run_jobs()
         assert [(items, force) for _, items, force in step.started] == [([("mask", "forest"), "GLAD-L"], False)]
+    finally:
+        rc.close()
+
+
+def _footer_item(rc):
+    """The footer menu's one item, and the tooltip around it."""
+    def walk(w):
+        yield w
+        for c in getattr(w, "children", None) or []:
+            if not isinstance(c, str):
+                yield from walk(c)
+
+    [item] = rc.find(v.ListItem).widgets
+    tips = [w.attributes.get("title") for root in rc.find(v.Html).widgets for w in walk(root)
+            if isinstance(w, v.Html) and item in (w.children or [])]
+    return item, tips[0] if tips else None
+
+
+def test_download_all_again_is_disabled_while_masks_pend(step, monkeypatch):
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    state = _state(_with_mask())
+
+    box, rc = _render(state)
+    try:
+        item, tip = _footer_item(rc)
+        assert tn("steps.prepare.redownload_all", 1) in [c for w in rc.find(v.ListItemTitle).widgets
+                                                         for c in w.children]
+        assert item.disabled and tip == t("steps.prepare.redownload_all_masks")
+    finally:
+        rc.close()
+
+
+def test_download_all_again_forces_the_sources_that_have_something_to_fetch(step, monkeypatch, tmp_path):
+    """Every catalogue / Earth Engine source that is not blocked, in one forced job."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    p = _with_tif(tmp_path, sidecar=True)
+    add_predefined_source(p, "RADD")
+    add_predefined_source(p, "GLAD-S2")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), PrepareRow("tif", Status.CURRENT, Status.CURRENT),
+              PrepareRow("RADD", Status.CURRENT, Status.CURRENT),
+              PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
+                         (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)))
+    state = _state(p, meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        item, tip = _footer_item(rc)
+        assert not item.disabled and not tip
+        item.fire_event("click", None)
+        step.run_jobs()
+        [(ctx, items, force)] = step.started
+        assert items == ["GLAD-L", "RADD"] and force
+        assert ctx.downloads == {("source", "GLAD-L"), ("source", "RADD")}
+    finally:
+        rc.close()
+
+
+def test_the_footer_counts_this_scopes_rows_and_forgets_the_batch_when_it_ends(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    seen = []
+
+    def texts():
+        return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
+
+    def a_run(ctx, items, force=False):
+        key = prepare_jobs.progress_key("d", JAN.id, "source", "GLAD-L")
+        ctx.row_stage.set({key: "download"})
+        seen.append(texts())
+        ctx.row_stage.set({})
+        ctx.on_row_end()
+        seen.append(texts())
+
+    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    box, rc = _render(state)
+    try:
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
+        assert _stop_shown(rc) and t("steps.prepare.footer_strip", running="0", queued="2") in texts()
+        step.run_jobs()
+        running, after_one = seen
+        assert t("steps.prepare.footer_strip", running="1", queued="1") in running
+        assert t("steps.prepare.footer_done", done="0", total="2") in running
+        assert t("steps.prepare.footer_done", done="1", total="2") in after_one
+        assert not _stop_shown(rc) and _run_all_shown(rc, 2)
+
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)  # a new batch counts afresh
+        assert t("steps.prepare.footer_done", done="0", total="2") in texts()
     finally:
         rc.close()
 
@@ -1440,13 +1535,13 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
     try:
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)  # January's job, still queued
         state.update_project("d", lambda q: setattr(q, "active_period", FEB.id))
-        assert _button(rc, t("steps.prepare.stop")).disabled  # February started nothing
+        assert not _stop_shown(rc)  # February started nothing
         run_all = _button(rc, tn("steps.prepare.run_all", 2))
         assert not run_all.disabled
         run_all.fire_event("click", None)
         assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
         # the refused job never entered February's Stop scope, not even for a moment
-        assert added == [("d", JAN.id)] and _button(rc, t("steps.prepare.stop")).disabled
+        assert added == [("d", JAN.id)] and not _stop_shown(rc)
 
         step.run_jobs()  # January's job ends and gives the mask back
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)

@@ -222,3 +222,67 @@ def test_a_downloading_mask_reads_its_percent():
     assert busy["label"] == "12%" and busy["compact"]
     assert "label" not in mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False,
                                       progress=12)
+
+
+# Row stages and row ends (the batch footer reads them)
+# ---------------------------------------------------------------------------
+class _Recorder:
+    """A reactive that keeps every value it was set to."""
+
+    def __init__(self):
+        self.value, self.history = {}, []
+
+    def set(self, value):
+        self.value = value
+        self.history.append(dict(value))
+
+
+def _stage_ctx(p, **over):
+    state = SimpleNamespace(project=SimpleNamespace(value=p), update_project=lambda name, fn: fn(p) or True)
+    kw = dict(app_state=state, layers=None, map_=None, notifier=None, name="r", pdir="/tmp/x", period=JAN, meta={},
+              aoi=None, cancel=threading.Event(), errors_lock=threading.Lock(), row_stage=_Recorder())
+    kw.update(over)
+    return prepare_jobs.PrepareContext(**kw)
+
+
+def test_run_rows_reports_each_rows_stage(monkeypatch):
+    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
+    seen = {}
+
+    def run(job, **kw):
+        seen[job.source] = dict(ctx.row_stage.value)
+        return {}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", run)
+    prepare_jobs.run_rows(ctx, ["GLAD-L", "RADD"])
+    key = lambda s: prepare_jobs.progress_key("r", JAN.id, "source", s)  # noqa: E731
+    assert seen == {"GLAD-L": {key("GLAD-L"): "download"}, "RADD": {key("RADD"): "harmonize"}}
+    assert ctx.row_stage.value == {}
+
+
+def test_the_stage_turns_to_harmonize_at_100_percent(monkeypatch):
+    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
+    key = prepare_jobs.progress_key("r", JAN.id, "source", "GLAD-L")
+
+    def run(job, on_tiles, **kw):
+        on_tiles(5, 10)
+        assert ctx.row_stage.value == {key: "download"}
+        on_tiles(10, 10)  # the reporter's on_pct(100)
+        assert ctx.row_stage.value == {key: "harmonize"}
+        return {}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", run)
+    prepare_jobs.run_rows(ctx, ["GLAD-L"])
+    assert ctx.row_stage.history == [{key: "download"}, {key: "harmonize"}, {}]
+
+
+def test_row_end_is_reported_on_failure(monkeypatch):
+    ends = []
+    ctx = _stage_ctx(_p(), on_row_end=lambda: ends.append(1))
+
+    def fail(job, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", fail)
+    prepare_jobs.run_rows(ctx, ["GLAD-L", "RADD", "gone"])  # a source removed meanwhile ends too
+    assert len(ends) == 3 and ctx.row_stage.value == {}

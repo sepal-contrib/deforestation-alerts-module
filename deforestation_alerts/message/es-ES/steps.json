@@ -378,7 +378,17 @@
         "many": "Ejecutar {n} pendientes",
         "other": "Ejecutar {n} pendientes"
       },
-      "stop": "Detener después de esta fila",
+      "footer_strip": "{running} en curso · {queued} en cola",
+      "footer_done": "{done} de {total} terminadas",
+      "footer_stop": "Detener",
+      "footer_stop_tip": "Se detiene después de la fila en curso",
+      "footer_more": "Más acciones por lotes",
+      "redownload_all": {
+        "one": "Descargar todo de nuevo ({n})",
+        "many": "Descargar todo de nuevo ({n})",
+        "other": "Descargar todo de nuevo ({n})"
+      },
+      "redownload_all_masks": "Ejecute primero las máscaras pendientes",
       "job_title": "Descargar y armonizar",
       "job_row": "Preparando {source}",
       "job_mask_row": "Preparando máscara {mask}",

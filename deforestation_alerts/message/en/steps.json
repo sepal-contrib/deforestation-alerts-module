@@ -365,7 +365,16 @@
         "one": "Run {n} pending",
         "other": "Run {n} pending"
       },
-      "stop": "Stop after this row",
+      "footer_strip": "{running} running · {queued} queued",
+      "footer_done": "{done} of {total} done",
+      "footer_stop": "Stop",
+      "footer_stop_tip": "Stops after the row in progress",
+      "footer_more": "More batch actions",
+      "redownload_all": {
+        "one": "Download all again ({n})",
+        "other": "Download all again ({n})"
+      },
+      "redownload_all_masks": "Run the pending masks first",
       "job_title": "Download & harmonize",
       "job_row": "Preparing {source}",
       "job_mask_row": "Preparing mask {mask}",

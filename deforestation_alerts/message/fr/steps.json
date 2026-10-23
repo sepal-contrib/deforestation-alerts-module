@@ -378,7 +378,17 @@
         "many": "Exécuter {n} en attente",
         "other": "Exécuter {n} en attente"
       },
-      "stop": "Arrêter après cette ligne",
+      "footer_strip": "{running} en cours · {queued} en attente",
+      "footer_done": "{done} sur {total} terminées",
+      "footer_stop": "Arrêter",
+      "footer_stop_tip": "S'arrête après la ligne en cours",
+      "footer_more": "Plus d'actions groupées",
+      "redownload_all": {
+        "one": "Tout télécharger à nouveau ({n})",
+        "many": "Tout télécharger à nouveau ({n})",
+        "other": "Tout télécharger à nouveau ({n})"
+      },
+      "redownload_all_masks": "Exécutez d'abord les masques en attente",
       "job_title": "Télécharger et harmoniser",
       "job_row": "Préparation de {source}",
       "job_mask_row": "Préparation du masque {mask}",

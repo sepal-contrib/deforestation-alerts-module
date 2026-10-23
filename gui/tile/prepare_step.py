@@ -34,6 +34,13 @@ included, are the step's own (``mine_keys``); a mask another period's job is
 aligning reads running in its row but is not in this period's Stop scope (this
 Stop could not stop it). A click whose keys are already claimed (that mask, or
 the AOI raster another job is building) says so (``claim_busy``).
+
+The footer under the table (``BatchFooter``) runs every pending row, and
+stops this scope's jobs while they run. Its counts come from the claimed rows
+of the scope (``mine_rows``) and the stage each running row reports
+(``row_stage``, ``scope_stages``): a claimed row with no stage is queued. Each
+start adds its rows to the scope's ``batch`` total and each row end one to
+its done count; the entry goes with the scope's last job.
 """
 
 import asyncio
@@ -64,6 +71,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
 from gui.tile.masks_card import MasksCard
+from gui.widget.batch_footer import BatchFooter, footer_counts
 from gui.widget.grid_form import GridForm
 from gui.widget.help import StepIntro
 from gui.widget.product_table import STATUS_PX, ProductTable
@@ -95,6 +103,26 @@ def mine_keys(running, stops, project: str, period_id: str) -> set:
     included: one Run all / Stop scope (spec §7.3). A mask job another period
     started is not in it: its Stop could not stop it."""
     return set(running) & stops.keys((project, period_id))
+
+
+def mine_rows(p, period, mine) -> set:
+    """The ``prepare_jobs.progress_key`` of every row (source or mask) whose
+    in-flight key is in ``mine``: the rows this scope's jobs hold."""
+    sources = {progress_key(p.name, period.id, "source", s) for s in p.sources
+               if _inflight_key(p.name, period.id, s) in mine}
+    masks = {progress_key(p.name, period.id, "mask", m) for m in p.masks if mask_inflight_key(p.name, m) in mine}
+    return sources | masks
+
+
+def scope_stages(stages: dict, project: str, period_id: str) -> dict:
+    """The row stages of this project and period (a mask's key is project-wide)."""
+    return {k: v for k, v in stages.items() if k[0] == project and k[1] in (period_id, None)}
+
+
+def redownload_items(p, rows) -> list:
+    """Download all again's rows (spec "Footer"): every source that is not
+    blocked and has something to fetch (not a user file)."""
+    return [("source", r.source) for r in rows if not r.blocked and not is_file_source(p.sources[r.source])]
 
 
 def run_all_items(p, pdir, period) -> list:
@@ -271,10 +299,12 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     building = layers.inflight.value
     stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
     row_errors = solara.use_reactive({})  # {scope: {row: message}}, written through _ScopedErrors
-    errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors and percents under it
+    errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors, percents and stages under it
     # {prepare_jobs.progress_key: percent} of the downloads running; keyed by
     # project and period, so a row of another scope never reads it
     row_progress = solara.use_reactive({})
+    row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
+    batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
     # of scope forgets them all.
@@ -347,6 +377,9 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
         def _give_back():
             stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
+            if not stops.keys(stop_scope):  # the scope's last job: its batch is over
+                with errors_lock:
+                    batch.set({k: v for k, v in batch.value.items() if k != stop_scope})
             inflight.release(*keys)
 
         # Drift note: only rows that download from Earth Engine need it (the
@@ -375,7 +408,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
                              name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
                              row_errors=_ScopedErrors(row_errors, scope), errors_lock=errors_lock,
-                             row_progress=row_progress)
+                             row_progress=row_progress, row_stage=row_stage, downloads=frozenset(downloads),
+                             on_row_end=lambda: _count(stop_scope, done=1))
 
         def _job():
             try:
@@ -385,7 +419,15 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             finally:
                 _give_back()
 
+        _count(stop_scope, total=len(items))
         spawn_in_context(_job)
+
+    def _count(stop_scope, total=0, done=0):
+        """Add to a scope's batch counts (a start's rows, a row's end); a
+        worker calls it too, so under the step's lock."""
+        with errors_lock:
+            was_total, was_done = batch.value.get(stop_scope, (0, 0))
+            batch.set({**batch.value, stop_scope: (was_total + total, was_done + done)})
 
     def _toggle_map(source):
         # The Alerts step's pattern, not ``toggle``: a click behind a
@@ -406,12 +448,25 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     mine = mine_keys(running, stops, p.name, period.id)
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
+    stages = scope_stages(row_stage.value, p.name, period.id)
+    counts = footer_counts(mine_rows(p, period, mine), stages, batch.value.get((p.name, period.id)))
+    redownload = redownload_items(p, rows)
+
+    def _redownload_all():
+        """Force a fresh download and harmonize of every catalogue and Earth
+        Engine source that is not blocked (the footer menu's)."""
+        _start(redownload, force=True)
+
+    masks_pend = any(kind == "mask" for kind, _ in pending)
+    menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)), "on_click": _redownload_all,
+             "disabled": masks_pend or read_only(p),
+             "title": t("steps.prepare.redownload_all_masks") if masks_pend else ""}] if redownload else []
 
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
                             # Details, Download again and Delete files land with their dialogs
                             on_info=lambda s: None, on_refresh=lambda s: None, on_delete=lambda s: None,
-                            stages={}, info_open=None, locked=read_only(p), progress=row_progress.value)
+                            stages=stages, info_open=None, locked=read_only(p), progress=row_progress.value)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
@@ -425,12 +480,10 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                       progress=row_progress.value)
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
-            with solara.Row(style="gap:8px;"):
-                solara.Button(tn("steps.prepare.run_all", len(pending)), color="primary", small=True,
-                              icon_name="mdi-play", disabled=not pending or bool(mine) or read_only(p),
-                              on_click=lambda: _start(pending))
-                solara.Button(t("steps.prepare.stop"), color="primary", small=True, outlined=True, disabled=not mine,
-                              on_click=lambda: stops.stop((p.name, period.id)))
+            BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
+                        on_run=lambda: _start(pending), on_stop=lambda: stops.stop((p.name, period.id)),
+                        # Run stays off while the scope holds keys its rows no longer show (a mask removed)
+                        menu=menu, counts=counts, disabled=read_only(p) or bool(mine))
             # Check again after a failed coverage check, or a failed AOI-sidecar
             # fetch that leaves the GeoTIFF rows (sources, masks on in the
             # period) waiting (the loader refetches it on the same retry)

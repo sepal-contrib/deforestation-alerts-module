@@ -40,6 +40,13 @@ progress bar, so each whole percent of the tiles goes into the task's title
 and into ``row_progress``, which the row's Download cell reads. Both go back
 when the download is done, and a milestone says the harmonize (alignment)
 has begun.
+
+Each row also says which stage it is in (``row_stage``): ``download`` while an
+item of ``downloads`` fetches its tiles, then ``harmonize`` (a mask:
+``align``); a row that downloads nothing starts at that second stage. The
+stage goes when the row ends, and ``on_row_end`` is called for every row the
+run reached, whether it succeeded, failed or was skipped: the step's footer
+counts the running, queued and done rows from them.
 """
 
 import asyncio
@@ -48,7 +55,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import solara
 
@@ -100,6 +107,9 @@ class PrepareContext:
     errors_lock: Any = None  # threading.Lock shared by the step's jobs around ``row_errors``
     on_warning: Any = None  # called with a warning's text; None: ``notifier.warning`` (tests record it)
     row_progress: Optional[solara.Reactive] = None  # {progress_key: percent} of the downloads; None in tests
+    row_stage: Optional[solara.Reactive] = None  # {progress_key: "download"|"harmonize"|"align"}; None in tests
+    downloads: frozenset = frozenset()  # the items (``("source", name)`` / ``("mask", name)``) that download
+    on_row_end: Optional[Callable[[], None]] = None  # called once each row the run reached is over
 
 
 def progress_key(project: str, period_id: str, kind: str, name: str) -> tuple:
@@ -292,29 +302,41 @@ def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> Non
                            legend=source_layers.harmonized_legend(key, name, ctx.period))
 
 
-def _set_progress(ctx: PrepareContext, key: tuple, pct: Optional[int]) -> None:
-    """Publish (``None``: drop) a row's download percent, under the lock the
+def _publish(ctx: PrepareContext, store: Optional[solara.Reactive], key: tuple, value) -> None:
+    """Publish (``None``: drop) a row's entry in ``store``, under the lock the
     step's jobs share: two jobs may report at once."""
-    if ctx.row_progress is None:
+    if store is None:
         return
     with ctx.errors_lock or contextlib.nullcontext():
-        current = dict(ctx.row_progress.value)
-        if pct is None:
+        current = dict(store.value)
+        if value is None:
             if key not in current:
                 return
             current.pop(key)
         else:
-            current[key] = pct
-        ctx.row_progress.set(current)
+            current[key] = value
+        store.set(current)
 
 
-def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: str):
+def _set_progress(ctx: PrepareContext, key: tuple, pct: Optional[int]) -> None:
+    """A row's download percent (``None``: drop it)."""
+    _publish(ctx, ctx.row_progress, key, pct)
+
+
+def _set_stage(ctx: PrepareContext, key: tuple, stage: Optional[str]) -> None:
+    """A row's stage (``None``: drop it)."""
+    _publish(ctx, ctx.row_stage, key, stage)
+
+
+def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: str, then: str):
     """The row's ``on_tiles``: its percent in the task's title and on its row,
-    until the download is done; then the title is back and ``done_step`` (the
-    harmonize, or the alignment) is the pill's milestone."""
+    until the download is done; then the title is back, ``done_step`` (the
+    harmonize, or the alignment) is the pill's milestone and ``then`` the
+    row's stage."""
     def on_pct(pct):
         if pct >= 100:
             _set_progress(ctx, key, 100)
+            _set_stage(ctx, key, then)
             task.update(title)
             task.step(done_step)
             return
@@ -344,48 +366,62 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
             live = _live(ctx, scope)
             if live is None:
                 return
-            if kind == "mask":
-                if name not in live.masks:
-                    continue  # removed from the project meanwhile
-                task.step(t("steps.prepare.job_mask_row", mask=name))
-                job = MaskJob(project=live.model_copy(deep=True), pdir=ctx.pdir, name=name, aoi=ctx.aoi,
-                              force=force)
-                run, error_key = run_mask_row, f"@mask:{name}"
-                done_step = t("steps.prepare.job_align_row", mask=name)
-            else:
-                src = live.sources.get(name)
-                if src is None:
-                    continue  # removed from the project meanwhile
-                task.step(t("steps.prepare.job_row", source=name))
-                job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
-                                source=name, aoi=ctx.aoi, force=force,
-                                meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
-                                else None)
-                run, error_key = run_source_row, name
-                done_step = t("steps.prepare.job_harmonize_row", source=name)
             key = progress_key(ctx.name, ctx.period.id, kind, name)
             try:
-                arts = run(job, on_tiles=_row_reporter(ctx, task, title, key, done_step))
-            except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)
-                logger.exception("row %s failed", error_key)
-                message = _failure_text(exc)
-                _set_error(ctx, error_key, message)
-                if ctx.notifier is not None:
-                    toast = (_mask_failure_toast if kind == "mask" else _failure_toast)(name, exc, message)
-                    ctx.notifier.error(toast, timeout=ERROR_TOAST_TIMEOUT)
-                if isinstance(exc, HarmonizeFailed) and exc.artifacts:
-                    # The download (or the AOI raster) succeeded: record it, so
-                    # the next run only re-harmonizes (re-aligns) from disk.
-                    if not _record(ctx, scope, exc.artifacts):
-                        return
-                continue
+                if not _run_item(ctx, task, title, scope, live, kind, name, key, force):
+                    return
             finally:
-                # the row is over, whichever way: its percent goes with it
-                _set_progress(ctx, key, None)
-                task.update(title)
-            _set_error(ctx, error_key, None)
-            if not _record(ctx, scope, arts):
-                return
-            if kind == "mask":
-                _warn_if_covers_none(ctx, name, arts)
-            _refresh_layer(ctx, kind, name, arts)
+                # the row is over, whichever way, and only now that it is recorded
+                _set_stage(ctx, key, None)
+                if ctx.on_row_end is not None:
+                    ctx.on_row_end()
+
+
+def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: str, name: str, key: tuple,
+              force: bool) -> bool:
+    """Run one row of ``run_rows``; False when the run must stop."""
+    if kind == "mask":
+        if name not in live.masks:
+            return True  # removed from the project meanwhile
+        task.step(t("steps.prepare.job_mask_row", mask=name))
+        job = MaskJob(project=live.model_copy(deep=True), pdir=ctx.pdir, name=name, aoi=ctx.aoi,
+                      force=force)
+        run, error_key = run_mask_row, f"@mask:{name}"
+        done_step, then = t("steps.prepare.job_align_row", mask=name), "align"
+    else:
+        src = live.sources.get(name)
+        if src is None:
+            return True  # removed from the project meanwhile
+        task.step(t("steps.prepare.job_row", source=name))
+        job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
+                        source=name, aoi=ctx.aoi, force=force,
+                        meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
+                        else None)
+        run, error_key = run_source_row, name
+        done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
+    _set_stage(ctx, key, "download" if (kind, name) in ctx.downloads else then)
+    try:
+        arts = run(job, on_tiles=_row_reporter(ctx, task, title, key, done_step, then))
+    except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)
+        logger.exception("row %s failed", error_key)
+        message = _failure_text(exc)
+        _set_error(ctx, error_key, message)
+        if ctx.notifier is not None:
+            toast = (_mask_failure_toast if kind == "mask" else _failure_toast)(name, exc, message)
+            ctx.notifier.error(toast, timeout=ERROR_TOAST_TIMEOUT)
+        if isinstance(exc, HarmonizeFailed) and exc.artifacts:
+            # The download (or the AOI raster) succeeded: record it, so
+            # the next run only re-harmonizes (re-aligns) from disk.
+            return _record(ctx, scope, exc.artifacts)
+        return True
+    finally:
+        # the row's download is over, whichever way: its percent goes with it
+        _set_progress(ctx, key, None)
+        task.update(title)
+    _set_error(ctx, error_key, None)
+    if not _record(ctx, scope, arts):
+        return False
+    if kind == "mask":
+        _warn_if_covers_none(ctx, name, arts)
+    _refresh_layer(ctx, kind, name, arts)
+    return True

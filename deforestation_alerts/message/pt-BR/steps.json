@@ -378,7 +378,17 @@
         "many": "Executar {n} pendentes",
         "other": "Executar {n} pendentes"
       },
-      "stop": "Parar depois desta linha",
+      "footer_strip": "{running} em execução · {queued} na fila",
+      "footer_done": "{done} de {total} concluídas",
+      "footer_stop": "Parar",
+      "footer_stop_tip": "Para depois da linha em andamento",
+      "footer_more": "Mais ações em lote",
+      "redownload_all": {
+        "one": "Baixar tudo de novo ({n})",
+        "many": "Baixar tudo de novo ({n})",
+        "other": "Baixar tudo de novo ({n})"
+      },
+      "redownload_all_masks": "Execute primeiro as máscaras pendentes",
       "job_title": "Baixar e harmonizar",
       "job_row": "Preparando {source}",
       "job_mask_row": "Preparando a máscara {mask}",
