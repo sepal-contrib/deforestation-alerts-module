@@ -451,12 +451,11 @@ def test_only_ee_s_no_access_answer_is_a_refusal(text, refused):
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                     disabled=False, show_origin=True):
+                     disabled=False):
     """Stands in for pysepal's asset and file pickers: the test sets ``path``.
     It draws one empty marker (``dv-stub-raster-input``), so its place among the
     form's fields can be asserted."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, asset_types=asset_types,
-                                            show_origin=show_origin)
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, asset_types=asset_types)
     rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
@@ -550,7 +549,7 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
         try:
             _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             _field(rc, "steps.layers.field_name").v_model = "height"
-            assert _StubRasterInput.seen.origin == "file" and _StubRasterInput.seen.show_origin is False
+            assert _StubRasterInput.seen.origin == "file"
             assert _StubRasterInput.seen.asset_types == ("IMAGE",)
             _StubRasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: _band_count(rc) == 2)

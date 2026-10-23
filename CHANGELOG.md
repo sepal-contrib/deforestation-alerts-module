@@ -56,6 +56,10 @@
       a line; two or more a dropdown that starts on the suggested band (a
       mask band, e.g. `datamask`) or the first. Each attribute band's
       statistic starts by its name: Majority for classes, else Mean.
+    - **Add source** (custom) follows the same order and band behaviour: Name,
+      Source, the picker, then the bands. One band is read as the alert date;
+      two or more ask the Alert format and bands. The **Date encoding** is
+      suggested from the date band's values over the AOI.
   - Period: **several monitoring periods** (typically one a month, dates
     included at both ends), each with its own alert sets, listed with their
     window, sets and out-of-date badges; new, edit and delete follow the

@@ -34,15 +34,8 @@ def absolute(path) -> Optional[str]:
 
 @solara.component
 def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                disabled=False, show_origin=True):
-    # ``show_origin=False``: the caller picks the origin itself, with a
-    # ``SourceSelect`` above the picker
-    if show_origin:  # an outlined field like the others in the form (spec D2), not radios
-        rv.Select(label=t("steps.raster_input.origin_label"), v_model=origin, on_v_model=on_origin,
-                  items=[{"text": t("steps.raster_input.origin_gee"), "value": "gee"},
-                         {"text": t("steps.raster_input.origin_file"), "value": "file"}],
-                  dense=True, outlined=True, hint=t("steps.raster_input.origin_hint"), persistent_hint=True,
-                  disabled=disabled)
+                disabled=False):
+    # The origin is picked by the caller, with a ``SourceSelect`` above this.
     # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
     # events instead. Always the same wrapper, so toggling it never remounts
     # a picker (which would list the user's assets again).
@@ -57,7 +50,7 @@ def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMA
 def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool = False,
                  origins: Sequence[str] = ("gee", "file")):
     """The Source of a form that picks a raster: Earth Engine or a GeoTIFF in
-    the user's SEPAL folder, above ``RasterInput(..., show_origin=False)``.
+    the user's SEPAL folder, above ``RasterInput``.
     ``on_origin`` gets the new origin; the caller clears the picked raster.
     ``origins`` lists the choices in order, each read as
     ``steps.raster_input.source_<origin>``."""

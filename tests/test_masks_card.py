@@ -634,12 +634,11 @@ def test_the_card_lists_the_rows_with_the_note_and_opens_add(monkeypatch):
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                     disabled=False, show_origin=True):
+                     disabled=False):
     """Stands in for pysepal's pickers: the test sets ``asset`` or ``path``
     itself. It draws one empty marker (``dv-stub-raster-input``), so its place
     among the form's fields can be asserted."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, disabled=disabled,
-                                            show_origin=show_origin)
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, disabled=disabled)
     rv.Html(tag="div", class_="dv-stub-raster-input")
 
 

@@ -82,7 +82,6 @@ def test_mask_form_order(monkeypatch):
             assert order.index(name) < order.index(source) < order.index(picker)
             assert (source.hint, source.persistent_hint) == (t("steps.raster_input.source_hint"), True)
             assert [i["value"] for i in source.items] == ["gee", "file"]
-            assert _StubRasterInput.seen.show_origin is False  # the Source select picks the origin
         finally:
             rc.close()
 

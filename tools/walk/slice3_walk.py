@@ -77,20 +77,28 @@ def day_of_year(value) -> int:
 
 
 def add_custom(page, rec, *, name, origin, ref, preset, encoding=None, out):
-    """Alerts → Add source → Custom: one source through the modal, validated and listed (spec §6.2)."""
+    """Alerts → Add source → Custom: one source through the modal, validated and listed (spec §6.2).
+
+    The form reads the bands first. One band is a line and nothing to pick;
+    two or more show Alert format (``preset``) and the band selects, left on
+    their suggestions. Date encoding shows once the date values are read, on
+    a suggestion or empty: ``encoding`` is picked there when given."""
     w.goto_step(page, "alerts", 2000)
     ph.visible_btn(page, "Add source", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the source modal")
     ph.choose(page, ph.SOURCE_TYPE, "Custom")
     ph.modal_field(page, "Name").fill(name)
-    ph.choose_origin(page, origin)
+    ph.choose_source(page, origin)
     if origin == "gee":
         ph.type_asset(page, ref)
     else:
         ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
-    w.wait_for(lambda: ph.radio_checked(page, preset), 180, f"{ref}: bands listed and the {preset} preset suggested")
+    if ph.wait_bands_read(page, ref, select_label=ph.ALERT_FORMAT, one_band_line=ph.ALERT_ONE_BAND):
+        ph.choose(page, ph.ALERT_FORMAT, preset)
+    if ph.has_select(page, ph.DATE_BAND) or ph.ALERT_ONE_BAND in ph.modal_text(page):
+        w.wait_for(lambda: ph.DATES_LOADING not in ph.modal_text(page), 180, f"{ref}: the date values read")
     if encoding:
-        ph.choose(page, "Date encoding", encoding)
+        ph.choose(page, ph.DATE_ENCODING, encoding)
     rec[f"modal_{name}"] = ph.modal_text(page)[:800]
     w.shot(page, out, f"modal_{name.replace(' ', '_')}")
     ph.modal_button(page, "Add source").click()

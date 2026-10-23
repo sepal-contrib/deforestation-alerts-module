@@ -195,13 +195,12 @@ def test_an_edit_keeps_its_own_name(requests):
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                     disabled=False, show_origin=True):
+                     disabled=False):
     """Stands in for pysepal's asset and file pickers (they list the user's
     assets and folders): the test sets the ``asset`` or ``path`` reactive
     itself. It draws one empty marker (``dv-stub-raster-input``), so its place
     among the form's fields can be asserted."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path,
-                                            show_origin=show_origin)
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path)
     rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
@@ -809,7 +808,6 @@ def test_custom_form_order_name_source_picker(monkeypatch):
             order = fields.children
             assert order.index(name) < order.index(_source(rc)) < order.index(picker)
             assert [i["value"] for i in _source(rc).items] == list(sm.SOURCE_ORIGINS) == ["gee", "file"]
-            assert _StubRasterInput.seen.show_origin is False  # the Source select picks the origin
             assert _nothing_below_the_picker(rc)  # no raster: nothing, not even the Alert format
             assert t("steps.raster_input.bands_loading") not in _texts(rc)
         finally:

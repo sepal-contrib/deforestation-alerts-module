@@ -14,8 +14,6 @@ from tools.walk.walklib import (ENTER_BUTTON, MODAL, close_dialog, dialog_text, 
 
 #: Form labels as the app shows them (the English catalogue).
 SOURCE_TYPE = en("steps.alerts.mode_label")
-RASTER_SOURCE = en("steps.raster_input.origin_label")
-ORIGIN = {"gee": en("steps.raster_input.origin_gee"), "file": en("steps.raster_input.origin_file")}
 MODE_OFF = en("steps.prepare.mask_mode_off")
 #: The Source select above a picker (the mask, attribute and visualization-layer forms)
 FIELD_SOURCE = en("steps.raster_input.field_source")
@@ -26,6 +24,15 @@ BANDS_FAILED = en("steps.raster_input.bands_failed").split("{")[0]
 #: The mask form's Band select (two bands or more), or its one-band line
 MASK_BAND = en("steps.prepare.mask_band")
 MASK_ONE_BAND = en("steps.prepare.mask_band_one").split("{")[0]
+#: The alert-source form's selects (Alert format and the two band selects with two
+#: bands or more, Date encoding once the date values are read), its one-band line
+#: and the line shown while the date values are read
+ALERT_FORMAT = en("steps.alerts.format_label")
+ALERT_BAND = en("steps.alerts.band_alert")
+DATE_BAND = en("steps.alerts.band_date")
+DATE_ENCODING = en("steps.alerts.encoding_label")
+ALERT_ONE_BAND = en("steps.alerts.band_one").split("{")[0]
+DATES_LOADING = en("steps.alerts.dates_loading")
 
 
 def manifest(data_dir, project):
@@ -397,8 +404,7 @@ def overview_export_csv(page, rec, *, out, folder):
 # A step's modal is a Vuetify dialog (`MODAL`) on the form frame: an outside
 # click nudges it, ESC cancels it, Enter presses its one `ENTER_BUTTON`
 # (`primary_button`); its raster origin is a select labelled FIELD_SOURCE
-# above the picker (`choose_source`), or RASTER_SOURCE in the alert-source
-# modal (`choose_origin`). A ProductTable row is a CSS-grid div whose first cell
+# above the picker (`choose_source`). A ProductTable row is a CSS-grid div whose first cell
 # holds the row's name, its under-row notes inside it; a Masks card row has
 # one Mode select (Off / Keep / Exclude) for its old switch and mode.
 # pysepal's AssetSelectComponent is a combobox labelled "Select an asset", its
@@ -464,12 +470,6 @@ def choose(page, label, option, scope=MODAL):
     _open_select(page, label, scope)
     page.locator(f'.menuable__content__active .v-list-item:has-text("{option}")').first.click()
     page.wait_for_timeout(600)
-
-
-def choose_origin(page, origin, scope=MODAL):
-    """RasterInput's origin select: ``"gee"`` (an Earth Engine asset) or
-    ``"file"`` (a GeoTIFF). Only the alert-source modal still has it."""
-    choose(page, RASTER_SOURCE, ORIGIN[origin], scope)
 
 
 def choose_source(page, origin, scope=MODAL):

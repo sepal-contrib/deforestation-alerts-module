@@ -1359,7 +1359,7 @@ def test_attribute_form_order(pickers):
             assert (source.hint, source.persistent_hint) == (t("steps.raster_input.source_hint"), True)
             assert _source(rc).v_model == "gee"
             assert _bands_or_none(rc) is None and _stats(rc) == []
-            assert t("steps.raster_input.origin_label") not in [w.label for w in rc.find(v.Select).widgets]
+            assert [w.label for w in rc.find(v.Select).widgets].count(t("steps.raster_input.field_source")) == 1
         finally:
             rc.close()
 

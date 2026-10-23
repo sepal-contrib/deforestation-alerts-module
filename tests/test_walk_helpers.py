@@ -32,13 +32,15 @@ def test_en_reads_the_english_catalogues():
 
 def test_the_labels_the_walks_pick_exist():
     assert phases.SOURCE_TYPE == "Source type"
-    assert phases.RASTER_SOURCE == walklib.en("steps.raster_input.origin_label")
-    assert phases.ORIGIN == {"gee": "Earth Engine asset", "file": "GeoTIFF in my SEPAL folder"}
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
     # the mask, attribute and visualization-layer forms: a Source select above the picker
     assert phases.FIELD_SOURCE == walklib.en("steps.raster_input.field_source") == "Source"
     assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF"}
     assert phases.MASK_BAND == "Band" and phases.MASK_ONE_BAND == "One band ("
+    # the alert-source form: Alert format and the band selects, Date encoding, the one-band line
+    assert (phases.ALERT_FORMAT, phases.ALERT_BAND, phases.DATE_BAND) == ("Alert format", "Alert band", "Date band")
+    assert phases.DATE_ENCODING == "Date encoding" and phases.ALERT_ONE_BAND == "One band ("
+    assert phases.DATES_LOADING == "Reading the date values…"
     assert phases.BANDS_LOADING == walklib.en("steps.raster_input.bands_loading")
     assert phases.BANDS_FAILED == "Could not read the bands: "
     for key in ("steps.project.empty_heading", "steps.project.new", "steps.project.search",

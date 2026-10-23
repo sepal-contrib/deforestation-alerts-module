@@ -281,13 +281,9 @@
       "field_show_in_analysis": "Mostrar na Análise"
     },
     "raster_input": {
-      "origin_gee": "Recurso do Earth Engine",
-      "origin_file": "GeoTIFF na minha pasta do SEPAL",
       "file": "GeoTIFF",
       "bands_loading": "Lendo as bandas…",
       "bands_failed": "Não foi possível ler as bandas: {error}",
-      "origin_label": "Origem do raster",
-      "origin_hint": "De onde ler o raster",
       "field_source": "Fonte",
       "source_hint": "Uma imagem do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL.",
       "source_gee": "Earth Engine",
