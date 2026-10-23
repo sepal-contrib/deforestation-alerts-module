@@ -33,8 +33,7 @@ def absolute(path) -> Optional[str]:
 
 
 @solara.component
-def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                disabled=False):
+def RasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"), disabled=False):
     # The origin is picked by the caller, with a ``SourceSelect`` above this.
     # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
     # events instead. Always the same wrapper, so toggling it never remounts

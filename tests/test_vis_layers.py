@@ -450,7 +450,7 @@ def test_only_ee_s_no_access_answer_is_a_refusal(text, refused):
 
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
-def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
+def _StubRasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
                      disabled=False):
     """Stands in for pysepal's asset and file pickers: the test sets ``path``.
     It draws one empty marker (``dv-stub-raster-input``), so its place among the

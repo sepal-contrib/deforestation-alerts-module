@@ -235,8 +235,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
                      on_v_model=lambda v: _set_name(v[:MAX_NAME]), dense=True, outlined=True,
                      counter=MAX_NAME, hint=t("steps.integrate.attr_name_hint"), persistent_hint=True)
         SourceSelect(origin=_ORIGIN[kind], on_origin=_set_origin)
-        RasterInput(gee_interface=gee_interface, origin=_ORIGIN[kind], on_origin=_set_origin,
-                    asset=asset, path=path, asset_types=("IMAGE",))
+        RasterInput(gee_interface=gee_interface, origin=_ORIGIN[kind], asset=asset, path=path, asset_types=("IMAGE",))
         band_status(read_task, src)
         if shown and len(rows) == 1:
             solara.Text(t("steps.integrate.attr_band_one", name=_band_text(rows[0])), style=MUTED)

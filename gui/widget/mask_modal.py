@@ -228,8 +228,7 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
                      outlined=True, disabled=m0 is not None or busy, hint=t("steps.prepare.mask_name_hint"),
                      persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
         SourceSelect(origin=origin, on_origin=_set_origin, disabled=busy)
-        RasterInput(gee_interface=gee_interface, origin=origin, on_origin=_set_origin, asset=asset, path=path,
-                    disabled=busy)
+        RasterInput(gee_interface=gee_interface, origin=origin, asset=asset, path=path, disabled=busy)
         band_status(bands_task, ref)
         if len(choices) == 1:
             solara.Text(t("steps.prepare.mask_band_one", name=choices[0][0]), style=MUTED)

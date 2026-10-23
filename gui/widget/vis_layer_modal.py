@@ -597,7 +597,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                      outlined=True, disabled=busy, counter=vis_layers.MAX_NAME, hint=t("steps.layers.name_hint"),
                      persistent_hint=auto_name, error_messages=[t(name_error)] if name_error else [])
         SourceSelect(origin=kind, on_origin=_set_kind, disabled=busy)
-        RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
+        RasterInput(gee_interface=gee_interface, origin=kind, asset=asset, path=path,
                     asset_types=("IMAGE",), disabled=busy)
         band_status(bands_task, ref)
         if has_bands:

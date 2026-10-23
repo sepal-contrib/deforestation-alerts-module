@@ -529,8 +529,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                          outlined=True, disabled=src0 is not None or busy, hint=t("steps.alerts.name_hint"),
                          persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
             SourceSelect(origin=origin, on_origin=_set_origin, disabled=busy, origins=SOURCE_ORIGINS)
-            RasterInput(gee_interface=gee_interface, origin=origin, on_origin=_set_origin, asset=asset, path=path,
-                        disabled=busy)
+            RasterInput(gee_interface=gee_interface, origin=origin, asset=asset, path=path, disabled=busy)
             if asset_type == "IMAGE_COLLECTION":  # it does not depend on the bands
                 solara.Text(t("steps.alerts.collection_help"), style=MUTED)
             raster.draw(busy)

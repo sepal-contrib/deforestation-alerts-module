@@ -32,7 +32,7 @@ def pickers(monkeypatch):
 
 @solara.component
 def _Harness(origin="gee", disabled=False):
-    raster_input.RasterInput(gee_interface=None, origin=origin, on_origin=lambda _o: None,
+    raster_input.RasterInput(gee_interface=None, origin=origin,
                              asset=solara.use_reactive(None), path=solara.use_reactive(""), disabled=disabled)
 
 

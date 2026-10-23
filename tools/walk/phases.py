@@ -445,10 +445,6 @@ def radio(page, label, scope=MODAL):
     page.wait_for_timeout(500)
 
 
-def radio_checked(page, label, scope=MODAL) -> bool:
-    return page.locator(f'{scope} .v-radio.v-item--active:has(label:has-text("{label}"))').count() > 0
-
-
 def _open_select(page, label, scope):
     page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()
     page.wait_for_timeout(600)

@@ -194,13 +194,13 @@ def test_an_edit_keeps_its_own_name(requests):
 
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
-def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
+def _StubRasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
                      disabled=False):
     """Stands in for pysepal's asset and file pickers (they list the user's
     assets and folders): the test sets the ``asset`` or ``path`` reactive
     itself. It draws one empty marker (``dv-stub-raster-input``), so its place
     among the form's fields can be asserted."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path)
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path)
     rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
