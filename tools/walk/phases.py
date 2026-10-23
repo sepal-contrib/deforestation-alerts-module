@@ -17,6 +17,15 @@ SOURCE_TYPE = en("steps.alerts.mode_label")
 RASTER_SOURCE = en("steps.raster_input.origin_label")
 ORIGIN = {"gee": en("steps.raster_input.origin_gee"), "file": en("steps.raster_input.origin_file")}
 MODE_OFF = en("steps.prepare.mask_mode_off")
+#: The Source select above a picker (the mask, attribute and visualization-layer forms)
+FIELD_SOURCE = en("steps.raster_input.field_source")
+SOURCE = {"gee": en("steps.raster_input.source_gee"), "file": en("steps.raster_input.source_file")}
+#: What shows under that picker: the band list being read, or why it could not be
+BANDS_LOADING = en("steps.raster_input.bands_loading")
+BANDS_FAILED = en("steps.raster_input.bands_failed").split("{")[0]
+#: The mask form's Band select (two bands or more), or its one-band line
+MASK_BAND = en("steps.prepare.mask_band")
+MASK_ONE_BAND = en("steps.prepare.mask_band_one").split("{")[0]
 
 
 def manifest(data_dir, project):
@@ -387,8 +396,9 @@ def overview_export_csv(page, rec, *, out, folder):
 # ------------------------------------------------- forms, tables and the legend (gates of slices 3-6)
 # A step's modal is a Vuetify dialog (`MODAL`) on the form frame: an outside
 # click nudges it, ESC cancels it, Enter presses its one `ENTER_BUTTON`
-# (`primary_button`); its raster origin is a select labelled RASTER_SOURCE
-# (`choose_origin`). A ProductTable row is a CSS-grid div whose first cell
+# (`primary_button`); its raster origin is a select labelled FIELD_SOURCE
+# above the picker (`choose_source`), or RASTER_SOURCE in the alert-source
+# modal (`choose_origin`). A ProductTable row is a CSS-grid div whose first cell
 # holds the row's name, its under-row notes inside it; a Masks card row has
 # one Mode select (Off / Keep / Exclude) for its old switch and mode.
 # pysepal's AssetSelectComponent is a combobox labelled "Select an asset", its
@@ -457,8 +467,53 @@ def choose(page, label, option, scope=MODAL):
 
 
 def choose_origin(page, origin, scope=MODAL):
-    """RasterInput's origin select: ``"gee"`` (an Earth Engine asset) or ``"file"`` (a GeoTIFF)."""
+    """RasterInput's origin select: ``"gee"`` (an Earth Engine asset) or
+    ``"file"`` (a GeoTIFF). Only the alert-source modal still has it."""
     choose(page, RASTER_SOURCE, ORIGIN[origin], scope)
+
+
+def choose_source(page, origin, scope=MODAL):
+    """The Source select above the picker (``SourceSelect``): ``"gee"`` or ``"file"``."""
+    choose(page, FIELD_SOURCE, SOURCE[origin], scope)
+
+
+def has_select(page, label, scope=MODAL) -> bool:
+    return page.locator(f'{scope} .v-select:has(label:text-is("{label}"))').count() > 0
+
+
+def wait_bands_read(page, ref, *, select_label, one_band_line, timeout=120):
+    """Wait until the picked raster's bands are read: the select labelled
+    ``select_label`` (two bands or more) or the ``one_band_line`` shows.
+    Raises with the form's error when the bands could not be read."""
+    def settled():
+        text = modal_text(page)
+        if BANDS_LOADING in text:
+            return False
+        return BANDS_FAILED in text or one_band_line in text or has_select(page, select_label)
+
+    wait_for(settled, timeout, f"the bands of {ref}")
+    text = modal_text(page)
+    assert BANDS_FAILED not in text, f"the bands of {ref}: {text[:300]}"
+    return has_select(page, select_label)
+
+
+def select_only(page, label, option, scope=MODAL):
+    """In the multi-select labelled ``label``, keep only the item whose text is
+    ``option`` selected: it is selected first, then the others are cleared, so
+    the selection is never empty on the way. The menu is closed again."""
+    _open_select(page, label, scope)
+    items = page.locator(".menuable__content__active .v-list-item")
+    wait_for(lambda: items.count(), 15, f"the {label} menu")
+    for keep in (True, False):  # select the one wanted, then clear the rest
+        for i in range(items.count()):
+            item = items.nth(i)
+            wanted = item.inner_text().strip() == option
+            selected = item.get_attribute("aria-selected") == "true"
+            if wanted == keep and selected != wanted:
+                item.click()
+                page.wait_for_timeout(300)
+    page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()  # close it
+    page.wait_for_timeout(400)
 
 
 def type_asset(page, asset_id, scope=MODAL):
@@ -545,14 +600,14 @@ def add_mask(page, rec, *, name, origin, ref, band, mode="Keep", out):
     visible_btn(page, "Add mask", ".right-panel").click()
     wait_for(lambda: dialog_open(page), 15, "the mask modal")
     modal_field(page, "Name").fill(name)
-    choose_origin(page, origin)
+    choose_source(page, origin)
     if origin == "gee":
         type_asset(page, ref)
     else:
         pick_file(page, "GeoTIFF", ref, scope=MODAL)
-    wait_for(lambda: "Reading the bands" not in modal_text(page) and "Could not read" not in modal_text(page), 120,
-             f"the bands of {ref}")
-    choose(page, "Band", str(band))
+    # one band is a line (the band is set to it), two or more a Band select
+    if wait_bands_read(page, ref, select_label=MASK_BAND, one_band_line=MASK_ONE_BAND):
+        choose(page, MASK_BAND, str(band))
     radio(page, mode)
     shot(page, out, f"mask_modal_{name}")
     modal_button(page, "Add mask").click()

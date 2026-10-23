@@ -35,6 +35,12 @@ def test_the_labels_the_walks_pick_exist():
     assert phases.RASTER_SOURCE == walklib.en("steps.raster_input.origin_label")
     assert phases.ORIGIN == {"gee": "Earth Engine asset", "file": "GeoTIFF in my SEPAL folder"}
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
+    # the mask, attribute and visualization-layer forms: a Source select above the picker
+    assert phases.FIELD_SOURCE == walklib.en("steps.raster_input.field_source") == "Source"
+    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF"}
+    assert phases.MASK_BAND == "Band" and phases.MASK_ONE_BAND == "One band ("
+    assert phases.BANDS_LOADING == walklib.en("steps.raster_input.bands_loading")
+    assert phases.BANDS_FAILED == "Could not read the bands: "
     for key in ("steps.project.empty_heading", "steps.project.new", "steps.project.search",
                 "steps.project.no_match", "steps.project.name_label", "steps.project.name_chars",
                 "steps.integrate.attr_add", "steps.raster_input.field_source", "steps.raster_input.bands_loading",
@@ -92,6 +98,54 @@ def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
     assert phases.compact_stages([gee, tif, stale, "Prepare: ready to go"], ready) == 4
     assert phases.compact_stages([busy], running) == 2
     assert phases.compact_stages([gee], running) == 0
+
+
+# ----------------------------------------------------- the band pickers
+#: A stand-in for a form's Vuetify multi-select (the attribute form's Bands):
+#: the slot toggles the menu, an item toggles its ``aria-selected``.
+_BANDS = """<!doctype html><html><body>
+<div class="v-dialog--active"><div class="v-select"><label>Bands</label>
+  <div class="v-select__slot" onclick="menu()">B1</div></div></div>
+<div id="menu">
+  <div class="v-list-item" aria-selected="true" onclick="pick(this)"><div class="v-list-item__title">B1</div></div>
+  <div class="v-list-item" aria-selected="false" onclick="pick(this)"><div class="v-list-item__title">B11</div></div>
+  <div class="v-list-item" aria-selected="true" onclick="pick(this)"><div class="v-list-item__title">B12</div></div>
+</div>
+<script>
+window.picked = [];
+function menu() { document.getElementById('menu').classList.toggle('menuable__content__active'); }
+function pick(e) {
+  e.setAttribute('aria-selected', String(e.getAttribute('aria-selected') !== 'true'));
+  window.picked.push([...document.querySelectorAll('[aria-selected="true"]')].length);
+}
+</script></body></html>"""
+
+
+@pytest.fixture
+def bands_page(_walk_browser):
+    page = _walk_browser.new_page()
+    page.set_content(_BANDS)
+    yield page
+    page.close()
+
+
+def test_select_only_keeps_one_band_of_a_multi_select(bands_page):
+    phases.select_only(bands_page, "Bands", "B11")
+    selected = bands_page.evaluate("""() => [...document.querySelectorAll('.v-list-item')]
+        .filter(e => e.getAttribute('aria-selected') === 'true').map(e => e.innerText.trim())""")
+    assert selected == ["B11"]  # "B1" and "B12" are other bands, not prefixes of it
+    assert 0 not in bands_page.evaluate("() => window.picked")  # never empty on the way
+    assert bands_page.locator(".menuable__content__active").count() == 0  # the menu is closed again
+
+
+def test_wait_bands_read_tells_a_select_from_a_one_band_line(bands_page):
+    assert phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
+    assert phases.has_select(bands_page, "Bands") and not phases.has_select(bands_page, "Band")
+    bands_page.set_content('<div class="v-dialog--active"><p>One band (slope): its statistic is added.</p></div>')
+    assert not phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
+    bands_page.set_content(f'<div class="v-dialog--active"><p>{phases.BANDS_FAILED}boom</p></div>')
+    with pytest.raises(AssertionError, match="boom"):
+        phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
 
 
 # ----------------------------------------------------- the analysis screen
