@@ -5,7 +5,7 @@ Colours are stored bare (no ``#``), as in ``vis_palettes``.
 """
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from deforestation_alerts.project.models import VisClass
 from gui.scripts import vis_palettes
@@ -25,6 +25,17 @@ def looks_categorical(name: str) -> bool:
     low = str(name).lower().strip()
     tokens = {t for t in re.split(r"[_\-\s\d]+", low) if t}
     return low == "land_cover" or bool(tokens & _CATEGORICAL_TOKENS)
+
+
+def suggest_mask_band(names: Sequence[str]) -> Optional[int]:
+    """The index in ``names`` of the band that looks like a mask: the first
+    whose name, split on non-alphanumerics, has a token ending in "mask"
+    (``datamask``, ``water_mask``); else the first ``looks_categorical`` name;
+    else None."""
+    for i, name in enumerate(names):
+        if any(token.endswith("mask") for token in re.split(r"[^0-9a-z]+", str(name).lower())):
+            return i
+    return next((i for i, name in enumerate(names) if looks_categorical(name)), None)
 
 
 def is_zero_one(values) -> bool:

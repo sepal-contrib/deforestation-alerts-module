@@ -86,6 +86,16 @@ def test_looks_categorical_by_name_tokens():
         assert not vc.looks_categorical(name), name
 
 
+def test_suggest_mask_band():
+    # a name token ending in "mask" first, then a categorical name, else none
+    assert vc.suggest_mask_band(["treecover2000", "loss", "gain", "lossyear", "datamask"]) == 4
+    assert vc.suggest_mask_band(["urban", "water_mask", "cloud_mask"]) == 1
+    assert vc.suggest_mask_band(["B2", "B3", "B4"]) is None
+    assert vc.suggest_mask_band(["forest", "loss"]) == 1
+    assert vc.suggest_mask_band(["Band 1"]) is None
+    assert vc.suggest_mask_band([]) is None
+
+
 def test_a_zero_one_find_names_1_after_the_band_and_hides_0():
     zero, one = vc.classes_from_values([1, 0, 1], band_label="loss")
     assert (zero.value, zero.visible, zero.label) == (0, False, "0")

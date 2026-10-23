@@ -30,7 +30,9 @@ from gui.scripts.legend_data import format_number
 from gui.scripts.legend_specs import vis_legend
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
-from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.raster_input import (
+    BandStatus, RasterInput, SourceSelect, absolute, band_index, bands_read, use_band_list,
+)
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
     CHANNEL_CSS, BandsField, ClassList, CompositeSelect, LegendPreview, PaletteMenu, RampSelect, RasterTypeSelect,
@@ -269,7 +271,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     band_text = {i["value"]: i["text"] for i in band_items}
     n_bands = len(band_items) if bands_task.finished else None
     # nothing below the picker shows until its band list is read (spec §3)
-    bands_read = bool(ref) and bands_task.finished and not bands_task.error and bool(band_items)
+    has_bands = bool(ref) and bands_read(bands_task)
     # RGB needs three bands: an RGB edit pointed at a smaller raster is drawn from one band
     style = "rgb" if bands_mode == "all" and (n_bands is None or n_bands >= 3) else one_style
 
@@ -594,21 +596,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
                      outlined=True, disabled=busy, counter=vis_layers.MAX_NAME, hint=t("steps.layers.name_hint"),
                      persistent_hint=auto_name, error_messages=[t(name_error)] if name_error else [])
-        rv.Select(label=t("steps.layers.field_source"), v_model=kind, on_v_model=_set_kind,
-                  items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
-                  hint=t("steps.layers.source_hint"), persistent_hint=True, dense=True, outlined=True,
-                  disabled=busy)
+        SourceSelect(origin=kind, on_origin=_set_kind, disabled=busy)
         RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
                     asset_types=("IMAGE",), disabled=busy, show_origin=False)
-        if bands_task.pending:
-            solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
-        elif bands_task.error:
-            solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                        classes=["error--text"])
-        if bands_read:
+        BandStatus(bands_task)
+        if has_bands:
             BandsField(band_items=band_items, mode=bands_mode, on_mode=_set_bands_mode, band=band, on_band=set_band,
                        rgb_found=rgb_found, disabled=busy)
-        if bands_read and rgb:
+        if has_bands and rgb:
             CompositeSelect(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
                             fallback=[i["value"] for i in band_items[:3]], disabled=busy)
             with rv.Row(dense=True):  # the three bands, filled by the combination or picked by hand
@@ -619,7 +614,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                         _channel_select(t(key), value, _rgb_setter(i, setter), channel=i)
             _range_fields()
             _stretch_fields()
-        elif bands_read:
+        elif has_bands:
             RasterTypeSelect(value=one_style, on_value=set_one_style,
                              suggested=vis_classes.looks_categorical(band_text.get(band, "")), disabled=busy)
             if style == "continuous":

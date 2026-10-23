@@ -548,7 +548,7 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
     async def main():
         box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             _field(rc, "steps.layers.field_name").v_model = "height"
             assert _StubRasterInput.seen.origin == "file" and _StubRasterInput.seen.show_origin is False
             assert _StubRasterInput.seen.asset_types == ("IMAGE",)
@@ -583,7 +583,7 @@ def test_a_kind_change_clears_the_band(monkeypatch, tmp_path):
         try:
             assert await _settle(lambda: _band_count(rc) == 2)
             assert _field(rc, "steps.layers.field_band", v.Select).v_model == "EVI"
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             assert _shown(rc, "steps.layers.field_band") is None  # no file picked: nothing below the picker
             _StubRasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: _band_count(rc) == 2)
@@ -697,7 +697,7 @@ def test_closing_the_dialog_during_a_check_saves_nothing(monkeypatch, close):
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
             assert _field(rc, "steps.layers.field_name").disabled is True  # frozen while checked
-            assert _field(rc, "steps.layers.field_source", v.Select).disabled is True
+            assert _field(rc, "steps.raster_input.field_source", v.Select).disabled is True
             assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
@@ -1035,7 +1035,7 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
     async def main():
         _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             _StubRasterInput.seen.path.set(str(tif))
             await _pick_all_bands(rc)
             assert await _settle(lambda: _selected_combo(rc) == "true_color")

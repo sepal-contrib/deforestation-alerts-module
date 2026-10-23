@@ -91,14 +91,14 @@ def test_the_form_reads_name_source_picker_in_order(monkeypatch):
         _box, rc = _render(state, open_, saved, gee)
         try:
             assert rc.find(v.TextField).widgets[0].label == t("steps.layers.field_name")
-            assert rc.find(v.Select).widgets[0].label == t("steps.layers.field_source")
+            assert rc.find(v.Select).widgets[0].label == t("steps.raster_input.field_source")
             [fields] = rc.find(v.Html, style_=FIELDS).widgets
             name = _field(rc, "steps.layers.field_name")
-            source = _field(rc, "steps.layers.field_source", v.Select)
+            source = _field(rc, "steps.raster_input.field_source", v.Select)
             [picker] = rc.find(v.Html, class_="dv-stub-raster-input").widgets
             order = fields.children
             assert order.index(name) < order.index(source) < order.index(picker)
-            assert (source.hint, source.persistent_hint) == (t("steps.layers.source_hint"), True)
+            assert (source.hint, source.persistent_hint) == (t("steps.raster_input.source_hint"), True)
             # the name's hint stays while the name is filled from the asset, not once typed over
             assert (name.hint, name.persistent_hint) == (t("steps.layers.name_hint"), True)
             vlm.RasterInput.seen.asset.set(ASSET)
@@ -234,7 +234,7 @@ def test_the_first_band_is_preselected(monkeypatch, tmp_path):
         tif = _tif(tmp_path / "two.tif", size=10, count=2)
         _box, rc = _render(state, open_, saved, gee)
         try:
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             vlm.RasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: _band_count(rc) == 2)
             assert _field(rc, "steps.layers.field_band", v.Select).v_model == 1  # a GeoTIFF band is its index
@@ -326,7 +326,7 @@ def test_switching_source_clears_band_roles_and_combo(monkeypatch):
         try:
             vlm.RasterInput.seen.asset.set(ASSET)
             assert await _settle(lambda: _selected_combo(rc) == "true_color")
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             _field(rc, "steps.layers.field_name").v_model = "x"
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
@@ -530,7 +530,7 @@ def test_rgb_without_recognized_names_uses_the_first_three_bands(monkeypatch, tm
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             vlm.RasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: _bands_choice(rc) is not None)
             assert _bands_choice(rc).v_model == "one"  # no red, green and blue names: one band
@@ -857,7 +857,7 @@ def test_a_zero_one_find_labels_1_with_the_band_and_shows_the_note(monkeypatch, 
     async def geotiff():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             vlm.RasterInput.seen.path.set(str(tif))
             assert await _settle(lambda: _raster_type(rc) is not None)
             _raster_type(rc).v_model = "categorical"
@@ -1006,9 +1006,9 @@ def test_changing_the_band_clears_the_found_classes(monkeypatch):
             _field(rc, "steps.layers.class_add").v_model = "80"
             _by_class(rc, "dv-class-add")[0].fire_event("click", None)
             assert _field(rc, "steps.layers.class_add").error_messages
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
             assert _shown(rc, "steps.layers.class_add", v.TextField) is None  # no file: nothing below the picker
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"  # the same image, read again
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "gee"  # the same image, read again
             assert await _settle(lambda: _band_count(rc) == 2)
             assert _labels(rc) == []
             assert _field(rc, "steps.layers.class_add").v_model == ""
@@ -1043,16 +1043,16 @@ def test_changing_the_band_clears_the_probe_errors(monkeypatch):
             _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
             await _find(rc)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "gee"
             assert await _settle(lambda: _band_count(rc) == 2)
             assert not _error_shown(rc, "steps.layers.err_not_integer")
             _raster_type(rc).v_model = "continuous"
             _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_no_stretch"))
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
-            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "gee"
             assert await _settle(lambda: _band_count(rc) == 2)
             assert not _error_shown(rc, "steps.layers.err_no_stretch")
         finally:

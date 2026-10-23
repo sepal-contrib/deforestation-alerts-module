@@ -213,8 +213,6 @@
       "edit_title": "Editar la capa {name}",
       "field_name": "Nombre",
       "name_hint": "Se toma del nombre del recurso o del archivo si lo dejas vacío.",
-      "field_source": "Fuente",
-      "source_hint": "Una imagen de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL.",
       "field_bands": "Bandas",
       "bands_all": "Compuesto RGB",
       "bands_one": "Seleccionar una banda",
@@ -280,7 +278,11 @@
       "bands_loading": "Leyendo las bandas…",
       "bands_failed": "No se pudieron leer las bandas: {error}",
       "origin_label": "Origen del raster",
-      "origin_hint": "Dónde leer el raster"
+      "origin_hint": "Dónde leer el raster",
+      "field_source": "Fuente",
+      "source_hint": "Una imagen de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL.",
+      "source_gee": "Earth Engine",
+      "source_file": "GeoTIFF"
     },
     "period": {
       "description": "Cada período descarga todas las fuentes en sus fechas más los días de retrospección anteriores. Los píxeles ya reportados por los conjuntos de períodos anteriores se omiten, así que una alerta publicada tarde cae en el conjunto del siguiente período y ningún píxel se reporta dos veces.",

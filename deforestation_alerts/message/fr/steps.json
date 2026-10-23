@@ -213,8 +213,6 @@
       "edit_title": "Modifier la couche {name}",
       "field_name": "Nom",
       "name_hint": "Repris du nom de l'asset ou du fichier si vous le laissez vide.",
-      "field_source": "Source",
-      "source_hint": "Une image Earth Engine, ou un GeoTIFF dans votre dossier SEPAL.",
       "field_bands": "Bandes",
       "bands_all": "Composite RVB",
       "bands_one": "Sélectionner une bande",
@@ -280,7 +278,11 @@
       "bands_loading": "Lecture des bandes…",
       "bands_failed": "Impossible de lire les bandes : {error}",
       "origin_label": "Source du raster",
-      "origin_hint": "Où lire le raster"
+      "origin_hint": "Où lire le raster",
+      "field_source": "Source",
+      "source_hint": "Une image Earth Engine, ou un GeoTIFF dans votre dossier SEPAL.",
+      "source_gee": "Earth Engine",
+      "source_file": "GeoTIFF"
     },
     "period": {
       "description": "Chaque période télécharge toutes les sources sur ses dates plus les jours de rétrospection qui les précèdent. Les pixels déjà signalés par les jeux des périodes antérieures sont ignorés, donc une alerte publiée tardivement atterrit dans le jeu de la période suivante et aucun pixel n'est signalé deux fois.",
