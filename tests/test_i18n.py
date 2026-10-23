@@ -251,10 +251,10 @@ def _dynamic_keys():
         "steps.prepare.mask_origin_": ["gee", "file"],
         # gui.scripts.vis_layers: the layer kinds
         "steps.layers.kind_": list(KINDS),
-        # gui.widget.vis_layer_modal: the colour ramps, band roles and RGB combinations
+        # gui.widget.vis_style_fields: the colour ramps, band roles and RGB combinations
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),
-        "steps.layers.combo_": [*RGB_COMBOS, "custom"],
+        "steps.layers.combo_": list(RGB_COMBOS),
         # gui.widget.vis_style_fields: the Bands question and the Raster type
         "steps.layers.bands_": list(BANDS_MODES),
         "steps.layers.style_": list(STYLES),

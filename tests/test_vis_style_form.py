@@ -19,10 +19,10 @@ from pysepal.i18n import set_locale
 from gui.scripts import vis_palettes
 from gui.widget import vis_layer_modal as vlm
 from gui.widget.form_dialog import FIELDS
+from gui.widget.text_style import MUTED
 from tests.test_vis_layers import (
-    S2_BANDS, _band_count, _bands_choice, _card_has, _combo_card, _combo_cards, _enabled_combos, _field, _flat,
-    _gee_modal, _pick_all_bands, _ramp_select, _rgb, _role_selects, _roles_link, _save_btn, _selected_combo,
-    _settle, _shown, _texts, _tif, _with_aoi,
+    S2_BANDS, _band_count, _bands_choice, _composite, _enabled_combos, _field, _flat, _gee_modal, _pick_all_bands,
+    _ramp_select, _rgb, _save_btn, _selected_combo, _settle, _shown, _texts, _tif, _with_aoi,
 )
 
 ASSET = {"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL", "value": None}
@@ -142,6 +142,32 @@ def test_nothing_below_the_picker_before_the_bands_are_read(monkeypatch):
             release.set()
             assert await _settle(lambda: _raster_type(rc) is not None)
             assert loading not in _texts(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_save_is_disabled_while_the_bands_are_read(monkeypatch):
+    state, open_, saved, _ = _gee_modal(monkeypatch, ["NDVI"])
+    release = asyncio.Event()
+
+    async def get_info_async(obj):
+        await release.wait()
+        return ["NDVI"]
+
+    gee = SimpleNamespace(get_info_async=get_info_async)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            _field(rc, "steps.layers.field_name").v_model = "ndvi"
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: t("steps.raster_input.bands_loading") in _texts(rc))
+            assert _save_btn(rc).disabled is True
+            release.set()
+            assert await _settle(lambda: _raster_type(rc) is not None)
+            assert _save_btn(rc).disabled is False
         finally:
             rc.close()
 
@@ -454,18 +480,13 @@ def test_preview_layer():
 
 
 # ---------------------------------------------------------------- the RGB fields
-def _roles_text(rc):
-    [line] = rc.find(v.Html, class_="dv-roles").widgets
-    return _flat(line)
-
-
 async def _rgb_form(rc, asset=ASSET):
     vlm.RasterInput.seen.asset.set(asset)
     await _pick_all_bands(rc)
 
 
-def test_composite_cards_grey_out_without_their_bands(monkeypatch):
-    state, open_, saved, gee = _gee_modal(monkeypatch, ["B4", "B3", "B2"])
+def test_the_composite_select_disables_combinations_without_their_bands(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["SR_B2", "SR_B3", "SR_B4"])
 
     async def main():
         _box, rc = _render(state, open_, saved, gee)
@@ -473,39 +494,51 @@ def test_composite_cards_grey_out_without_their_bands(monkeypatch):
             await _rgb_form(rc)
             assert await _settle(lambda: _selected_combo(rc) == "true_color")
             assert _enabled_combos(rc) == ["true_color", "custom"]
+            items = {i["value"]: i for i in _composite(rc).items}
             for key in ("false_color", "swir"):
-                card = _combo_card(rc, key)
-                assert _card_has(card, "dv-combo--off") and card.disabled is True and "opacity:.4" in card.style_
-            true_color = _combo_card(rc, "true_color")
-            assert true_color.disabled is False and "B4 B3 B2" in _flat(true_color)
-            assert _combo_card(rc, "custom").disabled is False
-            assert _combo_cards(rc)[-1] is _combo_card(rc, "custom")  # Custom is always last
+                assert items[key]["disabled"] is True
+            assert items["true_color"]["text"] == t("steps.layers.combo_item", name="True colour",
+                                                    bands="SR_B4 / SR_B3 / SR_B2")
+            assert [i["value"] for i in _composite(rc).items][-1] == "custom"  # Custom is always last
         finally:
             rc.close()
 
     asyncio.run(main())
 
 
-def test_the_roles_fold_behind_the_detected_line_and_edit_opens_them(monkeypatch):
+def test_rgb_starts_on_the_first_found_combination(monkeypatch):
     state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
 
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            await _rgb_form(rc)
-            assert await _settle(lambda: _selected_combo(rc) == "true_color")
-            assert _role_selects(rc) == []  # folded
-            listed = "B2 blue · B3 green · B4 red · B8 NIR · B11 SWIR"
-            assert t("steps.layers.roles_detected", list=listed) in _roles_text(rc)
-            assert t("steps.layers.roles_edit") in _flat(_roles_link(rc))
-            _roles_link(rc).fire_event("click", None)
-            assert len(_role_selects(rc)) == 1
-            _field(rc, "steps.layers.role_nir", v.Select).v_model = "B4"  # a role change updates the cards
-            assert "B4 B4 B3" in _flat(_combo_card(rc, "false_color"))
-            _field(rc, "steps.layers.role_swir", v.Select).v_model = None
-            assert _card_has(_combo_card(rc, "swir"), "dv-combo--off")
-            _roles_link(rc).fire_event("click", None)  # the link folds them again
-            assert _role_selects(rc) == []
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _composite(rc) is not None)
+            assert _bands_choice(rc).v_model == "all"
+            assert _composite(rc).v_model == "true_color"
+            assert _rgb(rc) == ["B4", "B3", "B2"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_rgb_without_recognized_names_uses_the_first_three_bands(monkeypatch, tmp_path):
+    tif = _tif(tmp_path / "three.tif", size=10, count=3)
+    state, open_, saved, gee = _gee_modal(monkeypatch, [])
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            vlm.RasterInput.seen.path.set(str(tif))
+            assert await _settle(lambda: _bands_choice(rc) is not None)
+            assert _bands_choice(rc).v_model == "one"  # no red, green and blue names: one band
+            _bands_choice(rc).v_model = "all"
+            assert await _settle(lambda: _composite(rc) is not None)
+            assert _composite(rc).v_model == "custom" and _enabled_combos(rc) == ["custom"]
+            assert _rgb(rc) == [1, 2, 3]
+            assert _composite(rc).hint == t("steps.layers.roles_none_rgb", bands="Band 1, Band 2, Band 3")
         finally:
             rc.close()
 
@@ -526,7 +559,7 @@ def test_a_hand_picked_band_selects_custom(monkeypatch):
                 for row in selects)  # the three band selects share one row
             _field(rc, "steps.layers.field_red", v.Select).v_model = "B8"
             assert _selected_combo(rc) == "custom" and _rgb(rc) == ["B8", "B3", "B2"]
-            _combo_card(rc, "true_color").fire_event("click", None)
+            _composite(rc).v_model = "true_color"
             assert _selected_combo(rc) == "true_color" and _rgb(rc) == ["B4", "B3", "B2"]
         finally:
             rc.close()
@@ -534,20 +567,46 @@ def test_a_hand_picked_band_selects_custom(monkeypatch):
     asyncio.run(main())
 
 
-def test_no_recognized_band_preselects_custom(monkeypatch):
-    state, open_, saved, gee = _gee_modal(monkeypatch, ["x", "y", "z"])
+def test_hand_picked_bands_matching_a_combination_select_it(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
 
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
             await _rgb_form(rc)
-            assert await _settle(lambda: _selected_combo(rc) == "custom")
-            assert _enabled_combos(rc) == ["custom"] and _role_selects(rc) == []
-            assert t("steps.layers.roles_none") in _roles_text(rc)
-            assert t("steps.layers.roles_set") in _flat(_roles_link(rc))
-            _roles_link(rc).fire_event("click", None)
-            _field(rc, "steps.layers.role_red", v.Select).v_model = "x"
-            assert "x" in _roles_text(rc)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            _field(rc, "steps.layers.field_red", v.Select).v_model = "B8"
+            _field(rc, "steps.layers.field_green", v.Select).v_model = "B4"
+            _field(rc, "steps.layers.field_blue", v.Select).v_model = "B3"
+            assert _rgb(rc) == ["B8", "B4", "B3"] and _selected_combo(rc) == "false_color"
+            _field(rc, "steps.layers.field_blue", v.Select).v_model = "B2"
+            assert _selected_combo(rc) == "custom"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_rgb_edit_opens_on_its_saved_bands_and_combination(monkeypatch):
+    p = _with_aoi()
+    roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
+    p.vis_layers = {"fc": GeeVisLayer(name="fc", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000,
+                                      style="rgb", roles=roles, combo="false_color")}
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS, p)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="fc")
+        try:
+            assert await _settle(lambda: _composite(rc) is not None)
+            await asyncio.sleep(0.05)  # the first band list keeps the edit's own bands
+            assert _bands_choice(rc).v_model == "all"
+            assert _composite(rc).v_model == "false_color"
+            assert _rgb(rc) == ["B8", "B4", "B3"]
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [(layer, prev)] = saved
+            assert (layer.style, layer.bands, layer.combo, layer.roles, prev) == (
+                "rgb", ["B8", "B4", "B3"], "false_color", roles, "fc")
         finally:
             rc.close()
 
@@ -564,13 +623,34 @@ def test_an_rgb_edit_on_a_two_band_raster_becomes_continuous(monkeypatch):
         _box, rc = _render(state, open_, saved, gee, editing="rgb")
         try:
             assert await _settle(lambda: _band_count(rc) == 2)
-            assert _bands_choice(rc) is None and not rc.find(v.Btn, class_="dv-combo").widgets
+            assert _bands_choice(rc) is None and _composite(rc) is None
             assert _raster_type(rc).v_model == "continuous"
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "B4"
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "B3"
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             [(layer, prev)] = saved
-            assert (layer.style, layer.bands, prev) == ("continuous", ["B4"], "rgb")
+            assert (layer.style, layer.bands, prev) == ("continuous", ["B3"], "rgb")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_rgb_edit_on_a_two_band_raster_preselects_its_first_band(monkeypatch):
+    p = _with_aoi()
+    p.vis_layers = {"rgb": GeeVisLayer(name="rgb", asset="users/x/img", bands=["B4", "B3", "B2"], min=0, max=3000,
+                                       style="rgb")}
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["B3", "B4"], p)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="rgb")
+        try:
+            assert await _settle(lambda: _band_count(rc) == 2)
+            assert await _settle(lambda: _field(rc, "steps.layers.field_band", v.Select).v_model == "B3")
+            _save_btn(rc).fire_event("click", None)  # no band picked by hand
+            assert await _settle(lambda: open_.value is False)
+            [(layer, _prev)] = saved
+            assert (layer.style, layer.bands) == ("continuous", ["B3"])
         finally:
             rc.close()
 
@@ -601,24 +681,6 @@ def test_the_rgb_stretch_spans_the_three_bands(monkeypatch):
     asyncio.run(main())
 
 
-def test_the_custom_card_shows_its_hand_picked_bands(monkeypatch):
-    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
-
-    async def main():
-        _box, rc = _render(state, open_, saved, gee)
-        try:
-            await _rgb_form(rc)
-            assert await _settle(lambda: _selected_combo(rc) == "true_color")
-            _field(rc, "steps.layers.field_red", v.Select).v_model = "B8"
-            assert "B8 B3 B2" in _flat(_combo_card(rc, "custom"))
-            _field(rc, "steps.layers.field_green", v.Select).v_model = None
-            assert "B8 ? B2" in _flat(_combo_card(rc, "custom"))
-        finally:
-            rc.close()
-
-    asyncio.run(main())
-
-
 def test_the_band_selects_carry_their_colour_dot_as_a_class(monkeypatch):
     """The dot is a CSS ``::before`` on the select's label, not a label slot: a
     slot's content is dropped once the select is picked from in the browser."""
@@ -636,50 +698,19 @@ def test_the_band_selects_carry_their_colour_dot_as_a_class(monkeypatch):
                 assert f"dv-channel-{i}" in (select.class_ or "").split() and not select.v_slots
                 assert f".dv-channel-{i} .v-label::before" in CHANNEL_CSS and CHANNEL_COLORS[i] in CHANNEL_CSS
             assert any(CHANNEL_CSS in t.template for t in rc.find(v.VuetifyTemplate).widgets)  # shipped with the form
-            # a long combination name wraps inside its card instead of running into the next one
-            assert "white-space:normal" in _combo_card(rc, "false_color").children[0].children[0].style_
         finally:
             rc.close()
 
     asyncio.run(main())
 
 
-def test_the_custom_card_names_its_bands_like_the_others():
-    from gui.widget.vis_style_fields import CompositeCards
+def test_the_composite_hint_names_a_band_the_list_lacks_as_stored():
+    from gui.widget.vis_style_fields import CompositeSelect
 
-    _box, rc = reacton.render(CompositeCards(combo="custom", on_combo=lambda k: None, roles={},
-                                             band_text={1: "Red", 3: "Blue"}, custom=(1, None, 3)),
-                              handle_error=False)
+    _box, rc = reacton.render(CompositeSelect(combo="custom", on_combo=lambda k: None, roles={"red": "B4", "nir": "B8"},
+                                              band_text={"B8": "B8"}, fallback=[]), handle_error=False)
     try:
-        assert "Red ? Blue" in _flat(_combo_card(rc, "custom"))
-    finally:
-        rc.close()
-
-
-def _summary(roles, band_text, loading):
-    from gui.widget.vis_style_fields import RolesSummary
-
-    return reacton.render(RolesSummary(roles=roles, band_text=band_text, expanded=False,
-                                       on_expanded=lambda x: None, on_role=lambda r, b: None, loading=loading),
-                          handle_error=False)
-
-
-def test_the_roles_line_names_the_roles_while_the_bands_load():
-    _box, rc = _summary({"red": "B4", "green": "B3", "blue": "B2"}, {}, loading=True)
-    try:
-        text = _roles_text(rc)
-        assert t("steps.layers.roles_detected", list="B4 red · B3 green · B2 blue") in text
-        assert t("steps.layers.roles_none") not in text
-    finally:
-        rc.close()
-    _box, rc = _summary({}, {}, loading=True)  # nothing yet: never "No bands recognized" while loading
-    try:
-        assert t("steps.layers.roles_none") not in _roles_text(rc)
-    finally:
-        rc.close()
-    _box, rc = _summary({"red": "B4", "nir": "B8"}, {"B8": "B8"}, loading=False)  # a band the list lacks
-    try:
-        assert t("steps.layers.roles_detected", list="B8 NIR · B4 red") in _roles_text(rc)
+        assert _composite(rc).hint == t("steps.layers.roles_detected", list="B8 NIR · B4 red")
     finally:
         rc.close()
 
@@ -698,7 +729,7 @@ def test_the_stretch_error_clears_when_the_composite_changes(monkeypatch):
             assert await _settle(lambda: _selected_combo(rc) == "true_color")
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text", children=[shown]).widgets))
-            _combo_card(rc, "false_color").fire_event("click", None)
+            _composite(rc).v_model = "false_color"
             assert await _settle(lambda: not rc.find(v.Html, class_="error--text", children=[shown]).widgets)
         finally:
             rc.close()
@@ -788,6 +819,69 @@ def test_find_classes_lists_worldcover_with_its_names(monkeypatch):
             assert asked == [("CLASSES", "users/x/img", "Map", tuple(state.project.value.aoi.bounds))]
             chips = _flat(_preview(rc))
             assert "Tree cover" in chips and "Water" in chips
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _note_shown(rc):
+    return t("steps.layers.zero_one_note") in _texts(rc)
+
+
+def test_a_zero_one_find_labels_1_with_the_band_and_shows_the_note(monkeypatch, tmp_path):
+    zero_one = {"hist": {"0": 40, "1": 3}, "meta": {}}
+    state, open_, saved, gee = _probing(monkeypatch, ["loss", "gain"], _answer(zero_one))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc, band="loss")
+            assert not _note_shown(rc)
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["0", "loss"])
+            assert _hide_icons(rc) == ["mdi-eye-off", "mdi-eye"]  # 0 starts hidden, 1 shown
+            assert _note_shown(rc)
+            note = rc.find(v.Html, children=[t("steps.layers.zero_one_note")]).widgets
+            assert len(note) == 1 and note[0].style_ == MUTED  # one muted line
+            _field(rc, "steps.layers.field_band", v.Select).v_model = "gain"  # another band: the note goes
+            assert await _settle(lambda: not _note_shown(rc))
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+    tif = _tif(tmp_path / "loss.tif", size=10)
+    monkeypatch.setattr(vlm.vis_probes, "file_classes", lambda path, band, bounds: {"values": [0, 1], "known": None})
+
+    async def geotiff():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            vlm.RasterInput.seen.path.set(str(tif))
+            assert await _settle(lambda: _raster_type(rc) is not None)
+            _raster_type(rc).v_model = "categorical"
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["0", "Band 1"])  # the band's text, never its index
+            assert _note_shown(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(geotiff())
+
+
+def test_classes_the_image_declares_get_no_zero_one_note(monkeypatch):
+    declared = {"hist": {"0": 4, "1": 3}, "meta": {"loss_class_values": [0, 1], "loss_class_palette": ["000000", "ff0000"],
+                                                   "loss_class_names": ["Stable", "Lost"]}}
+    state, open_, saved, gee = _probing(monkeypatch, ["loss"], _answer(declared))
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _categorical(rc, band="loss")
+            await _find(rc)
+            assert await _settle(lambda: _labels(rc) == ["Stable", "Lost"])
+            assert not _note_shown(rc)
         finally:
             rc.close()
 

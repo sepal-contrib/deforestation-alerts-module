@@ -26,19 +26,30 @@
     first and last dates and reasons in Alerts; rows that are not covered, or
     have no data for the period, are explained in Download & harmonize, are
     skipped by Run all and are left out of Integrate with their reason.
-  - Optional layers: **visualization layers** (an Earth Engine image, a
-    GeoTIFF, or Planet NICFI through Earth Engine), shown on the shared map
-    with their legend and, when marked, on both Analysis maps.
+  - Optional layers: **visualization layers** (an Earth Engine image or a
+    GeoTIFF), shown on the shared map with their legend and, when marked,
+    on both Analysis maps.
     - **Visualization styles**: one band is *Continuous* (a colour ramp
       between a minimum and a maximum) or *Categorical* (integer classes
       found over the AOI, at most 50, each with its colour and label and a
       hide toggle; values not listed and hidden classes are transparent);
-      an image of three bands or more can be drawn as *RGB* from composite
-      cards (true colour, false-colour infrared, SWIR / NIR / red, from the
-      band roles detected) or from bands picked by hand. **Stretch to the
-      AOI** fills the minimum and maximum from the 2–98 % percentiles over
+      an image of three bands or more can be drawn as *RGB* from a standard
+      combination (true colour, false-colour infrared, SWIR / NIR / red,
+      from the band roles detected) or from bands picked by hand. **Stretch
+      to the AOI** fills the minimum and maximum from the 2–98 % percentiles over
       the AOI's bounds (for RGB, one range across the three bands). Layers
       saved before this version keep their exact look.
+    - **The layer form** reads Name, Source, the image, then its bands, and
+      every choice is a dropdown. A **bands helper** asks only what the
+      image's band count allows: one band is drawn on its own, two are picked
+      from, three or more are drawn as one band or as RGB (suggested when red,
+      green and blue are recognized from the band names); the Band select
+      starts on the first band. One band takes a **Raster type** (Continuous
+      or Categorical, "suggested" when its name looks like classes). RGB
+      takes a **Composite** that names each combination's bands; without
+      recognized names it starts on the first three bands, and bands picked
+      by hand that match a combination select it. A band of only 0 and 1
+      found in Categorical names 1 after the band and starts 0 hidden.
   - Period: **several monitoring periods** (typically one a month, dates
     included at both ends), each with its own alert sets, listed with their
     window, sets and out-of-date badges; new, edit and delete follow the

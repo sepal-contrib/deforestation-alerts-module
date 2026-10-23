@@ -33,8 +33,8 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
-    CHANNEL_CSS, BandsField, ClassList, CompositeCards, LegendPreview, PaletteMenu, RampSelect, RasterTypeSelect,
-    RolesSummary, channel_class,
+    CHANNEL_CSS, BandsField, ClassList, CompositeSelect, LegendPreview, PaletteMenu, RampSelect, RasterTypeSelect,
+    channel_class,
 )
 
 
@@ -222,7 +222,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     blue, set_blue = solara.use_state(raster0.bands[2] if rgb0 else None)
     roles, set_roles = solara.use_state(dict(raster0.roles) if raster0 is not None else {})
     combo, set_combo = solara.use_state((raster0.combo if raster0 is not None else None) or "custom")
-    roles_open, set_roles_open = solara.use_state(False)  # the role selects fold behind their summary line
     vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None else "0")
     vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None else "1")
     palette0 = raster0.palette if raster0 is not None else []
@@ -240,6 +239,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     # {"key": ...} or {"exception": ...}, translated as it is drawn (_probe_error)
     stretch_error, set_stretch_error = solara.use_state(None)
     classes_error, set_classes_error = solara.use_state(None)
+    # a first find of only 0 and 1 says how they were set up, until the band changes
+    zero_one, set_zero_one = solara.use_state(False)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
 
     def _set_kind(value):
@@ -282,6 +283,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             first = vis_palettes.available_combos(roles)
             if first and _apply(first[0], roles):
                 set_combo(first[0])
+            else:  # no combination found: the first three bands, picked by hand
+                for setter, item in zip((set_red, set_green, set_blue), band_items[:3]):
+                    setter(item["value"])
+                set_combo("custom")
 
     # the roles the band names give, {role: band value}; red, green and blue all found suggest RGB
     by_name = {i["text"]: i["value"] for i in band_items}
@@ -293,9 +298,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             return
         if first_load.current:  # an edit's own bands, roles and combination stay for its own image
             first_load.current = False
-            if not saved_roles:  # a layer saved before the roles: only fill the empty role selects
+            if not saved_roles:  # a layer saved before the roles: they are guessed from the band names
                 set_roles(guessed)
-            if len(band_items) == 1:  # one band is always drawn from that band
+            # one band is always drawn from that band; an RGB edit on fewer than
+            # three bands is drawn from one band, which starts on the first
+            if len(band_items) == 1 or (bands_mode == "all" and len(band_items) < 3):
                 set_band(band_items[0]["value"])
             return
         set_roles(guessed)
@@ -322,17 +329,12 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         set_classes([])
         set_classes_error(None)
         set_stretch_error(None)
+        set_zero_one(False)
 
     solara.use_effect(_clear_probes, [kind, ref, band])
 
     # a stretch refused for one RGB composite says nothing of another
     solara.use_effect(lambda: set_stretch_error(None), [combo, red, green, blue])
-
-    def _set_role(role, value):
-        updated = {k: v for k, v in {**roles, role: value}.items() if v is not None}
-        set_roles(updated)
-        if combo != "custom" and not _apply(combo, updated):  # the combination lost a role
-            set_combo("custom")
 
     def _pick_combo(value):
         if not value:
@@ -341,10 +343,12 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if value != "custom":
             _apply(value, roles)
 
-    def _rgb_setter(setter):
+    def _rgb_setter(channel, setter):
         def on_value(value):
             setter(value)
-            set_combo("custom")  # picked by hand: no longer a standard combination
+            # picked by hand: Custom, unless the three bands now make a standard combination
+            picked = [value if i == channel else b for i, b in enumerate((red, green, blue))]
+            set_combo(vis_palettes.match_combo(picked, roles) or "custom")
 
         return on_value
 
@@ -469,7 +473,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             # a new find adds the new values; the listed classes keep their
             # colours, labels and visibility (only the palette menu repaints them)
             palette = vis_classes.palette_of(classes) or vis_palettes.DEFAULT_QUALITATIVE
-            found = vis_classes.classes_from_values(out["values"], palette=palette, known=out["known"])
+            # a 0/1 band's 1 is named after the band's text (a GeoTIFF band is an index)
+            found = vis_classes.classes_from_values(out["values"], palette=palette, known=out["known"],
+                                                    band_label=band_text.get(band))
+            if not classes:  # a first find, nothing listed yet: only 0 and 1, which the image does not name
+                set_zero_one(vis_classes.is_zero_one(out["values"]) and not out["known"])
             set_classes(vis_classes.merge_found(classes, found))
         elif out and "error" in out:
             set_classes_error({"key": out["error"]})  # the list is left as it was
@@ -543,6 +551,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                       color="primary", small=True,
                       disabled=busy or no_aoi or not ref or band is None)
         solara.Text(t("steps.layers.find_classes_hint"), style=MUTED)
+        if zero_one:
+            solara.Text(t("steps.layers.zero_one_note"), style=MUTED)
         if classes_error:
             solara.Text(_probe_error(classes_error), classes=["error--text"])
         # keyed on what the classes were found for: a clear also empties "Add a value" and its error
@@ -562,10 +572,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _actions():
         # spec §11: an async button is a task button. While the check runs it
         # reads Cancel and stops the check, and it carries no Enter class.
-        # a band list that could not be read leaves nothing to save
+        # a band list still being read, or that could not be read, leaves nothing to save
         SubmitTaskButton(label=t("common.save") if l0 is not None else t("steps.layers.add"),
                          icon="mdi-content-save-outline" if l0 is not None else "mdi-plus",
-                         external_busy=bool(name_error) or bool(bands_task.error), **button)
+                         external_busy=bool(name_error) or bool(bands_task.error) or (bool(ref) and bands_task.pending),
+                         **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
@@ -590,16 +601,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             BandsField(band_items=band_items, mode=bands_mode, on_mode=_set_bands_mode, band=band, on_band=set_band,
                        rgb_found=rgb_found, disabled=busy)
         if bands_read and rgb:
-            CompositeCards(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
-                           custom=(red, green, blue), disabled=busy)
-            RolesSummary(roles=roles, band_text=band_text, expanded=roles_open, on_expanded=set_roles_open,
-                         on_role=_set_role, disabled=busy, loading=bands_task.pending)
-            with rv.Row(dense=True):  # Custom: the three bands by hand
+            CompositeSelect(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
+                            fallback=[i["value"] for i in band_items[:3]], disabled=busy)
+            with rv.Row(dense=True):  # the three bands, filled by the combination or picked by hand
                 for i, (key, value, setter) in enumerate((("steps.layers.field_red", red, set_red),
                                                           ("steps.layers.field_green", green, set_green),
                                                           ("steps.layers.field_blue", blue, set_blue))):
                     with rv.Col(cols=4):
-                        _channel_select(t(key), value, _rgb_setter(setter), channel=i)
+                        _channel_select(t(key), value, _rgb_setter(i, setter), channel=i)
             _range_fields()
             _stretch_fields()
         elif bands_read:

@@ -946,57 +946,23 @@ def test_the_ramp_select_starts_on_grayscale_and_an_edit_prefills_ramp_and_inver
     asyncio.run(main())
 
 
-def _combo_cards(rc):
-    return [b for b in rc.find(v.Btn).widgets if "dv-combo" in (b.class_ or "").split()]
-
-
-def _combo_card(rc, key):
-    """The composite card of ``key`` (a ``vis_palettes.RGB_COMBOS`` key or "custom")."""
-    [card] = [b for b in _combo_cards(rc) if _flat(b).startswith(_capital_text(f"steps.layers.combo_{key}"))]
-    return card
-
-
-def _capital_text(key):
-    text = t(key)
-    return text[:1].upper() + text[1:]
-
-
-def _card_has(card, cls):
-    return cls in (card.class_ or "").split()
+def _composite(rc):
+    """The Composite select, or None while it is not shown."""
+    return _shown(rc, "steps.layers.field_composite")
 
 
 def _selected_combo(rc):
-    """The key of the selected composite card, or None."""
-    for key in [*vis_palettes.RGB_COMBOS, "custom"]:
-        if _card_has(_combo_card(rc, key), "dv-combo--selected"):
-            return key
-    return None
+    """The selected RGB combination ("custom" included), or None while the Composite is not shown."""
+    select = _composite(rc)
+    return select.v_model if select is not None else None
 
 
 def _enabled_combos(rc):
-    return [k for k in [*vis_palettes.RGB_COMBOS, "custom"] if not _card_has(_combo_card(rc, k), "dv-combo--off")]
+    return [i["value"] for i in _composite(rc).items if not i.get("disabled")]
 
 
 def _rgb(rc):
     return [_field(rc, f"steps.layers.field_{c}", v.Select).v_model for c in ("red", "green", "blue")]
-
-
-def _roles_link(rc):
-    """The "edit" / "set them" link of the band roles line, or None."""
-    links = [b for b in rc.find(v.Btn).widgets if "dv-roles-link" in (b.class_ or "").split()]
-    return links[0] if links else None
-
-
-def _role_selects(rc):
-    return rc.find(v.Select, label=t("steps.layers.role_red")).widgets
-
-
-async def _open_roles(rc):
-    """Unfold the band roles behind the summary line."""
-    assert await _settle(lambda: _roles_link(rc) is not None)
-    if not _role_selects(rc):
-        _roles_link(rc).fire_event("click", None)
-    assert _role_selects(rc)
 
 
 def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch):
@@ -1010,18 +976,17 @@ def test_loading_bands_guesses_the_roles_and_offers_the_combinations(monkeypatch
                                              "value": None})
             await _pick_all_bands(rc)
             assert await _settle(lambda: _selected_combo(rc) == "true_color")
-            await _open_roles(rc)
-            roles = {r: _field(rc, f"steps.layers.role_{r}", v.Select).v_model for r in vis_palettes.ROLES}
-            assert roles == {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
+            listed = "B2 blue · B3 green · B4 red · B8 NIR · B11 SWIR"
+            assert _composite(rc).hint == t("steps.layers.roles_detected", list=listed)
             assert _enabled_combos(rc) == ["true_color", "false_color", "swir", "custom"]
-            _combo_card(rc, "swir").fire_event("click", None)
+            _composite(rc).v_model = "swir"
             assert _rgb(rc) == ["B11", "B8", "B4"]
-            _field(rc, "steps.layers.role_nir", v.Select).v_model = "B2"  # a role moves: the combination re-applies
-            assert _rgb(rc) == ["B11", "B2", "B4"]
-            assert "B2" in _flat(_combo_card(rc, "false_color"))  # the cards follow the roles
-            _field(rc, "steps.layers.role_swir", v.Select).v_model = None  # swir no longer possible
-            assert _selected_combo(rc) == "custom"
-            assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
+            _field(rc, "steps.layers.field_name").v_model = "swir"
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [(layer, _prev)] = saved
+            assert layer.roles == {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
+            assert (layer.combo, layer.bands) == ("swir", ["B11", "B8", "B4"])
         finally:
             rc.close()
 
@@ -1045,11 +1010,11 @@ def test_the_default_name_follows_the_image_and_the_combination_until_typed_over
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "mosaic_B8")
             _bands_choice(rc).v_model = "all"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
-            _combo_card(rc, "false_color").fire_event("click", None)
+            _composite(rc).v_model = "false_color"
             want = "mosaic_false_color"
             assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == want)
             _field(rc, "steps.layers.field_name").v_model = "mine"
-            _combo_card(rc, "swir").fire_event("click", None)
+            _composite(rc).v_model = "swir"
             await asyncio.sleep(0.1)
             assert _field(rc, "steps.layers.field_name").v_model == "mine"
         finally:
@@ -1073,10 +1038,10 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
             _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
             _StubRasterInput.seen.path.set(str(tif))
             await _pick_all_bands(rc)
-            await _open_roles(rc)
-            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == 3)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            assert _rgb(rc) == [3, 2, 1]  # a GeoTIFF band is its index
             assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
-            _combo_card(rc, "false_color").fire_event("click", None)
+            _composite(rc).v_model = "false_color"
             _field(rc, "steps.layers.field_name").v_model = "fc"
             _field(rc, "steps.layers.field_max").v_model = "3000"
             _save_btn(rc).fire_event("click", None)
@@ -1101,12 +1066,13 @@ def test_editing_an_rgb_layer_saved_before_the_roles_keeps_its_bands(monkeypatch
                                                     on_save=lambda *a: saved.append(a), editing="rgb"),
                                   handle_error=False)
         try:
-            await _open_roles(rc)
-            assert await _settle(lambda: _field(rc, "steps.layers.role_red", v.Select).v_model == "B4")
+            assert await _settle(lambda: _composite(rc) is not None)
             assert _rgb(rc) == ["B8", "B4", "B3"]
+            # the roles are guessed from the band names, the bands stay as saved
+            assert _enabled_combos(rc) == ["true_color", "false_color", "swir", "custom"]
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
-            assert saved[0][0].bands == ["B8", "B4", "B3"]
+            assert saved[0][0].bands == ["B8", "B4", "B3"] and saved[0][0].roles["red"] == "B4"
         finally:
             rc.close()
 
