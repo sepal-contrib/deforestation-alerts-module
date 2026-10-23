@@ -1329,3 +1329,74 @@ def test_the_probe_buttons_are_disabled_without_an_aoi(monkeypatch):
             rc.close()
 
     asyncio.run(main())
+
+
+# ---------------------------------------------------------------- final-review fixes
+def test_an_rgb_edit_switched_to_one_band_starts_on_the_first_band(monkeypatch):
+    p = _with_aoi()
+    roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8", "swir": "B11"}
+    p.vis_layers = {"fc": GeeVisLayer(name="fc", asset="users/x/img", bands=["B8", "B4", "B3"], min=0, max=3000,
+                                      style="rgb", roles=roles, combo="false_color")}
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS, p)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="fc")
+        try:
+            assert await _settle(lambda: _composite(rc) is not None)
+            _bands_choice(rc).v_model = "one"
+            assert await _settle(lambda: _shown(rc, "steps.layers.field_band") is not None)
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == S2_BANDS[0]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_categorical_edit_switched_to_continuous_starts_on_the_default_ramp(monkeypatch):
+    state, open_, saved, gee = _probing(monkeypatch, ["Map"], p=_categorical_edit())
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="lc")
+        try:
+            assert await _settle(lambda: _raster_type(rc) is not None)
+            _raster_type(rc).v_model = "continuous"
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _ramp_select(rc).v_model == vis_palettes.DEFAULT_RAMP
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [(layer, _prev)] = saved
+            assert layer.style == "continuous"
+            assert layer.palette == vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_edits_saved_mode_is_not_kept_for_another_image(monkeypatch):
+    p = _with_aoi()
+    p.vis_layers = {"nd": GeeVisLayer(name="nd", asset="users/x/img", bands=["NDVI"], min=0, max=1)}
+    state, open_, saved, _ = _gee_modal(monkeypatch, [], p)
+    held = asyncio.Event()
+
+    async def get_info_async(ref):
+        if ref == "users/x/img":
+            await held.wait()  # the edit's own band list stays pending
+            return ["NDVI"]
+        return S2_BANDS
+
+    gee = SimpleNamespace(get_info_async=get_info_async)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee, editing="nd")
+        try:
+            await asyncio.sleep(0.05)
+            vlm.RasterInput.seen.asset.set({**ASSET, "asset_id": "users/x/s2"})
+            assert await _settle(lambda: _bands_choice(rc) is not None)
+            assert _bands_choice(rc).v_model == "all"  # S2's default, not the edit's one band
+            assert _shown(rc, "steps.layers.field_band") is None
+        finally:
+            held.set()
+            rc.close()
+
+    asyncio.run(main())

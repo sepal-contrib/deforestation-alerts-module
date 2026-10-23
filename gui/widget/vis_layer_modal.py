@@ -226,12 +226,15 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None else "1")
     palette0 = raster0.palette if raster0 is not None else []
     ramp0, invert0 = vis_palettes.ramp_choice(palette0)
-    # A new layer starts on the default ramp. A layer saved before the ramps keeps
-    # its palette or colormap until a ramp is picked, and preselects no ramp.
-    ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None else vis_palettes.DEFAULT_RAMP)
+    old_colormap = file0.colormap if file0 is not None and not file0.palette and not file0.bands else None
+    # A new layer starts on the default ramp, and so does an edit saved with no
+    # palette (Categorical, RGB). A layer saved before the ramps keeps its palette
+    # or colormap until a ramp is picked, and preselects no ramp.
+    ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None and (palette0 or old_colormap)
+                                      else vis_palettes.DEFAULT_RAMP)
     invert, set_invert = solara.use_state(invert0)
     show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
-    old_colormap = file0.colormap if file0 is not None and not file0.palette and not file0.bands else None
+    ref0 = gee0.asset if gee0 is not None else absolute(file0.path) if file0 is not None else None
     saved_roles = bool(raster0 is not None and raster0.roles)
     first_load = solara.use_ref(l0 is not None)  # the first band list of an edit must not touch its bands
     error, set_error = solara.use_state(None)
@@ -247,6 +250,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         # A band is a name in Earth Engine and an index in a GeoTIFF: one kind's
         # band is never a choice of the other's.
         if value and value != kind:
+            first_load.current = False  # the edit's saved mode and bands belong to its own kind
             set_kind(value)
             set_band(None)
             for setter in (set_red, set_green, set_blue):
@@ -256,6 +260,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
 
     ref = (asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if kind == "gee" else "FILE"
+    if first_load.current and ref and ref != ref0:
+        first_load.current = False  # another image: the edit's saved mode and bands are not its own
     bands_task = use_band_list(gee_interface, kind, ref, asset_type)
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
     band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
@@ -279,6 +285,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if not value:
             return
         set_bands_mode(value)
+        if value == "one" and band is None and band_items:  # an RGB edit has no band: start on the first
+            set_band(band_items[0]["value"])
         if value == "all" and not (red or green or blue):  # an RGB composite starts on the first combination
             first = vis_palettes.available_combos(roles)
             if first and _apply(first[0], roles):

@@ -213,7 +213,7 @@
       "bands_one_hint": "One band ({name}): it is drawn on its own.",
       "bands_two_hint": "2 bands: pick the one to draw. RGB needs 3 bands or more.",
       "bands_found": "{count} bands. Red, green and blue were recognized from the band names.",
-      "bands_not_found": "{count} bands. No band names were recognized as red, green and blue.",
+      "bands_not_found": "{count} bands. Red, green and blue were not all recognized from the band names.",
       "suggested": "{text} (suggested)",
       "field_raster_type": "Raster type",
       "style_continuous_item": "Continuous: a colour ramp",

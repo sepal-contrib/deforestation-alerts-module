@@ -221,7 +221,7 @@
       "bands_one_hint": "Uma banda ({name}): ela é desenhada sozinha.",
       "bands_two_hint": "2 bandas: escolha a que será desenhada. RGB precisa de 3 bandas ou mais.",
       "bands_found": "{count} bandas. Vermelho, verde e azul foram reconhecidos pelos nomes das bandas.",
-      "bands_not_found": "{count} bandas. Nenhum nome de banda foi reconhecido como vermelho, verde ou azul.",
+      "bands_not_found": "{count} bandas. Vermelho, verde e azul não foram todos reconhecidos a partir dos nomes das bandas.",
       "suggested": "{text} (sugerido)",
       "field_raster_type": "Tipo de raster",
       "style_continuous_item": "Contínuo: uma rampa de cores",
