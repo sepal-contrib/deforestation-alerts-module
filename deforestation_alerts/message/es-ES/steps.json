@@ -168,7 +168,18 @@
       "name_hint": "Como máximo 24 caracteres; también da nombre a los archivos de la fuente.",
       "format_label": "Formato de las alertas",
       "format_pyeo": "Alertas PyEO de SEPAL",
-      "format_help_pyeo": "total_changes: 1–2 probable, 3 o más confirmada; first_change_date_above_threshold: año fraccionario"
+      "format_help_pyeo": "total_changes: 1–2 probable, 3 o más confirmada; first_change_date_above_threshold: año fraccionario",
+      "band_one": "Una banda ({name}): se lee como la fecha de la alerta.",
+      "date_band_suggested": "{count} bandas. {name} parece la fecha de la alerta.",
+      "date_band_pick": "Ningún nombre de banda indica cuál contiene la fecha. Elígela.",
+      "date_band_help": "La banda que contiene la fecha de la alerta.",
+      "alert_band_pick": "Elige la banda que contiene el nivel de la alerta.",
+      "dates_loading": "Leyendo los valores de fecha…",
+      "dates_read": "Valores de {lo} a {hi}: se leen como {encoding}.",
+      "dates_odd": "Los valores de {lo} a {hi} no parecen fechas. Revisa la banda de fecha.",
+      "dates_none": "Ningún píxel con fecha en el AOI: elige la codificación.",
+      "dates_failed": "No se pudieron leer los valores de fecha: {error}",
+      "encoding_help": "Cómo guarda sus fechas la banda de fecha."
     },
     "layers": {
       "description": "Capas que apoyan el análisis de las alertas: una imagen de Earth Engine o un GeoTIFF de tu carpeta de SEPAL. También se pueden mostrar en los dos mapas de Análisis.",

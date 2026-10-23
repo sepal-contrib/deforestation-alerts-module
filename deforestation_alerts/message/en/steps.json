@@ -161,7 +161,18 @@
       "name_hint": "At most 24 characters; it also names the source's files.",
       "format_label": "Alert format",
       "format_pyeo": "SEPAL PyEO alerts",
-      "format_help_pyeo": "total_changes: 1–2 probable, 3 or more confirmed; first_change_date_above_threshold: fractional year"
+      "format_help_pyeo": "total_changes: 1–2 probable, 3 or more confirmed; first_change_date_above_threshold: fractional year",
+      "band_one": "One band ({name}): read as the alert date.",
+      "date_band_suggested": "{count} bands. {name} looks like the alert date.",
+      "date_band_pick": "No band name says which one holds the date. Pick it.",
+      "date_band_help": "The band that holds the alert date.",
+      "alert_band_pick": "Pick the band that holds the alert level.",
+      "dates_loading": "Reading the date values…",
+      "dates_read": "Values from {lo} to {hi}: they read as {encoding}.",
+      "dates_odd": "Values from {lo} to {hi} don't look like dates. Check the Date band.",
+      "dates_none": "No dated pixel over the AOI: pick the encoding.",
+      "dates_failed": "Could not read the date values: {error}",
+      "encoding_help": "How the date band stores its dates."
     },
     "layers": {
       "description": "Layers that support the analysis of the alerts: an Earth Engine image or a GeoTIFF from your SEPAL folder. They can also be shown on the two Analysis maps.",

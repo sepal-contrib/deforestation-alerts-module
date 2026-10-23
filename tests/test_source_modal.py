@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import rasterio
 import reacton
+import reacton.ipyvuetify as rv
 import solara
 from affine import Affine
 
@@ -194,10 +195,14 @@ def test_an_edit_keeps_its_own_name(requests):
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                     disabled=False):
+                     disabled=False, show_origin=True):
     """Stands in for pysepal's asset and file pickers (they list the user's
-    assets and folders): the test sets the ``path`` reactive itself."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path)
+    assets and folders): the test sets the ``asset`` or ``path`` reactive
+    itself. It draws one empty marker (``dv-stub-raster-input``), so its place
+    among the form's fields can be asserted."""
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path,
+                                            show_origin=show_origin)
+    rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
 def _state(p):
@@ -209,8 +214,8 @@ def _state(p):
     return state
 
 
-def _modal(state, open_, added, saved, editing=None):
-    return sm.SourceModal(open_=open_, app_state=state, gee_interface=object(),
+def _modal(state, open_, added, saved, editing=None, gee=None):
+    return sm.SourceModal(open_=open_, app_state=state, gee_interface=gee or object(),
                           on_add_predefined=added.append,
                           on_add_custom=lambda fields, cov: added.append((fields, cov)),
                           on_save_custom=lambda name, changes, cov: saved.append((name, changes, cov)),
@@ -239,6 +244,11 @@ def _go_custom(rc, name):
     field.v_model = name
 
 
+def _source(rc):
+    """The Source select above the picker."""
+    return rc.find(v.Select, label=t("steps.raster_input.field_source")).widgets[0]
+
+
 def _submit_btn(rc, label=None):
     """The TaskButtonComponent's button, found by its label."""
     label = label or t("steps.alerts.add")
@@ -263,7 +273,7 @@ def test_a_custom_geotiff_is_validated_added_inside_the_task_and_the_modal_close
         box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _go_custom(rc, "my radd")
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(path))
             # the bands are read and the RADD preset suggested, by band index
             assert await _settle(lambda: rc.find(v.Select, label=t("steps.alerts.band_date")).widgets
@@ -400,7 +410,7 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
         box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _go_custom(rc, "x")
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(_tif(tmp_path / "w.tif")))
             await asyncio.sleep(0.1)
 
@@ -463,7 +473,7 @@ def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
             assert await _settle(lambda: len(asked) == 1)
             # the fields are frozen while their values are checked
             assert rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0].disabled is True
-            assert rc.find(v.Select, label=t("steps.alerts.format_label")).widgets[0].disabled is True
+            assert _source(rc).disabled is True
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
             else:
@@ -617,27 +627,6 @@ def test_the_source_form_sits_on_the_form_frame():
     asyncio.run(main())
 
 
-def test_the_custom_fields_have_hints_and_the_format_is_a_dropdown(monkeypatch):
-    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
-    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
-
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            _go_custom(rc, "mine")
-            name = rc.find(v.TextField, label=t("steps.alerts.name_label")).widget
-            assert (name.hint, name.persistent_hint) == (t("steps.alerts.name_hint"), True)
-            fmt = rc.find(v.Select, label=t("steps.alerts.format_label")).widget
-            assert fmt.items == [{"text": t(f"steps.alerts.format_{f}"), "value": f} for f in sm.FORMATS]
-            fmt.v_model = "ccdc"
-            fmt = rc.find(v.Select, label=t("steps.alerts.format_label")).widget
-            assert fmt.hint == t("steps.alerts.format_help_ccdc") and fmt.persistent_hint
-        finally:
-            rc.close()
-
-    asyncio.run(main())
-
-
 def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
     """Review Focus 1: while the check runs, the primary button reads Cancel
     and carries no Enter class, so a second Enter cannot stop the check."""
@@ -680,6 +669,530 @@ def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
             assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
             assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
             assert mode.v_model == "predefined"
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------- the custom form (spec 2026-10-23-source-form)
+ASSET = {"asset_id": "users/x/a", "type": "IMAGE", "column": "ALL", "value": None}
+OTHER = {"asset_id": "users/x/b", "type": "IMAGE", "column": "ALL", "value": None}
+AOI_BOUNDS = (-55.5, -24.5, -55.4, -24.4)  # _p()'s
+
+
+def _ee(monkeypatch, bands, dates=None, gates=None):
+    """An Earth Engine stand-in. The band list of an asset is ``bands`` (a
+    dict per asset id, or one list for any); the date values of ``(asset id,
+    band)`` are ``dates[...]``: ``(lowest, highest)``, None for no dated pixel,
+    or an exception to raise. A request waits for ``gates[asset id]`` (band
+    list) or ``gates[(asset id, band)]`` (date values) when given."""
+    from gui.widget import raster_input
+
+    monkeypatch.setattr(raster_input.user_raster, "band_list_request", lambda ref, kind: ("BANDS", ref, kind))
+    monkeypatch.setattr(sm.date_probes, "date_range_request",
+                        lambda ref, kind, band, bounds: ("DATES", ref, kind, band, bounds))
+    calls = []
+
+    async def get_info_async(obj):
+        calls.append(obj)
+        key = obj[1] if obj[0] == "BANDS" else (obj[1], obj[3])
+        if gates and key in gates:
+            await gates[key].wait()
+        if obj[0] == "BANDS":
+            return list(bands[obj[1]] if isinstance(bands, dict) else bands)
+        span = (dates or {})[key]
+        if isinstance(span, Exception):
+            raise span
+        return {"min": None, "max": None} if span is None else {"min": span[0], "max": span[1]}
+
+    return SimpleNamespace(get_info_async=get_info_async, calls=calls)
+
+
+def _date_reads(gee):
+    return [c for c in gee.calls if c[0] == "DATES"]
+
+
+def _render_custom(monkeypatch, gee, p=None, editing=None):
+    """The custom form, named "mine" (an edit opens on its own name); Add
+    records what it would check and refuses."""
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    asked = []
+
+    async def fake_validate(gee_interface, project, aoi_fc, **kw):
+        asked.append(kw)
+        return {"error": "steps.alerts.err_not_covered"}
+
+    monkeypatch.setattr(sm, "validate_custom", fake_validate)
+    monkeypatch.setattr(sm.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    state, open_, added, saved = _state(p or _p()), solara.reactive(True), [], []
+    _box, rc = reacton.render(_modal(state, open_, added, saved, editing=editing, gee=gee), handle_error=False)
+    if editing is None:
+        _go_custom(rc, "mine")
+    return rc, SimpleNamespace(asked=asked, state=state, open_=open_)
+
+
+def _select(rc, key):
+    """The select labelled ``t(key)``, or None while it is not shown."""
+    found = rc.find(v.Select, label=t(key)).widgets
+    return found[0] if found else None
+
+
+def _fmt(rc):
+    return _select(rc, "steps.alerts.format_label")
+
+
+def _alert(rc):
+    return _select(rc, "steps.alerts.band_alert")
+
+
+def _date(rc):
+    return _select(rc, "steps.alerts.band_date")
+
+
+def _enc(rc):
+    return _select(rc, "steps.alerts.encoding_label")
+
+
+def _texts(rc):
+    return " ".join(str(w.children) for w in rc.find(v.Html).widgets)
+
+
+def _item_texts(select):
+    return {i["value"]: i["text"] for i in select.items}
+
+
+def _suggested(text):
+    return t("steps.layers.suggested", text=text)
+
+
+def _enc_text(e):
+    return t(f"steps.alerts.encoding_{e}")
+
+
+def _nothing_below_the_picker(rc):
+    return _fmt(rc) is None and _alert(rc) is None and _date(rc) is None and _enc(rc) is None
+
+
+async def _submit_and_read(rc, seen):
+    _submit_btn(rc).fire_event("click", None)
+    assert await _settle(lambda: bool(seen.asked))
+    return seen.asked[-1]
+
+
+def _dated_tif(path, layers):
+    """A WGS84 GeoTIFF inside ``_p()``'s AOI, one int32 band per layer of
+    values (cycled over its 10x10 pixels), no band descriptions."""
+    with rasterio.open(path, "w", driver="GTiff", width=10, height=10, count=len(layers), dtype="int32",
+                       crs="EPSG:4326", transform=Affine(0.0002, 0, -55.5, 0, -0.0002, -24.4)) as dst:
+        for i, values in enumerate(layers, start=1):
+            dst.write(np.resize(np.asarray(values, "int32"), (10, 10)), i)
+    return path
+
+
+def test_number_text_reads_whole_values_as_integers_and_others_with_two_decimals():
+    assert sm.number_text(25003.0) == "25003"
+    assert sm.number_text(2025032) == "2025032"
+    assert sm.number_text(2025.0234) == "2025.02"
+    assert sm.number_text(2025.816) == "2025.82"
+
+
+def test_custom_form_order_name_source_picker(monkeypatch):
+    from gui.widget.form_dialog import FIELDS
+
+    async def main():
+        rc, _ = _render_custom(monkeypatch, _ee(monkeypatch, ["Alert", "Date"]))
+        try:
+            [fields] = rc.find(v.Html, style_=FIELDS).widgets
+            name = rc.find(v.TextField, label=t("steps.alerts.name_label")).widgets[0]
+            [picker] = rc.find(v.Html, class_="dv-stub-raster-input").widgets
+            order = fields.children
+            assert order.index(name) < order.index(_source(rc)) < order.index(picker)
+            assert [i["value"] for i in _source(rc).items] == list(sm.SOURCE_ORIGINS) == ["gee", "file"]
+            assert _StubRasterInput.seen.show_origin is False  # the Source select picks the origin
+            assert _nothing_below_the_picker(rc)  # no raster: nothing, not even the Alert format
+            assert t("steps.raster_input.bands_loading") not in _texts(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_nothing_below_the_picker_until_the_bands_are_read(monkeypatch):
+    release = asyncio.Event()
+
+    async def main():
+        gee = _ee(monkeypatch, ["Alert", "Date"], gates={"users/x/a": release})
+        rc, seen = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set({**ASSET, "type": "IMAGE_COLLECTION"})
+            loading = t("steps.raster_input.bands_loading")
+            assert await _settle(lambda: loading in _texts(rc))
+            assert _nothing_below_the_picker(rc)
+            assert t("steps.alerts.collection_help") in _texts(rc)  # the note does not wait for the bands
+            assert _submit_btn(rc).disabled is True  # Save waits for the bands
+            release.set()
+            assert await _settle(lambda: _fmt(rc) is not None)
+            assert loading not in _texts(rc) and _submit_btn(rc).disabled is False
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_band_read_shows_its_error_line_only(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, {})  # no band list for any asset: a KeyError
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text").widgets))
+            assert _nothing_below_the_picker(rc) and _submit_btn(rc).disabled is True
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_one_band_is_a_line_then_the_encoding_read_from_its_values(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date"], dates={("users/x/a", "alert_date"): (25003, 25296)})
+        rc, seen = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yyddd")
+            assert t("steps.alerts.band_one", name="alert_date") in _texts(rc)
+            assert _fmt(rc) is None and _alert(rc) is None and _date(rc) is None
+            enc = _enc(rc)
+            assert _item_texts(enc)["yyddd"] == _suggested(_enc_text("yyddd"))
+            assert _item_texts(enc)["yymm"] == _enc_text("yymm")
+            assert (enc.hint, enc.persistent_hint) == (
+                t("steps.alerts.dates_read", lo="25003", hi="25296", encoding="yyddd"), True)
+            # the values are read over the AOI's bounds
+            assert _date_reads(gee) == [("DATES", "users/x/a", "IMAGE", "alert_date", AOI_BOUNDS)]
+            kw = await _submit_and_read(rc, seen)
+            assert (kw["fmt"], kw["alert_band"], kw["date_band"], kw["encoding"]) == (
+                "date_only", None, "alert_date", "yyddd")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_radd_band_names_suggest_radd_and_its_bands(monkeypatch):
+    async def main():
+        rc, seen = _render_custom(monkeypatch, _ee(monkeypatch, ["Alert", "Date", "extra"]))
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _fmt(rc) is not None and _fmt(rc).v_model == "radd")
+            fmt = _fmt(rc)
+            assert _item_texts(fmt) == {
+                "radd": _suggested(t("steps.alerts.format_radd")), "ccdc": t("steps.alerts.format_ccdc"),
+                "pyeo": t("steps.alerts.format_pyeo"), "date_only": t("steps.alerts.format_date_only")}
+            assert (fmt.hint, fmt.persistent_hint, fmt.dense, fmt.outlined) == (
+                t("steps.alerts.format_help_radd"), True, True, True)
+            assert _alert(rc).v_model == "Alert" and _date(rc).v_model == "Date"
+            assert _item_texts(_alert(rc)) == {"Alert": _suggested("Alert"), "Date": "Date", "extra": "extra"}
+            assert _item_texts(_date(rc))["Date"] == _suggested("Date")
+            assert _date(rc).hint == t("steps.alerts.date_band_suggested", count=3, name="Date")
+            assert _enc(rc) is None  # a preset's encoding is its own
+            kw = await _submit_and_read(rc, seen)
+            assert (kw["fmt"], kw["alert_band"], kw["date_band"]) == ("radd", "Alert", "Date")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_ccdc_with_one_preset_band_fills_that_one_and_leaves_the_other_empty(monkeypatch):
+    async def main():
+        rc, _ = _render_custom(monkeypatch, _ee(monkeypatch, ["first_detection_date", "magnitude"],
+                                                dates={("users/x/a", "first_detection_date"): (2025.1, 2025.5)}))
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            # not every CCDC band is there: Date only, on the band that says "date"
+            assert await _settle(lambda: _fmt(rc) is not None and _fmt(rc).v_model == "date_only")
+            _fmt(rc).v_model = "ccdc"
+            assert await _settle(lambda: _alert(rc) is not None)
+            assert _date(rc).v_model == "first_detection_date"
+            assert _item_texts(_date(rc))["first_detection_date"] == _suggested("first_detection_date")
+            alert = _alert(rc)
+            assert alert.v_model is None
+            assert (alert.hint, alert.persistent_hint) == (t("steps.alerts.alert_band_pick"), True)
+            assert _enc(rc) is None  # a preset's encoding is its own
+            alert.v_model = "magnitude"
+            assert _alert(rc).hint == ""  # picked: no hint
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_date_only_suggests_the_one_date_band_and_the_encoding_from_its_values(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["magnitude", "change_date", "confidence"],
+                  dates={("users/x/a", "change_date"): (2025.0234, 2025.816),
+                         ("users/x/a", "confidence"): (1, 87)})
+        rc, seen = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "decimal_year")
+            assert _fmt(rc).v_model == "date_only"
+            assert _item_texts(_fmt(rc))["date_only"] == _suggested(t("steps.alerts.format_date_only"))
+            assert _alert(rc) is None
+            date = _date(rc)
+            assert date.v_model == "change_date" and _item_texts(date)["change_date"] == _suggested("change_date")
+            assert (date.hint, date.persistent_hint) == (
+                t("steps.alerts.date_band_suggested", count=3, name="change_date"), True)
+            assert _enc(rc).hint == t("steps.alerts.dates_read", lo="2025.02", hi="2025.82",
+                                      encoding="decimal year")
+            assert _submit_btn(rc).disabled is False
+            # another band: its values do not read as dates
+            _date(rc).v_model = "confidence"
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).hint == t(
+                "steps.alerts.dates_odd", lo="1", hi="87"))
+            assert _enc(rc).v_model is None
+            assert _item_texts(_enc(rc)) == {e: _enc_text(e) for e in sm.ENCODINGS}  # nothing suggested
+            assert _date(rc).hint == t("steps.alerts.date_band_help")
+            assert _submit_btn(rc).disabled is True  # no encoding
+            _enc(rc).v_model = "yymm"
+            assert _submit_btn(rc).disabled is False
+            kw = await _submit_and_read(rc, seen)
+            assert (kw["fmt"], kw["date_band"], kw["encoding"]) == ("date_only", "confidence", "yymm")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_no_dated_pixel_over_the_aoi_asks_for_the_encoding(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date"], dates={("users/x/a", "alert_date"): None})
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).hint == t("steps.alerts.dates_none"))
+            assert _enc(rc).v_model is None and _submit_btn(rc).disabled is True
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_date_read_is_a_line_and_the_user_picks(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date"], dates={("users/x/a", "alert_date"): RuntimeError("boom")})
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            shown = t("steps.alerts.dates_failed", error="boom")
+            assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text", children=[shown]).widgets))
+            enc = _enc(rc)
+            assert enc is not None and enc.v_model is None
+            assert enc.hint == t("steps.alerts.encoding_help")
+            assert _submit_btn(rc).disabled is True
+            enc.v_model = "yymm"
+            assert _submit_btn(rc).disabled is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_reading_the_dates_shows_its_line_and_holds_save(monkeypatch):
+    release = asyncio.Event()
+
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date"], dates={("users/x/a", "alert_date"): (2501, 2510)},
+                  gates={("users/x/a", "alert_date"): release})
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            reading = t("steps.alerts.dates_loading")
+            assert await _settle(lambda: reading in _texts(rc))
+            assert _enc(rc) is None and _submit_btn(rc).disabled is True
+            release.set()
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yymm")
+            assert reading not in _texts(rc) and _submit_btn(rc).disabled is False
+            assert _enc(rc).hint == t("steps.alerts.dates_read", lo="2501", hi="2510", encoding="yymm")
+        finally:
+            release.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_new_date_band_reads_again_and_a_stale_read_is_dropped(monkeypatch):
+    slow = asyncio.Event()
+
+    async def main():
+        gee = _ee(monkeypatch, ["alert_date", "other"],
+                  dates={("users/x/a", "alert_date"): (25003, 25296), ("users/x/a", "other"): (2501, 2510)},
+                  gates={("users/x/a", "alert_date"): slow})
+        rc, seen = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: t("steps.alerts.dates_loading") in _texts(rc))
+            _date(rc).v_model = "other"  # while the first band's values are read
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yymm")
+            slow.set()  # the first read ends late: it does not land on the new band
+            await asyncio.sleep(0.1)
+            assert _enc(rc).v_model == "yymm"
+            assert _enc(rc).hint == t("steps.alerts.dates_read", lo="2501", hi="2510", encoding="yymm")
+            assert ("users/x/a", "other") in [(c[1], c[3]) for c in _date_reads(gee)]
+        finally:
+            slow.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_late_read_does_not_land_on_a_newer_raster(monkeypatch):
+    slow = asyncio.Event()
+
+    async def main():
+        gee = _ee(monkeypatch, {"users/x/a": ["alert_date"], "users/x/b": ["alert_date"]},
+                  dates={("users/x/a", "alert_date"): (25003, 25296), ("users/x/b", "alert_date"): (2501, 2510)},
+                  gates={("users/x/a", "alert_date"): slow})
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: t("steps.alerts.dates_loading") in _texts(rc))
+            _StubRasterInput.seen.asset.set(OTHER)
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yymm")
+            slow.set()
+            await asyncio.sleep(0.1)
+            assert _enc(rc).v_model == "yymm"
+        finally:
+            slow.set()
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_geotiff_without_band_names_leaves_the_date_band_to_the_user(tmp_path, monkeypatch):
+    path = _dated_tif(tmp_path / "stack.tif", [[0, 87], [2025032, 2025301], [1, 3]])
+
+    async def main():
+        rc, seen = _render_custom(monkeypatch, _ee(monkeypatch, []))
+        try:
+            _source(rc).v_model = "file"
+            _StubRasterInput.seen.path.set(str(path))
+            assert await _settle(lambda: _date(rc) is not None)
+            assert _fmt(rc).v_model == "date_only"
+            date = _date(rc)
+            assert date.v_model is None  # never the first band
+            assert [(i["text"], i["value"]) for i in date.items] == [("Band 1", 1), ("Band 2", 2), ("Band 3", 3)]
+            assert (date.hint, date.persistent_hint) == (t("steps.alerts.date_band_pick"), True)
+            assert _enc(rc) is None and _submit_btn(rc).disabled is True
+            date.v_model = 2  # the GeoTIFF's values are read too
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yyyyddd")
+            assert _enc(rc).hint == t("steps.alerts.dates_read", lo="2025032", hi="2025301", encoding="yyyyddd")
+            assert _submit_btn(rc).disabled is False
+            kw = await _submit_and_read(rc, seen)
+            assert (kw["origin"], kw["fmt"], kw["date_band"], kw["encoding"]) == ("file", "date_only", 2, "yyyyddd")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_source_change_clears_the_raster_and_its_bands(monkeypatch):
+    async def main():
+        rc, seen = _render_custom(monkeypatch, _ee(monkeypatch, ["Alert", "Date"]))
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _fmt(rc) is not None and _fmt(rc).v_model == "radd")
+            _source(rc).v_model = "file"
+            assert _StubRasterInput.seen.origin == "file"
+            assert _StubRasterInput.seen.asset.value is None and _StubRasterInput.seen.path.value == ""
+            assert _nothing_below_the_picker(rc)
+            _source(rc).v_model = "gee"  # the asset is not picked again
+            await asyncio.sleep(0.05)
+            assert _StubRasterInput.seen.asset.value is None and _nothing_below_the_picker(rc)
+            kw = await _submit_and_read(rc, seen)
+            assert (kw["ref"], kw["fmt"], kw["alert_band"], kw["date_band"], kw["encoding"]) == (
+                None, None, None, None, None)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_switching_the_format_away_and_back_reapplies_its_defaults(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["Alert", "Date", "extra"], dates={("users/x/a", "Date"): (25003, 25296)})
+        rc, _ = _render_custom(monkeypatch, gee)
+        try:
+            _StubRasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _alert(rc) is not None and _alert(rc).v_model == "Alert")
+            _alert(rc).v_model = "extra"
+            _date(rc).v_model = "extra"
+            _fmt(rc).v_model = "date_only"
+            # Date only's defaults: the band that says "date", the encoding from its values
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yyddd")
+            assert _alert(rc) is None and _date(rc).v_model == "Date"
+            _fmt(rc).v_model = "radd"
+            assert await _settle(lambda: _alert(rc) is not None)
+            assert (_alert(rc).v_model, _date(rc).v_model) == ("Alert", "Date") and _enc(rc) is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def _edited(fmt="date_only", encoding="yymm", alert=None, date="d"):
+    p = _p()
+    p.sources = {"mine": CustomSource(name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format=fmt,
+                                      date_encoding=encoding, band_map=BandMap(alert=alert, date=date),
+                                      native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3)}
+    return p
+
+
+def test_an_edit_opens_on_its_saved_values_and_reads_only_on_a_new_date_band(monkeypatch):
+    async def main():
+        gee = _ee(monkeypatch, ["d", "other_date"],
+                  dates={("users/x/a", "d"): (25003, 25296), ("users/x/a", "other_date"): (2025032, 2025301)})
+        rc, seen = _render_custom(monkeypatch, gee, p=_edited(), editing="mine")
+        try:
+            assert await _settle(lambda: _date(rc) is not None and _enc(rc) is not None)
+            await asyncio.sleep(0.1)
+            assert (_fmt(rc).v_model, _date(rc).v_model, _enc(rc).v_model) == ("date_only", "d", "yymm")
+            assert _enc(rc).hint == t("steps.alerts.encoding_help")
+            assert _item_texts(_enc(rc)) == {e: _enc_text(e) for e in sm.ENCODINGS}  # nothing suggested
+            assert _date_reads(gee) == []  # no read of the saved band
+            assert _submit_btn(rc, t("steps.alerts.save")).disabled is False
+            _date(rc).v_model = "other_date"
+            assert await _settle(lambda: _enc(rc) is not None and _enc(rc).v_model == "yyyyddd")
+            assert _item_texts(_enc(rc))["yyyyddd"] == _suggested(_enc_text("yyyyddd"))
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_raster_block_with_no_raster_draws_nothing_and_reads_nothing(monkeypatch):
+    """The seam the points/polygons branch uses: its own origin passes no
+    raster, and the raster block stays empty and idle."""
+    gee = _ee(monkeypatch, ["Alert", "Date"], dates={})
+    state = _state(_p())
+    open_ = solara.reactive(True)
+
+    @solara.component
+    def Host():
+        raster = sm.use_raster_fields(gee, state, open_, None, "gee", None, None)
+        with rv.Html(tag="div", class_="dv-raster-block"):
+            raster.draw(False)
+        Host.raster = raster
+
+    async def main():
+        _box, rc = reacton.render(Host(), handle_error=False)
+        try:
+            await asyncio.sleep(0.1)
+            [block] = rc.find(v.Html, class_="dv-raster-block").widgets
+            assert block.children == []
+            assert gee.calls == [] and Host.raster.save_blocked is False
         finally:
             rc.close()
 

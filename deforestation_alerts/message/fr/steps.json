@@ -168,7 +168,18 @@
       "name_hint": "24 caractères au plus ; il nomme aussi les fichiers de la source.",
       "format_label": "Format des alertes",
       "format_pyeo": "Alertes PyEO SEPAL",
-      "format_help_pyeo": "total_changes : 1–2 probable, 3 ou plus confirmée ; first_change_date_above_threshold : année fractionnaire"
+      "format_help_pyeo": "total_changes : 1–2 probable, 3 ou plus confirmée ; first_change_date_above_threshold : année fractionnaire",
+      "band_one": "Une bande ({name}) : lue comme la date de l'alerte.",
+      "date_band_suggested": "{count} bandes. {name} ressemble à la date de l'alerte.",
+      "date_band_pick": "Aucun nom de bande n'indique laquelle contient la date. Choisissez-la.",
+      "date_band_help": "La bande qui contient la date de l'alerte.",
+      "alert_band_pick": "Choisissez la bande qui contient le niveau de l'alerte.",
+      "dates_loading": "Lecture des valeurs de date…",
+      "dates_read": "Valeurs de {lo} à {hi} : elles se lisent comme {encoding}.",
+      "dates_odd": "Les valeurs de {lo} à {hi} ne ressemblent pas à des dates. Vérifiez la bande de date.",
+      "dates_none": "Aucun pixel daté dans l'AOI : choisissez l'encodage.",
+      "dates_failed": "Impossible de lire les valeurs de date : {error}",
+      "encoding_help": "Comment la bande de date stocke ses dates."
     },
     "layers": {
       "description": "Des couches qui appuient l'analyse des alertes : une image Earth Engine ou un GeoTIFF de votre dossier SEPAL. Elles peuvent aussi être affichées sur les deux cartes d'Analyse.",
