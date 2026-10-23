@@ -14,8 +14,8 @@ the AOI raster, so it waits for the AOI sidecar and claims ``aoi_key``.
 A row explains its coverage (``build_rows``, spec §7.3): a source that is not
 covered, has no data for the window or has no coverage record reads why under
 its row and cannot be run or shown; a partly covered one keeps a warning line
-per cause; a harmonized one reads what it found. Run all skips the blocked
-rows (``PrepareRow.needs_run``). Only an Earth Engine download needs the
+per cause; a harmonized one reads what it found in its subtitle. Run all
+skips the blocked rows (``PrepareRow.needs_run``). Only an Earth Engine download needs the
 Earth Engine AOI (and only GLAD-L's its catalogue metadata); a GeoTIFF row
 that must build the AOI raster first needs the AOI sidecar, and claims the
 project's AOI-raster key (``aoi_key``) so two jobs never build it at once.
@@ -49,14 +49,16 @@ from deforestation_alerts.engine.fingerprint import (
     AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, period_masks, raw_key, status,
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
+from deforestation_alerts.engine.why import source_reason
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.review_copy import read_only
-from gui.i18n import size_text, t, tn
+from gui.i18n import t, tn
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
-from gui.scripts.prepare_jobs import PrepareContext, progress_key, row_cells, run_rows
+from gui.scripts.prepare_jobs import PrepareContext, progress_key, run_rows
+from gui.scripts.prepare_view import source_state, source_subtitle
 from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
@@ -64,20 +66,19 @@ from gui.store import workflow_steps
 from gui.tile.masks_card import MasksCard
 from gui.widget.grid_form import GridForm
 from gui.widget.help import StepIntro
-from gui.widget.product_table import ProductTable
+from gui.widget.product_table import STATUS_PX, ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 _DOWNLOADS = (Status.MISSING, Status.STALE)  # the runner downloads these (and anything forced)
 
-SOURCE_ACTIONS = 3  # download, re-download, map
+SOURCE_ACTIONS = 4  # map, details, download again, delete
 
 
 def source_columns() -> list:
-    """Source | Download | Harmonize (spec D4): the size on disk is a note."""
+    """Source | Status (spec "The sources table"): the size on disk is in the subtitle."""
     return [{"label": t("steps.prepare.col_source")},
-            {"label": t("steps.prepare.col_download"), "width": "100px"},
-            {"label": t("steps.prepare.col_harmonize"), "width": "100px"}]
+            {"label": t("steps.prepare.col_status"), "width": f"{STATUS_PX}px"}]
 
 
 def _inflight_key(project: str, period_id: str, source: str) -> str:
@@ -121,56 +122,82 @@ def _label(p, source):
     return t(catalogue.LABEL_KEYS[src.catalogue_key]) if src.kind == "predefined" else source
 
 
-def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, rerun, toggle, locked=False,
-               progress=None) -> list:
-    """The ``ProductTable`` rows of the sources table (spec §7.3); pure.
+def _art(p, key):
+    """The artifact under ``key``; a slice-1 ``no_data`` record reads as none (``status``)."""
+    art = p.artifacts.get(key)
+    return None if art is None or art.no_data else art
+
+
+def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,
+               stages=None, info_open=None, locked=False, progress=None) -> list:
+    """The ``ProductTable`` rows of the sources table (spec "The sources
+    table", option B); pure.
 
     ``mine``: this project's and period's in-flight keys; ``errors``: the row
     errors by source; ``on``/``building``: the map keys shown and being built;
-    ``run``/``rerun``/``toggle``: the row actions, called with the source.
-    A blocked row (``PrepareRow.blocked``) cannot be run or shown; a row in
-    flight cannot be started again (the claim would refuse it silently), so
-    both run buttons say so, the download one with its spinner. ``locked``: a
-    review copy (spec §6.3): both run buttons are disabled. ``progress``: the
-    downloads' percents, by ``prepare_jobs.progress_key``.
+    ``run``/``toggle``/``on_info``/``on_refresh``/``on_delete``: the row's
+    pill and actions, called with the source. ``stages``: the running job's
+    stage (``download`` / ``harmonize``) by ``prepare_jobs.progress_key``: a
+    row in flight without one waits for its turn (queued). ``info_open``: the
+    source whose Details dialog is open. ``locked``: a review copy (spec
+    §6.3): no pill, and nothing that writes. ``progress``: the downloads'
+    percents, by ``progress_key``.
+
+    One Status cell holds the row's state or the verb of its next run
+    (``prepare_view.source_state``), and the name's subtitle says what the
+    row holds or why it is out of date; only the warning and error notes
+    stay as lines under the row. A blocked row (``PrepareRow.blocked``)
+    cannot be run, shown or downloaded again; a row in flight cannot be
+    started again (the claim would refuse it silently).
 
     A source already downloaded for this window offers no Run again (user
     decision 2026-10-15): it stays only while its harmonized file needs
     building, and comes back when the raw file goes out of date, as a new
-    period or a change to the period's dates makes it. Re-download stays: a
+    period or a change to the period's dates makes it. Download again stays: a
     live catalogue changes under the same window (spec §5.3).
     """
     out = []
     for r in rows:
         busy = _inflight_key(p.name, period.id, r.source) in mine
+        pkey = progress_key(p.name, period.id, "source", r.source)
+        stage = (stages or {}).get(pkey) if busy else None
+        pct = (progress or {}).get(pkey) if busy else None
+        file_source = is_file_source(p.sources[r.source])
+        raw_art, harm_art = _art(p, raw_key(period.id, r.source)), _art(p, harm_key(period.id, r.source))
         if r.file_missing:
             notes = [{"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"}]
         else:
-            notes = row_notes(r.coverage, r.notes)
+            notes = [n for n in row_notes(r.coverage, r.notes) if n["tone"] in ("warning", "error")]
         result = result_note(r.stats) if not r.blocked else None
-        if result is not None:
+        if result is not None and result["tone"] == "warning":  # every pixel masked out
             notes.append(result)
-        size = sum(a.size_bytes for k in (raw_key(period.id, r.source), harm_key(period.id, r.source))
-                   if (a := p.artifacts.get(k)) is not None)
-        if size:
-            notes.append({"text": t("steps.prepare.size_note", size=size_text(size)), "tone": None})
+        reason = source_reason(p, period, r.source) if not (r.ready or r.blocked) else None
+        subtitle, tone = source_subtitle(r, file_source=file_source, raw_art=raw_art, harm_art=harm_art,
+                                         reason=reason, stage=stage, queued=busy and stage is None, pct=pct)
+        title = {"type": "title", "value": _label(p, r.source), "subtitle": subtitle}
+        if tone:
+            title["subtitle_tone"] = tone
+        state = source_state(r, file_source=file_source, stage=stage, queued=busy and stage is None, pct=pct,
+                             failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)))
         key = f"src:{r.source}"
         out.append({
             "key": r.source,
-            "cells": row_cells(r, running=busy, label=_label(p, r.source),
-                               progress=(progress or {}).get(progress_key(p.name, period.id, "source", r.source))),
+            "cells": [title, state],
             "notes": notes,
             "error": errors.get(r.source),
             "actions": [
-                {"kind": "download", "disabled": locked or busy or not r.needs_run, "loading": busy,
-                 "on_click": (lambda s=r.source: run(s))},
-                {"kind": "redownload", "disabled": locked or busy or r.blocked,
-                 "on_click": (lambda s=r.source: rerun(s))},
                 # ``ready`` keeps files built before a failed check (Integrate
                 # uses them), but a blocked row is not shown (ruling T19 C)
                 # (a layer already on can always be switched off)
                 {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
                  "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
+                {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
+                {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source,
+                 "title": t("steps.prepare.action_nothing_to_fetch" if file_source
+                            else "steps.prepare.action_download_again"),
+                 "on_click": (lambda s=r.source: on_refresh(s))},
+                {"kind": "delete", "disabled": busy or locked or (raw_art is None and harm_art is None),
+                 "title": t("steps.prepare.action_delete_files"), "on_click": (lambda s=r.source: on_delete(s))},
             ],
         })
     return out
@@ -379,9 +406,10 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
 
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
-                            run=lambda s: _start(items_for_source(p, pdir, period, s)),
-                            rerun=lambda s: _start([("source", s)], force=True), toggle=_toggle_map,
-                            locked=read_only(p), progress=row_progress.value)
+                            run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
+                            # Details, Download again and Delete files land with their dialogs
+                            on_info=lambda s: None, on_refresh=lambda s: None, on_delete=lambda s: None,
+                            stages={}, info_open=None, locked=read_only(p), progress=row_progress.value)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))

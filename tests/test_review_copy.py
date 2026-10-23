@@ -412,7 +412,8 @@ def test_prepare_rows_are_disabled_and_the_runner_refuses(tmp_path, monkeypatch)
     from tests.test_prepare_rows import _build
 
     out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered")], locked=True)["RADD"]
-    assert all(a["disabled"] for a in out["actions"] if a["kind"] in ("download", "redownload"))
+    assert out["cells"][1]["type"] == "state"  # no pill to run it
+    assert all(a["disabled"] for a in out["actions"] if a["kind"] in ("refresh", "delete"))
     s = _state(tmp_path, monkeypatch)
     ctx = prepare_jobs.PrepareContext(app_state=s, layers=None, map_=None, notifier=None, name="c", pdir=tmp_path,
                                       period=PER, meta={}, aoi=None, cancel=threading.Event())

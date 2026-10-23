@@ -1,4 +1,4 @@
-"""Download & harmonize rows (spec §7.3): coverage states, results, sizes, refusals and Stop."""
+"""Download & harmonize rows (spec §7.3, option B): states, verbs, actions, notes, refusals and Stop."""
 
 import asyncio
 import threading
@@ -9,9 +9,11 @@ import pytest
 
 from deforestation_alerts.engine import runner
 from deforestation_alerts.engine.coverage import Note
-from deforestation_alerts.engine.fingerprint import Status
+from deforestation_alerts.engine.fingerprint import Status, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
-from deforestation_alerts.project.models import AoiRecord, Period, Project, add_predefined_source
+from deforestation_alerts.project.models import (
+    AoiRecord, Artifact, BandMap, Period, Project, add_custom_source, add_predefined_source,
+)
 from gui.scripts import prepare_jobs
 from gui.tile import prepare_step
 
@@ -28,14 +30,23 @@ def _p():
     return p
 
 
-def _build(rows, **over):
-    kw = dict(mine=set(), errors={}, on=set(), building=set(), run=lambda s: None, rerun=lambda s: None,
-              toggle=lambda s: None)
+def _build(rows, p=None, **over):
+    kw = dict(mine=set(), errors={}, on=set(), building=set(), run=lambda s: None, toggle=lambda s: None,
+              on_info=lambda s: None, on_refresh=lambda s: None, on_delete=lambda s: None)
     kw.update(over)
-    return {r["key"]: r for r in prepare_step.build_rows(_p(), "/tmp/x", JAN, rows, **kw)}
+    return {r["key"]: r for r in prepare_step.build_rows(p or _p(), "/tmp/x", JAN, rows, **kw)}
 
 
-def test_blocked_rows_explain_and_cannot_run():
+def _acts(row) -> dict:
+    return {a["kind"]: a for a in row["actions"]}
+
+
+def _art(key, kind):
+    return Artifact(key=key, kind=kind, rel_path="x.tif", fingerprint="f", inputs={}, content_id="c",
+                    size_bytes=1000, created_at=datetime(2026, 2, 3))
+
+
+def test_blocked_row_reads_its_status_and_no_verb():
     rows = [
         PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
                    (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)),
@@ -47,12 +58,17 @@ def test_blocked_rows_explain_and_cannot_run():
     assert out["GLAD-S2"]["notes"][0]["text"].startswith("Not covered: GLAD-S2 does not cover this AOI")
     assert out["RADD"]["notes"][0]["text"] == "No data for this period: RADD starts 2020-01-01 here"
     assert out["GLAD-L"]["notes"][0]["text"] == "Coverage not checked"
+    assert out["GLAD-S2"]["cells"][1]["label"] == "not covered"
+    assert out["GLAD-S2"]["cells"][0]["subtitle"] == out["GLAD-S2"]["notes"][0]["text"]
     for r in out.values():
-        assert all(a["disabled"] for a in r["actions"])
-        assert r["cells"][1]["status"] in ("not_covered", "no_data", "unchecked")
+        assert r["cells"][1]["type"] == "state"
+        acts = _acts(r)
+        assert acts["refresh"]["disabled"] and acts["delete"]["disabled"] and acts["map_toggle"]["disabled"]
+        assert not acts["info"].get("disabled", False)
 
 
-def test_partial_lines_and_results():
+def test_only_warning_and_error_notes_stay():
+    """The neutral notes (what a harmonized row found, its size) are in its subtitle now."""
     rows = [
         PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT, "partial",
                    (Note("coverage.partial_share", (("source", "GLAD-L"), ("pct", "35"))),),
@@ -63,27 +79,92 @@ def test_partial_lines_and_results():
                    stats={"alert_pixels": 0, "alert_pixels_unmasked": 40}),
     ]
     out = _build(rows)
-    assert [n["tone"] for n in out["GLAD-L"]["notes"]] == ["warning", None]
-    assert out["GLAD-L"]["notes"][1]["text"] == "ready · 1,200 alert pixels"
-    assert out["RADD"]["notes"] == [{"text": "ready · 0 alerts found", "tone": "info"}]
+    assert [n["tone"] for n in out["GLAD-L"]["notes"]] == ["warning"]
+    assert out["GLAD-L"]["cells"][0]["subtitle"].endswith("1,200 alert pixels")
+    assert out["RADD"]["notes"] == []
     assert out["GLAD-S2"]["notes"] == [{"text": "ready · all 40 alert pixels removed by masks", "tone": "warning"}]
-    assert not next(a for a in out["GLAD-L"]["actions"] if a["kind"] == "map_toggle")["disabled"]
+    assert not _acts(out["GLAD-L"])["map_toggle"]["disabled"]
 
 
-@pytest.mark.parametrize("raw, harmonized, download, redownload", [
-    (Status.MISSING, Status.MISSING, True, True),  # a new period
-    (Status.STALE, Status.STALE, True, True),  # the period's dates changed
-    (Status.CURRENT, Status.STALE, True, True),  # downloaded: Run only harmonizes again
-    (Status.CURRENT, Status.CURRENT, False, True),  # downloaded and harmonized: only a forced refresh
+def test_four_action_slots_in_order():
+    p = _p()
+    add_custom_source(p, name="tif", origin="file", ref="/x/tif.tif", asset_type="FILE", format="radd",
+                      date_encoding="yyddd", band_map=BandMap(alert=1, date=2), native=None)
+    rows = [PrepareRow("RADD", Status.CURRENT, Status.CURRENT), PrepareRow("tif", Status.MISSING, Status.MISSING)]
+    out = _build(rows, p=p)
+    for r in out.values():
+        assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "refresh", "delete"]
+        assert len(r["actions"]) == prepare_step.SOURCE_ACTIONS
+    radd, tif = _acts(out["RADD"]), _acts(out["tif"])
+    assert not radd["refresh"]["disabled"] and radd["refresh"]["title"] == "Download again"
+    assert tif["refresh"]["disabled"] and tif["refresh"]["title"] == "Nothing to download again: read from a file"
+    assert radd["delete"]["title"] == "Delete files"
+    assert out["tif"]["cells"][1]["label"] == "Harmonize"  # a GeoTIFF is never downloaded
+
+
+def test_the_row_actions_call_back_with_their_source():
+    calls = []
+    record = lambda name: (lambda s: calls.append((name, s)))  # noqa: E731
+    out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], run=record("run"), on_info=record("info"),
+                 on_refresh=record("refresh"), on_delete=record("delete"))["RADD"]
+    out["cells"][1]["on_click"]()
+    for kind in ("info", "refresh", "delete"):
+        _acts(out)[kind]["on_click"]()
+    assert calls == [("run", "RADD"), ("info", "RADD"), ("refresh", "RADD"), ("delete", "RADD")]
+    assert _acts(out)["info"]["is_on"] is False
+    assert _acts(_build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], info_open="RADD")["RADD"])["info"][
+        "is_on"]
+
+
+def test_delete_needs_a_file():
+    p = _p()
+    assert _acts(_build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], p=p)["RADD"])["delete"]["disabled"]
+    rkey = raw_key(JAN.id, "RADD")
+    p.artifacts = {rkey: _art(rkey, "raw_alert")}
+    assert not _acts(_build([PrepareRow("RADD", Status.CURRENT, Status.MISSING)], p=p)["RADD"])["delete"]["disabled"]
+
+
+def test_a_review_copy_shows_text_not_verbs():
+    out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], locked=True)["RADD"]
+    assert (out["cells"][1]["type"], out["cells"][1]["label"]) == ("state", "To download")
+    acts = _acts(out)
+    assert acts["refresh"]["disabled"] and acts["delete"]["disabled"] and not acts["info"].get("disabled", False)
+
+
+def test_a_failed_row_keeps_its_error_line():
+    out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], errors={"RADD": "boom"})["RADD"]
+    assert out["cells"][1]["label"] == "Retry" and out["error"] == "boom"
+
+
+@pytest.mark.parametrize("raw, harmonized, verb", [
+    (Status.MISSING, Status.MISSING, "Download"),  # a new period
+    (Status.STALE, Status.STALE, "Download"),  # the period's dates changed
+    (Status.CURRENT, Status.STALE, "Harmonize"),  # downloaded: Run only harmonizes again
+    (Status.CURRENT, Status.CURRENT, None),  # downloaded and harmonized: only a forced refresh
 ])
-def test_a_downloaded_source_offers_no_run_until_its_window_changes(raw, harmonized, download, redownload):
-    acts = {a["kind"]: a for a in _build([PrepareRow("GLAD-L", raw, harmonized)])["GLAD-L"]["actions"]}
-    assert (not acts["download"]["disabled"], not acts["redownload"]["disabled"]) == (download, redownload)
+def test_a_downloaded_source_offers_no_run_until_its_window_changes(raw, harmonized, verb):
+    row = _build([PrepareRow("GLAD-L", raw, harmonized)])["GLAD-L"]
+    assert (row["cells"][1]["label"] if row["cells"][1]["type"] == "verb" else None) == verb
+    assert not _acts(row)["refresh"]["disabled"]
+
+
+def test_a_busy_row_reads_queued_or_its_stage():
+    key = prepare_step._inflight_key("r", JAN.id, "RADD")
+    rows = [PrepareRow("RADD", Status.MISSING, Status.MISSING)]
+    queued = _build(rows, mine={key})["RADD"]
+    assert queued["cells"][1]["label"] == "Queued" and queued["cells"][0]["subtitle"] == "waiting for the row above"
+    assert _acts(queued)["refresh"]["disabled"] and _acts(queued)["delete"]["disabled"]
+    pkey = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
+    running = _build(rows, mine={key}, stages={pkey: "download"}, progress={pkey: 37})["RADD"]
+    assert running["cells"][1]["label"] == "Downloading 37%"
+    other = prepare_jobs.progress_key("r", "another period", "source", "RADD")
+    assert _build(rows, mine={key}, stages={other: "download"})["RADD"]["cells"][1]["label"] == "Queued"
 
 
 def test_a_missing_user_file():
     out = _build([PrepareRow("GLAD-L", Status.MISSING, Status.MISSING, "covered", (), file_missing="/home/u/x.tif")])
     assert out["GLAD-L"]["notes"][0] == {"text": "missing: file not found: /home/u/x.tif", "tone": "error"}
+    assert out["GLAD-L"]["cells"][1]["label"] == "File missing"
 
 
 def test_size_text():
@@ -133,18 +214,10 @@ def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
     assert toggle["is_on"] and not toggle["disabled"]
 
 
-def test_a_downloading_row_and_mask_read_their_percent():
+def test_a_downloading_mask_reads_its_percent():
     """Bug 2026-10-16: the step's own rows say how far a download has got."""
     from gui.tile.masks_card import mask_status
 
-    key = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
-    rows = [PrepareRow("RADD", Status.MISSING, Status.MISSING, "covered"),
-            PrepareRow("GLAD-L", Status.MISSING, Status.MISSING, "covered")]
-    built = _build(rows, mine={prepare_step._inflight_key("r", JAN.id, "RADD"),
-                               prepare_step._inflight_key("r", JAN.id, "GLAD-L")},
-                   progress={key: 37, ("r", "another period", "GLAD-L"): 80})
-    assert built["RADD"]["cells"][1]["label"] == "37%"
-    assert "label" not in built["GLAD-L"]["cells"][1]  # another period's percent is not this row's
     busy = mask_status(SimpleNamespace(raw=Status.MISSING, aligned=Status.MISSING), busy=True, progress=12)
     assert busy["label"] == "12%" and busy["compact"]
     assert "label" not in mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False,

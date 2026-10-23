@@ -52,9 +52,8 @@ from typing import Any, Optional
 
 import solara
 
-from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, UNCHECKED
+from deforestation_alerts.engine.coverage import UNCHECKED
 from deforestation_alerts.engine.fingerprint import Status, harm_key, mask_key
-from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import (
     CoverageRefused,
     HarmonizeFailed,
@@ -83,7 +82,6 @@ from gui.store.project_writers import writing
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
-_BLOCKED_STATUS = {NOT_COVERED: "not_covered", NO_DATA: "no_data", UNCHECKED: "unchecked"}
 
 
 @dataclass(frozen=True)
@@ -216,23 +214,6 @@ def _record_in_own_project(ctx: PrepareContext, scope: tuple, arts: dict) -> Non
     except Exception:  # noqa: BLE001 - the row's files are written; only the record is lost
         logger.exception("could not record a late row in project %s", ctx.name)
     _delete_refused(ctx, refused)
-
-
-def row_cells(row: PrepareRow, running: bool, label=None, progress=None) -> list:
-    """The name and both stage cells; a row blocked by its coverage shows why
-    (not covered, no data, not checked) in both. ``progress``: the running
-    download's percent, shown in its Download cell."""
-    def cell(s):
-        if running:
-            return {"type": "status", "status": "running"}
-        if row.blocked and row.file_missing is None:
-            return {"type": "status", "status": _BLOCKED_STATUS[row.coverage]}
-        return {"type": "status", "status": CELL_STATUS[s]}
-
-    download = cell(row.raw)
-    if running and progress is not None:
-        download["label"] = f"{progress}%"
-    return [{"value": label or row.source}, download, cell(row.harmonized)]
 
 
 def _failure_text(exc: BaseException) -> str:

@@ -74,34 +74,11 @@ def _arts(source):
 
 
 # ---------------------------------------------------------------------------
-# grid_error_key, row_cells
+# grid_error_key
 # ---------------------------------------------------------------------------
 def test_grid_error_keys():
     assert grid_error_key("4326", 10) == "steps.prepare.grid_geographic"
     assert grid_error_key("32721", 10) is None
-
-
-def test_row_cells_show_both_stages():
-    cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.STALE, coverage="covered"),
-                                   running=False)
-    assert cells[0]["value"] == "RADD"
-    assert [c.get("status") for c in cells[1:3]] == ["ready", "stale"]
-    running = prepare_jobs.row_cells(PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered"),
-                                     running=True)
-    assert running[1]["status"] == "running"
-    labelled = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT), False, label="RADD (S1)")
-    assert labelled[0]["value"] == "RADD (S1)"
-
-
-def test_row_cells_of_a_blocked_row_say_why_in_both_stages():
-    """A blocked row's files may exist (built before an AOI change or a failed
-    check), but its cells say why it cannot run, not "ready"; a missing user
-    file keeps the stage statuses (its note says what is missing)."""
-    for state in ("not_covered", "no_data", "unchecked"):
-        cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT, coverage=state), False)
-        assert [c["status"] for c in cells[1:3]] == [state, state]
-    gone = prepare_jobs.row_cells(PrepareRow("tif", Status.MISSING, Status.CURRENT, file_missing="/x.tif"), False)
-    assert [c["status"] for c in gone[1:3]] == ["missing", "ready"]
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +175,6 @@ def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tm
     (task,) = bus.tasks.value
     assert task.title == title and progress.value == {}
     assert t("steps.prepare.job_harmonize_row", source="GLAD-L") in [m.message for m in task.milestones]
-
-
-def test_a_downloading_row_reads_its_percent():
-    cells = prepare_jobs.row_cells(PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered"),
-                                   running=True, progress=42)
-    assert (cells[1]["status"], cells[1]["label"]) == ("running", "42%")
-    assert cells[2]["status"] == "running" and "label" not in cells[2]
-    idle = prepare_jobs.row_cells(PrepareRow("RADD", Status.CURRENT, Status.CURRENT, coverage="covered"),
-                                  running=False, progress=42)  # a stale percent never shows on an idle row
-    assert "label" not in idle[1]
 
 
 def test_run_rows_stops_when_the_project_is_closed(monkeypatch, tmp_path):
@@ -647,6 +614,25 @@ def _state(p, meta=None):
     return state
 
 
+def _run(row):
+    """Click a row's verb pill (its Run)."""
+    assert row["cells"][1]["type"] == "verb", row["cells"][1]
+    row["cells"][1]["on_click"]()
+
+
+def _act(row, kind):
+    return next(a for a in row["actions"] if a["kind"] == kind)
+
+
+def _offers_run(row) -> bool:
+    """The row's Status cell is a pill: nothing claims it."""
+    return row["cells"][1]["type"] == "verb"
+
+
+def _queued(row) -> bool:
+    return row["cells"][1]["label"] == t("steps.prepare.state_queued")
+
+
 def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step, monkeypatch):
     """Drift note: only rows that download need Earth Engine metadata; a grid
     change re-harmonizes from the raw file on disk (runner contract), so the
@@ -674,21 +660,19 @@ def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step
 
 def test_a_download_waits_for_the_catalogue_metadata(step, monkeypatch):
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
     state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
 
     box, rc = _render(state)
     try:
-        assert not step.table[-1][0]["actions"][1]["disabled"]  # a ready row can still be refreshed
-        redownload = step.table[-1][0]["actions"][1]["on_click"]
-        redownload()  # force: downloads, so it needs the metadata
+        _run(step.table[-1][0])  # downloads, so it needs the metadata
         assert step.jobs == [] and _toasts("info") == [t("steps.alerts.meta_loading")]
 
         state.catalogue_meta.value = {"GLAD-L": {"end": "2026-06-01"}}
-        step.table[-1][0]["actions"][1]["on_click"]()  # the refused claim was released
+        _run(step.table[-1][0])  # the refused claim was released
         step.run_jobs()
         [(ctx, sources, force)] = step.started
-        assert sources == ["GLAD-L"] and force is True
+        assert sources == ["GLAD-L"] and force is False
         assert ctx.aoi == "AOI" and ctx.meta == {"GLAD-L": {"end": "2026-06-01"}}
     finally:
         rc.close()
@@ -704,9 +688,9 @@ def test_a_download_without_an_aoi_geometry_is_refused(step, monkeypatch):
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         assert step.jobs == [] and _toasts("error") == [t("steps.aoi.no_geometry")]
-        assert step.table[-1][0]["cells"][1]["status"] == "missing"  # the claim was released
+        assert _offers_run(step.table[-1][0])  # the claim was released
     finally:
         rc.close()
 
@@ -726,24 +710,23 @@ def test_a_download_whose_ee_aoi_fails_releases_its_rows(step, monkeypatch, erro
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         assert step.jobs == [] and _toasts("error") == [str(error) or error.__class__.__name__]
-        assert step.table[-1][0]["cells"][1]["status"] == "missing"  # the claim was released
+        assert _offers_run(step.table[-1][0])  # the claim was released
         assert not _button(rc, tn("steps.prepare.run_all", 1)).disabled
     finally:
         rc.close()
 
 
 def _row_buttons(row):
-    """(disabled, loading) of a row's download and re-download actions."""
-    acts = {a["kind"]: a for a in row["actions"]}
-    return [(acts[k].get("disabled", False), acts[k].get("loading", False)) for k in ("download", "redownload")]
+    """Whether a row offers its Run pill, and whether Download again is disabled."""
+    return [_offers_run(row), _act(row, "refresh")["disabled"]]
 
 
 def test_a_row_in_flight_disables_its_run_buttons_until_its_job_ends(step, monkeypatch):
     """A second click on a running row is refused by its in-flight key, so the
-    buttons must say it: both disabled, the download one spinning. Only that
-    row: another row stays startable while it runs."""
+    row must say it: no pill (it reads queued until its turn), Download again
+    disabled. Only that row: another row stays startable while it runs."""
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING),
               PrepareRow("RADD", Status.MISSING, Status.MISSING))
@@ -752,14 +735,14 @@ def test_a_row_in_flight_disables_its_run_buttons_until_its_job_ends(step, monke
 
     box, rc = _render(state)
     try:
-        assert [_row_buttons(r) for r in step.table[-1]] == [[(False, False), (False, False)]] * 2
-        step.table[-1][0]["actions"][0]["on_click"]()  # GLAD-L runs
+        assert [_row_buttons(r) for r in step.table[-1]] == [[True, False]] * 2
+        _run(step.table[-1][0])  # GLAD-L runs
         glad, radd = step.table[-1]
-        assert _row_buttons(glad) == [(True, True), (True, False)]
-        assert _row_buttons(radd) == [(False, False), (False, False)]
+        assert _row_buttons(glad) == [False, True] and _queued(glad)
+        assert _row_buttons(radd) == [True, False]
 
         step.run_jobs()  # the job ends and gives the row back
-        assert [_row_buttons(r) for r in step.table[-1]] == [[(False, False), (False, False)]] * 2
+        assert [_row_buttons(r) for r in step.table[-1]] == [[True, False]] * 2
     finally:
         rc.close()
 
@@ -773,52 +756,53 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        on_run = step.table[-1][0]["cells"][1]["on_click"]
+        on_run()
         step.jobs.pop(0)  # a's worker is still running...
-        step.table[-1][0]["actions"][0]["on_click"]()
+        on_run()
         assert step.jobs == []  # ...so a second click is a no-op
-        assert step.table[-1][0]["cells"][1]["status"] == "running"
+        assert _queued(step.table[-1][0])
         assert _button(rc, tn("steps.prepare.run_all", 1)).disabled
 
         state.new_project_state(_project("b", "GLAD-L", bounds=PARAGUAY, grid=True))
-        assert step.table[-1][0]["cells"][1]["status"] == "ready"
+        assert _offers_run(step.table[-1][0])
         assert not _button(rc, tn("steps.prepare.run_all", 1)).disabled
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         step.run_jobs()
         assert [ctx.name for ctx, _, _ in step.started] == ["b"]
     finally:
         rc.close()
 
 
-def test_stop_reaches_a_run_all_after_another_row_started(step, monkeypatch):
+def test_stop_reaches_a_job_after_another_row_started(step, monkeypatch):
     """Spec §7.3/§12: Stop cancels a running download between rows. A later
-    start in the same project and period (here a Re-download of a ready row)
-    must not take Stop away from the Run all still in its current row.
+    start in the same project and period (here the Run of another row) must
+    not take Stop away from the job still in its current row.
     """
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING),
-              PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
+              PrepareRow("RADD", Status.CURRENT, Status.STALE))
     state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True),
                    meta={"GLAD-L": {}, "RADD": {}})
     contexts = {}
 
     box, rc = _render(state)
 
-    def run_all_blocked_mid_row(ctx, items, force=False):
+    def blocked_mid_row(ctx, items, force=False):
         sources = _named(items)
         contexts[tuple(sources)] = ctx
-        if sources == ["GLAD-L"]:  # Run all, still in its current row
-            step.table[-1][1]["actions"][1]["on_click"]()  # Re-download the ready RADD row
+        if sources == ["GLAD-L"]:  # still in its current row
+            _run(step.table[-1][1])  # RADD starts its own job
             stop = _button(rc, t("steps.prepare.stop"))
             assert not stop.disabled
             stop.fire_event("click", None)
 
-    monkeypatch.setattr(prepare_step, "run_rows", run_all_blocked_mid_row)
+    monkeypatch.setattr(prepare_step, "run_rows", blocked_mid_row)
     try:
-        _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
+        _run(step.table[-1][0])
         step.run_jobs()
         assert set(contexts) == {("GLAD-L",), ("RADD",)}
-        assert contexts[("GLAD-L",)].cancel.is_set()  # Run all stops after this row
+        assert contexts[("GLAD-L",)].cancel.is_set()  # the first job stops after this row
         assert contexts[("RADD",)].cancel.is_set()  # and so does every job of this project and period
         assert _button(rc, t("steps.prepare.stop")).disabled  # every job ended
     finally:
@@ -844,12 +828,12 @@ def test_stop_in_one_project_leaves_another_projects_job_running(step, monkeypat
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()  # a's GLAD-L job: queued, so still running
+        _run(step.table[-1][0])  # a's GLAD-L job: queued, so still running
         state.new_project_state(_project("b", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-        step.table[-1][0]["actions"][0]["on_click"]()  # b's job, started last
+        _run(step.table[-1][0])  # b's job, started last
         state.new_project_state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
         _button(rc, t("steps.prepare.stop")).fire_event("click", None)
-        step.table[-1][1]["actions"][0]["on_click"]()  # a's RADD job, while GLAD-L's still runs
+        _run(step.table[-1][1])  # a's RADD job, while GLAD-L's still runs
         step.run_jobs()
 
         stopped = {(ctx.name, *sources): ctx.cancel.is_set() for ctx, sources, _ in step.started}
@@ -883,7 +867,7 @@ def test_row_errors_are_cleared_when_the_project_changes(step, monkeypatch):
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         step.run_jobs()
         [(ctx, _, _)] = step.started
         ctx.row_errors.set({"GLAD-L": "quota exceeded"})
@@ -906,7 +890,7 @@ def test_a_row_error_recorded_after_a_period_switch_stays_with_its_period(step, 
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         step.run_jobs()
         [(ctx, _, _)] = step.started
         state.update_project("a", lambda live: setattr(live, "active_period", FEB.id))
@@ -930,13 +914,13 @@ def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, 
 
     box, rc = _render(state)
     try:
-        toggle = step.table[-1][0]["actions"][2]
+        toggle = _act(step.table[-1][0], "map_toggle")
         assert toggle["kind"] == "map_toggle" and not toggle["disabled"] and not toggle["loading"]
         toggle["on_click"]()
         harm = p.artifacts[harm_key(JAN.id, "GLAD-L")]
         assert drawn == [(paths.resolve(paths.project_dir("d"), harm.rel_path), "src:GLAD-L",
                           "GLAD-L · 2026-01-01 → 2026-01-31")]
-        assert step.table[-1][0]["actions"][2]["is_on"]
+        assert _act(step.table[-1][0], "map_toggle")["is_on"]
     finally:
         rc.close()
 
@@ -944,7 +928,7 @@ def test_map_toggle_draws_the_harmonized_file_and_shows_a_build_in_flight(step, 
                            inflight=solara.reactive(frozenset({"src:GLAD-L"})))
     box, rc = _render(state, layers=busy)
     try:
-        assert step.table[-1][0]["actions"][2]["loading"]
+        assert _act(step.table[-1][0], "map_toggle")["loading"]
     finally:
         rc.close()
 
@@ -970,7 +954,7 @@ def test_the_map_toggle_queues_a_click_behind_a_superseded_build_and_carries_its
     box, rc = _render(_state(p), layers=layers, map_=map_)
     try:
         def click():
-            step.table[-1][0]["actions"][2]["on_click"]()
+            _act(step.table[-1][0], "map_toggle")["on_click"]()
 
         click()  # starts a build
         click()  # on and still building: a no-op, not a hide
@@ -1132,10 +1116,10 @@ def test_stop_ends_the_job_quietly_and_gives_its_rows_back(step, monkeypatch):
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
-        assert step.table[-1][0]["cells"][1]["status"] == "running"
+        _run(step.table[-1][0])
+        assert _queued(step.table[-1][0])
         step.run_jobs()  # no CancelledError escapes the worker
-        assert step.table[-1][0]["cells"][1]["status"] == "ready"
+        assert _offers_run(step.table[-1][0])
         assert _button(rc, t("steps.prepare.stop")).disabled and _toasts("error") == []
     finally:
         rc.close()
@@ -1151,9 +1135,10 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
     box, rc = _render(state)
     try:
         blocked, radd = step.table[-1]
-        assert all(a["disabled"] for a in blocked["actions"])
+        assert not _offers_run(blocked)
+        assert all(a["disabled"] for a in blocked["actions"] if a["kind"] != "info")
         assert blocked["notes"][0]["text"].startswith(t("coverage.not_covered_row", reason=""))
-        assert not any(a["disabled"] for a in radd["actions"][:2])
+        assert _offers_run(radd) and not _act(radd, "refresh")["disabled"]
         _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()
         assert [sources for _, sources, _ in step.started] == [["RADD"]]
@@ -1161,7 +1146,7 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
         rc.close()
 
 
-def test_the_size_note_sums_both_files_of_a_row(step):
+def test_the_subtitle_sums_both_files_of_a_row(step):
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
     p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
     p.artifacts = {k: a.model_copy(update={"size_bytes": 2_700_000}) for k, a in _arts("GLAD-L").items()}
@@ -1170,8 +1155,8 @@ def test_the_size_note_sums_both_files_of_a_row(step):
     box, rc = _render(state)
     try:
         [row] = step.table[-1]
-        assert row["cells"][0]["value"] == t("steps.alerts.label_glad_l") and len(row["cells"]) == 3
-        assert row["notes"][-1] == {"text": t("steps.prepare.size_note", size="5.4 MB"), "tone": None}
+        assert row["cells"][0]["value"] == t("steps.alerts.label_glad_l") and len(row["cells"]) == 2
+        assert " · 5.4 MB" in row["cells"][0]["subtitle"] and row["notes"] == []
         assert len(row["actions"]) == prepare_step.SOURCE_ACTIONS  # the budget's count is the most a row has
     finally:
         rc.close()
@@ -1238,10 +1223,11 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypat
     try:
         [row] = step.table[-1]
         assert row["cells"][0]["value"] == "tif"  # a custom source by its name
-        row["actions"][1]["on_click"]()  # Re-download: still local
+        assert _act(row, "refresh")["disabled"]  # nothing to download again
+        _run(row)
         step.run_jobs()
         [(ctx, sources, force)] = step.started
-        assert sources == ["tif"] and force and ctx.aoi is None
+        assert sources == ["tif"] and not force and ctx.aoi is None
         assert claims == [(prepare_step._inflight_key("d", JAN.id, "tif"), prepare_step.aoi_key("d"))]
         assert prepare_step.aoi_key("d") == "prep:d:@aoi" and _toasts("info") == []
     finally:
@@ -1259,9 +1245,9 @@ def test_a_geotiff_row_waits_for_the_aoi_geometry(step, tmp_path):
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()
+        _run(step.table[-1][0])
         assert step.jobs == [] and _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
-        assert step.table[-1][0]["cells"][1]["status"] == "missing"  # nothing was claimed
+        assert _offers_run(step.table[-1][0])  # nothing was claimed
         assert not _check_again_shown(rc)  # nothing failed
     finally:
         rc.close()
@@ -1419,19 +1405,16 @@ def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step,
         rc.close()
 
 
-def test_a_source_run_runs_its_stale_masks_first_and_a_redownload_does_not(step, monkeypatch):
+def test_a_source_run_runs_its_stale_masks_first(step, monkeypatch):
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_with_mask(), meta={"GLAD-L": {}})
 
     box, rc = _render(state)
     try:
-        step.table[-1][0]["actions"][0]["on_click"]()  # Run
+        _run(step.table[-1][0])  # Run
         step.run_jobs()
-        step.table[-1][0]["actions"][1]["on_click"]()  # Re-download
-        step.run_jobs()
-        assert [(items, force) for _, items, force in step.started] == [
-            ([("mask", "forest"), "GLAD-L"], False), (["GLAD-L"], True)]
+        assert [(items, force) for _, items, force in step.started] == [([("mask", "forest"), "GLAD-L"], False)]
     finally:
         rc.close()
 

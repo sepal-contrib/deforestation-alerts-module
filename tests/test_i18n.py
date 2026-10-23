@@ -116,7 +116,7 @@ SAME_IN = {
         # words in Brazilian Portuguese; ramp names, band acronyms and R/G/B too.
         "common._test.one", "analysis.timeline.area_normal", "analysis_tile.facts.status",
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
-        "steps.prepare.col_download", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
+        "steps.prepare.col_download", "steps.prepare.col_status", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
         "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
         "steps.layers.summary_classes.other",  # "classes" is the same word
         # "timelapse" is the word Brazilian Portuguese uses.
@@ -224,6 +224,7 @@ def _dynamic_keys():
     from gui.tile.analysis.state import IMAGE_AREAS
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
+    from gui.scripts.prepare_view import WHY_KEYS
     from gui.widget.product_table import _ACTION_ICONS, STATUS_ICONS
     from gui.widget.source_modal import ENCODINGS, FORMATS
     from gui.widget.vis_style_fields import BANDS_MODES, STYLES
@@ -237,6 +238,11 @@ def _dynamic_keys():
         "steps.period.error_": list(periods.ERRORS),
         # engine.grid.validate_projection's error keys
         "steps.prepare.grid_": ["need_epsg", "bad_epsg", "geographic", "bad_resolution"],
+        # gui.scripts.prepare_view: a source row's Why line, its next run's pill and state, and its subtitle
+        "steps.prepare.why_": list(WHY_KEYS),
+        "steps.prepare.verb_": ["download", "harmonize"],
+        "steps.prepare.state_to_": ["download", "harmonize"],
+        "steps.prepare.sub_again_": ["download", "harmonize"],
         "widgets.product_table.status_": list(STATUS_ICONS),
         "widgets.product_table.action_": [*_ACTION_ICONS, "show", "hide", "select"],
         "legend.mask.": ["keep", "exclude", "off"],
