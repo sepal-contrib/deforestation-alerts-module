@@ -28,7 +28,7 @@ def layer_columns() -> list:
 
 def layer_cell(layer) -> dict:
     """The name with its kind chip, and an "in Analysis" chip when it is shown there."""
-    chips = [{"value": t(f"steps.layers.kind_{layer.kind}")}]
+    chips = [{"value": t(f"steps.raster_input.source_{layer.kind}")}]
     if layer.show_in_analysis:
         chips.append({"value": t("steps.layers.in_analysis"), "color": "primary"})
     return {"value": layer.name, "chips": chips}

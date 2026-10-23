@@ -1,5 +1,9 @@
 """Add mask modal (spec §7.3): a name, an Earth Engine image or collection or a
-GeoTIFF, one band, and the mode for the active period. Validated like a
+GeoTIFF, one band, and the mode for the active period. The form reads Name,
+Source, the picker, then the band: the bands are read once a raster is picked
+and nothing that depends on them shows until they are; one band is a line,
+two or more a Band select that starts on the band that looks like a mask
+(``vis_classes.suggest_mask_band``), else the first. Validated like a
 custom source (§6.2) without a coverage share: a mask that misses the AOI
 shows up as zero on-pixels after its alignment.
 
@@ -26,9 +30,12 @@ from deforestation_alerts.engine.user_raster import (
 from deforestation_alerts.project.names import name_from_ref, suggest_name, validate_mask_name
 from gui.i18n import t
 from gui.scripts.error_text import error_text
+from gui.scripts.vis_classes import suggest_mask_band
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, field_group, form_card, use_form_dialog
-from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.raster_input import (
+    BandStatus, RasterInput, SourceSelect, absolute, band_index, bands_read, use_band_list,
+)
 from gui.widget.text_style import MUTED
 
 
@@ -91,20 +98,54 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
     asset = solara.use_reactive({"asset_id": m0.ref, "type": m0.asset_type, "column": "ALL", "value": None}
                                 if m0 is not None and m0.origin == "gee" else None)
     path = solara.use_reactive(m0.ref if m0 is not None and m0.origin == "file" else "")
-    band, set_band = solara.use_state(m0.band if m0 else None)
+    band, set_band = solara.use_state((band_index(m0.band) if m0.origin == "file" else m0.band) if m0 else None)
     mode, set_mode = solara.use_state("keep")
     error, set_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Add per opening, held through the validation
+    ref0 = (m0.ref if m0.origin == "gee" else absolute(m0.ref)) if m0 is not None else None
+    first_load = solara.use_ref(m0 is not None)  # an edit's first band list keeps its saved band
+
+    def _set_origin(value):
+        # Another Source clears the picked raster and its band: a band is a name
+        # in Earth Engine and an index in a GeoTIFF, never a choice of the other's
+        if value and value != origin:
+            first_load.current = False
+            set_origin(value)
+            asset.set(None)
+            path.set("")
+            set_band(None)
 
     ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if origin == "gee" else "FILE"
+    if first_load.current and ref and ref != ref0:
+        first_load.current = False  # another raster: the edit's saved band is not its own
     bands_task = use_band_list(gee_interface, origin, ref, asset_type)
     use_default_name(
         ref if m0 is None else None, name, set_name,
         lambda r: suggest_name(name_from_ref(r), lambda n: validate_mask_name(n, app_state.project.value) is None))
-    names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
-    items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
-             else [{"text": n, "value": n} for n in names])
+    # nothing that depends on the bands shows until they are read; in the render
+    # where the raster changes the task still holds the previous one's list
+    has_bands = bool(ref) and bands_read(bands_task)
+    names, header = bands_task.value if has_bands else ((), None)
+    # a GeoTIFF band reads as its text (description, else "Band N"); its value is its 1-based index
+    choices = ([(b.name, b.index) for b in header.bands] if header is not None else [(n, n) for n in names])
+    suggested = suggest_mask_band([text for text, _ in choices])
+    items = [{"text": t("steps.layers.suggested", text=text) if i == suggested else text, "value": value}
+             for i, (text, value) in enumerate(choices)]
+
+    def _default_band():
+        # a new band list starts on the suggested band, else the first; an
+        # edit's first list keeps its saved band while that band is in it
+        values = [value for _, value in choices]
+        if not values:
+            return
+        if first_load.current:
+            first_load.current = False
+            if band in values:
+                return
+        set_band(values[suggested] if suggested is not None else values[0])
+
+    solara.use_effect(_default_band, [tuple(value for _, value in choices)])
 
     async def _validate():
         live = app_state.project.value
@@ -176,24 +217,28 @@ def _MaskForm(open_, app_state, gee_interface, on_add, on_save, editing):
     def _actions():
         # spec §11: an async button is a task button. While the check runs it
         # reads Cancel and stops the check, and it carries no Enter class.
+        # a band list still being read, or that could not be read, leaves nothing to save
         SubmitTaskButton(label=t("steps.alerts.save") if m0 is not None else t("steps.prepare.mask_add"),
                          icon="mdi-content-save-outline" if m0 is not None else "mdi-plus",
-                         external_busy=bool(name_error), **button)
+                         external_busy=bool(name_error) or bool(bands_task.error)
+                         or (bool(ref) and bands_task.pending), **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
         rv.TextField(label=t("steps.prepare.mask_name"), v_model=name, on_v_model=set_name, dense=True,
                      outlined=True, disabled=m0 is not None or busy, hint=t("steps.prepare.mask_name_hint"),
                      persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
-        RasterInput(gee_interface=gee_interface, origin=origin, on_origin=set_origin, asset=asset, path=path,
-                    disabled=busy)
-        if bands_task.pending:
-            solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
-        elif bands_task.error:
-            solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                        classes=["error--text"])
-        rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band, on_v_model=set_band, dense=True,
-                  outlined=True, loading=bands_task.pending, disabled=busy)
+        SourceSelect(origin=origin, on_origin=_set_origin, disabled=busy)
+        RasterInput(gee_interface=gee_interface, origin=origin, on_origin=_set_origin, asset=asset, path=path,
+                    disabled=busy, show_origin=False)
+        BandStatus(bands_task)
+        if len(choices) == 1:
+            solara.Text(t("steps.prepare.mask_band_one", name=choices[0][0]), style=MUTED)
+        elif choices:
+            hint = (t("steps.prepare.mask_bands_suggested", count=len(choices), name=choices[suggested][0])
+                    if suggested is not None else t("steps.prepare.mask_bands_pick", count=len(choices)))
+            rv.Select(label=t("steps.prepare.mask_band"), items=items, v_model=band, on_v_model=set_band,
+                      dense=True, outlined=True, hint=hint, persistent_hint=True, disabled=busy)
         if m0 is None:  # an edit changes the definition; each period keeps its own mode
             with field_group(t("steps.prepare.mask_mode_label")):
                 with rv.RadioGroup(v_model=mode, on_v_model=set_mode, row=True, dense=True, hide_details=True,

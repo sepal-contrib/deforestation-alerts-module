@@ -249,8 +249,8 @@ def _dynamic_keys():
         "analysis_tile.model_labels.dl_button": ["1", "2"],
         # gui.tile.masks_card's origin chip
         "steps.prepare.mask_origin_": ["gee", "file"],
-        # gui.scripts.vis_layers: the layer kinds
-        "steps.layers.kind_": list(KINDS),
+        # gui.tile.layers_step: the layer kinds, read with the Source select's words
+        "steps.raster_input.source_": list(KINDS),
         # gui.widget.vis_style_fields: the colour ramps, band roles and RGB combinations
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),

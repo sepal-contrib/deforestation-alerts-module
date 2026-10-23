@@ -179,8 +179,6 @@
       "empty": "Aucune couche de visualisation.",
       "add": "Ajouter une couche",
       "in_analysis": "dans Analyse",
-      "kind_gee": "Earth Engine",
-      "kind_file": "GeoTIFF",
       "summary_band": "bande {band}",
       "summary_classes": {
         "one": "{count} classe",
@@ -417,6 +415,9 @@
       "mask_edit_title": "Modifier le masque {name}",
       "mask_name": "Nom",
       "mask_band": "Bande",
+      "mask_band_one": "Une bande ({name}) : le masque est fait à partir d'elle.",
+      "mask_bands_suggested": "{count} bandes. {name} ressemble à un masque ; les pixels non nuls sont à l'intérieur.",
+      "mask_bands_pick": "{count} bandes. Choisissez celle dont les pixels non nuls marquent le masque.",
       "mask_mode_keep": "Conserver",
       "mask_mode_exclude": "Exclure",
       "mask_origin_gee": "Earth Engine",

@@ -179,8 +179,6 @@
       "empty": "No hay capas de visualización.",
       "add": "Añadir capa",
       "in_analysis": "en Análisis",
-      "kind_gee": "Earth Engine",
-      "kind_file": "GeoTIFF",
       "summary_band": "banda {band}",
       "summary_classes": {
         "one": "{count} clase",
@@ -417,6 +415,9 @@
       "mask_edit_title": "Editar máscara {name}",
       "mask_name": "Nombre",
       "mask_band": "Banda",
+      "mask_band_one": "Una banda ({name}): la máscara se hace con ella.",
+      "mask_bands_suggested": "{count} bandas. {name} parece una máscara; los píxeles distintos de cero están dentro de ella.",
+      "mask_bands_pick": "{count} bandas. Elige la banda cuyos píxeles distintos de cero marcan la máscara.",
       "mask_mode_keep": "Conservar",
       "mask_mode_exclude": "Excluir",
       "mask_origin_gee": "Earth Engine",

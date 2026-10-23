@@ -810,12 +810,12 @@ def test_rows_show_the_kind_and_analysis_chips_and_the_details_note(monkeypatch)
         assert [r["key"] for r in seen["rows"]] == ["height", "ndvi", "S2"]  # by name, case-folded
         s2 = next(r for r in seen["rows"] if r["key"] == "S2")
         assert s2["cells"] == [{"value": "S2", "chips": [
-            {"value": t("steps.layers.kind_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
+            {"value": t("steps.raster_input.source_gee")}, {"value": t("steps.layers.in_analysis"), "color": "primary"}]}]
         assert s2["notes"] == [{"text": "R/G/B: B4, B3, B2 · 0–3000", "tone": None}]
         assert [a["kind"] for a in s2["actions"]] == ["map_toggle", "edit", "delete"]
         assert len(s2["actions"]) == layers_step.LAYER_ACTIONS
         ndvi = next(r for r in seen["rows"] if r["key"] == "ndvi")
-        assert ndvi["cells"][0]["chips"] == [{"value": t("steps.layers.kind_gee")}]  # not in Analysis: no chip
+        assert ndvi["cells"][0]["chips"] == [{"value": t("steps.raster_input.source_gee")}]  # not in Analysis: no chip
         assert ndvi["notes"] == [{"text": "NDVI · 0–1", "tone": None}]
     finally:
         rc.close()

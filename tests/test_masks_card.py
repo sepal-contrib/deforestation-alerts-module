@@ -634,16 +634,38 @@ def test_the_card_lists_the_rows_with_the_note_and_opens_add(monkeypatch):
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                     disabled=False):
-    """Stands in for pysepal's pickers: the test sets ``path`` itself."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path,
-                                            disabled=disabled)
+                     disabled=False, show_origin=True):
+    """Stands in for pysepal's pickers: the test sets ``asset`` or ``path``
+    itself. It draws one empty marker (``dv-stub-raster-input``), so its place
+    among the form's fields can be asserted."""
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, disabled=disabled,
+                                            show_origin=show_origin)
+    rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
-def _modal(state, open_, added, saved, editing=None):
-    return mask_modal.MaskModal(open_=open_, app_state=state, gee_interface=object(),
+def _gee(monkeypatch, bands, release=None):
+    """An Earth Engine stand-in whose band list of any asset is ``bands``, read
+    once ``release`` (when given) is set."""
+    from gui.widget import raster_input
+
+    monkeypatch.setattr(raster_input.user_raster, "band_list_request", lambda ref, kind: ("BANDS", ref, kind))
+
+    async def get_info_async(obj):
+        if release is not None:
+            await release.wait()
+        return list(bands)
+
+    return SimpleNamespace(get_info_async=get_info_async)
+
+
+def _modal(state, open_, added, saved, editing=None, gee=None):
+    return mask_modal.MaskModal(open_=open_, app_state=state, gee_interface=gee or object(),
                                 on_add=lambda fields, mode: added.append((fields, mode)),
                                 on_save=lambda name, changes: saved.append((name, changes)), editing=editing)
+
+
+def _source(rc):
+    return rc.find(v.Select, label=t("steps.raster_input.field_source")).widgets[0]
 
 
 async def _settle(cond, timeout=10.0):
@@ -701,11 +723,12 @@ def test_a_geotiff_mask_is_validated_added_inside_the_task_and_the_modal_closes(
                                                       on_add=on_add, on_save=None), handle_error=False)
         try:
             _name_field(rc).v_model = "probability"
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(path))
-            band = lambda: rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0]  # noqa: E731
-            assert await _settle(lambda: len(band().items) == 2)  # the file's bands, by index
-            band().v_model = 2
+            bands = lambda: rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets  # noqa: E731
+            assert await _settle(lambda: bands() and len(bands()[0].items) == 2)  # the file's bands, by index
+            assert await _settle(lambda: bands()[0].v_model == 1)  # no band looks like a mask: the first
+            bands()[0].v_model = 2
             rc.find(v.RadioGroup, v_model="keep").widgets[0].v_model = "exclude"
             _submit_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
@@ -783,13 +806,14 @@ def test_an_edit_saves_its_changes_through_on_save(tmp_path, monkeypatch):
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
     monkeypatch.setattr(mask_modal, "validate_mask", fake_validate)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    gee = _gee(monkeypatch, ["a", "b"])
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
+        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest", gee=gee), handle_error=False)
         try:
             assert _name_field(rc).disabled is True and _name_field(rc).v_model == "forest"
             assert not rc.find(v.RadioGroup, v_model="keep").widgets  # an edit has no mode: periods choose it
-            await asyncio.sleep(0.05)
+            assert await _settle(lambda: not _submit_btn(rc, t("steps.alerts.save")).disabled)  # bands read
             _submit_btn(rc, t("steps.alerts.save")).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             assert asked[0]["editing"] == "forest" and asked[0]["ref"] == "UMD/x" and asked[0]["band"] == "b"
@@ -819,16 +843,20 @@ def _hanging(monkeypatch):
 def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
     asked, done, release = _hanging(monkeypatch)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    gee = _gee(monkeypatch, ["a", "b"])
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        box, rc = reacton.render(_modal(state, open_, added, saved, gee=gee), handle_error=False)
         try:
             _name_field(rc).v_model = "late"
-            await asyncio.sleep(0.05)
+            _StubRasterInput.seen.asset.set({"asset_id": "users/x/m", "type": "IMAGE", "column": "ALL",
+                                             "value": None})
+            assert await _settle(lambda: bool(rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets))
             _submit_btn(rc).fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
             # the fields are frozen while their values are checked
             assert _name_field(rc).disabled is True and _StubRasterInput.seen.disabled is True
+            assert _source(rc).disabled is True
             assert rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0].disabled is True
             assert rc.find(v.RadioGroup, v_model="keep").widgets[0].disabled is True
             assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
@@ -913,7 +941,7 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
         box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _name_field(rc).v_model = "x"
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(_tif(tmp_path / "w.tif")))
             await asyncio.sleep(0.1)
 
