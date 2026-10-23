@@ -93,6 +93,16 @@ def test_file_date_range_outside_the_aoi_is_none(tmp_path):
     assert dp.file_date_range(path, 1, (10.0, 40.0, 11.0, 41.0)) is None
 
 
+def test_file_date_range_just_outside_a_tiled_file_is_none(tmp_path):
+    """Bounds that start inside the file's last block, past its edge: no empty window read."""
+    path = tmp_path / "d.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=600, height=600, count=1, dtype="int16",
+                       crs="EPSG:4326", transform=Affine(0.001, 0, -55.0, 0, -0.001, -25.0),
+                       tiled=True, blockxsize=256, blockysize=256) as dst:
+        dst.write(np.full((600, 600), 2501, dtype="int16"), 1)
+    assert dp.file_date_range(path, 1, (-54.39, -25.5, -54.0, -25.1)) is None
+
+
 def test_file_date_range_reads_every_pixel_of_a_large_file(tmp_path):
     """Two dated pixels in 3000x20 zeros, where a 1024-px nearest read skips both."""
     data = np.zeros((20, 3000), dtype="uint16")

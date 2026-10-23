@@ -105,6 +105,8 @@ def file_date_range(path, band: int, bounds) -> Optional[Tuple[float, float]]:
         col0, row0 = max(0, math.floor(win.col_off)), max(0, math.floor(win.row_off))
         col1 = min(src.width, math.ceil(win.col_off + win.width))
         row1 = min(src.height, math.ceil(win.row_off + win.height))
+        if col1 <= col0 or row1 <= row0:
+            return None
         block_h, block_w = src.block_shapes[band - 1]
         # the file's blocks that meet the window, each clipped to it
         for r in range(row0 - row0 % block_h, row1, block_h):
