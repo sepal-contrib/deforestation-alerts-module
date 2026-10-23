@@ -1,10 +1,9 @@
 """The visualization form's style fields (gui/widget/vis_layer_modal): the
-Bands question (keep every band for an RGB composite, or draw one), an RGB
-layer's composite cards and band roles line, the Style tiles of a one-band
-layer (Continuous or Categorical), a Categorical layer's class list and
-palette menu, and the legend preview that ends a style's fields. The
-dropdown fields that replace the question, cards and tiles: the bands helper
-(``BandsField``), ``RasterTypeSelect``, ``RampSelect`` and ``CompositeSelect``.
+bands helper (``BandsField``: one band, the Band select, or the Bands
+question), the Raster type of a one-band layer (``RasterTypeSelect``), a
+Continuous layer's ``RampSelect``, an RGB layer's composite cards and band
+roles line (``CompositeSelect`` is to replace them), a Categorical layer's
+class list and palette menu, and the legend preview that ends a style's fields.
 """
 
 from typing import Optional
@@ -17,65 +16,24 @@ from gui.i18n import t
 from gui.scripts import vis_classes, vis_palettes
 from gui.scripts.legend_data import LegendSpec, resolve_label
 from gui.widget.enter_key import ENTER_OWN
-from gui.widget.form_dialog import field_group
 from gui.widget.text_style import MUTED
 
-# Ramp and style cards (as spatial_risk's variable modal): a gradient bar over
-# its name in a bordered card; the selected card is ringed and bold.
+# The composite cards (as spatial_risk's variable modal): a bordered card; the
+# selected card is ringed and bold.
 _RAMP_CARD = (
     "display:block;height:auto;min-width:0;width:100%;padding:6px;"
     "text-transform:none;letter-spacing:normal;font-weight:400;text-align:left;"
     "border:1px solid rgba(128,128,128,0.5);border-radius:4px;background:transparent;"
 )
 _RAMP_CARD_SELECTED = "box-shadow:0 0 0 2px currentColor;font-weight:600;"
-_RAMP_BAR = (
-    "display:block;height:14px;border-radius:3px;margin-bottom:6px;"
-    "border:1px solid rgba(0,0,0,0.1);background:{gradient};"
-)
-_RAMP_GRID = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;width:100%;"
-_STYLE_GRID = "display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:4px 0 8px;"
-_HINT = "display:block;font-size:0.75rem;font-weight:400;opacity:0.75;white-space:normal;"
 _PREVIEW_BAR = "height:12px;border-radius:3px;border:1px solid rgba(0,0,0,0.1);background:{gradient};"
 _TICKS = "display:flex;justify-content:space-between;font-size:0.75rem;opacity:0.75;"
 _CHIPS = "display:flex;flex-wrap:wrap;gap:4px 12px;font-size:0.8125rem;"
 _CHIP = "display:inline-flex;align-items:center;gap:4px;"
 _SWATCH = "display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,0.2);background:{color};"
 
-BANDS_MODES = ("all", "one")
+BANDS_MODES = ("one", "all")  # the Bands question's items: one band, or an RGB composite
 STYLES = ("continuous", "categorical")
-
-
-def card_button(children, *, selected, on_click, disabled, classes):
-    """A bordered card as a text button; ``classes`` gets a ``--selected`` twin when picked."""
-    solara.Button(children=children, on_click=on_click, disabled=disabled, text=True,
-                  style=_RAMP_CARD + (_RAMP_CARD_SELECTED if selected else ""),
-                  classes=list(classes) + [f"{c}--selected" for c in classes if selected])
-
-
-@solara.component
-def BandsChoice(value, on_value, disabled=False):
-    """Keep every band for an RGB composite ("all"), or draw one band ("one")."""
-    with field_group(t("steps.layers.field_bands")):
-        with rv.RadioGroup(v_model=value, on_v_model=on_value, dense=True, hide_details=True, disabled=disabled,
-                           class_="mt-0"):
-            for mode in BANDS_MODES:
-                rv.Radio(label=t(f"steps.layers.bands_{mode}"), value=mode)
-
-
-@solara.component
-def StyleTiles(value, on_value, disabled=False):
-    """How one band is drawn: a colour ramp (Continuous) or a colour per class (Categorical)."""
-    bars = {"continuous": vis_palettes.ramp_css("viridis"),
-            "categorical": vis_palettes.qualitative_css(vis_palettes.DEFAULT_QUALITATIVE)}
-    with rv.Html(tag="div", style_=_STYLE_GRID):
-        for key in STYLES:
-            card_button(
-                [rv.Html(tag="span", style_="display:block;width:100%;", children=[
-                    rv.Html(tag="span", style_=_RAMP_BAR.format(gradient=bars[key])),
-                    rv.Html(tag="span", children=[t(f"steps.layers.style_{key}")]),
-                    rv.Html(tag="span", style_=_HINT, children=[t(f"steps.layers.style_{key}_hint")])])],
-                selected=key == value, on_click=lambda *_, k=key: on_value(k), disabled=disabled,
-                classes=["dv-style"])
 
 
 # The composite cards: the name over three chips (the bands drawn in red,
@@ -209,7 +167,7 @@ def BandsField(band_items, mode, on_mode, band, on_band, rgb_found, disabled=Fal
             band_select(t("steps.layers.bands_two_hint"))
         elif n >= 3:
             items = [{"text": _suggested(t(f"steps.layers.bands_{m}"), m == "all" and rgb_found), "value": m}
-                     for m in ("one", "all")]  # BANDS_MODES, one band first
+                     for m in BANDS_MODES]
             hint = t("steps.layers.bands_found" if rgb_found else "steps.layers.bands_not_found", count=n)
             rv.Select(label=t("steps.layers.field_bands"), items=items, v_model=mode, on_v_model=on_mode,
                       dense=True, outlined=True, disabled=disabled, hint=hint, persistent_hint=True).key("mode")

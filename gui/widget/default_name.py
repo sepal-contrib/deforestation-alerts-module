@@ -7,7 +7,10 @@ the raster changes; a typed name is never overwritten."""
 import solara
 
 
-def use_default_name(ref, name, set_name, suggest) -> None:
+def use_default_name(ref, name, set_name, suggest) -> bool:
+    """Hook: fill ``name`` from ``suggest(ref)`` when ``ref`` changes. True while
+    the name is still the suggestion (or empty), so a field can keep its hint
+    until the user types a name of their own."""
     last = solara.use_ref("")
 
     def _fill():
@@ -21,3 +24,4 @@ def use_default_name(ref, name, set_name, suggest) -> None:
             set_name(value)
 
     solara.use_effect(_fill, [ref])
+    return not name or name == last.current

@@ -33,8 +33,8 @@ from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
 from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
 from gui.widget.text_style import MUTED
 from gui.widget.vis_style_fields import (
-    _RAMP_BAR, _RAMP_GRID, CHANNEL_CSS, BandsChoice, ClassList, CompositeCards, LegendPreview, PaletteMenu,
-    RolesSummary, StyleTiles, card_button, channel_class,
+    CHANNEL_CSS, BandsField, ClassList, CompositeCards, LegendPreview, PaletteMenu, RampSelect, RasterTypeSelect,
+    RolesSummary, channel_class,
 )
 
 
@@ -175,11 +175,6 @@ def preview_layer(kind, style, *, band, bands, ramp, invert, palette, colormap, 
     return GeeVisLayer(asset="", bands=[str(b) for b in chosen if b is not None], **kw)
 
 
-_FIELDSET_STYLE = ("border:1px solid rgba(128,128,128,0.6);border-radius:4px;"
-                   "padding:8px 12px 4px;margin:4px 0 0;min-width:0;")
-_LEGEND_STYLE = "padding:0 4px;font-size:0.75rem;opacity:0.75;"
-
-
 def _probe_error(err) -> str:
     """A probe's refusal (a message key) or failure (an exception), in the current language."""
     return t(err["key"]) if "key" in err else error_text(err["exception"])
@@ -233,7 +228,7 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     palette0 = raster0.palette if raster0 is not None else []
     ramp0, invert0 = vis_palettes.ramp_choice(palette0)
     # A new layer starts on the default ramp. A layer saved before the ramps keeps
-    # its palette or colormap until a card is picked, and preselects no card.
+    # its palette or colormap until a ramp is picked, and preselects no ramp.
     ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None else vis_palettes.DEFAULT_RAMP)
     invert, set_invert = solara.use_state(invert0)
     show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
@@ -266,6 +261,8 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                   else [{"text": n, "value": n} for n in names])
     band_text = {i["value"]: i["text"] for i in band_items}
     n_bands = len(band_items) if bands_task.finished else None
+    # nothing below the picker shows until its band list is read (spec §3)
+    bands_read = bool(ref) and bands_task.finished and not bands_task.error and bool(band_items)
     # RGB needs three bands: an RGB edit pointed at a smaller raster is drawn from one band
     style = "rgb" if bands_mode == "all" and (n_bands is None or n_bands >= 3) else one_style
 
@@ -286,25 +283,30 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             if first and _apply(first[0], roles):
                 set_combo(first[0])
 
+    # the roles the band names give, {role: band value}; red, green and blue all found suggest RGB
+    by_name = {i["text"]: i["value"] for i in band_items}
+    guessed = {r: by_name[n] for r, n in vis_palettes.guess_roles(list(by_name)).items()}
+    rgb_found = all(r in guessed for r in ("red", "green", "blue"))
+
     def _guess_roles():
         if not band_items:
             return
-        by_name = {i["text"]: i["value"] for i in band_items}
-        guessed = {r: by_name[n] for r, n in vis_palettes.guess_roles(list(by_name)).items()}
         if first_load.current:  # an edit's own bands, roles and combination stay for its own image
             first_load.current = False
             if not saved_roles:  # a layer saved before the roles: only fill the empty role selects
                 set_roles(guessed)
+            if len(band_items) == 1:  # one band is always drawn from that band
+                set_band(band_items[0]["value"])
             return
         set_roles(guessed)
         set_combo("custom")
+        set_band(band_items[0]["value"])  # the Band select starts on the image's first band
         for setter in (set_red, set_green, set_blue):
             setter(None)
         # spectral bands are kept as RGB; any other image draws one band (never guessed Categorical)
-        all_bands = all(r in guessed for r in ("red", "green", "blue"))
-        set_bands_mode("all" if all_bands else "one")
+        set_bands_mode("all" if rgb_found else "one")
         first = vis_palettes.available_combos(guessed)
-        if all_bands and first and _apply(first[0], guessed):
+        if rgb_found and first and _apply(first[0], guessed):
             set_combo(first[0])
 
     solara.use_effect(_guess_roles, [tuple(i["value"] for i in band_items)])
@@ -359,8 +361,9 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             vis_layers.MAX_NAME)
 
     rgb = style == "rgb"
-    use_default_name(f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
-                     name, set_name, _suggest)
+    auto_name = use_default_name(
+        f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
+        name, set_name, _suggest) and l0 is None  # an edit's name is never filled from its raster
 
     async def _validate():
         live = app_state.project.value
@@ -509,11 +512,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     title = t("steps.layers.edit_title", name=editing) if l0 is not None else t("steps.layers.add_title")
     button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
 
-    def _band_select(label, value, on_value, channel=None):
+    def _channel_select(label, value, on_value, channel):
         # an RGB band's label leads with its colour dot (CHANNEL_CSS)
         rv.Select(label=label, items=band_items, v_model=value, on_v_model=on_value, dense=True, outlined=True,
-                  loading=bands_task.pending, disabled=busy,
-                  class_=channel_class(channel) if channel is not None else "")
+                  disabled=busy, class_=channel_class(channel))
 
     def _range_fields():
         with rv.Row(dense=True):
@@ -523,20 +525,6 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             with rv.Col():
                 rv.TextField(label=t("steps.layers.field_max"), v_model=vmax, on_v_model=set_vmax, type="number",
                              dense=True, outlined=True, disabled=busy)
-
-    def _ramp_fields():
-        with rv.Html(tag="fieldset", style_=_FIELDSET_STYLE):
-            rv.Html(tag="legend", children=[t("steps.layers.field_ramp")], style_=_LEGEND_STYLE)
-            with rv.Html(tag="div", style_=_RAMP_GRID):
-                for key in vis_palettes.RAMPS:
-                    card_button(
-                        [rv.Html(tag="span", style_="display:block;width:100%;", children=[
-                            rv.Html(tag="span", style_=_RAMP_BAR.format(gradient=vis_palettes.ramp_css(key, invert))),
-                            rv.Html(tag="span", children=[t(f"steps.layers.ramp_{key}")])])],
-                        selected=key == ramp, on_click=lambda *_, k=key: set_ramp(k), disabled=busy,
-                        classes=["dv-ramp"])
-            rv.Switch(label=t("steps.layers.field_invert"), v_model=invert, on_v_model=set_invert, dense=True,
-                      hide_details=True, disabled=busy or ramp is None, class_="mt-0 mb-1")
 
     def _stretch_fields():
         no_aoi = p is None or p.aoi is None
@@ -574,21 +562,23 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     def _actions():
         # spec §11: an async button is a task button. While the check runs it
         # reads Cancel and stops the check, and it carries no Enter class.
+        # a band list that could not be read leaves nothing to save
         SubmitTaskButton(label=t("common.save") if l0 is not None else t("steps.layers.add"),
                          icon="mdi-content-save-outline" if l0 is not None else "mdi-plus",
-                         external_busy=bool(name_error), **button)
+                         external_busy=bool(name_error) or bool(bands_task.error), **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
         # with the form, not the band selects: the outlined label's notch is
         # measured when a select mounts, so the dot's rule must be loaded by then
         solara.Style(CHANNEL_CSS)
-        rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
-                  items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
-                  dense=True, outlined=True, disabled=busy)
         rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
-                     outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
-                     error_messages=[t(name_error)] if name_error else [])
+                     outlined=True, disabled=busy, counter=vis_layers.MAX_NAME, hint=t("steps.layers.name_hint"),
+                     persistent_hint=auto_name, error_messages=[t(name_error)] if name_error else [])
+        rv.Select(label=t("steps.layers.field_source"), v_model=kind, on_v_model=_set_kind,
+                  items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
+                  hint=t("steps.layers.source_hint"), persistent_hint=True, dense=True, outlined=True,
+                  disabled=busy)
         RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
                     asset_types=("IMAGE",), disabled=busy, show_origin=False)
         if bands_task.pending:
@@ -596,9 +586,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         elif bands_task.error:
             solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
                         classes=["error--text"])
-        if n_bands is not None and n_bands >= 3:  # RGB is offered for three bands or more
-            BandsChoice(value=bands_mode, on_value=_set_bands_mode, disabled=busy)
-        if rgb:
+        if bands_read:
+            BandsField(band_items=band_items, mode=bands_mode, on_mode=_set_bands_mode, band=band, on_band=set_band,
+                       rgb_found=rgb_found, disabled=busy)
+        if bands_read and rgb:
             CompositeCards(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
                            custom=(red, green, blue), disabled=busy)
             RolesSummary(roles=roles, band_text=band_text, expanded=roles_open, on_expanded=set_roles_open,
@@ -608,14 +599,14 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                                                           ("steps.layers.field_green", green, set_green),
                                                           ("steps.layers.field_blue", blue, set_blue))):
                     with rv.Col(cols=4):
-                        _band_select(t(key), value, _rgb_setter(setter), channel=i)
+                        _channel_select(t(key), value, _rgb_setter(setter), channel=i)
             _range_fields()
             _stretch_fields()
-        else:
-            StyleTiles(value=one_style, on_value=set_one_style, disabled=busy)
-            _band_select(t("steps.layers.field_band"), band, set_band)
+        elif bands_read:
+            RasterTypeSelect(value=one_style, on_value=set_one_style,
+                             suggested=vis_classes.looks_categorical(band_text.get(band, "")), disabled=busy)
             if style == "continuous":
-                _ramp_fields()
+                RampSelect(value=ramp, on_value=set_ramp, invert=invert, on_invert=set_invert, disabled=busy)
                 _range_fields()
                 _stretch_fields()
             else:

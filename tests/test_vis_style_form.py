@@ -1,8 +1,10 @@
-"""The visualization form's Bands question, Style tiles and Continuous fields
-(gui/widget/vis_style_fields, gui/widget/vis_layer_modal): only a raster of
-three or more bands is asked about its bands, a new layer is Continuous, the
-stretch fills Min and Max from the AOI, and the legend preview follows the
-ramp and the range."""
+"""The visualization form's order, bands helper, Raster type and Continuous
+fields (gui/widget/vis_style_fields, gui/widget/vis_layer_modal): Name, Source
+and the picker come first and nothing shows below the picker until its band
+list is read; one band is drawn on its own, two are picked from, three or more
+are asked about (RGB when red, green and blue are recognized); the first band is
+preselected, a new layer is Continuous, the stretch fills Min and Max from the
+AOI, and the legend preview follows the ramp and the range."""
 
 import asyncio
 import logging
@@ -16,22 +18,30 @@ from gui.i18n import t
 from pysepal.i18n import set_locale
 from gui.scripts import vis_palettes
 from gui.widget import vis_layer_modal as vlm
+from gui.widget.form_dialog import FIELDS
 from tests.test_vis_layers import (
-    S2_BANDS, _bands_choice, _card_has, _combo_card, _combo_cards, _enabled_combos, _field, _flat, _gee_modal,
-    _pick_all_bands, _rgb, _role_selects, _roles_link, _selected_combo, _settle, _with_aoi,
+    S2_BANDS, _band_count, _bands_choice, _card_has, _combo_card, _combo_cards, _enabled_combos, _field, _flat,
+    _gee_modal, _pick_all_bands, _ramp_select, _rgb, _role_selects, _roles_link, _save_btn, _selected_combo,
+    _settle, _shown, _texts, _tif, _with_aoi,
 )
 
 ASSET = {"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL", "value": None}
 
 
-def _style_tiles(rc, selected=False):
-    cls = "dv-style--selected" if selected else "dv-style"
-    return [b for b in rc.find(v.Btn).widgets if cls in (b.class_ or "").split()]
+def _raster_type(rc):
+    """The Raster type select, or None while it is not shown."""
+    return _shown(rc, "steps.layers.field_raster_type")
 
 
 def _button(rc, key):
-    [btn] = [b for b in rc.find(v.Btn).widgets if t(key) in _flat(b)]
-    return btn
+    """The button reading ``key``, or None while it is not shown."""
+    found = [b for b in rc.find(v.Btn).widgets if t(key) in _flat(b)]
+    assert len(found) <= 1
+    return found[0] if found else None
+
+
+def _enabled(rc, key):
+    return _button(rc, key) is not None and not _button(rc, key).disabled
 
 
 def _preview(rc):
@@ -53,6 +63,12 @@ def _render(state, open_, saved, gee, editing=None):
                                             editing=editing), handle_error=False)
 
 
+async def _one_band_form(rc, asset=ASSET):
+    """Pick ``asset`` and wait for its band list: the one-band fields show."""
+    vlm.RasterInput.seen.asset.set(asset)
+    assert await _settle(lambda: _raster_type(rc) is not None)
+
+
 def _stretching(monkeypatch, bands, answer):
     """An Earth Engine form whose stretch request is answered by ``answer``."""
     state, open_, saved, _ = _gee_modal(monkeypatch, bands)
@@ -67,24 +83,135 @@ def _stretching(monkeypatch, bands, answer):
     return state, open_, saved, SimpleNamespace(get_info_async=get_info_async)
 
 
+# ---------------------------------------------------------------- order and the bands helper
+def test_the_form_reads_name_source_picker_in_order(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["NDVI"])
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            assert rc.find(v.TextField).widgets[0].label == t("steps.layers.field_name")
+            assert rc.find(v.Select).widgets[0].label == t("steps.layers.field_source")
+            [fields] = rc.find(v.Html, style_=FIELDS).widgets
+            name = _field(rc, "steps.layers.field_name")
+            source = _field(rc, "steps.layers.field_source", v.Select)
+            [picker] = rc.find(v.Html, class_="dv-stub-raster-input").widgets
+            order = fields.children
+            assert order.index(name) < order.index(source) < order.index(picker)
+            assert (source.hint, source.persistent_hint) == (t("steps.layers.source_hint"), True)
+            # the name's hint stays while the name is filled from the asset, not once typed over
+            assert (name.hint, name.persistent_hint) == (t("steps.layers.name_hint"), True)
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _field(rc, "steps.layers.field_name").v_model == "img_NDVI")
+            assert _field(rc, "steps.layers.field_name").persistent_hint is True
+            _field(rc, "steps.layers.field_name").v_model = "mine"
+            assert _field(rc, "steps.layers.field_name").persistent_hint is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_nothing_below_the_picker_before_the_bands_are_read(monkeypatch):
+    state, open_, saved, _ = _gee_modal(monkeypatch, ["NDVI"])
+    release = asyncio.Event()
+
+    async def get_info_async(obj):
+        await release.wait()
+        return ["NDVI"]
+
+    gee = SimpleNamespace(get_info_async=get_info_async)
+
+    def nothing_below(rc):
+        assert _shown(rc, "steps.layers.field_band") is None and _bands_choice(rc) is None
+        assert _raster_type(rc) is None and _ramp_select(rc) is None
+        assert not rc.find(v.Html, class_="dv-legend-preview").widgets
+        assert _button(rc, "steps.layers.stretch") is None
+        assert _shown(rc, "steps.layers.field_min", v.TextField) is None
+        # Show in Analysis is the exception
+        assert _shown(rc, "steps.layers.field_show_in_analysis", v.Checkbox) is not None
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            nothing_below(rc)  # no image picked
+            vlm.RasterInput.seen.asset.set(ASSET)
+            loading = t("steps.raster_input.bands_loading")
+            assert await _settle(lambda: loading in _texts(rc))
+            nothing_below(rc)  # the band list is loading
+            release.set()
+            assert await _settle(lambda: _raster_type(rc) is not None)
+            assert loading not in _texts(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_failed_band_list_shows_only_its_error(monkeypatch):
+    state, open_, saved, _ = _gee_modal(monkeypatch, ["NDVI"])
+
+    async def get_info_async(obj):
+        raise RuntimeError("boom")
+
+    gee = SimpleNamespace(get_info_async=get_info_async)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            vlm.RasterInput.seen.asset.set(ASSET)
+            shown = t("steps.raster_input.bands_failed", error="boom")
+            assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text", children=[shown]).widgets))
+            assert _raster_type(rc) is None and _shown(rc, "steps.layers.field_band") is None
+            assert _button(rc, "steps.layers.stretch") is None
+            assert _save_btn(rc).disabled is True
+            assert _shown(rc, "steps.layers.field_show_in_analysis", v.Checkbox) is not None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_a_one_band_image_shows_no_bands_question_and_starts_continuous(monkeypatch):
     state, open_, saved, gee = _gee_modal(monkeypatch, ["NDVI"])
 
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
-            assert _bands_choice(rc) is None
-            [tile] = _style_tiles(rc, selected=True)
-            assert t("steps.layers.style_continuous") in _flat(tile) and len(_style_tiles(rc)) == 2
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "NDVI"
+            await _one_band_form(rc)
+            assert t("steps.layers.bands_one_hint", name="NDVI") in _texts(rc)
+            assert _bands_choice(rc) is None and _shown(rc, "steps.layers.field_band") is None
+            assert _raster_type(rc).v_model == "continuous"
             _field(rc, "steps.layers.field_name").v_model = "ndvi"
-            [save] = [b for b in rc.find(v.Btn).widgets if t("steps.layers.add") in b.children]
-            save.fire_event("click", None)
+            _save_btn(rc).fire_event("click", None)  # no band picked by hand: the only band is set
             assert await _settle(lambda: open_.value is False)
             [(layer, _prev)] = saved
             assert layer.style == "continuous" and layer.bands == ["NDVI"]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_first_band_is_preselected(monkeypatch, tmp_path):
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["a", "b", "c"])
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _band_count(rc) == 3)
+            assert _bands_choice(rc).v_model == "one"
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == "a"
+        finally:
+            rc.close()
+        tif = _tif(tmp_path / "two.tif", size=10, count=2)
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            vlm.RasterInput.seen.path.set(str(tif))
+            assert await _settle(lambda: _band_count(rc) == 2)
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == 1  # a GeoTIFF band is its index
         finally:
             rc.close()
 
@@ -102,13 +229,91 @@ def test_three_spectral_bands_default_to_rgb_and_other_bands_to_one(monkeypatch)
                 vlm.RasterInput.seen.asset.set(ASSET)
                 assert await _settle(lambda: _bands_choice(rc) is not None)
                 assert _bands_choice(rc).v_model == mode
-                assert bool(_style_tiles(rc)) is (mode == "one")  # RGB has no Style tiles
+                assert (_raster_type(rc) is not None) is (mode == "one")  # RGB has no Raster type
             finally:
                 rc.close()
 
         asyncio.run(main())
 
 
+def test_categorical_is_suggested_by_the_band_name(monkeypatch):
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["classification"])
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _one_band_form(rc)
+            items = _raster_type(rc).items
+            assert items[0]["text"] == t("steps.layers.style_continuous_item")
+            assert items[1]["text"] == t("steps.layers.suggested", text=t("steps.layers.style_categorical_item"))
+            assert _raster_type(rc).v_model == "continuous"  # suggested, never picked for the user
+            assert _button(rc, "steps.layers.find_classes") is None
+            _raster_type(rc).v_model = "categorical"
+            assert _button(rc, "steps.layers.find_classes") is not None
+            assert _ramp_select(rc) is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_picking_another_image_resets_band_mode_and_classes(monkeypatch):
+    bands_of = {"users/x/lc": ["lc"], "users/x/s2": S2_BANDS}
+    state, open_, saved, _ = _gee_modal(monkeypatch, [])
+
+    async def get_info_async(ref):
+        return bands_of[ref]
+
+    gee = SimpleNamespace(get_info_async=get_info_async)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            await _one_band_form(rc, {**ASSET, "asset_id": "users/x/lc"})
+            _raster_type(rc).v_model = "categorical"
+            _field(rc, "steps.layers.class_add").v_model = "1"
+            _by_class(rc, "dv-class-add")[0].fire_event("click", None)
+            assert _labels(rc) == ["1"]
+            vlm.RasterInput.seen.asset.set({**ASSET, "asset_id": "users/x/s2"})
+            assert await _settle(lambda: _bands_choice(rc) is not None and _bands_choice(rc).v_model == "all")
+            _bands_choice(rc).v_model = "one"
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == "B2"  # the new first band
+            assert _labels(rc) == []
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_switching_source_clears_band_roles_and_combo(monkeypatch):
+    asked = []
+
+    async def fake_validate(gee_interface, project, **kw):
+        asked.append(kw)
+        return {"error": "steps.layers.err_incomplete"}
+
+    state, open_, saved, gee = _gee_modal(monkeypatch, S2_BANDS)
+    monkeypatch.setattr(vlm, "validate_vis_layer", fake_validate)
+
+    async def main():
+        _box, rc = _render(state, open_, saved, gee)
+        try:
+            vlm.RasterInput.seen.asset.set(ASSET)
+            assert await _settle(lambda: _selected_combo(rc) == "true_color")
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_name").v_model = "x"
+            _save_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: len(asked) == 1)
+            [kw] = asked
+            assert (kw["kind"], kw["band"], tuple(kw["bands"]), kw["roles"], kw["combo"]) == (
+                "file", None, (None, None, None), {}, None)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ---------------------------------------------------------------- the Continuous fields
 def test_the_stretch_fills_min_and_max(monkeypatch):
     asked = []
 
@@ -121,10 +326,8 @@ def test_the_stretch_fills_min_and_max(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            assert _button(rc, "steps.layers.stretch").disabled is True  # no band yet
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "NDVI"
+            await _one_band_form(rc)
+            assert _enabled(rc, "steps.layers.stretch")  # the only band is set
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: _field(rc, "steps.layers.field_max").v_model == "0.91")
             assert _field(rc, "steps.layers.field_min").v_model == "0.05"
@@ -144,9 +347,7 @@ def test_a_stretch_with_no_spread_says_so_under_its_button(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "NDVI"
+            await _one_band_form(rc)
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             shown = t("steps.layers.err_no_stretch")
             assert await _settle(lambda: bool(rc.find(v.Html, class_="error--text", children=[shown]).widgets))
@@ -172,13 +373,11 @@ def test_closing_during_a_stretch_cancels_it(monkeypatch, caplog):
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "NDVI"
+            await _one_band_form(rc)
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
             assert _field(rc, "steps.layers.field_min").disabled is True  # frozen while it runs
-            assert all(b.disabled for b in _style_tiles(rc))
+            assert _raster_type(rc).disabled is True and _ramp_select(rc).disabled is True
             open_.set(False)
             release.set()
             await asyncio.sleep(0.1)
@@ -197,10 +396,10 @@ def test_the_legend_preview_follows_the_ramp_and_range(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
+            await _one_band_form(rc)
             assert _ticks(rc) == ["0", "0.5", "1"]
             before = _bar(rc)
-            [card] = [b for b in rc.find(v.Btn).widgets if t("steps.layers.ramp_viridis") in _flat(b)]
-            card.fire_event("click", None)
+            _ramp_select(rc).v_model = "viridis"
             assert _bar(rc) != before and "#440154" in _bar(rc)
             _field(rc, "steps.layers.field_max").v_model = "100"
             assert _ticks(rc) == ["0", "50", "100"]
@@ -215,14 +414,22 @@ def test_the_legend_preview_follows_the_ramp_and_range(monkeypatch):
 def test_an_edit_opens_on_its_saved_style(monkeypatch):
     p = _with_aoi()
     p.vis_layers = {"lc": GeeVisLayer(name="lc", asset="users/x/img", bands=["lc"], style="categorical",
-                                      classes=[VisClass(value=1, color="aa0000")])}
+                                      classes=[VisClass(value=1, color="aa0000")]),
+                    "old": GeeVisLayer(name="old", asset="users/x/img", bands=["lc"], palette=["ff0000", "00ff00"])}
     state, open_, saved, gee = _gee_modal(monkeypatch, ["lc"], p)
 
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
-            [tile] = _style_tiles(rc, selected=True)
-            assert t("steps.layers.style_categorical") in _flat(tile)
+            assert await _settle(lambda: _raster_type(rc) is not None)
+            assert _raster_type(rc).v_model == "categorical"
+        finally:
+            rc.close()
+        _box, rc = _render(state, open_, saved, gee, editing="old")
+        try:
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _raster_type(rc).v_model == "continuous"
+            assert _ramp_select(rc).v_model is None  # a palette saved before the ramps selects no ramp
         finally:
             rc.close()
 
@@ -356,13 +563,11 @@ def test_an_rgb_edit_on_a_two_band_raster_becomes_continuous(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="rgb")
         try:
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            assert await _settle(lambda: _band_count(rc) == 2)
             assert _bands_choice(rc) is None and not rc.find(v.Btn, class_="dv-combo").widgets
-            [tile] = _style_tiles(rc, selected=True)
-            assert t("steps.layers.style_continuous") in _flat(tile)
+            assert _raster_type(rc).v_model == "continuous"
             _field(rc, "steps.layers.field_band", v.Select).v_model = "B4"
-            [save] = [b for b in rc.find(v.Btn).widgets if t("common.save") in b.children]
-            save.fire_event("click", None)
+            _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             [(layer, prev)] = saved
             assert (layer.style, layer.bands, prev) == ("continuous", ["B4"], "rgb")
@@ -555,12 +760,12 @@ def _error_shown(rc, key):
 
 
 async def _categorical(rc, band="Map"):
-    """Pick the Categorical tile and ``band`` once the band list is in."""
-    vlm.RasterInput.seen.asset.set(ASSET)
-    assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) >= 1)
-    [tile] = [b for b in _style_tiles(rc) if t("steps.layers.style_categorical") in _flat(b)]
-    tile.fire_event("click", None)
-    _field(rc, "steps.layers.field_band", v.Select).v_model = band
+    """Pick Categorical once the band list is in, and ``band`` when the image has more than one."""
+    await _one_band_form(rc)
+    _raster_type(rc).v_model = "categorical"
+    select = _shown(rc, "steps.layers.field_band")
+    if select is not None:
+        select.v_model = band
 
 
 async def _find(rc):
@@ -697,17 +902,20 @@ def test_changing_the_band_clears_the_found_classes(monkeypatch):
             await _find(rc)
             assert await _settle(lambda: len(_labels(rc)) == 2)
             vlm.RasterInput.seen.asset.set({**ASSET, "asset_id": "users/x/other"})
-            assert await _settle(lambda: _labels(rc) == [])
+            assert await _settle(lambda: _band_count(rc) == 2 and _labels(rc) == [])
             # and so does a new kind; "Add a value" starts empty again too
             vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            assert await _settle(lambda: _band_count(rc) == 2)
             _field(rc, "steps.layers.field_band", v.Select).v_model = "Map"
             await _find(rc)
             assert await _settle(lambda: len(_labels(rc)) == 2)
             _field(rc, "steps.layers.class_add").v_model = "80"
             _by_class(rc, "dv-class-add")[0].fire_event("click", None)
             assert _field(rc, "steps.layers.class_add").error_messages
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            assert _shown(rc, "steps.layers.class_add", v.TextField) is None  # no file: nothing below the picker
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"  # the same image, read again
+            assert await _settle(lambda: _band_count(rc) == 2)
             assert _labels(rc) == []
             assert _field(rc, "steps.layers.class_add").v_model == ""
             assert _field(rc, "steps.layers.class_add").error_messages == []
@@ -726,7 +934,7 @@ def test_changing_the_band_clears_the_probe_errors(monkeypatch):
         _box, rc = _render(state, open_, saved, gee)
         try:
             vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            assert await _settle(lambda: _band_count(rc) == 2)
             _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_no_stretch"))
@@ -737,21 +945,21 @@ def test_changing_the_band_clears_the_probe_errors(monkeypatch):
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
             _field(rc, "steps.layers.field_band", v.Select).v_model = "b"
             assert not _error_shown(rc, "steps.layers.err_not_integer")
-            # a new kind clears them too
+            # a new kind clears them too: they are gone once the same image is read again
             _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
             await _find(rc)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"
+            assert await _settle(lambda: _band_count(rc) == 2)
             assert not _error_shown(rc, "steps.layers.err_not_integer")
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "gee"
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
-            [tile] = [b for b in _style_tiles(rc) if t("steps.layers.style_continuous") in _flat(b)]
-            tile.fire_event("click", None)
+            _raster_type(rc).v_model = "continuous"
             _field(rc, "steps.layers.field_band", v.Select).v_model = "a"
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_no_stretch"))
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "gee"
+            assert await _settle(lambda: _band_count(rc) == 2)
             assert not _error_shown(rc, "steps.layers.err_no_stretch")
         finally:
             rc.close()
@@ -773,8 +981,7 @@ def test_an_edit_opens_with_its_classes(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
-            assert _labels(rc) == ["Forest", "Crops"]
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
+            assert await _settle(lambda: _labels(rc) == ["Forest", "Crops"])
             await asyncio.sleep(0.05)
             assert _labels(rc) == ["Forest", "Crops"]  # the first band load keeps them
             assert _hide_icons(rc) == ["mdi-eye", "mdi-eye-off"]
@@ -792,7 +999,7 @@ def test_a_band_with_fractions_says_so_inline(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
+            assert await _settle(lambda: _enabled(rc, "steps.layers.find_classes"))
             await _find(rc)
             assert await _settle(lambda: _error_shown(rc, "steps.layers.err_not_integer"))
             assert _labels(rc) == ["Forest", "Crops"]  # the list is left unchanged
@@ -819,7 +1026,7 @@ def test_closing_during_find_classes_cancels_it(monkeypatch, caplog):
             await _categorical(rc)
             await _find(rc)
             assert await _settle(lambda: len(asked) == 1)
-            assert _field(rc, "steps.layers.field_band", v.Select).disabled is True  # frozen while it runs
+            assert _raster_type(rc).disabled is True  # frozen while it runs
             open_.set(False)
             release.set()
             await asyncio.sleep(0.1)
@@ -941,8 +1148,8 @@ def test_a_geotiff_categorical_edit_keeps_its_classes(monkeypatch, tmp_path):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
+            assert await _settle(lambda: _band_count(rc) == 2)
             assert _labels(rc) == ["Forest"]
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
             await asyncio.sleep(0.05)
             assert _field(rc, "steps.layers.field_band", v.Select).v_model == 2
             assert _labels(rc) == ["Forest"]
@@ -982,7 +1189,7 @@ def test_stretch_runs_on_the_geotiff_band(monkeypatch, tmp_path):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
-            assert await _settle(lambda: not _button(rc, "steps.layers.stretch").disabled)
+            assert await _settle(lambda: _enabled(rc, "steps.layers.stretch"))
             _button(rc, "steps.layers.stretch").fire_event("click", None)
             assert await _settle(lambda: _field(rc, "steps.layers.field_max").v_model == "42")
             assert _field(rc, "steps.layers.field_min").v_model == "3"
@@ -1000,7 +1207,7 @@ def test_find_classes_runs_on_the_geotiff_band(monkeypatch, tmp_path):
     async def main():
         _box, rc = _render(state, open_, saved, gee, editing="lc")
         try:
-            assert await _settle(lambda: not _button(rc, "steps.layers.find_classes").disabled)
+            assert await _settle(lambda: _enabled(rc, "steps.layers.find_classes"))
             await _find(rc)
             assert await _settle(lambda: _labels(rc) == ["Forest", "7"])
             assert asked == [("CLASSES", tif, 2, tuple(state.project.value.aoi.bounds))]
@@ -1018,9 +1225,7 @@ def test_the_probe_buttons_are_disabled_without_an_aoi(monkeypatch):
     async def main():
         _box, rc = _render(state, open_, saved, gee)
         try:
-            vlm.RasterInput.seen.asset.set(ASSET)
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 1)
-            _field(rc, "steps.layers.field_band", v.Select).v_model = "Map"
+            await _one_band_form(rc)
             await asyncio.sleep(0.05)
             assert _button(rc, "steps.layers.stretch").disabled is True
             await _categorical(rc)

@@ -255,7 +255,7 @@ def _dynamic_keys():
         "steps.layers.ramp_": list(RAMPS),
         "steps.layers.role_": list(ROLES),
         "steps.layers.combo_": [*RGB_COMBOS, "custom"],
-        # gui.widget.vis_style_fields: the Bands question and the Style tiles
+        # gui.widget.vis_style_fields: the Bands question and the Raster type
         "steps.layers.bands_": list(BANDS_MODES),
         "steps.layers.style_": list(STYLES),
         # ... and the Categorical palette menu

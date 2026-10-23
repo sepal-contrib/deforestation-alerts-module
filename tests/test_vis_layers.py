@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import rasterio
 import reacton
+import reacton.ipyvuetify as rv
 import solara
 from affine import Affine
 from pysepal.solara.notifications import NotificationProvider
@@ -451,9 +452,12 @@ def test_only_ee_s_no_access_answer_is_a_refusal(text, refused):
 @solara.component
 def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
                      disabled=False, show_origin=True):
-    """Stands in for pysepal's asset and file pickers: the test sets ``path``."""
+    """Stands in for pysepal's asset and file pickers: the test sets ``path``.
+    It draws one empty marker (``dv-stub-raster-input``), so its place among the
+    form's fields can be asserted."""
     _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, asset_types=asset_types,
                                             show_origin=show_origin)
+    rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
 def _state(p):
@@ -479,6 +483,18 @@ def _field(rc, key, cls=v.TextField):
     return rc.find(cls, label=t(key)).widgets[0]
 
 
+def _shown(rc, key, cls=v.Select):
+    """The field labelled ``key``, or None while the form does not show it."""
+    found = rc.find(cls, label=t(key)).widgets
+    return found[0] if found else None
+
+
+def _band_count(rc):
+    """How many bands the Band select lists, 0 while it is not shown."""
+    band = _shown(rc, "steps.layers.field_band")
+    return len(band.items) if band is not None else 0
+
+
 def _save_btn(rc):
     """The primary button: "Add layer" when adding, "Save" when editing."""
     [btn] = [b for b in rc.find(v.Btn).widgets
@@ -486,13 +502,10 @@ def _save_btn(rc):
     return btn
 
 
-def _ramp_cards(rc):
-    return [b for b in rc.find(v.Btn).widgets if "dv-ramp" in (b.class_ or "").split()]
-
-
-def _ramp_card(rc, key):
-    [card] = [b for b in _ramp_cards(rc) if t(f"steps.layers.ramp_{key}") in _flat(b)]
-    return card
+def _ramp_select(rc):
+    """The Colour ramp select, or None while it is not shown."""
+    found = [s for s in rc.find(v.Select).widgets if "dv-ramp-select" in (s.class_ or "").split()]
+    return found[0] if found else None
 
 
 def _flat(w):
@@ -501,10 +514,6 @@ def _flat(w):
     for c in getattr(w, "children", None) or []:
         out.append(c if isinstance(c, str) else _flat(c))
     return " ".join(out)
-
-
-def _selected_ramps(rc):
-    return [b for b in _ramp_cards(rc) if "dv-ramp--selected" in (b.class_ or "").split()]
 
 
 def _defaults(rc):
@@ -517,14 +526,12 @@ def _icons(btn):
 
 
 def _bands_choice(rc):
-    """The Bands question's radio group (keep all bands as RGB, or one), or None when it is not asked."""
-    groups = [g for g in rc.find(v.RadioGroup).widgets
-              if {getattr(c, "value", None) for c in g.children} == {"all", "one"}]
-    return groups[0] if groups else None
+    """The Bands select (one band, or an RGB composite), or None when it is not asked."""
+    return _shown(rc, "steps.layers.field_bands")
 
 
 async def _pick_all_bands(rc):
-    """Answer the Bands question "Keep all for an RGB composite" once the band list asks it."""
+    """Answer the Bands question "RGB composite" once the band list asks it."""
     assert await _settle(lambda: _bands_choice(rc) is not None)
     _bands_choice(rc).v_model = "all"
 
@@ -541,14 +548,14 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
     async def main():
         box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
             _field(rc, "steps.layers.field_name").v_model = "height"
             assert _StubRasterInput.seen.origin == "file" and _StubRasterInput.seen.show_origin is False
             assert _StubRasterInput.seen.asset_types == ("IMAGE",)
             _StubRasterInput.seen.path.set(str(tif))
-            assert await _settle(lambda: len(_field(rc, "steps.layers.field_band", v.Select).items) == 2)
+            assert await _settle(lambda: _band_count(rc) == 2)
             _field(rc, "steps.layers.field_band", v.Select).v_model = 2
-            _ramp_card(rc, "terrain").fire_event("click", None)
+            _ramp_select(rc).v_model = "terrain"
             _field(rc, "steps.layers.field_invert", v.Switch).v_model = True
             _field(rc, "steps.layers.field_max").v_model = "45"
             _field(rc, "steps.layers.field_show_in_analysis", v.Checkbox).v_model = True
@@ -563,21 +570,24 @@ def test_a_geotiff_layer_is_saved_inside_the_task_and_the_modal_closes(tmp_path,
     asyncio.run(main())
 
 
-def test_a_kind_change_clears_the_band(monkeypatch):
-    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+def test_a_kind_change_clears_the_band(monkeypatch, tmp_path):
+    tif = _tif(tmp_path / "two.tif", size=10, count=2)
     p = _with_aoi()
-    p.vis_layers = {"ndvi": GeeVisLayer(name="ndvi", asset="users/x/img", bands=["NDVI"], min=0, max=1)}
-    state, open_, saved = _state(p), solara.reactive(True), []
+    p.vis_layers = {"evi": GeeVisLayer(name="evi", asset="users/x/img", bands=["EVI"], min=0, max=1)}
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["NDVI", "EVI"], p)
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, saved, editing="ndvi"), handle_error=False)
+        box, rc = reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                   on_save=lambda *a: saved.append(a), editing="evi"),
+                                 handle_error=False)
         try:
-            assert _field(rc, "steps.layers.field_band", v.Select).v_model == "NDVI"
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
-            assert _field(rc, "steps.layers.field_band", v.Select).v_model is None  # no Earth Engine band name
-            _field(rc, "steps.layers.field_band", v.Select).v_model = 1
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "gee"
-            assert _field(rc, "steps.layers.field_band", v.Select).v_model is None  # no GeoTIFF band index
+            assert await _settle(lambda: _band_count(rc) == 2)
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == "EVI"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
+            assert _shown(rc, "steps.layers.field_band") is None  # no file picked: nothing below the picker
+            _StubRasterInput.seen.path.set(str(tif))
+            assert await _settle(lambda: _band_count(rc) == 2)
+            assert _field(rc, "steps.layers.field_band", v.Select).v_model == 1  # an index, no Earth Engine name
         finally:
             rc.close()
 
@@ -602,7 +612,7 @@ def test_an_edit_opens_with_the_layers_values(monkeypatch):
                 "B4", "B3", "B2"]
             assert _field(rc, "steps.layers.field_max").v_model == "3000"
             assert _StubRasterInput.seen.asset.value["asset_id"] == "users/x/img"
-            assert not _ramp_cards(rc)  # RGB: no colour ramp
+            assert _ramp_select(rc) is None  # RGB: no colour ramp
         finally:
             rc.close()
 
@@ -687,7 +697,7 @@ def test_closing_the_dialog_during_a_check_saves_nothing(monkeypatch, close):
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
             assert _field(rc, "steps.layers.field_name").disabled is True  # frozen while checked
-            assert _field(rc, "steps.layers.field_kind", v.Select).disabled is True
+            assert _field(rc, "steps.layers.field_source", v.Select).disabled is True
             assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
             if close == "esc":
                 rc.find(v.Dialog).widgets[0].fire_event("keydown.esc", None)
@@ -896,31 +906,40 @@ def _gee_modal(monkeypatch, bands, p=None, editing=None):
     return state, open_, saved, gee
 
 
-def test_the_ramp_cards_start_on_grayscale_and_an_edit_prefills_ramp_and_invert(monkeypatch):
-    monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
+def test_the_ramp_select_starts_on_grayscale_and_an_edit_prefills_ramp_and_invert(monkeypatch):
     p = _with_aoi()
     p.vis_layers = {
         "n": GeeVisLayer(name="n", asset="users/x/img", bands=["NDVI"], palette=vis_palettes.ramp_palette("magma", True)),
         "old": GeeVisLayer(name="old", asset="users/x/img", bands=["NDVI"], palette=["ff0000", "00ff00"]),
     }
+    state, open_, saved, gee = _gee_modal(monkeypatch, ["NDVI"], p)
+
+    def render(editing=None):
+        return reacton.render(vlm.VisLayerModal(open_=open_, app_state=state, gee_interface=gee,
+                                                on_save=lambda *a: saved.append(a), editing=editing),
+                              handle_error=False)
 
     async def main():
-        state, open_, saved = _state(p), solara.reactive(True), []
-        _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
+        _box, rc = render()
         try:
-            assert [len(_ramp_cards(rc)), len(_selected_ramps(rc))] == [len(vis_palettes.RAMPS), 1]
-            assert t("steps.layers.ramp_grayscale") in _flat(_selected_ramps(rc)[0])
+            _StubRasterInput.seen.asset.set({"asset_id": "users/x/img", "type": "IMAGE", "column": "ALL",
+                                             "value": None})
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _ramp_select(rc).v_model == "grayscale"
+            assert [i["value"] for i in _ramp_select(rc).items] == list(vis_palettes.RAMPS)
         finally:
             rc.close()
-        _box, rc = reacton.render(_modal(state, open_, saved, editing="n"), handle_error=False)
+        _box, rc = render("n")
         try:
-            assert t("steps.layers.ramp_magma") in _flat(_selected_ramps(rc)[0])
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _ramp_select(rc).v_model == "magma"
             assert _field(rc, "steps.layers.field_invert", v.Switch).v_model is True
         finally:
             rc.close()
-        _box, rc = reacton.render(_modal(state, open_, saved, editing="old"), handle_error=False)
+        _box, rc = render("old")
         try:
-            assert _selected_ramps(rc) == []  # a palette that is no ramp preselects no card
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _ramp_select(rc).v_model is None  # a palette that is no ramp preselects no ramp
         finally:
             rc.close()
 
@@ -1051,7 +1070,7 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
     async def main():
         _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
         try:
-            _field(rc, "steps.layers.field_kind", v.Select).v_model = "file"
+            _field(rc, "steps.layers.field_source", v.Select).v_model = "file"
             _StubRasterInput.seen.path.set(str(tif))
             await _pick_all_bands(rc)
             await _open_roles(rc)
@@ -1104,7 +1123,8 @@ def test_a_layer_saved_with_a_colormap_keeps_it_and_its_invert_switch_is_off(mon
     async def main():
         _box, rc = reacton.render(_modal(state, open_, saved, editing="g"), handle_error=False)
         try:
-            assert _selected_ramps(rc) == []
+            assert await _settle(lambda: _ramp_select(rc) is not None)
+            assert _ramp_select(rc).v_model is None
             assert _field(rc, "steps.layers.field_invert", v.Switch).disabled is True
             _save_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
