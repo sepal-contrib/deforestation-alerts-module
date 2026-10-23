@@ -1,24 +1,34 @@
 """One attribute layer's controls (spec §7.4 form, D3), on the shared raster input.
 
-Pick an Earth Engine image or a GeoTIFF (``RasterInput``), load its bands,
-then name the layer, select its bands and choose a statistic per band. Emits
-the config dict ``raster_attribute.build_attribute_config`` builds. ``gui/widget/attribute_modal`` hosts the form, and Integrate lists the
-layers. An Earth Engine band keeps its ``crs`` and ``scale`` (metres,
+The form reads Layer name, Source, the picker (``RasterInput``: an Earth
+Engine image or a GeoTIFF), then the bands: they are read as soon as a raster
+is picked, and what depends on them waits for them ("Reading the bands…", or
+the read's error). One band is a line, two or more a Bands select; each
+selected band has a row with its statistic and its alert column. Emits the
+config dict ``raster_attribute.build_attribute_config`` builds.
+``gui/widget/attribute_modal`` hosts the form, and Integrate lists the layers.
+An Earth Engine band keeps its ``crs`` and ``scale`` (metres,
 ``nominalScale``): Integrate's free-space gate estimates the band's download
 from them.
 
-The rows describe the raster their bands were loaded from, not whatever the
-pickers show now: picking another source changes nothing until its bands are
-loaded, so the config never pairs one raster with another's bands.
+The rows describe the raster their bands were read from, not whatever the
+pickers show now: picking another raster, clearing the picker or changing
+Source drops them at once and emits ``None`` until the new bands are read (a
+failed read leaves it ``None``), so the config never pairs one raster with
+another's bands.
 
 A layer has a name; its alert columns are ``<name>_<band>``, shown read-only
 beside each selected band. They are de-duplicated against ``reserved`` (the
 alert columns and the other layers' columns, ``raster_attribute.reserved_for``)
 and the earlier bands. A layer saved before layers had names keeps its
-columns until it is given one. A freshly loaded layer starts with no band
-selected and a name filled from its raster; editing keeps the saved selection
-and name, and reloading the same raster keeps the selection and statistics by
-band name (new bands arrive unselected).
+columns until it is given one. A new raster starts on its first band, each
+band's statistic by its name (Majority for a band that looks categorical,
+else Mean), and a name filled from the raster; an edit keeps the saved
+selection and name, and reading the raster its rows came from keeps their
+selection and statistics by band (new bands arrive unselected). A GeoTIFF
+band shows its description, else "Band N", but keeps its
+``raster_attribute.band_names`` key (``band_N``), so saved layers and their
+columns do not change.
 """
 
 import asyncio
@@ -26,23 +36,23 @@ from pathlib import Path
 
 import reacton.ipyvuetify as rv
 import solara
-from pysepal.solara.components.task_button import TaskButtonComponent, use_task_button
 
 from deforestation_alerts.engine import user_raster
 from deforestation_alerts.project.names import MAX_NAME, name_from_ref, suggest_name
 from deforestation_alerts.scripts.raster_attribute import (
     ALERT_RESERVED_COLUMNS,
-    band_names,
+    band_keys_and_texts,
     build_attribute_config,
 )
 from gui.i18n import t
-from gui.scripts.error_text import error_text
+from gui.scripts.vis_classes import looks_categorical
 from gui.widget.default_name import use_default_name
-from gui.widget.raster_input import RasterInput, absolute
+from gui.widget.raster_input import BandStatus, RasterInput, SourceSelect, absolute
 from gui.widget.text_style import MUTED
 
 _STATS = ["majority", "mean", "min", "max", "median"]
 _ROW = "display:flex;gap:8px;align-items:center;"
+_COLUMN = "display:flex;flex-direction:column;gap:8px;"
 #: the config's ``kind`` -> RasterInput's origin
 _ORIGIN = {"gee": "gee", "local": "file"}
 _KIND = {origin: kind for kind, origin in _ORIGIN.items()}
@@ -65,33 +75,47 @@ def other_layer_names(layers, skip=None) -> set:
             if i != skip and (layer or {}).get("name")}
 
 
+def default_stat(text) -> str:
+    """A new band's statistic: Majority for a band whose name looks like
+    classes (``vis_classes.looks_categorical``), else Mean."""
+    return "majority" if looks_categorical(text) else "mean"
+
+
+def _band_text(row) -> str:
+    return row.get("text") or row["band"]
+
+
 @solara.component
 def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMNS, on_busy=None, taken_names=()):
-    cfg = value or {}
+    # the config the form opened with: ``use_reactive`` follows a changed
+    # argument, and the emitted ``None`` (a pick waiting for its bands) must
+    # not clear the picker
+    cfg = solara.use_memo(lambda: value or {}, dependencies=[])
     gee_src = cfg.get("source") if cfg.get("kind") == "gee" else None
     local_src = cfg.get("source") if cfg.get("kind") == "local" else None
     kind, set_kind = solara.use_state(cfg.get("kind", "gee"))
     asset = solara.use_reactive({"asset_id": gee_src, "type": None, "column": "ALL", "value": None}
                                 if gee_src else None)
     path = solara.use_reactive(local_src or "")
-    # (source, kind) the rows' bands were read from; None until a load
+    # (source, kind) the rows' bands came from: the saved raster on an edit, else
+    # None until a read lands
     loaded, set_loaded = solara.use_state((cfg["source"], cfg["kind"]) if cfg.get("source") else None)
     rows, set_rows = solara.use_state([
         {"include": True, "band": b["band"], "stat": b["stat"], "column": b["column"],
          **{k: b[k] for k in ("crs", "scale") if k in b}}
         for b in cfg.get("bands", [])
     ])
-    error, set_error = solara.use_state(None)
+    listed, set_listed = solara.use_state(False)  # the rows hold the raster's whole band list
     name, set_name = solara.use_state(cfg.get("name", ""))
-    fresh, set_fresh = solara.use_state(False)  # bands were loaded in this form: the name follows the raster
+    fresh, set_fresh = solara.use_state(False)  # bands were read in this form: the name follows the raster
 
     def _emit(new_rows, new_name):
         on_value(build_attribute_config(loaded[0], loaded[1], new_rows, reserved=reserved, name=new_name))
 
-    # the latest name, for the load: its default can land (use_default_name) before the load emits
+    # the latest name, for the read: its default can land (use_default_name) before the read emits
     latest_name = solara.use_ref(cfg.get("name", ""))
 
-    # what the form holds now, for the load (its closure can predate later edits)
+    # what the form holds now, for the read (its closure can predate later edits)
     held = solara.use_ref(None)
     held.current = (loaded, rows)
 
@@ -104,58 +128,83 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
     use_default_name(loaded[0] if fresh and loaded else None, name, _set_name,
                      lambda r: suggest_name(name_from_ref(r), lambda n: n.strip().casefold() not in taken_names))
 
-    def _source():
-        if kind == "gee":
-            return (asset.value or {}).get("asset_id") or None
-        return absolute(path.value)
+    src = ((asset.value or {}).get("asset_id") or None) if kind == "gee" else absolute(path.value)
 
-    async def _load():
-        src, src_kind = _source(), kind
+    def _drop():
+        # the rows describe a raster the pickers no longer show: Save waits for the next read
+        if held.current[0] is not None:
+            set_rows([])
+            set_loaded(None)
+            set_listed(False)
+            on_value(None)
+
+    def _on_pick():
+        if loaded is not None and loaded != (src, kind):
+            _drop()
+
+    solara.use_effect(_on_pick, [src, kind])
+
+    def _set_origin(origin):
+        # another Source clears the picked raster (and so its rows, _on_pick)
+        if origin and _KIND[origin] != kind:
+            set_kind(_KIND[origin])
+            asset.set(None)
+            path.set("")
+
+    async def _read():
+        # keyed on (kind, src): a new pick cancels a read still running, so a
+        # late result never lands on a newer pick
         if not src:
-            set_error(t("steps.integrate.attr_no_source"))
-            return
+            return None
         try:
-            if src_kind == "gee":
+            if kind == "gee":
                 names = await gee_interface.get_info_async(user_raster.band_list_request(src, "IMAGE"))
                 projections = await gee_interface.get_info_async(user_raster.band_projections_request(src, names))
+                bands = [(n, n) for n in names]
             else:
-                names = await asyncio.to_thread(band_names, src)
+                bands = await asyncio.to_thread(band_keys_and_texts, src)
                 projections = {}
-        except Exception as exc:  # noqa: BLE001 - shown next to the field
-            set_error(error_text(exc))
-            return
-        # reloading the raster the rows came from keeps their selection and statistics
+        except Exception:
+            _drop()  # a failed read leaves no config; BandStatus shows why
+            raise
+        # reading the raster the rows came from keeps their selection and statistics
         held_loaded, held_rows = held.current
-        old = {r["band"]: r for r in held_rows} if held_loaded == (src, src_kind) else {}
-        new_rows = [{"include": old.get(n, {}).get("include", False), "band": n,
-                     "stat": old.get(n, {}).get("stat", "majority"), "column": old.get(n, {}).get("column", n),
-                     **(projections.get(n) or {})} for n in names]
-        set_error(None)
+        old = {r["band"]: r for r in held_rows} if held_loaded == (src, kind) else {}
+        new_rows = []
+        for i, (key, text) in enumerate(bands):
+            row = old.get(key)
+            include = row["include"] if row else (not old and i == 0)  # a new raster: its first band
+            new_rows.append({"include": include or len(bands) == 1, "band": key, "text": text,
+                             "stat": row["stat"] if row else default_stat(text),
+                             "column": row["column"] if row else key, **(projections.get(key) or {})})
         set_rows(new_rows)
+        set_listed(True)
         if not old:  # another raster: the name follows it
             set_fresh(True)
-        set_loaded((src, src_kind))
-        on_value(build_attribute_config(src, src_kind, new_rows, reserved=reserved,
+        set_loaded((src, kind))
+        on_value(build_attribute_config(src, kind, new_rows, reserved=reserved,
                                         name=latest_name.current.strip() or None))
+        return None
 
-    load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
+    read_task = solara.lab.use_task(_read, dependencies=[kind, src], prefer_threaded=False, raise_error=False)
+    reading = bool(src) and read_task.pending
 
     def _cancel_on_unmount():
         def cleanup():
             # closing the modal (ESC, Cancel) unmounts this form, and use_task
-            # does not cancel on unmount: stop a load still running, or it
+            # does not cancel on unmount: stop a read still running, or it
             # would hand the bands it read to a form the user closed
-            if load_task.pending:
+            if read_task.pending:
                 try:
-                    load_task.cancel()
+                    read_task.cancel()
                 except RuntimeError:
                     pass
 
         return cleanup
 
     solara.use_effect(_cancel_on_unmount, [])
-    # the host's Save must not fire on the config held before this load
-    solara.use_effect(lambda: on_busy(load_task.pending) if on_busy else None, [load_task.pending])
+    # the host's Save must not fire on the config held before this read
+    solara.use_effect(lambda: on_busy(reading) if on_busy else None, [reading])
 
     def _edit(i, **changes):
         new_rows = [dict(r, **changes) if j == i else r for j, r in enumerate(rows)]
@@ -169,29 +218,36 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
 
     # what each included band is written as, after the de-duplication
     resolved = {b["band"]: b["column"] for b in (value or {}).get("bands", [])}
+    held_here = loaded is not None and loaded == (src, kind)
+    selected = [r["band"] for r in rows if r["include"]]
 
-    with rv.Html(tag="div", style_="display:flex;flex-direction:column;gap:8px;"):
-        RasterInput(gee_interface=gee_interface, origin=_ORIGIN[kind], on_origin=lambda o: set_kind(_KIND[o]),
-                    asset=asset, path=path, asset_types=("IMAGE",))
-        with rv.Html(tag="div", style_=_ROW):
-            TaskButtonComponent(label=t("steps.integrate.attr_load"), cancel_label=t("common.cancel"), small=True,
-                                **use_task_button(load_task, on_start=lambda: load_task()))
-        if error:  # a load failure, next to the field it is about (the modal's inline validation)
-            solara.Text(error, classes=["error--text"])
-        if loaded and rows:
-            solara.Text(t("steps.integrate.attr_loaded", source=loaded[0]), style=MUTED)
-            rv.TextField(label=t("steps.integrate.attr_name"), v_model=name,
-                         on_v_model=lambda v: _set_name(v[:MAX_NAME]), dense=True, outlined=True,
-                         counter=MAX_NAME, hint=t("steps.integrate.attr_name_hint"), persistent_hint=True)
-            rv.Select(label=t("steps.integrate.attr_bands"), items=[r["band"] for r in rows],
-                      v_model=[r["band"] for r in rows if r["include"]], on_v_model=_select, multiple=True,
-                      chips=True, small_chips=True, dense=True, outlined=True, hide_details=True)
-        for i, r in enumerate(rows):
+    with rv.Html(tag="div", style_=_COLUMN):
+        rv.TextField(label=t("steps.integrate.attr_name"), v_model=name,
+                     on_v_model=lambda v: _set_name(v[:MAX_NAME]), dense=True, outlined=True,
+                     counter=MAX_NAME, hint=t("steps.integrate.attr_name_hint"), persistent_hint=True)
+        SourceSelect(origin=_ORIGIN[kind], on_origin=_set_origin)
+        RasterInput(gee_interface=gee_interface, origin=_ORIGIN[kind], on_origin=_set_origin,
+                    asset=asset, path=path, asset_types=("IMAGE",), show_origin=False)
+        if src:
+            BandStatus(read_task)
+        if held_here and listed and len(rows) == 1:
+            solara.Text(t("steps.integrate.attr_band_one", name=_band_text(rows[0])), style=MUTED)
+        elif held_here and listed and rows:
+            # plain text selection, no chips (the forms' dropdown rule)
+            rv.Select(label=t("steps.integrate.attr_bands"),
+                      items=[{"text": _band_text(r), "value": r["band"]} for r in rows],
+                      v_model=selected, on_v_model=_select, multiple=True, dense=True, outlined=True,
+                      hint=t("steps.integrate.attr_bands_pick", count=len(rows)), persistent_hint=True,
+                      error_messages=[] if selected else [t("steps.integrate.attr_err_no_bands")])
+        for i, r in enumerate(rows if held_here else []):
             if not r["include"]:
                 continue
+            suggested = default_stat(_band_text(r))
             with rv.Html(tag="div", style_=_ROW):
-                solara.Text(r["band"], style="min-width:90px;")
-                rv.Select(items=[{"text": t(f"steps.integrate.attr_stat_{s}"), "value": s} for s in _STATS],
+                solara.Text(_band_text(r), style="min-width:90px;")
+                rv.Select(items=[{"text": t("steps.layers.suggested", text=t(f"steps.integrate.attr_stat_{s}"))
+                                  if s == suggested else t(f"steps.integrate.attr_stat_{s}"), "value": s}
+                                 for s in _STATS],
                           v_model=r["stat"], on_v_model=lambda v, i=i: _edit(i, stat=v), dense=True,
-                          hide_details=True, style_="max-width:130px")
+                          outlined=True, hide_details=True, style_="max-width:200px")
                 solara.Text(resolved.get(r["band"], ""), style=MUTED)

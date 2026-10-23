@@ -50,6 +50,12 @@
       recognized names it starts on the first three bands, and bands picked
       by hand that match a combination select it. A band of only 0 and 1
       found in Categorical names 1 after the band and starts 0 hidden.
+    - **Add mask** and **Add attribute layer** follow the same order and
+      band behaviour: Name (Layer name), Source, the picker, then the bands,
+      read as soon as a raster is picked (no Load bands button). One band is
+      a line; two or more a dropdown that starts on the suggested band (a
+      mask band, e.g. `datamask`) or the first. Each attribute band's
+      statistic starts by its name: Majority for classes, else Mean.
   - Period: **several monitoring periods** (typically one a month, dates
     included at both ends), each with its own alert sets, listed with their
     window, sets and out-of-date badges; new, edit and delete follow the

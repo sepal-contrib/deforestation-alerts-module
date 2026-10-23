@@ -37,7 +37,7 @@ def test_the_labels_the_walks_pick_exist():
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
     for key in ("steps.project.empty_heading", "steps.project.new", "steps.project.search",
                 "steps.project.no_match", "steps.project.name_label", "steps.project.name_chars",
-                "steps.integrate.attr_add", "steps.integrate.attr_load", "steps.integrate.attr_loaded",
+                "steps.integrate.attr_add", "steps.raster_input.field_source", "steps.raster_input.bands_loading",
                 "steps.period.new", "steps.period.created"):
         assert walklib.en(key), key
 

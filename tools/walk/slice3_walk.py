@@ -149,19 +149,19 @@ def _include_only(page, band):
 
 def _add_attribute_layer(page, *, origin, ref, band, out):
     """Integrate → Add attribute layer → the modal: the raster, its bands
-    loaded, ``band`` alone kept, added to the card's list (spec D3)."""
+    read on pick, ``band`` alone kept, added to the card's list (spec D3)."""
     w.goto_step(page, "integrate", 2000)
     ph.visible_btn(page, ATTR_ADD, ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the attribute modal")
-    ph.choose_origin(page, origin)
+    source = {"gee": w.en("steps.raster_input.source_gee"), "file": w.en("steps.raster_input.source_file")}
+    ph.choose(page, w.en("steps.raster_input.field_source"), source[origin])
     if origin == "gee":
         ph.type_asset(page, ref)
     else:
         ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
-    ph.modal_button(page, w.en("steps.integrate.attr_load")).click()
-    loaded = w.en("steps.integrate.attr_loaded").format(source=ref)
-    w.wait_for(lambda: loaded in ph.modal_text(page) and ph.modal(page).locator(".v-input--checkbox").count(), 120,
-               f"the band list of {ref}")
+    reading = w.en("steps.raster_input.bands_loading")
+    w.wait_for(lambda: reading not in ph.modal_text(page) and ph.modal(page).locator(".v-input--checkbox").count(),
+               120, f"the band list of {ref}")
     _include_only(page, band)
     add = ph.primary_button(page)
     w.wait_for(lambda: add.count() and add.is_enabled(), 15, f"{band}: the layer can be added")

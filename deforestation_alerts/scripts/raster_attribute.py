@@ -77,9 +77,16 @@ def reserved_for(layers, skip=None, reserved=ALERT_RESERVED_COLUMNS) -> set:
 
 def band_names(raster_path):
     """List band names from a raster's descriptions, falling back to band_N."""
+    return [key for key, _text in band_keys_and_texts(raster_path)]
+
+
+def band_keys_and_texts(raster_path):
+    """Each band as ``(key, text)``, from one read of the file: the key is its
+    ``band_names`` value (what a config and its columns use), the text what a
+    form shows: its description, else "Band N" (as ``user_raster.read_header``)."""
     with rasterio.open(raster_path) as src:
         return [
-            desc if desc else f"band_{i}"
+            (desc, desc) if desc else (f"band_{i}", f"Band {i}")
             for i, desc in enumerate(src.descriptions, start=1)
         ]
 
