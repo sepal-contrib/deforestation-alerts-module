@@ -2,7 +2,9 @@
 Bands question (keep every band for an RGB composite, or draw one), an RGB
 layer's composite cards and band roles line, the Style tiles of a one-band
 layer (Continuous or Categorical), a Categorical layer's class list and
-palette menu, and the legend preview that ends a style's fields.
+palette menu, and the legend preview that ends a style's fields. The
+dropdown fields that replace the question, cards and tiles: the bands helper
+(``BandsField``), ``RasterTypeSelect``, ``RampSelect`` and ``CompositeSelect``.
 """
 
 from typing import Optional
@@ -135,17 +137,23 @@ def _role_word(label: str) -> str:
     return label if label.isupper() else label[:1].lower() + label[1:]
 
 
-@solara.component
-def RolesSummary(roles, band_text, expanded, on_expanded, on_role, disabled=False, loading=False):
-    """The bands' roles on one line ("Bands detected: B2 blue · …", or "No
-    bands recognized"), with a link that unfolds the five role selects. The
-    line is built from ``roles``, in the band list's order; a band the list
-    does not hold (yet: it is ``loading``) is named as it is stored."""
+def _roles_list(roles, band_text) -> str:
+    """The recognized roles as "B2 blue · B3 green · …", in the band list's
+    order; a band the list does not hold (yet) is named as it is stored. Empty
+    when no role is recognized."""
     order = {b: i for i, b in enumerate(band_text)}
     assigned = sorted(((b, r) for r in vis_palettes.ROLES if (b := roles.get(r)) is not None),
                       key=lambda pair: order.get(pair[0], len(order)))
-    listed = " · ".join(f"{band_text.get(b, str(b))} {_role_word(t(f'steps.layers.role_{r}'))}"
-                        for b, r in assigned)
+    return " · ".join(f"{band_text.get(b, str(b))} {_role_word(t(f'steps.layers.role_{r}'))}"
+                      for b, r in assigned)
+
+
+@solara.component
+def RolesSummary(roles, band_text, expanded, on_expanded, on_role, disabled=False, loading=False):
+    """The bands' roles on one line ("Detected from the band names: B2 blue ·
+    …", or "No bands recognized"), with a link that unfolds the five role
+    selects. The line is built from ``roles`` (``_roles_list``)."""
+    listed = _roles_list(roles, band_text)
     found = bool(listed)
     # one box, keyed parts: the role selects come and go under the line
     with rv.Html(tag="div", style_="margin:4px 0;"):
@@ -165,6 +173,102 @@ def RolesSummary(roles, band_text, expanded, on_expanded, on_role, disabled=Fals
                         rv.Select(label=t(f"steps.layers.role_{role}"), items=items, v_model=roles.get(role),
                                   on_v_model=lambda value, r=role: on_role(r, value), clearable=True, dense=True,
                                   outlined=True, hide_details=True, loading=loading, disabled=disabled)
+
+
+# The dropdown fields: a component that shows more than one field stacks them
+# with the form's own gap (form_dialog.FIELDS).
+_STACK = "display:flex;flex-direction:column;gap:4px;"
+_RAMP_ROW = "display:flex;align-items:center;gap:16px;"
+RAMP_MENU = "dv-ramp-menu"  # the ramp select's menu, whose rows ramp_menu_css draws the bars of
+_SELECTION_BAR = ("display:inline-block;width:72px;height:12px;border-radius:2px;margin-right:10px;"
+                  "vertical-align:middle;background:{gradient};")
+
+
+def _suggested(text: str, suggested: bool) -> str:
+    """An item's text, marked "(suggested)" when ``suggested``."""
+    return t("steps.layers.suggested", text=text) if suggested else text
+
+
+@solara.component
+def BandsField(band_items, mode, on_mode, band, on_band, rgb_found, disabled=False):
+    """The bands helper. One band: a line naming it, no field. Two: the Band
+    select. Three or more: the Bands question (one band, or an RGB composite,
+    suggested when red, green and blue are ``rgb_found``), then the Band select
+    when one band is drawn. ``band_items`` are the select's ``{"text", "value"}``."""
+    n = len(band_items)
+
+    def band_select(hint=None):
+        rv.Select(label=t("steps.layers.field_band"), items=band_items, v_model=band, on_v_model=on_band,
+                  dense=True, outlined=True, disabled=disabled, class_="dv-band", hint=hint or "",
+                  persistent_hint=hint is not None).key("band")
+
+    with rv.Html(tag="div", style_=_STACK):
+        if n == 1:
+            solara.Text(t("steps.layers.bands_one_hint", name=band_items[0]["text"]), style=MUTED)
+        elif n == 2:
+            band_select(t("steps.layers.bands_two_hint"))
+        elif n >= 3:
+            items = [{"text": _suggested(t(f"steps.layers.bands_{m}"), m == "all" and rgb_found), "value": m}
+                     for m in ("one", "all")]  # BANDS_MODES, one band first
+            hint = t("steps.layers.bands_found" if rgb_found else "steps.layers.bands_not_found", count=n)
+            rv.Select(label=t("steps.layers.field_bands"), items=items, v_model=mode, on_v_model=on_mode,
+                      dense=True, outlined=True, disabled=disabled, hint=hint, persistent_hint=True).key("mode")
+            if mode == "one":
+                band_select()
+
+
+@solara.component
+def RasterTypeSelect(value, on_value, suggested, disabled=False):
+    """How one band is drawn: Continuous (a colour ramp) or Categorical (a
+    colour per class, ``suggested`` when the band looks categorical)."""
+    items = [{"text": _suggested(t(f"steps.layers.style_{key}_item"), key == "categorical" and suggested),
+              "value": key} for key in STYLES]
+    rv.Select(label=t("steps.layers.field_raster_type"), items=items, v_model=value, on_v_model=on_value,
+              dense=True, outlined=True, disabled=disabled)
+
+
+@solara.component
+def RampSelect(value, on_value, invert, on_invert, disabled=False):
+    """The colour ramp select and, on its row, the Invert switch (off with no
+    ramp: a layer saved before ramps keeps its palette). The chosen ramp shows
+    its bar and name; the menu rows' bars are CSS (``ramp_menu_css``), as a
+    widget slot cannot read the row it is drawn for."""
+    items = [{"text": t(f"steps.layers.ramp_{key}"), "value": key} for key in vis_palettes.RAMPS]
+    slots = []
+    if value is not None:
+        gradient = vis_palettes.ramp_css(value, invert)
+        slots = [{"name": "selection", "children": rv.Html(tag="span", children=[
+            rv.Html(tag="span", style_=_SELECTION_BAR.format(gradient=gradient)), t(f"steps.layers.ramp_{value}")])}]
+    with rv.Html(tag="div", style_=_RAMP_ROW):
+        solara.Style(vis_palettes.ramp_menu_css(RAMP_MENU, invert))
+        rv.Select(label=t("steps.layers.field_ramp"), items=items, v_model=value, on_v_model=on_value, dense=True,
+                  outlined=True, hide_details=True, disabled=disabled, menu_props={"contentClass": RAMP_MENU},
+                  v_slots=slots, class_="dv-ramp-select", style_="flex:1;min-width:0;")
+        rv.Switch(label=t("steps.layers.field_invert"), v_model=invert, on_v_model=on_invert, dense=True,
+                  hide_details=True, disabled=disabled or value is None, class_="mt-0 pt-0")
+
+
+@solara.component
+def CompositeSelect(combo, on_combo, roles, band_text, fallback, disabled=False):
+    """The RGB combination: each standard one names its bands ("True colour (B4
+    / B3 / B2)"), or is disabled when its roles were not all recognized; then
+    Custom. The hint lists the recognized roles, or, with none, the
+    ``fallback`` bands used as red, green and blue."""
+    items = []
+    for key in vis_palettes.RGB_COMBOS:
+        name = _capital(t(f"steps.layers.combo_{key}"))
+        picked = vis_palettes.combo_bands(key, roles)
+        if picked is None:
+            items.append({"text": t("steps.layers.combo_not_found", name=name), "value": key, "disabled": True})
+        else:
+            bands = " / ".join(band_text.get(b, str(b)) for b in picked)
+            items.append({"text": t("steps.layers.combo_item", name=name, bands=bands), "value": key})
+    items.append({"text": t("steps.layers.combo_custom_item"), "value": "custom"})
+    listed = _roles_list(roles, band_text)
+    hint = (t("steps.layers.roles_detected", list=listed) if listed else
+            t("steps.layers.roles_none_rgb", bands=", ".join(band_text.get(b, str(b)) for b in fallback)))
+    rv.Select(label=t("steps.layers.field_composite"), items=items, v_model=combo, on_v_model=on_combo, dense=True,
+              outlined=True, disabled=disabled, hint=hint, persistent_hint=True)
 
 
 def _css_color(color: str) -> str:

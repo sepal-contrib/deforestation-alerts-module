@@ -108,6 +108,8 @@ SAME_IN = {
         "analysis_tile.export_labels.tile_gif",
         # "classes" is the same word in French.
         "steps.layers.summary_classes.other",
+        # "source" and "composite" (an RGB composite) are the same words in French.
+        "steps.layers.field_source", "steps.layers.field_composite",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
