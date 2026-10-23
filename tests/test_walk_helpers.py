@@ -150,6 +150,29 @@ def test_wait_bands_read_tells_a_select_from_a_one_band_line(bands_page):
         phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
 
 
+def _source_form(body):
+    return f'<div class="v-dialog--active">{body}</div>'
+
+
+def test_wait_source_ready_waits_for_a_state_that_shows(bands_page):
+    encoding = f'<div class="v-select"><label>{phases.DATE_ENCODING}</label></div>'
+    # date only: nothing read yet is not ready, though no "Reading…" line shows
+    bands_page.set_content(_source_form("<p>One band (d).</p>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=True, timeout=1)
+    bands_page.set_content(_source_form(f"<p>{phases.DATES_LOADING}</p>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=True, timeout=1)
+    bands_page.set_content(_source_form(encoding))
+    phases.wait_source_ready(bands_page, "x", date_only=True, timeout=2)
+    # any other format: the Add button enabled
+    bands_page.set_content(_source_form("<button disabled>Add source</button>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=False, timeout=1)
+    bands_page.set_content(_source_form("<button>Add source</button>"))
+    phases.wait_source_ready(bands_page, "x", date_only=False, timeout=2)
+
+
 # ----------------------------------------------------- the analysis screen
 #: A stand-in for the app's two screens: MapApp's wrap (the rail, the
 #: stepper in the right panel, the main map) and the analysis screen beside

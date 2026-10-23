@@ -95,8 +95,10 @@ def add_custom(page, rec, *, name, origin, ref, preset, encoding=None, out):
         ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
     if ph.wait_bands_read(page, ref, select_label=ph.ALERT_FORMAT, one_band_line=ph.ALERT_ONE_BAND):
         ph.choose(page, ph.ALERT_FORMAT, preset)
-    if ph.has_select(page, ph.DATE_BAND) or ph.ALERT_ONE_BAND in ph.modal_text(page):
-        w.wait_for(lambda: ph.DATES_LOADING not in ph.modal_text(page), 180, f"{ref}: the date values read")
+    # date only: one band, or a date band with no alert band
+    date_only = ph.ALERT_ONE_BAND in ph.modal_text(page) or (
+        ph.has_select(page, ph.DATE_BAND) and not ph.has_select(page, ph.ALERT_BAND))
+    ph.wait_source_ready(page, ref, date_only=date_only)
     if encoding:
         ph.choose(page, ph.DATE_ENCODING, encoding)
     rec[f"modal_{name}"] = ph.modal_text(page)[:800]

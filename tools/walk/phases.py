@@ -493,6 +493,21 @@ def wait_bands_read(page, ref, *, select_label, one_band_line, timeout=120):
     return has_select(page, select_label)
 
 
+def wait_source_ready(page, ref, *, date_only, button="Add source", timeout=180):
+    """Wait until the alert-source form can be sent, on a state that shows,
+    never on a line gone (the date values' line may not show yet): a
+    date-only source once its values are read (the Date encoding select and
+    no "Reading the date values…" line), any other format once ``button`` is
+    enabled."""
+    def ready():
+        if date_only:
+            return has_select(page, DATE_ENCODING) and DATES_LOADING not in modal_text(page)
+        found = modal(page).locator(f'button:has-text("{button}"):visible')
+        return found.count() > 0 and found.last.is_enabled()
+
+    wait_for(ready, timeout, f"{ref}: the source form ready to send")
+
+
 def select_only(page, label, option, scope=MODAL):
     """In the multi-select labelled ``label``, keep only the item whose text is
     ``option`` selected: it is selected first, then the others are cleared, so
