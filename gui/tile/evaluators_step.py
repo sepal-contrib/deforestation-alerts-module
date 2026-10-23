@@ -837,7 +837,7 @@ def _StartAnalysis(app_state, ready):
     writes ``current_page_view``, the navigation signal every other way into
     Analysis writes; ``_NavBridge`` turns it into the analysis screen. Gated on
     an active alert set, with the reason under it."""
-    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", block=True,
+    solara.Button(t("workflow.start_analysis"), icon_name="mdi-image-search-outline", color="primary", small=True,
                   disabled=not ready, classes=["defo-start-analysis"],
                   on_click=lambda: app_state.current_page_view.set("analysis_tile"))
     if not ready:
