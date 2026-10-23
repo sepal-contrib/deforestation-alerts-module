@@ -97,6 +97,22 @@ def combo_bands(combo, roles):
     return [roles[r] for r in need]
 
 
+def match_combo(bands, roles) -> Optional[str]:
+    """The first RGB combo whose bands (for these roles) equal ``bands``, else None."""
+    wanted = list(bands)
+    return next((k for k in RGB_COMBOS if combo_bands(k, roles) == wanted), None)
+
+
+def ramp_menu_css(menu_class: str, invert: bool) -> str:
+    """CSS drawing each ramp's gradient bar before the title of the n-th item of a menu."""
+    return "\n".join(
+        f".{menu_class} .v-list-item:nth-child({i}) .v-list-item__title::before {{"
+        f"content:'';display:inline-block;width:72px;height:12px;border-radius:2px;"
+        f"margin-right:10px;vertical-align:middle;background:{ramp_css(key, invert)};}}"
+        for i, key in enumerate(RAMPS, start=1)
+    )
+
+
 QUALITATIVE = ("set1", "set2", "tab10", "paired")
 DEFAULT_QUALITATIVE = "set1"
 _QUALITATIVE_MPL = {"set1": "Set1", "set2": "Set2", "tab10": "tab10", "paired": "Paired"}

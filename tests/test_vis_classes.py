@@ -77,3 +77,30 @@ def test_palette_of_names_the_palette_the_classes_are_painted_from():
     assert vc.palette_of(vc.recolor(classes, "paired")) == "paired"
     assert vc.palette_of([classes[0].model_copy(update={"color": "000000"}), *classes[1:]]) is None
     assert vc.palette_of([]) is None
+
+
+def test_looks_categorical_by_name_tokens():
+    for name in ("classification", "landcover", "LULC", "lossyear", "forest_mask", "datamask", "lc_2020", "loss"):
+        assert vc.looks_categorical(name), name
+    for name in ("B4", "NDVI", "treecover2000", "SR_B5", "Band 1", "glossy"):
+        assert not vc.looks_categorical(name), name
+
+
+def test_a_zero_one_find_names_1_after_the_band_and_hides_0():
+    zero, one = vc.classes_from_values([1, 0, 1], band_label="loss")
+    assert (zero.value, zero.visible, zero.label) == (0, False, "0")
+    assert (one.value, one.visible, one.label) == (1, True, "loss")
+
+
+def test_declared_classes_win_over_the_band_label():
+    known = {"values": [0, 1], "palette": ["000000", "00ff00"], "names": ["No forest", "Forest"]}
+    zero, one = vc.classes_from_values([0, 1], known=known, band_label="mask")
+    assert (zero.label, one.label) == ("No forest", "Forest")
+
+
+def test_the_band_label_only_applies_to_zero_one():
+    assert [c.label for c in vc.classes_from_values([1, 2], band_label="lc")] == ["1", "2"]
+
+
+def test_is_zero_one():
+    assert vc.is_zero_one([0, 1, 1]) and not vc.is_zero_one([1]) and not vc.is_zero_one([0, 1, 2])

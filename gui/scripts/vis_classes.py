@@ -4,6 +4,7 @@ Pure (no Solara, no i18n); matplotlib is imported inside the function that needs
 Colours are stored bare (no ``#``), as in ``vis_palettes``.
 """
 
+import re
 from typing import List, Optional, Tuple
 
 from deforestation_alerts.project.models import VisClass
@@ -13,8 +14,30 @@ from gui.scripts.vis_palettes import DEFAULT_QUALITATIVE, _bare
 MAX_CLASSES = 50
 
 
-def classes_from_values(values, *, palette: str = DEFAULT_QUALITATIVE, known: Optional[dict] = None) -> List[VisClass]:
-    """One class per distinct value, sorted; ``known`` (the band's ``*_class_*`` properties) wins."""
+_CATEGORICAL_TOKENS = frozenset({
+    "class", "classes", "classification", "landcover", "lc", "lulc", "mask", "datamask",
+    "loss", "gain", "lossyear", "label", "labels", "cluster", "clusters", "category",
+})
+
+
+def looks_categorical(name: str) -> bool:
+    """Whether a band name suggests class values (by whole-name or name-token match)."""
+    low = str(name).lower().strip()
+    tokens = {t for t in re.split(r"[_\-\s\d]+", low) if t}
+    return low == "land_cover" or bool(tokens & _CATEGORICAL_TOKENS)
+
+
+def is_zero_one(values) -> bool:
+    """Whether the distinct values are exactly ``{0, 1}``."""
+    return sorted({int(v) for v in values}) == [0, 1]
+
+
+def classes_from_values(
+    values, *, palette: str = DEFAULT_QUALITATIVE, known: Optional[dict] = None, band_label: Optional[str] = None
+) -> List[VisClass]:
+    """One class per distinct value, sorted; ``known`` (the band's ``*_class_*`` properties) wins.
+
+    A 0/1 find without ``known`` hides 0 and names 1 after ``band_label`` when given."""
     ordered = sorted({int(v) for v in values})
     colors = vis_palettes.qualitative_colors(palette, len(ordered))
     meta = {}
@@ -29,6 +52,8 @@ def classes_from_values(values, *, palette: str = DEFAULT_QUALITATIVE, known: Op
             color, label = meta[v]
         elif zero_one and v == 1:
             color = colors[0]
+            if band_label:
+                label = band_label
         out.append(VisClass(value=v, color=color, label=label, visible=not (zero_one and v == 0)))
     return out
 

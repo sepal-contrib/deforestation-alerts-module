@@ -41,3 +41,19 @@ def test_ramp_css_and_colormap():
     assert vp.ramp_css("grayscale", True) == "linear-gradient(to right, #ffffff, #000000)"
     cmap = vp.ramp_colormap(vp.ramp_palette("grayscale"))
     assert cmap(0.0)[:3] == (0.0, 0.0, 0.0)
+
+
+def test_match_combo():
+    roles = {"red": "B4", "green": "B3", "blue": "B2", "nir": "B8"}
+    assert vp.match_combo(["B4", "B3", "B2"], roles) == "true_color"
+    assert vp.match_combo(["B8", "B4", "B3"], roles) == "false_color"
+    assert vp.match_combo(["B2", "B3", "B4"], roles) is None
+    assert vp.match_combo(["B4", None, "B2"], roles) is None
+
+
+def test_ramp_menu_css_draws_every_ramp_in_order():
+    css = vp.ramp_menu_css("dv-ramp-menu", invert=False)
+    for i, key in enumerate(vp.RAMPS, start=1):
+        assert f".dv-ramp-menu .v-list-item:nth-child({i})" in css
+        assert vp.ramp_css(key) in css
+    assert vp.ramp_css("viridis", True) in vp.ramp_menu_css("dv-ramp-menu", invert=True)
