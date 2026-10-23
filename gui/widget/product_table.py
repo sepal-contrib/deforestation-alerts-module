@@ -343,7 +343,7 @@ def _render_button(act: dict):
     else:
         color = None
     if kind == "menu":
-        activator = rv.Btn(icon=True, text=True, x_small=True, color=color, disabled=act.get("disabled", False),
+        activator = rv.Btn(icon=True, v_on="menu.on", text=True, x_small=True, color=color, disabled=act.get("disabled", False),
                            children=[rv.Icon(children=[action_icon(kind)], small=True)])
         with rv.Menu(offset_y=True, left=True, v_slots=[{"name": "activator", "variable": "menu", "children": activator}]):
             with rv.List(dense=True):

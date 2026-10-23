@@ -85,6 +85,10 @@ def test_a_menu_action_lists_its_items():
     try:
         (menu,) = _widgets(rc, v.Menu)
         assert menu.offset_y
+        (slot,) = menu.v_slots
+        activator = slot["children"]
+        assert slot["name"] == "activator" and slot["variable"] == "menu"
+        assert isinstance(activator, v.Btn) and activator.v_on == "menu.on"
         entries = _widgets(rc, v.ListItem)
         assert [x for t in _widgets(rc, v.ListItemTitle) for x in _strings(t)] == ["Edit", "Delete mask…"]
         entries[0].fire_event("click", None)
