@@ -93,6 +93,26 @@ def test_file_date_range_outside_the_aoi_is_none(tmp_path):
     assert dp.file_date_range(path, 1, (10.0, 40.0, 11.0, 41.0)) is None
 
 
+def test_file_date_range_reads_every_pixel_of_a_large_file(tmp_path):
+    """Two dated pixels in 3000x20 zeros, where a 1024-px nearest read skips both."""
+    data = np.zeros((20, 3000), dtype="uint16")
+    data[2, 2], data[16, 2999] = 2507, 2503  # rows a 7x1024 read skips
+    path = _tif(tmp_path / "d.tif", data)
+    assert dp.file_date_range(path, 1, (-56.0, -26.0, -51.0, -24.0)) == (2503.0, 2507.0)
+
+
+def test_file_date_range_reads_only_the_aoi_window(tmp_path):
+    data = np.zeros((20, 3000), dtype="uint16")
+    data[5, 100], data[5, 2500] = 2501, 2512  # the second one east of the AOI
+    path = _tif(tmp_path / "d.tif", data)
+    assert dp.file_date_range(path, 1, (-56.0, -26.0, -54.0, -24.0)) == (2501.0, 2501.0)
+
+
+def test_date_range_request_refuses_a_type_that_is_not_a_raster():
+    with pytest.raises(ValueError, match="TABLE"):
+        dp.date_range_request("users/x/t", "TABLE", "d", AOI)
+
+
 # ------------------------------------------------------- Earth Engine (live tier)
 BOUNDS = (-55.10, -10.10, -55.00, -10.00)
 
@@ -124,6 +144,26 @@ def test_the_date_range_of_a_collection_reads_its_mosaic_at_the_band_scale(gee):
     col = ee.ImageCollection([ee.Image(9).rename("x"), _dates()])
     lo, hi = dp.date_range_from_info(dp.date_range_request(col, "IMAGE_COLLECTION", "d", BOUNDS).getInfo())
     assert 2503 <= lo < hi <= 2509
+
+
+def test_a_collection_with_no_image_over_the_aoi_has_no_range(gee):
+    import ee
+
+    away = _dates().clip(ee.Geometry.Rectangle([10.0, 40.0, 11.0, 41.0]))
+    col = ee.ImageCollection([away.set("system:footprint", ee.Geometry.Rectangle([10.0, 40.0, 11.0, 41.0]))])
+    info = dp.date_range_request(col, "IMAGE_COLLECTION", "d", BOUNDS).getInfo()
+    assert info == {"min": None, "max": None}
+    assert dp.date_range_from_info(info) is None
+
+
+def test_the_date_read_is_exact_and_never_best_effort(gee):
+    """At the band's own scale, no ``bestEffort`` (a coarser scale averages the dates)."""
+    import json
+
+    graph = json.dumps(json.loads(dp.date_range_request(_dates(), "IMAGE", "d", BOUNDS).serialize()))
+    assert "bestEffort" not in graph
+    assert '"tileScale": {"constantValue": 4}' in graph
+    assert '"maxPixels": {"constantValue": 1000000000' in graph
 
 
 def test_an_image_with_no_positive_value_has_no_range(gee):
