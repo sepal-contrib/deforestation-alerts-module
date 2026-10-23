@@ -149,16 +149,19 @@ def test_a_review_copy_reads_text_not_verbs():
         "To harmonize")
 
 
-def test_status_labels_fit_their_cell():
-    """At most 12 characters in English, so the 128 px Status cell never
-    wraps (the running percent rides on Downloading)."""
+@pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
+def test_status_labels_fit_their_cell(locale):
+    """At most 12 characters in every language, so the 128 px Status cell
+    never wraps; the running percent may take Downloading to 16 at 100%."""
     from gui.i18n import t
 
+    set_locale(locale)
     keys = ["ready", "queued", "downloading", "harmonizing", "aligning", "file_missing", "to_download",
             "to_harmonize", "to_align", "off"]
     labels = [t(f"steps.prepare.state_{k}") for k in keys]
     labels += [t(f"steps.prepare.verb_{k}") for k in ("download", "harmonize", "align", "retry")]
     assert all(len(label) <= 12 for label in labels), [x for x in labels if len(x) > 12]
+    assert len(t("steps.prepare.state_downloading_pct", pct=100)) <= 16
 
 
 def test_reason_text_reads_its_values():

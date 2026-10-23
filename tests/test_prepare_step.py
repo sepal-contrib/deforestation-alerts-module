@@ -1137,7 +1137,8 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
         blocked, radd = step.table[-1]
         assert not _offers_run(blocked)
         assert all(a["disabled"] for a in blocked["actions"] if a["kind"] != "info")
-        assert blocked["notes"][0]["text"].startswith(t("coverage.not_covered_row", reason=""))
+        assert blocked["cells"][0]["subtitle"].startswith(t("coverage.not_covered_row", reason=""))
+        assert blocked["notes"] == []  # said once, in the subtitle
         assert _offers_run(radd) and not _act(radd, "refresh")["disabled"]
         _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()

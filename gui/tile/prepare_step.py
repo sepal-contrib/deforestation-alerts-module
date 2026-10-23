@@ -166,6 +166,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
         raw_art, harm_art = _art(p, raw_key(period.id, r.source)), _art(p, harm_key(period.id, r.source))
         if r.file_missing:
             notes = [{"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"}]
+        elif r.blocked:
+            notes = []  # its coverage sentence is its subtitle
         else:
             notes = [n for n in row_notes(r.coverage, r.notes) if n["tone"] in ("warning", "error")]
         result = result_note(r.stats) if not r.blocked else None

@@ -55,11 +55,11 @@ def test_blocked_row_reads_its_status_and_no_verb():
         PrepareRow("GLAD-L", Status.MISSING, Status.MISSING, "unchecked", (Note("coverage.unchecked", tone="error"),)),
     ]
     out = _build(rows)
-    assert out["GLAD-S2"]["notes"][0]["text"].startswith("Not covered: GLAD-S2 does not cover this AOI")
-    assert out["RADD"]["notes"][0]["text"] == "No data for this period: RADD starts 2020-01-01 here"
-    assert out["GLAD-L"]["notes"][0]["text"] == "Coverage not checked"
+    assert out["GLAD-S2"]["cells"][0]["subtitle"].startswith("Not covered: GLAD-S2 does not cover this AOI")
+    assert out["RADD"]["cells"][0]["subtitle"] == "No data for this period: RADD starts 2020-01-01 here"
+    assert out["GLAD-L"]["cells"][0]["subtitle"] == "Coverage not checked"
     assert out["GLAD-S2"]["cells"][1]["label"] == "not covered"
-    assert out["GLAD-S2"]["cells"][0]["subtitle"] == out["GLAD-S2"]["notes"][0]["text"]
+    assert all(r["notes"] == [] for r in out.values())  # the subtitle says it once, no line repeats it
     for r in out.values():
         assert r["cells"][1]["type"] == "state"
         acts = _acts(r)
