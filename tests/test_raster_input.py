@@ -155,3 +155,24 @@ def test_bands_block_save_while_they_load_or_after_they_fail():
     assert raster_input.bands_block_save(READ, "users/x/m") is False
     # nothing picked: the form's own check says what is missing
     assert raster_input.bands_block_save(READING, None) is False
+
+
+# ------------------------------------------------------------ the Source select
+def _source_items(**kwargs):
+    _box, rc = reacton.render(raster_input.SourceSelect(origin="gee", on_origin=lambda _o: None, **kwargs),
+                              handle_error=False)
+    try:
+        return rc.find(v.Select, label=t("steps.raster_input.field_source")).widget.items
+    finally:
+        rc.close()
+
+
+def test_the_source_select_offers_earth_engine_then_geotiff_by_default():
+    assert _source_items() == [{"text": t("steps.raster_input.source_gee"), "value": "gee"},
+                               {"text": t("steps.raster_input.source_file"), "value": "file"}]
+
+
+def test_the_source_select_lists_its_origins_in_the_given_order():
+    assert _source_items(origins=("file", "gee")) == [{"text": t("steps.raster_input.source_file"), "value": "file"},
+                                                      {"text": t("steps.raster_input.source_gee"), "value": "gee"}]
+    assert _source_items(origins=("file",)) == [{"text": t("steps.raster_input.source_file"), "value": "file"}]

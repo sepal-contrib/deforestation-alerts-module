@@ -127,3 +127,16 @@ def test_suggestions():
     assert ur.suggest_band_map("radd", ["date", "ALERT"]) == BandMap(alert="ALERT", date="date")
     assert ur.suggest_band_map("radd", ["Band 1", "Band 2"]) is None
     assert ur.suggest_band_map("date_only", ["disturbance_date"]) == BandMap(alert=None, date="disturbance_date")
+
+
+@pytest.mark.parametrize("fmt, names, expected", [
+    ("ccdc", ["detection_count", "magnitude"], ("detection_count", None)),  # each band found on its own
+    ("ccdc", ["magnitude", "FIRST_DETECTION_DATE"], (None, "FIRST_DETECTION_DATE")),
+    ("radd", ["alert", "date"], ("alert", "date")),  # the raster's own names, matched case-insensitively
+    ("pyeo", ["Band 1", "Band 2"], (None, None)),
+    ("date_only", ["magnitude", "change_date", "confidence"], (None, "change_date")),
+    ("date_only", ["a_date", "b_date"], (None, None)),  # two candidates: none
+    ("date_only", ["Band 1"], (None, None)),
+])
+def test_suggest_bands_finds_each_band_on_its_own(fmt, names, expected):
+    assert ur.suggest_bands(fmt, names) == expected

@@ -5,7 +5,7 @@ the attribute raster."""
 
 import asyncio
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import reacton.ipyvuetify as rv
 import solara
@@ -54,13 +54,15 @@ def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMA
 
 
 @solara.component
-def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool = False):
+def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool = False,
+                 origins: Sequence[str] = ("gee", "file")):
     """The Source of a form that picks a raster: Earth Engine or a GeoTIFF in
     the user's SEPAL folder, above ``RasterInput(..., show_origin=False)``.
-    ``on_origin`` gets the new origin; the caller clears the picked raster."""
+    ``on_origin`` gets the new origin; the caller clears the picked raster.
+    ``origins`` lists the choices in order, each read as
+    ``steps.raster_input.source_<origin>``."""
     rv.Select(label=t("steps.raster_input.field_source"), v_model=origin, on_v_model=on_origin,
-              items=[{"text": t("steps.raster_input.source_gee"), "value": "gee"},
-                     {"text": t("steps.raster_input.source_file"), "value": "file"}],
+              items=[{"text": t(f"steps.raster_input.source_{o}"), "value": o} for o in origins],
               hint=t("steps.raster_input.source_hint"), persistent_hint=True, dense=True, outlined=True,
               disabled=disabled)
 
