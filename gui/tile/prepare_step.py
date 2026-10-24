@@ -42,6 +42,12 @@ of the scope (``mine_rows``) and the stage each running row reports
 start adds its rows to the scope's ``batch`` total and each row end one to
 its done count; the entry goes with the scope's last job.
 
+Stop only sets the jobs' cancel Events, so it also marks the scope as
+``stopping`` (a reactive): until the scope's last job ends, the footer reads
+``Stopping after this row…`` while every job of the scope is stopped, and the
+rows a stopped job still holds no longer read Queued (``_StopEvents.stopped``):
+they will not run.
+
 Download again (a row's, or the footer menu's Download all again) and Delete
 files ask first (``refresh_confirm``, ``delete_confirm``). Delete files drops
 this period's raw and harmonized records of the source and deletes their
@@ -51,6 +57,7 @@ files; the source and the alert sets built from them stay.
 import asyncio
 import logging
 import threading
+from typing import Optional
 
 import solara
 from pysepal.solara.notifications import use_notifications
@@ -191,7 +198,8 @@ def delete_confirm(p, period, source) -> tuple:
 
 
 def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,
-               stages=None, info_open=None, locked=False, progress=None, writing=False, masks_pend=False) -> list:
+               stages=None, info_open=None, locked=False, progress=None, writing=False, masks_pend=False,
+               stopped=frozenset()) -> list:
     """The ``ProductTable`` rows of the sources table (spec "The sources
     table", option B); pure.
 
@@ -206,7 +214,10 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     percents, by ``progress_key``. ``writing``: a job writes into the
     project (``is_writing``): Delete files waits, saying why. ``masks_pend``:
     a mask on in the period needs a run: Download again waits for it, as
-    Download all again does (a forced row runs no mask first).
+    Download all again does (a forced row runs no mask first). ``stopped``:
+    the in-flight keys of the jobs Stop reached: their rows waiting for their
+    turn will not run, so they read their state again, not Queued (the pill
+    disabled until the job gives them back).
 
     One Status cell holds the row's state or the verb of its next run
     (``prepare_view.source_state``), and the name's subtitle says what the
@@ -227,6 +238,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
         pkey = progress_key(p.name, period.id, "source", r.source)
         stage = (stages or {}).get(pkey) if busy else None
         pct = (progress or {}).get(pkey) if busy else None
+        queued = busy and stage is None and _inflight_key(p.name, period.id, r.source) not in stopped
         file_source = is_file_source(p.sources[r.source])
         raw_art, harm_art = _art(p, raw_key(period.id, r.source)), _art(p, harm_key(period.id, r.source))
         if r.file_missing:
@@ -240,12 +252,14 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             notes.append(result)
         reason = source_reason(p, period, r.source) if not (r.ready or r.blocked) else None
         subtitle, tone = source_subtitle(r, file_source=file_source, raw_art=raw_art, harm_art=harm_art,
-                                         reason=reason, stage=stage, queued=busy and stage is None, pct=pct)
+                                         reason=reason, stage=stage, queued=queued, pct=pct)
         title = {"type": "title", "value": source_label(p.sources[r.source]), "subtitle": subtitle}
         if tone:
             title["subtitle_tone"] = tone
-        state = source_state(r, file_source=file_source, stage=stage, queued=busy and stage is None, pct=pct,
+        state = source_state(r, file_source=file_source, stage=stage, queued=queued, pct=pct,
                              failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)))
+        if busy and state["type"] == "verb":  # a stopped job still holds the row
+            state["disabled"] = True
         key = f"src:{r.source}"
         out.append({
             "key": r.source,
@@ -310,6 +324,12 @@ class _StopEvents:
         for event in events:
             event.set()
 
+    def stopped(self, scope: Optional[tuple] = None) -> set:
+        """The in-flight keys of the jobs Stop reached, in ``scope`` (None: every scope)."""
+        with self._lock:
+            scopes = [self._events.get(scope, {})] if scope is not None else list(self._events.values())
+            return {key for events in scopes for event, keys in events.items() if event.is_set() for key in keys}
+
 
 class _ScopedErrors:
     """One job's view of the step's row errors (``{scope: {row: message}}``):
@@ -349,6 +369,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     pending_delete, set_pending_delete = solara.use_state(None)  # the source whose files to delete
     row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
     batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
+    stopping = solara.use_reactive(frozenset())  # the (project, period id) scopes Stop reached, until their last job ends
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
     # of scope forgets them all.
@@ -420,10 +441,14 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         cancel = job["cancel"]
 
         def _give_back():
-            stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
-            if not stops.keys(stop_scope):  # the scope's last job: its batch is over
-                with errors_lock:
+            # Under the step's lock, so a Stop or a start racing it sees the
+            # scope's last job either before or after it is gone.
+            with errors_lock:
+                stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
+                if not stops.keys(stop_scope):  # the scope's last job: its batch and its Stop are over
                     batch.set({k: v for k, v in batch.value.items() if k != stop_scope})
+                    if stop_scope in stopping.value:
+                        stopping.set(stopping.value - {stop_scope})
             inflight.release(*keys)
 
         # Drift note: only rows that download from Earth Engine need it (the
@@ -491,6 +516,15 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                     legend=source_layers.harmonized_legend(key, source, period))
 
     mine = mine_keys(running, stops, p.name, period.id)
+    stopped = stops.stopped((p.name, period.id))
+
+    def _stop():
+        """Stop after the row in progress; the footer says so until the scope's last job ends."""
+        stop_scope = (p.name, period.id)
+        stops.stop(stop_scope)
+        with errors_lock:  # ``_give_back`` drops the mark under it: never one left behind
+            if stops.keys(stop_scope):
+                stopping.set(stopping.value | {stop_scope})
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
     stages = scope_stages(row_stage.value, p.name, period.id)
     counts = footer_counts(mine_rows(p, period, mine), stages, batch.value.get((p.name, period.id)))
@@ -520,7 +554,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         shown_key = progress_key(p.name, period.id, "source", shown)
         shown_stage = stages.get(shown_key) if shown_busy else None
         lead = row_status_label(row, is_file_source(p.sources[shown]), stage=shown_stage,
-                                queued=shown_busy and shown_stage is None,
+                                queued=(shown_busy and shown_stage is None
+                                        and _inflight_key(p.name, period.id, shown) not in stopped),
                                 pct=row_progress.value.get(shown_key) if shown_busy else None)
         details = source_details(p, period, shown, row, source_reason(p, period, shown), lead)
 
@@ -562,7 +597,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
                             on_info=_toggle_info, on_refresh=set_pending_refresh, on_delete=set_pending_delete,
                             stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value,
-                            writing=is_writing(p.name), masks_pend=masks_pend)
+                            writing=is_writing(p.name), masks_pend=masks_pend, stopped=stopped)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
@@ -573,7 +608,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
                       rows=plan_masks(p, pdir, period), running=running, errors=errors,
                       on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True),
-                      progress=row_progress.value, stages=stages)
+                      progress=row_progress.value, stages=stages, stopped=stops.stopped())
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
             DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_source(None))
@@ -584,9 +619,11 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                           on_confirm=_delete_files, title=delete_title, message=delete_message, note=delete_note,
                           confirm_label=t("common.delete"))
             BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
-                        on_run=lambda: _start(pending), on_stop=lambda: stops.stop((p.name, period.id)),
+                        on_run=lambda: _start(pending), on_stop=_stop,
                         # Run stays off while the scope holds keys its rows no longer show (a mask removed)
-                        menu=menu, counts=counts, disabled=read_only(p) or bool(mine))
+                        menu=menu, counts=counts, disabled=read_only(p) or bool(mine),
+                        # every job of the scope is stopped (a row started since Stop brings Stop back)
+                        stopping=(p.name, period.id) in stopping.value and bool(mine) and mine <= stopped)
             # Check again after a failed coverage check, or a failed AOI-sidecar
             # fetch that leaves the GeoTIFF rows (sources, masks on in the
             # period) waiting (the loader refetches it on the same retry)

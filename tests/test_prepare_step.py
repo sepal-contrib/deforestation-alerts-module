@@ -857,9 +857,12 @@ def test_stop_events_are_scoped_and_forgotten_when_their_job_ends():
     not stay in it.
     """
     stops = prepare_step._StopEvents()
-    a1, a2, b = stops.add(("a", JAN.id)), stops.add(("a", JAN.id)), stops.add(("b", JAN.id))
+    a1, a2, b = stops.add(("a", JAN.id), {"k1"}), stops.add(("a", JAN.id), {"k2"}), stops.add(("b", JAN.id), {"k3"})
+    assert stops.stopped() == set()
     stops.stop(("a", JAN.id))
     assert a1.is_set() and a2.is_set() and not b.is_set()
+    assert stops.stopped(("a", JAN.id)) == {"k1", "k2"} and stops.stopped(("b", JAN.id)) == set()
+    assert stops.stopped() == {"k1", "k2"}  # every scope
 
     for scope, event in ((("a", JAN.id), a1), (("a", JAN.id), a2), (("b", JAN.id), b)):
         stops.discard(scope, event)
@@ -2069,5 +2072,74 @@ def test_the_details_lead_of_a_queued_row_reads_queued(step, monkeypatch):
         _run(step.table[-1][0])
         assert _queued(step.table[-1][0])
         assert lead()[0].startswith(t("steps.prepare.state_queued") + " · ")
+    finally:
+        rc.close()
+
+
+def test_stop_says_stopping_until_the_job_ends_and_its_queued_rows_stop_reading_queued(step, monkeypatch):
+    """Stop only sets the cancel Events: the footer says it is stopping, and
+    the rows waiting their turn read their pill again (disabled: still
+    claimed); once the job ends, Run comes back."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    seen = {}
+
+    def texts():
+        return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
+
+    def a_run(ctx, items, force=False):
+        key = prepare_jobs.progress_key("d", JAN.id, "source", "GLAD-L")
+        ctx.row_stage.set({key: "download"})
+        assert _queued(step.table[-1][1])
+        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+        seen["stopping"] = _button(rc, t("steps.prepare.footer_stopping"))
+        seen["texts"] = texts()
+        seen["radd"] = step.table[-1][1]
+        seen["stop_shown"] = _stop_shown(rc)
+        ctx.row_stage.set({})
+        ctx.on_row_end()
+
+    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    box, rc = _render(state)
+    try:
+        _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
+        step.run_jobs()
+        assert seen["stopping"].disabled and seen["stopping"].outlined and not seen["stop_shown"]
+        assert t("steps.prepare.footer_running", running="1") in seen["texts"]
+        assert not any("queued" in s for s in seen["texts"])
+        radd = seen["radd"]
+        assert not _queued(radd) and radd["cells"][1]["type"] == "verb" and radd["cells"][1]["disabled"]
+        assert radd["cells"][0]["subtitle"] != t("steps.prepare.sub_queued")
+        # the job ended: Run is back, and nothing reads stopping
+        assert _run_all_shown(rc, 2) and not _stop_shown(rc)
+        assert not any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets)
+        assert _offers_run(step.table[-1][1]) and not step.table[-1][1]["cells"][1].get("disabled")
+    finally:
+        rc.close()
+
+
+def test_a_row_started_after_stop_brings_stop_back(step, monkeypatch):
+    """Stopping is shown only while every job of the scope is stopped: a row
+    run since Stop has a job Stop can still stop."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    seen = []
+
+    def a_run(ctx, items, force=False):
+        if _named(items) == ["GLAD-L"]:
+            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+            seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
+            _run(step.table[-1][1])  # RADD, a job of its own
+            seen.append(_stop_shown(rc))
+
+    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    box, rc = _render(state)
+    try:
+        _run(step.table[-1][0])
+        step.run_jobs()
+        assert seen == [True, True]
+        assert not _stop_shown(rc)
     finally:
         rc.close()

@@ -6,7 +6,9 @@ other batch actions; with no menu item there is no caret. While the scope has
 a job, the left side says how many of its rows run and wait
 (``{running} running · {queued} queued``), with a thin bar and
 ``{done} of {total} done`` while a batch is counted, and the main part turns
-into an outlined ``Stop``: it stops after the row in progress.
+into an outlined ``Stop``: it stops after the row in progress. Once
+stopped, until the job ends, it is a disabled outlined ``Stopping after this
+row…``, and the strip drops its queued half (those rows will not run).
 
 The spatial_risk app's list footer, without its queue: every click of the step
 starts its own job, so the counts come from the claimed rows and the stage
@@ -68,7 +70,7 @@ def _up_menu(menu: list, label: str):
 
 @solara.component
 def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_stop: Callable[[], None],
-                menu: list, counts: dict, disabled: bool = False):
+                menu: list, counts: dict, disabled: bool = False, stopping: bool = False):
     """The batch footer (render it under the table).
 
     ``pending``: the rows Run would start (none: the main part is
@@ -76,22 +78,28 @@ def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_sto
     main part's clicks, idle and busy; ``menu``: the caret's items,
     ``{"label", "on_click", "disabled"?, "title"?}`` (``title``: the tooltip,
     kept while disabled); ``counts``: ``footer_counts``; ``disabled``: Run
-    cannot start anything (a review copy).
+    cannot start anything (a review copy); ``stopping``: Stop was clicked
+    and the job has not ended yet.
     """
     busy = counts["running"] + counts["queued"] > 0
     solara.Style(_CSS)
     with solara.Row(style="align-items: center; justify-content: space-between; gap: 12px;"):
         if busy:
             with solara.Column(style="flex: 1 1 auto; min-width: 0; gap: 2px;"):
-                solara.Text(t("steps.prepare.footer_strip", running=format_number(counts["running"]),
-                              queued=format_number(counts["queued"])), style=_TEXT)
+                strip = (t("steps.prepare.footer_running", running=format_number(counts["running"])) if stopping
+                         else t("steps.prepare.footer_strip", running=format_number(counts["running"]),
+                                queued=format_number(counts["queued"])))
+                solara.Text(strip, style=_TEXT)
                 if counts["total"]:
                     rv.ProgressLinear(value=round(100 * counts["done"] / counts["total"]), height=3,
                                       color="primary")
                     solara.Text(t("steps.prepare.footer_done", done=format_number(counts["done"]),
                                   total=format_number(counts["total"])), style=_TEXT)
         with rv.Html(tag="div", class_=_WRAP, style_="flex: 0 0 auto; margin-left: auto;"):
-            if busy:
+            if busy and stopping:
+                solara.Button(t("steps.prepare.footer_stopping"), icon_name="mdi-stop", color="primary",
+                              small=True, outlined=True, disabled=True)
+            elif busy:
                 tip = t("steps.prepare.footer_stop_tip")
                 with rv.Html(tag="span", attributes={"title": tip, "aria-label": tip}, style_=_TIP):
                     solara.Button(t("steps.prepare.footer_stop"), icon_name="mdi-stop", color="primary",

@@ -1235,3 +1235,14 @@ def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_mask_a_stopped_job_holds_reads_its_pill_again_disabled():
+    """Stop reached its job: the mask will not run, so it no longer reads Queued."""
+    from gui.tile.prepare_step import mask_inflight_key
+
+    key = mask_inflight_key("mc", "forest")
+    out = _rows([GEE_MISSING], running={key}, stopped={key})["forest"]
+    state = out["cells"][2]
+    assert state["type"] == "verb" and state["disabled"]
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.why_not_downloaded")

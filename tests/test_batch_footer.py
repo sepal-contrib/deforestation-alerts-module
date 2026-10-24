@@ -44,11 +44,12 @@ def _btn(rc, label):
     return next(w for w in _all(rc) if isinstance(w, v.Btn) and label in w.children)
 
 
-def _render(counts, menu=(), pending=2, disabled=False):
+def _render(counts, menu=(), pending=2, disabled=False, stopping=False):
     calls = []
     box, rc = reacton.render(
         BatchFooter(pending=pending, run_label="Run 2 pending", on_run=lambda: calls.append("run"),
-                    on_stop=lambda: calls.append("stop"), menu=list(menu), counts=counts, disabled=disabled),
+                    on_stop=lambda: calls.append("stop"), menu=list(menu), counts=counts, disabled=disabled,
+                    stopping=stopping),
         handle_error=False)
     return rc, calls
 
@@ -141,5 +142,17 @@ def test_a_disabled_menu_item_keeps_its_tooltip():
         assert item.disabled
         tips = [w.attributes.get("title") for w in _all(rc) if isinstance(w, v.Html)]
         assert "Run the pending masks first" in tips
+    finally:
+        rc.close()
+
+
+def test_a_stopping_footer_says_so_and_drops_the_queued_count():
+    rc, calls = _render({"running": 1, "queued": 2, "done": 1, "total": 4}, stopping=True)
+    try:
+        btn = _btn(rc, "Stopping after this row…")
+        assert btn.disabled and btn.outlined
+        assert not any(isinstance(w, v.Btn) and "Stop" in w.children for w in _all(rc))
+        assert "1 running" in _texts(rc) and not any("queued" in s for s in _texts(rc))
+        assert "1 of 4 done" in _texts(rc)
     finally:
         rc.close()

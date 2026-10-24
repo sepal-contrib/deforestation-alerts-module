@@ -54,7 +54,8 @@ def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None)
 
 
 def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, info, edit, delete,
-                    switch, refusals=0, locked=False, progress=None, stages=None, info_open=None) -> list:
+                    switch, refusals=0, locked=False, progress=None, stages=None, info_open=None,
+                    stopped=frozenset()) -> list:
     """The ``ProductTable`` rows of the Masks card (spec "Masks card"); pure.
 
     ``running``: every claimed in-flight key (a mask row is busy whichever
@@ -67,7 +68,9 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
     ready local raster. ``progress``/``stages``: the downloads' percents and
     the running job's stage (``download`` / ``align``), by
     ``prepare_jobs.progress_key``: a busy mask without a stage is queued.
-    ``info_open``: the mask whose Details dialog is open.
+    ``info_open``: the mask whose Details dialog is open. ``stopped``: the
+    in-flight keys of the jobs Stop reached: a mask they hold waiting for its
+    turn will not run, so it reads its state again (its pill disabled).
 
     As the sources table: the name's subtitle says what the mask holds or why
     it needs a run (``prepare_view.mask_subtitle``), and only the warning and
@@ -81,7 +84,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         pkey = progress_key(p.name, period.id, "mask", r.name)
         stage = (stages or {}).get(pkey) if busy else None
         pct = (progress or {}).get(pkey) if busy else None
-        queued = busy and stage is None
+        queued = busy and stage is None and mask_inflight_key(p.name, r.name) not in stopped
         raw_art, aligned_art = _art(p, mask_raw_key(r.name)), _art(p, mask_key(r.name))
         reason = mask_reason(p, r.name) if not (r.ready or r.file_missing) else None
         subtitle, tone = mask_subtitle(r, raw_art=raw_art, aligned_art=aligned_art, reason=reason, stage=stage,
@@ -91,6 +94,8 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
             title["subtitle_tone"] = tone
         state = mask_state(r, stage=stage, queued=queued, pct=pct, failed=f"@mask:{r.name}" in errors,
                            locked=locked, on_run=(lambda n=r.name: run(n)))
+        if busy and state["type"] == "verb":  # a stopped job still holds the mask
+            state["disabled"] = True
         notes = []
         if r.file_missing:
             notes.append({"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"})
@@ -146,7 +151,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
 
 @solara.component
 def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, errors, on_run, on_rerun,
-              progress=None, stages=None):
+              progress=None, stages=None, stopped=frozenset()):
     from gui.tile.prepare_step import mask_inflight_key
 
     notifications = use_notifications()
@@ -302,14 +307,16 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         shown_busy = mask_inflight_key(p.name, shown) in running
         shown_key = progress_key(p.name, period.id, "mask", shown)
         shown_stage = (stages or {}).get(shown_key) if shown_busy else None
-        lead = mask_status_label(row, stage=shown_stage, queued=shown_busy and shown_stage is None,
+        lead = mask_status_label(row, stage=shown_stage, queued=(shown_busy and shown_stage is None
+                                                                  and mask_inflight_key(p.name, shown) not in stopped),
                                  pct=(progress or {}).get(shown_key) if shown_busy else None)
         details = mask_details(p, shown, row, mask_reason(p, shown), lead)
 
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=set_pending_rerun, toggle=_toggle, info=_toggle_info, edit=_edit,
                                  delete=set_pending_delete, switch=_switch, refusals=refusals,
-                                 locked=read_only(p), progress=progress, stages=stages, info_open=shown)
+                                 locked=read_only(p), progress=progress, stages=stages, info_open=shown,
+                                 stopped=stopped)
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
         solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
