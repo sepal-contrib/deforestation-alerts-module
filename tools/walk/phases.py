@@ -126,16 +126,25 @@ def download_btn(page):
 
 #: The Prepare step's labels in English (``run_all`` takes others, see
 #: ``prepare_labels``): the plural forms of the "Run {n} pending" button and
-#: the status cells' texts.
+#: the Status cells' texts.
 EN_PREPARE = None
+#: The Status cell texts of a row in a running job (``prepare_view._in_flight``)
+RUNNING_KEYS = ("steps.prepare.state_downloading", "steps.prepare.state_downloading_pct",
+                "steps.prepare.state_harmonizing", "steps.prepare.state_aligning", "steps.prepare.state_queued")
+
+
+def _alternatives(texts, slot) -> str:
+    """A regex alternation of ``texts``, each ``{slot}`` matching a number."""
+    return "|".join(re.escape(x).replace(re.escape("{" + slot + "}"), r"\d+") for x in sorted(set(texts)))
 
 
 def prepare_labels(forms, ready, running):
     """The labels ``run_all`` reads, in one language: ``forms`` the plural
-    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` /
-    ``running`` the ``widgets.product_table.status_*`` texts."""
-    alts = "|".join(re.escape(f).replace(re.escape("{n}"), r"\d+") for f in sorted(set(forms)))
-    return {"run": re.compile(rf"^\s*(?:{alts})\s*$"), "ready": ready, "running": running}
+    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` the
+    ``steps.prepare.state_ready`` text, ``running`` the texts of
+    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern."""
+    return {"run": re.compile(rf"^\s*(?:{_alternatives(forms, 'n')})\s*$"), "ready": ready,
+            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$")}
 
 
 def en_prepare():
@@ -144,8 +153,7 @@ def en_prepare():
         from tools.walk.walklib import MESSAGES_EN
 
         node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
-        EN_PREPARE = prepare_labels(node.values(), en("widgets.product_table.status_ready"),
-                                    en("widgets.product_table.status_running"))
+        EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS])
     return EN_PREPARE
 
 
@@ -166,10 +174,13 @@ def pending_count(page, labels=None) -> int:
 
 
 def prepare_state(page, labels=None):
-    """The "ready" / "running" status cells on the panel, by their label (a
-    Masks row's status is a label too, since Task 7)."""
+    """The "ready" / "running" Status cells on the panel (source and mask
+    rows), by their label: ``ready`` is one text, ``running`` a pattern
+    (Downloading 12%, Harmonizing, Aligning, Queued…)."""
     labels = labels or en_prepare()
-    return {state: page.locator(f'.right-panel :text-is("{labels[state]}")').count() for state in ("ready", "running")}
+    panel = page.locator(".right-panel")
+    return {"ready": panel.locator(f':text-is("{labels["ready"]}")').count(),
+            "running": panel.get_by_text(labels["running"]).count()}
 
 
 def save_grid(page, *, resolution="30"):

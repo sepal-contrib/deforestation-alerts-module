@@ -84,17 +84,33 @@ def test_every_label_key_a_walk_names_exists():
     assert not missing, missing
 
 
-def test_prepare_state_reads_a_mask_rows_status_from_its_text():
-    """A Masks row shows its status as a label, like a source row (Task 7):
-    the walks count it by its text, with no stages hidden in a tooltip."""
+def test_the_walks_prepare_labels_are_the_ones_the_status_cells_show():
+    """``prepare_state`` counts the Status cells by their text: ``en_prepare``
+    must hold the label of a ready source and mask cell, and its running
+    pattern must match every in-flight cell (Task 7)."""
     from deforestation_alerts.engine.fingerprint import Status
-    from deforestation_alerts.engine.plan import MaskRow
-    from gui.scripts.prepare_view import mask_state
+    from deforestation_alerts.engine.plan import MaskRow, PrepareRow
+    from gui.scripts.prepare_view import mask_state, source_state
 
-    row = MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")
-    cell = mask_state(row, stage=None, queued=False, pct=None, failed=False, locked=False, on_run=None)
-    assert cell["label"] == walklib.en("steps.prepare.state_ready") and "title" not in cell
-    assert not hasattr(phases, "compact_stages")
+    labels = phases.en_prepare()
+    source = dict(file_source=False, failed=False, locked=False, on_run=None)
+    mask = dict(failed=False, locked=False, on_run=None)
+    ready_source = source_state(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), stage=None, queued=False,
+                                pct=None, **source)
+    ready_mask = mask_state(MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep"), stage=None,
+                            queued=False, pct=None, **mask)
+    assert labels["ready"] == ready_source["label"] == ready_mask["label"]
+    row = PrepareRow("GLAD-L", Status.MISSING, Status.MISSING)
+    pending = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+    running = [source_state(row, stage="download", queued=False, pct=12, **source),
+               source_state(row, stage="download", queued=False, pct=None, **source),
+               source_state(row, stage="harmonize", queued=False, pct=None, **source),
+               source_state(row, stage=None, queued=True, pct=None, **source),
+               mask_state(pending, stage="download", queued=False, pct=100, **mask),
+               mask_state(pending, stage="align", queued=False, pct=None, **mask),
+               mask_state(pending, stage=None, queued=True, pct=None, **mask)]
+    assert all(labels["running"].fullmatch(cell["label"]) for cell in running), [c["label"] for c in running]
+    assert not labels["running"].fullmatch(ready_source["label"])
 
 
 # ----------------------------------------------------- the band pickers
@@ -266,3 +282,18 @@ def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):
     walklib.back_to_workflow(screens, wait=100)
     assert not _screen_on(screens)
     assert screens.locator("#screen").evaluate("e => e.style.display") == "none"
+
+
+def test_prepare_state_counts_the_status_cells_by_their_text(_walk_browser):
+    """Ready and in-flight Status cells (their label in a div, as ProductTable
+    renders a ``state`` cell), and nothing outside the panel or in a subtitle."""
+    page = _walk_browser.new_page()
+    try:
+        page.set_content("""<div class="right-panel">
+          <div><i></i><div>Ready</div></div><div><i></i><div>Ready</div></div>
+          <div><i></i><div>Downloading 42%</div></div><div><i></i><div>Aligning</div></div>
+          <div><i></i><div>Queued</div></div><div>waiting for the row above</div>
+          <button>Align</button></div><div>Ready</div>""")
+        assert phases.prepare_state(page) == {"ready": 2, "running": 3}
+    finally:
+        page.close()
