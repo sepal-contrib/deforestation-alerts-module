@@ -806,12 +806,16 @@ def test_the_card_passes_the_row_stages(monkeypatch):
 
     state = _state(_p())
     key = progress_key("mc", FEB.id, "mask", "forest")
+    dialogs = {}
 
     async def main():
-        rc, seen, *_ = _card(monkeypatch, state, rows=[GEE_MISSING], running=frozenset({mask_inflight_key("mc", "forest")}),
-                             stages={key: "align"})
+        rc, seen, *_ = _card(monkeypatch, state, dialogs=dialogs, rows=[GEE_MISSING],
+                             running=frozenset({mask_inflight_key("mc", "forest")}), stages={key: "align"})
         try:
             assert seen["rows"][0]["cells"][2]["label"] == t("steps.prepare.state_aligning")
+            _action(seen, "forest", "info")()
+            # the Details lead reads the running state, not "To download"
+            assert dialogs["details"]["details"]["lead"] == t("steps.prepare.state_aligning")
         finally:
             rc.close()
 

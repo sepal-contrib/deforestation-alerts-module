@@ -52,14 +52,16 @@ def _next(row: PrepareRow, file_source: bool) -> tuple[str, bool]:
 
 
 def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Optional[dict]:
-    """The state of a row in a running job: its stage while it is its turn,
-    else Queued while it waits; None when the row is not in flight."""
+    """The state of a row in a running job: its stage while it is its turn
+    (its whole label in its tooltip: ``Downloading 42%`` can clip), else
+    Queued while it waits; None when the row is not in flight."""
     if stage == "download":
         label = t("steps.prepare.state_downloading_pct", pct=pct) if pct is not None else t(
             "steps.prepare.state_downloading")
-        return _state(STATUS_ICONS["running"], "primary", label, progress=pct)
+        return _state(STATUS_ICONS["running"], "primary", label, progress=pct, title=label)
     if stage in _STAGE_STATES:
-        return _state(STATUS_ICONS["running"], "primary", t(_STAGE_STATES[stage]))
+        label = t(_STAGE_STATES[stage])
+        return _state(STATUS_ICONS["running"], "primary", label, title=label)
     if queued:
         return _state("mdi-timer-sand", "grey", t("steps.prepare.state_queued"))
     return None
@@ -156,9 +158,20 @@ def source_label(src) -> str:
     return t(catalogue.LABEL_KEYS[src.catalogue_key]) if src.kind == "predefined" else src.name
 
 
-def row_status_label(row: PrepareRow, file_source: bool) -> str:
-    """The row's status as words (the Details dialog's lead): its state, or
-    what Run does next, without the button."""
+def in_flight_label(stage: Optional[str], queued: bool, pct: Optional[int]) -> Optional[str]:
+    """The label of a row in a running job (``Downloading 42%``, ``Queued``), None when it is not in flight."""
+    running = _in_flight(stage, queued, pct)
+    return None if running is None else running["label"]
+
+
+def row_status_label(row: PrepareRow, file_source: bool, *, stage: Optional[str] = None, queued: bool = False,
+                     pct: Optional[int] = None) -> str:
+    """The row's status as words (the Details dialog's lead): its state in a
+    running job (``stage``/``queued``/``pct`` as ``source_state``), else its
+    state, or what Run does next, without the button."""
+    running = in_flight_label(_stage(stage, file_source), queued, pct)
+    if running is not None:
+        return running
     if row.file_missing:
         return t("steps.prepare.state_file_missing")
     if row.blocked:
@@ -227,8 +240,12 @@ def mask_subtitle(row: MaskRow, *, raw_art: Optional[Artifact], aligned_art: Opt
     return " · ".join(part for part in parts if part), None
 
 
-def mask_status_label(row: MaskRow) -> str:
-    """A mask's status as words (its Details dialog's lead)."""
+def mask_status_label(row: MaskRow, *, stage: Optional[str] = None, queued: bool = False,
+                      pct: Optional[int] = None) -> str:
+    """A mask's status as words (its Details dialog's lead), its in-flight state first."""
+    running = in_flight_label(stage, queued, pct)
+    if running is not None:
+        return running
     if row.file_missing:
         return t("steps.prepare.state_file_missing")
     if row.ready:

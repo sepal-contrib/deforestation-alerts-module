@@ -191,7 +191,7 @@ def delete_confirm(p, period, source) -> tuple:
 
 
 def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,
-               stages=None, info_open=None, locked=False, progress=None) -> list:
+               stages=None, info_open=None, locked=False, progress=None, writing=False, masks_pend=False) -> list:
     """The ``ProductTable`` rows of the sources table (spec "The sources
     table", option B); pure.
 
@@ -203,7 +203,10 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     row in flight without one waits for its turn (queued). ``info_open``: the
     source whose Details dialog is open. ``locked``: a review copy (spec
     §6.3): no pill, and nothing that writes. ``progress``: the downloads'
-    percents, by ``progress_key``.
+    percents, by ``progress_key``. ``writing``: a job writes into the
+    project (``is_writing``): Delete files waits, saying why. ``masks_pend``:
+    a mask on in the period needs a run: Download again waits for it, as
+    Download all again does (a forced row runs no mask first).
 
     One Status cell holds the row's state or the verb of its next run
     (``prepare_view.source_state``), and the name's subtitle says what the
@@ -256,12 +259,16 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
                 {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
                  "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
                 {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
-                {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source,
+                {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source or masks_pend,
                  "title": t("steps.prepare.action_nothing_to_fetch" if file_source
+                            else "steps.prepare.redownload_all_masks" if masks_pend
                             else "steps.prepare.action_download_again"),
                  "on_click": (lambda s=r.source: on_refresh(s))},
-                {"kind": "delete", "disabled": busy or locked or (raw_art is None and harm_art is None),
-                 "title": t("steps.prepare.action_delete_files"), "on_click": (lambda s=r.source: on_delete(s))},
+                # the confirm re-checks: a job can start while it is open
+                {"kind": "delete", "disabled": busy or writing or locked or (raw_art is None and harm_art is None),
+                 "title": t("steps.prepare.delete_files_busy" if (busy or writing) and not locked
+                            else "steps.prepare.action_delete_files"),
+                 "on_click": (lambda s=r.source: on_delete(s))},
             ],
         })
     return out
@@ -509,8 +516,13 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     details = None
     if shown is not None:
         row = by_source[shown]
-        details = source_details(p, period, shown, row, source_reason(p, period, shown),
-                                 row_status_label(row, is_file_source(p.sources[shown])))
+        shown_busy = _inflight_key(p.name, period.id, shown) in mine
+        shown_key = progress_key(p.name, period.id, "source", shown)
+        shown_stage = stages.get(shown_key) if shown_busy else None
+        lead = row_status_label(row, is_file_source(p.sources[shown]), stage=shown_stage,
+                                queued=shown_busy and shown_stage is None,
+                                pct=row_progress.value.get(shown_key) if shown_busy else None)
+        details = source_details(p, period, shown, row, source_reason(p, period, shown), lead)
 
     # A confirm goes with its row, Download all again's with its menu item.
     refreshing = pending_refresh if pending_refresh in by_source or (pending_refresh == "*" and redownload) else None
@@ -549,7 +561,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
                             on_info=_toggle_info, on_refresh=set_pending_refresh, on_delete=set_pending_delete,
-                            stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value)
+                            stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value,
+                            writing=is_writing(p.name), masks_pend=masks_pend)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))

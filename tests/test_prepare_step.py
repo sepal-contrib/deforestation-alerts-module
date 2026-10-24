@@ -1603,12 +1603,21 @@ def test_download_again_waits_for_the_catalogue_metadata(step, monkeypatch):
 
 
 def test_download_again_does_not_run_the_masks_first(step, monkeypatch):
+    """A forced row runs no mask first, so while a mask on in the period
+    needs a run its Download again waits, saying so, as Download all again
+    does; once the masks are aligned it forces the row alone."""
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_with_mask(), meta={"GLAD-L": {}})
 
     box, rc = _render(state)
     try:
+        refresh = _act(step.table[-1][0], "refresh")
+        assert refresh["disabled"] and refresh["title"] == t("steps.prepare.redownload_all_masks")
+        monkeypatch.setattr(prepare_step, "plan_masks", lambda p, pdir, period: [])  # the masks are aligned
+        _rerender(step)
+        refresh = _act(step.table[-1][0], "refresh")
+        assert not refresh["disabled"] and refresh["title"] == t("steps.prepare.action_download_again")
         _refresh(rc, step.table[-1][0])
         step.run_jobs()
         assert [(items, force) for _, items, force in step.started] == [(["GLAD-L"], True)]
@@ -2011,3 +2020,54 @@ def test_the_delete_files_message_of_a_record_without_a_size_has_no_empty_parent
     p.artifacts[raw_key(JAN.id, "GLAD-L")] = p.artifacts[raw_key(JAN.id, "GLAD-L")].model_copy(
         update={"size_bytes": 2_700_000})
     assert prepare_step.delete_confirm(p, JAN, "GLAD-L")[1] == t("steps.prepare.delete_files_message", size="2.7 MB")
+
+
+def _rerender(step):
+    """Open and close the first row's Details: two renders of the step."""
+    _act(step.table[-1][0], "info")["on_click"]()
+    _act(step.table[-1][0], "info")["on_click"]()
+
+
+def test_delete_files_is_disabled_while_a_job_writes_or_the_row_is_in_flight(step, monkeypatch):
+    """The confirm would always be refused: the action says why instead."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    state = _state(_with_files(), meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        delete = _act(step.table[-1][0], "delete")
+        assert not delete["disabled"] and delete["title"] == t("steps.prepare.action_delete_files")
+        with writing("d"):
+            _rerender(step)  # while it writes
+            delete = _act(step.table[-1][0], "delete")
+            assert delete["disabled"] and delete["title"] == t("steps.prepare.delete_files_busy")
+        _refresh(rc, step.table[-1][0])  # the row is claimed (in flight)
+        delete = _act(step.table[-1][0], "delete")
+        assert delete["disabled"] and delete["title"] == t("steps.prepare.delete_files_busy")
+        step.run_jobs()
+        assert not _act(step.table[-1][0], "delete")["disabled"]
+    finally:
+        rc.close()
+
+
+def test_the_details_lead_of_a_queued_row_reads_queued(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    state = _state(_project("d", "RADD", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+
+    def lead():
+        dialog = next(d for d in rc.find(v.Dialog).widgets if d.max_width == 480)
+        return [s for s in _texts(dialog) if s.endswith(t("steps.period.range", start=JAN.start.isoformat(),
+                                                         end=JAN.end.isoformat()))]
+
+    try:
+        _act(step.table[-1][0], "info")["on_click"]()
+        assert lead()[0].startswith(t("steps.prepare.state_to_download") + " · ")
+        _run(step.table[-1][0])
+        assert _queued(step.table[-1][0])
+        assert lead()[0].startswith(t("steps.prepare.state_queued") + " · ")
+    finally:
+        rc.close()

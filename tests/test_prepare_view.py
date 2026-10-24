@@ -10,7 +10,7 @@ from deforestation_alerts.engine.fingerprint import Status
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.why import Reason
 from deforestation_alerts.project.models import Artifact
-from gui.scripts.prepare_view import reason_text, source_state, source_subtitle
+from gui.scripts.prepare_view import mask_status_label, reason_text, row_status_label, source_state, source_subtitle
 
 
 @pytest.fixture(autouse=True)
@@ -113,10 +113,11 @@ def test_running_row_shows_stage_and_percent():
     row = PrepareRow("RADD", Status.MISSING, Status.MISSING)
     cell = _state(row, stage="download", pct=42)
     assert (cell["type"], cell["label"], cell["progress"]) == ("state", "Downloading 42%", 42)
+    assert cell["title"] == "Downloading 42%"  # whole on hover when the cell clips it
     assert _subtitle(row, stage="download", pct=42) == ("downloading 42% · then harmonize", None)
     assert _state(row, stage="download")["label"] == "Downloading"  # no percent yet
     cell = _state(row, stage="harmonize", pct=42)
-    assert cell["label"] == "Harmonizing" and cell.get("progress") is None
+    assert cell["label"] == "Harmonizing" and cell.get("progress") is None and cell["title"] == "Harmonizing"
     assert _subtitle(row, stage="harmonize")[0] == "harmonizing"
     # a GeoTIFF is read, not downloaded
     assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Harmonizing"
@@ -187,3 +188,17 @@ def test_a_mask_not_aligned_reads_bare_without_a_harmonize_again_tail():
     row = PrepareRow("RADD", Status.CURRENT, Status.STALE)
     reason = Reason("mask_not_aligned", (("name", "forest"),))
     assert _subtitle(row, reason=reason) == ("a mask must be aligned first (forest)", None)
+
+
+def test_the_details_lead_of_a_row_in_flight_reads_its_running_state():
+    from deforestation_alerts.engine.plan import MaskRow
+
+    row = PrepareRow("RADD", Status.MISSING, Status.MISSING)
+    assert row_status_label(row, False) == "To download"
+    assert row_status_label(row, False, queued=True) == "Queued"
+    assert row_status_label(row, False, stage="download", pct=42) == "Downloading 42%"
+    assert row_status_label(row, True, stage="download") == "Harmonizing"  # a user file is read
+    mask = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+    assert mask_status_label(mask) == "To download"
+    assert mask_status_label(mask, stage="align") == "Aligning"
+    assert mask_status_label(mask, queued=True) == "Queued"

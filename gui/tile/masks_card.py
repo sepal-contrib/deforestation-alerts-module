@@ -299,7 +299,12 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     details = None
     if shown is not None:
         row = by_name[shown]
-        details = mask_details(p, shown, row, mask_reason(p, shown), mask_status_label(row))
+        shown_busy = mask_inflight_key(p.name, shown) in running
+        shown_key = progress_key(p.name, period.id, "mask", shown)
+        shown_stage = (stages or {}).get(shown_key) if shown_busy else None
+        lead = mask_status_label(row, stage=shown_stage, queued=shown_busy and shown_stage is None,
+                                 pct=(progress or {}).get(shown_key) if shown_busy else None)
+        details = mask_details(p, shown, row, mask_reason(p, shown), lead)
 
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
                                  run=on_run, rerun=set_pending_rerun, toggle=_toggle, info=_toggle_info, edit=_edit,
