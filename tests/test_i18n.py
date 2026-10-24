@@ -118,7 +118,7 @@ SAME_IN = {
         # words in Brazilian Portuguese; ramp names, band acronyms and R/G/B too.
         "common._test.one", "analysis.timeline.area_normal", "analysis_tile.facts.status",
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
-        "steps.prepare.col_download", "steps.prepare.col_status", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
+        "steps.prepare.col_status", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
         "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
         "steps.layers.summary_classes.other",  # "classes" is the same word
         # "timelapse" is the word Brazilian Portuguese uses.

@@ -1,7 +1,7 @@
-"""What a Download & harmonize source row shows (option B): one Status cell
-holding a state or a verb pill, and a subtitle under the source's name.
+"""What a Download & harmonize source or mask row shows (option B): one
+Status cell holding a state or a verb pill, and a subtitle under its name.
 
-Pure presentation: the row's ``PrepareRow``, its artifacts, its ``Reason``
+Pure presentation: the row's ``PrepareRow`` / ``MaskRow``, its artifacts, its ``Reason``
 (``engine.why``) and the job's report in, ``ProductTable`` cells out.
 
 A user file (``is_file_source``) is read where it is, never downloaded: its
@@ -27,6 +27,7 @@ WHY_KEYS = ("not_downloaded", "not_read", "not_harmonized", "not_aligned", "grid
             "file", "source", "mask_not_aligned", "mask", "masks", "raw")
 _RAW_TERMS = frozenset({"aoi", "window", "file", "source"})  # a run downloads again
 _BLOCKED_STATUS = {NOT_COVERED: "not_covered", NO_DATA: "no_data", UNCHECKED: "unchecked"}
+_STAGE_STATES = {"harmonize": "steps.prepare.state_harmonizing", "align": "steps.prepare.state_aligning"}
 
 
 def reason_text(reason: Reason) -> str:
@@ -50,21 +51,41 @@ def _next(row: PrepareRow, file_source: bool) -> tuple[str, bool]:
     return "harmonize", row.harmonized is Status.STALE
 
 
+def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Optional[dict]:
+    """The state of a row in a running job: its stage while it is its turn,
+    else Queued while it waits; None when the row is not in flight."""
+    if stage == "download":
+        label = t("steps.prepare.state_downloading_pct", pct=pct) if pct is not None else t(
+            "steps.prepare.state_downloading")
+        return _state(STATUS_ICONS["running"], "primary", label, progress=pct)
+    if stage in _STAGE_STATES:
+        return _state(STATUS_ICONS["running"], "primary", t(_STAGE_STATES[stage]))
+    if queued:
+        return _state("mdi-timer-sand", "grey", t("steps.prepare.state_queued"))
+    return None
+
+
+def _run_cell(verb: str, stale: bool, *, locked: bool, failed: bool, on_run: Callable) -> dict:
+    """The pill of the row's next run (``verb``; warning colour when it redoes
+    an out-of-date file), Retry after a failure, or its words on a review copy."""
+    icon, color = ("mdi-update", "warning") if stale else ("mdi-play", "primary")
+    if locked:  # a review copy runs nothing: the state, no pill
+        return _state(icon, color, t(f"steps.prepare.state_to_{verb}"))
+    if failed:
+        return {"type": "verb", "label": t("steps.prepare.verb_retry"), "icon": "mdi-refresh", "color": "error",
+                "on_click": on_run}
+    return {"type": "verb", "label": t(f"steps.prepare.verb_{verb}"), "icon": icon, "color": color, "on_click": on_run}
+
+
 def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], queued: bool, pct: Optional[int],
                  failed: bool, locked: bool, on_run: Callable) -> dict:
     """The Status cell (spec "Status cell: status or verb"): a ``state`` cell,
     or the ``verb`` pill of the row's next run. ``stage``: the running job's
     (``download`` / ``harmonize``) while it is the row's turn; ``queued``: the
     row is claimed and waits for its turn; ``failed``: the row has an error."""
-    stage = _stage(stage, file_source)
-    if stage == "download":
-        label = t("steps.prepare.state_downloading_pct", pct=pct) if pct is not None else t(
-            "steps.prepare.state_downloading")
-        return _state(STATUS_ICONS["running"], "primary", label, progress=pct)
-    if stage == "harmonize":
-        return _state(STATUS_ICONS["running"], "primary", t("steps.prepare.state_harmonizing"))
-    if queued:
-        return _state("mdi-timer-sand", "grey", t("steps.prepare.state_queued"))
+    running = _in_flight(_stage(stage, file_source), queued, pct)
+    if running is not None:
+        return running
     if row.file_missing:
         return _state(STATUS_ICONS["failed"], "error", t("steps.prepare.state_file_missing"))
     if row.blocked:
@@ -73,13 +94,7 @@ def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], qu
     if row.ready:
         return _state(STATUS_ICONS["ready"], "success", t("steps.prepare.state_ready"))
     verb, stale = _next(row, file_source)
-    icon, color = ("mdi-update", "warning") if stale else ("mdi-play", "primary")
-    if locked:  # a review copy runs nothing: the state, no pill
-        return _state(icon, color, t(f"steps.prepare.state_to_{verb}"))
-    if failed:
-        return {"type": "verb", "label": t("steps.prepare.verb_retry"), "icon": "mdi-refresh", "color": "error",
-                "on_click": on_run}
-    return {"type": "verb", "label": t(f"steps.prepare.verb_{verb}"), "icon": icon, "color": color, "on_click": on_run}
+    return _run_cell(verb, stale, locked=locked, failed=failed, on_run=on_run)
 
 
 def _ready_text(row: PrepareRow, file_source: bool, raw_art: Optional[Artifact], harm_art: Optional[Artifact]) -> str:
@@ -101,12 +116,13 @@ def _fallback(row: PrepareRow, file_source: bool) -> Reason:
     return Reason("not_harmonized")
 
 
-def _reason_line(reason: Reason, file_source: bool) -> str:
-    """The short reason: bare for ``not_*``, else what the run redoes."""
+def _reason_line(reason: Reason, file_source: bool, then: str = "harmonize") -> str:
+    """The short reason: bare for ``not_*``, else what the run redoes: a
+    download again, or ``then`` (a source harmonizes, a mask aligns)."""
     why = reason_text(reason)
     if reason.key.startswith("not_"):
         return why
-    again = "download" if reason.key in _RAW_TERMS and not file_source else "harmonize"
+    again = "download" if reason.key in _RAW_TERMS and not file_source else then
     return t(f"steps.prepare.sub_again_{again}", why=why)
 
 
@@ -148,6 +164,74 @@ def row_status_label(row: PrepareRow, file_source: bool) -> str:
     if row.ready:
         return t("steps.prepare.state_ready")
     return t(f"steps.prepare.state_to_{_next(row, file_source)[0]}")
+
+
+# ---------------------------------------------------------------------------
+# Masks card rows (spec "Masks card"): the same grammar. A mask is downloaded
+# (Earth Engine) then aligned; a GeoTIFF mask is only aligned.
+# ---------------------------------------------------------------------------
+
+def _mask_next(row: MaskRow) -> tuple[str, bool]:
+    """What Run does next for a mask (``download`` / ``align``) and whether it
+    redoes an out-of-date file."""
+    if row.raw is not None and row.raw is not Status.CURRENT:
+        return "download", row.raw is Status.STALE
+    return "align", row.aligned is Status.STALE
+
+
+def mask_state(row: MaskRow, *, stage: Optional[str], queued: bool, pct: Optional[int], failed: bool, locked: bool,
+               on_run: Callable) -> dict:
+    """A mask row's Status cell, as ``source_state``. A mask that is off in the
+    period keeps its pill, neutral (settled: it can still be aligned and
+    previewed, and holds no run back)."""
+    running = _in_flight(stage, queued, pct)
+    if running is not None:
+        return running
+    if row.file_missing:
+        return _state(STATUS_ICONS["failed"], "error", t("steps.prepare.state_file_missing"))
+    if row.ready:
+        return _state(STATUS_ICONS["ready"], "success", t("steps.prepare.state_ready"))
+    verb, stale = _mask_next(row)
+    return _run_cell(verb, stale and row.on, locked=locked, failed=failed, on_run=on_run)
+
+
+def _mask_fallback(row: MaskRow) -> Reason:
+    """A mask out of date whose inputs all match (a file deleted on disk)."""
+    return Reason("not_downloaded" if _mask_next(row)[0] == "download" else "not_aligned")
+
+
+def mask_subtitle(row: MaskRow, *, raw_art: Optional[Artifact], aligned_art: Optional[Artifact],
+                  reason: Optional[Reason], stage: Optional[str], queued: bool,
+                  pct: Optional[int]) -> tuple[str, Optional[str]]:
+    """The grey line under a mask's name, and its tone (``error`` for a
+    missing file): its origin and size once ready, else why it needs a run
+    (``reason``: ``engine.why.mask_reason``); ``Off`` after either when it is
+    off in the period. A running or queued mask says so, as a source does."""
+    if stage == "download" and pct is not None:
+        return t("steps.prepare.sub_downloading_align", pct=pct), None
+    if stage == "align":
+        return t("steps.prepare.sub_aligning"), None
+    if queued:
+        return t("steps.prepare.sub_queued"), None
+    if row.file_missing:
+        return t("steps.prepare.state_file_missing"), "error"
+    if row.ready:
+        size = sum(a.size_bytes for a in (raw_art, aligned_art) if a is not None)
+        parts = [t(f"steps.raster_input.source_{row.origin}"), size_text(size) if size else ""]
+    else:
+        parts = [_reason_line(reason or _mask_fallback(row), row.origin == "file", then="align")]
+    if not row.on:
+        parts.append(t("steps.prepare.state_off"))
+    return " · ".join(part for part in parts if part), None
+
+
+def mask_status_label(row: MaskRow) -> str:
+    """A mask's status as words (its Details dialog's lead)."""
+    if row.file_missing:
+        return t("steps.prepare.state_file_missing")
+    if row.ready:
+        return t("steps.prepare.state_ready")
+    return t(f"steps.prepare.state_to_{_mask_next(row)[0]}")
 
 
 # ---------------------------------------------------------------------------
@@ -302,5 +386,5 @@ def mask_details(p, name: str, row: MaskRow, reason: Optional[Reason], status_la
         (t("steps.prepare.f_size"), size_text(aligned.size_bytes)), (t("steps.prepare.f_file"), aligned.rel_path)]))
     why = None
     if not (row.ready or row.file_missing):
-        why = reason_text(reason or Reason("not_aligned"))
+        why = reason_text(reason or _mask_fallback(row))
     return {"title": name, "lead": status_label, "why": why, "sections": sections}

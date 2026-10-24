@@ -10,7 +10,7 @@ import pytest
 from deforestation_alerts.engine import runner
 from deforestation_alerts.engine.coverage import Note
 from deforestation_alerts.engine.fingerprint import Status, raw_key
-from deforestation_alerts.engine.plan import PrepareRow
+from deforestation_alerts.engine.plan import MaskRow, PrepareRow
 from deforestation_alerts.project.models import (
     AoiRecord, Artifact, BandMap, Period, Project, add_custom_source, add_predefined_source,
 )
@@ -216,12 +216,11 @@ def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
 
 def test_a_downloading_mask_reads_its_percent():
     """Bug 2026-10-16: the step's own rows say how far a download has got."""
-    from gui.tile.masks_card import mask_status
+    from gui.scripts.prepare_view import mask_state
 
-    busy = mask_status(SimpleNamespace(raw=Status.MISSING, aligned=Status.MISSING), busy=True, progress=12)
-    assert busy["label"] == "12%" and busy["compact"]
-    assert "label" not in mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False,
-                                      progress=12)
+    row = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+    busy = mask_state(row, stage="download", queued=False, pct=12, failed=False, locked=False, on_run=None)
+    assert busy["label"] == "Downloading 12%" and busy["progress"] == 12
 
 
 # Row stages and row ends (the batch footer reads them)

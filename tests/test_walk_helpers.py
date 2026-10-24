@@ -84,22 +84,17 @@ def test_every_label_key_a_walk_names_exists():
     assert not missing, missing
 
 
-def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
-    """A Masks row shows one compact status icon (Task 8): its stages are in
-    its tooltip, so the walks' "ready" count reads them there."""
-    from types import SimpleNamespace
-
+def test_prepare_state_reads_a_mask_rows_status_from_its_text():
+    """A Masks row shows its status as a label, like a source row (Task 7):
+    the walks count it by its text, with no stages hidden in a tooltip."""
     from deforestation_alerts.engine.fingerprint import Status
-    from gui.tile.masks_card import mask_status
+    from deforestation_alerts.engine.plan import MaskRow
+    from gui.scripts.prepare_view import mask_state
 
-    gee = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False)["title"]
-    tif = mask_status(SimpleNamespace(raw=None, aligned=Status.CURRENT), busy=False)["title"]
-    stale = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.STALE), busy=False)["title"]
-    busy = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.MISSING), busy=True)["title"]
-    ready, running = walklib.en("widgets.product_table.status_ready"), walklib.en("widgets.product_table.status_running")
-    assert phases.compact_stages([gee, tif, stale, "Prepare: ready to go"], ready) == 4
-    assert phases.compact_stages([busy], running) == 2
-    assert phases.compact_stages([gee], running) == 0
+    row = MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")
+    cell = mask_state(row, stage=None, queued=False, pct=None, failed=False, locked=False, on_run=None)
+    assert cell["label"] == walklib.en("steps.prepare.state_ready") and "title" not in cell
+    assert not hasattr(phases, "compact_stages")
 
 
 # ----------------------------------------------------- the band pickers

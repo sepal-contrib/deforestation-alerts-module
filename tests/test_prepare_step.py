@@ -1449,14 +1449,20 @@ def test_a_source_run_runs_its_stale_masks_first(step, monkeypatch):
 
 
 def _footer_item(rc):
-    """The footer menu's one item, and the tooltip around it."""
+    """The footer menu's one item (Download all again), and the tooltip
+    around it; the Masks card's ⋮ menus hold list items too."""
     def walk(w):
         yield w
         for c in getattr(w, "children", None) or []:
             if not isinstance(c, str):
                 yield from walk(c)
 
-    [item] = rc.find(v.ListItem).widgets
+    def label(w):
+        return " ".join(c for x in walk(w) if isinstance(x, v.ListItemTitle) for c in x.children)
+
+    masks_menu = {t("steps.prepare.action_download_again"), t("widgets.product_table.action_edit"),
+                  t("steps.prepare.mask_delete_action")}
+    [item] = [w for w in rc.find(v.ListItem).widgets if label(w) not in masks_menu]
     tips = [w.attributes.get("title") for root in rc.find(v.Html).widgets for w in walk(root)
             if isinstance(w, v.Html) and item in (w.children or [])]
     return item, tips[0] if tips else None
@@ -1870,8 +1876,9 @@ def test_the_masks_card_sits_between_the_grid_and_the_sources_and_runs_its_masks
     and the row reads running while its key is claimed."""
     from gui.tile import masks_card
 
-    order, masks = [], []
+    order, masks, confirms = [], [], {}
     monkeypatch.setattr(masks_card, "ProductTable", lambda **kw: (order.append("masks"), masks.append(kw["rows"])))
+    monkeypatch.setattr(masks_card, "ConfirmDialog", lambda **kw: confirms.update({kw["confirm_label"]: kw}))
     sources_table = prepare_step.ProductTable
 
     @solara.component
@@ -1889,11 +1896,15 @@ def test_the_masks_card_sits_between_the_grid_and_the_sources_and_runs_its_masks
         assert order[:2] == ["masks", "sources"]
         [row] = masks[-1]
         assert row["key"] == "forest"
-        next(a for a in row["actions"] if a["kind"] == "download")["on_click"]()
-        assert masks[-1][0]["cells"][2]["status"] == "running"  # claimed: the row reads running
+        row["cells"][2]["on_click"]()  # the Download pill
+        assert masks[-1][0]["cells"][2]["label"] == t("steps.prepare.state_queued")  # claimed, no stage yet
         step.run_jobs()
-        assert masks[-1][0]["cells"][2]["status"] == "missing"
-        next(a for a in masks[-1][0]["actions"] if a["kind"] == "redownload")["on_click"]()
+        assert masks[-1][0]["cells"][2]["label"] == t("steps.prepare.verb_download")
+        [again] = [i for a in masks[-1][0]["actions"] if a["kind"] == "menu" for i in a["items"]
+                   if i["label"] == t("steps.prepare.action_download_again")]
+        again["on_click"]()
+        assert step.started[1:] == []  # it asks first
+        confirms[t("steps.prepare.redownload_label")]["on_confirm"]()
         step.run_jobs()
         assert [(items, force) for _, items, force in step.started] == [
             ([("mask", "forest")], False), ([("mask", "forest")], True)]

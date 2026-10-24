@@ -255,7 +255,11 @@ def test_masks_refuse_switches_and_disable_their_actions(tmp_path, monkeypatch):
     assert masks_card.switch_mask(s, "c", PER.id, "forest", on=False) is False
     assert s.project.value.periods[PER.id].masks["forest"] == before and warned == [BANNER]
     row = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")], locked=True)["forest"]
-    assert all(a["disabled"] for a in row["actions"] if a["kind"] != "map_toggle")
+    # no pill, and every item of the ⋮ menu greyed; Details still open
+    assert row["cells"][2]["type"] == "state"
+    [menu] = [a for a in row["actions"] if a["kind"] == "menu"]
+    assert menu["items"] and all(i["disabled"] for i in menu["items"])
+    assert not any(a.get("disabled") for a in row["actions"] if a["kind"] == "info")
 
 
 def test_a_copys_earth_engine_mask_preview_is_disabled_and_refused(tmp_path, monkeypatch):

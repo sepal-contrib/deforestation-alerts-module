@@ -60,7 +60,7 @@ from typing import Any, Callable, Optional
 import solara
 
 from deforestation_alerts.engine.coverage import UNCHECKED
-from deforestation_alerts.engine.fingerprint import Status, harm_key, mask_key
+from deforestation_alerts.engine.fingerprint import harm_key, mask_key
 from deforestation_alerts.engine.runner import (
     CoverageRefused,
     HarmonizeFailed,
@@ -87,9 +87,6 @@ from gui.scripts.notify_bridge import (
 from gui.store.project_writers import writing
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
-
-CELL_STATUS = {Status.CURRENT: "ready", Status.STALE: "stale", Status.MISSING: "missing"}
-
 
 @dataclass(frozen=True)
 class PrepareContext:

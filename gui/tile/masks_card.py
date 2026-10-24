@@ -1,10 +1,11 @@
-"""The Masks card of Download & harmonize (spec §7.3, §5.1).
+"""The Masks card of Download & harmonize (spec §7.3, §5.1, "Masks card").
 
-One row per project mask, with its choice in the active period (one Mode
-select: off, keep or exclude), one compact status for its download and
-alignment, and its actions; its origin and size are the row's first note. A
-switch only edits the project: it replaces the period's ``masks`` dict and
-starts no job. Editing is refused once a set used the mask; editing and
+One row per project mask, in the sources table's grammar: its name over a
+subtitle (origin and size, or why it needs a run), its choice in the active
+period (one Mode select: off, keep or exclude), one Status cell holding its
+state or the verb of its next run, and map · details · ⋮ (Download again,
+Edit, Delete mask…). Download again asks first. A switch only edits the
+project: it replaces the period's ``masks`` dict and starts no job. Editing is refused once a set used the mask; editing and
 deleting wait for the project's writers (when the modal would open, and again
 at Save: a job can start while it is open), mirroring the Alerts step's
 custom sources (Task 18).
@@ -14,33 +15,36 @@ import reacton.ipyvuetify as rv
 import solara
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.engine.fingerprint import Status, mask_key, mask_raw_key
+from deforestation_alerts.engine.fingerprint import mask_key, mask_raw_key
 from deforestation_alerts.engine.masks import build_mask_image
+from deforestation_alerts.engine.why import mask_reason
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
     add_mask, remove_mask, set_period_mask, sets_using_mask, update_mask,
 )
 from deforestation_alerts.project.review_copy import read_only
-from gui.i18n import size_text, t, tn
+from gui.i18n import t, tn
 from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.error_text import error_text
-from gui.scripts.prepare_jobs import CELL_STATUS, progress_key
+from gui.scripts.prepare_jobs import progress_key
+from gui.scripts.prepare_view import mask_details, mask_state, mask_status_label, mask_subtitle
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
+from gui.widget.details_dialog import DetailsDialog
 from gui.widget.mask_modal import MaskModal
-from gui.widget.product_table import ProductTable, status_text
+from gui.widget.product_table import ProductTable
 from gui.widget.text_style import MUTED
 
-MASK_ACTIONS = 5  # an Earth Engine mask's: download, re-download, map, edit, delete
+MASK_ACTIONS = 3  # map, details, the ⋮ menu (Download again, Edit, Delete mask…)
 
 
 def mask_columns() -> list:
-    """Mask | Mode | compact status (spec D4), measured at ``CARD_CONTENT_PX``."""
+    """Mask | Mode | Status (spec "Masks card"), measured at ``CARD_CONTENT_PX``."""
     return [{"label": t("steps.prepare.col_mask")},
-            {"label": t("steps.prepare.col_mode"), "width": "96px"},
-            {"label": "", "width": "28px"}]
+            {"label": t("steps.prepare.col_mode"), "width": "78px"},
+            {"label": t("steps.prepare.col_status"), "width": "104px"}]
 
 
 def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None) -> bool:
@@ -49,69 +53,69 @@ def switch_mask(app_state, project_name, period_id, name, *, on=None, mode=None)
                                                                                mode=mode))
 
 
-def mask_status(r, busy, progress=None) -> dict:
-    """One compact status for both stages (spec D4): running while claimed,
-    else the download stage when it is not current, else the alignment
-    stage. Its tooltip names both (a GeoTIFF mask has no download). A running
-    download shows its percent (``progress``) beside the icon."""
-    def label(s):
-        return status_text("running" if busy else CELL_STATUS[s])
-
-    if busy:
-        shown = "running"
-    elif r.raw is not None and r.raw is not Status.CURRENT:
-        shown = CELL_STATUS[r.raw]
-    else:
-        shown = CELL_STATUS[r.aligned]
-    parts = [] if r.raw is None else [f"{t('steps.prepare.col_download')}: {label(r.raw)}"]
-    parts.append(f"{t('steps.prepare.col_align')}: {label(r.aligned)}")
-    cell = {"type": "status", "status": shown, "compact": True, "title": " · ".join(parts)}
-    if busy and progress is not None:
-        cell["label"] = f"{progress}%"
-    return cell
-
-
-def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, edit, delete,
-                    switch, refusals=0, locked=False, progress=None) -> list:
-    """The ``ProductTable`` rows of the Masks card (spec §7.3); pure.
+def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run, rerun, toggle, info, edit, delete,
+                    switch, refusals=0, locked=False, progress=None, stages=None, info_open=None) -> list:
+    """The ``ProductTable`` rows of the Masks card (spec "Masks card"); pure.
 
     ``running``: every claimed in-flight key (a mask row is busy whichever
     period's job claimed it); ``errors``: the step's row errors (a mask's is
     keyed ``@mask:<name>``); ``on``/``building``: the map keys shown and being
-    built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``).
-    ``locked``: a review copy (spec §6.3): downloads, edits, deletes and the
-    Mode select are disabled; the map toggle stays for a ready local raster.
-    ``progress``: the downloads' percents, by ``prepare_jobs.progress_key``.
+    built; the callbacks take the mask name (``switch`` also ``on=``/``mode=``):
+    ``run`` is the Status pill's, ``rerun`` the menu's Download again (the card
+    asks first). ``locked``: a review copy (spec §6.3): no pill, and the
+    menu's items and the Mode select are disabled; the map toggle stays for a
+    ready local raster. ``progress``/``stages``: the downloads' percents and
+    the running job's stage (``download`` / ``align``), by
+    ``prepare_jobs.progress_key``: a busy mask without a stage is queued.
+    ``info_open``: the mask whose Details dialog is open.
+
+    As the sources table: the name's subtitle says what the mask holds or why
+    it needs a run (``prepare_view.mask_subtitle``), and only the warning and
+    error notes stay as lines under the row.
     """
-    from gui.tile.prepare_step import mask_inflight_key  # prepare_step renders this card
+    from gui.tile.prepare_step import _art, mask_inflight_key  # prepare_step renders this card
 
     out = []
     for r in rows:
         busy = mask_inflight_key(p.name, r.name) in running
-        size = sum(a.size_bytes for k in (mask_raw_key(r.name), mask_key(r.name))
-                   if (a := p.artifacts.get(k)) is not None)
-        origin = t(f"steps.raster_input.source_{r.origin}")  # the Source select's words
-        size_note = t("steps.prepare.size_note", size=size_text(size)) if size else ""
-        notes = [{"text": f"{origin} · {size_note}" if size_note else origin, "tone": None}]
+        pkey = progress_key(p.name, period.id, "mask", r.name)
+        stage = (stages or {}).get(pkey) if busy else None
+        pct = (progress or {}).get(pkey) if busy else None
+        queued = busy and stage is None
+        raw_art, aligned_art = _art(p, mask_raw_key(r.name)), _art(p, mask_key(r.name))
+        reason = mask_reason(p, r.name) if not (r.ready or r.file_missing) else None
+        subtitle, tone = mask_subtitle(r, raw_art=raw_art, aligned_art=aligned_art, reason=reason, stage=stage,
+                                       queued=queued, pct=pct)
+        title = {"type": "title", "value": r.name, "subtitle": subtitle}
+        if tone:
+            title["subtitle_tone"] = tone
+        state = mask_state(r, stage=stage, queued=queued, pct=pct, failed=f"@mask:{r.name}" in errors,
+                           locked=locked, on_run=(lambda n=r.name: run(n)))
+        notes = []
         if r.file_missing:
             notes.append({"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"})
         if r.on and r.mode == "keep" and r.covers_none:
             notes.append({"text": t("steps.prepare.mask_covers_none_line"), "tone": "warning"})
-        key = f"mask:{r.name}"
-        actions = [{"kind": "download", "disabled": locked or busy or r.file_missing is not None, "loading": busy,
-                    "on_click": (lambda n=r.name: run(n))}]
+        items = []
         if r.origin == "gee":
-            actions.append({"kind": "redownload", "disabled": locked or busy,
-                            "on_click": (lambda n=r.name: rerun(n))})
-        actions += [
+            items.append({"label": t("steps.prepare.action_download_again"), "icon": "mdi-refresh",
+                          "disabled": locked or busy, "on_click": (lambda n=r.name: rerun(n))})
+        items += [
+            {"label": t("widgets.product_table.action_edit"), "icon": "mdi-pencil-outline", "disabled": locked,
+             "on_click": (lambda n=r.name: edit(n))},
+            {"label": t("steps.prepare.mask_delete_action"), "icon": "mdi-delete-outline", "color": "error",
+             "disabled": locked, "on_click": (lambda n=r.name: delete(n))},
+        ]
+        key = f"mask:{r.name}"
+        actions = [
             # a GeoTIFF mask is shown once aligned; a layer already on can always be switched off.
             # A copy shows an EE mask only from its local raster: its Earth Engine
             # preview would send the creator's reference (spec §6.3).
             {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
              "disabled": (r.origin == "file" or locked) and not r.ready and key not in on,
              "on_click": (lambda n=r.name: toggle(n))},
-            {"kind": "edit", "disabled": locked, "on_click": (lambda n=r.name: edit(n))},
-            {"kind": "delete", "disabled": locked, "on_click": (lambda n=r.name: delete(n))},
+            {"kind": "info", "is_on": info_open == r.name, "on_click": (lambda n=r.name: info(n))},
+            {"kind": "menu", "items": items},
         ]
 
         def _choose(v, n=r.name):
@@ -132,8 +136,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
 
         out.append({
             "key": r.name,
-            "cells": [{"value": r.name}, {"type": "render", "fn": _mode_cell},
-                      mask_status(r, busy, (progress or {}).get(progress_key(p.name, period.id, "mask", r.name)))],
+            "cells": [title, {"type": "render", "fn": _mode_cell}, state],
             "notes": notes,
             "error": errors.get(f"@mask:{r.name}"),
             "actions": actions,
@@ -143,7 +146,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
 
 @solara.component
 def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, errors, on_run, on_rerun,
-              progress=None):
+              progress=None, stages=None):
     from gui.tile.prepare_step import mask_inflight_key
 
     notifications = use_notifications()
@@ -151,6 +154,8 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
     modal_open = solara.use_reactive(False)
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
+    pending_rerun, set_pending_rerun = solara.use_state(None)  # the Earth Engine mask to download again
+    info_name, set_info_name = solara.use_state(None)  # the mask whose Details dialog is open
     on, building = layers.on.value, layers.inflight.value  # subscribe: the toggles follow the registry
     # The claimed keys as of the latest render: a Save made from the modal's
     # task reads them then, not as they were when the modal opened.
@@ -280,10 +285,26 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         layers.show(key, build, content_id=content_id, notifier=notifications,
                     legend=source_layers.mask_layer_legend(p, name))
 
+    by_name = {r.name: r for r in rows}
+    shown = info_name if info_name in by_name else None  # the dialog goes with its row
+    rerunning = pending_rerun if pending_rerun in by_name else None  # and the confirm
+
+    def _toggle_info(name):
+        set_info_name(None if name == shown else name)
+
+    def _confirm_rerun():
+        set_pending_rerun(None)
+        on_rerun(rerunning)
+
+    details = None
+    if shown is not None:
+        row = by_name[shown]
+        details = mask_details(p, shown, row, mask_reason(p, shown), mask_status_label(row))
+
     table_rows = mask_table_rows(p, pdir, period, rows, running=running, errors=errors, on=on, building=building,
-                                 run=on_run, rerun=on_rerun, toggle=_toggle, edit=_edit,
+                                 run=on_run, rerun=set_pending_rerun, toggle=_toggle, info=_toggle_info, edit=_edit,
                                  delete=set_pending_delete, switch=_switch, refusals=refusals,
-                                 locked=read_only(p), progress=progress)
+                                 locked=read_only(p), progress=progress, stages=stages, info_open=shown)
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
         solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
@@ -293,6 +314,11 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
         solara.Text(t("steps.prepare.masks_note"), style=MUTED + "font-size:0.78rem;")
     MaskModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, on_add=_add, on_save=_save,
               editing=editing)
+    DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_name(None))
+    ConfirmDialog(open=rerunning is not None, on_cancel=lambda: set_pending_rerun(None), on_confirm=_confirm_rerun,
+                  title=t("steps.prepare.mask_redownload_title", name=rerunning or ""),
+                  message=t("steps.prepare.mask_redownload_message"),
+                  confirm_label=t("steps.prepare.redownload_label"), confirm_color="primary")
     used = len(sets_using_mask(p, pending_delete)) if pending_delete else 0
     ConfirmDialog(open=pending_delete is not None, on_cancel=lambda: set_pending_delete(None), on_confirm=_delete,
                   title=t("steps.prepare.mask_delete_title", name=pending_delete or ""),

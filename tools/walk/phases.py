@@ -124,13 +124,6 @@ def download_btn(page):
     return page.locator('.defo-analysis-right .defo-build-tile:visible').first
 
 
-def compact_stages(titles, label) -> int:
-    """How many stages read ``label`` in compact status tooltips: a Masks row
-    shows one icon whose title is ``"Download: ready · Aligned: ready"``
-    (``masks_card.mask_status``), one stage per ``Column: status``."""
-    return sum(len(re.findall(rf": {re.escape(label)}(?= ·|$)", t or "")) for t in titles)
-
-
 #: The Prepare step's labels in English (``run_all`` takes others, see
 #: ``prepare_labels``): the plural forms of the "Run {n} pending" button and
 #: the status cells' texts.
@@ -173,15 +166,10 @@ def pending_count(page, labels=None) -> int:
 
 
 def prepare_state(page, labels=None):
-    """The "ready" / "running" stages on the panel: a source row's status
-    cells (their label), and a Masks row's compact status (its tooltip)."""
+    """The "ready" / "running" status cells on the panel, by their label (a
+    Masks row's status is a label too, since Task 7)."""
     labels = labels or en_prepare()
-    titles = page.locator(".right-panel [title]").evaluate_all("es => es.map(e => e.getAttribute('title'))")
-    out = {}
-    for state in ("ready", "running"):
-        label = labels[state]
-        out[state] = page.locator(f'.right-panel :text-is("{label}")').count() + compact_stages(titles, label)
-    return out
+    return {state: page.locator(f'.right-panel :text-is("{labels[state]}")').count() for state in ("ready", "running")}
 
 
 def save_grid(page, *, resolution="30"):

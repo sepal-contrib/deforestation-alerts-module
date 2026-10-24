@@ -556,7 +556,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
                       rows=plan_masks(p, pdir, period), running=running, errors=errors,
                       on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True),
-                      progress=row_progress.value)
+                      progress=row_progress.value, stages=stages)
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
             DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_source(None))
