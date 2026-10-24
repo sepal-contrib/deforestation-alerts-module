@@ -479,6 +479,19 @@
       "action_download_again": "Download again",
       "action_nothing_to_fetch": "Nothing to download again: read from a file",
       "action_delete_files": "Delete files",
+      "redownload_title": "Download {source} again?",
+      "redownload_message": "The catalogue keeps adding alerts to past dates. This fetches the latest ones for {window}, replaces the file downloaded on {date}, then harmonizes.",
+      "redownload_message_new": "This fetches the alerts for {window}, then harmonizes.",
+      "redownload_label": "Download again",
+      "redownload_all_title": {
+        "one": "Download {n} source again?",
+        "other": "Download {n} sources again?"
+      },
+      "redownload_all_message": "These sources are downloaded again from their catalogues, then harmonized: {names}.",
+      "delete_files_title": "Delete {source}'s files?",
+      "delete_files_message": "Removes the download and the harmonized file of this period ({size}). The source stays in the project; run it again to rebuild them.",
+      "delete_files_sets": "These alert sets will read out of date: {names}. Their alerts and reviews stay.",
+      "delete_files_busy": "A job is writing into this project; delete the files once it has finished.",
       "sub_pixels": {
         "one": "{n} alert pixel",
         "other": "{n} alert pixels"

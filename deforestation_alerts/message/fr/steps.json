@@ -496,6 +496,20 @@
       "action_download_again": "Télécharger à nouveau",
       "action_nothing_to_fetch": "Rien à télécharger à nouveau : lue depuis un fichier",
       "action_delete_files": "Supprimer les fichiers",
+      "redownload_title": "Télécharger {source} à nouveau ?",
+      "redownload_message": "Le catalogue continue d'ajouter des alertes à des dates passées. Ceci récupère les plus récentes pour {window}, remplace le fichier téléchargé le {date}, puis harmonise.",
+      "redownload_message_new": "Ceci récupère les alertes pour {window}, puis harmonise.",
+      "redownload_label": "Télécharger à nouveau",
+      "redownload_all_title": {
+        "one": "Télécharger {n} source à nouveau ?",
+        "many": "Télécharger {n} de sources à nouveau ?",
+        "other": "Télécharger {n} sources à nouveau ?"
+      },
+      "redownload_all_message": "Ces sources sont téléchargées à nouveau depuis leurs catalogues, puis harmonisées : {names}.",
+      "delete_files_title": "Supprimer les fichiers de {source} ?",
+      "delete_files_message": "Supprime le téléchargement et le fichier harmonisé de cette période ({size}). La source reste dans le projet ; exécutez-la à nouveau pour les reconstruire.",
+      "delete_files_sets": "Ces jeux d'alertes seront obsolètes : {names}. Leurs alertes et leurs revues sont conservées.",
+      "delete_files_busy": "Une tâche écrit dans ce projet ; supprimez les fichiers une fois qu'elle est terminée.",
       "sub_pixels": {
         "one": "{n} pixel d'alerte",
         "many": "{n} de pixels d'alerte",

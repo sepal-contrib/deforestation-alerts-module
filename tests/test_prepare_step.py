@@ -40,6 +40,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t, tn
 from gui.scripts import aoi_io, prepare_jobs, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.prepare_view import source_label
 from gui.store.project_writers import is_writing, writing
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
@@ -1491,11 +1492,268 @@ def test_download_all_again_forces_the_sources_that_have_something_to_fetch(step
     try:
         item, tip = _footer_item(rc)
         assert not item.disabled and not tip
-        item.fire_event("click", None)
+        item.fire_event("click", None)  # asks first
+        assert step.jobs == []
+        names = ", ".join(source_label(p.sources[s]) for s in ("GLAD-L", "RADD"))
+        dialog = _confirm(rc, tn("steps.prepare.redownload_all_title", 2))
+        assert t("steps.prepare.redownload_all_message", names=names) in _texts(dialog)
+        _click(dialog, t("steps.prepare.redownload_label"))
         step.run_jobs()
         [(ctx, items, force)] = step.started
         assert items == ["GLAD-L", "RADD"] and force
         assert ctx.downloads == {("source", "GLAD-L"), ("source", "RADD")}
+    finally:
+        rc.close()
+
+
+def _walk(w):
+    yield w
+    for c in getattr(w, "children", None) or []:
+        if not isinstance(c, str):
+            yield from _walk(c)
+
+
+def _texts(w) -> list:
+    """Every string a widget tree shows."""
+    return [c for x in _walk(w) for c in (getattr(x, "children", None) or []) if isinstance(c, str)]
+
+
+def _confirm(rc, title):
+    """The open dialog titled ``title`` (the step's confirms render even when closed)."""
+    [dialog] = [d for d in rc.find(v.Dialog).widgets if d.v_model and title in _texts(d)]
+    return dialog
+
+
+def _closed(rc, title) -> bool:
+    return not any(d.v_model and title in _texts(d) for d in rc.find(v.Dialog).widgets)
+
+
+def _click(dialog, label):
+    next(b for b in _walk(dialog) if isinstance(b, v.Btn) and label in b.children).fire_event("click", None)
+
+
+def _refresh(rc, row):
+    """Click a row's Download again and confirm it."""
+    _act(row, "refresh")["on_click"]()
+    _click(_confirm(rc, t("steps.prepare.redownload_title", source=row["cells"][0]["value"])),
+           t("steps.prepare.redownload_label"))
+
+
+def test_download_again_asks_then_forces(step, monkeypatch):
+    """Spec "Confirms": the window and the date of the file it replaces; a
+    source never downloaded reads the short message. Only that source runs."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    p = _project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True)
+    p.periods = {JAN.id: JAN.model_copy(update={"look_back_days": 10})}
+    p.artifacts.update(_arts("GLAD-L"))
+    downloaded = p.artifacts[raw_key(JAN.id, "GLAD-L")].created_at.date().isoformat()
+    state = _state(p, meta={"GLAD-L": {}})
+    window = t("steps.period.range", start="2025-12-22", end="2026-01-31")
+
+    box, rc = _render(state)
+    try:
+        glad, radd = step.table[-1]
+        _act(radd, "refresh")["on_click"]()
+        title = t("steps.prepare.redownload_title", source=radd["cells"][0]["value"])
+        assert t("steps.prepare.redownload_message_new", window=window) in _texts(_confirm(rc, title))
+        _click(_confirm(rc, title), t("common.cancel"))
+        assert _closed(rc, title) and step.jobs == []
+
+        _act(glad, "refresh")["on_click"]()
+        title = t("steps.prepare.redownload_title", source=glad["cells"][0]["value"])
+        dialog = _confirm(rc, title)
+        assert t("steps.prepare.redownload_message", window=window, date=downloaded) in _texts(dialog)
+        assert step.jobs == []  # nothing runs before the confirm
+        _click(dialog, t("steps.prepare.redownload_label"))
+        assert _closed(rc, title)
+        step.run_jobs()
+        [(ctx, items, force)] = step.started
+        assert items == ["GLAD-L"] and force is True
+    finally:
+        rc.close()
+
+
+def test_download_again_waits_for_the_catalogue_metadata(step, monkeypatch):
+    """A forced download needs the metadata too (Task 3's carried case)."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        assert not _act(step.table[-1][0], "refresh")["disabled"]  # a ready row can still be downloaded again
+        _refresh(rc, step.table[-1][0])
+        assert step.jobs == [] and _toasts("info") == [t("steps.alerts.meta_loading")]
+
+        state.catalogue_meta.value = {"GLAD-L": {"end": "2026-06-01"}}
+        _refresh(rc, step.table[-1][0])  # the refused claim was released
+        step.run_jobs()
+        [(ctx, sources, force)] = step.started
+        assert sources == ["GLAD-L"] and force is True
+        assert ctx.aoi == "AOI" and ctx.meta == {"GLAD-L": {"end": "2026-06-01"}}
+    finally:
+        rc.close()
+
+
+def test_download_again_does_not_run_the_masks_first(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_with_mask(), meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        _refresh(rc, step.table[-1][0])
+        step.run_jobs()
+        assert [(items, force) for _, items, force in step.started] == [(["GLAD-L"], True)]
+    finally:
+        rc.close()
+
+
+def test_download_again_during_a_run_all_keeps_stop(step, monkeypatch):
+    """A Download again started while Run all is in its current row joins the
+    scope: the footer's Stop stops both."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}, "RADD": {}})
+    contexts = {}
+
+    box, rc = _render(state)
+
+    def run_all_blocked_mid_row(ctx, items, force=False):
+        sources = _named(items)
+        contexts[tuple(sources)] = (ctx, force)
+        if sources == ["GLAD-L"]:  # Run all, still in its current row
+            _refresh(rc, step.table[-1][1])  # Download again the ready RADD row
+            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+
+    monkeypatch.setattr(prepare_step, "run_rows", run_all_blocked_mid_row)
+    try:
+        _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
+        step.run_jobs()
+        assert set(contexts) == {("GLAD-L",), ("RADD",)} and contexts[("RADD",)][1] is True
+        assert contexts[("GLAD-L",)][0].cancel.is_set()  # Run all stops after this row
+        assert contexts[("RADD",)][0].cancel.is_set()  # and so does the Download again
+        assert not _stop_shown(rc)
+    finally:
+        rc.close()
+
+
+def _with_files(*, sets=()):
+    """Project ``d`` with GLAD-L's raw and harmonized files of January and
+    February on disk, January active; ``sets``: (id, period) of the alert
+    sets built from GLAD-L."""
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams
+
+    p = _project("d", "GLAD-L", bounds=PARAGUAY, grid=True)
+    p.periods = {JAN.id: JAN, FEB.id: FEB}
+    pdir = paths.project_dir("d")
+    for period in (JAN, FEB):
+        for key, kind in ((raw_key(period.id, "GLAD-L"), "raw_alert"), (harm_key(period.id, "GLAD-L"), "harmonized")):
+            art = _art(key, kind).model_copy(update={"size_bytes": 2_700_000})
+            (pdir / art.rel_path).parent.mkdir(parents=True, exist_ok=True)
+            (pdir / art.rel_path).write_bytes(b"x")
+            p.artifacts[key] = art
+    for sid, period in sets:
+        p.alert_sets[sid] = AlertSet(id=sid, period_id=period.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                     params=AlertSetParams(), store_rel_path="s.parquet", combined_rel_path="c.tif",
+                                     footprint_rel_path="f.tif", fingerprint="f", created_at=datetime.now())
+    return p
+
+
+def _delete_title(row):
+    return t("steps.prepare.delete_files_title", source=row["cells"][0]["value"])
+
+
+def test_delete_files_hides_the_layer_and_drops_both_records(step, monkeypatch):
+    """Spec "Delete files": this period's raw and harmonized files and records
+    go, the layer first; the other period's stay, and so does the source."""
+    import gui.scripts.map_layers as ml
+    from deforestation_alerts.project import cleanup
+
+    monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: target(*args))
+    monkeypatch.setattr(raster_map, "add_raster_layer", lambda map_, path, *, key, name: None)
+    shown_when_deleted = []
+    real_delete = cleanup.delete_files
+
+    def delete_files(pdir, rel_paths):
+        shown_when_deleted.append(layers.is_on("src:GLAD-L"))
+        real_delete(pdir, rel_paths)
+
+    monkeypatch.setattr(cleanup, "delete_files", delete_files)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    p = _with_files()
+    pdir = paths.project_dir("d")
+    jan = [p.artifacts[k].rel_path for k in (raw_key(JAN.id, "GLAD-L"), harm_key(JAN.id, "GLAD-L"))]
+    state = _state(p)
+    layers = MapLayers(_FakeMap())
+
+    box, rc = _render(state, layers=layers)
+    try:
+        _act(step.table[-1][0], "map_toggle")["on_click"]()
+        assert layers.is_on("src:GLAD-L")
+        _act(step.table[-1][0], "delete")["on_click"]()
+        dialog = _confirm(rc, _delete_title(step.table[-1][0]))
+        message = t("steps.prepare.delete_files_message", size="5.4 MB")  # this period's two files
+        assert set(_texts(dialog)) == {_delete_title(step.table[-1][0]), message, t("common.cancel"),
+                                       t("common.delete")}  # no set uses them: no warning line
+        _click(dialog, t("common.delete"))
+
+        live = state.project.value
+        assert raw_key(JAN.id, "GLAD-L") not in live.artifacts and harm_key(JAN.id, "GLAD-L") not in live.artifacts
+        assert {raw_key(FEB.id, "GLAD-L"), harm_key(FEB.id, "GLAD-L")} <= set(live.artifacts)
+        assert all(not (pdir / rel).exists() for rel in jan)
+        assert all((pdir / a.rel_path).exists() for a in live.artifacts.values())
+        assert "GLAD-L" in live.sources
+        assert shown_when_deleted == [False]  # the layer was hidden before the files went
+        assert _closed(rc, _delete_title(step.table[-1][0])) and _toasts("warning") == []
+    finally:
+        rc.close()
+
+
+def test_delete_files_warns_about_sets_of_this_period(step):
+    """User decision 2026-10-23: allowed, with a line naming this period's sets
+    that will read out of date; nothing cascades."""
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    state = _state(_with_files(sets=(("jan-a", JAN), ("jan-b", JAN), ("feb-a", FEB))))
+
+    box, rc = _render(state)
+    try:
+        _act(step.table[-1][0], "delete")["on_click"]()
+        dialog = _confirm(rc, _delete_title(step.table[-1][0]))
+        assert t("steps.prepare.delete_files_sets", names="jan-a, jan-b") in _texts(dialog)
+        _click(dialog, t("common.delete"))
+        live = state.project.value
+        assert set(live.alert_sets) == {"jan-a", "jan-b", "feb-a"}  # the sets are not touched
+        assert raw_key(JAN.id, "GLAD-L") not in live.artifacts
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("busy", ["writing", "claimed"])
+def test_delete_files_refuses_while_writing(step, monkeypatch, busy):
+    """Spec §5.1: deletes wait for the project's writers, and for a job that
+    claimed the row after the dialog opened."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
+    p = _with_files()
+    pdir = paths.project_dir("d")
+    before = dict(p.artifacts)
+    state = _state(p, meta={"GLAD-L": {}})
+
+    box, rc = _render(state)
+    try:
+        _act(step.table[-1][0], "delete")["on_click"]()
+        dialog = _confirm(rc, _delete_title(step.table[-1][0]))
+        if busy == "writing":
+            with writing("d"):
+                _click(dialog, t("common.delete"))
+        else:
+            _refresh(rc, step.table[-1][0])  # a job claims the row while the dialog is open
+            _click(dialog, t("common.delete"))
+        assert _toasts("warning") == [t("steps.prepare.delete_files_busy")]
+        assert state.project.value.artifacts == before
+        assert all((pdir / a.rel_path).exists() for a in before.values())
     finally:
         rc.close()
 

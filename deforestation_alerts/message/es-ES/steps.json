@@ -496,6 +496,20 @@
       "action_download_again": "Descargar de nuevo",
       "action_nothing_to_fetch": "Nada que descargar de nuevo: se lee de un archivo",
       "action_delete_files": "Eliminar archivos",
+      "redownload_title": "¿Descargar {source} de nuevo?",
+      "redownload_message": "El catálogo sigue añadiendo alertas a fechas pasadas. Esto obtiene las más recientes para {window}, reemplaza el archivo descargado el {date} y luego armoniza.",
+      "redownload_message_new": "Esto obtiene las alertas para {window} y luego armoniza.",
+      "redownload_label": "Descargar de nuevo",
+      "redownload_all_title": {
+        "one": "¿Descargar {n} fuente de nuevo?",
+        "many": "¿Descargar {n} de fuentes de nuevo?",
+        "other": "¿Descargar {n} fuentes de nuevo?"
+      },
+      "redownload_all_message": "Estas fuentes se descargan de nuevo de sus catálogos y luego se armonizan: {names}.",
+      "delete_files_title": "¿Eliminar los archivos de {source}?",
+      "delete_files_message": "Elimina la descarga y el archivo armonizado de este período ({size}). La fuente sigue en el proyecto; ejecútela de nuevo para reconstruirlos.",
+      "delete_files_sets": "Estos conjuntos de alertas quedarán desactualizados: {names}. Sus alertas y revisiones se conservan.",
+      "delete_files_busy": "Un trabajo está escribiendo en este proyecto; elimine los archivos cuando haya terminado.",
       "sub_pixels": {
         "one": "{n} píxel de alerta",
         "many": "{n} de píxeles de alerta",

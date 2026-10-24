@@ -496,6 +496,20 @@
       "action_download_again": "Baixar de novo",
       "action_nothing_to_fetch": "Nada a baixar de novo: lida de um arquivo",
       "action_delete_files": "Excluir arquivos",
+      "redownload_title": "Baixar {source} de novo?",
+      "redownload_message": "O catálogo continua adicionando alertas a datas passadas. Isto busca os mais recentes para {window}, substitui o arquivo baixado em {date} e depois harmoniza.",
+      "redownload_message_new": "Isto busca os alertas para {window} e depois harmoniza.",
+      "redownload_label": "Baixar de novo",
+      "redownload_all_title": {
+        "one": "Baixar {n} fonte de novo?",
+        "many": "Baixar {n} de fontes de novo?",
+        "other": "Baixar {n} fontes de novo?"
+      },
+      "redownload_all_message": "Estas fontes são baixadas de novo de seus catálogos e depois harmonizadas: {names}.",
+      "delete_files_title": "Excluir os arquivos de {source}?",
+      "delete_files_message": "Remove o download e o arquivo harmonizado deste período ({size}). A fonte continua no projeto; execute-a de novo para recriá-los.",
+      "delete_files_sets": "Estes conjuntos de alertas ficarão desatualizados: {names}. Seus alertas e revisões são mantidos.",
+      "delete_files_busy": "Um trabalho está gravando neste projeto; exclua os arquivos quando ele terminar.",
       "sub_pixels": {
         "one": "{n} pixel de alerta",
         "many": "{n} de pixels de alerta",

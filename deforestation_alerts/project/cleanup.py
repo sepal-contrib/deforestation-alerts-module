@@ -55,6 +55,11 @@ def source_artifact_keys(p: Project, name: str) -> list[str]:
     return [k for pid in p.periods for k in (raw_key(pid, name), harm_key(pid, name)) if k in p.artifacts]
 
 
+def source_period_keys(p: Project, period_id: str, name: str) -> list[str]:
+    """The recorded raw and harmonized files of one source in one period."""
+    return [k for k in (raw_key(period_id, name), harm_key(period_id, name)) if k in p.artifacts]
+
+
 def period_artifact_keys(p: Project, period_id: str) -> list[str]:
     prefixes = (f"raw:{period_id}:", f"harm:{period_id}:")
     return [k for k in p.artifacts if k.startswith(prefixes)]

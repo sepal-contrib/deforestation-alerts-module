@@ -41,6 +41,11 @@ of the scope (``mine_rows``) and the stage each running row reports
 (``row_stage``, ``scope_stages``): a claimed row with no stage is queued. Each
 start adds its rows to the scope's ``batch`` total and each row end one to
 its done count; the entry goes with the scope's last job.
+
+Download again (a row's, or the footer menu's Download all again) and Delete
+files ask first (``refresh_confirm``, ``delete_confirm``). Delete files drops
+this period's raw and harmonized records of the source and deletes their
+files; the source and the alert sets built from them stay.
 """
 
 import asyncio
@@ -56,21 +61,24 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.engine.why import source_reason
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import cleanup, paths
+from deforestation_alerts.project.models import sets_using_source
 from deforestation_alerts.project.review_copy import read_only
-from gui.i18n import t, tn
+from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.inflight import InflightKeys
 from gui.scripts.prepare_jobs import PrepareContext, progress_key, run_rows
 from gui.scripts.prepare_view import row_status_label, source_details, source_label, source_state, source_subtitle
-from gui.scripts.setup_guard import refuse_setup
+from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.scripts.solara_threads import spawn_in_context
 from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
+from gui.store.project_writers import is_writing
 from gui.tile.masks_card import MasksCard
 from gui.widget.batch_footer import BatchFooter, footer_counts
+from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.details_dialog import DetailsDialog
 from gui.widget.grid_form import GridForm
 from gui.widget.help import StepIntro
@@ -149,6 +157,33 @@ def _art(p, key):
     """The artifact under ``key``; a slice-1 ``no_data`` record reads as none (``status``)."""
     art = p.artifacts.get(key)
     return None if art is None or art.no_data else art
+
+
+def refresh_confirm(p, period, source, redownload) -> tuple:
+    """(title, message) of the Download again confirm of ``source``, or of
+    Download all again's (``"*"``, its rows ``redownload``) (spec "Confirms")."""
+    if source == "*":
+        names = ", ".join(source_label(p.sources[name]) for _, name in redownload)
+        return (tn("steps.prepare.redownload_all_title", len(redownload)),
+                t("steps.prepare.redownload_all_message", names=names))
+    start, end = period.search_window()
+    window = t("steps.period.range", start=start.isoformat(), end=end.isoformat())
+    raw_art = _art(p, raw_key(period.id, source))
+    message = (t("steps.prepare.redownload_message_new", window=window) if raw_art is None
+               else t("steps.prepare.redownload_message", window=window, date=raw_art.created_at.date().isoformat()))
+    return t("steps.prepare.redownload_title", source=source_label(p.sources[source])), message
+
+
+def delete_confirm(p, period, source) -> tuple:
+    """(title, message, note) of the Delete files confirm (spec "Confirms"):
+    the note names this period's alert sets built from the source, which
+    will read out of date (user decision 2026-10-23: allowed, nothing
+    cascades)."""
+    size = size_text(sum(p.artifacts[k].size_bytes for k in cleanup.source_period_keys(p, period.id, source)))
+    sets = [s for s in sets_using_source(p, source) if p.alert_sets[s].period_id == period.id]
+    return (t("steps.prepare.delete_files_title", source=source_label(p.sources[source])),
+            t("steps.prepare.delete_files_message", size=size),
+            t("steps.prepare.delete_files_sets", names=", ".join(sets)) if sets else None)
 
 
 def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,
@@ -299,6 +334,8 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     # project and period, so a row of another scope never reads it
     row_progress = solara.use_reactive({})
     info_source, set_info_source = solara.use_state(None)  # the source whose Details dialog is open
+    pending_refresh, set_pending_refresh = solara.use_state(None)  # a source to download again, "*" for all
+    pending_delete, set_pending_delete = solara.use_state(None)  # the source whose files to delete
     row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
     batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
     # A row's error belongs to the project and period it ran for: a job writes
@@ -450,11 +487,13 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     def _redownload_all():
         """Force a fresh download and harmonize of every catalogue and Earth
-        Engine source that is not blocked (the footer menu's)."""
+        Engine source that is not blocked (the footer menu's, once its
+        confirm is accepted)."""
         _start(redownload, force=True)
 
     masks_pend = any(kind == "mask" for kind, _ in pending)
-    menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)), "on_click": _redownload_all,
+    menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)),
+             "on_click": lambda: set_pending_refresh("*"),  # asks first
              "disabled": masks_pend or read_only(p),
              "title": t("steps.prepare.redownload_all_masks") if masks_pend else ""}] if redownload else []
 
@@ -469,10 +508,43 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         details = source_details(p, period, shown, row, source_reason(p, period, shown),
                                  row_status_label(row, is_file_source(p.sources[shown])))
 
+    # A confirm goes with its row, Download all again's with its menu item.
+    refreshing = pending_refresh if pending_refresh in by_source or (pending_refresh == "*" and redownload) else None
+    deleting = pending_delete if pending_delete in by_source else None
+
+    def _confirm_refresh():
+        set_pending_refresh(None)
+        if refreshing == "*":
+            _redownload_all()
+        else:
+            _start([("source", refreshing)], force=True)  # no masks first: only the download is asked for
+
+    def _delete_files():
+        """This period's raw and harmonized files of the source and their
+        records. The source stays, and the alert sets built from them are not
+        touched: they read out of date (``set_status``)."""
+        name = deleting
+        set_pending_delete(None)
+        # spec §5.1: like the other deletes, wait for the project's writers,
+        # and for a job that claimed the row since the dialog opened
+        if is_writing(p.name) or _inflight_key(p.name, period.id, name) in inflight:
+            notifications.warning(t("steps.prepare.delete_files_busy"))
+            return
+        layers.hide(f"src:{name}")  # its layer reads the harmonized file
+        gone = []
+
+        def _apply(live):
+            gone.extend(cleanup.drop_artifacts(live, cleanup.source_period_keys(live, period.id, name)))
+
+        if update_setup(app_state, p.name, _apply, notifications):
+            cleanup.delete_files(pdir, gone)
+
+    refresh_title, refresh_message = refresh_confirm(p, period, refreshing, redownload) if refreshing else ("", "")
+    delete_title, delete_message, delete_note = delete_confirm(p, period, deleting) if deleting else ("", "", None)
+
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
-                            # Download again and Delete files land with their dialogs
-                            on_info=_toggle_info, on_refresh=lambda s: None, on_delete=lambda s: None,
+                            on_info=_toggle_info, on_refresh=set_pending_refresh, on_delete=set_pending_delete,
                             stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value)
 
     with solara.Column(style="gap:16px;"):
@@ -488,6 +560,12 @@ def PrepareStep(app_state, map_, gee_interface, layers):
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
             DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_source(None))
+            ConfirmDialog(open=refreshing is not None, on_cancel=lambda: set_pending_refresh(None),
+                          on_confirm=_confirm_refresh, title=refresh_title, message=refresh_message,
+                          confirm_label=t("steps.prepare.redownload_label"), confirm_color="primary")
+            ConfirmDialog(open=deleting is not None, on_cancel=lambda: set_pending_delete(None),
+                          on_confirm=_delete_files, title=delete_title, message=delete_message, note=delete_note,
+                          confirm_label=t("common.delete"))
             BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
                         on_run=lambda: _start(pending), on_stop=lambda: stops.stop((p.name, period.id)),
                         # Run stays off while the scope holds keys its rows no longer show (a mask removed)
