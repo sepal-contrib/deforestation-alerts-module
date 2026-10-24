@@ -53,7 +53,7 @@ def test_the_labels_the_walks_pick_exist():
 #: The f-string key families the walks build, and every value they fill in.
 KEY_FAMILIES = {
     "analysis.timeline.lane_{lane}": ("before", "after"),
-    "widgets.product_table.status_{state}": ("ready", "running"),
+    "steps.prepare.verb_{verb}": ("download", "harmonize", "align", "retry"),
 }
 
 
@@ -295,5 +295,27 @@ def test_prepare_state_counts_the_status_cells_by_their_text(_walk_browser):
           <div><i></i><div>Queued</div></div><div>waiting for the row above</div>
           <button>Align</button></div><div>Ready</div>""")
         assert phases.prepare_state(page) == {"ready": 2, "running": 3}
+    finally:
+        page.close()
+
+
+def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_browser):
+    """The verb pill by its label, an icon action by the tooltip on its span,
+    and the footer's Run / Stop swap (``pending_count`` is 0 while Stop shows)."""
+    page = _walk_browser.new_page()
+    try:
+        page.set_content("""<div class="right-panel">
+          <div style="display:grid;grid-template-columns:1fr 1fr"><div>GLAD-L<div>sub</div></div>
+            <div><button>Harmonize</button></div>
+            <span title="Download again"><button disabled><i class="mdi-refresh"></i></button></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr"><div>RADD</div><div><i></i><div>Ready</div></div></div>
+          <button>Run 2 pending</button></div>""")
+        assert phases.row_pill(page, "GLAD-L", "harmonize").count() == 1
+        assert phases.row_pill(page, "GLAD-L", "download").count() == 0
+        assert phases.row_pill(page, "RADD", "harmonize").count() == 0
+        assert phases.row_action(page, "GLAD-L", "steps.prepare.action_download_again").is_disabled()
+        assert phases.pending_count(page) == 2 and not phases.job_running(page)
+        page.evaluate("document.querySelector('.right-panel > button').textContent = 'Stop'")
+        assert phases.job_running(page) and phases.pending_count(page) == 0
     finally:
         page.close()

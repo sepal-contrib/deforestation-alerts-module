@@ -114,7 +114,7 @@ def a_mixed(page, rec, *, out, folder):
     assert "custom · RADD" in rec["row_radd sa"] and "covers" in rec["row_radd sa"], rec["row_radd sa"]
     add_custom(page, rec, name="ccdc tif", origin="file", ref=USER / "ccdc.tif", preset="SEPAL CCDC alerts", out=out)
     assert "custom · SEPAL CCDC alerts" in rec["row_ccdc tif"], rec["row_ccdc tif"]
-    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=6)  # three rows, download + harmonize each
+    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=3)  # three rows, one Ready cell each
     ph.integrate_and_land(page, rec, out=out)
     alerts, s = store("s3a")
     rec["digit_map"] = s["digit_map"]
@@ -191,7 +191,7 @@ def f_attribute(page, rec, *, out):
 def b_date_only(page, rec, *, out, asset):
     w.open_project(page, "s3b")
     add_custom(page, rec, name="monthly", origin="gee", ref=asset, preset="Date only", encoding="yymm", out=out)
-    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=2)
+    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=1)  # the monthly source
     ph.integrate_and_land(page, rec, out=out)
     alert, dates = harmonized("s3b", "monthly")
     rec["codes"] = sorted(set(alert[alert > 0].tolist()))
@@ -225,11 +225,13 @@ def c_not_covered(page, rec, *, out):
     ph.save_grid(page)
     rec["prepare_row"] = ph.row_text(page, "GLAD-S2")
     assert "Not covered: GLAD-S2 does not cover this AOI" in rec["prepare_row"], rec["prepare_row"]
-    assert ph.row_button(page, "GLAD-S2", "mdi-cloud-download-outline").is_disabled()
+    # a blocked row shows its reason, not a verb pill, and cannot be fetched again
+    assert not ph.row_pill(page, "GLAD-S2", "download").count()
+    assert ph.row_action(page, "GLAD-S2", "steps.prepare.action_download_again").is_disabled()
     assert ph.row_button(page, "GLAD-S2", "mdi-map-plus").is_disabled()
     # innerText is upper case (Vuetify buttons): compare case-insensitively
     assert "run 1 pending" in w.panel_text(page).lower(), w.panel_text(page)[-600:]
-    ph.run_all(page, rec, out=out, expect_ready=2)
+    ph.run_all(page, rec, out=out, expect_ready=1)  # GLAD-L; GLAD-S2 is blocked
     w.goto_step(page, "integrate", 2000)
     choice = page.locator('.right-panel .v-input--checkbox:has(label:has-text("GLAD-S2"))').first
     rec["integrate_choice"] = choice.inner_text()
@@ -244,7 +246,8 @@ def d_no_data(page, rec, *, out):
     w.wait_for(lambda: "No data for this period" in ph.row_text(page, "RADD"), 120, "the RADD row's reason")
     rec["row"] = ph.row_text(page, "RADD")
     assert "No data for this period: RADD starts 2020-01-01 here" in rec["row"], rec["row"]
-    assert ph.row_button(page, "RADD", "mdi-cloud-download-outline").is_disabled()
+    assert not ph.row_pill(page, "RADD", "download").count()  # no pill: the row has no data to fetch
+    assert ph.row_action(page, "RADD", "steps.prepare.action_download_again").is_disabled()
     w.shot(page, out, "no_data")
 
 

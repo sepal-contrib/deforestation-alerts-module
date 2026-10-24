@@ -59,7 +59,7 @@ def harm_stats(source="GLAD-L") -> dict:
 def setup(page, rec, *, out):
     ph.save_grid(page)
     ph.add_mask(page, rec, name="hansen", origin="gee", ref=HANSEN, band="treecover2000", mode="Keep", out=out)
-    ph.run_all(page, rec, out=out, expect_ready=4)  # the mask (download, aligned), then GLAD-L
+    ph.run_all(page, rec, out=out, expect_ready=2)  # the mask, then GLAD-L: one Ready cell each
     ph.integrate_and_land(page, rec, out=out)
     w.goto_step(page, "integrate", 2000)
     assert SET_STALE not in w.panel_text(page), w.panel_text(page)[:600]
@@ -77,7 +77,8 @@ def a_switch(page, rec, *, out):
         t0 = w.now_ms(page)
         act()
         ph.wait_toast(page, t0, SOURCES_STALE)
-        w.wait_for(lambda: "out of date" in ph.row_text(page, "GLAD-L"), 30, f"{label}: GLAD-L out of date")
+        # out of date = a Harmonize pill (its raw file is current: no download)
+        w.wait_for(lambda: ph.row_pill(page, "GLAD-L", "harmonize").count(), 30, f"{label}: GLAD-L out of date")
         rec[f"{label}_row"] = ph.row_text(page, "GLAD-L")
         # With its only source out of date, Integrate is locked (spec §6.1: it
         # needs a source whose files are current), so its set line cannot be
@@ -87,8 +88,8 @@ def a_switch(page, rec, *, out):
         w.goto_step(page, "period", 2000)
         rec[f"{label}_period"] = ph.row_text(page, "2025-06-01")
         assert SET_STALE in rec[f"{label}_period"], f"{label}: the set does not read out of date before a Run"
-        ph.run_all(page, rec, out=out, expect_ready=4, shot_name=f"switch_{label}")
-        assert "out of date" not in ph.row_text(page, "GLAD-L"), ph.row_text(page, "GLAD-L")
+        ph.run_all(page, rec, out=out, expect_ready=2, shot_name=f"switch_{label}")
+        assert not ph.row_pill(page, "GLAD-L", "harmonize").count(), ph.row_text(page, "GLAD-L")
     assert raw_files() == before, "a source was downloaded again"
 
 
@@ -99,12 +100,12 @@ def b_masks_remove_alerts(page, rec, *, out):
     assert rec["hansen_only"]["alert_pixels"] < rec["hansen_only"]["alert_pixels_unmasked"], rec["hansen_only"]
     ph.add_mask(page, rec, name="probability", origin="file", ref=USER / "probability.tif", band="probability",
                 mode="Keep", out=out)
-    ph.run_all(page, rec, out=out, expect_ready=5, shot_name="two_masks")  # its alignment, then GLAD-L
+    ph.run_all(page, rec, out=out, expect_ready=3, shot_name="two_masks")  # hansen, probability, then GLAD-L
     rec["both"] = harm_stats()
     assert rec["both"]["alert_pixels"] < rec["hansen_only"]["alert_pixels"], (rec["hansen_only"], rec["both"])
     make_rasters.probability_tif(USER / "probability.tif", AMAZON, everywhere=True)  # the file changes
     ph.row_mode(page, "probability", "Exclude")
-    ph.run_all(page, rec, out=out, expect_ready=5, shot_name="all_masked")  # realigned, then GLAD-L
+    ph.run_all(page, rec, out=out, expect_ready=3, shot_name="all_masked")  # probability realigned, then GLAD-L
     rec["all_removed"] = ph.row_text(page, "GLAD-L")
     assert re.search(r"ready · all [\d,]+ alert pixels removed by masks", rec["all_removed"]), rec["all_removed"]
 
@@ -112,17 +113,17 @@ def b_masks_remove_alerts(page, rec, *, out):
 def c_covers_none(page, rec, *, out):
     ph.add_mask(page, rec, name="far", origin="file", ref=USER / "far.tif", band="far", mode="Keep", out=out)
     t0 = w.now_ms(page)
-    ph.row_button(page, "far", "mdi-cloud-download-outline").click()
+    ph.row_pill(page, "far", "align").click()  # a GeoTIFF mask is only aligned
     ph.wait_toast(page, t0, "covers none of the AOI", timeout=300, kind="warning")
     w.wait_for(lambda: "covers none of the AOI: every alert would be removed" in ph.row_text(page, "far"), 60,
                "the far row's warning line")
     rec["far_row"] = ph.row_text(page, "far")
     for name in ("far", "probability"):  # give the next phases their alerts back
-        ph.row_button(page, name, "mdi-delete-outline").click()
+        ph.row_menu_pick(page, name, "steps.prepare.mask_delete_action")  # the row's ⋮ menu
         w.wait_for(lambda: ph.dialog_open(page), 15, f"the {name} delete confirmation")
         ph.modal_button(page, "Delete").click()
         w.wait_for(lambda: not ph.row_text(page, name), 30, f"{name} deleted")
-    ph.run_all(page, rec, out=out, expect_ready=4, shot_name="hansen_only")
+    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="hansen_only")
 
 
 def add_predefined(page, key):
@@ -148,7 +149,7 @@ def d_legends(page, rec, *, out):
     rec["preview_options"] = ph.legend_options(page)
     assert [o["text"] for o in rec["preview_options"] if o["selected"]] == ["RADD · preview"], rec["preview_options"]
     w.goto_step(page, "prepare", 2000)
-    ph.row_button(page, "RADD", "mdi-cloud-download-outline").click()
+    ph.row_pill(page, "RADD", "download").click()
     w.wait_for(lambda: "RADD" in ph.legend_text(page) and WINDOW in ph.legend_text(page)
                and "preview" not in ph.legend_text(page), 1200, "RADD's harmonized legend", poll=3)
     assert not any("preview" in o["text"] for o in ph.legend_options(page)), ph.legend_options(page)

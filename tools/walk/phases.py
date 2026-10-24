@@ -125,8 +125,8 @@ def download_btn(page):
 
 
 #: The Prepare step's labels in English (``run_all`` takes others, see
-#: ``prepare_labels``): the plural forms of the "Run {n} pending" button and
-#: the Status cells' texts.
+#: ``prepare_labels``): the plural forms of the "Run {n} pending" button, the
+#: Stop button that replaces it while a job runs, and the Status cells' texts.
 EN_PREPARE = None
 #: The Status cell texts of a row in a running job (``prepare_view._in_flight``)
 RUNNING_KEYS = ("steps.prepare.state_downloading", "steps.prepare.state_downloading_pct",
@@ -138,13 +138,16 @@ def _alternatives(texts, slot) -> str:
     return "|".join(re.escape(x).replace(re.escape("{" + slot + "}"), r"\d+") for x in sorted(set(texts)))
 
 
-def prepare_labels(forms, ready, running):
+def prepare_labels(forms, ready, running, stop):
     """The labels ``run_all`` reads, in one language: ``forms`` the plural
     forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` the
     ``steps.prepare.state_ready`` text, ``running`` the texts of
-    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern."""
+    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern, ``stop`` the
+    ``steps.prepare.footer_stop`` text of the button that replaces Run while a
+    job runs: a pattern."""
     return {"run": re.compile(rf"^\s*(?:{_alternatives(forms, 'n')})\s*$"), "ready": ready,
-            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$")}
+            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$"),
+            "stop": re.compile(rf"^\s*{re.escape(stop)}\s*$")}
 
 
 def en_prepare():
@@ -153,19 +156,34 @@ def en_prepare():
         from tools.walk.walklib import MESSAGES_EN
 
         node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
-        EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS])
+        EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS],
+                                    en("steps.prepare.footer_stop"))
     return EN_PREPARE
 
 
 def run_button(page, labels=None):
-    """The "Run {n} pending" button of the Prepare panel, found by its
-    catalogue text (any plural form) in the labels' language."""
+    """The "Run {n} pending" button of the Prepare panel's batch footer, found
+    by its catalogue text (any plural form) in the labels' language. Absent
+    while a job runs: ``stop_button`` takes its place."""
     labels = labels or en_prepare()
     return page.locator(".right-panel button:visible").filter(has_text=labels["run"]).first
 
 
+def stop_button(page, labels=None):
+    """The footer's "Stop", which replaces "Run {n} pending" while the step has
+    a job (running or queued rows)."""
+    labels = labels or en_prepare()
+    return page.locator(".right-panel button:visible").filter(has_text=labels["stop"]).first
+
+
+def job_running(page, labels=None) -> bool:
+    """Whether the step has a job: its Stop button is shown."""
+    return stop_button(page, labels).count() > 0
+
+
 def pending_count(page, labels=None) -> int:
-    """The {n} of the "Run {n} pending" button (0 when it is not shown)."""
+    """The {n} of the "Run {n} pending" button (0 when it is not shown: nothing
+    is pending, or a job runs and Stop replaces it, see ``job_running``)."""
     btn = run_button(page, labels)
     if not btn.count():
         return 0
@@ -193,24 +211,28 @@ def save_grid(page, *, resolution="30"):
     page.wait_for_timeout(1500)
 
 
-def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_done", labels=None):
+def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None):
     """Click "Run N pending" and wait for the job: it must start (a row reads
-    running, or nothing is pending any more) and end with ``expect_ready``
-    "ready" status cells (two per source row, two per Earth Engine mask row,
-    one aligned cell per GeoTIFF mask row) and no error toast. ``labels``
-    (``prepare_labels``) for a language other than English."""
+    running, Stop shows, or nothing is pending any more) and end (no running
+    cell, Stop gone again) with ``expect_ready`` "Ready" status cells (one per
+    source row and one per mask row on the panel, whatever its origin) and no
+    error toast. ``labels`` (``prepare_labels``) for a language other than
+    English."""
     goto_step(page, "prepare", 2000)
     run = run_button(page, labels)
     t_run = now_ms(page)
     run.click()
     t0 = time.time()
-    wait_for(lambda: prepare_state(page, labels)["running"] or pending_count(page, labels) == 0, 30,
-             "the job to start", poll=0.3)
+    # Stop replaces Run while the job lasts, so "nothing pending" is only true
+    # once Stop is not shown either
+    wait_for(lambda: prepare_state(page, labels)["running"] or job_running(page, labels)
+             or pending_count(page, labels) == 0, 30, "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page, labels)
-        if st["ready"] >= expect_ready and not st["running"]:
+        idle = not st["running"] and not job_running(page, labels)
+        if st["ready"] >= expect_ready and idle:
             break
-        if errors(toasts_since(page, t_run)) and not st["running"]:
+        if errors(toasts_since(page, t_run)) and idle:
             break
         page.wait_for_timeout(3000)
     rec["prepare_seconds"] = round(time.time() - t0)
@@ -221,7 +243,7 @@ def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_d
     assert not errors(toasts_since(page, t_run)), rec["prepare_toasts"]
 
 
-def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=4, timeout=900):
+def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=2, timeout=900):
     save_grid(page, resolution=resolution)
     run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout)
 
@@ -561,9 +583,40 @@ def row_text(page, name, scope=".right-panel") -> str:
 
 def row_button(page, name, icon, scope=".right-panel"):
     """A row action by its icon (ProductTable): mdi-map-plus / mdi-map-minus (show / hide),
-    mdi-cloud-download-outline (run), mdi-cloud-sync (re-download), mdi-pencil-outline,
-    mdi-delete-outline, mdi-radiobox-blank / mdi-radiobox-marked (select)."""
+    mdi-information-outline (details), mdi-dots-vertical (a mask's menu),
+    mdi-pencil-outline, mdi-delete-outline, mdi-radiobox-blank /
+    mdi-radiobox-marked (select). Not a Download & harmonize row's run: that
+    is its verb pill (``row_pill``), and mdi-refresh is both the source's
+    Download again (``row_action``) and the pill's Retry."""
     return row(page, name, scope).locator(f"button:has(.{icon})").first
+
+
+def row_pill(page, name, verb, scope=".right-panel"):
+    """The verb pill of a Download & harmonize row's Status cell, by its label:
+    ``verb`` is ``download`` / ``harmonize`` / ``align`` / ``retry`` (the
+    ``steps.prepare.verb_*`` texts). A row that is ready, running, queued,
+    blocked or on a review copy shows a state, not a pill: ``.count()`` is 0."""
+    text = en(f"steps.prepare.verb_{verb}")
+    label = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I)
+    return row(page, name, scope).locator("button").filter(has_text=label).first
+
+
+def row_action(page, name, title_key, scope=".right-panel"):
+    """A row's icon action by its tooltip, which sits on the span around the
+    button (so it shows while the button is disabled): ``title_key`` is the
+    catalogue key, e.g. ``steps.prepare.action_download_again`` (a source's
+    refresh) or ``steps.prepare.action_delete_files``."""
+    return row(page, name, scope).locator(f'span[title="{en(title_key)}"] button').first
+
+
+def row_menu_pick(page, name, label_key, scope=".right-panel"):
+    """Pick an entry of a mask row's ⋮ menu (``label_key``: its catalogue key,
+    e.g. ``steps.prepare.mask_delete_action``). Any confirmation that follows
+    is the caller's."""
+    row_button(page, name, "mdi-dots-vertical", scope).click()
+    page.wait_for_timeout(600)
+    page.locator(f'.menuable__content__active .v-list-item:has-text("{en(label_key)}")').first.click()
+    page.wait_for_timeout(600)
 
 
 def row_mode(page, name, mode):
