@@ -369,7 +369,10 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     pending_delete, set_pending_delete = solara.use_state(None)  # the source whose files to delete
     row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
     batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
-    stopping = solara.use_reactive(frozenset())  # the (project, period id) scopes Stop reached, until their last job ends
+    # {(project, period id): Stop clicks} of the scopes Stop reached, until their
+    # last job ends: a count, so a second Stop (after a row started since the
+    # first) is a new value and re-renders
+    stopping = solara.use_reactive({})
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
     # of scope forgets them all.
@@ -448,7 +451,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                 if not stops.keys(stop_scope):  # the scope's last job: its batch and its Stop are over
                     batch.set({k: v for k, v in batch.value.items() if k != stop_scope})
                     if stop_scope in stopping.value:
-                        stopping.set(stopping.value - {stop_scope})
+                        stopping.set({k: n for k, n in stopping.value.items() if k != stop_scope})
             inflight.release(*keys)
 
         # Drift note: only rows that download from Earth Engine need it (the
@@ -524,7 +527,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         stops.stop(stop_scope)
         with errors_lock:  # ``_give_back`` drops the mark under it: never one left behind
             if stops.keys(stop_scope):
-                stopping.set(stopping.value | {stop_scope})
+                stopping.set({**stopping.value, stop_scope: stopping.value.get(stop_scope, 0) + 1})
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
     stages = scope_stages(row_stage.value, p.name, period.id)
     counts = footer_counts(mine_rows(p, period, mine), stages, batch.value.get((p.name, period.id)))

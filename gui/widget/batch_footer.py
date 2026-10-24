@@ -96,14 +96,15 @@ def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_sto
                     solara.Text(t("steps.prepare.footer_done", done=format_number(counts["done"]),
                                   total=format_number(counts["total"])), style=_TEXT)
         with rv.Html(tag="div", class_=_WRAP, style_="flex: 0 0 auto; margin-left: auto;"):
-            if busy and stopping:
-                solara.Button(t("steps.prepare.footer_stopping"), icon_name="mdi-stop", color="primary",
-                              small=True, outlined=True, disabled=True)
-            elif busy:
+            if busy:
                 tip = t("steps.prepare.footer_stop_tip")
                 with rv.Html(tag="span", attributes={"title": tip, "aria-label": tip}, style_=_TIP):
-                    solara.Button(t("steps.prepare.footer_stop"), icon_name="mdi-stop", color="primary",
-                                  small=True, outlined=True, on_click=on_stop)
+                    if stopping:
+                        solara.Button(t("steps.prepare.footer_stopping"), icon_name="mdi-stop", color="primary",
+                                      small=True, outlined=True, disabled=True)
+                    else:
+                        solara.Button(t("steps.prepare.footer_stop"), icon_name="mdi-stop", color="primary",
+                                      small=True, outlined=True, on_click=on_stop)
             else:
                 solara.Button(run_label, icon_name="mdi-play", color="primary", small=True,
                               disabled=disabled or not pending, on_click=on_run,

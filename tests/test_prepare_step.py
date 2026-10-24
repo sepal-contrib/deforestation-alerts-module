@@ -2133,13 +2133,16 @@ def test_a_row_started_after_stop_brings_stop_back(step, monkeypatch):
             seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
             _run(step.table[-1][1])  # RADD, a job of its own
             seen.append(_stop_shown(rc))
+            # a second Stop reaches both jobs: stopping again
+            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+            seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
 
     monkeypatch.setattr(prepare_step, "run_rows", a_run)
     box, rc = _render(state)
     try:
         _run(step.table[-1][0])
         step.run_jobs()
-        assert seen == [True, True]
+        assert seen == [True, True, True]
         assert not _stop_shown(rc)
     finally:
         rc.close()

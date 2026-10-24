@@ -381,7 +381,7 @@
       "footer_done": "{done} de {total} terminadas",
       "footer_stop": "Detener",
       "footer_stop_tip": "Se detiene después de la fila en curso",
-      "footer_stopping": "Deteniendo tras esta fila…",
+      "footer_stopping": "Deteniendo…",
       "footer_more": "Más acciones por lotes",
       "redownload_all": {
         "one": "Descargar todo de nuevo ({n})",

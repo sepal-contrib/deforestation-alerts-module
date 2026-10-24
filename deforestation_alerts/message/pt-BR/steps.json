@@ -381,7 +381,7 @@
       "footer_done": "{done} de {total} concluídas",
       "footer_stop": "Parar",
       "footer_stop_tip": "Para depois da linha em andamento",
-      "footer_stopping": "Parando após esta linha…",
+      "footer_stopping": "Parando…",
       "footer_more": "Mais ações em lote",
       "redownload_all": {
         "one": "Baixar tudo de novo ({n})",

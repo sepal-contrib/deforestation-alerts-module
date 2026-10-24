@@ -149,7 +149,7 @@ def test_a_disabled_menu_item_keeps_its_tooltip():
 def test_a_stopping_footer_says_so_and_drops_the_queued_count():
     rc, calls = _render({"running": 1, "queued": 2, "done": 1, "total": 4}, stopping=True)
     try:
-        btn = _btn(rc, "Stopping after this row…")
+        btn = _btn(rc, "Stopping…")
         assert btn.disabled and btn.outlined
         assert not any(isinstance(w, v.Btn) and "Stop" in w.children for w in _all(rc))
         assert "1 running" in _texts(rc) and not any("queued" in s for s in _texts(rc))

@@ -368,7 +368,7 @@
       "footer_done": "{done} of {total} done",
       "footer_stop": "Stop",
       "footer_stop_tip": "Stops after the row in progress",
-      "footer_stopping": "Stopping after this row…",
+      "footer_stopping": "Stopping…",
       "footer_more": "More batch actions",
       "redownload_all": {
         "one": "Download all again ({n})",
