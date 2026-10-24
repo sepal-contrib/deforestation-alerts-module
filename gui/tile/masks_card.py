@@ -38,12 +38,29 @@ from gui.widget.product_table import ProductTable
 from gui.widget.text_style import MUTED
 
 MASK_ACTIONS = 3  # map, details, the ⋮ menu (Download again, Edit, Delete mask…)
+MODE_PX = 78
+_MODE = "defo-mask-mode"
+# The Mode select fits its 78 px column in every language: its selection text
+# at the row's size (0.8125rem), the whole width (no 90% cap, no right margin,
+# no room kept for the hidden input) and an 18 px arrow with no padding leave
+# 60 px to the text; the longest choice, "Conservar" / "Conserver" /
+# "Desligada", needs 57 px (measured in Chromium, Roboto 13 px). Vuetify's
+# dense select keeps 16 px text, a 24 px arrow and 4 px padding: 45 px.
+MODE_CSS = (
+    f".{_MODE} .v-select__selections .v-select__selection {{ font-size: 0.8125rem; max-width: 100%;"
+    " margin-right: 0 !important; }"
+    f" .{_MODE} .v-select__selections input {{ min-width: 0 !important; width: 0 !important;"
+    " padding: 0 !important; flex: 0 0 0 !important; }"
+    f" .{_MODE} .v-input__append-inner {{ padding-left: 0 !important; margin-left: 0 !important; }}"
+    f" .{_MODE} .v-input__icon {{ min-width: 18px !important; width: 18px !important; }}"
+    f" .{_MODE} .v-input__icon .v-icon {{ font-size: 18px !important; }}"
+)
 
 
 def mask_columns() -> list:
     """Mask | Mode | Status (spec "Masks card"), measured at ``CARD_CONTENT_PX``."""
     return [{"label": t("steps.prepare.col_mask")},
-            {"label": t("steps.prepare.col_mode"), "width": "78px"},
+            {"label": t("steps.prepare.col_mode"), "width": f"{MODE_PX}px"},
             {"label": t("steps.prepare.col_status"), "width": "104px"}]
 
 
@@ -133,7 +150,7 @@ def mask_table_rows(p, pdir, period, rows, *, running, errors, on, building, run
         # the refusals: a refused switch leaves the props unchanged, so only a
         # remount puts the user's choice back to what the project holds.
         def _mode_cell(n=r.name, value=r.mode if r.on else "off"):
-            rv.Select(v_model=value, on_v_model=_choose, dense=True, hide_details=True, disabled=locked,
+            rv.Select(v_model=value, on_v_model=_choose, dense=True, hide_details=True, disabled=locked, class_=_MODE,
                       items=[{"text": t("steps.prepare.mask_mode_off"), "value": "off"},
                              {"text": t("steps.prepare.mask_mode_keep"), "value": "keep"},
                              {"text": t("steps.prepare.mask_mode_exclude"), "value": "exclude"}],
@@ -317,6 +334,7 @@ def MasksCard(app_state, map_, gee_interface, layers, period, rows, running, err
                                  delete=set_pending_delete, switch=_switch, refusals=refusals,
                                  locked=read_only(p), progress=progress, stages=stages, info_open=shown,
                                  stopped=stopped)
+    solara.Style(MODE_CSS)
     with rv.Card(outlined=True, class_="pa-3"):
         # spec D4: a nested list's Add button sits above it, outlined and full width
         solara.Button(t("steps.prepare.mask_add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,

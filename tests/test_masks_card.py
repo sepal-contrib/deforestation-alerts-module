@@ -125,6 +125,30 @@ def test_the_mask_columns_leave_the_name_its_budget():
     assert [c["label"] for c in cols] == [t("steps.prepare.col_mask"), t("steps.prepare.col_mode"),
                                           t("steps.prepare.col_status")]
     assert [c.get("width") for c in cols] == [None, "78px", "104px"]
+    # 422 - (78 + 104 + 80 actions + 3 × 8 gaps + 16 padding) = 120 px: MIN_FLEX_PX exactly
+    from gui.widget.product_table import CARD_CONTENT_PX, MIN_FLEX_PX, fixed_width_px
+
+    assert CARD_CONTENT_PX - fixed_width_px(cols, masks_card.MASK_ACTIONS) == MIN_FLEX_PX
+
+
+def test_the_mode_select_reads_at_the_row_size_with_a_small_arrow():
+    """Its selection fits 78 px in every language (B3): 0.8125rem text over
+    the whole width, an 18 px arrow with no padding."""
+    css = masks_card.MODE_CSS
+    assert "font-size: 0.8125rem" in css and "max-width: 100%" in css
+    assert "width: 18px" in css and "font-size: 18px" in css and "padding-left: 0" in css
+    out = _rows([GEE_MISSING])["forest"]
+    box, rc = reacton.render(_Cell(out["cells"][1]["fn"]), handle_error=False)
+    try:
+        [select] = rc.find(v.Select).widgets
+        assert "defo-mask-mode" in select.class_
+    finally:
+        rc.close()
+
+
+@solara.component
+def _Cell(fn):
+    fn()
 
 
 def test_an_earth_engine_mask_row_reads_its_name_subtitle_and_download_pill():
