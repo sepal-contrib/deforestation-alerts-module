@@ -17,7 +17,7 @@ from deforestation_alerts.engine.fingerprint import (
 )
 from deforestation_alerts.project.models import Period, Project
 
-GEOGRAPHIC = frozenset({"EPSG:4326"})  # resolution in degrees: printed without a unit
+GEOGRAPHIC = frozenset({"EPSG:4326"})  # resolution in degrees
 
 
 @dataclass(frozen=True)
@@ -31,11 +31,34 @@ class Reason:
         return dict(self.values)
 
 
+def res_text(crs: str, res: float) -> str:
+    """A pixel size in the CRS's units: degrees in a geographic CRS
+    (``0.00025°``), metres otherwise (``30 m``), never a long raw float."""
+    return f"{float(res):.6g}°" if crs in GEOGRAPHIC else f"{float(res):.6g} m"
+
+
+def metres_text(scale: float) -> str:
+    """A scale in metres: a whole metre from 10 m on (``28 m``), else one decimal (``2.5 m``)."""
+    return f"{round(scale)} m" if scale >= 10 else f"{scale:.1f} m"
+
+
 def grid_label(signature: str) -> str:
-    """``EPSG:32719 · 30 m`` from a ``GridSpec.signature`` (``epsg|res|xmin|ymax|WxH``)."""
+    """``EPSG:32719 · 30 m`` from a ``GridSpec.signature`` (``epsg|res|xmin|ymax|WxH``):
+    the grid's resolution is in its CRS's units (``EPSG:4326 · 0.00025°``)."""
     epsg, res = signature.split("|")[:2]
-    text = str(int(float(res))) if float(res).is_integer() else res
-    return f"{epsg} · {text}" if epsg in GEOGRAPHIC else f"{epsg} · {text} m"
+    return f"{epsg} · {res_text(epsg, float(res))}"
+
+
+def native_label(crs: str, *, scale_m: Optional[float] = None, res: Optional[float] = None) -> str:
+    """A native projection (the Details "Native grid"). ``scale_m``: an Earth
+    Engine nominal scale, always in metres, even in EPSG:4326 (``EPSG:4326 ·
+    28 m``); ``res``: a file's pixel size from its transform, in its CRS's
+    units (``EPSG:4326 · 0.00025°``). Neither: the CRS alone."""
+    if res:
+        return f"{crs} · {res_text(crs, abs(res))}"
+    if scale_m:
+        return f"{crs} · {metres_text(scale_m)}"
+    return str(crs)
 
 
 def source_reason(p: Project, period: Period, source: str) -> Optional[Reason]:

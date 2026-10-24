@@ -16,7 +16,7 @@ from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, UNCHECKED, pct_text, record_for
 from deforestation_alerts.engine.fingerprint import Status, harm_key, is_file_source, mask_key, mask_raw_key, raw_key
 from deforestation_alerts.engine.plan import MaskRow, PrepareRow
-from deforestation_alerts.engine.why import Reason, grid_label
+from deforestation_alerts.engine.why import Reason, grid_label, native_label
 from deforestation_alerts.project.models import Artifact
 from gui.i18n import format_number, size_text, t, tn
 from gui.scripts.coverage_ui import row_notes
@@ -270,13 +270,24 @@ def _grid_text(stored: Optional[str], current: Optional[str]) -> str:
 
 
 def _native_text(native) -> str:
-    """A stored ``[crs, scale]`` (or a file's ``[crs, transform]``) as ``EPSG:32719 · 30 m``."""
+    """A stored ``[crs, scale]`` (an Earth Engine scale, in metres) or a
+    file's ``[crs, transform]`` (its pixel size in CRS units) as ``EPSG:32719 · 30 m``."""
     if not native:
         return ""
     crs, scale = native
     if isinstance(scale, (list, tuple)):
-        scale = abs(scale[0]) if scale else None
-    return grid_label(f"{crs}|{scale}") if scale else str(crs)
+        return native_label(crs, res=scale[0] if scale else None)
+    return native_label(crs, scale_m=scale)
+
+
+def _native_grid_text(native, file: bool) -> str:
+    """A source's or mask's ``NativeGrid``: a file's from its transform (CRS
+    units), an Earth Engine asset's from its nominal scale (metres)."""
+    if native is None:
+        return ""
+    if file and native.transform:
+        return native_label(native.crs, res=native.transform[0])
+    return native_label(native.crs, scale_m=native.scale)
 
 
 def _mode_text(mode: str) -> str:
@@ -329,7 +340,7 @@ def _source_section(p, source: str) -> dict:
                 (t("steps.prepare.f_ref"), src.ref), (t("steps.prepare.f_format"), formats[src.format]),
                 (t("steps.prepare.f_encoding"), src.date_encoding),
                 (t("steps.prepare.f_bands"), bands),
-                (t("steps.prepare.f_native"), grid_label(f"{src.native.crs}|{src.native.scale}") if src.native else "")]
+                (t("steps.prepare.f_native"), _native_grid_text(src.native, src.origin == "file"))]
     return {"title": t("steps.prepare.sec_source"), "icon": "mdi-database-outline", "when": None, "empty": None,
             "rows": [(label, value) for label, value in rows if value]}
 
@@ -373,7 +384,7 @@ def mask_details(p, name: str, row: MaskRow, reason: Optional[Reason], status_la
     source = {"title": t("steps.prepare.sec_source"), "icon": "mdi-database-outline", "when": None, "empty": None,
               "rows": [(label, value) for label, value in (
                   (t("steps.prepare.f_ref"), mask.ref), (t("steps.prepare.f_band"), str(mask.band)),
-                  (t("steps.prepare.f_native"), grid_label(f"{mask.native.crs}|{mask.native.scale}") if mask.native else ""),
+                  (t("steps.prepare.f_native"), _native_grid_text(mask.native, mask.origin == "file")),
                   (t("steps.prepare.f_periods"), ", ".join(used))) if value]}
     sections = [source]
     if mask.origin == "gee":

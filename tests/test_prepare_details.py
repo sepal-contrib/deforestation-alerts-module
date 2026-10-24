@@ -134,7 +134,7 @@ def test_mask_details_lists_periods_using_it():
     feb = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
     p.periods[feb.id] = feb
     add_mask(p, name="forest", origin="gee", ref="users/x/forest", asset_type="IMAGE", band="b1",
-             native=NativeGrid(crs="EPSG:4326", scale=0.00025), mode="keep", period_id=JAN.id)
+             native=NativeGrid(crs="EPSG:4326", scale=27.829872698318393), mode="keep", period_id=JAN.id)
     set_period_mask(p, feb.id, "forest", on=True, mode="exclude")
     raw = _art(mask_raw_key("forest"), "raw_mask", mask_raw_inputs(p, "forest"), rel="masks/raw.tif", size=1_000_000)
     aligned = _art(mask_key("forest"), "mask", {"stage": "mask", "grid": SIG30}, rel="masks/forest.tif",
@@ -145,7 +145,7 @@ def test_mask_details_lists_periods_using_it():
     assert d["title"] == "forest" and d["lead"] == "Ready"
     assert [s["title"] for s in d["sections"]] == ["Source", "Download", "Align"]
     source, download, align = d["sections"]
-    assert _rows(source)["Band"] == "b1" and _rows(source)["Native grid"] == "EPSG:4326 · 0.00025"
+    assert _rows(source)["Band"] == "b1" and _rows(source)["Native grid"] == "EPSG:4326 · 28 m"
     assert _rows(source)["Used in"] == "2026-01-01 → 2026-01-31 · keep, 2026-02-01 → 2026-02-28 · exclude"
     assert _rows(download)["File"] == "masks/raw.tif"
     assert _rows(align)["Mask pixels"] == "777" and _rows(align)["Grid used"].startswith("EPSG:32719 · 30 m")
@@ -193,3 +193,26 @@ def test_dialog_renders_sections_and_why():
         assert "Why:" not in _strings(rc.container)
     finally:
         rc.close()
+
+
+def test_native_grid_reads_metres_for_earth_engine_and_degrees_for_a_geographic_file():
+    """An Earth Engine scale is in metres even in EPSG:4326; a file's transform
+    in its CRS's units; a projected file reads metres."""
+    p = _project()
+    add_predefined_source(p, "GLAD-L")
+    _record(p, "GLAD-L", JAN, SIG30, [], {})
+    d = source_details(p, JAN, "GLAD-L", PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), None, "Ready")
+    assert _rows(d["sections"][1])["Native grid"] == "EPSG:4326 · 28 m"
+
+    add_custom_source(p, name="geo", origin="file", ref="/data/geo.tif", asset_type="FILE", format="date_only",
+                      date_encoding="yyyyddd", band_map=BandMap(alert=None, date=1),
+                      native=NativeGrid(crs="EPSG:4326", scale=27.829872698318393,
+                                        transform=(0.00025, 0.0, -70.0, 0.0, -0.00025, -12.5)))
+    _record(p, "geo", JAN, SIG30, [], {})
+    d = source_details(p, JAN, "geo", PrepareRow("geo", Status.CURRENT, Status.CURRENT), None, "Ready")
+    assert _rows(d["sections"][0])["Native grid"] == "EPSG:4326 · 0.00025°"
+    assert _rows(d["sections"][1])["Native grid"] == "EPSG:4326 · 0.00025°"
+
+    _file_source(p)  # EPSG:32719, 30 m, no transform
+    assert _rows(source_details(p, JAN, "tif", PrepareRow("tif", Status.MISSING, Status.MISSING), None,
+                                "To harmonize")["sections"][0])["Native grid"] == "EPSG:32719 · 30 m"

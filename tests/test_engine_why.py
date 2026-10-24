@@ -5,7 +5,7 @@ from datetime import date, datetime
 import pytest
 
 from deforestation_alerts.engine import fingerprint as fp
-from deforestation_alerts.engine.why import Reason, grid_label, mask_reason, source_reason
+from deforestation_alerts.engine.why import Reason, grid_label, mask_reason, native_label, source_reason
 from deforestation_alerts.project.models import (
     AoiRecord, BandMap, GridSpec, NativeGrid, Period, Project, add_custom_source, add_mask, add_predefined_source,
     set_period_mask,
@@ -228,9 +228,29 @@ def test_file_mask_reasons(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("signature, label", [
-    ("EPSG:4326|0.00025|-57.0|-9.9|400x300", "EPSG:4326 · 0.00025"),
+    ("EPSG:4326|0.00025|-57.0|-9.9|400x300", "EPSG:4326 · 0.00025°"),
+    ("EPSG:4326|0.00026949458523585647|-57.0|-9.9|400x300", "EPSG:4326 · 0.000269495°"),
+    ("EPSG:32719|30.000000000000004|300000.0|8700000.0|100x80", "EPSG:32719 · 30 m"),
     ("EPSG:32719|30.0|300000.0|8700000.0|100x80", "EPSG:32719 · 30 m"),
     ("EPSG:32719|12.5|300000.0|8700000.0|100x80", "EPSG:32719 · 12.5 m"),
 ])
 def test_grid_label(signature, label):
     assert grid_label(signature) == label
+
+
+@pytest.mark.parametrize("kwargs, label", [
+    # an Earth Engine nominal scale is in metres, even in EPSG:4326 (GLAD-L's)
+    ({"scale_m": 27.829872698318393}, "EPSG:4326 · 28 m"),
+    ({"scale_m": 2.5}, "EPSG:4326 · 2.5 m"),
+    # a file's transform is in its CRS's units: degrees in EPSG:4326
+    ({"res": 0.00025}, "EPSG:4326 · 0.00025°"),
+    ({"res": -0.00026949458523585647}, "EPSG:4326 · 0.000269495°"),
+    ({}, "EPSG:4326"),
+])
+def test_native_label_in_epsg_4326(kwargs, label):
+    assert native_label("EPSG:4326", **kwargs) == label
+
+
+def test_native_label_of_a_projected_file_reads_metres():
+    assert native_label("EPSG:32719", res=30.0) == "EPSG:32719 · 30 m"
+    assert native_label("EPSG:32719", scale_m=10.0) == "EPSG:32719 · 10 m"
