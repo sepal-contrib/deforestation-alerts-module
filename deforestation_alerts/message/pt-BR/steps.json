@@ -370,7 +370,6 @@
       "grid_bad_resolution": "Digite uma resolução em metros, maior que 0.",
       "list_title": "Fontes deste período",
       "col_source": "Fonte",
-      "col_harmonize": "Harmonizar",
       "empty": "Adicione primeiro fontes de alertas.",
       "run_all": {
         "one": "Executar {n} pendente",
@@ -378,9 +377,11 @@
         "other": "Executar {n} pendentes"
       },
       "footer_strip": "{running} em execução · {queued} na fila",
+      "footer_running": "{running} em execução",
       "footer_done": "{done} de {total} concluídas",
       "footer_stop": "Parar",
       "footer_stop_tip": "Para depois da linha em andamento",
+      "footer_stopping": "Parando após esta linha…",
       "footer_more": "Mais ações em lote",
       "redownload_all": {
         "one": "Baixar tudo de novo ({n})",
@@ -479,6 +480,7 @@
       "sub_downloading_align": "baixando {pct}% · depois alinhar",
       "sub_aligning": "alinhando",
       "sub_queued": "aguardando a linha acima",
+      "sub_file_missing": "arquivo não encontrado",
       "sub_again_download": "{why}: baixar de novo",
       "sub_again_harmonize": "{why}: harmonizar de novo",
       "sub_again_align": "{why}: alinhar de novo",
@@ -511,6 +513,7 @@
       "redownload_all_message": "Estas fontes são baixadas de novo de seus catálogos e depois harmonizadas: {names}.",
       "delete_files_title": "Excluir os arquivos de {source}?",
       "delete_files_message": "Remove o download e o arquivo harmonizado deste período ({size}). A fonte continua no projeto; execute-a de novo para recriá-los.",
+      "delete_files_message_nosize": "Remove o download e o arquivo harmonizado deste período. A fonte continua no projeto; execute-a de novo para recriá-los.",
       "delete_files_sets": "Estes conjuntos de alertas ficarão desatualizados: {names}. Seus alertas e revisões são mantidos.",
       "delete_files_busy": "Um trabalho está gravando neste projeto; exclua os arquivos quando ele terminar.",
       "sub_pixels": {

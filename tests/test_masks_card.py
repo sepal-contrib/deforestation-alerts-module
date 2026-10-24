@@ -274,6 +274,7 @@ def test_a_geotiff_mask_whose_file_is_gone_says_so_and_cannot_run():
     assert out["notes"] == [{"text": t("steps.prepare.file_missing", path="/x/tif.tif"), "tone": "error"}]
     assert out["cells"][2]["type"] == "state" and out["cells"][2]["label"] == t("steps.prepare.state_file_missing")
     assert out["cells"][0]["subtitle_tone"] == "error"
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_file_missing")  # not "File missing" twice
 
 
 def test_the_mode_select_reads_off_for_a_mask_that_is_off():

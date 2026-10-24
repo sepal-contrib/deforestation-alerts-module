@@ -181,9 +181,13 @@ def delete_confirm(p, period, source) -> tuple:
     cascades)."""
     size = size_text(sum(p.artifacts[k].size_bytes for k in cleanup.source_period_keys(p, period.id, source)))
     sets = [s for s in sets_using_source(p, source) if p.alert_sets[s].period_id == period.id]
+    # a set is named by its sources: the period is this one
+    names = ", ".join(" + ".join(p.alert_sets[s].sources) for s in sets)
     return (t("steps.prepare.delete_files_title", source=source_label(p.sources[source])),
-            t("steps.prepare.delete_files_message", size=size),
-            t("steps.prepare.delete_files_sets", names=", ".join(sets)) if sets else None)
+            # a legacy record has no size: no empty "()"
+            t("steps.prepare.delete_files_message", size=size) if size
+            else t("steps.prepare.delete_files_message_nosize"),
+            t("steps.prepare.delete_files_sets", names=names) if sets else None)
 
 
 def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,

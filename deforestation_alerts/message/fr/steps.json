@@ -370,7 +370,6 @@
       "grid_bad_resolution": "Saisissez une résolution en mètres, supérieure à 0.",
       "list_title": "Sources de cette période",
       "col_source": "Source",
-      "col_harmonize": "Harmonisation",
       "empty": "Ajoutez d'abord des sources d'alertes.",
       "run_all": {
         "one": "Exécuter {n} en attente",
@@ -378,9 +377,11 @@
         "other": "Exécuter {n} en attente"
       },
       "footer_strip": "{running} en cours · {queued} en attente",
+      "footer_running": "{running} en cours",
       "footer_done": "{done} sur {total} terminées",
       "footer_stop": "Arrêter",
       "footer_stop_tip": "S'arrête après la ligne en cours",
+      "footer_stopping": "Arrêt après cette ligne…",
       "footer_more": "Plus d'actions groupées",
       "redownload_all": {
         "one": "Tout télécharger à nouveau ({n})",
@@ -479,6 +480,7 @@
       "sub_downloading_align": "téléchargement {pct}% · puis alignement",
       "sub_aligning": "alignement en cours",
       "sub_queued": "en attente de la ligne du dessus",
+      "sub_file_missing": "fichier introuvable",
       "sub_again_download": "{why} : télécharger à nouveau",
       "sub_again_harmonize": "{why} : harmoniser à nouveau",
       "sub_again_align": "{why} : aligner à nouveau",
@@ -511,6 +513,7 @@
       "redownload_all_message": "Ces sources sont téléchargées à nouveau depuis leurs catalogues, puis harmonisées : {names}.",
       "delete_files_title": "Supprimer les fichiers de {source} ?",
       "delete_files_message": "Supprime le téléchargement et le fichier harmonisé de cette période ({size}). La source reste dans le projet ; exécutez-la à nouveau pour les reconstruire.",
+      "delete_files_message_nosize": "Supprime le téléchargement et le fichier harmonisé de cette période. La source reste dans le projet ; exécutez-la à nouveau pour les reconstruire.",
       "delete_files_sets": "Ces jeux d'alertes seront obsolètes : {names}. Leurs alertes et leurs revues sont conservées.",
       "delete_files_busy": "Une tâche écrit dans ce projet ; supprimez les fichiers une fois qu'elle est terminée.",
       "sub_pixels": {

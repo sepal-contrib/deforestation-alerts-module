@@ -138,13 +138,15 @@ def test_blocked_and_missing_file_rows_read_their_status():
     gone = PrepareRow("tif", Status.MISSING, Status.CURRENT, file_missing="/x/tif.tif")
     cell = _state(gone, file_source=True)
     assert (cell["type"], cell["label"], cell["color"]) == ("state", "File missing", "error")
-    assert _subtitle(gone, file_source=True) == ("File missing", "error")
+    assert _subtitle(gone, file_source=True) == ("file not found", "error")  # not the cell's words again
 
 
 def test_a_review_copy_reads_text_not_verbs():
     assert _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), locked=True)["label"] == "To download"
     cell = _state(PrepareRow("RADD", Status.CURRENT, Status.STALE), locked=True, failed=True)
     assert (cell["type"], cell["label"]) == ("state", "To harmonize")
+    # a grey circle, not the play or update icon of a pill: nothing there looks clickable
+    assert (cell["icon"], cell["color"]) == ("mdi-circle-outline", "grey")
     assert _state(PrepareRow("tif", Status.MISSING, Status.MISSING), locked=True, file_source=True)["label"] == (
         "To harmonize")
 
@@ -178,3 +180,10 @@ def test_every_reason_has_its_message():
 
     built = set(re.findall(r'Reason\("([a-z_]+)"', Path(why.__file__).read_text(encoding="utf-8")))
     assert built <= set(WHY_KEYS)
+
+
+def test_a_mask_not_aligned_reads_bare_without_a_harmonize_again_tail():
+    """The Harmonize pill aligns the mask first: "harmonize again" would contradict it."""
+    row = PrepareRow("RADD", Status.CURRENT, Status.STALE)
+    reason = Reason("mask_not_aligned", (("name", "forest"),))
+    assert _subtitle(row, reason=reason) == ("a mask must be aligned first (forest)", None)

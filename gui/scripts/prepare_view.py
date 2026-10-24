@@ -67,10 +67,11 @@ def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Option
 
 def _run_cell(verb: str, stale: bool, *, locked: bool, failed: bool, on_run: Callable) -> dict:
     """The pill of the row's next run (``verb``; warning colour when it redoes
-    an out-of-date file), Retry after a failure, or its words on a review copy."""
-    icon, color = ("mdi-update", "warning") if stale else ("mdi-play", "primary")
+    an out-of-date file), Retry after a failure, or its words on a review copy
+    (a grey circle: nothing there looks clickable)."""
     if locked:  # a review copy runs nothing: the state, no pill
-        return _state(icon, color, t(f"steps.prepare.state_to_{verb}"))
+        return _state(STATUS_ICONS["missing"], "grey", t(f"steps.prepare.state_to_{verb}"))
+    icon, color = ("mdi-update", "warning") if stale else ("mdi-play", "primary")
     if failed:
         return {"type": "verb", "label": t("steps.prepare.verb_retry"), "icon": "mdi-refresh", "color": "error",
                 "on_click": on_run}
@@ -117,10 +118,11 @@ def _fallback(row: PrepareRow, file_source: bool) -> Reason:
 
 
 def _reason_line(reason: Reason, file_source: bool, then: str = "harmonize") -> str:
-    """The short reason: bare for ``not_*``, else what the run redoes: a
-    download again, or ``then`` (a source harmonizes, a mask aligns)."""
+    """The short reason: bare for ``not_*`` and ``mask_not_aligned`` (the
+    run aligns the mask first), else what the run redoes: a download again,
+    or ``then`` (a source harmonizes, a mask aligns)."""
     why = reason_text(reason)
-    if reason.key.startswith("not_"):
+    if reason.key.startswith("not_") or reason.key == "mask_not_aligned":
         return why
     again = "download" if reason.key in _RAW_TERMS and not file_source else then
     return t(f"steps.prepare.sub_again_{again}", why=why)
@@ -141,7 +143,7 @@ def source_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Art
     if queued:
         return t("steps.prepare.sub_queued"), None
     if row.file_missing:
-        return t("steps.prepare.state_file_missing"), "error"
+        return t("steps.prepare.sub_file_missing"), "error"
     if row.blocked:
         return row_notes(row.coverage, row.notes)[0]["text"], None
     if row.ready:
@@ -214,7 +216,7 @@ def mask_subtitle(row: MaskRow, *, raw_art: Optional[Artifact], aligned_art: Opt
     if queued:
         return t("steps.prepare.sub_queued"), None
     if row.file_missing:
-        return t("steps.prepare.state_file_missing"), "error"
+        return t("steps.prepare.sub_file_missing"), "error"
     if row.ready:
         size = sum(a.size_bytes for a in (raw_art, aligned_art) if a is not None)
         parts = [t(f"steps.raster_input.source_{row.origin}"), size_text(size) if size else ""]

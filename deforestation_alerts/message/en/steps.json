@@ -358,16 +358,17 @@
       "grid_bad_resolution": "Enter a resolution in metres, greater than 0.",
       "list_title": "Sources for this period",
       "col_source": "Source",
-      "col_harmonize": "Harmonize",
       "empty": "Add alert sources first.",
       "run_all": {
         "one": "Run {n} pending",
         "other": "Run {n} pending"
       },
       "footer_strip": "{running} running · {queued} queued",
+      "footer_running": "{running} running",
       "footer_done": "{done} of {total} done",
       "footer_stop": "Stop",
       "footer_stop_tip": "Stops after the row in progress",
+      "footer_stopping": "Stopping after this row…",
       "footer_more": "More batch actions",
       "redownload_all": {
         "one": "Download all again ({n})",
@@ -462,6 +463,7 @@
       "sub_downloading_align": "downloading {pct}% · then align",
       "sub_aligning": "aligning",
       "sub_queued": "waiting for the row above",
+      "sub_file_missing": "file not found",
       "sub_again_download": "{why}: download again",
       "sub_again_harmonize": "{why}: harmonize again",
       "sub_again_align": "{why}: align again",
@@ -493,6 +495,7 @@
       "redownload_all_message": "These sources are downloaded again from their catalogues, then harmonized: {names}.",
       "delete_files_title": "Delete {source}'s files?",
       "delete_files_message": "Removes the download and the harmonized file of this period ({size}). The source stays in the project; run it again to rebuild them.",
+      "delete_files_message_nosize": "Removes the download and the harmonized file of this period. The source stays in the project; run it again to rebuild them.",
       "delete_files_sets": "These alert sets will read out of date: {names}. Their alerts and reviews stay.",
       "delete_files_busy": "A job is writing into this project; delete the files once it has finished.",
       "sub_pixels": {

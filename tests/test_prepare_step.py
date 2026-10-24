@@ -1721,13 +1721,16 @@ def test_delete_files_warns_about_sets_of_this_period(step):
     """User decision 2026-10-23: allowed, with a line naming this period's sets
     that will read out of date; nothing cascades."""
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
-    state = _state(_with_files(sets=(("jan-a", JAN), ("jan-b", JAN), ("feb-a", FEB))))
+    p = _with_files(sets=(("jan-a", JAN), ("jan-b", JAN), ("feb-a", FEB)))
+    p.alert_sets["jan-b"].sources = ["GLAD-L", "RADD"]
+    state = _state(p)
 
     box, rc = _render(state)
     try:
         _act(step.table[-1][0], "delete")["on_click"]()
         dialog = _confirm(rc, _delete_title(step.table[-1][0]))
-        assert t("steps.prepare.delete_files_sets", names="jan-a, jan-b") in _texts(dialog)
+        # named by their sources, not their ids (the period is this one)
+        assert t("steps.prepare.delete_files_sets", names="GLAD-L, GLAD-L + RADD") in _texts(dialog)
         _click(dialog, t("common.delete"))
         live = state.project.value
         assert set(live.alert_sets) == {"jan-a", "jan-b", "feb-a"}  # the sets are not touched
@@ -1997,3 +2000,14 @@ def test_the_grid_card_shows_the_hint_in_mb_for_a_small_aoi(tmp_path, monkeypatc
         assert t("steps.prepare.grid_large") not in texts  # well under the 2 GB warning
     finally:
         rc.close()
+
+
+def test_the_delete_files_message_of_a_record_without_a_size_has_no_empty_parentheses():
+    p = _with_files()
+    for key in (raw_key(JAN.id, "GLAD-L"), harm_key(JAN.id, "GLAD-L")):
+        p.artifacts[key] = p.artifacts[key].model_copy(update={"size_bytes": 0})  # a legacy record
+    _, message, note = prepare_step.delete_confirm(p, JAN, "GLAD-L")
+    assert message == t("steps.prepare.delete_files_message_nosize") and "()" not in message and note is None
+    p.artifacts[raw_key(JAN.id, "GLAD-L")] = p.artifacts[raw_key(JAN.id, "GLAD-L")].model_copy(
+        update={"size_bytes": 2_700_000})
+    assert prepare_step.delete_confirm(p, JAN, "GLAD-L")[1] == t("steps.prepare.delete_files_message", size="2.7 MB")
