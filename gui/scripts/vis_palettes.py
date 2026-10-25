@@ -95,3 +95,42 @@ def combo_bands(combo, roles):
     if need is None or not all(roles.get(r) for r in need):
         return None
     return [roles[r] for r in need]
+
+
+def match_combo(bands, roles) -> Optional[str]:
+    """The first RGB combo whose bands (for these roles) equal ``bands``, else None."""
+    wanted = list(bands)
+    return next((k for k in RGB_COMBOS if combo_bands(k, roles) == wanted), None)
+
+
+def ramp_menu_css(menu_class: str, invert: bool) -> str:
+    """CSS drawing each ramp's gradient bar before the title of the n-th item of a menu."""
+    return "\n".join(
+        f".{menu_class} .v-list-item:nth-child({i}) .v-list-item__title::before {{"
+        f"content:'';display:inline-block;width:72px;height:12px;border-radius:2px;"
+        f"margin-right:10px;vertical-align:middle;background:{ramp_css(key, invert)};}}"
+        for i, key in enumerate(RAMPS, start=1)
+    )
+
+
+QUALITATIVE = ("set1", "set2", "tab10", "paired")
+DEFAULT_QUALITATIVE = "set1"
+_QUALITATIVE_MPL = {"set1": "Set1", "set2": "Set2", "tab10": "tab10", "paired": "Paired"}
+
+
+def qualitative_colors(name: str, n: int) -> List[str]:
+    """``n`` bare hex colours of a qualitative palette (matplotlib), cycled when ``n`` exceeds it."""
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+    base = [_bare(to_hex(c)) for c in colormaps[_QUALITATIVE_MPL[name]].colors]
+    return [base[i % len(base)] for i in range(n)]
+
+
+def qualitative_css(name: str) -> str:
+    """A hard-stop CSS ``linear-gradient`` of a qualitative palette's first six colours."""
+    colors = qualitative_colors(name, 6)
+    step = 100 / len(colors)
+    stops = []
+    for i, c in enumerate(colors):
+        stops += [f"#{c} {i * step:.2f}%", f"#{c} {(i + 1) * step:.2f}%"]
+    return "linear-gradient(to right, " + ", ".join(stops) + ")"

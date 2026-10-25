@@ -84,7 +84,7 @@ def test_an_imported_package_is_a_review_copy(package, evaluator_root):
     assert (rc.set_fingerprint, rc.origin_project) == (f"fp-{SET1}", CREATOR)
     assert list(p.alert_sets) == [SET1] and p.active_set == SET1
     assert list(p.periods) == [P1.id] and p.active_period == P1.id
-    assert p.artifacts == {} and p.coverage == {} and set(p.vis_layers) == {"gee", "nicfi"}
+    assert p.artifacts == {} and p.coverage == {} and set(p.vis_layers) == {"gee"}
     assert p.alert_sets[SET1].store_rel_path == CANON
     assert p.alert_sets[SET1].split.split_id == SPLIT_ID and p.alert_sets[SET1].split.packaged is True
     assert load_gdf_from_parquet(folder / CANON)["evaluator"].tolist() == ["Ana", "Bo", "Ana", "Bo"]

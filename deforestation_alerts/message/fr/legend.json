@@ -32,8 +32,7 @@
       "earlier_set": "Jeu antérieur · {period} · {sources}"
     },
     "vis": {
-      "rgb": "Composite RGB de {bands}, {min}–{max}",
-      "nicfi": "Planet NICFI {month}, vraies couleurs"
+      "rgb": "Composite RGB de {bands}, {min}–{max}"
     }
   }
 }

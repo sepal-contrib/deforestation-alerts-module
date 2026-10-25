@@ -37,7 +37,6 @@ from gui.store.project_writers import writing
 from gui.store.state_manager import AppState
 from gui.tile import masks_card
 from gui.widget import mask_modal
-from gui.widget.product_table import status_text
 from gui.widget.enter_key import ENTER_DEFAULT
 
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
@@ -54,11 +53,28 @@ def _p():
     return p
 
 
-def _rows(rows, **over):
+def _with_tif(p):
+    """``_p()`` plus a GeoTIFF mask ``tif`` (excluded in February)."""
+    add_mask(p, name="tif", origin="file", ref="/x/tif.tif", asset_type="IMAGE", band=1,
+             native=NativeGrid(crs="EPSG:32721", scale=30.0), mode="exclude", period_id=FEB.id)
+    return p
+
+
+def _rows(rows, p=None, **over):
     kw = dict(running=set(), errors={}, on=set(), building=set(), run=lambda n: None, rerun=lambda n: None,
-              toggle=lambda n: None, edit=lambda n: None, delete=lambda n: None, switch=lambda n, **k: None)
+              toggle=lambda n: None, info=lambda n: None, edit=lambda n: None, delete=lambda n: None,
+              switch=lambda n, **k: None)
     kw.update(over)
-    return {r["key"]: r for r in masks_card.mask_table_rows(_p(), "/tmp/x", FEB, rows, **kw)}
+    return {r["key"]: r for r in masks_card.mask_table_rows(p or _with_tif(_p()), "/tmp/x", FEB, rows, **kw)}
+
+
+def _menu(row) -> dict:
+    """The row's ⋮ menu items, by label."""
+    return {i["label"]: i for i in next(a for a in row["actions"] if a["kind"] == "menu")["items"]}
+
+
+def _kind(row, kind) -> dict:
+    return next(a for a in row["actions"] if a["kind"] == kind)
 
 
 def _art(kind, rel_path, size_bytes=0):
@@ -74,84 +90,215 @@ def _toasts(bus, kind, message):
 
 
 # ---------------------------------------------------------------- the rows
+GEE_MISSING = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+EE, TIF = t("steps.raster_input.source_gee"), t("steps.raster_input.source_file")
+DOWNLOAD_AGAIN, EDIT, DELETE = (t("steps.prepare.action_download_again"), t("widgets.product_table.action_edit"),
+                                t("steps.prepare.mask_delete_action"))
+
+
 def test_a_keep_mask_covering_none_of_the_aoi_warns_on_its_row():
     out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep", stats={"on_pixels": 0})])
-    assert {"text": "covers none of the AOI: every alert would be removed", "tone": "warning"} in out["forest"]["notes"]
-    # an exclude mask covering nothing removes nothing: no warning
+    assert out["forest"]["notes"] == [{"text": "covers none of the AOI: every alert would be removed",
+                                       "tone": "warning"}]
+    # an exclude mask covering nothing removes nothing: no warning, and no neutral line
     out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "exclude",
                          stats={"on_pixels": 0})])
-    assert out["forest"]["notes"][1:] == []  # the origin line only
+    assert out["forest"]["notes"] == []
+
+
+def test_mask_actions_are_map_info_menu():
+    out = _rows([GEE_MISSING])["forest"]
+    kinds = [a["kind"] for a in out["actions"]]
+    assert kinds == ["map_toggle", "info", "menu"]
+    assert len(kinds) == masks_card.MASK_ACTIONS  # the budget's count
+    assert list(_menu(out)) == [DOWNLOAD_AGAIN, EDIT, DELETE]
+    assert _menu(out)[EDIT]["icon"] == "mdi-pencil-outline"
+    assert _menu(out)[DELETE]["icon"] == "mdi-delete-outline" and _menu(out)[DELETE]["color"] == "error"
+    assert not any(i.get("disabled") for i in _menu(out).values())
+    assert not _kind(out, "map_toggle")["disabled"]  # an Earth Engine mask is shown before alignment
+    tif = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "exclude")])["tif"]
+    assert list(_menu(tif)) == [EDIT, DELETE]  # nothing to fetch
+
+
+def test_the_mask_columns_leave_the_name_its_budget():
+    cols = masks_card.mask_columns()
+    assert [c["label"] for c in cols] == [t("steps.prepare.col_mask"), t("steps.prepare.col_mode"),
+                                          t("steps.prepare.col_status")]
+    assert [c.get("width") for c in cols] == [None, "78px", "104px"]
+    # 422 - (78 + 104 + 80 actions + 3 × 8 gaps + 16 padding) = 120 px: MIN_FLEX_PX exactly
+    from gui.widget.product_table import CARD_CONTENT_PX, MIN_FLEX_PX, fixed_width_px
+
+    assert CARD_CONTENT_PX - fixed_width_px(cols, masks_card.MASK_ACTIONS) == MIN_FLEX_PX
+
+
+def test_the_mode_select_reads_at_the_row_size_with_a_small_arrow():
+    """Its selection fits 78 px in every language (B3): 0.8125rem text over
+    the whole width, an 18 px arrow with no padding."""
+    css = masks_card.MODE_CSS
+    assert "font-size: 0.8125rem" in css and "max-width: 100%" in css
+    assert "width: 18px" in css and "font-size: 18px" in css and "padding-left: 0" in css
+    out = _rows([GEE_MISSING])["forest"]
+    box, rc = reacton.render(_Cell(out["cells"][1]["fn"]), handle_error=False)
+    try:
+        [select] = rc.find(v.Select).widgets
+        assert "defo-mask-mode" in select.class_
+    finally:
+        rc.close()
+
+
+@solara.component
+def _Cell(fn):
+    fn()
+
+
+def test_an_earth_engine_mask_row_reads_its_name_subtitle_and_download_pill():
+    out = _rows([GEE_MISSING])["forest"]
+    assert out["cells"][0] == {"type": "title", "value": "forest", "subtitle": t("steps.prepare.why_not_downloaded")}
+    assert out["cells"][1]["type"] == "render"  # the Mode select
+    state = out["cells"][2]
+    assert (state["type"], state["label"], state["icon"], state["color"]) == (
+        "verb", t("steps.prepare.verb_download"), "mdi-play", "primary")
 
 
 def test_a_geotiff_mask_has_no_download_status_nor_redownload():
-    out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "exclude")])
-    assert out["tif"]["cells"][2] == {"type": "status", "status": "missing", "compact": True,
-                                      "title": f"{t('steps.prepare.col_align')}: {status_text('missing')}"}
-    kinds = [a["kind"] for a in out["tif"]["actions"]]
-    assert "redownload" not in kinds and next(a for a in out["tif"]["actions"]
-                                              if a["kind"] == "map_toggle")["disabled"]
+    out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "exclude")])["tif"]
+    assert out["cells"][2]["type"] == "verb" and out["cells"][2]["label"] == t("steps.prepare.verb_align")
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.why_not_aligned")
+    assert DOWNLOAD_AGAIN not in _menu(out) and _kind(out, "map_toggle")["disabled"]
     # once aligned, its toggle is enabled
     out = _rows([MaskRow("tif", "file", None, Status.CURRENT, True, "exclude")])
-    assert not next(a for a in out["tif"]["actions"] if a["kind"] == "map_toggle")["disabled"]
+    assert not _kind(out["tif"], "map_toggle")["disabled"]
 
 
-def test_an_earth_engine_mask_row_reads_both_stages_and_can_be_shown_before_alignment():
-    out = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")])["forest"]
-    assert out["cells"][0] == {"value": "forest"}
-    assert out["cells"][1]["type"] == "render"  # the Mode select
-    missing = status_text("missing")
-    assert out["cells"][2] == {"type": "status", "status": "missing", "compact": True,
-                               "title": f"{t('steps.prepare.col_download')}: {missing} · "
-                                        f"{t('steps.prepare.col_align')}: {missing}"}
-    assert out["notes"][0] == {"text": t("steps.prepare.mask_origin_gee"), "tone": None}  # no size yet
-    kinds = [a["kind"] for a in out["actions"]]
-    assert kinds == ["download", "redownload", "map_toggle", "edit", "delete"]
-    assert len(kinds) == masks_card.MASK_ACTIONS  # the budget's count is the most a row has
-    assert not next(a for a in out["actions"] if a["kind"] == "map_toggle")["disabled"]
+@pytest.mark.parametrize("raw, aligned, verb, stale", [
+    (Status.MISSING, Status.MISSING, "download", False),  # the download, when it is not current
+    (Status.STALE, Status.CURRENT, "download", True),
+    (Status.MISSING, Status.STALE, "download", False),
+    (Status.CURRENT, Status.MISSING, "align", False),  # else the alignment
+    (Status.CURRENT, Status.STALE, "align", True),
+    (None, Status.MISSING, "align", False),  # a GeoTIFF: the alignment only
+    (None, Status.STALE, "align", True),
+])
+def test_the_pill_runs_the_first_stage_that_is_not_current(raw, aligned, verb, stale):
+    origin, name = ("gee", "forest") if raw is not None else ("file", "tif")
+    cell = _rows([MaskRow(name, origin, raw, aligned, True, "keep")])[name]["cells"][2]
+    assert cell["type"] == "verb" and cell["label"] == t(f"steps.prepare.verb_{verb}")
+    assert (cell["icon"], cell["color"]) == (("mdi-update", "warning") if stale else ("mdi-play", "primary"))
 
 
-def test_a_mask_whichever_periods_job_claimed_it_reads_running():
+def test_a_ready_mask_reads_ready_and_its_origin_and_size():
+    p = _with_tif(_p())
+    p.artifacts = {
+        mask_raw_key("forest"): _art("raw_mask", "masks/raw/mask_forest.tif", 2_000_000),
+        mask_key("forest"): _art("mask", "masks/mask_forest.tif", 3_000_000),
+    }
+    out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")], p=p)["forest"]
+    assert out["cells"][0]["subtitle"] == f"{EE} · 5.0 MB"  # the download and the aligned file
+    state = out["cells"][2]
+    assert (state["type"], state["label"], state["color"]) == ("state", t("steps.prepare.state_ready"), "success")
+    tif = _rows([MaskRow("tif", "file", None, Status.CURRENT, True, "keep")])["tif"]
+    assert tif["cells"][0]["subtitle"] == TIF  # no file recorded: no size
+
+
+def test_an_off_mask_keeps_its_align_pill():
+    out = _rows([MaskRow("tif", "file", None, Status.STALE, False, "exclude")])["tif"]
+    state = out["cells"][2]
+    # neutral: an off mask holds no period back, but can still be aligned and previewed
+    assert (state["type"], state["label"], state["icon"], state["color"]) == (
+        "verb", t("steps.prepare.verb_align"), "mdi-play", "primary")
+    assert out["cells"][0]["subtitle"] == f"{t('steps.prepare.why_not_aligned')} · {t('steps.prepare.state_off')}"
+    ready = _rows([MaskRow("tif", "file", None, Status.CURRENT, False, "exclude")])["tif"]
+    assert ready["cells"][0]["subtitle"] == f"{TIF} · {t('steps.prepare.state_off')}"
+
+
+def test_a_stale_mask_says_why_and_what_the_run_redoes():
+    p = _with_tif(_p())
+    p.artifacts = {mask_key("tif"): Artifact(key=mask_key("tif"), kind="mask", rel_path="masks/mask_tif.tif",
+                                             fingerprint="f", inputs={"grid": "EPSG:32721|10|0|0|1x1"},
+                                             content_id="c", size_bytes=1, created_at=datetime.now())}
+    from deforestation_alerts.engine.why import mask_reason
+    from gui.scripts.prepare_view import reason_text
+
+    reason = mask_reason(p, "tif")
+    out = _rows([MaskRow("tif", "file", None, Status.STALE, True, "exclude")], p=p)["tif"]
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_again_align", why=reason_text(reason))
+
+
+def test_a_mask_whichever_periods_job_claimed_it_reads_queued_then_its_stage():
+    from gui.scripts.prepare_jobs import progress_key
     from gui.tile.prepare_step import mask_inflight_key
 
-    out = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")],
-                running={mask_inflight_key("mc", "forest")})["forest"]
-    assert out["cells"][2]["status"] == "running"
-    assert out["cells"][2]["title"].count(status_text("running")) == 2  # both stages
-    run, redo = out["actions"][0], out["actions"][1]
-    assert run["disabled"] and run["loading"] and redo["disabled"]
+    running = {mask_inflight_key("mc", "forest")}
+    out = _rows([GEE_MISSING], running=running)["forest"]
+    assert out["cells"][2] == {"type": "state", "icon": "mdi-timer-sand", "color": "grey",
+                               "label": t("steps.prepare.state_queued")}
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_queued")
+    assert _menu(out)[DOWNLOAD_AGAIN]["disabled"]
+    key = progress_key("mc", FEB.id, "mask", "forest")  # project-wide
+    out = _rows([GEE_MISSING], running=running, stages={key: "download"}, progress={key: 12})["forest"]
+    assert out["cells"][2]["label"] == t("steps.prepare.state_downloading_pct", pct=12)
+    assert out["cells"][2]["progress"] == 12
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_downloading_align", pct=12)
+    # a stage left behind by a row no longer claimed is not shown
+    assert _rows([GEE_MISSING], stages={key: "download"})["forest"]["cells"][2]["type"] == "verb"
+
+
+def test_running_mask_shows_aligning():
+    from gui.scripts.prepare_jobs import progress_key
+    from gui.tile.prepare_step import mask_inflight_key
+
+    key = progress_key("mc", FEB.id, "mask", "tif")
+    out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "keep")],
+                running={mask_inflight_key("mc", "tif")}, stages={key: "align"})["tif"]
+    assert out["cells"][2]["label"] == t("steps.prepare.state_aligning")
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_aligning")
+
+
+def test_a_locked_mask_shows_text_not_verbs():
+    """A review copy (spec §6.3): the status as text with no pill, every run,
+    refresh, edit and delete greyed; Details still opens."""
+    for row, label in ((GEE_MISSING, "state_to_download"),
+                       (MaskRow("tif", "file", None, Status.STALE, True, "keep"), "state_to_align")):
+        out = _rows([row], locked=True)[row.name]
+        state = out["cells"][2]
+        assert state["type"] == "state" and state["label"] == t(f"steps.prepare.{label}")
+        assert "on_click" not in state
+        assert all(i["disabled"] for i in _menu(out).values())
+        assert not _kind(out, "info").get("disabled")
+    # a locked Earth Engine mask shows only its local raster (spec §6.3)
+    assert _kind(_rows([GEE_MISSING], locked=True)["forest"], "map_toggle")["disabled"]
+
+
+def test_a_failed_mask_offers_retry():
+    out = _rows([GEE_MISSING], errors={"@mask:forest": "boom"})["forest"]
+    assert out["cells"][2]["label"] == t("steps.prepare.verb_retry") and out["cells"][2]["color"] == "error"
 
 
 def test_a_rows_actions_call_back_with_its_name_and_its_error_is_keyed():
     calls = []
-    out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")],
+    out = _rows([GEE_MISSING],
                 errors={"@mask:forest": "boom", "forest": "a source's"},
                 run=lambda n: calls.append(("run", n)), rerun=lambda n: calls.append(("rerun", n)),
-                toggle=lambda n: calls.append(("toggle", n)), edit=lambda n: calls.append(("edit", n)),
-                delete=lambda n: calls.append(("delete", n)))["forest"]
+                toggle=lambda n: calls.append(("toggle", n)), info=lambda n: calls.append(("info", n)),
+                edit=lambda n: calls.append(("edit", n)), delete=lambda n: calls.append(("delete", n)),
+                info_open="forest")["forest"]
     assert out["error"] == "boom"
-    for a in out["actions"]:
-        a["on_click"]()
-    assert calls == [("run", "forest"), ("rerun", "forest"), ("toggle", "forest"), ("edit", "forest"),
-                     ("delete", "forest")]
+    assert _kind(out, "info")["is_on"]
+    out["cells"][2]["on_click"]()
+    _kind(out, "map_toggle")["on_click"]()
+    _kind(out, "info")["on_click"]()
+    for item in _menu(out).values():
+        item["on_click"]()
+    assert calls == [("run", "forest"), ("toggle", "forest"), ("info", "forest"), ("rerun", "forest"),
+                     ("edit", "forest"), ("delete", "forest")]
 
 
 def test_a_geotiff_mask_whose_file_is_gone_says_so_and_cannot_run():
     out = _rows([MaskRow("tif", "file", None, Status.MISSING, True, "keep", file_missing="/x/tif.tif")])["tif"]
-    assert out["notes"][1:] == [{"text": t("steps.prepare.file_missing", path="/x/tif.tif"), "tone": "error"}]
-    assert out["actions"][0]["disabled"]
-
-
-@pytest.mark.parametrize("raw, aligned, shown", [
-    (Status.STALE, Status.CURRENT, "stale"),  # the download, when it is not current
-    (Status.MISSING, Status.STALE, "missing"),
-    (Status.CURRENT, Status.STALE, "stale"),  # else the alignment
-    (Status.CURRENT, Status.CURRENT, "ready"),
-    (None, Status.MISSING, "missing"),  # a GeoTIFF: the alignment only
-])
-def test_the_compact_status_shows_the_first_stage_that_is_not_current(raw, aligned, shown):
-    origin = "gee" if raw is not None else "file"
-    out = _rows([MaskRow("forest", origin, raw, aligned, True, "keep")])["forest"]
-    assert out["cells"][2]["status"] == shown
+    assert out["notes"] == [{"text": t("steps.prepare.file_missing", path="/x/tif.tif"), "tone": "error"}]
+    assert out["cells"][2]["type"] == "state" and out["cells"][2]["label"] == t("steps.prepare.state_file_missing")
+    assert out["cells"][0]["subtitle_tone"] == "error"
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.sub_file_missing")  # not "File missing" twice
 
 
 def test_the_mode_select_reads_off_for_a_mask_that_is_off():
@@ -170,20 +317,6 @@ def test_the_mode_select_reads_off_for_a_mask_that_is_off():
         assert [i["value"] for i in select.items] == ["off", "keep", "exclude"]
     finally:
         rc.close()
-
-
-def test_the_size_sums_the_masks_download_and_aligned_file():
-    p = _p()
-    p.artifacts = {
-        mask_raw_key("forest"): _art("raw_mask", "masks/raw/mask_forest.tif", 2_000_000),
-        mask_key("forest"): _art("mask", "masks/mask_forest.tif", 3_000_000),
-    }
-    [row] = masks_card.mask_table_rows(
-        p, "/tmp/x", FEB, [MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")],
-        running=set(), errors={}, on=set(), building=set(), run=None, rerun=None, toggle=None, edit=None,
-        delete=None, switch=None)
-    assert row["notes"][0] == {"text": f"{t('steps.prepare.mask_origin_gee')} · "
-                                       f"{t('steps.prepare.size_note', size='5.0 MB')}", "tone": None}
 
 
 def test_a_switch_only_edits_the_project():
@@ -298,11 +431,18 @@ def _sync_spawn(monkeypatch):
     monkeypatch.setattr(ml, "spawn_in_context", lambda target, args=(), **kw: target(*args))
 
 
-def _card(monkeypatch, state, *, rows=None, running=frozenset(), layers=None, map_=None):
+def _card(monkeypatch, state, *, rows=None, running=frozenset(), layers=None, map_=None, dialogs=None,
+          on_rerun=lambda n: None, stages=None):
+    """Render the card with recorders: ``confirm`` is the delete confirm's
+    props; ``dialogs`` (when given) gets ``redownload`` (the Download again
+    confirm's) and ``details`` (the Details dialog's)."""
     seen, modal, confirm = {}, {}, {}
+    dialogs = {} if dialogs is None else dialogs
     monkeypatch.setattr(masks_card, "ProductTable", lambda **kw: seen.update(kw))
     monkeypatch.setattr(masks_card, "MaskModal", lambda **kw: modal.update(kw))
-    monkeypatch.setattr(masks_card, "ConfirmDialog", lambda **kw: confirm.update(kw))
+    monkeypatch.setattr(masks_card, "ConfirmDialog", lambda **kw: (
+        confirm if kw["confirm_label"] == t("common.delete") else dialogs.setdefault("redownload", {})).update(kw))
+    monkeypatch.setattr(masks_card, "DetailsDialog", lambda **kw: dialogs.setdefault("details", {}).update(kw))
     map_ = map_ or _Map()
     layers = layers or MapLayers(map_)
     rows = rows if rows is not None else [MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")]
@@ -313,15 +453,18 @@ def _card(monkeypatch, state, *, rows=None, running=frozenset(), layers=None, ma
     def Page():
         NotificationProvider()
         masks_card.MasksCard(app_state=state, map_=map_, gee_interface=None, layers=layers, period=period, rows=rows,
-                             running=running, errors={}, on_run=lambda n: None, on_rerun=lambda n: None)
+                             running=running, errors={}, on_run=lambda n: None, on_rerun=on_rerun, stages=stages)
 
     box, rc = reacton.render(Page(), handle_error=False)
     return rc, seen, modal, confirm
 
 
 def _action(seen, name, kind):
+    """A row action's callback; ``edit`` and ``delete`` are its ⋮ menu's."""
     row = next(r for r in seen["rows"] if r["key"] == name)
-    return next(a for a in row["actions"] if a["kind"] == kind)["on_click"]
+    if kind in ("edit", "delete"):
+        return _menu(row)[EDIT if kind == "edit" else DELETE]["on_click"]
+    return _kind(row, kind)["on_click"]
 
 
 def _state(p):
@@ -631,19 +774,112 @@ def test_the_card_lists_the_rows_with_the_note_and_opens_add(monkeypatch):
     asyncio.run(main())
 
 
+def test_details_open_from_the_info_action_and_close_with_their_row(monkeypatch):
+    state = _state(_p())
+    dialogs = {}
+
+    async def main():
+        rc, seen, modal, _ = _card(monkeypatch, state, dialogs=dialogs, rows=[GEE_MISSING])
+        try:
+            assert dialogs["details"]["open"] is False
+            _action(seen, "forest", "info")()
+            details = dialogs["details"]
+            assert details["open"] is True and details["details"]["title"] == "forest"
+            assert details["details"]["lead"] == t("steps.prepare.state_to_download")
+            assert details["details"]["why"] == t("steps.prepare.why_not_downloaded")
+            assert _kind(seen["rows"][0], "info")["is_on"]
+            details["on_close"]()
+            assert dialogs["details"]["open"] is False
+            _action(seen, "forest", "info")()
+            _action(seen, "forest", "info")()  # a second click closes it
+            assert dialogs["details"]["open"] is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_download_again_asks_first_then_reruns(monkeypatch):
+    state = _state(_p())
+    dialogs, reruns = {}, []
+
+    async def main():
+        rc, seen, modal, _ = _card(monkeypatch, state, dialogs=dialogs, on_rerun=reruns.append)
+        try:
+            row = seen["rows"][0]
+            _menu(row)[DOWNLOAD_AGAIN]["on_click"]()
+            redo = dialogs["redownload"]
+            assert redo["open"] is True and reruns == []
+            assert redo["title"] == t("steps.prepare.mask_redownload_title", name="forest")
+            assert redo["message"] == t("steps.prepare.mask_redownload_message")
+            assert redo["confirm_label"] == t("steps.prepare.redownload_label") and redo["confirm_color"] == "primary"
+            redo["on_cancel"]()
+            assert dialogs["redownload"]["open"] is False and reruns == []
+            _menu(seen["rows"][0])[DOWNLOAD_AGAIN]["on_click"]()
+            dialogs["redownload"]["on_confirm"]()
+            assert reruns == ["forest"] and dialogs["redownload"]["open"] is False
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_the_card_passes_the_row_stages(monkeypatch):
+    from gui.scripts.prepare_jobs import progress_key
+    from gui.tile.prepare_step import mask_inflight_key
+
+    state = _state(_p())
+    key = progress_key("mc", FEB.id, "mask", "forest")
+    dialogs = {}
+
+    async def main():
+        rc, seen, *_ = _card(monkeypatch, state, dialogs=dialogs, rows=[GEE_MISSING],
+                             running=frozenset({mask_inflight_key("mc", "forest")}), stages={key: "align"})
+        try:
+            assert seen["rows"][0]["cells"][2]["label"] == t("steps.prepare.state_aligning")
+            _action(seen, "forest", "info")()
+            # the Details lead reads the running state, not "To download"
+            assert dialogs["details"]["details"]["lead"] == t("steps.prepare.state_aligning")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 # ---------------------------------------------------------------- the modal, rendered
 @solara.component
-def _StubRasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
+def _StubRasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
                      disabled=False):
-    """Stands in for pysepal's pickers: the test sets ``path`` itself."""
-    _StubRasterInput.seen = SimpleNamespace(origin=origin, on_origin=on_origin, asset=asset, path=path,
-                                            disabled=disabled)
+    """Stands in for pysepal's pickers: the test sets ``asset`` or ``path``
+    itself. It draws one empty marker (``dv-stub-raster-input``), so its place
+    among the form's fields can be asserted."""
+    _StubRasterInput.seen = SimpleNamespace(origin=origin, asset=asset, path=path, disabled=disabled)
+    rv.Html(tag="div", class_="dv-stub-raster-input")
 
 
-def _modal(state, open_, added, saved, editing=None):
-    return mask_modal.MaskModal(open_=open_, app_state=state, gee_interface=object(),
+def _gee(monkeypatch, bands, release=None):
+    """An Earth Engine stand-in whose band list of any asset is ``bands``, read
+    once ``release`` (when given) is set."""
+    from gui.widget import raster_input
+
+    monkeypatch.setattr(raster_input.user_raster, "band_list_request", lambda ref, kind: ("BANDS", ref, kind))
+
+    async def get_info_async(obj):
+        if release is not None:
+            await release.wait()
+        return list(bands)
+
+    return SimpleNamespace(get_info_async=get_info_async)
+
+
+def _modal(state, open_, added, saved, editing=None, gee=None):
+    return mask_modal.MaskModal(open_=open_, app_state=state, gee_interface=gee or object(),
                                 on_add=lambda fields, mode: added.append((fields, mode)),
                                 on_save=lambda name, changes: saved.append((name, changes)), editing=editing)
+
+
+def _source(rc):
+    return rc.find(v.Select, label=t("steps.raster_input.field_source")).widgets[0]
 
 
 async def _settle(cond, timeout=10.0):
@@ -701,11 +937,12 @@ def test_a_geotiff_mask_is_validated_added_inside_the_task_and_the_modal_closes(
                                                       on_add=on_add, on_save=None), handle_error=False)
         try:
             _name_field(rc).v_model = "probability"
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(path))
-            band = lambda: rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0]  # noqa: E731
-            assert await _settle(lambda: len(band().items) == 2)  # the file's bands, by index
-            band().v_model = 2
+            bands = lambda: rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets  # noqa: E731
+            assert await _settle(lambda: bands() and len(bands()[0].items) == 2)  # the file's bands, by index
+            assert await _settle(lambda: bands()[0].v_model == 1)  # no band looks like a mask: the first
+            bands()[0].v_model = 2
             rc.find(v.RadioGroup, v_model="keep").widgets[0].v_model = "exclude"
             _submit_btn(rc).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
@@ -783,13 +1020,14 @@ def test_an_edit_saves_its_changes_through_on_save(tmp_path, monkeypatch):
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
     monkeypatch.setattr(mask_modal, "validate_mask", fake_validate)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    gee = _gee(monkeypatch, ["a", "b"])
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
+        box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest", gee=gee), handle_error=False)
         try:
             assert _name_field(rc).disabled is True and _name_field(rc).v_model == "forest"
             assert not rc.find(v.RadioGroup, v_model="keep").widgets  # an edit has no mode: periods choose it
-            await asyncio.sleep(0.05)
+            assert await _settle(lambda: not _submit_btn(rc, t("steps.alerts.save")).disabled)  # bands read
             _submit_btn(rc, t("steps.alerts.save")).fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
             assert asked[0]["editing"] == "forest" and asked[0]["ref"] == "UMD/x" and asked[0]["band"] == "b"
@@ -819,16 +1057,20 @@ def _hanging(monkeypatch):
 def test_closing_the_dialog_during_a_check_adds_nothing(monkeypatch, close):
     asked, done, release = _hanging(monkeypatch)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    gee = _gee(monkeypatch, ["a", "b"])
 
     async def main():
-        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+        box, rc = reacton.render(_modal(state, open_, added, saved, gee=gee), handle_error=False)
         try:
             _name_field(rc).v_model = "late"
-            await asyncio.sleep(0.05)
+            _StubRasterInput.seen.asset.set({"asset_id": "users/x/m", "type": "IMAGE", "column": "ALL",
+                                             "value": None})
+            assert await _settle(lambda: bool(rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets))
             _submit_btn(rc).fire_event("click", None)
             assert await _settle(lambda: len(asked) == 1)
             # the fields are frozen while their values are checked
             assert _name_field(rc).disabled is True and _StubRasterInput.seen.disabled is True
+            assert _source(rc).disabled is True
             assert rc.find(v.Select, label=t("steps.prepare.mask_band")).widgets[0].disabled is True
             assert rc.find(v.RadioGroup, v_model="keep").widgets[0].disabled is True
             assert _defaults(rc) == []  # Review Focus 1: mid-check, Enter presses nothing
@@ -913,7 +1155,7 @@ def test_the_open_form_survives_a_worker_publish(tmp_path, monkeypatch):
         box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
         try:
             _name_field(rc).v_model = "x"
-            _StubRasterInput.seen.on_origin("file")
+            _source(rc).v_model = "file"
             _StubRasterInput.seen.path.set(str(_tif(tmp_path / "w.tif")))
             await asyncio.sleep(0.1)
 
@@ -1017,3 +1259,14 @@ def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_mask_a_stopped_job_holds_reads_its_pill_again_disabled():
+    """Stop reached its job: the mask will not run, so it no longer reads Queued."""
+    from gui.tile.prepare_step import mask_inflight_key
+
+    key = mask_inflight_key("mc", "forest")
+    out = _rows([GEE_MISSING], running={key}, stopped={key})["forest"]
+    state = out["cells"][2]
+    assert state["type"] == "verb" and state["disabled"]
+    assert out["cells"][0]["subtitle"] == t("steps.prepare.why_not_downloaded")

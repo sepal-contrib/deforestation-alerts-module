@@ -1,6 +1,6 @@
-"""Visualization layers (spec §6.3): Earth Engine images, GeoTIFFs and Planet
-NICFI, on the shared map and the Analysis maps. Builders are blocking (map
-ids, tile servers): call them from a worker thread (MapLayers does).
+"""Visualization layers (spec §6.3): Earth Engine images and GeoTIFFs, on the
+shared map and the Analysis maps. Builders are blocking (map ids, tile
+servers): call them from a worker thread (MapLayers does).
 
 What a builder raises ``MapLayers`` shows as the toast (``error_text``), so
 it raises keyed errors and never translates on its worker (spec §9.1, §11: a
@@ -8,24 +8,28 @@ GeoTIFF in a folder that is not writable is refused with a toast naming the
 folder).
 """
 
+import hashlib
 import os
-from datetime import date, timedelta
+import threading
 from pathlib import Path
 from typing import Optional
+from xml.sax.saxutils import escape
 
+from deforestation_alerts import gdal_env
 from deforestation_alerts.engine.raster_io import ensure_overviews
 from deforestation_alerts.errors import FolderNotWritable, UserFileMissing
 from gui.i18n import t
-from gui.scripts import legend_specs, raster_map, vis_palettes
+from gui.scripts import raster_map, vis_classes, vis_palettes
 from gui.scripts.legend_data import format_number
 
+#: The Planet NICFI basemaps of each region: the timeline's Planet collection
+#: (gui/scripts/scene_loader), shown when the Earth Engine account can read them.
 NICFI_COLLECTIONS = {
     "americas": "projects/planet-nicfi/assets/basemaps/americas",
     "africa": "projects/planet-nicfi/assets/basemaps/africa",
     "asia": "projects/planet-nicfi/assets/basemaps/asia",
 }
-NICFI_VIS = {"bands": ["R", "G", "B"], "min": 0, "max": 1600}  # the Analysis maps' Planet true colour
-KINDS = ("gee", "file", "nicfi")
+KINDS = ("gee", "file")
 MAX_NAME = 24
 
 
@@ -35,44 +39,19 @@ def nicfi_region(bounds) -> str:
     return "americas" if lon < -30 else "asia" if lon > 60 else "africa"
 
 
-def region_label(region: str) -> str:
-    return t(f"steps.layers.region_{region}")
-
-
-def period_month(project, today: date) -> str:
-    """The active period's end month, else last month: the month of a NICFI
-    layer without one of its own."""
-    period = project.periods.get(project.active_period) if project.active_period else None
-    if period is not None:
-        return period.end.strftime("%Y-%m")
-    return (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-
-
-def nicfi_month(layer, project, today: date) -> str:
-    """The layer's month, else the active period's end month, else last month."""
-    return layer.month or period_month(project, today)
-
-
-def nicfi_image(region: str, month: str):
-    import ee
-
-    start = ee.Date(f"{month}-01")
-    return ee.ImageCollection(NICFI_COLLECTIONS[region]).filterDate(start, start.advance(1, "month")).first()
-
-
-def nicfi_access_request(region: str):
-    """The number of images the user can read in the region's collection (0 or
-    an Earth Engine error: no access)."""
-    import ee
-
-    return ee.ImageCollection(NICFI_COLLECTIONS[region]).limit(1).size()
-
-
 def ee_vis_params(layer) -> dict:
     vis = {"bands": list(layer.bands), "min": float(layer.min), "max": float(layer.max)}
     if layer.palette and len(layer.bands) == 1:
         vis["palette"] = list(layer.palette)
     return vis
+
+
+def effective_style(layer) -> str:
+    """The layer's drawing style: the saved one, else read from the band count as
+    layers saved before styles were drawn."""
+    if layer.style is not None:
+        return layer.style
+    return "rgb" if len(layer.bands) == 3 else "continuous"
 
 
 def folder_writable(path) -> bool:
@@ -100,11 +79,14 @@ def _ramp_label(palette) -> Optional[str]:
 
 def vis_layers_summary(layer) -> str:
     """The layer's details note: its bands, or its band and colour ramp, and
-    its range, or the NICFI month."""
-    if layer.kind == "nicfi":
-        return layer.month or t("steps.layers.nicfi_period_month")
+    its range, or its band and class count."""
+    style = effective_style(layer)
+    if style == "categorical":
+        band = layer.bands[0] if layer.kind == "gee" else layer.band
+        count = len(vis_classes.visible_classes(layer.classes))
+        return f"{t('steps.layers.summary_band', band=band)} · {t('steps.layers.summary_classes', count=count)}"
     span = f"{format_number(layer.min)}–{format_number(layer.max)}"
-    if len(layer.bands) == 3:
+    if style == "rgb":
         return f"{t('steps.layers.summary_rgb', bands=', '.join(str(b) for b in layer.bands))} · {span}"
     if layer.kind == "gee":
         return f"{_ramp_label(layer.palette) or ', '.join(layer.bands)} · {span}"
@@ -113,20 +95,42 @@ def vis_layers_summary(layer) -> str:
     return " · ".join(p for p in parts if p)
 
 
-def refresh_nicfi_layers(layers, map_, project, *, today: date, notifier=None) -> None:
-    """Give every NICFI layer on the map that draws the active period's month
-    (no month of its own) the current one, image and legend. A layer is shown
-    with its month as content id, so ``refresh`` rebuilds only when the month
-    changed."""
-    if project.aoi is None:
-        return
-    month = period_month(project, today)
-    for key in sorted(layers.on.value):
-        layer = project.vis_layers.get(key[4:]) if key.startswith("vis:") else None
-        if layer is None or layer.kind != "nicfi" or layer.month:
-            continue
-        layers.refresh(key, builder(map_, layer, key, project=project, aoi_bounds=project.aoi.bounds), month,
-                       legend=legend_specs.vis_legend(key, layer, month=month), notifier=notifier)
+def categorical_vrt(path, band: int, classes) -> Path:
+    """A one-band Byte VRT of ``band`` of ``path`` in the app's scratch dir that
+    maps the visible classes to 1..m and every other value to 0, its nodata
+    (``vis_classes.lut_text``): localtileserver then draws it with a
+    ``ListedColormap`` over 1..m and leaves the rest transparent. Named by the
+    file, its mtime, the band and the LUT; always rewritten, as
+    ``alert_layers.states_vrt`` is (a moved file leaves a stale SourceFilename).
+    """
+    import rasterio
+
+    path = Path(path).resolve()
+    lut = vis_classes.lut_text(classes)
+    digest = hashlib.sha1(f"{path}|{path.stat().st_mtime_ns}|{band}|{lut}".encode()).hexdigest()[:16]
+    out = gdal_env.scratch_dir() / f"vis_classes_{digest}.vrt"
+    with rasterio.open(path) as src:
+        w, h, crs, gt = src.width, src.height, src.crs, src.transform.to_gdal()
+    srs = f"<SRS>{escape(crs.to_wkt())}</SRS>" if crs is not None else ""
+    xml = f"""<VRTDataset rasterXSize="{w}" rasterYSize="{h}">
+  {srs}
+  <GeoTransform>{", ".join(repr(float(c)) for c in gt)}</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">{escape(str(path))}</SourceFilename>
+      <SourceBand>{int(band)}</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
+      <DstRect xOff="0" yOff="0" xSize="{w}" ySize="{h}" />
+      <LUT>{lut}</LUT>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>
+"""
+    part = out.with_name(out.name + f".{os.getpid()}.{threading.get_ident()}.part")
+    part.write_text(xml)
+    os.replace(part, out)
+    return out
 
 
 def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
@@ -137,13 +141,16 @@ def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
         import ee
         from matplotlib import colormaps
 
-        if layer.kind == "gee":
+        style = effective_style(layer)
+        if layer.kind == "gee" and style == "categorical":
+            src, dst, vis = vis_classes.ee_remap(layer.classes)
+            if not src:  # no visible class: nothing to draw
+                return
+            img = ee.Image(layer.asset).select([layer.bands[0]]).remap(src, dst)  # unlisted values masked
+            map_.add_ee_layer(img, vis, name=layer.name, key=key, shown=shown)
+        elif layer.kind == "gee":
             img = ee.Image(layer.asset).select(list(layer.bands))
             map_.add_ee_layer(img, ee_vis_params(layer), name=layer.name, key=key, shown=shown)
-        elif layer.kind == "nicfi":
-            month = nicfi_month(layer, project, date.today())
-            img = nicfi_image(nicfi_region(aoi_bounds), month)
-            map_.add_ee_layer(img, dict(NICFI_VIS), name=layer.name, key=key, shown=shown)
         else:
             if not Path(layer.path).exists():
                 raise UserFileMissing(f"file not found: {layer.path}", key="steps.layers.err_missing", path=layer.path)
@@ -152,7 +159,16 @@ def builder(map_, layer, key: str, *, project, aoi_bounds, shown: bool = True):
                 raise FolderNotWritable(f"the folder {folder} is not writable", key="steps.layers.err_folder",
                                         folder=folder)
             ensure_overviews(layer.path, resampling="nearest")
-            if layer.bands:  # an RGB composite: three bands, no colormap
+            if style == "categorical":
+                m = len(vis_classes.visible_classes(layer.classes))
+                if not m:  # no visible class: nothing to draw
+                    return
+                # vmax at least 2: a lone class would rescale over an empty range
+                raster_map.add_raster_layer(map_, categorical_vrt(layer.path, layer.band, layer.classes), key=key,
+                                            name=layer.name, band=1, colormap=vis_classes.class_colormap(layer.classes),
+                                            vmin=1, vmax=max(m, 2), nodata=0, visible=shown)
+                return
+            if style == "rgb":  # an RGB composite: three bands, no colormap
                 band, colormap = list(layer.bands), None
             else:  # a ramp, or the colormap name of a layer saved before the ramps
                 band = int(layer.band)

@@ -481,16 +481,14 @@ def test_an_index_that_has_not_arrived_yet_says_it_is_loading():
         timeline.build_timeline(ready, _fake_analysis(), _fake_widgets()))
 
 
-def test_the_planet_toggle_is_disabled_and_says_why_without_nicfi_access():
-    """Spec §5.4: a licence-gated collection must not read as an empty one."""
+def test_there_is_no_planet_toggle_without_nicfi_access():
+    """Planet NICFI comes with the Earth Engine account: an account without
+    access has no Planet collection, so the toolbar shows no Planet chip."""
     state = _fake_state()
     state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=False)))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    chip = next(w for w in _walk(card)
-                if (getattr(w, "attributes", None) or {}).get("title", "").startswith(
-                    timeline.t("steps.layers.err_nicfi", region="americas")[:20]))
-    assert chip.attributes.get("disabled") == "disabled"
-    assert chip._events == [] or "click" not in chip._events  # nothing to click
+    chips = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-pressed")]
+    assert [timeline.SRC_LABEL[PL] in _text(w) for w in chips] == [False, False]
 
 
 def test_the_planet_toggle_is_live_when_access_was_granted():
@@ -1084,7 +1082,8 @@ def test_only_the_granules_that_cover_the_alert_are_handed_to_the_rebuild():
 # ------------------------------------------------- the chips (final fix wave)
 
 def _chips(card) -> list:
-    """``[(label, pressed)]`` for the three collection chips, in their order."""
+    """``[(label, pressed)]`` for the collection chips, in their order (no
+    Planet chip without NICFI access)."""
     return [(_text(w).strip(), (w.attributes or {}).get("aria-pressed") == "true")
             for w in _walk(card)
             if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None]
@@ -1107,6 +1106,7 @@ def test_a_chip_counts_what_its_collection_holds_in_the_window():
                                       (LS, "2026-08-27", 3.0, "W", "kB"),
                                       (LS, "2026-09-02", 2.0, "W", "kC"),
                                       (PL, "2026-05-01", float("nan"), "", "kP")]))
+    state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=True)))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", True)]
 
@@ -1122,18 +1122,18 @@ def test_a_chip_still_splits_the_cloud_hidden_rows_while_its_collection_is_off()
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
                                       (S2, "2026-05-11", 77.0, "W", "kB")]))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    assert _chips(card)[1] == ("Sentinel-2 1 +1", True)  # one shown, one over the limit
+    assert _chips(card)[0] == ("Sentinel-2 1 +1", True)  # one shown, one over the limit
     _chip_click(card, "Sentinel-2")
-    assert _chips(card)[1] == ("Sentinel-2 1 +1", False)
+    assert _chips(card)[0] == ("Sentinel-2 1 +1", False)
 
 
 def test_with_every_collection_off_the_strip_says_so_rather_than_claiming_no_images():
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
                                       (LS, "2026-08-27", 3.0, "W", "kB")]))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    for name in ("Planet", "Sentinel-2", "Landsat"):
+    for name in ("Sentinel-2", "Landsat"):
         _chip_click(card, name)
-    assert _chips(card) == [("Planet 0", False), ("Sentinel-2 1", False), ("Landsat 1", False)]
+    assert _chips(card) == [("Sentinel-2 1", False), ("Landsat 1", False)]
     assert _count_stripes(card) == 0
     shown = _text(card)
     off = timeline.t("analysis.timeline.sources_off")
@@ -1151,7 +1151,7 @@ def test_an_index_with_no_rows_in_the_window_still_says_no_images():
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert timeline.t("analysis.timeline.no_images") in _text(card)
     assert timeline.t("analysis.timeline.sources_off") not in _text(card)
-    assert _chips(card) == [("Planet 0", True), ("Sentinel-2 0", True), ("Landsat 0", True)]
+    assert _chips(card) == [("Sentinel-2 0", True), ("Landsat 0", True)]
 
 
 def _long_alert_card():
@@ -1311,7 +1311,7 @@ def test_a_collection_this_build_has_no_band_for_is_dropped_rather_than_raising(
                                       (LS, "2026-08-27", 3.0, "W", "kB")]))
     with caplog.at_level(logging.WARNING, logger="SEPALUI.deforestation_alerts"):
         card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    assert _chips(card) == [("Planet 0", True), ("Sentinel-2 1", True), ("Landsat 1", True)]
+    assert _chips(card) == [("Sentinel-2 1", True), ("Landsat 1", True)]
     assert _count_stripes(card) == 2  # the two drawable rows
     dropped = [r for r in caplog.records if "no band for" in r.getMessage()]
     assert dropped and "Sentinel 3" in dropped[0].getMessage()

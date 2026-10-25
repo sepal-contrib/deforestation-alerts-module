@@ -1,7 +1,7 @@
-from datetime import date, datetime
+from datetime import datetime
 from types import SimpleNamespace
 
-from deforestation_alerts.project.models import AoiRecord, FileVisLayer, GeeVisLayer, NicfiVisLayer, Period, Project
+from deforestation_alerts.project.models import AoiRecord, FileVisLayer, GeeVisLayer, Project
 from gui.store.state_manager import AppState
 from gui.tile.analysis import vis_sync
 from gui.tile.analysis.pane_layers import Z_BASE
@@ -23,18 +23,6 @@ def test_wanted_and_plan():
     build, remove = vis_sync.plan({"vis:old": "sig"}, wanted)
     assert build == ["vis:s2"] and remove == ["vis:old"]
     assert vis_sync.plan(wanted, wanted) == ([], [])
-
-
-def test_a_period_month_nicfi_layer_is_rebuilt_when_the_active_period_changes():
-    p = _p(NicfiVisLayer(name="planet", show_in_analysis=True),
-           NicfiVisLayer(name="fixed", month="2024-01", show_in_analysis=True))
-    p.periods = {"p1": Period(id="p1", start=date(2024, 1, 1), end=date(2024, 3, 31)),
-                 "p2": Period(id="p2", start=date(2024, 4, 1), end=date(2024, 6, 30))}
-    p.active_period = "p1"
-    before = vis_sync.wanted(p)
-    p.active_period = "p2"
-    after = vis_sync.wanted(p)
-    assert vis_sync.plan(before, after) == (["vis:planet"], [])  # the fixed-month layer stays
 
 
 def _panes(removed, asked=None):

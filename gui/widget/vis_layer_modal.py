@@ -1,7 +1,7 @@
 """Visualization-layer modal (spec §6.3): an Earth Engine image or a GeoTIFF in
-the user's SEPAL folder (one band and a colour ramp, or three bands as RGB, set
-by hand or by band roles and a standard combination) or Planet NICFI (a month,
-the region from the AOI centroid, access checked).
+the user's SEPAL folder (one band, Continuous with a colour ramp or Categorical
+with a colour per class; or, for three bands or more, an RGB composite set by
+hand or by band roles and a standard combination).
 
 It follows ``source_modal``'s rules (Task 17), on the same form frame
 (``gui/widget/form_dialog``), as ``mask_modal`` does: the Add/Save is a
@@ -14,7 +14,6 @@ it raises translated text.
 """
 
 import asyncio
-import re
 from pathlib import Path
 
 import reacton.ipyvuetify as rv
@@ -22,17 +21,24 @@ import solara
 from pysepal.solara.components.task_button import use_task_button
 
 from deforestation_alerts.engine.user_raster import UserRasterError, band_list_request, check_file, read_header
-from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer, NicfiVisLayer
+from deforestation_alerts.project.models import FileVisLayer, GeeVisLayer
 from deforestation_alerts.project.names import name_from_ref, suggest_name_with_tail
 from gui.i18n import t
-from gui.scripts import vis_layers, vis_palettes
-from gui.scripts.error_text import ee_no_access, error_text
+from gui.scripts import vis_classes, vis_layers, vis_palettes, vis_probes
+from gui.scripts.error_text import error_text
+from gui.scripts.legend_data import format_number
+from gui.scripts.legend_specs import vis_legend
 from gui.widget.default_name import use_default_name
 from gui.widget.form_dialog import SubmitTaskButton, form_card, use_form_dialog
-from gui.widget.raster_input import RasterInput, absolute, band_index, use_band_list
+from gui.widget.raster_input import (
+    RasterInput, SourceSelect, absolute, band_choices, band_index, band_status, bands_block_save, bands_read,
+    use_band_list,
+)
 from gui.widget.text_style import MUTED
-
-_MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
+from gui.widget.vis_style_fields import (
+    CHANNEL_CSS, BandsField, ClassList, CompositeSelect, LegendPreview, PaletteMenu, RampSelect, RasterTypeSelect,
+    channel_class,
+)
 
 
 def parse_range(vmin, vmax):
@@ -49,44 +55,45 @@ def _number_text(value) -> str:
     return str(int(value)) if value.is_integer() else str(value)
 
 
-async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None, rgb=False,
-                             bands=(), band=None, ramp=None, invert=False, palette=(), colormap=None, roles=None,
-                             combo=None, vmin=None, vmax=None, month="", show_in_analysis=False,
-                             editing=None) -> dict:
+async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, asset_type=None,
+                             style="continuous", bands=(), band=None, ramp=None, invert=False, palette=(),
+                             colormap=None, roles=None, combo=None, classes=(), vmin=None, vmax=None,
+                             show_in_analysis=False, editing=None) -> dict:
     """Check a visualization layer before it is saved: ``{"error": key,
-    "args": {...}}`` or ``{"layer": GeeVisLayer | FileVisLayer | NicfiVisLayer}``.
+    "args": {...}}`` or ``{"layer": GeeVisLayer | FileVisLayer}``.
 
-    ``bands`` are the three RGB bands (``rgb``); ``band`` is the one band of a
-    single-band image or of a GeoTIFF. A single band is coloured by ``ramp``
-    (``invert`` reverses it). With no ramp, the ``palette`` of a layer saved
-    before the ramps is kept, or the ``colormap`` of a GeoTIFF saved before
-    them; with none of these, the default ramp. ``roles`` and ``combo`` are
-    kept only to prefill the form when the layer is edited."""
+    ``style`` is "continuous", "categorical" or "rgb". ``bands`` are the three
+    RGB bands (style "rgb"); ``band`` is the one band of a single-band image or
+    of a GeoTIFF. A continuous band is coloured by ``ramp`` (``invert``
+    reverses it); a categorical one by its ``classes``, which have no range.
+    With no ramp, the ``palette`` of a layer saved before the ramps is kept,
+    or the ``colormap`` of a GeoTIFF saved before them; with none of these,
+    the default ramp. ``roles`` and ``combo`` are kept only to prefill the
+    form when the layer is edited."""
     name = (name or "").strip()
     error = vis_layers.validate_name(name, project, current=editing)
     if error:
         return {"error": error}
-    if kind == "nicfi":
-        month = (month or "").strip() or None
-        if month is not None and not _MONTH.fullmatch(month):
-            return {"error": "steps.layers.err_month"}
-        region = vis_layers.nicfi_region(project.aoi.bounds)
-        try:
-            count = await gee_interface.get_info_async(vis_layers.nicfi_access_request(region))
-        except Exception as exc:  # noqa: BLE001 - no access reads as an Earth Engine error
-            if not ee_no_access(exc):
-                raise
-            count = 0
-        if not isinstance(count, (int, float)) or count <= 0:
-            return {"error": "steps.layers.err_nicfi", "args": {"region": vis_layers.region_label(region)}}
-        return {"layer": NicfiVisLayer(name=name, month=month, show_in_analysis=bool(show_in_analysis))}
-    span = parse_range(vmin, vmax)
+    rgb = style == "rgb"
+    categorical = style == "categorical"
+    span = (0.0, 1.0) if categorical else parse_range(vmin, vmax)
     if span is None:
         return {"error": "steps.layers.err_range"}
     if not ref:
         return {"error": "steps.layers.err_incomplete"}
     if kind == "gee" and asset_type != "IMAGE":
         return {"error": "steps.layers.err_wrong_type"}
+    if categorical:
+        values = [c.value for c in classes]
+        if not values:
+            return {"error": "steps.layers.err_no_classes"}
+        if len(set(values)) != len(values):
+            return {"error": "steps.layers.err_duplicate_class"}
+        if len(values) > vis_classes.MAX_CLASSES:
+            return {"error": "steps.layers.err_class_limit"}
+        if not any(c.visible for c in classes):
+            return {"error": "steps.layers.err_no_visible_class"}
+        classes = [c.model_copy(update={"color": vis_palettes._bare(c.color)}) for c in classes]
     is_file = kind == "file"
     if is_file:  # a GeoTIFF band is its 1-based index (a name is left from an asset)
         chosen = [band_index(b) for b in bands] if rgb else [band_index(band)]
@@ -115,8 +122,8 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
             return {"error": error}
         if not vis_layers.folder_writable(ref):  # spec §9.1: its .ovr sidecar goes next to it
             return {"error": "steps.layers.err_folder", "args": {"folder": str(Path(ref).parent)}}
-    extra = {"roles": roles, "combo": combo} if rgb else {}
-    if rgb:
+    extra = {"roles": roles, "combo": combo} if rgb else {"classes": classes} if categorical else {}
+    if rgb or categorical:
         colours, old_colormap = [], None
     elif ramp:
         colours, old_colormap = vis_palettes.ramp_palette(ramp, invert), None
@@ -128,34 +135,52 @@ async def validate_vis_layer(gee_interface, project, *, kind, name, ref=None, as
         colours, old_colormap = vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP, invert), None
     if not is_file:
         return {"layer": GeeVisLayer(name=name, asset=ref, bands=chosen, min=span[0], max=span[1], palette=colours,
-                                     show_in_analysis=bool(show_in_analysis), **extra)}
+                                     style=style, show_in_analysis=bool(show_in_analysis), **extra)}
     kwargs = {"bands": chosen} if rgb else {"band": chosen[0], "palette": colours}
     if old_colormap:
         kwargs["colormap"] = old_colormap
-    return {"layer": FileVisLayer(name=name, path=ref, min=span[0], max=span[1],
+    return {"layer": FileVisLayer(name=name, path=ref, min=span[0], max=span[1], style=style,
                                   show_in_analysis=bool(show_in_analysis), **kwargs, **extra)}
 
 
-# Ramp cards (as spatial_risk's variable modal): a gradient bar over its name in
-# a bordered card; the selected card is ringed and bold.
-_RAMP_GRID = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;width:100%;"
-_RAMP_CARD = (
-    "display:block;height:auto;min-width:0;width:100%;padding:6px;"
-    "text-transform:none;letter-spacing:normal;font-weight:400;text-align:left;"
-    "border:1px solid rgba(128,128,128,0.5);border-radius:4px;background:transparent;"
-)
-_RAMP_CARD_SELECTED = "box-shadow:0 0 0 2px currentColor;font-weight:600;"
-_RAMP_BAR = (
-    "display:block;height:14px;border-radius:3px;margin-bottom:6px;"
-    "border:1px solid rgba(0,0,0,0.1);background:{gradient};"
-)
-_FIELDSET_STYLE = ("border:1px solid rgba(128,128,128,0.6);border-radius:4px;"
-                   "padding:8px 12px 4px;margin:4px 0 0;min-width:0;")
-_LEGEND_STYLE = "padding:0 4px;font-size:0.75rem;opacity:0.75;"
+def preview_layer(kind, style, *, band, bands, ramp, invert, palette, colormap, classes, vmin, vmax):
+    """The draft layer the form's legend preview is drawn from, coloured as
+    ``validate_vis_layer`` would save it; None while the range is invalid
+    (continuous, rgb), no class is visible (categorical) or the three bands
+    are not all chosen (rgb)."""
+    if style == "rgb" and None in ([band_index(b) for b in bands] if kind == "file" else list(bands)):
+        return None
+    if style == "categorical":
+        if not vis_classes.visible_classes(classes):
+            return None
+        span = (0.0, 1.0)
+    else:
+        span = parse_range(vmin, vmax)
+        if span is None:
+            return None
+    kw = {"name": "preview", "min": span[0], "max": span[1], "style": style}
+    if style == "categorical":
+        kw["classes"] = list(classes)
+    elif style == "continuous":
+        if ramp:
+            kw["palette"] = vis_palettes.ramp_palette(ramp, invert)
+        elif palette:
+            kw["palette"] = list(palette)
+        elif not (kind == "file" and colormap):
+            kw["palette"] = vis_palettes.ramp_palette(vis_palettes.DEFAULT_RAMP, invert)
+    if kind == "file":
+        if style == "rgb":
+            kw["bands"] = [i for i in (band_index(b) for b in bands) if i is not None]
+        if colormap and "palette" not in kw:
+            kw["colormap"] = colormap
+        return FileVisLayer(path="", band=band_index(band) or 1, **kw)
+    chosen = bands if style == "rgb" else (band,)
+    return GeeVisLayer(asset="", bands=[str(b) for b in chosen if b is not None], **kw)
 
 
-def _capital(text: str) -> str:
-    return text[:1].upper() + text[1:]
+def _probe_error(err) -> str:
+    """A probe's refusal (a message key) or failure (an exception), in the current language."""
+    return t(err["key"]) if "key" in err else error_text(err["exception"])
 
 
 @solara.component
@@ -169,8 +194,7 @@ def VisLayerModal(open_, app_state, gee_interface, on_save, editing=None):
 
 
 def _scope(p):
-    """What the check must still match when it ends: the project and its AOI
-    (the NICFI region comes from the AOI)."""
+    """What the check must still match when it ends: the project and its AOI."""
     if p is None:
         return None
     return p.name, p.aoi.digest if p.aoi is not None else None
@@ -183,13 +207,17 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     gee0 = l0 if l0 is not None and l0.kind == "gee" else None
     file0 = l0 if l0 is not None and l0.kind == "file" else None
     raster0 = gee0 or file0
-    rgb0 = raster0 is not None and len(raster0.bands) == 3
+    style0 = vis_layers.effective_style(raster0) if raster0 is not None else "continuous"
+    rgb0 = style0 == "rgb"
     kind, set_kind = solara.use_state(l0.kind if l0 is not None else "gee")
     name, set_name = solara.use_state(l0.name if l0 is not None else "")
     asset = solara.use_reactive({"asset_id": gee0.asset, "type": "IMAGE", "column": "ALL", "value": None}
                                 if gee0 is not None else None)
     path = solara.use_reactive(file0.path if file0 is not None else "")
-    rgb, set_rgb = solara.use_state(rgb0)
+    # Two steps: keep every band (RGB) or draw one; one band is Continuous or Categorical.
+    bands_mode, set_bands_mode = solara.use_state("all" if rgb0 else "one")
+    one_style, set_one_style = solara.use_state("categorical" if style0 == "categorical" else "continuous")
+    classes, set_classes = solara.use_state(list(raster0.classes) if style0 == "categorical" else [])
     band, set_band = solara.use_state(file0.band if file0 is not None and not rgb0
                                       else gee0.bands[0] if gee0 is not None and gee0.bands and not rgb0 else None)
     red, set_red = solara.use_state(raster0.bands[0] if rgb0 else None)
@@ -197,26 +225,35 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     blue, set_blue = solara.use_state(raster0.bands[2] if rgb0 else None)
     roles, set_roles = solara.use_state(dict(raster0.roles) if raster0 is not None else {})
     combo, set_combo = solara.use_state((raster0.combo if raster0 is not None else None) or "custom")
-    vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None and l0.kind != "nicfi" else "0")
-    vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None and l0.kind != "nicfi" else "1")
+    vmin, set_vmin = solara.use_state(_number_text(l0.min) if l0 is not None else "0")
+    vmax, set_vmax = solara.use_state(_number_text(l0.max) if l0 is not None else "1")
     palette0 = raster0.palette if raster0 is not None else []
     ramp0, invert0 = vis_palettes.ramp_choice(palette0)
-    # A new layer starts on the default ramp. A layer saved before the ramps keeps
-    # its palette or colormap until a card is picked, and preselects no card.
-    ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None else vis_palettes.DEFAULT_RAMP)
-    invert, set_invert = solara.use_state(invert0)
-    month, set_month = solara.use_state((l0.month or "") if l0 is not None and l0.kind == "nicfi" else "")
-    show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
     old_colormap = file0.colormap if file0 is not None and not file0.palette and not file0.bands else None
+    # A new layer starts on the default ramp, and so does an edit saved with no
+    # palette (Categorical, RGB). A layer saved before the ramps keeps its palette
+    # or colormap until a ramp is picked, and preselects no ramp.
+    ramp, set_ramp = solara.use_state(ramp0 if raster0 is not None and (palette0 or old_colormap)
+                                      else vis_palettes.DEFAULT_RAMP)
+    invert, set_invert = solara.use_state(invert0)
+    show, set_show = solara.use_state(bool(l0.show_in_analysis) if l0 is not None else False)
+    ref0 = gee0.asset if gee0 is not None else absolute(file0.path) if file0 is not None else None
     saved_roles = bool(raster0 is not None and raster0.roles)
     first_load = solara.use_ref(l0 is not None)  # the first band list of an edit must not touch its bands
     error, set_error = solara.use_state(None)
+    # what the probes refused, shown under their buttons until the band changes:
+    # {"key": ...} or {"exception": ...}, translated as it is drawn (_probe_error)
+    stretch_error, set_stretch_error = solara.use_state(None)
+    classes_error, set_classes_error = solara.use_state(None)
+    # a first find of only 0 and 1 says how they were set up, until the band changes
+    zero_one, set_zero_one = solara.use_state(False)
     submitted = solara.use_ref(False)  # one Save per opening, held through the validation
 
     def _set_kind(value):
         # A band is a name in Earth Engine and an index in a GeoTIFF: one kind's
         # band is never a choice of the other's.
         if value and value != kind:
+            first_load.current = False  # the edit's saved mode and bands belong to its own kind
             set_kind(value)
             set_band(None)
             for setter in (set_red, set_green, set_blue):
@@ -224,16 +261,19 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_roles({})
             set_combo("custom")
 
-    raster = kind in ("gee", "file")
-    ref = ((asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value) if kind == "file"
-           else None)
+    ref = (asset.value or {}).get("asset_id") if kind == "gee" else absolute(path.value)
     asset_type = (asset.value or {}).get("type") if kind == "gee" else "FILE"
-    bands_task = use_band_list(gee_interface, kind if raster else "gee", ref, asset_type)
+    if first_load.current and ref and ref != ref0:
+        first_load.current = False  # another image: the edit's saved mode and bands are not its own
+    bands_task = use_band_list(gee_interface, kind, ref, asset_type)
     names, header = bands_task.value if bands_task.finished and bands_task.value else ((), None)
-    band_items = ([{"text": b.name, "value": b.index} for b in header.bands] if header is not None
-                  else [{"text": n, "value": n} for n in names])
-    region = vis_layers.nicfi_region(p.aoi.bounds) if p is not None and p.aoi is not None else None
+    band_items = [{"text": text, "value": value} for text, value in band_choices(names, header)]
     band_text = {i["value"]: i["text"] for i in band_items}
+    n_bands = len(band_items) if bands_task.finished else None
+    # nothing below the picker shows until its band list is read (spec §3)
+    has_bands = bool(ref) and bands_read(bands_task)
+    # RGB needs three bands: an RGB edit pointed at a smaller raster is drawn from one band
+    style = "rgb" if bands_mode == "all" and (n_bands is None or n_bands >= 3) else one_style
 
     def _apply(chosen_combo, chosen_roles):
         picked = vis_palettes.combo_bands(chosen_combo, chosen_roles)
@@ -243,38 +283,68 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             set_blue(picked[2])
         return bool(picked)
 
-    def _set_rgb(on):
-        set_rgb(on)
-        if on and l0 is None and not (red or green or blue):  # a new RGB layer starts on the first composite
+    def _set_bands_mode(value):
+        if not value:
+            return
+        set_bands_mode(value)
+        if value == "one" and band is None and band_items:  # an RGB edit has no band: start on the first
+            set_band(band_items[0]["value"])
+        if value == "all" and not (red or green or blue):  # an RGB composite starts on the first combination
             first = vis_palettes.available_combos(roles)
             if first and _apply(first[0], roles):
                 set_combo(first[0])
+            else:  # no combination found: the first three bands, picked by hand
+                for setter, item in zip((set_red, set_green, set_blue), band_items[:3]):
+                    setter(item["value"])
+                set_combo("custom")
+
+    # the roles the band names give, {role: band value}; red, green and blue all found suggest RGB
+    by_name = {i["text"]: i["value"] for i in band_items}
+    guessed = {r: by_name[n] for r, n in vis_palettes.guess_roles(list(by_name)).items()}
+    rgb_found = all(r in guessed for r in ("red", "green", "blue"))
 
     def _guess_roles():
         if not band_items:
             return
-        by_name = {i["text"]: i["value"] for i in band_items}
-        guessed = {r: by_name[n] for r, n in vis_palettes.guess_roles(list(by_name)).items()}
         if first_load.current:  # an edit's own bands, roles and combination stay for its own image
             first_load.current = False
-            if not saved_roles:  # a layer saved before the roles: only fill the empty role selects
+            if not saved_roles:  # a layer saved before the roles: they are guessed from the band names
                 set_roles(guessed)
+            # one band is always drawn from that band; an RGB edit on fewer than
+            # three bands is drawn from one band, which starts on the first
+            if len(band_items) == 1 or (bands_mode == "all" and len(band_items) < 3):
+                set_band(band_items[0]["value"])
             return
         set_roles(guessed)
         set_combo("custom")
+        set_band(band_items[0]["value"])  # the Band select starts on the image's first band
         for setter in (set_red, set_green, set_blue):
             setter(None)
+        # spectral bands are kept as RGB; any other image draws one band (never guessed Categorical)
+        set_bands_mode("all" if rgb_found else "one")
         first = vis_palettes.available_combos(guessed)
-        if rgb and l0 is None and first and _apply(first[0], guessed):
+        if rgb_found and first and _apply(first[0], guessed):
             set_combo(first[0])
 
     solara.use_effect(_guess_roles, [tuple(i["value"] for i in band_items)])
 
-    def _set_role(role, value):
-        updated = {k: v for k, v in {**roles, role: value}.items() if v is not None}
-        set_roles(updated)
-        if combo != "custom" and not _apply(combo, updated):  # the combination lost a role
-            set_combo("custom")
+    probed = solara.use_ref((kind, ref, band))  # what the classes and the probe errors were found for
+
+    def _clear_probes():
+        # classes found on one band are never kept on another band, raster or
+        # kind; an edit opens on its own (kind, ref, band), so keeps its classes
+        if probed.current == (kind, ref, band):
+            return
+        probed.current = (kind, ref, band)
+        set_classes([])
+        set_classes_error(None)
+        set_stretch_error(None)
+        set_zero_one(False)
+
+    solara.use_effect(_clear_probes, [kind, ref, band])
+
+    # a stretch refused for one RGB composite says nothing of another
+    solara.use_effect(lambda: set_stretch_error(None), [combo, red, green, blue])
 
     def _pick_combo(value):
         if not value:
@@ -283,16 +353,18 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if value != "custom":
             _apply(value, roles)
 
-    def _rgb_setter(setter):
+    def _rgb_setter(channel, setter):
         def on_value(value):
             setter(value)
-            set_combo("custom")  # picked by hand: no longer a standard combination
+            # picked by hand: Custom, unless the three bands now make a standard combination
+            picked = [value if i == channel else b for i, b in enumerate((red, green, blue))]
+            set_combo(vis_palettes.match_combo(picked, roles) or "custom")
 
         return on_value
 
     def _suggest(_ref):
         base = name_from_ref(ref)
-        if rgb:
+        if style == "rgb":
             # the combination's short key, so a long image name keeps a readable base
             tail = f"_{combo}" if combo != "custom" else "_rgb"
         else:
@@ -302,8 +374,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
             base, tail, lambda n: vis_layers.validate_name(n, app_state.project.value, current=editing) is None,
             vis_layers.MAX_NAME)
 
-    use_default_name(f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
-                     name, set_name, _suggest)
+    rgb = style == "rgb"
+    auto_name = use_default_name(
+        f"{ref}|{rgb}|{combo if rgb else ''}|{'' if rgb else band}" if ref and l0 is None else None,
+        name, set_name, _suggest) and l0 is None  # an edit's name is never filled from its raster
 
     async def _validate():
         live = app_state.project.value
@@ -311,10 +385,11 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
         if live is None or live.aoi is None:
             return {"error": "steps.layers.err_changed"}  # closed while the form was open
         out = await validate_vis_layer(
-            gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type, rgb=rgb,
-            bands=(red, green, blue), band=band, ramp=ramp, invert=invert, palette=palette0 if ramp is None else (),
+            gee_interface, live, kind=kind, name=name, ref=ref, asset_type=asset_type,
+            style=style, bands=(red, green, blue), band=band, ramp=ramp, invert=invert,
+            palette=palette0 if ramp is None else (),
             colormap=old_colormap if ramp is None else None, roles=roles, combo=None if combo == "custom" else combo,
-            vmin=vmin, vmax=vmax, month=month, show_in_analysis=show, editing=editing)
+            classes=classes, vmin=vmin, vmax=vmax, show_in_analysis=show, editing=editing)
         if not open_.value:
             return None  # closed during the check (ESC or Cancel): the user cancelled
         if _scope(app_state.project.value) != scope:
@@ -345,21 +420,104 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     solara.use_effect(_on_validated, [validation.pending, validation.finished, validation.error,
                                       validation.cancelled])
 
+    stretch_bands = [red, green, blue] if style == "rgb" else [band]
+
+    async def _stretch():
+        # p2/p98 of the band over the AOI's bounds (gui/scripts/vis_probes); for
+        # RGB the lowest p2 and the highest p98 of the three bands, one shared range
+        live = app_state.project.value
+        scope = _scope(live)
+        if live is None or live.aoi is None or not ref or None in stretch_bands:
+            return None
+        bounds = live.aoi.bounds
+        if kind == "gee":
+            info = await gee_interface.get_info_async(vis_probes.stretch_request(ref, stretch_bands, bounds))
+            span = vis_probes.stretch_from_info(info, stretch_bands)
+        else:
+            span = await asyncio.to_thread(vis_probes.file_stretch, ref, [band_index(b) for b in stretch_bands],
+                                           bounds)
+        if not open_.value or _scope(app_state.project.value) != scope:
+            return None  # closed, or the project or its AOI changed: the range is dropped
+        return {"span": span} if span is not None else {"error": "steps.layers.err_no_stretch"}
+
+    stretch_task = solara.lab.use_task(_stretch, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _on_stretched():
+        if stretch_task.error:
+            set_stretch_error({"exception": stretch_task.exception})
+            return
+        out = stretch_task.value if stretch_task.finished else None
+        if out and "span" in out:
+            lo, hi = out["span"]
+            set_vmin(_number_text(round(lo, 6)))
+            set_vmax(_number_text(round(hi, 6)))
+        elif out and "error" in out:
+            set_stretch_error({"key": out["error"]})
+
+    solara.use_effect(_on_stretched, [stretch_task.pending, stretch_task.finished, stretch_task.error])
+
+    async def _find_classes():
+        # the band's values over the AOI's bounds, with its *_class_* names (gui/scripts/vis_probes)
+        live = app_state.project.value
+        scope = _scope(live)
+        if live is None or live.aoi is None or not ref or band is None:
+            return None
+        bounds = live.aoi.bounds
+        if kind == "gee":
+            info = await gee_interface.get_info_async(vis_probes.classes_request(ref, band, bounds))
+            out = vis_probes.classes_from_info(info, band)
+        else:
+            out = await asyncio.to_thread(vis_probes.file_classes, ref, band_index(band), bounds)
+        if not open_.value or _scope(app_state.project.value) != scope:
+            return None  # closed, or the project or its AOI changed: the classes are dropped
+        return out
+
+    classes_task = solara.lab.use_task(_find_classes, dependencies=None, prefer_threaded=False, raise_error=False)
+
+    def _on_classes():
+        if classes_task.error:
+            set_classes_error({"exception": classes_task.exception})
+            return
+        out = classes_task.value if classes_task.finished else None
+        if out and "values" in out:
+            # a new find adds the new values; the listed classes keep their
+            # colours, labels and visibility (only the palette menu repaints them)
+            palette = vis_classes.palette_of(classes) or vis_palettes.DEFAULT_QUALITATIVE
+            # a 0/1 band's 1 is named after the band's text (a GeoTIFF band is an index)
+            found = vis_classes.classes_from_values(out["values"], palette=palette, known=out["known"],
+                                                    band_label=band_text.get(band))
+            if not classes:  # a first find, nothing listed yet: only 0 and 1, which the image does not name
+                set_zero_one(vis_classes.is_zero_one(out["values"]) and not out["known"])
+            set_classes(vis_classes.merge_found(classes, found))
+        elif out and "error" in out:
+            set_classes_error({"key": out["error"]})  # the list is left as it was
+
+    solara.use_effect(_on_classes, [classes_task.pending, classes_task.finished, classes_task.error])
+
+    def _start_probe(task, set_probe_error):
+        set_probe_error(None)
+        task()
+
+    def _pick_palette(key):
+        set_classes(vis_classes.recolor(classes, key))
+
     def _cancel_on_unmount():
         def cleanup():
             # closing the dialog (ESC, Cancel) unmounts this form, and use_task
             # does not cancel on unmount: stop a check still running, or it
-            # would save the layer the user just cancelled
-            if validation.pending:
-                try:
-                    validation.cancel()
-                except RuntimeError:
-                    pass
+            # would save the layer the user just cancelled; stop a probe too
+            for task in (validation, stretch_task, classes_task):
+                if task.pending:
+                    try:
+                        task.cancel()
+                    except RuntimeError:
+                        pass
 
         return cleanup
 
     solara.use_effect(_cancel_on_unmount, [])
-    busy = validation.pending  # fields are frozen while their values are being checked
+    # fields are frozen while their values are being checked or probed
+    busy = validation.pending or stretch_task.pending or classes_task.pending
 
     def _submit():
         if submitted.current:
@@ -372,9 +530,10 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
     title = t("steps.layers.edit_title", name=editing) if l0 is not None else t("steps.layers.add_title")
     button = use_task_button(validation, on_start=_submit)  # a plain function, not a hook
 
-    def _band_select(label, value, on_value):
+    def _channel_select(label, value, on_value, channel):
+        # an RGB band's label leads with its colour dot (CHANNEL_CSS)
         rv.Select(label=label, items=band_items, v_model=value, on_v_model=on_value, dense=True, outlined=True,
-                  loading=bands_task.pending, disabled=busy)
+                  disabled=busy, class_=channel_class(channel))
 
     def _range_fields():
         with rv.Row(dense=True):
@@ -385,75 +544,85 @@ def _VisLayerForm(open_, app_state, gee_interface, on_save, editing):
                 rv.TextField(label=t("steps.layers.field_max"), v_model=vmax, on_v_model=set_vmax, type="number",
                              dense=True, outlined=True, disabled=busy)
 
-    def _ramp_fields():
-        with rv.Html(tag="fieldset", style_=_FIELDSET_STYLE):
-            rv.Html(tag="legend", children=[t("steps.layers.field_ramp")], style_=_LEGEND_STYLE)
-            with rv.Html(tag="div", style_=_RAMP_GRID):
-                for key in vis_palettes.RAMPS:
-                    selected = key == ramp
-                    solara.Button(
-                        children=[rv.Html(tag="span", style_="display:block;width:100%;", children=[
-                            rv.Html(tag="span", style_=_RAMP_BAR.format(gradient=vis_palettes.ramp_css(key, invert))),
-                            rv.Html(tag="span", children=[t(f"steps.layers.ramp_{key}")])])],
-                        on_click=lambda *_, k=key: set_ramp(k), disabled=busy, text=True,
-                        style=_RAMP_CARD + (_RAMP_CARD_SELECTED if selected else ""),
-                        classes=["dv-ramp"] + (["dv-ramp--selected"] if selected else []))
-            rv.Switch(label=t("steps.layers.field_invert"), v_model=invert, on_v_model=set_invert, dense=True,
-                      hide_details=True, disabled=busy or ramp is None, class_="mt-0 mb-1")
+    def _stretch_fields():
+        no_aoi = p is None or p.aoi is None
+        solara.Button(label=t("steps.layers.stretch"), icon_name="mdi-arrow-expand-horizontal",
+                      on_click=lambda: _start_probe(stretch_task, set_stretch_error), outlined=True,
+                      color="primary", small=True,
+                      disabled=busy or no_aoi or not ref or None in stretch_bands)
+        solara.Text(t("steps.layers.stretch_hint"), style=MUTED)
+        if stretch_error:
+            solara.Text(_probe_error(stretch_error), classes=["error--text"])
+
+    def _class_fields():
+        no_aoi = p is None or p.aoi is None
+        solara.Button(label=t("steps.layers.find_classes"), icon_name="mdi-magnify",
+                      on_click=lambda: _start_probe(classes_task, set_classes_error), outlined=True,
+                      color="primary", small=True,
+                      disabled=busy or no_aoi or not ref or band is None)
+        solara.Text(t("steps.layers.find_classes_hint"), style=MUTED)
+        if zero_one:
+            solara.Text(t("steps.layers.zero_one_note"), style=MUTED)
+        if classes_error:
+            solara.Text(_probe_error(classes_error), classes=["error--text"])
+        # keyed on what the classes were found for: a clear also empties "Add a value" and its error
+        ClassList(classes=classes, on_classes=set_classes, disabled=busy).key(f"classes|{kind}|{ref}|{band}")
+        PaletteMenu(value=vis_classes.palette_of(classes), on_value=_pick_palette, disabled=busy or not classes)
+
+    def _legend_preview():
+        draft = preview_layer(kind, style, band=band, bands=(red, green, blue), ramp=ramp, invert=invert,
+                              palette=palette0 if ramp is None else (),
+                              colormap=old_colormap if ramp is None else None, classes=classes, vmin=vmin,
+                              vmax=vmax)
+        if draft is None:
+            return
+        mid = format_number((draft.min + draft.max) / 2) if style != "categorical" else None
+        LegendPreview(spec=vis_legend("preview", draft).spec, mid=mid)
 
     def _actions():
         # spec §11: an async button is a task button. While the check runs it
         # reads Cancel and stops the check, and it carries no Enter class.
+        # a band list still being read, or that could not be read, leaves nothing to save
         SubmitTaskButton(label=t("common.save") if l0 is not None else t("steps.layers.add"),
                          icon="mdi-content-save-outline" if l0 is not None else "mdi-plus",
-                         external_busy=bool(name_error), **button)
+                         external_busy=bool(name_error) or bands_block_save(bands_task, ref),
+                         **button)
 
     # a validation error stays inline in the form (spec §11; form_card shows it)
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
-        rv.Select(label=t("steps.layers.field_kind"), v_model=kind, on_v_model=_set_kind,
-                  items=[{"text": t(f"steps.layers.kind_{k}"), "value": k} for k in vis_layers.KINDS],
-                  dense=True, outlined=True, disabled=busy)
+        # with the form, not the band selects: the outlined label's notch is
+        # measured when a select mounts, so the dot's rule must be loaded by then
+        solara.Style(CHANNEL_CSS)
         rv.TextField(label=t("steps.layers.field_name"), v_model=name, on_v_model=set_name, dense=True,
-                     outlined=True, disabled=busy, counter=vis_layers.MAX_NAME,
-                     error_messages=[t(name_error)] if name_error else [])
-        if raster:
-            RasterInput(gee_interface=gee_interface, origin=kind, on_origin=_set_kind, asset=asset, path=path,
-                        asset_types=("IMAGE",), disabled=busy, show_origin=False)
-            if bands_task.pending:
-                solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
-            elif bands_task.error:
-                solara.Text(t("steps.raster_input.bands_failed", error=error_text(bands_task.exception)),
-                            classes=["error--text"])
-        if raster:
-            rv.Switch(label=t("steps.layers.field_rgb"), v_model=rgb, on_v_model=_set_rgb, dense=True,
-                      hide_details=True, disabled=busy)
-            if rgb:
-                solara.Text(t("steps.layers.roles_hint"), style=MUTED)
-                with rv.Row(dense=True):
-                    for role in vis_palettes.ROLES:
-                        with rv.Col(cols=6):
-                            rv.Select(label=t(f"steps.layers.role_{role}"), items=band_items,
-                                      v_model=roles.get(role), on_v_model=lambda value, r=role: _set_role(r, value),
-                                      clearable=True, dense=True, outlined=True, hide_details=True,
-                                      loading=bands_task.pending, disabled=busy)
-                rv.Select(label=t("steps.layers.field_combo"), v_model=combo, on_v_model=_pick_combo,
-                          items=[{"text": _capital(t(f"steps.layers.combo_{c}")), "value": c}
-                                 for c in [*vis_palettes.available_combos(roles), "custom"]],
-                          dense=True, outlined=True, disabled=busy)
-                _band_select(t("steps.layers.field_red"), red, _rgb_setter(set_red))
-                _band_select(t("steps.layers.field_green"), green, _rgb_setter(set_green))
-                _band_select(t("steps.layers.field_blue"), blue, _rgb_setter(set_blue))
+                     outlined=True, disabled=busy, counter=vis_layers.MAX_NAME, hint=t("steps.layers.name_hint"),
+                     persistent_hint=auto_name, error_messages=[t(name_error)] if name_error else [])
+        SourceSelect(origin=kind, on_origin=_set_kind, disabled=busy)
+        RasterInput(gee_interface=gee_interface, origin=kind, asset=asset, path=path,
+                    asset_types=("IMAGE",), disabled=busy)
+        band_status(bands_task, ref)
+        if has_bands:
+            BandsField(band_items=band_items, mode=bands_mode, on_mode=_set_bands_mode, band=band, on_band=set_band,
+                       rgb_found=rgb_found, disabled=busy)
+        if has_bands and rgb:
+            CompositeSelect(combo=combo, on_combo=_pick_combo, roles=roles, band_text=band_text,
+                            fallback=[i["value"] for i in band_items[:3]], disabled=busy)
+            with rv.Row(dense=True):  # the three bands, filled by the combination or picked by hand
+                for i, (key, value, setter) in enumerate((("steps.layers.field_red", red, set_red),
+                                                          ("steps.layers.field_green", green, set_green),
+                                                          ("steps.layers.field_blue", blue, set_blue))):
+                    with rv.Col(cols=4):
+                        _channel_select(t(key), value, _rgb_setter(i, setter), channel=i)
+            _range_fields()
+            _stretch_fields()
+        elif has_bands:
+            RasterTypeSelect(value=one_style, on_value=set_one_style,
+                             suggested=vis_classes.looks_categorical(band_text.get(band, "")), disabled=busy)
+            if style == "continuous":
+                RampSelect(value=ramp, on_value=set_ramp, invert=invert, on_invert=set_invert, disabled=busy)
                 _range_fields()
+                _stretch_fields()
             else:
-                _band_select(t("steps.layers.field_band"), band, set_band)
-                _ramp_fields()
-                _range_fields()
-        else:
-            rv.TextField(label=t("steps.layers.field_month"), v_model=month, on_v_model=set_month, dense=True,
-                         outlined=True, disabled=busy, placeholder="YYYY-MM", hint=t("steps.layers.month_hint"),
-                         persistent_hint=True)
-            if region is not None:
-                solara.Text(t("steps.layers.region", region=vis_layers.region_label(region)),
-                            style=MUTED)
+                _class_fields()
+            _legend_preview()
         rv.Checkbox(label=t("steps.layers.field_show_in_analysis"), v_model=show, on_v_model=set_show, dense=True,
                     hide_details=True, disabled=busy)

@@ -76,7 +76,7 @@ def legend_chips(page, value) -> list:
 def a_first_month(page, rec, *, out):
     ph.save_grid(page)
     ph.add_mask(page, rec, name="south", origin="file", ref=USER / "south.tif", band="south", mode="Keep", out=out)
-    ph.run_all(page, rec, out=out, expect_ready=3)  # the mask (aligned), then GLAD-L
+    ph.run_all(page, rec, out=out, expect_ready=2)  # the mask (aligned), then GLAD-L: one Ready cell each
     ph.integrate_and_land(page, rec, out=out)
     (june,) = sets_of(JUNE)
     rec["june_set"], rec["june_alerts"], rec["june_footprint"] = june["id"], june["n_alerts"], june["footprint_rel_path"]
@@ -128,7 +128,7 @@ def b_second_period(page, rec, *, out):
     w.goto_step(page, "period", 2000)
     rec["june_row_after_switch"] = ph.row_text(page, JUNE_ROW)
     assert "out of date" not in rec["june_row_after_switch"], rec["june_row_after_switch"]
-    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="july_ready")  # GLAD-L's two cells
+    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="july_ready")  # south (aligned, off in July) and GLAD-L
     ph.integrate_and_land(page, rec, out=out)
     p = ph.manifest(DATA, PROJECT)
     assert p["periods"][JULY]["masks"] == {"south": {"on": False, "mode": "keep"}}, p["periods"][JULY]["masks"]

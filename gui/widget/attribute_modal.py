@@ -8,10 +8,11 @@ columns never take an alert column or another layer's column
 
 The layers are the Integrate form's state, not the project's. Save only hands
 the finished layer to ``on_save``. Nothing is checked asynchronously here
-(the form's Load read the bands), so the primary button is a plain button
-carrying the Enter class, disabled while the layer cannot be saved. While the
-form's Load runs, Save is disabled and drops the Enter class, so Enter never
-saves the config held before the load.
+(the form reads the bands when a raster is picked), so the primary button is
+a plain button carrying the Enter class, disabled while the layer cannot be
+saved. While the form reads the bands, Save is disabled and drops the Enter
+class, so Enter never saves the config held before the read. "Keep at least
+one band." is the form's Bands field error, so the dialog does not repeat it.
 """
 
 import solara
@@ -25,12 +26,14 @@ from gui.widget.attribute_form import AttributeForm, layer_label, other_layer_na
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import form_card, use_form_dialog
 
+NO_BANDS = "steps.integrate.attr_err_no_bands"
+
 
 def attribute_error(config, layers, editing=None):
     """Why ``config`` cannot be saved as layer ``editing`` of ``layers`` (None:
     a new layer): a message key, or None."""
     if not config or not config.get("bands"):
-        return "steps.integrate.attr_err_no_bands"
+        return NO_BANDS
     for i, layer in enumerate(layers):
         if i != editing and (layer.get("source"), layer.get("kind")) == (config.get("source"), config.get("kind")):
             return "steps.integrate.attr_err_duplicate"
@@ -56,7 +59,7 @@ def AttributeModal(open_, gee_interface, layers, editing, on_save):
 def _AttributeLayerForm(open_, gee_interface, layers, editing, on_save):
     initial = layers[editing] if editing is not None and editing < len(layers) else None
     config, set_config = solara.use_state(initial)
-    busy, set_busy = solara.use_state(False)  # the form's Load is running
+    busy, set_busy = solara.use_state(False)  # the form is reading the bands
     error = attribute_error(config, layers, editing)
 
     def _save():
@@ -73,8 +76,9 @@ def _AttributeLayerForm(open_, gee_interface, layers, editing, on_save):
 
     title = (t("steps.integrate.attr_edit_title", name=layer_label(initial)) if initial is not None
              else t("steps.integrate.attr_add_title"))
-    # Before the first load nothing is wrong yet: Add is disabled, with no message.
-    shown = t(error) if error is not None and config is not None else None
+    # No band yet (none read, or none selected) disables Add with no message
+    # here: the form's Bands field says it, once.
+    shown = t(error) if error is not None and error != NO_BANDS else None
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=shown):
         AttributeForm(gee_interface=gee_interface, value=config, on_value=set_config,
                       reserved=reserved_for(layers, skip=editing), on_busy=set_busy,

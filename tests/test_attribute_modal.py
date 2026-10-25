@@ -112,25 +112,38 @@ def test_adding_a_layer_hands_over_unclashed_columns_and_closes(form):
         rc.close()
 
 
-@pytest.mark.parametrize("config, key", [
-    ({**LC, "bands": []}, "steps.integrate.attr_err_no_bands"),  # every band unticked
-    (LC, "steps.integrate.attr_err_duplicate"),                   # layer 0's raster again
-], ids=["no-bands", "duplicate"])
-def test_a_layer_that_cannot_be_saved_says_why_and_disables_add(form, config, key):
+def test_a_layer_that_reads_another_layers_raster_says_why_and_disables_add(form):
     open_, saved, rc = _render([LC])
     try:
-        form[-1].on_value(config)
-        assert _alerts(rc) == [t(key)]
+        form[-1].on_value(LC)  # layer 0's raster again
+        assert _alerts(rc) == [t("steps.integrate.attr_err_duplicate")]
         assert _button(rc, t("steps.integrate.attr_add")).disabled
         assert saved == [] and open_.value is True
     finally:
         rc.close()
 
 
-def test_a_load_in_progress_takes_save_off_enter(form):
-    """Reloading bands mid-edit: Enter must not save the config the form held
-    before the load, so Save is disabled and loses the Enter class until the
-    load ends."""
+@pytest.mark.parametrize("config", [{**LC, "bands": []}, None], ids=["no-band-selected", "bands-being-read"])
+def test_no_band_disables_add_and_leaves_the_error_to_the_bands_field(form, config):
+    """"Keep at least one band." shows once, as the form's Bands field error;
+    the dialog does not repeat it. ``None``: another raster was picked and its
+    bands are not read yet (or could not be)."""
+    open_, saved, rc = _render([LC])
+    try:
+        form[-1].on_value(_layer("c.tif", "b1"))
+        form[-1].on_value(config)
+        assert _alerts(rc) == []
+        assert t("steps.integrate.attr_err_no_bands") not in _strings(rc.container)
+        assert _button(rc, t("steps.integrate.attr_add")).disabled
+        assert saved == [] and open_.value is True
+    finally:
+        rc.close()
+
+
+def test_a_band_read_in_progress_takes_save_off_enter(form):
+    """An edit's bands are read when it opens: Enter must not save the config
+    the form held before the read, so Save is disabled and loses the Enter
+    class until the read ends."""
     _open, _saved, rc = _render([LC, DEM], editing=1)
     try:
         form[-1].on_busy(True)

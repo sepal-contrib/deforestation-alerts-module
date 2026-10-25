@@ -58,6 +58,17 @@ def test_band_names_reads_descriptions_with_fallback(tmp_path):
     assert ra.band_names(path) == ["forest", "band_2"]
 
 
+def test_band_keys_and_texts_show_band_n_but_key_band_n(tmp_path):
+    """A form shows a band without a description as "Band N"; its key (and
+    so its column) stays ``band_N``."""
+    path = _write_raster(
+        tmp_path / "r.tif",
+        [np.zeros((2, 2)), np.zeros((2, 2))],
+        descriptions=["forest", None],
+    )
+    assert ra.band_keys_and_texts(path) == [("forest", "forest"), ("band_2", "Band 2")]
+
+
 def _gdf(polys, crs="EPSG:4326"):
     return gpd.GeoDataFrame({"id": list(range(len(polys)))}, geometry=polys, crs=crs)
 

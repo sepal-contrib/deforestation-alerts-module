@@ -233,14 +233,24 @@ def suggest_format(band_names) -> Optional[str]:
     return "date_only" if names else None
 
 
-def suggest_band_map(fmt: str, band_names) -> Optional[BandMap]:
-    """Band **names** for ``fmt`` (a GeoTIFF caller maps them to its 1-based
-    indexes); None when the names do not identify the bands ("Band i" names
-    never do)."""
+def suggest_bands(fmt: str, band_names) -> tuple[Optional[str], Optional[str]]:
+    """``(alert, date)`` band **names** for ``fmt``, each found on its own (one
+    may be found and not the other): a preset's band names matched
+    case-insensitively (the raster's own spelling is returned); date-only's
+    date band is the single band whose name contains "date". None where the
+    names do not say ("Band i" names never do)."""
     names = list(band_names)
     if fmt == "date_only":
         dates = [n for n in names if "date" in str(n).casefold()]
-        return BandMap(alert=None, date=dates[0]) if len(dates) == 1 else None
+        return None, (dates[0] if len(dates) == 1 else None)
     alert_name, date_name = PRESETS[fmt]["bands"]
-    alert, dt = _match(names, alert_name), _match(names, date_name)
+    return _match(names, alert_name), _match(names, date_name)
+
+
+def suggest_band_map(fmt: str, band_names) -> Optional[BandMap]:
+    """Band **names** for ``fmt`` (a GeoTIFF caller maps them to its 1-based
+    indexes); None when the names do not identify every band ``fmt`` needs."""
+    alert, dt = suggest_bands(fmt, band_names)
+    if fmt == "date_only":
+        return BandMap(alert=None, date=dt) if dt else None
     return BandMap(alert=alert, date=dt) if alert and dt else None

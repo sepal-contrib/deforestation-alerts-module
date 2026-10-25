@@ -12,7 +12,7 @@ Work happens in a **project**: a folder under `~/module_results/deforestation_al
 
 1. **AOI**: the area of interest (an administrative area, a drawing, a vector file or an Earth Engine asset).
 2. **Alerts**: the predefined GLAD-L, RADD and GLAD-S2 sources, plus custom sources from an Earth Engine image or collection or from a GeoTIFF. Each source shows its coverage of the AOI.
-3. **Optional layers**: visualization layers (Earth Engine, GeoTIFF or Planet NICFI) for the map and the review screen.
+3. **Optional layers**: visualization layers (Earth Engine or GeoTIFF) for the map and the review screen.
 4. **Period**: one or more monitoring periods, with a look-back window. An alert reported in one period is never reported again in a later one.
 5. **Download & harmonize**: each source is downloaded and aligned onto one projected grid for the project, with optional masks.
 6. **Integrate & vectorize**: the sources are combined and turned into an **alert set**. Each connected cluster of alert pixels becomes one alert, which lists every source that flagged it. Options: probable (unconfirmed) alerts, a minimum size, the review order, a maximum count and attribute rasters.

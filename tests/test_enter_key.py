@@ -45,6 +45,7 @@ _PAGE = """<!doctype html><html><body>
   <div class="v-dialog__content v-dialog__content--active" style="z-index:202" tabindex="0">
     <div class="v-select"><input id="select" type="text"></div>
     <input id="end" type="date" value="2025-07-31">
+    <div class="da-enter-own"><input id="own" type="number"></div>
     <button class="da-enter-default" onclick="window.clicks++">Add period</button>
   </div>
 </div></body></html>"""
@@ -92,3 +93,8 @@ def test_enter_reaches_the_listener_through_ipyvuetifys_overlay():
 
 def test_enter_in_a_select_is_still_the_selects():
     assert _enter_in("select") == 0
+
+
+def test_enter_in_a_field_that_owns_it_presses_nothing():
+    assert enter_key.ENTER_OWN == "da-enter-own"
+    assert _enter_in("own") == 0

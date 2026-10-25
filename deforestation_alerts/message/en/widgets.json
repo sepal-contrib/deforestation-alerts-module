@@ -29,7 +29,22 @@
       "status_missing": "missing",
       "status_no_data": "no data",
       "status_not_covered": "not covered",
-      "status_unchecked": "not checked"
+      "status_unchecked": "not checked",
+      "action_edit": "Edit",
+      "action_delete": "Delete",
+      "action_download": "Download",
+      "action_redownload": "Download again",
+      "action_cancel": "Stop",
+      "action_open": "Open",
+      "action_dismiss": "Dismiss",
+      "action_move_up": "Move up",
+      "action_move_down": "Move down",
+      "action_show": "Show on the map",
+      "action_hide": "Hide from the map",
+      "action_select": "Make active",
+      "action_info": "Details",
+      "action_refresh": "Download again",
+      "action_menu": "More actions"
     }
   },
   "workflow": {

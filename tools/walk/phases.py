@@ -14,9 +14,28 @@ from tools.walk.walklib import (ENTER_BUTTON, MODAL, close_dialog, dialog_text, 
 
 #: Form labels as the app shows them (the English catalogue).
 SOURCE_TYPE = en("steps.alerts.mode_label")
-RASTER_SOURCE = en("steps.raster_input.origin_label")
-ORIGIN = {"gee": en("steps.raster_input.origin_gee"), "file": en("steps.raster_input.origin_file")}
 MODE_OFF = en("steps.prepare.mask_mode_off")
+#: The Source select above a picker (the mask, attribute and visualization-layer forms)
+FIELD_SOURCE = en("steps.raster_input.field_source")
+SOURCE = {"gee": en("steps.raster_input.source_gee"), "file": en("steps.raster_input.source_file")}
+#: What shows under that picker: the band list being read, or why it could not be
+BANDS_LOADING = en("steps.raster_input.bands_loading")
+BANDS_FAILED = en("steps.raster_input.bands_failed").split("{")[0]
+#: The mask form's Band select (two bands or more), or its one-band line
+MASK_BAND = en("steps.prepare.mask_band")
+MASK_ONE_BAND = en("steps.prepare.mask_band_one").split("{")[0]
+#: The alert-source form's selects (Alert format and the two band selects with two
+#: bands or more, Date encoding once the date values are read), its one-band line
+#: and the line shown while the date values are read
+ALERT_FORMAT = en("steps.alerts.format_label")
+ALERT_BAND = en("steps.alerts.band_alert")
+DATE_BAND = en("steps.alerts.band_date")
+DATE_ENCODING = en("steps.alerts.encoding_label")
+ALERT_ONE_BAND = en("steps.alerts.band_one").split("{")[0]
+DATES_LOADING = en("steps.alerts.dates_loading")
+#: The toast Integrate ends with: ``steps.integrate.done`` is a plural node
+#: ("{n} alert(s) ready for review"), so its common tail
+INTEGRATE_DONE = "ready for review"
 
 
 def manifest(data_dir, project):
@@ -108,25 +127,30 @@ def download_btn(page):
     return page.locator('.defo-analysis-right .defo-build-tile:visible').first
 
 
-def compact_stages(titles, label) -> int:
-    """How many stages read ``label`` in compact status tooltips: a Masks row
-    shows one icon whose title is ``"Download: ready · Aligned: ready"``
-    (``masks_card.mask_status``), one stage per ``Column: status``."""
-    return sum(len(re.findall(rf": {re.escape(label)}(?= ·|$)", t or "")) for t in titles)
-
-
 #: The Prepare step's labels in English (``run_all`` takes others, see
-#: ``prepare_labels``): the plural forms of the "Run {n} pending" button and
-#: the status cells' texts.
+#: ``prepare_labels``): the plural forms of the "Run {n} pending" button, the
+#: Stop button that replaces it while a job runs, and the Status cells' texts.
 EN_PREPARE = None
+#: The Status cell texts of a row in a running job (``prepare_view._in_flight``)
+RUNNING_KEYS = ("steps.prepare.state_downloading", "steps.prepare.state_downloading_pct",
+                "steps.prepare.state_harmonizing", "steps.prepare.state_aligning", "steps.prepare.state_queued")
 
 
-def prepare_labels(forms, ready, running):
+def _alternatives(texts, slot) -> str:
+    """A regex alternation of ``texts``, each ``{slot}`` matching a number."""
+    return "|".join(re.escape(x).replace(re.escape("{" + slot + "}"), r"\d+") for x in sorted(set(texts)))
+
+
+def prepare_labels(forms, ready, running, stop):
     """The labels ``run_all`` reads, in one language: ``forms`` the plural
-    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` /
-    ``running`` the ``widgets.product_table.status_*`` texts."""
-    alts = "|".join(re.escape(f).replace(re.escape("{n}"), r"\d+") for f in sorted(set(forms)))
-    return {"run": re.compile(rf"^\s*(?:{alts})\s*$"), "ready": ready, "running": running}
+    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` the
+    ``steps.prepare.state_ready`` text, ``running`` the texts of
+    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern, ``stop`` the
+    ``steps.prepare.footer_stop`` text of the button that replaces Run while a
+    job runs: a pattern."""
+    return {"run": re.compile(rf"^\s*(?:{_alternatives(forms, 'n')})\s*$"), "ready": ready,
+            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$"),
+            "stop": re.compile(rf"^\s*{re.escape(stop)}\s*$")}
 
 
 def en_prepare():
@@ -135,20 +159,34 @@ def en_prepare():
         from tools.walk.walklib import MESSAGES_EN
 
         node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
-        EN_PREPARE = prepare_labels(node.values(), en("widgets.product_table.status_ready"),
-                                    en("widgets.product_table.status_running"))
+        EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS],
+                                    en("steps.prepare.footer_stop"))
     return EN_PREPARE
 
 
 def run_button(page, labels=None):
-    """The "Run {n} pending" button of the Prepare panel, found by its
-    catalogue text (any plural form) in the labels' language."""
+    """The "Run {n} pending" button of the Prepare panel's batch footer, found
+    by its catalogue text (any plural form) in the labels' language. Absent
+    while a job runs: ``stop_button`` takes its place."""
     labels = labels or en_prepare()
     return page.locator(".right-panel button:visible").filter(has_text=labels["run"]).first
 
 
+def stop_button(page, labels=None):
+    """The footer's "Stop", which replaces "Run {n} pending" while the step has
+    a job (running or queued rows)."""
+    labels = labels or en_prepare()
+    return page.locator(".right-panel button:visible").filter(has_text=labels["stop"]).first
+
+
+def job_running(page, labels=None) -> bool:
+    """Whether the step has a job: its Stop button is shown."""
+    return stop_button(page, labels).count() > 0
+
+
 def pending_count(page, labels=None) -> int:
-    """The {n} of the "Run {n} pending" button (0 when it is not shown)."""
+    """The {n} of the "Run {n} pending" button (0 when it is not shown: nothing
+    is pending, or a job runs and Stop replaces it, see ``job_running``)."""
     btn = run_button(page, labels)
     if not btn.count():
         return 0
@@ -157,15 +195,13 @@ def pending_count(page, labels=None) -> int:
 
 
 def prepare_state(page, labels=None):
-    """The "ready" / "running" stages on the panel: a source row's status
-    cells (their label), and a Masks row's compact status (its tooltip)."""
+    """The "ready" / "running" Status cells on the panel (source and mask
+    rows), by their label: ``ready`` is one text, ``running`` a pattern
+    (Downloading 12%, Harmonizing, Aligning, Queued…)."""
     labels = labels or en_prepare()
-    titles = page.locator(".right-panel [title]").evaluate_all("es => es.map(e => e.getAttribute('title'))")
-    out = {}
-    for state in ("ready", "running"):
-        label = labels[state]
-        out[state] = page.locator(f'.right-panel :text-is("{label}")').count() + compact_stages(titles, label)
-    return out
+    panel = page.locator(".right-panel")
+    return {"ready": panel.locator(f':text-is("{labels["ready"]}")').count(),
+            "running": panel.get_by_text(labels["running"]).count()}
 
 
 def save_grid(page, *, resolution="30"):
@@ -178,24 +214,28 @@ def save_grid(page, *, resolution="30"):
     page.wait_for_timeout(1500)
 
 
-def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_done", labels=None):
+def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None):
     """Click "Run N pending" and wait for the job: it must start (a row reads
-    running, or nothing is pending any more) and end with ``expect_ready``
-    "ready" status cells (two per source row, two per Earth Engine mask row,
-    one aligned cell per GeoTIFF mask row) and no error toast. ``labels``
-    (``prepare_labels``) for a language other than English."""
+    running, Stop shows, or nothing is pending any more) and end (no running
+    cell, Stop gone again) with ``expect_ready`` "Ready" status cells (one per
+    source row and one per mask row on the panel, whatever its origin) and no
+    error toast. ``labels`` (``prepare_labels``) for a language other than
+    English."""
     goto_step(page, "prepare", 2000)
     run = run_button(page, labels)
     t_run = now_ms(page)
     run.click()
     t0 = time.time()
-    wait_for(lambda: prepare_state(page, labels)["running"] or pending_count(page, labels) == 0, 30,
-             "the job to start", poll=0.3)
+    # Stop replaces Run while the job lasts, so "nothing pending" is only true
+    # once Stop is not shown either
+    wait_for(lambda: prepare_state(page, labels)["running"] or job_running(page, labels)
+             or pending_count(page, labels) == 0, 30, "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page, labels)
-        if st["ready"] >= expect_ready and not st["running"]:
+        idle = not st["running"] and not job_running(page, labels)
+        if st["ready"] >= expect_ready and idle:
             break
-        if errors(toasts_since(page, t_run)) and not st["running"]:
+        if errors(toasts_since(page, t_run)) and idle:
             break
         page.wait_for_timeout(3000)
     rec["prepare_seconds"] = round(time.time() - t0)
@@ -206,22 +246,34 @@ def run_all(page, rec, *, out, expect_ready=4, timeout=900, shot_name="prepare_d
     assert not errors(toasts_since(page, t_run)), rec["prepare_toasts"]
 
 
-def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=4, timeout=900):
+def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=2, timeout=900):
     save_grid(page, resolution=resolution)
     run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout)
 
 
 def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
     """Integrate & vectorize until Analysis shows the set. ``replace``: the set
-    exists, so confirm the Replace dialog first."""
+    exists, so confirm the Replace dialog first. Analysis does not open by
+    itself once Integrate is done: Evaluation's *Start analysis* opens it."""
     goto_step(page, "integrate", 2000)
     t_int = now_ms(page)
     visible_btn(page, "Integrate & vectorize").click()
     if replace:
         wait_for(lambda: dialog_open(page), 30, "the Replace dialog")
         modal_button(page, "Replace").click()
-    t0, landed = time.time(), False
+    t0, done = time.time(), False
     while time.time() - t0 < timeout:
+        toasts = toasts_since(page, t_int)
+        if errors(toasts):
+            break
+        if any(INTEGRATE_DONE in x["msg"] for x in toasts):
+            done = True
+            break
+        page.wait_for_timeout(2000)
+    if done:
+        goto_step(page, "analysis")
+    t0, landed = time.time(), False
+    while done and time.time() - t0 < 60:
         # Block A's card is on screen. NOT "the new set's alert is on screen":
         # the Source / Detected / Status labels are written once at build and
         # the values are left alone while another set's rows are current
@@ -387,8 +439,8 @@ def overview_export_csv(page, rec, *, out, folder):
 # ------------------------------------------------- forms, tables and the legend (gates of slices 3-6)
 # A step's modal is a Vuetify dialog (`MODAL`) on the form frame: an outside
 # click nudges it, ESC cancels it, Enter presses its one `ENTER_BUTTON`
-# (`primary_button`); its raster origin is a select labelled RASTER_SOURCE
-# (`choose_origin`). A ProductTable row is a CSS-grid div whose first cell
+# (`primary_button`); its raster origin is a select labelled FIELD_SOURCE
+# above the picker (`choose_source`). A ProductTable row is a CSS-grid div whose first cell
 # holds the row's name, its under-row notes inside it; a Masks card row has
 # one Mode select (Off / Keep / Exclude) for its old switch and mode.
 # pysepal's AssetSelectComponent is a combobox labelled "Select an asset", its
@@ -429,10 +481,6 @@ def radio(page, label, scope=MODAL):
     page.wait_for_timeout(500)
 
 
-def radio_checked(page, label, scope=MODAL) -> bool:
-    return page.locator(f'{scope} .v-radio.v-item--active:has(label:has-text("{label}"))').count() > 0
-
-
 def _open_select(page, label, scope):
     page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()
     page.wait_for_timeout(600)
@@ -456,9 +504,63 @@ def choose(page, label, option, scope=MODAL):
     page.wait_for_timeout(600)
 
 
-def choose_origin(page, origin, scope=MODAL):
-    """RasterInput's origin select: ``"gee"`` (an Earth Engine asset) or ``"file"`` (a GeoTIFF)."""
-    choose(page, RASTER_SOURCE, ORIGIN[origin], scope)
+def choose_source(page, origin, scope=MODAL):
+    """The Source select above the picker (``SourceSelect``): ``"gee"`` or ``"file"``."""
+    choose(page, FIELD_SOURCE, SOURCE[origin], scope)
+
+
+def has_select(page, label, scope=MODAL) -> bool:
+    return page.locator(f'{scope} .v-select:has(label:text-is("{label}"))').count() > 0
+
+
+def wait_bands_read(page, ref, *, select_label, one_band_line, timeout=120):
+    """Wait until the picked raster's bands are read: the select labelled
+    ``select_label`` (two bands or more) or the ``one_band_line`` shows.
+    Raises with the form's error when the bands could not be read."""
+    def settled():
+        text = modal_text(page)
+        if BANDS_LOADING in text:
+            return False
+        return BANDS_FAILED in text or one_band_line in text or has_select(page, select_label)
+
+    wait_for(settled, timeout, f"the bands of {ref}")
+    text = modal_text(page)
+    assert BANDS_FAILED not in text, f"the bands of {ref}: {text[:300]}"
+    return has_select(page, select_label)
+
+
+def wait_source_ready(page, ref, *, date_only, button="Add source", timeout=180):
+    """Wait until the alert-source form can be sent, on a state that shows,
+    never on a line gone (the date values' line may not show yet): a
+    date-only source once its values are read (the Date encoding select and
+    no "Reading the date values…" line), any other format once ``button`` is
+    enabled."""
+    def ready():
+        if date_only:
+            return has_select(page, DATE_ENCODING) and DATES_LOADING not in modal_text(page)
+        found = modal(page).locator(f'button:has-text("{button}"):visible')
+        return found.count() > 0 and found.last.is_enabled()
+
+    wait_for(ready, timeout, f"{ref}: the source form ready to send")
+
+
+def select_only(page, label, option, scope=MODAL):
+    """In the multi-select labelled ``label``, keep only the item whose text is
+    ``option`` selected: it is selected first, then the others are cleared, so
+    the selection is never empty on the way. The menu is closed again."""
+    _open_select(page, label, scope)
+    items = page.locator(".menuable__content__active .v-list-item")
+    wait_for(lambda: items.count(), 15, f"the {label} menu")
+    for keep in (True, False):  # select the one wanted, then clear the rest
+        for i in range(items.count()):
+            item = items.nth(i)
+            wanted = item.inner_text().strip() == option
+            selected = item.get_attribute("aria-selected") == "true"
+            if wanted == keep and selected != wanted:
+                item.click()
+                page.wait_for_timeout(300)
+    page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()  # close it
+    page.wait_for_timeout(400)
 
 
 def type_asset(page, asset_id, scope=MODAL):
@@ -496,9 +598,40 @@ def row_text(page, name, scope=".right-panel") -> str:
 
 def row_button(page, name, icon, scope=".right-panel"):
     """A row action by its icon (ProductTable): mdi-map-plus / mdi-map-minus (show / hide),
-    mdi-cloud-download-outline (run), mdi-cloud-sync (re-download), mdi-pencil-outline,
-    mdi-delete-outline, mdi-radiobox-blank / mdi-radiobox-marked (select)."""
+    mdi-information-outline (details), mdi-dots-vertical (a mask's menu),
+    mdi-pencil-outline, mdi-delete-outline, mdi-radiobox-blank /
+    mdi-radiobox-marked (select). Not a Download & harmonize row's run: that
+    is its verb pill (``row_pill``), and mdi-refresh is both the source's
+    Download again (``row_action``) and the pill's Retry."""
     return row(page, name, scope).locator(f"button:has(.{icon})").first
+
+
+def row_pill(page, name, verb, scope=".right-panel"):
+    """The verb pill of a Download & harmonize row's Status cell, by its label:
+    ``verb`` is ``download`` / ``harmonize`` / ``align`` / ``retry`` (the
+    ``steps.prepare.verb_*`` texts). A row that is ready, running, queued,
+    blocked or on a review copy shows a state, not a pill: ``.count()`` is 0."""
+    text = en(f"steps.prepare.verb_{verb}")
+    label = re.compile(rf"^\s*{re.escape(text)}\s*$", re.I)
+    return row(page, name, scope).locator("button").filter(has_text=label).first
+
+
+def row_action(page, name, title_key, scope=".right-panel"):
+    """A row's icon action by its tooltip, which sits on the span around the
+    button (so it shows while the button is disabled): ``title_key`` is the
+    catalogue key, e.g. ``steps.prepare.action_download_again`` (a source's
+    refresh) or ``steps.prepare.action_delete_files``."""
+    return row(page, name, scope).locator(f'span[title="{en(title_key)}"] button').first
+
+
+def row_menu_pick(page, name, label_key, scope=".right-panel"):
+    """Pick an entry of a mask row's ⋮ menu (``label_key``: its catalogue key,
+    e.g. ``steps.prepare.mask_delete_action``). Any confirmation that follows
+    is the caller's."""
+    row_button(page, name, "mdi-dots-vertical", scope).click()
+    page.wait_for_timeout(600)
+    page.locator(f'.menuable__content__active .v-list-item:has-text("{en(label_key)}")').first.click()
+    page.wait_for_timeout(600)
 
 
 def row_mode(page, name, mode):
@@ -545,14 +678,14 @@ def add_mask(page, rec, *, name, origin, ref, band, mode="Keep", out):
     visible_btn(page, "Add mask", ".right-panel").click()
     wait_for(lambda: dialog_open(page), 15, "the mask modal")
     modal_field(page, "Name").fill(name)
-    choose_origin(page, origin)
+    choose_source(page, origin)
     if origin == "gee":
         type_asset(page, ref)
     else:
         pick_file(page, "GeoTIFF", ref, scope=MODAL)
-    wait_for(lambda: "Reading the bands" not in modal_text(page) and "Could not read" not in modal_text(page), 120,
-             f"the bands of {ref}")
-    choose(page, "Band", str(band))
+    # one band is a line (the band is set to it), two or more a Band select
+    if wait_bands_read(page, ref, select_label=MASK_BAND, one_band_line=MASK_ONE_BAND):
+        choose(page, MASK_BAND, str(band))
     radio(page, mode)
     shot(page, out, f"mask_modal_{name}")
     modal_button(page, "Add mask").click()

@@ -32,12 +32,20 @@ def test_en_reads_the_english_catalogues():
 
 def test_the_labels_the_walks_pick_exist():
     assert phases.SOURCE_TYPE == "Source type"
-    assert phases.RASTER_SOURCE == walklib.en("steps.raster_input.origin_label")
-    assert phases.ORIGIN == {"gee": "Earth Engine asset", "file": "GeoTIFF in my SEPAL folder"}
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
+    # the mask, attribute and visualization-layer forms: a Source select above the picker
+    assert phases.FIELD_SOURCE == walklib.en("steps.raster_input.field_source") == "Source"
+    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF"}
+    assert phases.MASK_BAND == "Band" and phases.MASK_ONE_BAND == "One band ("
+    # the alert-source form: Alert format and the band selects, Date encoding, the one-band line
+    assert (phases.ALERT_FORMAT, phases.ALERT_BAND, phases.DATE_BAND) == ("Alert format", "Alert band", "Date band")
+    assert phases.DATE_ENCODING == "Date encoding" and phases.ALERT_ONE_BAND == "One band ("
+    assert phases.DATES_LOADING == "Reading the date values…"
+    assert phases.BANDS_LOADING == walklib.en("steps.raster_input.bands_loading")
+    assert phases.BANDS_FAILED == "Could not read the bands: "
     for key in ("steps.project.empty_heading", "steps.project.new", "steps.project.search",
                 "steps.project.no_match", "steps.project.name_label", "steps.project.name_chars",
-                "steps.integrate.attr_add", "steps.integrate.attr_load", "steps.integrate.attr_loaded",
+                "steps.integrate.attr_add", "steps.raster_input.field_source", "steps.raster_input.bands_loading",
                 "steps.period.new", "steps.period.created"):
         assert walklib.en(key), key
 
@@ -45,7 +53,7 @@ def test_the_labels_the_walks_pick_exist():
 #: The f-string key families the walks build, and every value they fill in.
 KEY_FAMILIES = {
     "analysis.timeline.lane_{lane}": ("before", "after"),
-    "widgets.product_table.status_{state}": ("ready", "running"),
+    "steps.prepare.verb_{verb}": ("download", "harmonize", "align", "retry"),
 }
 
 
@@ -76,22 +84,104 @@ def test_every_label_key_a_walk_names_exists():
     assert not missing, missing
 
 
-def test_prepare_state_counts_the_stages_of_a_compact_mask_status():
-    """A Masks row shows one compact status icon (Task 8): its stages are in
-    its tooltip, so the walks' "ready" count reads them there."""
-    from types import SimpleNamespace
-
+def test_the_walks_prepare_labels_are_the_ones_the_status_cells_show():
+    """``prepare_state`` counts the Status cells by their text: ``en_prepare``
+    must hold the label of a ready source and mask cell, and its running
+    pattern must match every in-flight cell (Task 7)."""
     from deforestation_alerts.engine.fingerprint import Status
-    from gui.tile.masks_card import mask_status
+    from deforestation_alerts.engine.plan import MaskRow, PrepareRow
+    from gui.scripts.prepare_view import mask_state, source_state
 
-    gee = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.CURRENT), busy=False)["title"]
-    tif = mask_status(SimpleNamespace(raw=None, aligned=Status.CURRENT), busy=False)["title"]
-    stale = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.STALE), busy=False)["title"]
-    busy = mask_status(SimpleNamespace(raw=Status.CURRENT, aligned=Status.MISSING), busy=True)["title"]
-    ready, running = walklib.en("widgets.product_table.status_ready"), walklib.en("widgets.product_table.status_running")
-    assert phases.compact_stages([gee, tif, stale, "Prepare: ready to go"], ready) == 4
-    assert phases.compact_stages([busy], running) == 2
-    assert phases.compact_stages([gee], running) == 0
+    labels = phases.en_prepare()
+    source = dict(file_source=False, failed=False, locked=False, on_run=None)
+    mask = dict(failed=False, locked=False, on_run=None)
+    ready_source = source_state(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), stage=None, queued=False,
+                                pct=None, **source)
+    ready_mask = mask_state(MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep"), stage=None,
+                            queued=False, pct=None, **mask)
+    assert labels["ready"] == ready_source["label"] == ready_mask["label"]
+    row = PrepareRow("GLAD-L", Status.MISSING, Status.MISSING)
+    pending = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
+    running = [source_state(row, stage="download", queued=False, pct=12, **source),
+               source_state(row, stage="download", queued=False, pct=None, **source),
+               source_state(row, stage="harmonize", queued=False, pct=None, **source),
+               source_state(row, stage=None, queued=True, pct=None, **source),
+               mask_state(pending, stage="download", queued=False, pct=100, **mask),
+               mask_state(pending, stage="align", queued=False, pct=None, **mask),
+               mask_state(pending, stage=None, queued=True, pct=None, **mask)]
+    assert all(labels["running"].fullmatch(cell["label"]) for cell in running), [c["label"] for c in running]
+    assert not labels["running"].fullmatch(ready_source["label"])
+
+
+# ----------------------------------------------------- the band pickers
+#: A stand-in for a form's Vuetify multi-select (the attribute form's Bands):
+#: the slot toggles the menu, an item toggles its ``aria-selected``.
+_BANDS = """<!doctype html><html><body>
+<div class="v-dialog--active"><div class="v-select"><label>Bands</label>
+  <div class="v-select__slot" onclick="menu()">B1</div></div></div>
+<div id="menu">
+  <div class="v-list-item" aria-selected="true" onclick="pick(this)"><div class="v-list-item__title">B1</div></div>
+  <div class="v-list-item" aria-selected="false" onclick="pick(this)"><div class="v-list-item__title">B11</div></div>
+  <div class="v-list-item" aria-selected="true" onclick="pick(this)"><div class="v-list-item__title">B12</div></div>
+</div>
+<script>
+window.picked = [];
+function menu() { document.getElementById('menu').classList.toggle('menuable__content__active'); }
+function pick(e) {
+  e.setAttribute('aria-selected', String(e.getAttribute('aria-selected') !== 'true'));
+  window.picked.push([...document.querySelectorAll('[aria-selected="true"]')].length);
+}
+</script></body></html>"""
+
+
+@pytest.fixture
+def bands_page(_walk_browser):
+    page = _walk_browser.new_page()
+    page.set_content(_BANDS)
+    yield page
+    page.close()
+
+
+def test_select_only_keeps_one_band_of_a_multi_select(bands_page):
+    phases.select_only(bands_page, "Bands", "B11")
+    selected = bands_page.evaluate("""() => [...document.querySelectorAll('.v-list-item')]
+        .filter(e => e.getAttribute('aria-selected') === 'true').map(e => e.innerText.trim())""")
+    assert selected == ["B11"]  # "B1" and "B12" are other bands, not prefixes of it
+    assert 0 not in bands_page.evaluate("() => window.picked")  # never empty on the way
+    assert bands_page.locator(".menuable__content__active").count() == 0  # the menu is closed again
+
+
+def test_wait_bands_read_tells_a_select_from_a_one_band_line(bands_page):
+    assert phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
+    assert phases.has_select(bands_page, "Bands") and not phases.has_select(bands_page, "Band")
+    bands_page.set_content('<div class="v-dialog--active"><p>One band (slope): its statistic is added.</p></div>')
+    assert not phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
+    bands_page.set_content(f'<div class="v-dialog--active"><p>{phases.BANDS_FAILED}boom</p></div>')
+    with pytest.raises(AssertionError, match="boom"):
+        phases.wait_bands_read(bands_page, "x", select_label="Bands", one_band_line="One band (", timeout=2)
+
+
+def _source_form(body):
+    return f'<div class="v-dialog--active">{body}</div>'
+
+
+def test_wait_source_ready_waits_for_a_state_that_shows(bands_page):
+    encoding = f'<div class="v-select"><label>{phases.DATE_ENCODING}</label></div>'
+    # date only: nothing read yet is not ready, though no "Reading…" line shows
+    bands_page.set_content(_source_form("<p>One band (d).</p>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=True, timeout=1)
+    bands_page.set_content(_source_form(f"<p>{phases.DATES_LOADING}</p>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=True, timeout=1)
+    bands_page.set_content(_source_form(encoding))
+    phases.wait_source_ready(bands_page, "x", date_only=True, timeout=2)
+    # any other format: the Add button enabled
+    bands_page.set_content(_source_form("<button disabled>Add source</button>"))
+    with pytest.raises(AssertionError, match="ready to send"):
+        phases.wait_source_ready(bands_page, "x", date_only=False, timeout=1)
+    bands_page.set_content(_source_form("<button>Add source</button>"))
+    phases.wait_source_ready(bands_page, "x", date_only=False, timeout=2)
 
 
 # ----------------------------------------------------- the analysis screen
@@ -192,3 +282,40 @@ def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):
     walklib.back_to_workflow(screens, wait=100)
     assert not _screen_on(screens)
     assert screens.locator("#screen").evaluate("e => e.style.display") == "none"
+
+
+def test_prepare_state_counts_the_status_cells_by_their_text(_walk_browser):
+    """Ready and in-flight Status cells (their label in a div, as ProductTable
+    renders a ``state`` cell), and nothing outside the panel or in a subtitle."""
+    page = _walk_browser.new_page()
+    try:
+        page.set_content("""<div class="right-panel">
+          <div><i></i><div>Ready</div></div><div><i></i><div>Ready</div></div>
+          <div><i></i><div>Downloading 42%</div></div><div><i></i><div>Aligning</div></div>
+          <div><i></i><div>Queued</div></div><div>waiting for the row above</div>
+          <button>Align</button></div><div>Ready</div>""")
+        assert phases.prepare_state(page) == {"ready": 2, "running": 3}
+    finally:
+        page.close()
+
+
+def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_browser):
+    """The verb pill by its label, an icon action by the tooltip on its span,
+    and the footer's Run / Stop swap (``pending_count`` is 0 while Stop shows)."""
+    page = _walk_browser.new_page()
+    try:
+        page.set_content("""<div class="right-panel">
+          <div style="display:grid;grid-template-columns:1fr 1fr"><div>GLAD-L<div>sub</div></div>
+            <div><button>Harmonize</button></div>
+            <span title="Download again"><button disabled><i class="mdi-refresh"></i></button></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr"><div>RADD</div><div><i></i><div>Ready</div></div></div>
+          <button>Run 2 pending</button></div>""")
+        assert phases.row_pill(page, "GLAD-L", "harmonize").count() == 1
+        assert phases.row_pill(page, "GLAD-L", "download").count() == 0
+        assert phases.row_pill(page, "RADD", "harmonize").count() == 0
+        assert phases.row_action(page, "GLAD-L", "steps.prepare.action_download_again").is_disabled()
+        assert phases.pending_count(page) == 2 and not phases.job_running(page)
+        page.evaluate("document.querySelector('.right-panel > button').textContent = 'Stop'")
+        assert phases.job_running(page) and phases.pending_count(page) == 0
+    finally:
+        page.close()

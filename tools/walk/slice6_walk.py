@@ -279,7 +279,7 @@ def main(argv=None):
             folder = lambda: ph.set_dir(data, PROJECT)  # noqa: E731
             ok = ph.run_phases(page, [
                 ("open", lambda pg, r: (w.open_app(pg, args.port), w.open_project(pg, PROJECT))),
-                ("a_prepare", lambda pg, r: ph.prepare_grid_and_run_all(pg, r, out=out)),
+                ("a_prepare", lambda pg, r: ph.prepare_grid_and_run_all(pg, r, out=out, expect_ready=2)),
                 ("a_integrate", lambda pg, r: ph.integrate_and_land(pg, r, out=out)),
                 ("b_pick_template", lambda pg, r: pick_template(pg, r, out=out, data=data, template=template)),
                 ("b_review_save", lambda pg, r: ph.review_and_save(pg, r, out=out)),

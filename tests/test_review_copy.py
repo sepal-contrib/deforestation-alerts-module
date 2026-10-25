@@ -255,7 +255,11 @@ def test_masks_refuse_switches_and_disable_their_actions(tmp_path, monkeypatch):
     assert masks_card.switch_mask(s, "c", PER.id, "forest", on=False) is False
     assert s.project.value.periods[PER.id].masks["forest"] == before and warned == [BANNER]
     row = _rows([MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")], locked=True)["forest"]
-    assert all(a["disabled"] for a in row["actions"] if a["kind"] != "map_toggle")
+    # no pill, and every item of the ⋮ menu greyed; Details still open
+    assert row["cells"][2]["type"] == "state"
+    [menu] = [a for a in row["actions"] if a["kind"] == "menu"]
+    assert menu["items"] and all(i["disabled"] for i in menu["items"])
+    assert not any(a.get("disabled") for a in row["actions"] if a["kind"] == "info")
 
 
 def test_a_copys_earth_engine_mask_preview_is_disabled_and_refused(tmp_path, monkeypatch):
@@ -412,7 +416,8 @@ def test_prepare_rows_are_disabled_and_the_runner_refuses(tmp_path, monkeypatch)
     from tests.test_prepare_rows import _build
 
     out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING, coverage="covered")], locked=True)["RADD"]
-    assert all(a["disabled"] for a in out["actions"] if a["kind"] in ("download", "redownload"))
+    assert out["cells"][1]["type"] == "state"  # no pill to run it
+    assert all(a["disabled"] for a in out["actions"] if a["kind"] in ("refresh", "delete"))
     s = _state(tmp_path, monkeypatch)
     ctx = prepare_jobs.PrepareContext(app_state=s, layers=None, map_=None, notifier=None, name="c", pdir=tmp_path,
                                       period=PER, meta={}, aoi=None, cancel=threading.Event())

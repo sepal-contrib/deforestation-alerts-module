@@ -46,6 +46,14 @@ def test_deleting_a_source_leaves_none_of_its_files(tmp_path):
     assert all((tmp_path / a.rel_path).exists() for a in p.artifacts.values())
 
 
+def test_source_period_keys_are_this_periods_only(tmp_path):
+    p = _project(tmp_path)
+    assert cleanup.source_period_keys(p, JAN.id, "RADD") == [fp.raw_key(JAN.id, "RADD"), fp.harm_key(JAN.id, "RADD")]
+    p.artifacts = {k: a for k, a in p.artifacts.items() if k != fp.raw_key(FEB.id, "RADD")}
+    assert cleanup.source_period_keys(p, FEB.id, "RADD") == [fp.harm_key(FEB.id, "RADD")]  # only the existing ones
+    assert cleanup.source_period_keys(p, JAN.id, "GLAD-S2") == []
+
+
 def test_replacing_a_period_drops_only_that_period(tmp_path):
     p = _project(tmp_path)
     gone = cleanup.drop_artifacts(p, cleanup.period_artifact_keys(p, JAN.id))

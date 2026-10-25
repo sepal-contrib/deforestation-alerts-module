@@ -24,6 +24,7 @@ and ``deferred_keys`` record.
 
 import logging
 import os
+import threading
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -115,7 +116,7 @@ def states_vrt(combined, content_id: str) -> Path:
   </VRTRasterBand>
 </VRTDataset>
 """
-    part = out.with_name(out.name + f".{os.getpid()}.part")
+    part = out.with_name(out.name + f".{os.getpid()}.{threading.get_ident()}.part")
     part.write_text(xml)
     os.replace(part, out)
     return out

@@ -5,7 +5,7 @@ the attribute raster."""
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 import reacton.ipyvuetify as rv
 import solara
@@ -13,6 +13,8 @@ from pysepal.solara.components.inputs import AssetSelectComponent, FileInputComp
 
 from deforestation_alerts.engine import user_raster
 from gui.i18n import t
+from gui.scripts.error_text import error_text
+from gui.widget.text_style import MUTED
 
 EXTENSIONS = [".tif", ".tiff"]
 
@@ -31,16 +33,8 @@ def absolute(path) -> Optional[str]:
 
 
 @solara.component
-def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"),
-                disabled=False, show_origin=True):
-    # ``show_origin=False``: the caller picks the origin itself (the
-    # visualization-layer modal's Kind select)
-    if show_origin:  # an outlined field like the others in the form (spec D2), not radios
-        rv.Select(label=t("steps.raster_input.origin_label"), v_model=origin, on_v_model=on_origin,
-                  items=[{"text": t("steps.raster_input.origin_gee"), "value": "gee"},
-                         {"text": t("steps.raster_input.origin_file"), "value": "file"}],
-                  dense=True, outlined=True, hint=t("steps.raster_input.origin_hint"), persistent_hint=True,
-                  disabled=disabled)
+def RasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE_COLLECTION"), disabled=False):
+    # The origin is picked by the caller, with a ``SourceSelect`` above this.
     # pysepal's pickers take no ``disabled``: a wrapper blocks their pointer
     # events instead. Always the same wrapper, so toggling it never remounts
     # a picker (which would list the user's assets again).
@@ -49,6 +43,65 @@ def RasterInput(gee_interface, origin, on_origin, asset, path, asset_types=("IMA
             AssetSelectComponent(types=list(asset_types), value=asset, gee_interface=gee_interface)
         else:
             FileInputComponent(extensions=EXTENSIONS, value=path, label=t("steps.raster_input.file"))
+
+
+@solara.component
+def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool = False,
+                 origins: Sequence[str] = ("gee", "file")):
+    """The Source of a form that picks a raster: Earth Engine or a GeoTIFF in
+    the user's SEPAL folder, above ``RasterInput``.
+    ``on_origin`` gets the new origin; the caller clears the picked raster.
+    ``origins`` lists the choices in order, each read as
+    ``steps.raster_input.source_<origin>``."""
+    rv.Select(label=t("steps.raster_input.field_source"), v_model=origin, on_v_model=on_origin,
+              items=[{"text": t(f"steps.raster_input.source_{o}"), "value": o} for o in origins],
+              hint=t("steps.raster_input.source_hint"), persistent_hint=True, dense=True, outlined=True,
+              disabled=disabled)
+
+
+def band_status(task, ref) -> None:
+    """Where a form's band list stands, under the picker: "Reading the bands…"
+    while ``task`` runs, its error once it fails, nothing otherwise, and
+    nothing at all while no raster (``ref``) is picked: the task restarts in
+    an effect, so it is pending for one render after the raster is cleared
+    (at mount, after a Source change).
+
+    A plain function drawn into the caller's container (no wrapper, no
+    component of its own). It reads only ``task.pending``, ``task.error`` and
+    ``task.exception``, so it serves any ``solara.lab.use_task`` result, not
+    only ``use_band_list``'s; ``bands_read`` says when that one's bands are in."""
+    if not ref:
+        return
+    if task.pending:
+        solara.Text(t("steps.raster_input.bands_loading"), style=MUTED)
+    elif task.error:
+        solara.Text(t("steps.raster_input.bands_failed", error=error_text(task.exception)),
+                    classes=["error--text"])
+
+
+def bands_read(task) -> bool:
+    """Whether ``use_band_list``'s task has read a non-empty band list.
+
+    The task restarts in an effect, so in the render where the picked raster
+    changes it still holds the previous raster's list: a caller that must show
+    nothing once the raster is cleared also checks its ref."""
+    return bool(task.finished and not task.error and task.value and task.value[0])
+
+
+def bands_block_save(task, ref) -> bool:
+    """Whether a form's Save waits on its band list: while the picked raster's
+    bands are read, or once they could not be. With nothing picked it does
+    not: the form's own check says what is missing."""
+    return (bool(ref) and bool(task.pending)) or bool(task.error)
+
+
+def band_choices(names, header) -> list:
+    """``use_band_list``'s ``(names, header)`` as ``[(text, value)]``, one per
+    band: an Earth Engine band is its name; a GeoTIFF band reads as its text
+    (description, else "Band N") and its value is its 1-based index."""
+    if header is not None:
+        return [(b.name, b.index) for b in header.bands]
+    return [(n, n) for n in names]
 
 
 def use_band_list(gee_interface, origin, ref, asset_type):

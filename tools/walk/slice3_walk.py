@@ -77,20 +77,30 @@ def day_of_year(value) -> int:
 
 
 def add_custom(page, rec, *, name, origin, ref, preset, encoding=None, out):
-    """Alerts → Add source → Custom: one source through the modal, validated and listed (spec §6.2)."""
+    """Alerts → Add source → Custom: one source through the modal, validated and listed (spec §6.2).
+
+    The form reads the bands first. One band is a line and nothing to pick;
+    two or more show Alert format (``preset``) and the band selects, left on
+    their suggestions. Date encoding shows once the date values are read, on
+    a suggestion or empty: ``encoding`` is picked there when given."""
     w.goto_step(page, "alerts", 2000)
     ph.visible_btn(page, "Add source", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the source modal")
     ph.choose(page, ph.SOURCE_TYPE, "Custom")
     ph.modal_field(page, "Name").fill(name)
-    ph.choose_origin(page, origin)
+    ph.choose_source(page, origin)
     if origin == "gee":
         ph.type_asset(page, ref)
     else:
         ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
-    w.wait_for(lambda: ph.radio_checked(page, preset), 180, f"{ref}: bands listed and the {preset} preset suggested")
+    if ph.wait_bands_read(page, ref, select_label=ph.ALERT_FORMAT, one_band_line=ph.ALERT_ONE_BAND):
+        ph.choose(page, ph.ALERT_FORMAT, preset)
+    # date only: one band, or a date band with no alert band
+    date_only = ph.ALERT_ONE_BAND in ph.modal_text(page) or (
+        ph.has_select(page, ph.DATE_BAND) and not ph.has_select(page, ph.ALERT_BAND))
+    ph.wait_source_ready(page, ref, date_only=date_only)
     if encoding:
-        ph.choose(page, "Date encoding", encoding)
+        ph.choose(page, ph.DATE_ENCODING, encoding)
     rec[f"modal_{name}"] = ph.modal_text(page)[:800]
     w.shot(page, out, f"modal_{name.replace(' ', '_')}")
     ph.modal_button(page, "Add source").click()
@@ -104,7 +114,7 @@ def a_mixed(page, rec, *, out, folder):
     assert "custom · RADD" in rec["row_radd sa"] and "covers" in rec["row_radd sa"], rec["row_radd sa"]
     add_custom(page, rec, name="ccdc tif", origin="file", ref=USER / "ccdc.tif", preset="SEPAL CCDC alerts", out=out)
     assert "custom · SEPAL CCDC alerts" in rec["row_ccdc tif"], rec["row_ccdc tif"]
-    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=6)  # three rows, download + harmonize each
+    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=3)  # three rows, one Ready cell each
     ph.integrate_and_land(page, rec, out=out)
     alerts, s = store("s3a")
     rec["digit_map"] = s["digit_map"]
@@ -137,32 +147,24 @@ def _attribute_card(page):
     return page.locator(f'.right-panel .v-card--outlined:has(button:has-text("{ATTR_ADD}")):visible').last
 
 
-def _include_only(page, band):
-    boxes = page.locator(f"{ph.MODAL} .v-input--checkbox")
-    for i in range(boxes.count()):
-        box = boxes.nth(i)
-        checked = "v-input--is-label-active" in (box.get_attribute("class") or "")
-        if (box.inner_text().strip() == band) != checked:
-            box.locator(".v-input--selection-controls__input").click()
-            page.wait_for_timeout(150)
+ATTR_BANDS = w.en("steps.integrate.attr_bands")  # the Bands multi-select (two bands or more)
+ATTR_ONE_BAND = w.en("steps.integrate.attr_band_one").split("{")[0]  # or its one-band line
 
 
 def _add_attribute_layer(page, *, origin, ref, band, out):
     """Integrate → Add attribute layer → the modal: the raster, its bands
-    loaded, ``band`` alone kept, added to the card's list (spec D3)."""
+    read on pick, ``band`` alone kept, added to the card's list (spec D3).
+    One band is a line (it is selected); two or more the Bands multi-select."""
     w.goto_step(page, "integrate", 2000)
     ph.visible_btn(page, ATTR_ADD, ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the attribute modal")
-    ph.choose_origin(page, origin)
+    ph.choose_source(page, origin)
     if origin == "gee":
         ph.type_asset(page, ref)
     else:
         ph.pick_file(page, "GeoTIFF", ref, scope=ph.MODAL)
-    ph.modal_button(page, w.en("steps.integrate.attr_load")).click()
-    loaded = w.en("steps.integrate.attr_loaded").format(source=ref)
-    w.wait_for(lambda: loaded in ph.modal_text(page) and ph.modal(page).locator(".v-input--checkbox").count(), 120,
-               f"the band list of {ref}")
-    _include_only(page, band)
+    if ph.wait_bands_read(page, ref, select_label=ATTR_BANDS, one_band_line=ATTR_ONE_BAND):
+        ph.select_only(page, ATTR_BANDS, band)
     add = ph.primary_button(page)
     w.wait_for(lambda: add.count() and add.is_enabled(), 15, f"{band}: the layer can be added")
     w.shot(page, out, f"attribute_modal_{band}")
@@ -189,7 +191,7 @@ def f_attribute(page, rec, *, out):
 def b_date_only(page, rec, *, out, asset):
     w.open_project(page, "s3b")
     add_custom(page, rec, name="monthly", origin="gee", ref=asset, preset="Date only", encoding="yymm", out=out)
-    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=2)
+    ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=1)  # the monthly source
     ph.integrate_and_land(page, rec, out=out)
     alert, dates = harmonized("s3b", "monthly")
     rec["codes"] = sorted(set(alert[alert > 0].tolist()))
@@ -223,11 +225,13 @@ def c_not_covered(page, rec, *, out):
     ph.save_grid(page)
     rec["prepare_row"] = ph.row_text(page, "GLAD-S2")
     assert "Not covered: GLAD-S2 does not cover this AOI" in rec["prepare_row"], rec["prepare_row"]
-    assert ph.row_button(page, "GLAD-S2", "mdi-cloud-download-outline").is_disabled()
+    # a blocked row shows its reason, not a verb pill, and cannot be fetched again
+    assert not ph.row_pill(page, "GLAD-S2", "download").count()
+    assert ph.row_action(page, "GLAD-S2", "steps.prepare.action_download_again").is_disabled()
     assert ph.row_button(page, "GLAD-S2", "mdi-map-plus").is_disabled()
     # innerText is upper case (Vuetify buttons): compare case-insensitively
     assert "run 1 pending" in w.panel_text(page).lower(), w.panel_text(page)[-600:]
-    ph.run_all(page, rec, out=out, expect_ready=2)
+    ph.run_all(page, rec, out=out, expect_ready=1)  # GLAD-L; GLAD-S2 is blocked
     w.goto_step(page, "integrate", 2000)
     choice = page.locator('.right-panel .v-input--checkbox:has(label:has-text("GLAD-S2"))').first
     rec["integrate_choice"] = choice.inner_text()
@@ -242,7 +246,8 @@ def d_no_data(page, rec, *, out):
     w.wait_for(lambda: "No data for this period" in ph.row_text(page, "RADD"), 120, "the RADD row's reason")
     rec["row"] = ph.row_text(page, "RADD")
     assert "No data for this period: RADD starts 2020-01-01 here" in rec["row"], rec["row"]
-    assert ph.row_button(page, "RADD", "mdi-cloud-download-outline").is_disabled()
+    assert not ph.row_pill(page, "RADD", "download").count()  # no pill: the row has no data to fetch
+    assert ph.row_action(page, "RADD", "steps.prepare.action_download_again").is_disabled()
     w.shot(page, out, "no_data")
 
 
