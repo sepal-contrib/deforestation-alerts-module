@@ -45,11 +45,16 @@ def _Section(section: dict):
 
 @solara.component
 def DetailsDialog(open: bool, details: Optional[dict], on_close: Callable):
-    """``open``: shown; ``on_close()``: Close, Esc or a click outside."""
-    with rv.Dialog(v_model=open and details is not None, on_v_model=lambda v: None if v else on_close(),
-                   max_width=480):
-        if details is None:
-            return
+    """``open``: shown; ``on_close()``: Close, Esc or a click outside.
+
+    ``eager``: a lazy dialog builds its content on the first open, after
+    VDialog has tried to focus it, so that first open never heard Esc."""
+    dialog = rv.Dialog(v_model=open and details is not None, on_v_model=lambda v: None if v else on_close(),
+                       max_width=480, eager=True)
+    rv.use_event(dialog, "keydown.esc", lambda *_: on_close())
+    if details is None:
+        return dialog
+    with dialog:
         with rv.Card():
             with rv.CardTitle(style_="word-break: normal; overflow-wrap: anywhere; padding-bottom: 0;"):
                 rv.Icon(color="primary", class_="mr-2", children=["mdi-information-outline"])

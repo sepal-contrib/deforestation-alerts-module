@@ -195,6 +195,23 @@ def test_dialog_renders_sections_and_why():
         rc.close()
 
 
+def test_esc_closes_the_dialog_on_its_first_open():
+    """Eager, so VDialog focuses built content on the first open and hears
+    Esc; the dialog's ``keydown.esc`` also closes it."""
+    import ipyvuetify
+
+    closed = []
+    _, rc = reacton.render(DetailsDialog(open=False, details=None, on_close=lambda: closed.append(1)),
+                           handle_error=False)
+    try:
+        dialog = rc.find(ipyvuetify.Dialog).widget
+        assert dialog.eager is True
+        dialog.fire_event("keydown.esc", {})
+        assert closed == [1]
+    finally:
+        rc.close()
+
+
 def test_native_grid_reads_metres_for_earth_engine_and_degrees_for_a_geographic_file():
     """An Earth Engine scale is in metres even in EPSG:4326; a file's transform
     in its CRS's units; a projected file reads metres."""
