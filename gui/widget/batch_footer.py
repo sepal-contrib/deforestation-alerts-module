@@ -7,8 +7,8 @@ a job, the left side says how many of its rows run and wait
 (``{running} running · {queued} queued``), with a thin bar and
 ``{done} of {total} done`` while a batch is counted, and the main part turns
 into an outlined ``Stop``: it stops after the row in progress. Once
-stopped, until the job ends, it is a disabled outlined ``Stopping after this
-row…``, and the strip drops its queued half (those rows will not run).
+stopped, until the job ends, it is a disabled outlined ``Stopping…``, and the
+strip drops its queued half (those rows will not run).
 
 The spatial_risk app's list footer, without its queue: every click of the step
 starts its own job, so the counts come from the claimed rows and the stage
