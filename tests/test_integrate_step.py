@@ -1286,13 +1286,16 @@ async def _settle(done, tries=200):
     raise AssertionError("the band read never finished")
 
 
-def _geotiff(path, descriptions):
+def _geotiff(path, descriptions, colormaps=()):
+    """``colormaps``: the 1-based bands given a colour table."""
     with rasterio.open(path, "w", driver="GTiff", width=4, height=4, count=len(descriptions), dtype="uint8",
                        crs="EPSG:4326", transform=Affine(1, 0, 0, 0, -1, 4)) as dst:
         dst.write(np.ones((len(descriptions), 4, 4), np.uint8))
         for i, d in enumerate(descriptions, start=1):
             if d:
                 dst.set_band_description(i, d)
+        for i in colormaps:
+            dst.write_colormap(i, {0: (0, 0, 0, 255), 1: (0, 100, 0, 255)})
     return path
 
 
@@ -1443,6 +1446,43 @@ def test_one_band_attribute_shows_a_line_and_its_row(pickers, tmp_path):
             assert [w.v_model for w in _stats(rc)] == ["mean"]
             assert seen[-1]["bands"] == [{"band": "elevation", "stat": "mean", "column": "dem_elevation"}]
             assert "dem_elevation" in _texts(rc)
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_statistic_defaults_to_majority_for_an_earth_engine_band_of_classes(pickers, monkeypatch):
+    """ESA WorldCover's ``Map``: no categorical name, but a ``Map_class_values`` property."""
+    _ee_requests(monkeypatch)
+    gee, seen = _fake_gee(["Map"], {"Map": {"crs": "EPSG:4326", "scale": 10, "classes": True}}), []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False)
+        try:
+            pickers.asset.set(ASSET)
+            await _settle(lambda: seen and seen[-1] and seen[-1].get("bands"))
+            assert [w.v_model for w in _stats(rc)] == ["majority"]
+            majority = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_majority"))
+            assert _items(_stats(rc)[0])[0] == (majority, "majority")
+            assert "classes" not in seen[-1]["bands"][0]  # read, not saved
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_statistic_defaults_to_majority_for_a_geotiff_band_with_a_colour_table(pickers, tmp_path):
+    tif = _geotiff(tmp_path / "lc.tif", ["Map", "elevation"], colormaps=(1,))
+    seen = []
+
+    async def main():
+        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
+        try:
+            _pick_file(rc, pickers, tif)
+            await _settle(lambda: seen)
+            _bands_or_none(rc).v_model = ["Map", "elevation"]
+            assert [b["stat"] for b in seen[-1]["bands"]] == ["majority", "mean"]
         finally:
             rc.close()
 
@@ -1997,6 +2037,9 @@ def test_the_band_projections_request_reads_metres(gee):
     got = user_raster.band_projections_request("USGS/SRTMGL1_003", ["elevation"]).getInfo()
     assert got["elevation"]["crs"] == "EPSG:4326"
     assert 25 < got["elevation"]["scale"] < 35  # 1 arc-second, in metres
+    assert got["elevation"]["classes"] is False
+    lc = user_raster.band_projections_request("ESA/WorldCover/v200/2021", ["Map"]).getInfo()
+    assert lc["Map"]["classes"] is True
 
 
 # ---------------------------------------------------------------------------

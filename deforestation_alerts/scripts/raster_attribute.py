@@ -91,6 +91,20 @@ def band_keys_and_texts(raster_path):
         ]
 
 
+def classed_band_keys(raster_path) -> set:
+    """The keys (as ``band_keys_and_texts``) of the bands that carry a colour
+    table: a GeoTIFF's mark of a band of classes."""
+    keys = set()
+    with rasterio.open(raster_path) as src:
+        for i, desc in enumerate(src.descriptions, start=1):
+            try:
+                src.colormap(i)
+            except ValueError:  # no colour table
+                continue
+            keys.add(desc or f"band_{i}")
+    return keys
+
+
 def _majority(values):
     """Most frequent value; ties broken toward the smallest value."""
     uniq, counts = np.unique(values, return_counts=True)

@@ -205,13 +205,17 @@ def check_discovery(info: dict, fmt: str, bands: list) -> Optional[str]:
 
 
 def band_projections_request(ref: str, bands: list):
-    """``{band: {"crs", "scale"}}`` of an image's bands (bands may differ)."""
+    """``{band: {"crs", "scale", "classes"}}`` of an image's bands (bands may
+    differ). ``classes``: the image carries ``{band}_class_values``, the
+    catalogue's mark of a band of classes (ESA WorldCover's ``Map``)."""
     import ee
 
     img = ee.Image(ref)
+    names = img.propertyNames()
     return ee.Dictionary({
         str(b): ee.Dictionary({"crs": img.select(str(b)).projection().crs(),
-                               "scale": img.select(str(b)).projection().nominalScale()})
+                               "scale": img.select(str(b)).projection().nominalScale(),
+                               "classes": names.contains(f"{b}_class_values")})
         for b in bands
     })
 

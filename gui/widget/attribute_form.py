@@ -22,8 +22,8 @@ beside each selected band. They are de-duplicated against ``reserved`` (the
 alert columns and the other layers' columns, ``raster_attribute.reserved_for``)
 and the earlier bands. A layer saved before layers had names keeps its
 columns until it is given one. A new raster starts on its first band, each
-band's statistic by its name (Majority for a band that looks categorical,
-else Mean), and a name filled from the raster as soon as it is picked; an
+band's statistic Majority for a band of classes (its raster marks it, or
+its name looks categorical), else Mean, and a name filled from the raster as soon as it is picked; an
 edit keeps the saved selection and name, shows nothing below the picker
 until its raster's bands are read, and reading the raster its rows came from
 keeps their selection and statistics by band (new bands arrive unselected). A GeoTIFF
@@ -44,6 +44,7 @@ from deforestation_alerts.scripts.raster_attribute import (
     ALERT_RESERVED_COLUMNS,
     band_keys_and_texts,
     build_attribute_config,
+    classed_band_keys,
 )
 from gui.i18n import t
 from gui.scripts.vis_classes import looks_categorical
@@ -76,10 +77,12 @@ def other_layer_names(layers, skip=None) -> set:
             if i != skip and (layer or {}).get("name")}
 
 
-def default_stat(text) -> str:
-    """A new band's statistic: Majority for a band whose name looks like
-    classes (``vis_classes.looks_categorical``), else Mean."""
-    return "majority" if looks_categorical(text) else "mean"
+def default_stat(text, classes=False) -> str:
+    """A new band's statistic: Majority for a band of classes (``classes``:
+    its raster says so, a ``{band}_class_values`` property or a colour table)
+    or whose name looks like classes (``vis_classes.looks_categorical``), else
+    Mean."""
+    return "majority" if classes or looks_categorical(text) else "mean"
 
 
 def _band_text(row) -> str:
@@ -173,7 +176,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
                 bands = [(n, n) for n in names]
             else:
                 bands = await asyncio.to_thread(band_keys_and_texts, src)
-                projections = {}
+                projections = {k: {"classes": True} for k in await asyncio.to_thread(classed_band_keys, src)}
         except Exception:
             _drop()  # a failed read leaves no config; band_status shows why
             raise
@@ -185,7 +188,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
             row = old.get(key)
             include = row["include"] if row else (not old and i == 0)  # a new raster: its first band
             new_rows.append({"include": include or len(bands) == 1, "band": key, "text": text,
-                             "stat": row["stat"] if row else default_stat(text),
+                             "stat": row["stat"] if row else default_stat(text, (projections.get(key) or {}).get("classes")),
                              "column": row["column"] if row else key, **(projections.get(key) or {})})
         set_rows(new_rows)
         set_listed(True)
@@ -249,7 +252,7 @@ def AttributeForm(gee_interface, value, on_value, reserved=ALERT_RESERVED_COLUMN
         for i, r in enumerate(rows if shown else []):
             if not r["include"]:
                 continue
-            suggested = default_stat(_band_text(r))
+            suggested = default_stat(_band_text(r), r.get("classes"))
             with rv.Html(tag="div", style_=_ROW):
                 solara.Text(_band_text(r), style="min-width:90px;")
                 rv.Select(items=[{"text": t("steps.layers.suggested", text=t(f"steps.integrate.attr_stat_{s}"))
