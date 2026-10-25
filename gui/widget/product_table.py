@@ -41,7 +41,10 @@ HEADER_CELL = (
 )
 # Full-width line under a row (grid rows have no subtitle slot): its notes.
 ERROR_LINE = "grid-column:1/-1;padding:0 8px 5px;font-size:0.75rem;"
-SUBTITLE = "font-size:11px;line-height:1.3;" + NAME_TEXT
+# Up to two lines, then an ellipsis: on one line the Source column cut
+# "downloaded {date} · {size} · {n} alert pixels" after the size.
+SUBTITLE = ("font-size:11px;line-height:1.3;min-width:0;overflow:hidden;display:-webkit-box;"
+            "-webkit-box-orient:vertical;-webkit-line-clamp:2;")
 PROGRESS_TRACK = "width:100px;height:3px;border-radius:2px;background:rgba(0,0,0,0.12);overflow:hidden;"
 VERB = "text-transform:none;letter-spacing:normal;font-size:11.5px;padding:0 10px;height:24px;"
 
@@ -228,7 +231,7 @@ def _render_cell(cell: dict, first: bool):
                 solara.Text(label, classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
         return
     if ctype == "title":
-        # the name over a one-line subtitle (tone: warning / error), whole in its tooltip
+        # the name over a subtitle of up to two lines (tone: warning / error), whole in its tooltip
         sub = str(cell.get("subtitle", ""))
         tone = NOTE_CLASSES.get(cell.get("subtitle_tone"), "text--secondary")
         with rv.Html(tag="div", style_=STACK_CELL + "gap:0;"):

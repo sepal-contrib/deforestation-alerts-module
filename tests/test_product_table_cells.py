@@ -105,6 +105,7 @@ def test_title_cell_shows_name_and_subtitle():
         assert "GLAD-L" in texts and sub in texts
         (line,) = [w for w in _widgets(rc, v.Html) if sub in w.children]
         assert line.attributes["title"] == sub
+        assert "-webkit-line-clamp:2" in line.style_ and "nowrap" not in line.style_
     finally:
         rc.close()
 

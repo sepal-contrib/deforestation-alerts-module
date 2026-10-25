@@ -114,12 +114,14 @@ def _GridFields(app_state, name, bounds, grid, locked, default_res):
                          error_messages=[t(err)] if res_err else [])
         # rv.use_event is a hook: called unconditionally (spec §11)
         rv.use_event(epsg_field, "click:append", lambda *_: None if locked else _auto())
+        # One line each: solara.Text is an inline span, so adjacent texts ran
+        # together ("…before compressionThe grid is locked…").
         if preview is not None:
-            solara.Text(grid_size_text(preview), style=MUTED)
+            solara.Text(grid_size_text(preview), style="display:block;" + MUTED)
             if gridmod.estimate_bytes(preview) > LARGE_BYTES:
-                solara.Text(t("steps.prepare.grid_large"), classes=["warning--text"])
+                solara.Text(t("steps.prepare.grid_large"), style="display:block;", classes=["warning--text"])
         if locked:
-            solara.Text(t("steps.prepare.grid_locked"), style=MUTED)
+            solara.Text(t("steps.prepare.grid_locked"), style="display:block;" + MUTED)
         else:
             solara.Button(t("steps.prepare.grid_save"), color="primary", small=True, disabled=bool(err),
                           on_click=_save)
