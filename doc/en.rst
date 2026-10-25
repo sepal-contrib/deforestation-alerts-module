@@ -471,12 +471,12 @@ When every predefined source is in the project, the dialog reads: "Every predefi
 Custom sources
 """"""""""""""
 
-.. shot: alerts-add-custom | The "Add an alert source" dialog with Source type = Custom (0 of 6), Raster source = Earth Engine asset, an image asset id filled in, the Name suggested from it, Alert format = RADD with its help line, Alert band and Date band filled in. Crop to the dialog.
+.. shot: alerts-add-custom | The "Add an alert source" dialog with Source type = Custom (0 of 6), the Name suggested from the asset, Source = Earth Engine, a RADD image asset picked; under it, once the bands are read, Alert format = "RADD (suggested)" with its help line, Alert band and Date band filled in, the Date band's hint naming the suggested band. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/alerts-add-custom.png
     :alt: Adding a custom source from an Earth Engine asset
 
-A custom source reads your own alert raster through one of four format presets.
+A custom source reads your own alert raster through one of four format presets. The form reads from top to bottom: the name, where the raster comes from, the raster itself, then its bands. The bands are read as soon as the raster is chosen ("Reading the bands…"), and the fields that depend on them appear only once they are read.
 
 .. list-table::
     :header-rows: 1
@@ -488,24 +488,26 @@ A custom source reads your own alert raster through one of four format presets.
     *   -   **Name**
         -   The source's name in lists, legends and file names.
         -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved.
-    *   -   **Raster source**
-        -   Where the raster is read from: **Earth Engine asset** or **GeoTIFF in my SEPAL folder**.
-        -   **Earth Engine asset**.
+    *   -   **Source**
+        -   Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine**.
     *   -   Asset or **GeoTIFF**
         -   The GEE image or image collection, or the .tif file.
         -   An image collection is used whole, the newest image on top. For a collection of weekly snapshots (like RADD's own), give the latest image's ID instead. The GeoTIFF needs a coordinate reference system.
     *   -   **Alert format**
-        -   How the bands are read (see below).
-        -   Suggested from the band names when the app recognizes them.
+        -   How the bands are read (see below). Shown when the raster has two bands or more. A raster with one band has no format to choose: the form reads "One band (…): read as the alert date." and the source is read as **Date only**.
+        -   Suggested from the band names when the app recognizes them, and marked "(suggested)".
     *   -   **Alert band**
         -   The band holding the alert class.
-        -   Only for **RADD**, **SEPAL CCDC alerts** and **SEPAL PyEO alerts**.
+        -   Only for **RADD**, **SEPAL CCDC alerts** and **SEPAL PyEO alerts**. Starts on the band the format expects; when the raster has no such band, the hint reads "Pick the band that holds the alert level."
     *   -   **Date band**
         -   The band holding the detection date.
-        -   Always required.
+        -   Always required. Starts on the band the format expects, and its hint names it (e.g. "3 bands. Date looks like the alert date."), or asks you to pick it.
     *   -   **Date encoding**
-        -   How the date is written.
-        -   Only for **Date only**: **yymm (year and month; the alert is dated on the 1st)**, **yyddd (year and day of year)**, **yyyyddd (year and day of year)** or **decimal year**.
+        -   How the date is written: **yymm (year and month; the alert is dated on the 1st)**, **yyddd (year and day of year)**, **yyyyddd (year and day of year)** or **decimal year**.
+        -   Only for **Date only**. Suggested from the date band's values (see below).
+
+For a **Date only** source, the app reads the lowest and highest values of the date band over the AOI ("Reading the date values…") and suggests the encoding they fit, for example "Values from 24001 to 24366: they read as yyddd." Check the suggestion: the app reads only the two ends of the range. When the values do not look like dates ("… don't look like dates. Check the Date band."), or when no pixel over the AOI has a date ("No dated pixel over the AOI: pick the encoding."), choose the encoding yourself.
 
 The four formats:
 
@@ -529,7 +531,7 @@ When **Add source** is selected, the app checks the raster: the bands exist and 
 Edit a custom source
 """"""""""""""""""""
 
-Select the pencil icon to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change.
+Select the pencil icon to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change. The form keeps the saved format and bands until another raster is chosen.
 
 Once an alert set uses the source, it can no longer be edited: delete it and add a new one.
 
@@ -558,13 +560,17 @@ Common messages
 Optional layers
 ---------------
 
-Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen.
+Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer is an Earth Engine image or a GeoTIFF. It can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen.
 
 Open the **Optional layers** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_.
 
 The step is optional: skip it and come back at any time. Once the project has a `monitoring period <defo-period_>`_, the **Workflow** panel counts the step as done even without a layer, and its badge reads "none" instead of "nothing yet".
 
-.. shot: layers-list | The Optional layers step of the demo project with its one layer listed: name, kind chip, the green "in Analysis" chip, the grey summary note under it, and the map / edit / delete icons; the layer switched on, so it shows on the main map with its legend. Crop to the Workflow panel plus the visible part of the map.
+.. note::
+
+    Planet NICFI mosaics are not an optional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_.
+
+.. shot: layers-list | The Optional layers step of the demo project with its one layer listed: name, the "Earth Engine" chip, the green "in Analysis" chip, the grey summary note under it, and the map / edit / delete icons; the layer switched on, so it shows on the main map with its legend. Crop to the Workflow panel plus the visible part of the map.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/layers-list.png
     :alt: The Optional layers step with one layer
@@ -575,9 +581,9 @@ The layer list
 Each row of **Visualization layers** shows:
 
 -   the layer's **Name**;
--   a chip with its kind (**Earth Engine**, **GeoTIFF** or **Planet NICFI**);
+-   a chip with its source (**Earth Engine** or **GeoTIFF**);
 -   an **in Analysis** chip when it is shown on the Analysis maps; and
--   a note with its bands and value range (or its month, for Planet NICFI).
+-   a note with its bands and value range, or, for a categorical layer, its band and number of classes ("band Map · 9 classes").
 
 The icons on the right side of each row:
 
@@ -588,12 +594,83 @@ The icons on the right side of each row:
 Add a layer
 ^^^^^^^^^^^
 
-Select **Add layer** to open the **Add a visualization layer** dialog. Choose the **Kind** first: the other fields depend on it.
+Select **Add layer** to open the **Add a visualization layer** dialog. The form reads from top to bottom: the name, the source, the image, then how its bands are drawn. The bands are read as soon as the image is chosen ("Reading the bands…"), and every choice after that is a dropdown menu.
 
-Earth Engine image and GeoTIFF
-""""""""""""""""""""""""""""""
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
 
-.. shot: layers-add-rgb | The "Add a visualization layer" dialog with Kind = Earth Engine, an optical image asset filled in, Three bands (RGB) switched on, the band roles Red / Green / Blue / NIR / SWIR filled in automatically, Combination = False-colour infrared, the Red/Green/Blue band fields set by it, Min and Max filled in, Show in Analysis ticked. Crop to the dialog.
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Name**
+        -   The layer's name in the list, on the maps and in the legend.
+        -   Left empty, it is filled from the asset or file name, plus the band or combination. At most 24 characters, unique in the project.
+    *   -   **Source**
+        -   **Earth Engine** (an image asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine**.
+    *   -   Asset or **GeoTIFF**
+        -   A GEE *image* (not a collection), or a .tif file.
+        -   The GeoTIFF's folder must be writable: the app writes an overview file next to it so that the layer draws quickly.
+
+What comes next depends on the number of bands of the image:
+
+-   One band: the form names it ("One band (…): it is drawn on its own.").
+-   Two bands: choose the one to draw in **Band**. RGB needs three bands or more.
+-   Three bands or more: **Bands** asks for **Select one band** (then **Band**) or **RGB composite**. **RGB composite** is suggested when the band names give red, green and blue (e.g. ``B4``, ``B3`` and ``B2`` of Sentinel-2). **Band** starts on the first band.
+
+One band
+""""""""
+
+.. shot: layers-add-categorical | The "Add a visualization layer" dialog with Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): it is drawn on its own.", Raster type = Categorical: a colour per class, Find the classes in the AOI pressed and the classes found listed (swatch, value, Label, eye), Add a value and the Palette button under them, the legend preview with one chip per class, and Show in Analysis ticked. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/layers-add-categorical.png
+    :alt: Adding a categorical layer from a land-cover image
+
+A single band takes a **Raster type**:
+
+-   **Continuous: a colour ramp** for measured values (reflectance, elevation, tree cover); or
+-   **Categorical: a colour per class** for whole-number classes (a land-cover map, a forest mask, a loss year). It is suggested when the band's name looks like classes (e.g. ``landcover``, ``class``, ``lossyear``, ``datamask``).
+
+A preview of the layer's legend appears under the fields.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Colour ramp**
+        -   *Continuous*: the colours, from **Min** to **Max**: **Grayscale**, **Blues**, **Greens**, **Oranges**, **Cool–warm**, **Viridis**, **Terrain**, **Heat** or **Magma**.
+        -   **Grayscale**.
+    *   -   **Invert**
+        -   *Continuous*: reverses the ramp.
+        -   Off.
+    *   -   **Min**, **Max**
+        -   *Continuous*: the value range stretched over the colours.
+        -   0 and 1. Both must be numbers, **Min** below **Max**.
+    *   -   **Stretch to the AOI (2–98 %)**
+        -   *Continuous*: fills **Min** and **Max** with the band's 2nd and 98th percentiles over the AOI's bounding box.
+        -   
+    *   -   **Find the classes in the AOI**
+        -   *Categorical*: lists the whole values present over the AOI, each with a colour, its value, a **Label** and an eye icon that hides or shows it. When the image names its classes and their colours (as ESA WorldCover does), the classes take them; otherwise each class is labelled with its value.
+        -   At most 50 classes. Values not listed and hidden classes are transparent.
+    *   -   **Add a value**
+        -   *Categorical*: adds a class by hand. Type the whole number, then press **Enter** or select the plus icon.
+        -   Each value once.
+    *   -   **Palette**
+        -   *Categorical*: recolours every class from a palette: **Set1**, **Set2**, **Tab10** or **Paired**. Select a class's colour square to choose its colour by hand.
+        -   
+
+.. labels-ok: Enter
+
+When a band holds only 0 and 1 over the AOI, the classes found name 1 after the band and start with 0 hidden: "Only 0 and 1 in the AOI: 1 is named after the band and 0 starts hidden (transparent)." Select the eye icon of 0 to draw it too.
+
+RGB composite
+"""""""""""""
+
+.. shot: layers-add-rgb | The "Add a visualization layer" dialog with Source = Earth Engine, the demo's Sentinel-2 image picked, Bands = RGB composite (suggested) with its hint, Composite open on or set to False-colour infrared with its bands named, its hint "Detected from the band names: …", the Red / Green / Blue band selects with their colour dots, Min 0 and Max 4000, the Stretch to the AOI button, and Show in Analysis ticked. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/layers-add-rgb.png
     :alt: Adding an RGB layer from an Earth Engine image
@@ -607,80 +684,34 @@ Earth Engine image and GeoTIFF
     *   -   Field
         -   Description
         -   Default and limits
-    *   -   **Name**
-        -   The layer's name in the list, on the maps and in the legend.
-        -   Suggested from the image or file name, plus the band or combination. At most 24 characters, unique in the project.
-    *   -   Asset or **GeoTIFF**
-        -   A GEE *image* (not a collection), or a .tif file in your SEPAL folder.
-        -   The GeoTIFF's folder must be writable: the app writes an overview file next to it so that the layer draws quickly.
-    *   -   **Three bands (RGB)**
-        -   Off: one band drawn with a colour ramp. On: three bands as a red-green-blue (RGB) composite.
-        -   Off.
-    *   -   **Band**
-        -   The band to draw (one-band layer).
-        -
-    *   -   **Colour ramp**
-        -   The colours for a one-band layer: **Grayscale**, **Blues**, **Greens**, **Oranges**, **Cool–warm**, **Viridis**, **Terrain**, **Heat** or **Magma**.
-        -   **Grayscale**.
-    *   -   **Invert**
-        -   Reverses the ramp.
-        -   Off.
-    *   -   **Red**, **Green**, **Blue**, **NIR**, **SWIR**
-        -   Which of the image's bands holds each colour, near infrared (NIR) and shortwave infrared (SWIR) (RGB layer). Leave unknown ones empty.
-        -   Guessed from the band names (e.g. ``B4`` or ``SR_B4`` for red).
-    *   -   **Combination**
-        -   Fills the three bands from those roles: **True colour**, **False-colour infrared** (NIR / red / green), **SWIR / NIR / red**, or **Custom** to choose them yourself.
-        -   The first combination the roles allow. A combination is offered only when its roles are filled.
+    *   -   **Composite**
+        -   A standard combination, named with its bands (e.g. "True colour (B4 / B3 / B2)"): **True colour**, **False-colour infrared** (near infrared, red, green) or **SWIR / NIR / red** (shortwave infrared, near infrared, red); or **Custom: pick the bands**. The hint lists the band roles detected from the band names ("Detected from the band names: …").
+        -   The first combination the band names allow. A combination whose bands were not all recognized reads "(bands not found)" and cannot be chosen. With no band name recognized, the first three bands are used as red, green and blue.
     *   -   **Red band**, **Green band**, **Blue band**
         -   The bands drawn in red, green and blue.
-        -   Must be three different bands. Choosing one by hand switches **Combination** to **Custom**.
+        -   Filled by the **Composite**. Must be three different bands. Bands chosen by hand that match a combination select it; others select **Custom: pick the bands**.
     *   -   **Min**, **Max**
-        -   The value range stretched over the colours.
+        -   The value range stretched over the colours, the same for the three bands.
         -   0 and 1. Both must be numbers, **Min** below **Max**.
+    *   -   **Stretch to the AOI (2–98 %)**
+        -   Fills **Min** and **Max** with one range across the three bands, from their 2nd and 98th percentiles over the AOI's bounding box.
+        -   
 
 .. tip::
 
-    Set **Min** and **Max** to the real range of the data (e.g. 0 to 3000 for a Sentinel-2 surface-reflectance image). With the default 0 to 1, most images draw all white.
-
-Planet NICFI
-""""""""""""
-
-.. shot: layers-add-nicfi | The "Add a visualization layer" dialog with Kind = Planet NICFI, Name filled in, Month (YYYY-MM) left empty with its hint, the "Region: Americas" line, and Show in Analysis ticked. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/layers-add-nicfi.png
-    :alt: Adding a Planet NICFI layer
-
-The monthly Planet NICFI tropical mosaic, read through GEE and drawn in true colour.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 40 40
-
-    *   -   Field
-        -   Description
-        -   Default and limits
-    *   -   **Name**
-        -   The layer's name.
-        -   At most 24 characters, unique in the project.
-    *   -   **Month (YYYY-MM)**
-        -   The month of the mosaic.
-        -   Empty: the active period's last month, which follows the active period when it changes. Without a period, last month.
-
-The region (**Americas**, **Africa** or **Asia**) comes from the centre of the AOI and is shown under the month. When the layer is saved, the app checks that your GEE account can read that region.
-
-.. important::
-
-    "Your Earth Engine account has no access to Planet NICFI …" means the account has not been granted NICFI access. Request it from Planet's NICFI programme, then add the layer again.
+    Set **Min** and **Max** to the real range of the data (e.g. 0 to 3000 for a Sentinel-2 surface-reflectance image), or select **Stretch to the AOI (2–98 %)**. With the default 0 to 1, most images draw all white.
 
 Show in Analysis
 """"""""""""""""
 
-**Show in Analysis** (all kinds) adds the layer to both maps of the `Analysis <defo-analysis_>`_ screen, turned off. Turn it on there from the layer menu. The Analysis maps show no legend for it.
+**Show in Analysis** adds the layer to both maps of the `Analysis <defo-analysis_>`_ screen, turned off. Turn it on there from the layer menu. The Analysis maps show no legend for it.
 
 Save a layer
 ^^^^^^^^^^^^
 
-Select **Add layer** (or **Save** when editing). The app checks the bands, the range and, for a GeoTIFF, the folder. A problem is shown in red inside the dialog, which stays open. While the check runs, the button reads **Cancel** and stops it.
+Select **Add layer** (or **Save** when editing). The app checks the bands, the range or the classes and, for a GeoTIFF, the folder. A problem is shown in red inside the dialog, which stays open. While the check runs, the button reads **Cancel** and stops it.
+
+Layers saved before the visualization styles were added keep their exact look.
 
 Common messages
 ^^^^^^^^^^^^^^^
@@ -690,6 +721,18 @@ Common messages
 
 "Pick three different bands for red, green and blue."
     Choose a different band for each colour.
+
+"This band has non-integer values: draw it as Continuous."
+    **Find the classes in the AOI** found decimal values: the band is not a set of classes. Set **Raster type** to **Continuous: a colour ramp**.
+
+"More than 50 values: this band looks continuous."
+    Draw the band as **Continuous: a colour ramp**, or add the classes you need by hand with **Add a value**.
+
+"No values in the AOI." or "The band has no spread of values in the AOI."
+    The band has no data over the AOI, or the same value everywhere. Check the image and the band, or enter **Min** and **Max** yourself.
+
+"Find the classes or add a value." or "Show at least one class."
+    A categorical layer needs at least one class, and at least one class not hidden.
 
 "The folder … is not writable, so the layer's overviews cannot be built."
     Move the GeoTIFF to a folder of your own in SEPAL.
@@ -873,7 +916,7 @@ Open the **Download & harmonize** step of the **Workflow** panel. It unlocks onc
 
 From top to bottom, the step has three parts: the **Project grid**, the **Masks** and the **Sources for this period**.
 
-.. shot: prepare-step | The Download & harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with one mask, and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 all green "ready" in both Download and Harmonize, each with its "ready · N alert pixels" and "… on disk" notes. Crop to the Workflow panel.
+.. shot: prepare-step | The Download & harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details, Download again and Delete files icons; the "Run 0 pending" button of the footer under it. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-step.png
     :alt: The Download & harmonize step after a run
@@ -932,12 +975,12 @@ When several masks are on, all of them apply. Masks act on the harmonized source
 Add a mask
 """"""""""
 
-.. shot: prepare-mask-add | The "Add a mask" dialog with Raster source = Earth Engine asset, a forest-cover image asset picked, Name filled from it with its hint "At most 24 characters; it also names the mask's files.", Band chosen, Mode in the active period = Keep, and the grey note under it. Crop to the dialog.
+.. shot: prepare-mask-add | The "Add a mask" dialog: Name with its hint "At most 24 characters; it also names the mask's files.", Source = Earth Engine, the Hansen forest-change image asset picked, Band = treecover2000 with the hint naming the band suggested as a mask, Mode in the active period = Keep, and the grey note under it. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-mask-add.png
     :alt: Adding a mask
 
-Select **Add mask** to open the **Add a mask** dialog.
+Select **Add mask** to open the **Add a mask** dialog. The bands are read as soon as the raster is chosen.
 
 .. list-table::
     :header-rows: 1
@@ -949,15 +992,15 @@ Select **Add mask** to open the **Add a mask** dialog.
     *   -   **Name**
         -   The mask's name in lists, legends and file names.
         -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks.
-    *   -   **Raster source**
-        -   **Earth Engine asset** or **GeoTIFF in my SEPAL folder**.
-        -   **Earth Engine asset**.
+    *   -   **Source**
+        -   **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine**.
     *   -   Asset or **GeoTIFF**
         -   The GEE image or image collection, or the .tif file.
-        -   The bands are read as soon as it is chosen.
+        -   
     *   -   **Band**
-        -   The band that defines the mask.
-        -   Required.
+        -   The band that defines the mask. Shown when the raster has two bands or more; with one band, the form reads "One band (…): the mask is made from it."
+        -   The band whose name looks like a mask (e.g. ``datamask``), named in the hint ("… looks like a mask; non-zero pixels are inside it."), else none: pick it.
     *   -   **Mode in the active period**
         -   **Keep** or **Exclude**.
         -   **Keep**. The mask is turned on in the active period only; every other period leaves it off until it is turned on there.
@@ -967,22 +1010,39 @@ When **Add mask** is selected, the app checks the raster and its band. A problem
 The mask list
 """""""""""""
 
-Each row of **Masks** shows the mask's name, its **Mode** in the active period, and one status icon for its download and its alignment to the grid (hover over it to read both). The note under the name gives its origin (**Earth Engine** or **GeoTIFF**) and its size on disk.
+Each row of **Masks** shows:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Column
+        -   Description
+    *   -   **Mask**
+        -   The mask's name. The line under it gives its source and size on disk once it is ready ("Earth Engine · 18.9 MB"), or why it needs a run ("not downloaded yet", "the grid changed (…): align again"). It ends with "Off" when the mask is off in the active period.
+    *   -   **Mode**
+        -   The mask's mode in the active period: **Off**, **Keep** or **Exclude**. A change applies at once; the period's sources then read out of date.
+    *   -   **Status**
+        -   "Ready", or a button for the mask's next run: **Download** (a GEE mask not downloaded yet) or **Align** (onto the grid). An orange button redoes a file that is out of date. While a run goes on, the cell reads "Downloading 42%", "Aligning" or "Queued".
 
 The icons on the right side of each row:
 
--   the cloud icon downloads and aligns the mask;
--   the cloud-refresh icon (GEE masks only) downloads it again, for an asset that changed;
--   the map icon shows it on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;
--   the pencil icon opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and
--   the bin icon deletes the mask. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date.
+-   the map icon shows the mask on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;
+-   the information icon opens its **Details** (see `The Details dialog <defo-prepare-details_>`_); and
+-   the **More actions** menu (three dots) holds:
+
+    -   **Download again** (GEE masks only), for an asset that changed. The app asks first: "This fetches the mask again from Earth Engine, replaces its download, then aligns it.";
+    -   **Edit**, which opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and
+    -   **Delete mask…**, which deletes the mask after you confirm. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date.
 
 A mask is downloaded and aligned once for the whole project, whichever period runs it.
+
+.. _defo-prepare-sources:
 
 Sources for this period
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The table has one row per alert source of the project:
+The table has one row per alert source of the project, with two columns:
 
 .. list-table::
     :header-rows: 1
@@ -991,42 +1051,96 @@ The table has one row per alert source of the project:
     *   -   Column
         -   Description
     *   -   **Source**
-        -   The source's name. The notes under it give its coverage warnings, what its harmonized file found ("ready · 1234 alert pixels", "ready · 0 alerts found" or "ready · all 56 alert pixels removed by masks") and its size on disk.
+        -   The source's name. The line under it says what the row holds or what it waits for (see below). Warnings, such as a partial coverage, and errors show as lines under the row.
+    *   -   **Status**
+        -   The row's state, or a button for its next run.
+
+The **Status** column reads:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Status
+        -   Meaning
+    *   -   "Ready"
+        -   Downloaded and harmonized with the current inputs. The line under the name gives the download date, the size on disk and what the harmonized file found: "downloaded 2026-10-20 · 31.7 MB · 2,362,718 alert pixels".
     *   -   **Download**
-        -   The download over the period's search window.
+        -   The source is not downloaded for this period's search window yet, or its download is out of date. Select the button to run the row: it aligns any mask of the period that needs it, downloads the source, then harmonizes it.
     *   -   **Harmonize**
-        -   The alignment onto the grid, with the masks applied.
+        -   The download is current, but the harmonized file is missing or out of date (a new grid, a mask change). The run harmonizes again without downloading. A GeoTIFF source is never downloaded: it is read from its file, so its button always reads **Harmonize**.
+    *   -   **Retry**
+        -   The last run of the row failed. Its error is shown in red under the row.
+    *   -   "Downloading 42%", "Harmonizing", "Queued"
+        -   The row is running, or waits for its turn in a run ("waiting for the row above").
+    *   -   "not covered", "no data"
+        -   The source cannot run for this period: it does not cover the AOI, or it has no data for the search window. The line under the name gives the reason. See `Alert sources <defo-alerts_>`_ for coverage.
+    *   -   "File missing"
+        -   The file of a GeoTIFF source is gone (see `Common messages <defo-prepare-messages_>`_).
 
-Each stage reads:
+In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: instead of a button, the column reads "To download", "To harmonize" or "To align".
 
--   **ready**;
--   **out of date**, when its inputs changed (the period's dates, the AOI, the grid or a mask);
--   **missing**, when it is not made yet; or
--   **running**, with the download's percentage.
+A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why, and what the run does about it: for example "the grid changed (EPSG:32719 · 30 m → EPSG:32719 · 10 m): harmonize again", "the search window changed (…): download again", "mask forest_2000 changed: harmonize again" or "the AOI changed: download again".
 
-A source that cannot run reads **not covered** or **no data** in both cells, with the reason under its name ("Not covered: …" or "No data for this period: …"). See `Alert sources <defo-alerts_>`_ for coverage.
+.. note::
+
+    A row that is ready has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**.
 
 The icons on the right side of each row:
 
--   the cloud icon runs the row: it first aligns any mask of the period that needs it, then downloads the source (if needed) and harmonizes it. It is disabled when the row is ready;
--   the cloud-refresh icon downloads the source again even if nothing changed, for a catalogue that updates its alerts over the same dates; and
--   the map icon shows the harmonized alerts on the map.
+-   the map icon (**Show on the map**) shows the harmonized alerts on the map;
+-   the information icon opens the row's **Details** (see below);
+-   **Download again** fetches the source again even if nothing changed, then harmonizes it. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source ("Nothing to download again: read from a file"), and waits while a mask of the period needs a run ("Run the pending masks first"); and
+-   **Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the project: run the row again to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay.
+
+.. _defo-prepare-details:
+
+The Details dialog
+""""""""""""""""""
+
+.. shot: prepare-details | The Details dialog of the demo's GLAD-L row: the title GLAD-L, the lead "Ready · 2026-09-01 → 2026-09-30", the Source section (Catalogue, Coverage), the Download section with its date (Search window, Native grid, Size, File) and the Harmonize section with its date (Grid used, Resampling, Masks, Alert pixels, Alert dates, Size, File), and the Close button. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-details.png
+    :alt: The Details dialog of a source
+
+The information icon of a source or a mask opens a read-only summary of what its files were made with. It starts with the row's status and, for a source, the period. When the row is out of date, an orange **Why:** line says what changed.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Section
+        -   What it lists
+    *   -   **Source**
+        -   A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**.
+    *   -   **Download** (**Read from file** for a GeoTIFF source)
+        -   The **Search window**, the **Native grid** the file was downloaded in, its **Size** and its **File** in the project folder.
+    *   -   **Harmonize** (**Align** for a mask)
+        -   The **Grid used**, with the current grid when it changed since, the **Resampling**, the **Masks** applied with their mode, the **Alert pixels** kept (and how many the masks removed), the **Alert dates** found, the **Size** and the **File**. For a mask: its **Mask pixels**.
+
+Each section gives the date and time its file was written, or reads "Not run yet". Select **Close**, or press **Esc**, to close the dialog.
+
+.. labels-ok: Esc
 
 Run everything
 """"""""""""""
 
-Select **Run … pending** (e.g. **Run 4 pending**). It first aligns the masks that need it, then runs every source that is missing or out of date, one row at a time:
+The footer under the table runs the rows in batch. Select **Run … pending** (e.g. **Run 4 pending**). It first aligns the masks on in the period that need it, then runs every source that needs a run, one row at a time:
 
--   rows that read **not covered** or **no data** are skipped;
+-   rows that read "not covered" or "no data" are skipped;
 -   a row that fails shows its error in red under it, and the run goes on with the next row.
 
-**Stop after this row** ends the run once the row now running has finished. The rows already done stay done.
+While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done.
 
-The run shows as a task notification titled **Download & harmonize**, with the step it is on ("Preparing GLAD-L", then "Harmonizing GLAD-L") and the download's percentage ("Download & harmonize · 35%"). The percentage also shows in the row's **Download** cell.
+The arrow beside **Run … pending** (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, then harmonized, after you confirm.
+
+The run also shows as a task notification titled **Download & harmonize**, with the step it is on ("Preparing GLAD-L", then "Harmonizing GLAD-L") and the download's percentage ("Download & harmonize · 35%").
 
 .. tip::
 
     Each row needs free disk space for its files. The app checks it before writing, and stops the row with a message when the disk is too full. The grid size line gives an idea of how big a source can get.
+
+.. _defo-prepare-messages:
 
 Common messages
 ^^^^^^^^^^^^^^^
@@ -1046,14 +1160,14 @@ Common messages
 "A job is writing into this project; save the grid once it has finished."
     The grid, masks and sources cannot change while a download or an **Integrate & vectorize** run is going.
 
-"missing: file not found: …" (under a row) or "Mask …: file not found (…). Put the file back at this path to use the mask."
+"File missing", with "missing: file not found: …" under the row, or "Mask …: file not found (…). Put the file back at this path to use the mask."
     A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place.
 
 "A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first."
-    A source cannot be harmonized before the period's masks are aligned. Select **Run … pending**, or run the mask's row first.
+    A source cannot be harmonized before the period's masks are aligned. Select **Run … pending**, or the mask's **Align** button first.
 
 "Mask …: its native grid (projection and scale) is unknown; edit the mask."
-    The app does not know how to download this GEE mask. Open it with the pencil icon and save it again, so that its raster is checked anew.
+    The app does not know how to download this GEE mask. Open it with **Edit** in its **More actions** menu and save it again, so that its raster is checked anew.
 
 .. _defo-integrate:
 
@@ -1170,7 +1284,7 @@ Attribute layers
 
 An *attribute layer* adds information to each alert from a raster (e.g. the majority land-cover class under the alert, or its mean elevation). The values are columns of the alert table: they are exported with the alerts, and columns of classes can be used in the Analysis filter.
 
-.. shot: integrate-attribute | The "Add an attribute layer" dialog with Raster source = Earth Engine asset, a land-cover image picked, Load bands pressed, "Bands of …" shown, Layer name filled with its hint "Alert columns are named <layer name>_<band>.", one band selected with statistic Majority and its column name beside it. Crop to the dialog.
+.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Alert columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every alert.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-attribute.png
     :alt: Adding an attribute layer
@@ -1178,10 +1292,10 @@ An *attribute layer* adds information to each alert from a raster (e.g. the majo
 To add an attribute layer:
 
 1.  Select **Add attribute layer** to open the **Add an attribute layer** dialog.
-2.  Choose the **Raster source** (**Earth Engine asset**, an image, or **GeoTIFF in my SEPAL folder**), then choose the raster.
-3.  Select **Load bands**. The bands are read and listed ("Bands of …").
-4.  Check the **Layer name**, suggested from the raster. The columns are named *layer name*\_\ *band*.
-5.  In **Bands**, select one or more bands. For each, choose the statistic computed over the alert: **Majority** (the default, for classes), **Mean**, **Minimum**, **Maximum** or **Median**. The column name is shown beside it.
+2.  Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\_\ *band*.
+3.  Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once.
+4.  With one band, the form reads "One band (…): its statistic is added to every alert." With two or more, select one or more in **Bands**.
+5.  For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked "(suggested)". The column name is shown beside it.
 6.  Select **Add attribute layer**.
 
 Rules:
@@ -1824,10 +1938,12 @@ The **Layers** menu lists:
 
 A map displays "Imagery failed to load" when the tiles of its image do not load.
 
+.. _defo-analysis-timeline:
+
 Choose the images: the timeline
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the chips Planet 0 (greyed: the build account has no NICFI access), Sentinel-2 17 +22, Landsat 8 +13, the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; the month names on the axis. Crop to the timeline card.
+.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the chips Sentinel-2 17 +23 (no Planet chip: the build account has no NICFI access), Landsat 8 +13, the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; the month names on the axis. Crop to the timeline card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-timeline.png
     :alt: The image timeline
@@ -1836,7 +1952,7 @@ The timeline shows every image that covers the alert, from about two months befo
 
 -   *Sentinel-2* stripes on top;
 -   *Landsat* in the middle; and
--   *Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom.
+-   *Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom, only when your GEE account has NICFI access.
 
 A faded, half-height stripe is an image over the cloud limit. The gold band is the *alert window*: the dates over which the alert was detected. On a `growth alert <defo-integrate-growth_>`_, a grey band behind it marks the detection dates of each earlier alert it is linked to: choose a before image taken after the earlier clearing to see only the new loss.
 
@@ -1864,7 +1980,7 @@ The toolbar above the track:
         -   Description
         -   Default
     *   -   *Planet*, *Sentinel-2*, *Landsat* chips
-        -   Show or hide a collection. Each chip counts the collection's images in view, then ("+7") those over the cloud limit. The Planet chip is disabled when your GEE account has no NICFI access.
+        -   Show or hide a collection. Each chip counts the collection's images in view, then ("+7") those over the cloud limit. The Planet chip shows only when your GEE account has NICFI access.
         -   All on.
     *   -   **?** button
         -   Shows or hides a legend of the timeline.
@@ -2458,11 +2574,11 @@ The coordinator sets up the project as follows:
 1.  **Project**: in the app, select **New project** and name it ``madre_de_dios`` (see `Create a project <defo-project-create_>`_).
 2.  **AOI**: in the `AOI <defo-aoi_>`_ step, choose **Admin level 1**, then Peru, then "Madre De Dios" (as the list spells it), and select **Select AOI**. The area is saved as ``PER_Madre_De_Dios``. A whole department is a large area: every later step takes longer than for a district.
 3.  **Alert sources**: in `Alert sources <defo-alerts_>`_, add the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**. Each one **covers the AOI**. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts.
-4.  **Optional layers**: to judge alerts against a recent image, add one `optional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), with **Three bands (RGB)** on, **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected.
+4.  **Optional layers**: to judge alerts against a recent image, add one `optional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected.
 
 .. note::
 
-    A Planet NICFI monthly mosaic would cover the whole department, but the account used for this article has no NICFI access. This is also why the *Planet* chip of the Analysis timeline reads 0 in the screenshots below.
+    Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip.
 
 The September round
 ^^^^^^^^^^^^^^^^^^^
@@ -2486,9 +2602,9 @@ In `Download & harmonize <defo-prepare_>`_, the coordinator:
 
 1.  keeps the suggested grid, the UTM zone of the department (``EPSG:32719``) at 10 m, and selects **Save grid**. The grid is 41425 × 38561 pixels, about 12.8 GB per source before compression, so the app warns that the downloads will take a while;
 2.  adds a mask so that only alerts in forest count: **Add mask**, the Hansen Global Forest Change image ``UMD/hansen/global_forest_change_2025_v1_13``, band ``treecover2000``, named ``forest_2000``, mode **Keep**; and
-3.  selects **Run … pending**, which aligns the mask, then downloads and harmonizes the three sources.
+3.  selects **Run … pending** in the footer of the table, which aligns the mask, then downloads and harmonizes the three sources.
 
-The run took about 15 minutes. Each source then reads **ready**: GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458.
+The run took about 15 minutes. The mask and each source then read "Ready": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458.
 
 Integrate & vectorize
 """""""""""""""""""""
