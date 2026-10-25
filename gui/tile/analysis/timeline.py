@@ -105,8 +105,7 @@ _RANK = {SOURCE_S2: 0, SOURCE_LANDSAT: 1, SOURCE_PLANET: 2}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
-_LEGEND_HIDDEN = "display: none"
-_LEGEND_SHOWN = f"padding: 0 8px 8px; color: {MUTED}; font-size: 12px; max-width: 70ch"
+_LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5"
 _MESSAGE_STYLE = f"padding: 14px 0; color: {MUTED}; font-size: 12.5px"
 _TRACK_STYLE = "position: relative; flex: 1 1 auto; min-width: 0"
 
@@ -1259,17 +1258,28 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if value is None:
             return
         max_cloud.set(float(value))
-        slider.label = _cloud_label()
+        _show_cloud(max_cloud.value)
         _publish_filter()
         render()
 
-    def _cloud_label():
-        # The limit in words, always: Vuetify's thumb label shows only while
-        # the thumb is held, which left the reviewer guessing what the faded
-        # rows were faded by. In the label rather than beside the slider: the
-        # toolbar is full at the drawer-open width, and an extra element there
-        # pushed the value off the card.
-        return f"{t('analysis.timeline.max_cloud')} {max_cloud.value:.0f}%"
+    # The limit in words, always: Vuetify's thumb label shows only while the
+    # thumb is held, which left the reviewer guessing what the faded rows
+    # were faded by. In the label rather than beside the slider: the toolbar
+    # is full at the drawer-open width, and an extra element there pushed the
+    # value off the card. On a narrow card the words give way to a cloud icon
+    # (the screen's container query); ``slider.label`` keeps them, for the
+    # thumb's accessible name.
+    cloud_word = v.Html(tag="span", class_="defo-tl-cloud-word", children=[])
+    cloud_value = v.Html(tag="span", children=[])
+    cloud_label = v.Html(tag="span", style_="white-space: nowrap", attributes={}, children=[
+        v.Icon(small=True, class_="defo-tl-cloud-icon", children=["mdi-weather-cloudy"]), cloud_word, cloud_value])
+
+    def _show_cloud(value):
+        word = t("analysis.timeline.max_cloud")
+        slider.label = f"{word} {value:.0f}%"
+        cloud_word.children = [word]
+        cloud_value.children = [f" {value:.0f}%"]
+        cloud_label.attributes = {"title": word}
 
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True, dense=True,
                       # gives way first on a narrow card, down to a track
@@ -1278,7 +1288,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                       # breaks its lines on the bases, so a 230 px basis
                       # wrapped the row before the slider had shrunk at all.
                       class_="defo-cloud-slider", style_="flex: 1 1 170px; min-width: 170px; max-width: 230px",
-                      label=_cloud_label())
+                      v_slots=[{"name": "label", "children": cloud_label}])
+    _show_cloud(max_cloud.value)
     slider.on_event("change", _on_cloud)
 
     def _on_cloud_drag(widget, event, value):
@@ -1287,7 +1298,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # strip's top edge, where the panes cover it. Only the label: the
         # filter waits for @change (see ``_on_cloud``).
         if value is not None:
-            slider.label = f"{t('analysis.timeline.max_cloud')} {float(value):.0f}%"
+            _show_cloud(float(value))
 
     slider.on_event("input", _on_cloud_drag)
 
@@ -1308,36 +1319,44 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     # sentence case, not Vuetify's spaced capitals: the toolbar is full at
     # the drawer-open width, and the slider is what gave way. On a card too
     # narrow for the toolbar the labels go too (``defo-tl-label``, hidden by
-    # the screen's container query), so each button carries its name in
-    # ``title`` and ``aria-label`` as well.
+    # the screen's container query), so each button carries its name in a
+    # tooltip and in ``aria-label`` as well. A Vuetify tooltip, not ``title``:
+    # the browser's shows only after a long still hover, and not at all to a
+    # keyboard reviewer.
     _compact = "text-transform: none; letter-spacing: normal"
 
     def _fold_btn(icon, key):
         text = t(key)
-        return v.Btn(small=True, text=True, class_="defo-tl-btn defo-tl-fold", style_=_compact,
-                     attributes={"title": text, "aria-label": text},
-                     children=[v.Icon(small=True, left=True, children=[icon]),
-                               v.Html(tag="span", class_="defo-tl-label", children=[text])])
+        btn = v.Btn(small=True, text=True, class_="defo-tl-btn defo-tl-fold", style_=_compact,
+                    v_on="tooltip.on", attributes={"aria-label": text},
+                    children=[v.Icon(small=True, left=True, children=[icon]),
+                              v.Html(tag="span", class_="defo-tl-label", children=[text])])
+        tip = v.Tooltip(bottom=True, open_delay=200, children=[text],
+                        v_slots=[{"name": "activator", "variable": "tooltip", "children": btn}])
+        return btn, tip
 
-    def _label_fold(btn, key):
+    def _label_fold(btn, tip, key):
         text = t(key)
-        btn.attributes = {**btn.attributes, "title": text, "aria-label": text}
+        btn.attributes = {**btn.attributes, "aria-label": text}
         btn.children[1].children = [text]
+        tip.children = [text]
 
-    fold = _fold_btn("mdi-arrow-collapse-horizontal", "analysis.timeline.collapse_all")
+    fold, fold_tip = _fold_btn("mdi-arrow-collapse-horizontal", "analysis.timeline.collapse_all")
     fold.on_event("click", lambda w, e, d: _collapse_window())
-    unfold = _fold_btn("mdi-arrow-expand-horizontal", "analysis.timeline.expand_all")
+    unfold, unfold_tip = _fold_btn("mdi-arrow-expand-horizontal", "analysis.timeline.expand_all")
     unfold.on_event("click", lambda w, e, d: (collapsed.set(frozenset()), render()))
 
     # The legend is the only description of what the lanes, bands, fade and
     # gold band mean, and it used to hang off ``aria-label`` on a
     # ``role="note"`` span: not focusable, and not reliably announced. It is a
     # disclosure button now, so a keyboard reviewer can reach the explanation
-    # and a screen reader reads it as text rather than as a label.
+    # and a screen reader reads it as text rather than as a label. It opens a
+    # popup above the strip, which sits at the screen's foot: shown inline,
+    # the paragraph pushed the timeline down by its own height. The browser opens it (``menu.on``), so a busy
+    # kernel does not delay the click.
     legend = t("analysis.timeline.legend")
-    legend_text = v.Html(tag="div", attributes={"id": _LEGEND_ID},
-                         style_=_LEGEND_HIDDEN, children=[])
-    help_badge = v.Html(tag="button",
+    legend_text = v.Card(attributes={"id": _LEGEND_ID}, style_=_LEGEND_STYLE, children=[legend])
+    help_badge = v.Html(tag="button", v_on="menu.on",
                         attributes={"type": "button", "title": legend,
                                     "aria-label": t("analysis.timeline.legend_label"),
                                     "aria-expanded": "false", "aria-controls": _LEGEND_ID},
@@ -1347,16 +1366,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                 f"border: 1px solid var(--dat-edge); color: {MUTED}; font-size: 11px"),
                         children=["?"])
 
-    def _toggle_legend(*_):
-        shown = help_badge.attributes.get("aria-expanded") == "true"
-        help_badge.attributes = {**help_badge.attributes,
-                                 "aria-expanded": "false" if shown else "true"}
-        # cleared, not only hidden, for the same reason as ``message``: a
-        # string left in the tree is still read by a screen reader walking it
-        legend_text.children = [] if shown else [t("analysis.timeline.legend")]
-        legend_text.style_ = _LEGEND_HIDDEN if shown else _LEGEND_SHOWN
-
-    help_badge.on_event("click", _toggle_legend)
+    legend_menu = v.Menu(v_model=False, top=True, offset_y=True, nudge_top=4, max_width=460,
+                         v_slots=[{"name": "activator", "variable": "menu", "children": help_badge}],
+                         children=[legend_text])
+    legend_menu.observe(lambda change: setattr(help_badge, "attributes", {
+        **help_badge.attributes, "aria-expanded": "true" if change["new"] else "false"}), "v_model")
 
     # The image area around the alert (``imagery.IMAGE_AREAS``): per alert,
     # back to Normal on the next one (``AnalysisState.reset_alert``).
@@ -1369,14 +1383,13 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
     def _label_toolbar():
-        slider.label = _cloud_label()
-        _label_fold(fold, "analysis.timeline.collapse_all")
-        _label_fold(unfold, "analysis.timeline.expand_all")
+        _show_cloud(max_cloud.value)
+        _label_fold(fold, fold_tip, "analysis.timeline.collapse_all")
+        _label_fold(unfold, unfold_tip, "analysis.timeline.expand_all")
         legend = t("analysis.timeline.legend")
         help_badge.attributes = {**help_badge.attributes, "title": legend,
                                  "aria-label": t("analysis.timeline.legend_label")}
-        if help_badge.attributes.get("aria-expanded") == "true":
-            legend_text.children = [legend]
+        legend_text.children = [legend]
         area.items = [{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS]
         area.label = t("analysis.timeline.image_area")
         area.attributes = {**area.attributes, "title": t("analysis.timeline.area_hint")}
@@ -1397,15 +1410,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     controls = v.Html(tag="div", class_="defo-tl-controls",
                       style_="display: flex; flex: 1 1 0; min-width: min-content; align-items: center;"
                              " justify-content: flex-end; gap: 12px",
-                      children=[fold, unfold, _divider(), slider, _divider(), area])
+                      children=[fold_tip, unfold_tip, _divider(), slider, _divider(), area])
 
     card = v.Card(flat=True, class_="analysis-timeline", children=[
         # wraps rather than running off the card when even the icon-only
         # toolbar does not fit
         v.Html(tag="div", style_="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;"
                                  " padding: 8px 8px 6px",
-               children=[chips, help_badge, controls, status]),
-        legend_text,
+               children=[chips, legend_menu, controls, status]),
         # tall enough, even when it holds only a one-line message, for
         # pysepal's log button to sit under "+1 month" (the shell's
         # ``.pill-wrapper`` rule) without covering it

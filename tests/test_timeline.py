@@ -644,13 +644,43 @@ def test_the_legend_is_a_button_that_opens_the_explanation():
                  if (getattr(w, "attributes", None) or {}).get("aria-expanded") is not None)
     assert badge.tag == "button"
     assert "tabindex" not in (badge.attributes or {})  # a button is focusable already
-    assert timeline.t("analysis.timeline.legend") not in _text(card)
-    badge.fire_event("click", None)
-    assert badge.attributes["aria-expanded"] == "true"
-    assert timeline.t("analysis.timeline.legend") in _text(card)
-    badge.fire_event("click", None)
     assert badge.attributes["aria-expanded"] == "false"
-    assert timeline.t("analysis.timeline.legend") not in _text(card)
+
+
+def test_the_legend_opens_in_a_popup_not_in_the_strip():
+    """User report: the explanation, shown inline, pushed the timeline down by
+    a paragraph. It is a menu's content now, opened by the browser."""
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu))
+    badge = menu.v_slots[0]["children"]
+    assert badge.v_on == "menu.on"
+    assert timeline.t("analysis.timeline.legend") in _text(menu)
+    menu.v_model = True
+    assert badge.attributes["aria-expanded"] == "true"
+    menu.v_model = False
+    assert badge.attributes["aria-expanded"] == "false"
+
+
+def test_the_fold_buttons_name_themselves_in_a_tooltip():
+    """User request: on a narrow card the fold buttons are bare icons, and
+    ``title`` showed their names late or not at all."""
+    from gui.tile.analysis.labels import Labels
+
+    labels = Labels()
+    set_locale("en")
+    try:
+        card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets(), labels=labels)
+        tips = [w for w in _walk(card) if isinstance(w, timeline.v.Tooltip)]
+        keys = ("analysis.timeline.collapse_all", "analysis.timeline.expand_all")
+        assert [_text(tip) for tip in tips] == [timeline.t(k) for k in keys]
+        for tip in tips:
+            btn = tip.v_slots[0]["children"]
+            assert btn.v_on == "tooltip.on" and "title" not in btn.attributes
+        set_locale("fr")
+        labels.run()
+        assert [_text(tip) for tip in tips] == [timeline.t(k) for k in keys]
+    finally:
+        set_locale("en")
 
 
 def test_the_legend_button_is_named_by_something_short():
@@ -725,7 +755,8 @@ def _text(widget) -> str:
 
 def _walk(widget):
     yield widget
-    for child in (getattr(widget, "children", None) or ()):
+    slotted = [slot["children"] for slot in (getattr(widget, "v_slots", None) or ())]
+    for child in [*(getattr(widget, "children", None) or ()), *slotted]:
         if not isinstance(child, str):
             yield from _walk(child)
 
@@ -944,8 +975,7 @@ def test_a_language_switch_relabels_a_rendered_strip_and_keeps_the_pick():
         ctx["token"] = analysis.alert_token.value
         widgets.imagery_ctx.set(ctx)
         card = timeline.build_timeline(state, analysis, widgets, labels=labels)
-        legend = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-controls")][0]
-        legend.fire_event("click", None)
+        next(w for w in _walk(card) if isinstance(w, timeline.v.Menu)).v_model = True  # the legend open
         before, after = analysis.before_info.value, analysis.after_info.value
         set_locale("fr")
         labels.run()

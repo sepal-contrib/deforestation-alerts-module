@@ -669,6 +669,14 @@ SCREEN_CSS = (
     "@container (max-width: 1250px) { .defo-analysis-screen .defo-tl-label { display: none; }"
     " .defo-analysis-screen .defo-tl-fold .v-icon--left { margin-right: 0; } }\n"
     "@container (max-width: 950px) { .defo-analysis-screen .defo-tl-divider { display: none; } }\n"
+    # Narrower still, the cloud slider's words give way to a cloud icon (its
+    # title keeps the words) and the fold buttons to their bare icons, so the
+    # image-area select stays on the chips' line on a ~650 px card.
+    ".defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: none; }\n"
+    "@container (max-width: 820px) { .defo-analysis-screen .defo-tl-cloud-word { display: none; }"
+    " .defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: inline-flex; }"
+    " .defo-analysis-screen .defo-cloud-slider { flex-basis: 130px !important; min-width: 130px !important; }"
+    " .defo-analysis-screen .defo-tl-fold { min-width: 0 !important; padding: 0 6px !important; } }\n"
     # The strip's outline follows the theme. The views are not bordered: they
     # draw their own limit with the basemap.
     ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
