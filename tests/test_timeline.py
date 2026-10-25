@@ -628,9 +628,12 @@ def test_repeated_widening_on_the_same_alert_is_cumulative(monkeypatch):
 
 
 def test_the_legend_is_reachable_from_the_toolbar():
+    """The button's hover text is its short name; the paragraph is the
+    popup's, not a tooltip the size of a paragraph."""
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
-    assert any((getattr(w, "attributes", None) or {}).get("title") == timeline.t(
-        "analysis.timeline.legend") for w in _walk(card))
+    titles = {(getattr(w, "attributes", None) or {}).get("title") for w in _walk(card)}
+    assert timeline.t("analysis.timeline.legend_label") in titles
+    assert timeline.t("analysis.timeline.legend") not in titles
 
 
 # ------------------------------------------------------------ the legend

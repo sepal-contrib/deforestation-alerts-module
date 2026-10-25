@@ -1352,13 +1352,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     # disclosure button now, so a keyboard reviewer can reach the explanation
     # and a screen reader reads it as text rather than as a label. It opens a
     # popup above the strip, which sits at the screen's foot: shown inline,
-    # the paragraph pushed the timeline down by its own height. The browser opens it (``menu.on``), so a busy
-    # kernel does not delay the click.
-    legend = t("analysis.timeline.legend")
-    legend_text = v.Card(attributes={"id": _LEGEND_ID}, style_=_LEGEND_STYLE, children=[legend])
+    # the paragraph pushed the timeline down by its own height. The browser
+    # opens it (``menu.on``), so a busy kernel does not delay the click. Its
+    # hover text is the short name: the paragraph is the popup's.
+    legend_label = t("analysis.timeline.legend_label")
+    legend_text = v.Card(attributes={"id": _LEGEND_ID}, style_=_LEGEND_STYLE,
+                         children=[t("analysis.timeline.legend")])
     help_badge = v.Html(tag="button", v_on="menu.on",
-                        attributes={"type": "button", "title": legend,
-                                    "aria-label": t("analysis.timeline.legend_label"),
+                        attributes={"type": "button", "title": legend_label, "aria-label": legend_label,
                                     "aria-expanded": "false", "aria-controls": _LEGEND_ID},
                         style_=(f"display: inline-flex; align-items: center; justify-content: center; "
                                 f"width: 18px; height: 18px; border-radius: 9px; cursor: pointer; "
@@ -1386,10 +1387,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         _show_cloud(max_cloud.value)
         _label_fold(fold, fold_tip, "analysis.timeline.collapse_all")
         _label_fold(unfold, unfold_tip, "analysis.timeline.expand_all")
-        legend = t("analysis.timeline.legend")
-        help_badge.attributes = {**help_badge.attributes, "title": legend,
-                                 "aria-label": t("analysis.timeline.legend_label")}
-        legend_text.children = [legend]
+        legend_label = t("analysis.timeline.legend_label")
+        help_badge.attributes = {**help_badge.attributes, "title": legend_label, "aria-label": legend_label}
+        legend_text.children = [t("analysis.timeline.legend")]
         area.items = [{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS]
         area.label = t("analysis.timeline.image_area")
         area.attributes = {**area.attributes, "title": t("analysis.timeline.area_hint")}
