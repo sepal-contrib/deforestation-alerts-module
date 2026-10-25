@@ -1273,8 +1273,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True, dense=True,
                       # gives way first on a narrow card, down to a track
-                      # still wide enough to drag beside its label
-                      class_="defo-cloud-slider", style_="flex: 0 1 230px; min-width: 170px; max-width: 230px",
+                      # still wide enough to drag beside its label. Its basis
+                      # is that minimum, grown up to 230 px: a flex row
+                      # breaks its lines on the bases, so a 230 px basis
+                      # wrapped the row before the slider had shrunk at all.
+                      class_="defo-cloud-slider", style_="flex: 1 1 170px; min-width: 170px; max-width: 230px",
                       label=_cloud_label())
     slider.on_event("change", _on_cloud)
 
@@ -1361,7 +1364,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                     v_model=analysis.image_area.value, dense=True, outlined=True, hide_details=True,
                     label=t("analysis.timeline.image_area"), class_="defo-area-select",
                     attributes={"title": t("analysis.timeline.area_hint")},
-                    style_="flex: 0 1 150px; min-width: 120px; max-width: 150px;")
+                    style_="flex: 1 1 120px; min-width: 120px; max-width: 150px;")
     area.observe(lambda change: analysis.image_area.set(change["new"] or "normal"), "v_model")
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
@@ -1388,13 +1391,20 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         return v.Html(tag="span", class_="defo-tl-divider",
                       style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
 
+    # The controls hold together on one line: the slider and the image area
+    # shrink first, and only when even their minimums do not fit beside the
+    # chips does the whole group, not the image area alone, drop below them.
+    controls = v.Html(tag="div", class_="defo-tl-controls",
+                      style_="display: flex; flex: 1 1 0; min-width: min-content; align-items: center;"
+                             " justify-content: flex-end; gap: 12px",
+                      children=[fold, unfold, _divider(), slider, _divider(), area])
+
     card = v.Card(flat=True, class_="analysis-timeline", children=[
         # wraps rather than running off the card when even the icon-only
         # toolbar does not fit
         v.Html(tag="div", style_="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;"
                                  " padding: 8px 8px 6px",
-               children=[chips, help_badge, v.Spacer(), fold, unfold, _divider(), slider, _divider(),
-                         area, status]),
+               children=[chips, help_badge, controls, status]),
         legend_text,
         # tall enough, even when it holds only a one-line message, for
         # pysepal's log button to sit under "+1 month" (the shell's
