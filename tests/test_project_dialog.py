@@ -118,13 +118,27 @@ def dialog(monkeypatch, tmp_path):
 SETTLE_SECONDS = 10.0
 
 
-async def _settle(done, what, timeout=SETTLE_SECONDS):
+async def _settle(done, what, timeout=SETTLE_SECONDS, rc=None):
     """Wait until ``done()`` is truthy: poll by wall-clock deadline, not by a
-    count of sleeps (a count gives up early when the event loop runs slowly)."""
+    count of sleeps (a count gives up early when the event loop runs slowly).
+
+    With ``rc``, ``done()`` is only read between two renders of it. A list
+    read or a size count renders on its worker thread, and a state set on
+    this thread meanwhile is left to that render: the tree is then half
+    updated (the recorder has the new list, the confirmation is still open),
+    and a field typed into or a button pressed lands on the previous render's
+    handlers."""
     deadline = time.monotonic() + timeout
     while True:
-        if done():
-            return
+        if rc is None:
+            if done():
+                return
+        elif rc.thread_lock.acquire(blocking=False):  # held for a whole render, nested ones too
+            try:
+                if done():
+                    return
+            finally:
+                rc.thread_lock.release()
         if time.monotonic() > deadline:
             raise AssertionError(f"never happened within {timeout:g} s: {what}")
         await asyncio.sleep(0.01)
@@ -381,10 +395,16 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
 
 async def _delete(rc, dialog, name):
     dialog.manage[-1]["on_delete"](name)  # the row's trash button
-    await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
-    confirm = _open_form(rc)
-    confirm.find(v.TextField).widget.v_model = name
-    _button(confirm, t("common.delete")).fire_event("click", None)
+    await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened", rc=rc)
+    await _type_and_delete(rc, name)
+
+
+async def _type_and_delete(rc, name):
+    """The name typed, then Delete pressed once the render that took the name
+    is done: the press runs that render's handler, not one that saw no name."""
+    _open_form(rc).find(v.TextField).widget.v_model = name
+    await _settle(lambda: not _button(_open_form(rc), t("common.delete")).disabled, "the name typed", rc=rc)
+    _button(_open_form(rc), t("common.delete")).fire_event("click", None)
 
 
 def test_the_confirmation_shows_the_folder_size_counted_off_thread(dialog):
@@ -448,17 +468,18 @@ def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monk
             dialog.state.active_step.set(step_index("period"))
             await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
             dialog.manage[-1]["on_delete"]("a")
-            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
+            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened", rc=rc)
             alerts = _open_form(rc).find(v.Alert).widgets
             assert [(a.type, _texts(a)) for a in alerts] == [("warning", [t("steps.project.delete_open_warning")])]
-            _open_form(rc).find(v.TextField).widget.v_model = "a"
-            _button(_open_form(rc), t("common.delete")).fire_event("click", None)
+            await _type_and_delete(rc, "a")
             await _settle(lambda: _toasts("success"), "the delete finished")
             assert seen == [None]
             assert not (dialog.root / "a").exists()
             assert dialog.state.project.value is None and dialog.state.active_step.value == 0
             assert _toasts("success") == [t("steps.project.deleted", name="a")] and dialog.dismissed == 0
-            await _settle(lambda: _listed(dialog) == {}, "the list emptied")
+            # The read the close started can render the empty list on its
+            # worker while the confirmation's close waits for that render.
+            await _settle(lambda: _listed(dialog) == {}, "the list emptied", rc=rc)
             assert not _open_form(rc).widgets  # the confirmation closed
         finally:
             rc.close()
