@@ -742,8 +742,8 @@ msgstr "Sources personnalisées"
 msgid "Adding a custom source from an Earth Engine asset"
 msgstr "Ajout d'une source personnalisée depuis un asset Earth Engine"
 
-msgid "A custom source reads your own alert raster through one of four format presets."
-msgstr "Une source personnalisée lit votre propre raster d'alertes selon l'un des quatre formats prédéfinis."
+msgid "A custom source reads your own alert raster through one of four format presets. The form reads from top to bottom: the name, where the raster comes from, the raster itself, then its bands. The bands are read as soon as the raster is chosen (\"Reading the bands…\"), and the fields that depend on them appear only once they are read."
+msgstr "Une source personnalisée lit votre propre raster d'alertes selon l'un des quatre formats prédéfinis. Le formulaire se lit de haut en bas : le nom, la provenance du raster, le raster lui-même, puis ses bandes. Les bandes sont lues dès que le raster est choisi (« Lecture des bandes… »), et les champs qui en dépendent n'apparaissent qu'une fois qu'elles sont lues."
 
 msgid "Field"
 msgstr "Champ"
@@ -760,14 +760,11 @@ msgstr "Le nom de la source dans les listes, les légendes et les noms de fichie
 msgid "Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved."
 msgstr "Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique dans le projet. GLAD-L, RADD et GLAD-S2 sont réservés."
 
-msgid "**Raster source**"
-msgstr "**Source du raster**"
+msgid "Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder)."
+msgstr "L'endroit d'où le raster est lu : **Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL)."
 
-msgid "Where the raster is read from: **Earth Engine asset** or **GeoTIFF in my SEPAL folder**."
-msgstr "L'endroit d'où le raster est lu : **Asset Earth Engine** ou **GeoTIFF dans mon dossier SEPAL**."
-
-msgid "**Earth Engine asset**."
-msgstr "**Asset Earth Engine**."
+msgid "**Earth Engine**."
+msgstr "**Earth Engine**."
 
 msgid "Asset or **GeoTIFF**"
 msgstr "Asset ou **GeoTIFF**"
@@ -781,11 +778,11 @@ msgstr "Une collection d'images est utilisée en entier, l'image la plus récent
 msgid "**Alert format**"
 msgstr "**Format des alertes**"
 
-msgid "How the bands are read (see below)."
-msgstr "La façon dont les bandes sont lues (voir plus bas)."
+msgid "How the bands are read (see below). Shown when the raster has two bands or more. A raster with one band has no format to choose: the form reads \"One band (…): read as the alert date.\" and the source is read as **Date only**."
+msgstr "La façon dont les bandes sont lues (voir plus bas). Affiché quand le raster a deux bandes ou plus. Un raster à une bande n'a pas de format à choisir : le formulaire indique « Une bande (…) : lue comme la date de l'alerte. » et la source est lue en **Date seule**."
 
-msgid "Suggested from the band names when the app recognizes them."
-msgstr "Proposé à partir des noms des bandes quand l'application les reconnaît."
+msgid "Suggested from the band names when the app recognizes them, and marked \"(suggested)\"."
+msgstr "Proposé à partir des noms des bandes quand l'application les reconnaît, et marqué « (suggéré) »."
 
 msgid "**Alert band**"
 msgstr "**Bande d'alerte**"
@@ -793,8 +790,8 @@ msgstr "**Bande d'alerte**"
 msgid "The band holding the alert class."
 msgstr "La bande qui contient la classe d'alerte."
 
-msgid "Only for **RADD**, **SEPAL CCDC alerts** and **SEPAL PyEO alerts**."
-msgstr "Uniquement pour **RADD**, **Alertes CCDC SEPAL** et **Alertes PyEO SEPAL**."
+msgid "Only for **RADD**, **SEPAL CCDC alerts** and **SEPAL PyEO alerts**. Starts on the band the format expects; when the raster has no such band, the hint reads \"Pick the band that holds the alert level.\""
+msgstr "Uniquement pour **RADD**, **Alertes CCDC SEPAL** et **Alertes PyEO SEPAL**. Démarre sur la bande que le format attend ; quand le raster n'a pas cette bande, l'aide indique « Choisissez la bande qui contient le niveau de l'alerte. »"
 
 msgid "**Date band**"
 msgstr "**Bande de date**"
@@ -802,17 +799,20 @@ msgstr "**Bande de date**"
 msgid "The band holding the detection date."
 msgstr "La bande qui contient la date de détection."
 
-msgid "Always required."
-msgstr "Toujours obligatoire."
+msgid "Always required. Starts on the band the format expects, and its hint names it (e.g. \"3 bands. Date looks like the alert date.\"), or asks you to pick it."
+msgstr "Toujours obligatoire. Démarre sur la bande que le format attend, et son aide la nomme (par exemple « 3 bandes. Date ressemble à la date de l'alerte. »), ou vous demande de la choisir."
 
 msgid "**Date encoding**"
 msgstr "**Encodage de date**"
 
-msgid "How the date is written."
-msgstr "La façon dont la date est écrite."
+msgid "How the date is written: **yymm (year and month; the alert is dated on the 1st)**, **yyddd (year and day of year)**, **yyyyddd (year and day of year)** or **decimal year**."
+msgstr "La façon dont la date est écrite : **yymm (année et mois ; l'alerte est datée au 1er)**, **yyddd (année et jour de l'année)**, **yyyyddd (année et jour de l'année)** ou **année décimale**."
 
-msgid "Only for **Date only**: **yymm (year and month; the alert is dated on the 1st)**, **yyddd (year and day of year)**, **yyyyddd (year and day of year)** or **decimal year**."
-msgstr "Uniquement pour **Date seule** : **yymm (année et mois ; l'alerte est datée au 1er)**, **yyddd (année et jour de l'année)**, **yyyyddd (année et jour de l'année)** ou **année décimale**."
+msgid "Only for **Date only**. Suggested from the date band's values (see below)."
+msgstr "Uniquement pour **Date seule**. Proposé à partir des valeurs de la bande de date (voir plus bas)."
+
+msgid "For a **Date only** source, the app reads the lowest and highest values of the date band over the AOI (\"Reading the date values…\") and suggests the encoding they fit, for example \"Values from 24001 to 24366: they read as yyddd.\" Check the suggestion: the app reads only the two ends of the range. When the values do not look like dates (\"… don't look like dates. Check the Date band.\"), or when no pixel over the AOI has a date (\"No dated pixel over the AOI: pick the encoding.\"), choose the encoding yourself."
+msgstr "Pour une source **Date seule**, l'application lit les valeurs la plus basse et la plus haute de la bande de date sur l'AOI (« Lecture des valeurs de date… ») et propose l'encodage qui leur correspond, par exemple « Valeurs de 24001 à 24366 : elles se lisent comme yyddd. » Vérifiez la proposition : l'application ne lit que les deux bornes de la plage. Quand les valeurs ne ressemblent pas à des dates (« … ne ressemblent pas à des dates. Vérifiez la bande de date. »), ou quand aucun pixel de l'AOI n'a de date (« Aucun pixel daté dans l'AOI : choisissez l'encodage. »), choisissez vous-même l'encodage."
 
 msgid "The four formats:"
 msgstr "Les quatre formats :"
@@ -853,8 +853,8 @@ msgstr "Quand **Ajouter une source** est sélectionné, l'application vérifie l
 msgid "Edit a custom source"
 msgstr "Modifier une source personnalisée"
 
-msgid "Select the pencil icon to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change."
-msgstr "Sélectionnez l'icône de crayon pour rouvrir le formulaire, intitulé avec le nom de la source. Le nom est fixe ; le raster, le format et les bandes peuvent changer."
+msgid "Select the pencil icon to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change. The form keeps the saved format and bands until another raster is chosen."
+msgstr "Sélectionnez l'icône de crayon pour rouvrir le formulaire, intitulé avec le nom de la source. Le nom est fixe ; le raster, le format et les bandes peuvent changer. Le formulaire garde le format et les bandes enregistrés jusqu'à ce qu'un autre raster soit choisi."
 
 msgid "Once an alert set uses the source, it can no longer be edited: delete it and add a new one."
 msgstr "Dès qu'un jeu d'alertes utilise la source, elle ne peut plus être modifiée : supprimez-la et ajoutez-en une nouvelle."
@@ -895,14 +895,17 @@ msgstr "Les sources ne peuvent pas changer pendant un téléchargement ou une ex
 msgid "Optional layers"
 msgstr "Couches facultatives"
 
-msgid "Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen."
-msgstr "Les couches de visualisation appuient l'examen des alertes : une carte d'occupation du sol, une référence forestière, une mosaïque récente. Elles ne modifient jamais les alertes. Une couche peut être affichée sur la carte principale et, avec **Afficher dans Analyse** coché, sur les deux cartes de l'écran `Analyse <defo-analysis_>`_."
+msgid "Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer is an Earth Engine image or a GeoTIFF. It can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen."
+msgstr "Les couches de visualisation appuient l'examen des alertes : une carte d'occupation du sol, une référence forestière, une mosaïque récente. Elles ne modifient jamais les alertes. Une couche est une image Earth Engine ou un GeoTIFF. Elle peut être affichée sur la carte principale et, avec **Afficher dans Analyse** coché, sur les deux cartes de l'écran `Analyse <defo-analysis_>`_."
 
 msgid "Open the **Optional layers** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_."
 msgstr "Ouvrez l'étape **Couches facultatives** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_."
 
 msgid "The step is optional: skip it and come back at any time. Once the project has a `monitoring period <defo-period_>`_, the **Workflow** panel counts the step as done even without a layer, and its badge reads \"none\" instead of \"nothing yet\"."
 msgstr "L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant »."
+
+msgid "Planet NICFI mosaics are not an optional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_."
+msgstr "Les mosaïques Planet NICFI ne sont pas une couche facultative : si votre compte GEE a accès à NICFI, elles arrivent avec les images *Planet* de la `frise chronologique d'Analyse <defo-analysis-timeline_>`_."
 
 msgid "The Optional layers step with one layer"
 msgstr "L'étape Couches facultatives avec une couche"
@@ -916,14 +919,14 @@ msgstr "Chaque ligne de **Couches de visualisation** affiche :"
 msgid "the layer's **Name**;"
 msgstr "le **Nom** de la couche ;"
 
-msgid "a chip with its kind (**Earth Engine**, **GeoTIFF** or **Planet NICFI**);"
-msgstr "une pastille avec son type (**Earth Engine**, **GeoTIFF** ou **Planet NICFI**) ;"
+msgid "a chip with its source (**Earth Engine** or **GeoTIFF**);"
+msgstr "une pastille avec sa source (**Earth Engine** ou **GeoTIFF**) ;"
 
 msgid "an **in Analysis** chip when it is shown on the Analysis maps; and"
 msgstr "une pastille **dans Analyse** lorsqu'elle est affichée sur les cartes d'Analyse ;"
 
-msgid "a note with its bands and value range (or its month, for Planet NICFI)."
-msgstr "une note avec ses bandes et sa plage de valeurs (ou son mois, pour Planet NICFI)."
+msgid "a note with its bands and value range, or, for a categorical layer, its band and number of classes (\"band Map · 9 classes\")."
+msgstr "une note avec ses bandes et sa plage de valeurs ou, pour une couche catégorielle, sa bande et son nombre de classes (« bande Map · 9 classes »)."
 
 msgid "The icons on the right side of each row:"
 msgstr "Les icônes à droite de chaque ligne :"
@@ -940,47 +943,59 @@ msgstr "l'icône de corbeille la supprime. La couche est retirée du projet ; so
 msgid "Add a layer"
 msgstr "Ajouter une couche"
 
-msgid "Select **Add layer** to open the **Add a visualization layer** dialog. Choose the **Kind** first: the other fields depend on it."
-msgstr "Sélectionnez **Ajouter une couche** pour ouvrir la boîte de dialogue **Ajouter une couche de visualisation**. Choisissez d'abord le **Type** : les autres champs en dépendent."
-
-msgid "Earth Engine image and GeoTIFF"
-msgstr "Image Earth Engine et GeoTIFF"
-
-msgid "Adding an RGB layer from an Earth Engine image"
-msgstr "Ajout d'une couche RGB depuis une image Earth Engine"
+msgid "Select **Add layer** to open the **Add a visualization layer** dialog. The form reads from top to bottom: the name, the source, the image, then how its bands are drawn. The bands are read as soon as the image is chosen (\"Reading the bands…\"), and every choice after that is a dropdown menu."
+msgstr "Sélectionnez **Ajouter une couche** pour ouvrir la boîte de dialogue **Ajouter une couche de visualisation**. Le formulaire se lit de haut en bas : le nom, la source, l'image, puis la façon d'afficher ses bandes. Les bandes sont lues dès que l'image est choisie (« Lecture des bandes… »), et chaque choix suivant est un menu déroulant."
 
 msgid "The layer's name in the list, on the maps and in the legend."
 msgstr "Le nom de la couche dans la liste, sur les cartes et dans la légende."
 
-msgid "Suggested from the image or file name, plus the band or combination. At most 24 characters, unique in the project."
-msgstr "Proposé à partir du nom de l'image ou du fichier, suivi de la bande ou de la combinaison. 24 caractères au plus, unique dans le projet."
+msgid "Left empty, it is filled from the asset or file name, plus the band or combination. At most 24 characters, unique in the project."
+msgstr "Laissé vide, il est repris du nom de l'asset ou du fichier, suivi de la bande ou de la combinaison. 24 caractères au plus, unique dans le projet."
 
-msgid "A GEE *image* (not a collection), or a .tif file in your SEPAL folder."
-msgstr "Une *image* GEE (pas une collection), ou un fichier .tif de votre dossier SEPAL."
+msgid "**Earth Engine** (an image asset) or **GeoTIFF** (a file in your SEPAL folder)."
+msgstr "**Earth Engine** (un asset d'image) ou **GeoTIFF** (un fichier de votre dossier SEPAL)."
+
+msgid "A GEE *image* (not a collection), or a .tif file."
+msgstr "Une *image* GEE (pas une collection), ou un fichier .tif."
 
 msgid "The GeoTIFF's folder must be writable: the app writes an overview file next to it so that the layer draws quickly."
 msgstr "Le dossier du GeoTIFF doit être accessible en écriture : l'application écrit un fichier de pyramides à côté pour que la couche s'affiche rapidement."
 
-msgid "**Three bands (RGB)**"
-msgstr "**Trois bandes (RGB)**"
+msgid "What comes next depends on the number of bands of the image:"
+msgstr "La suite dépend du nombre de bandes de l'image :"
 
-msgid "Off: one band drawn with a colour ramp. On: three bands as a red-green-blue (RGB) composite."
-msgstr "Désactivé : une seule bande, affichée avec une rampe de couleurs. Activé : trois bandes en composition rouge-vert-bleu (RGB)."
+msgid "One band: the form names it (\"One band (…): it is drawn on its own.\")."
+msgstr "Une bande : le formulaire la nomme (« Une bande (…) : elle est dessinée seule. »)."
 
-msgid "Off."
-msgstr "Désactivé."
+msgid "Two bands: choose the one to draw in **Band**. RGB needs three bands or more."
+msgstr "Deux bandes : choisissez celle à afficher dans **Bande**. Le RVB demande trois bandes ou plus."
 
-msgid "**Band**"
-msgstr "**Bande**"
+msgid "Three bands or more: **Bands** asks for **Select one band** (then **Band**) or **RGB composite**. **RGB composite** is suggested when the band names give red, green and blue (e.g. ``B4``, ``B3`` and ``B2`` of Sentinel-2). **Band** starts on the first band."
+msgstr "Trois bandes ou plus : **Bandes** demande **Sélectionner une bande** (puis **Bande**) ou **Composite RVB**. **Composite RVB** est suggéré quand les noms des bandes donnent le rouge, le vert et le bleu (par exemple ``B4``, ``B3`` et ``B2`` de Sentinel-2). **Bande** démarre sur la première bande."
 
-msgid "The band to draw (one-band layer)."
-msgstr "La bande à afficher (couche à une bande)."
+msgid "One band"
+msgstr "Une bande"
+
+msgid "Adding a categorical layer from a land-cover image"
+msgstr "Ajout d'une couche catégorielle depuis une image d'occupation du sol"
+
+msgid "A single band takes a **Raster type**:"
+msgstr "Une bande seule prend un **Type de raster** :"
+
+msgid "**Continuous: a colour ramp** for measured values (reflectance, elevation, tree cover); or"
+msgstr "**Continu : une rampe de couleurs** pour des valeurs mesurées (réflectance, altitude, couvert arboré) ;"
+
+msgid "**Categorical: a colour per class** for whole-number classes (a land-cover map, a forest mask, a loss year). It is suggested when the band's name looks like classes (e.g. ``landcover``, ``class``, ``lossyear``, ``datamask``)."
+msgstr "**Catégoriel : une couleur par classe** pour des classes en nombres entiers (une carte d'occupation du sol, un masque forestier, une année de perte). Il est suggéré quand le nom de la bande ressemble à des classes (par exemple ``landcover``, ``class``, ``lossyear``, ``datamask``)."
+
+msgid "A preview of the layer's legend appears under the fields."
+msgstr "Un aperçu de la légende de la couche apparaît sous les champs."
 
 msgid "**Colour ramp**"
 msgstr "**Rampe de couleurs**"
 
-msgid "The colours for a one-band layer: **Grayscale**, **Blues**, **Greens**, **Oranges**, **Cool–warm**, **Viridis**, **Terrain**, **Heat** or **Magma**."
-msgstr "Les couleurs d'une couche à une bande : **Niveaux de gris**, **Bleus**, **Verts**, **Oranges**, **Froid–chaud**, **Viridis**, **Terrain**, **Chaleur** ou **Magma**."
+msgid "*Continuous*: the colours, from **Min** to **Max**: **Grayscale**, **Blues**, **Greens**, **Oranges**, **Cool–warm**, **Viridis**, **Terrain**, **Heat** or **Magma**."
+msgstr "*Continu* : les couleurs, de **Min** à **Max** : **Niveaux de gris**, **Bleus**, **Verts**, **Oranges**, **Froid–chaud**, **Viridis**, **Terrain**, **Chaleur** ou **Magma**."
 
 msgid "**Grayscale**."
 msgstr "**Niveaux de gris**."
@@ -988,26 +1003,68 @@ msgstr "**Niveaux de gris**."
 msgid "**Invert**"
 msgstr "**Inverser**"
 
-msgid "Reverses the ramp."
-msgstr "Inverse la rampe."
+msgid "*Continuous*: reverses the ramp."
+msgstr "*Continu* : inverse la rampe."
 
-msgid "**Red**, **Green**, **Blue**, **NIR**, **SWIR**"
-msgstr "**Rouge**, **Vert**, **Bleu**, **PIR**, **SWIR**"
+msgid "Off."
+msgstr "Désactivé."
 
-msgid "Which of the image's bands holds each colour, near infrared (NIR) and shortwave infrared (SWIR) (RGB layer). Leave unknown ones empty."
-msgstr "La bande de l'image qui contient chaque couleur, le proche infrarouge (PIR) et l'infrarouge à ondes courtes (SWIR) (couche RGB). Laissez vides celles que vous ne connaissez pas."
+msgid "**Min**, **Max**"
+msgstr "**Min**, **Max**"
 
-msgid "Guessed from the band names (e.g. ``B4`` or ``SR_B4`` for red)."
-msgstr "Devinées à partir des noms des bandes (par exemple ``B4`` ou ``SR_B4`` pour le rouge)."
+msgid "*Continuous*: the value range stretched over the colours."
+msgstr "*Continu* : la plage de valeurs étirée sur les couleurs."
 
-msgid "**Combination**"
-msgstr "**Combinaison**"
+msgid "0 and 1. Both must be numbers, **Min** below **Max**."
+msgstr "0 et 1. Les deux doivent être des nombres, **Min** inférieur à **Max**."
 
-msgid "Fills the three bands from those roles: **True colour**, **False-colour infrared** (NIR / red / green), **SWIR / NIR / red**, or **Custom** to choose them yourself."
-msgstr "Remplit les trois bandes à partir de ces rôles : **Couleurs naturelles**, **Infrarouge fausses couleurs** (PIR / rouge / vert), **SWIR / PIR / rouge**, ou **Personnalisée** pour les choisir vous-même."
+msgid "**Stretch to the AOI (2–98 %)**"
+msgstr "**Étirer sur l'AOI (2–98 %)**"
 
-msgid "The first combination the roles allow. A combination is offered only when its roles are filled."
-msgstr "La première combinaison que les rôles permettent. Une combinaison n'est proposée que si ses rôles sont remplis."
+msgid "*Continuous*: fills **Min** and **Max** with the band's 2nd and 98th percentiles over the AOI's bounding box."
+msgstr "*Continu* : remplit **Min** et **Max** avec les centiles 2 et 98 de la bande sur le rectangle englobant de l'AOI."
+
+msgid "**Find the classes in the AOI**"
+msgstr "**Trouver les classes dans l'AOI**"
+
+msgid "*Categorical*: lists the whole values present over the AOI, each with a colour, its value, a **Label** and an eye icon that hides or shows it. When the image names its classes and their colours (as ESA WorldCover does), the classes take them; otherwise each class is labelled with its value."
+msgstr "*Catégoriel* : liste les valeurs entières présentes sur l'AOI, chacune avec une couleur, sa valeur, un **Libellé** et une icône d'œil qui la masque ou l'affiche. Quand l'image nomme ses classes et leurs couleurs (comme ESA WorldCover), les classes les reprennent ; sinon, chaque classe est libellée avec sa valeur."
+
+msgid "At most 50 classes. Values not listed and hidden classes are transparent."
+msgstr "50 classes au plus. Les valeurs non listées et les classes masquées sont transparentes."
+
+msgid "**Add a value**"
+msgstr "**Ajouter une valeur**"
+
+msgid "*Categorical*: adds a class by hand. Type the whole number, then press **Enter** or select the plus icon."
+msgstr "*Catégoriel* : ajoute une classe à la main. Tapez le nombre entier, puis appuyez sur **Entrée** ou sélectionnez l'icône plus."
+
+msgid "Each value once."
+msgstr "Chaque valeur une seule fois."
+
+msgid "**Palette**"
+msgstr "**Palette**"
+
+msgid "*Categorical*: recolours every class from a palette: **Set1**, **Set2**, **Tab10** or **Paired**. Select a class's colour square to choose its colour by hand."
+msgstr "*Catégoriel* : recolore toutes les classes à partir d'une palette : **Set1**, **Set2**, **Tab10** ou **Paired**. Sélectionnez le carré de couleur d'une classe pour choisir sa couleur à la main."
+
+msgid "When a band holds only 0 and 1 over the AOI, the classes found name 1 after the band and start with 0 hidden: \"Only 0 and 1 in the AOI: 1 is named after the band and 0 starts hidden (transparent).\" Select the eye icon of 0 to draw it too."
+msgstr "Quand une bande ne contient que 0 et 1 sur l'AOI, les classes trouvées nomment 1 d'après la bande et démarrent avec 0 masqué : « Seulement 0 et 1 dans l'AOI : 1 prend le nom de la bande et 0 est d'abord masqué (transparent). » Sélectionnez l'icône d'œil de 0 pour l'afficher aussi."
+
+msgid "RGB composite"
+msgstr "Composite RVB"
+
+msgid "Adding an RGB layer from an Earth Engine image"
+msgstr "Ajout d'une couche RVB depuis une image Earth Engine"
+
+msgid "**Composite**"
+msgstr "**Composite**"
+
+msgid "A standard combination, named with its bands (e.g. \"True colour (B4 / B3 / B2)\"): **True colour**, **False-colour infrared** (near infrared, red, green) or **SWIR / NIR / red** (shortwave infrared, near infrared, red); or **Custom: pick the bands**. The hint lists the band roles detected from the band names (\"Detected from the band names: …\")."
+msgstr "Une combinaison standard, nommée avec ses bandes (par exemple « Couleurs naturelles (B4 / B3 / B2) ») : **Couleurs naturelles**, **Infrarouge fausses couleurs** (proche infrarouge, rouge, vert) ou **SWIR / PIR / rouge** (infrarouge à ondes courtes, proche infrarouge, rouge) ; ou **Personnalisé : choisissez les bandes**. L'aide liste les rôles de bandes détectés d'après les noms des bandes (« Détectées d'après les noms des bandes : … »)."
+
+msgid "The first combination the band names allow. A combination whose bands were not all recognized reads \"(bands not found)\" and cannot be chosen. With no band name recognized, the first three bands are used as red, green and blue."
+msgstr "La première combinaison que les noms des bandes permettent. Une combinaison dont les bandes n'ont pas toutes été reconnues indique « (bandes introuvables) » et ne peut pas être choisie. Si aucun nom de bande n'est reconnu, les trois premières bandes servent de rouge, vert et bleu."
 
 msgid "**Red band**, **Green band**, **Blue band**"
 msgstr "**Bande rouge**, **Bande verte**, **Bande bleue**"
@@ -1015,62 +1072,32 @@ msgstr "**Bande rouge**, **Bande verte**, **Bande bleue**"
 msgid "The bands drawn in red, green and blue."
 msgstr "Les bandes affichées en rouge, en vert et en bleu."
 
-msgid "Must be three different bands. Choosing one by hand switches **Combination** to **Custom**."
-msgstr "Il faut trois bandes différentes. En choisir une à la main fait passer **Combinaison** à **Personnalisée**."
+msgid "Filled by the **Composite**. Must be three different bands. Bands chosen by hand that match a combination select it; others select **Custom: pick the bands**."
+msgstr "Remplies par le **Composite**. Il faut trois bandes différentes. Des bandes choisies à la main qui correspondent à une combinaison la sélectionnent ; les autres sélectionnent **Personnalisé : choisissez les bandes**."
 
-msgid "**Min**, **Max**"
-msgstr "**Min**, **Max**"
+msgid "The value range stretched over the colours, the same for the three bands."
+msgstr "La plage de valeurs étirée sur les couleurs, la même pour les trois bandes."
 
-msgid "The value range stretched over the colours."
-msgstr "La plage de valeurs étirée sur les couleurs."
+msgid "Fills **Min** and **Max** with one range across the three bands, from their 2nd and 98th percentiles over the AOI's bounding box."
+msgstr "Remplit **Min** et **Max** avec une seule plage pour les trois bandes, à partir de leurs centiles 2 et 98 sur le rectangle englobant de l'AOI."
 
-msgid "0 and 1. Both must be numbers, **Min** below **Max**."
-msgstr "0 et 1. Les deux doivent être des nombres, **Min** inférieur à **Max**."
-
-msgid "Set **Min** and **Max** to the real range of the data (e.g. 0 to 3000 for a Sentinel-2 surface-reflectance image). With the default 0 to 1, most images draw all white."
-msgstr "Réglez **Min** et **Max** sur la plage réelle des données (par exemple de 0 à 3000 pour une image Sentinel-2 en réflectance de surface). Avec la plage par défaut de 0 à 1, la plupart des images s'affichent toutes blanches."
-
-msgid "Planet NICFI"
-msgstr "Planet NICFI"
-
-msgid "Adding a Planet NICFI layer"
-msgstr "Ajout d'une couche Planet NICFI"
-
-msgid "The monthly Planet NICFI tropical mosaic, read through GEE and drawn in true colour."
-msgstr "La mosaïque tropicale mensuelle Planet NICFI, lue via GEE et affichée en couleurs naturelles."
-
-msgid "The layer's name."
-msgstr "Le nom de la couche."
-
-msgid "At most 24 characters, unique in the project."
-msgstr "24 caractères au plus, unique dans le projet."
-
-msgid "**Month (YYYY-MM)**"
-msgstr "**Mois (AAAA-MM)**"
-
-msgid "The month of the mosaic."
-msgstr "Le mois de la mosaïque."
-
-msgid "Empty: the active period's last month, which follows the active period when it changes. Without a period, last month."
-msgstr "Vide : le dernier mois de la période active, qui suit la période active quand elle change. Sans période, le mois dernier."
-
-msgid "The region (**Americas**, **Africa** or **Asia**) comes from the centre of the AOI and is shown under the month. When the layer is saved, the app checks that your GEE account can read that region."
-msgstr "La région (**Amériques**, **Afrique** ou **Asie**) est déduite du centre de l'AOI et s'affiche sous le mois. À l'enregistrement de la couche, l'application vérifie que votre compte GEE peut lire cette région."
-
-msgid "\"Your Earth Engine account has no access to Planet NICFI …\" means the account has not been granted NICFI access. Request it from Planet's NICFI programme, then add the layer again."
-msgstr "« Votre compte Earth Engine n'a pas accès à Planet NICFI … » signifie que l'accès à NICFI n'a pas été accordé au compte. Demandez-le au programme NICFI de Planet, puis ajoutez à nouveau la couche."
+msgid "Set **Min** and **Max** to the real range of the data (e.g. 0 to 3000 for a Sentinel-2 surface-reflectance image), or select **Stretch to the AOI (2–98 %)**. With the default 0 to 1, most images draw all white."
+msgstr "Réglez **Min** et **Max** sur la plage réelle des données (par exemple de 0 à 3000 pour une image Sentinel-2 en réflectance de surface), ou sélectionnez **Étirer sur l'AOI (2–98 %)**. Avec la plage par défaut de 0 à 1, la plupart des images s'affichent toutes blanches."
 
 msgid "Show in Analysis"
 msgstr "Afficher dans Analyse"
 
-msgid "**Show in Analysis** (all kinds) adds the layer to both maps of the `Analysis <defo-analysis_>`_ screen, turned off. Turn it on there from the layer menu. The Analysis maps show no legend for it."
-msgstr "**Afficher dans Analyse** (pour tous les types) ajoute la couche aux deux cartes de l'écran `Analyse <defo-analysis_>`_, désactivée. Activez-la là-bas depuis le menu des couches. Les cartes d'Analyse n'affichent pas sa légende."
+msgid "**Show in Analysis** adds the layer to both maps of the `Analysis <defo-analysis_>`_ screen, turned off. Turn it on there from the layer menu. The Analysis maps show no legend for it."
+msgstr "**Afficher dans Analyse** ajoute la couche aux deux cartes de l'écran `Analyse <defo-analysis_>`_, désactivée. Activez-la là-bas depuis le menu des couches. Les cartes d'Analyse n'affichent pas sa légende."
 
 msgid "Save a layer"
 msgstr "Enregistrer une couche"
 
-msgid "Select **Add layer** (or **Save** when editing). The app checks the bands, the range and, for a GeoTIFF, the folder. A problem is shown in red inside the dialog, which stays open. While the check runs, the button reads **Cancel** and stops it."
-msgstr "Sélectionnez **Ajouter une couche** (ou **Enregistrer** lors d'une modification). L'application vérifie les bandes, la plage et, pour un GeoTIFF, le dossier. Un problème s'affiche en rouge dans la boîte de dialogue, qui reste ouverte. Pendant la vérification, le bouton indique **Annuler** et permet de l'arrêter."
+msgid "Select **Add layer** (or **Save** when editing). The app checks the bands, the range or the classes and, for a GeoTIFF, the folder. A problem is shown in red inside the dialog, which stays open. While the check runs, the button reads **Cancel** and stops it."
+msgstr "Sélectionnez **Ajouter une couche** (ou **Enregistrer** lors d'une modification). L'application vérifie les bandes, la plage ou les classes et, pour un GeoTIFF, le dossier. Un problème s'affiche en rouge dans la boîte de dialogue, qui reste ouverte. Pendant la vérification, le bouton indique **Annuler** et permet de l'arrêter."
+
+msgid "Layers saved before the visualization styles were added keep their exact look."
+msgstr "Les couches enregistrées avant l'arrivée des styles de visualisation gardent exactement leur apparence."
 
 msgid "\"Pick an Earth Engine image.\""
 msgstr "« Choisissez une image Earth Engine. »"
@@ -1083,6 +1110,30 @@ msgstr "« Choisissez trois bandes différentes pour le rouge, le vert et le ble
 
 msgid "Choose a different band for each colour."
 msgstr "Choisissez une bande différente pour chaque couleur."
+
+msgid "\"This band has non-integer values: draw it as Continuous.\""
+msgstr "« Cette bande a des valeurs non entières : dessinez-la en Continu. »"
+
+msgid "**Find the classes in the AOI** found decimal values: the band is not a set of classes. Set **Raster type** to **Continuous: a colour ramp**."
+msgstr "**Trouver les classes dans l'AOI** a trouvé des valeurs décimales : la bande n'est pas un ensemble de classes. Réglez **Type de raster** sur **Continu : une rampe de couleurs**."
+
+msgid "\"More than 50 values: this band looks continuous.\""
+msgstr "« Plus de 50 valeurs : cette bande semble continue. »"
+
+msgid "Draw the band as **Continuous: a colour ramp**, or add the classes you need by hand with **Add a value**."
+msgstr "Affichez la bande en **Continu : une rampe de couleurs**, ou ajoutez à la main les classes nécessaires avec **Ajouter une valeur**."
+
+msgid "\"No values in the AOI.\" or \"The band has no spread of values in the AOI.\""
+msgstr "« Aucune valeur dans l'AOI. » ou « La bande n'a pas d'étendue de valeurs dans l'AOI. »"
+
+msgid "The band has no data over the AOI, or the same value everywhere. Check the image and the band, or enter **Min** and **Max** yourself."
+msgstr "La bande n'a pas de données sur l'AOI, ou a la même valeur partout. Vérifiez l'image et la bande, ou saisissez vous-même **Min** et **Max**."
+
+msgid "\"Find the classes or add a value.\" or \"Show at least one class.\""
+msgstr "« Trouvez les classes ou ajoutez une valeur. » ou « Affichez au moins une classe. »"
+
+msgid "A categorical layer needs at least one class, and at least one class not hidden."
+msgstr "Une couche catégorielle a besoin d'au moins une classe, et d'au moins une classe non masquée."
 
 msgid "\"The folder … is not writable, so the layer's overviews cannot be built.\""
 msgstr "« Le dossier … n'est pas accessible en écriture, donc les pyramides de la couche ne peuvent pas être construites. »"
@@ -1402,8 +1453,8 @@ msgstr "Ajouter un masque"
 msgid "Adding a mask"
 msgstr "Ajout d'un masque"
 
-msgid "Select **Add mask** to open the **Add a mask** dialog."
-msgstr "Sélectionnez **Ajouter un masque** pour ouvrir la boîte de dialogue **Ajouter un masque**."
+msgid "Select **Add mask** to open the **Add a mask** dialog. The bands are read as soon as the raster is chosen."
+msgstr "Sélectionnez **Ajouter un masque** pour ouvrir la boîte de dialogue **Ajouter un masque**. Les bandes sont lues dès que le raster est choisi."
 
 msgid "The mask's name in lists, legends and file names."
 msgstr "Le nom du masque dans les listes, les légendes et les noms de fichiers."
@@ -1411,17 +1462,17 @@ msgstr "Le nom du masque dans les listes, les légendes et les noms de fichiers.
 msgid "Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks."
 msgstr "Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique parmi les masques du projet."
 
-msgid "**Earth Engine asset** or **GeoTIFF in my SEPAL folder**."
-msgstr "**Asset Earth Engine** ou **GeoTIFF dans mon dossier SEPAL**."
+msgid "**Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder)."
+msgstr "**Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL)."
 
-msgid "The bands are read as soon as it is chosen."
-msgstr "Les bandes sont lues dès qu'il est choisi."
+msgid "**Band**"
+msgstr "**Bande**"
 
-msgid "The band that defines the mask."
-msgstr "La bande qui définit le masque."
+msgid "The band that defines the mask. Shown when the raster has two bands or more; with one band, the form reads \"One band (…): the mask is made from it.\""
+msgstr "La bande qui définit le masque. Affichée quand le raster a deux bandes ou plus ; avec une bande, le formulaire indique « Une bande (…) : le masque est fait à partir d'elle. »"
 
-msgid "Required."
-msgstr "Obligatoire."
+msgid "The band whose name looks like a mask (e.g. ``datamask``), named in the hint (\"… looks like a mask; non-zero pixels are inside it.\"), else none: pick it."
+msgstr "La bande dont le nom ressemble à un masque (par exemple ``datamask``), nommée dans l'aide (« … ressemble à un masque ; les pixels non nuls sont à l'intérieur. »), sinon aucune : choisissez-la."
 
 msgid "**Mode in the active period**"
 msgstr "**Mode dans la période active**"
@@ -1438,23 +1489,41 @@ msgstr "Quand **Ajouter un masque** est sélectionné, l'application vérifie le
 msgid "The mask list"
 msgstr "La liste des masques"
 
-msgid "Each row of **Masks** shows the mask's name, its **Mode** in the active period, and one status icon for its download and its alignment to the grid (hover over it to read both). The note under the name gives its origin (**Earth Engine** or **GeoTIFF**) and its size on disk."
-msgstr "Chaque ligne de **Masques** affiche le nom du masque, son **Mode** dans la période active et une icône d'état pour son téléchargement et son alignement sur la grille (survolez-la pour lire les deux). La note sous le nom indique son origine (**Earth Engine** ou **GeoTIFF**) et sa taille sur le disque."
+msgid "Each row of **Masks** shows:"
+msgstr "Chaque ligne de **Masques** affiche :"
 
-msgid "the cloud icon downloads and aligns the mask;"
-msgstr "l'icône de nuage télécharge et aligne le masque ;"
+msgid "**Mask**"
+msgstr "**Masque**"
 
-msgid "the cloud-refresh icon (GEE masks only) downloads it again, for an asset that changed;"
-msgstr "l'icône de nuage avec flèche circulaire (masques GEE uniquement) le télécharge à nouveau, pour un asset qui a changé ;"
+msgid "The mask's name. The line under it gives its source and size on disk once it is ready (\"Earth Engine · 18.9 MB\"), or why it needs a run (\"not downloaded yet\", \"the grid changed (…): align again\"). It ends with \"Off\" when the mask is off in the active period."
+msgstr "Le nom du masque. La ligne en dessous donne sa source et sa taille sur le disque une fois prêt (« Earth Engine · 18,9 MB »), ou la raison pour laquelle il doit être exécuté (« pas encore téléchargée », « la grille a changé (…) : aligner à nouveau »). Elle se termine par « Inactif » quand le masque est inactif dans la période active."
 
-msgid "the map icon shows it on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;"
-msgstr "l'icône de carte l'affiche sur la carte : un masque GEE peut être prévisualisé avant d'être téléchargé, un masque GeoTIFF une fois aligné ;"
+msgid "**Mode**"
+msgstr "**Mode**"
 
-msgid "the pencil icon opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and"
-msgstr "l'icône de crayon ouvre **Modifier le masque** *nom* : le raster et la bande peuvent changer, le nom non. Dès qu'un jeu d'alertes a utilisé le masque, il ne peut plus être modifié (**Un jeu d'alertes utilise déjà ce masque : ajoutez-en un nouveau à la place.**) ;"
+msgid "The mask's mode in the active period: **Off**, **Keep** or **Exclude**. A change applies at once; the period's sources then read out of date."
+msgstr "Le mode du masque dans la période active : **Inactif**, **Conserver** ou **Exclure**. Un changement s'applique tout de suite ; les sources de la période deviennent alors obsolètes."
 
-msgid "the bin icon deletes the mask. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date."
-msgstr "l'icône de corbeille supprime le masque. Son téléchargement et son fichier aligné sont supprimés, et toutes les périodes cessent de l'utiliser. Les jeux d'alertes qui l'utilisaient conservent leurs alertes et apparaissent comme obsolètes."
+msgid "\"Ready\", or a button for the mask's next run: **Download** (a GEE mask not downloaded yet) or **Align** (onto the grid). An orange button redoes a file that is out of date. While a run goes on, the cell reads \"Downloading 42%\", \"Aligning\" or \"Queued\"."
+msgstr "« Prête », ou un bouton pour la prochaine exécution du masque : **Télécharger** (un masque GEE pas encore téléchargé) ou **Aligner** (sur la grille). Un bouton orange refait un fichier obsolète. Pendant une exécution, la cellule indique « Chargement 42 % », « Alignement » ou « En attente »."
+
+msgid "the map icon shows the mask on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;"
+msgstr "l'icône de carte affiche le masque sur la carte : un masque GEE peut être prévisualisé avant d'être téléchargé, un masque GeoTIFF une fois aligné ;"
+
+msgid "the information icon opens its **Details** (see `The Details dialog <defo-prepare-details_>`_); and"
+msgstr "l'icône d'information ouvre ses **Détails** (voir `La boîte de dialogue Détails <defo-prepare-details_>`_) ;"
+
+msgid "the **More actions** menu (three dots) holds:"
+msgstr "le menu **Plus d'actions** (trois points) contient :"
+
+msgid "**Download again** (GEE masks only), for an asset that changed. The app asks first: \"This fetches the mask again from Earth Engine, replaces its download, then aligns it.\";"
+msgstr "**Télécharger à nouveau** (masques GEE uniquement), pour un asset qui a changé. L'application demande d'abord : « Ceci récupère le masque à nouveau depuis Earth Engine, remplace son téléchargement, puis l'aligne. » ;"
+
+msgid "**Edit**, which opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and"
+msgstr "**Modifier**, qui ouvre **Modifier le masque** *nom* : le raster et la bande peuvent changer, le nom non. Dès qu'un jeu d'alertes a utilisé le masque, il ne peut plus être modifié (**Un jeu d'alertes utilise déjà ce masque : ajoutez-en un nouveau à la place.**) ;"
+
+msgid "**Delete mask…**, which deletes the mask after you confirm. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date."
+msgstr "**Supprimer le masque…**, qui supprime le masque après confirmation. Son téléchargement et son fichier aligné sont supprimés, et toutes les périodes cessent de l'utiliser. Les jeux d'alertes qui l'utilisaient conservent leurs alertes et apparaissent comme obsolètes."
 
 msgid "A mask is downloaded and aligned once for the whole project, whichever period runs it."
 msgstr "Un masque est téléchargé et aligné une seule fois pour tout le projet, quelle que soit la période qui l'exécute."
@@ -1462,68 +1531,140 @@ msgstr "Un masque est téléchargé et aligné une seule fois pour tout le proje
 msgid "Sources for this period"
 msgstr "Sources de cette période"
 
-msgid "The table has one row per alert source of the project:"
-msgstr "Le tableau a une ligne par source d'alertes du projet :"
+msgid "The table has one row per alert source of the project, with two columns:"
+msgstr "Le tableau a une ligne par source d'alertes du projet, avec deux colonnes :"
 
-msgid "The source's name. The notes under it give its coverage warnings, what its harmonized file found (\"ready · 1234 alert pixels\", \"ready · 0 alerts found\" or \"ready · all 56 alert pixels removed by masks\") and its size on disk."
-msgstr "Le nom de la source. Les notes en dessous donnent ses avertissements de couverture, ce que son fichier harmonisé a trouvé (« prête · 1234 pixels d'alerte », « prête · 0 alerte trouvée » ou « prête · les 56 pixels d'alerte supprimés par les masques ») et sa taille sur le disque."
+msgid "The source's name. The line under it says what the row holds or what it waits for (see below). Warnings, such as a partial coverage, and errors show as lines under the row."
+msgstr "Le nom de la source. La ligne en dessous dit ce que contient la ligne du tableau ou ce qu'elle attend (voir plus bas). Les avertissements, comme une couverture partielle, et les erreurs s'affichent en lignes sous la ligne du tableau."
+
+msgid "The row's state, or a button for its next run."
+msgstr "L'état de la ligne, ou un bouton pour sa prochaine exécution."
+
+msgid "The **Status** column reads:"
+msgstr "La colonne **État** indique :"
+
+msgid "Status"
+msgstr "État"
+
+msgid "Meaning"
+msgstr "Signification"
+
+msgid "\"Ready\""
+msgstr "« Prête »"
+
+msgid "Downloaded and harmonized with the current inputs. The line under the name gives the download date, the size on disk and what the harmonized file found: \"downloaded 2026-10-20 · 31.7 MB · 2,362,718 alert pixels\"."
+msgstr "Téléchargée et harmonisée avec les entrées actuelles. La ligne sous le nom donne la date du téléchargement, la taille sur le disque et ce que le fichier harmonisé a trouvé : « téléchargée le 2026-10-20 · 31,7 MB · 2 362 718 pixels d'alerte »."
 
 msgid "**Download**"
-msgstr "**Téléchargement**"
+msgstr "**Télécharger**"
 
-msgid "The download over the period's search window."
-msgstr "Le téléchargement sur la fenêtre de recherche de la période."
+msgid "The source is not downloaded for this period's search window yet, or its download is out of date. Select the button to run the row: it aligns any mask of the period that needs it, downloads the source, then harmonizes it."
+msgstr "La source n'est pas encore téléchargée pour la fenêtre de recherche de cette période, ou son téléchargement est obsolète. Sélectionnez le bouton pour exécuter la ligne : il aligne les masques de la période qui en ont besoin, télécharge la source, puis l'harmonise."
 
 msgid "**Harmonize**"
-msgstr "**Harmonisation**"
+msgstr "**Harmoniser**"
 
-msgid "The alignment onto the grid, with the masks applied."
-msgstr "L'alignement sur la grille, masques appliqués."
+msgid "The download is current, but the harmonized file is missing or out of date (a new grid, a mask change). The run harmonizes again without downloading. A GeoTIFF source is never downloaded: it is read from its file, so its button always reads **Harmonize**."
+msgstr "Le téléchargement est à jour, mais le fichier harmonisé manque ou est obsolète (une nouvelle grille, un changement de masque). L'exécution réharmonise sans télécharger. Une source GeoTIFF n'est jamais téléchargée : elle est lue depuis son fichier, donc son bouton indique toujours **Harmoniser**."
 
-msgid "Each stage reads:"
-msgstr "Chaque étape indique :"
+msgid "**Retry**"
+msgstr "**Réessayer**"
 
-msgid "**ready**;"
-msgstr "**prête** ;"
+msgid "The last run of the row failed. Its error is shown in red under the row."
+msgstr "La dernière exécution de la ligne a échoué. Son erreur s'affiche en rouge sous la ligne."
 
-msgid "**out of date**, when its inputs changed (the period's dates, the AOI, the grid or a mask);"
-msgstr "**obsolète**, quand ses entrées ont changé (les dates de la période, l'AOI, la grille ou un masque) ;"
+msgid "\"Downloading 42%\", \"Harmonizing\", \"Queued\""
+msgstr "« Chargement 42 % », « Traitement », « En attente »"
 
-msgid "**missing**, when it is not made yet; or"
-msgstr "**manquante**, quand elle n'est pas encore produite ;"
+msgid "The row is running, or waits for its turn in a run (\"waiting for the row above\")."
+msgstr "La ligne est en cours, ou attend son tour dans une exécution (« en attente de la ligne du dessus »)."
 
-msgid "**running**, with the download's percentage."
-msgstr "**en cours**, avec le pourcentage du téléchargement."
+msgid "\"not covered\", \"no data\""
+msgstr "« non couverte », « aucune donnée »"
 
-msgid "A source that cannot run reads **not covered** or **no data** in both cells, with the reason under its name (\"Not covered: …\" or \"No data for this period: …\"). See `Alert sources <defo-alerts_>`_ for coverage."
-msgstr "Une source qui ne peut pas s'exécuter indique **non couverte** ou **aucune donnée** dans les deux cellules, avec la raison sous son nom (« Non couverte : … » ou « Aucune donnée pour cette période : … »). Pour la couverture, voir `Sources d'alertes <defo-alerts_>`_."
+msgid "The source cannot run for this period: it does not cover the AOI, or it has no data for the search window. The line under the name gives the reason. See `Alert sources <defo-alerts_>`_ for coverage."
+msgstr "La source ne peut pas s'exécuter pour cette période : elle ne couvre pas l'AOI, ou n'a pas de données pour la fenêtre de recherche. La ligne sous le nom en donne la raison. Pour la couverture, voir `Sources d'alertes <defo-alerts_>`_."
 
-msgid "the cloud icon runs the row: it first aligns any mask of the period that needs it, then downloads the source (if needed) and harmonizes it. It is disabled when the row is ready;"
-msgstr "l'icône de nuage exécute la ligne : elle aligne d'abord les masques de la période qui en ont besoin, puis télécharge la source (si nécessaire) et l'harmonise. Elle est désactivée quand la ligne est prête ;"
+msgid "\"File missing\""
+msgstr "« Sans fichier »"
 
-msgid "the cloud-refresh icon downloads the source again even if nothing changed, for a catalogue that updates its alerts over the same dates; and"
-msgstr "l'icône de nuage avec flèche circulaire télécharge à nouveau la source même si rien n'a changé, pour un catalogue qui met à jour ses alertes sur les mêmes dates ;"
+msgid "The file of a GeoTIFF source is gone (see `Common messages <defo-prepare-messages_>`_)."
+msgstr "Le fichier d'une source GeoTIFF a disparu (voir `Messages fréquents <defo-prepare-messages_>`_)."
 
-msgid "the map icon shows the harmonized alerts on the map."
-msgstr "l'icône de carte affiche les alertes harmonisées sur la carte."
+msgid "In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: instead of a button, the column reads \"To download\", \"To harmonize\" or \"To align\"."
+msgstr "Dans la `copie d'examen <defo-evaluation-return_>`_ d'un évaluateur, rien ne s'exécute : au lieu d'un bouton, la colonne indique « À charger », « À harmoniser » ou « À aligner »."
+
+msgid "A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why, and what the run does about it: for example \"the grid changed (EPSG:32719 · 30 m → EPSG:32719 · 10 m): harmonize again\", \"the search window changed (…): download again\", \"mask forest_2000 changed: harmonize again\" or \"the AOI changed: download again\"."
+msgstr "Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refait un fichier obsolète. La ligne sous le nom dit alors pourquoi, et ce que l'exécution fait à ce sujet : par exemple « la grille a changé (EPSG:32719 · 30 m → EPSG:32719 · 10 m) : harmoniser à nouveau », « la fenêtre de recherche a changé (…) : télécharger à nouveau », « le masque forest_2000 a changé : harmoniser à nouveau » ou « l'AOI a changé : télécharger à nouveau »."
+
+msgid "A row that is ready has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**."
+msgstr "Une ligne prête n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**."
+
+msgid "the map icon (**Show on the map**) shows the harmonized alerts on the map;"
+msgstr "l'icône de carte (**Afficher sur la carte**) affiche les alertes harmonisées sur la carte ;"
+
+msgid "the information icon opens the row's **Details** (see below);"
+msgstr "l'icône d'information ouvre les **Détails** de la ligne (voir plus bas) ;"
+
+msgid "**Download again** fetches the source again even if nothing changed, then harmonizes it. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source (\"Nothing to download again: read from a file\"), and waits while a mask of the period needs a run (\"Run the pending masks first\"); and"
+msgstr "**Télécharger à nouveau** récupère à nouveau la source même si rien n'a changé, puis l'harmonise. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »), et attend tant qu'un masque de la période doit être exécuté (« Exécutez d'abord les masques en attente ») ;"
+
+msgid "**Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the project: run the row again to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay."
+msgstr "**Supprimer les fichiers** retire le téléchargement et le fichier harmonisé de la source pour cette période, après confirmation. La source reste dans le projet : exécutez à nouveau la ligne pour les reconstruire. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées."
+
+msgid "The Details dialog"
+msgstr "La boîte de dialogue Détails"
+
+msgid "The Details dialog of a source"
+msgstr "La boîte de dialogue Détails d'une source"
+
+msgid "The information icon of a source or a mask opens a read-only summary of what its files were made with. It starts with the row's status and, for a source, the period. When the row is out of date, an orange **Why:** line says what changed."
+msgstr "L'icône d'information d'une source ou d'un masque ouvre un résumé en lecture seule de ce avec quoi ses fichiers ont été produits. Il commence par l'état de la ligne et, pour une source, la période. Quand la ligne est obsolète, une ligne orange **Pourquoi :** dit ce qui a changé."
+
+msgid "Section"
+msgstr "Section"
+
+msgid "What it lists"
+msgstr "Ce qu'elle liste"
+
+msgid "A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**."
+msgstr "Une source prédéfinie : son **Catalogue** et sa **Couverture** de l'AOI, avec la dernière date de données et le jour de la vérification. Une source personnalisée : son **Type**, sa **Référence**, son **Format**, son **Codage des dates**, ses **Bandes** et sa **Grille native**. Un masque : sa **Référence**, sa **Bande**, sa **Grille native** et les périodes où il est utilisé (**Utilisé dans**)."
+
+msgid "**Download** (**Read from file** for a GeoTIFF source)"
+msgstr "**Téléchargement** (**Lecture du fichier** pour une source GeoTIFF)"
+
+msgid "The **Search window**, the **Native grid** the file was downloaded in, its **Size** and its **File** in the project folder."
+msgstr "La **Fenêtre de recherche**, la **Grille native** dans laquelle le fichier a été téléchargé, sa **Taille** et son **Fichier** dans le dossier du projet."
+
+msgid "**Harmonize** (**Align** for a mask)"
+msgstr "**Harmonisation** (**Alignement** pour un masque)"
+
+msgid "The **Grid used**, with the current grid when it changed since, the **Resampling**, the **Masks** applied with their mode, the **Alert pixels** kept (and how many the masks removed), the **Alert dates** found, the **Size** and the **File**. For a mask: its **Mask pixels**."
+msgstr "La **Grille utilisée**, avec la grille actuelle quand elle a changé depuis, le **Rééchantillonnage**, les **Masques** appliqués avec leur mode, les **Pixels d'alerte** conservés (et combien les masques en ont retiré), les **Dates d'alerte** trouvées, la **Taille** et le **Fichier**. Pour un masque : ses **Pixels du masque**."
+
+msgid "Each section gives the date and time its file was written, or reads \"Not run yet\". Select **Close**, or press **Esc**, to close the dialog."
+msgstr "Chaque section donne la date et l'heure d'écriture de son fichier, ou indique « Pas encore exécuté ». Sélectionnez **Fermer**, ou appuyez sur **Échap**, pour fermer la boîte de dialogue."
 
 msgid "Run everything"
 msgstr "Tout exécuter"
 
-msgid "Select **Run … pending** (e.g. **Run 4 pending**). It first aligns the masks that need it, then runs every source that is missing or out of date, one row at a time:"
-msgstr "Sélectionnez **Exécuter … en attente** (par exemple **Exécuter 4 en attente**). Le bouton aligne d'abord les masques qui en ont besoin, puis exécute toutes les sources manquantes ou obsolètes, une ligne à la fois :"
+msgid "The footer under the table runs the rows in batch. Select **Run … pending** (e.g. **Run 4 pending**). It first aligns the masks on in the period that need it, then runs every source that needs a run, one row at a time:"
+msgstr "Le pied du tableau exécute les lignes par lot. Sélectionnez **Exécuter … en attente** (par exemple **Exécuter 4 en attente**). Le bouton aligne d'abord les masques activés dans la période qui en ont besoin, puis exécute chaque source qui doit être exécutée, une ligne à la fois :"
 
-msgid "rows that read **not covered** or **no data** are skipped;"
-msgstr "les lignes qui indiquent **non couverte** ou **aucune donnée** sont ignorées ;"
+msgid "rows that read \"not covered\" or \"no data\" are skipped;"
+msgstr "les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ;"
 
 msgid "a row that fails shows its error in red under it, and the run goes on with the next row."
 msgstr "une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante."
 
-msgid "**Stop after this row** ends the run once the row now running has finished. The rows already done stay done."
-msgstr "**Arrêter après cette ligne** termine l'exécution une fois finie la ligne en cours. Les lignes déjà faites le restent."
+msgid "While the run lasts, the footer counts its rows (\"1 running · 3 queued\", then \"2 of 4 done\", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads \"Stopping…\". The rows already done stay done."
+msgstr "Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent."
 
-msgid "The run shows as a task notification titled **Download & harmonize**, with the step it is on (\"Preparing GLAD-L\", then \"Harmonizing GLAD-L\") and the download's percentage (\"Download & harmonize · 35%\"). The percentage also shows in the row's **Download** cell."
-msgstr "L'exécution apparaît comme une notification de tâche intitulée **Télécharger et harmoniser**, avec l'étape en cours (« Préparation de GLAD-L », puis « Harmonisation de GLAD-L ») et le pourcentage du téléchargement (« Télécharger et harmoniser · 35 % »). Le pourcentage s'affiche aussi dans la cellule **Téléchargement** de la ligne."
+msgid "The arrow beside **Run … pending** (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, then harmonized, after you confirm."
+msgstr "La flèche à côté d'**Exécuter … en attente** (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, puis harmonisée, après confirmation."
+
+msgid "The run also shows as a task notification titled **Download & harmonize**, with the step it is on (\"Preparing GLAD-L\", then \"Harmonizing GLAD-L\") and the download's percentage (\"Download & harmonize · 35%\")."
+msgstr "L'exécution apparaît aussi comme une notification de tâche intitulée **Télécharger et harmoniser**, avec l'étape en cours (« Préparation de GLAD-L », puis « Harmonisation de GLAD-L ») et le pourcentage du téléchargement (« Télécharger et harmoniser · 35 % »)."
 
 msgid "Each row needs free disk space for its files. The app checks it before writing, and stops the row with a message when the disk is too full. The grid size line gives an idea of how big a source can get."
 msgstr "Chaque ligne a besoin d'espace disque libre pour ses fichiers. L'application le vérifie avant d'écrire et arrête la ligne avec un message quand le disque est trop plein. La ligne de taille de la grille donne une idée du volume que peut atteindre une source."
@@ -1558,8 +1699,8 @@ msgstr "« Une tâche écrit dans ce projet ; enregistrez la grille une fois cel
 msgid "The grid, masks and sources cannot change while a download or an **Integrate & vectorize** run is going."
 msgstr "La grille, les masques et les sources ne peuvent pas changer pendant un téléchargement ou une exécution d'**Intégrer et vectoriser**."
 
-msgid "\"missing: file not found: …\" (under a row) or \"Mask …: file not found (…). Put the file back at this path to use the mask.\""
-msgstr "« manquante : fichier introuvable : … » (sous une ligne) ou « Masque … : fichier introuvable (…). Remettez le fichier à cet emplacement pour utiliser le masque. »"
+msgid "\"File missing\", with \"missing: file not found: …\" under the row, or \"Mask …: file not found (…). Put the file back at this path to use the mask.\""
+msgstr "« Sans fichier », avec « manquante : fichier introuvable : … » sous la ligne, ou « Masque … : fichier introuvable (…). Remettez le fichier à cet emplacement pour utiliser le masque. »"
 
 msgid "A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place."
 msgstr "Une source ou un masque GeoTIFF a été déplacé, renommé ou supprimé de votre dossier SEPAL. Remettez le fichier à l'emplacement indiqué, ou modifiez la source ou le masque pour pointer vers son nouvel emplacement."
@@ -1567,14 +1708,14 @@ msgstr "Une source ou un masque GeoTIFF a été déplacé, renommé ou supprimé
 msgid "\"A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first.\""
 msgstr "« Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Exécuter … en attente aligne d'abord les masques. »"
 
-msgid "A source cannot be harmonized before the period's masks are aligned. Select **Run … pending**, or run the mask's row first."
-msgstr "Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez **Exécuter … en attente**, ou exécutez d'abord la ligne du masque."
+msgid "A source cannot be harmonized before the period's masks are aligned. Select **Run … pending**, or the mask's **Align** button first."
+msgstr "Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez **Exécuter … en attente**, ou d'abord le bouton **Aligner** du masque."
 
 msgid "\"Mask …: its native grid (projection and scale) is unknown; edit the mask.\""
 msgstr "« Masque … : sa grille native (projection et échelle) est inconnue ; modifiez le masque. »"
 
-msgid "The app does not know how to download this GEE mask. Open it with the pencil icon and save it again, so that its raster is checked anew."
-msgstr "L'application ne sait pas comment télécharger ce masque GEE. Ouvrez-le avec l'icône de crayon et enregistrez-le à nouveau, pour que son raster soit revérifié."
+msgid "The app does not know how to download this GEE mask. Open it with **Edit** in its **More actions** menu and save it again, so that its raster is checked anew."
+msgstr "L'application ne sait pas comment télécharger ce masque GEE. Ouvrez-le avec **Modifier** dans son menu **Plus d'actions** et enregistrez-le à nouveau, pour que son raster soit revérifié."
 
 msgid "Integrate & vectorize"
 msgstr "Intégrer et vectoriser"
@@ -1762,17 +1903,17 @@ msgstr "Pour ajouter une couche d'attributs :"
 msgid "Select **Add attribute layer** to open the **Add an attribute layer** dialog."
 msgstr "Sélectionnez **Ajouter une couche d'attributs** pour ouvrir la boîte de dialogue **Ajouter une couche d'attributs**."
 
-msgid "Choose the **Raster source** (**Earth Engine asset**, an image, or **GeoTIFF in my SEPAL folder**), then choose the raster."
-msgstr "Choisissez la **Source du raster** (**Asset Earth Engine**, une image, ou **GeoTIFF dans mon dossier SEPAL**), puis choisissez le raster."
+msgid "Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\\_\\ *band*."
+msgstr "Vérifiez le **Nom de la couche**, proposé à partir du raster une fois celui-ci choisi. Les colonnes se nomment *nom de la couche*\\_\\ *bande*."
 
-msgid "Select **Load bands**. The bands are read and listed (\"Bands of …\")."
-msgstr "Sélectionnez **Charger les bandes**. Les bandes sont lues et listées (« Bandes de … »)."
+msgid "Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once."
+msgstr "Choisissez la **Source** (**Earth Engine**, une image, ou **GeoTIFF**, un fichier de votre dossier SEPAL), puis choisissez le raster. Ses bandes sont lues aussitôt."
 
-msgid "Check the **Layer name**, suggested from the raster. The columns are named *layer name*\\_\\ *band*."
-msgstr "Vérifiez le **Nom de la couche**, proposé à partir du raster. Les colonnes se nomment *nom de la couche*\\_\\ *bande*."
+msgid "With one band, the form reads \"One band (…): its statistic is added to every alert.\" With two or more, select one or more in **Bands**."
+msgstr "Avec une bande, le formulaire indique « Une bande (…) : sa statistique est ajoutée à chaque alerte. » Avec deux ou plus, sélectionnez-en une ou plusieurs dans **Bandes**."
 
-msgid "In **Bands**, select one or more bands. For each, choose the statistic computed over the alert: **Majority** (the default, for classes), **Mean**, **Minimum**, **Maximum** or **Median**. The column name is shown beside it."
-msgstr "Dans **Bandes**, sélectionnez une ou plusieurs bandes. Pour chacune, choisissez la statistique calculée sur l'alerte : **Majorité** (par défaut, pour des classes), **Moyenne**, **Minimum**, **Maximum** ou **Médiane**. Le nom de la colonne s'affiche à côté."
+msgid "For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked \"(suggested)\". The column name is shown beside it."
+msgstr "Pour chaque bande, choisissez la statistique calculée sur l'alerte : **Majorité** (pour des classes), **Moyenne**, **Minimum**, **Maximum** ou **Médiane**. Elle démarre sur **Majorité** quand le nom de la bande ressemble à des classes (par exemple ``landcover``), et sur **Moyenne** sinon, marquée « (suggéré) ». Le nom de la colonne s'affiche à côté."
 
 msgid "Select **Add attribute layer**."
 msgstr "Sélectionnez **Ajouter une couche d'attributs**."
@@ -1983,6 +2124,9 @@ msgstr "**Question**"
 
 msgid "The text shown in Analysis."
 msgstr "Le texte affiché dans Analyse."
+
+msgid "Required."
+msgstr "Obligatoire."
 
 msgid "**Answer**"
 msgstr "**Réponse**"
@@ -2701,9 +2845,6 @@ msgstr "Recentre les deux cartes sur l'alerte."
 msgid "The **Layers** menu lists:"
 msgstr "Le menu **Couches** liste :"
 
-msgid "Section"
-msgstr "Section"
-
 msgid "Layers"
 msgstr "Couches"
 
@@ -2743,8 +2884,8 @@ msgstr "les traits *Sentinel-2* en haut ;"
 msgid "*Landsat* in the middle; and"
 msgstr "*Landsat* au milieu ; et"
 
-msgid "*Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom."
-msgstr "*Planet* (la mosaïque mensuelle NICFI), sous forme de barre couvrant son mois, en bas."
+msgid "*Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom, only when your GEE account has NICFI access."
+msgstr "*Planet* (la mosaïque mensuelle NICFI), sous forme de barre couvrant son mois, en bas, seulement quand votre compte GEE a accès à NICFI."
 
 msgid "A faded, half-height stripe is an image over the cloud limit. The gold band is the *alert window*: the dates over which the alert was detected. On a `growth alert <defo-integrate-growth_>`_, a grey band behind it marks the detection dates of each earlier alert it is linked to: choose a before image taken after the earlier clearing to see only the new loss."
 msgstr "Un trait estompé, à mi-hauteur, est une image au-dessus de la limite de nuages. La bande dorée est la *fenêtre de l'alerte* : les dates sur lesquelles l'alerte a été détectée. Sur une `alerte d'extension <defo-integrate-growth_>`_, une bande grise derrière elle marque les dates de détection de chaque alerte antérieure à laquelle elle est liée : choisissez une image d'avant prise après le défrichement antérieur pour ne voir que la nouvelle perte."
@@ -2779,8 +2920,8 @@ msgstr "Par défaut"
 msgid "*Planet*, *Sentinel-2*, *Landsat* chips"
 msgstr "Pastilles *Planet*, *Sentinel-2*, *Landsat*"
 
-msgid "Show or hide a collection. Each chip counts the collection's images in view, then (\"+7\") those over the cloud limit. The Planet chip is disabled when your GEE account has no NICFI access."
-msgstr "Affichent ou masquent une collection. Chaque pastille compte les images de la collection dans la vue, puis (« +7 ») celles au-dessus de la limite de nuages. La pastille Planet est désactivée quand votre compte GEE n'a pas accès à NICFI."
+msgid "Show or hide a collection. Each chip counts the collection's images in view, then (\"+7\") those over the cloud limit. The Planet chip shows only when your GEE account has NICFI access."
+msgstr "Affichent ou masquent une collection. Chaque pastille compte les images de la collection dans la vue, puis (« +7 ») celles au-dessus de la limite de nuages. La pastille Planet ne s'affiche que quand votre compte GEE a accès à NICFI."
 
 msgid "All on."
 msgstr "Toutes activées."
@@ -3661,11 +3802,11 @@ msgstr "**AOI** : à l'étape `AOI <defo-aoi_>`_, choisissez **Niveau administra
 msgid "**Alert sources**: in `Alert sources <defo-alerts_>`_, add the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**. Each one **covers the AOI**. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts."
 msgstr "**Sources d'alertes** : dans `Sources d'alertes <defo-alerts_>`_, ajoutez les trois sources prédéfinies : **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** et **GLAD-S2 (Sentinel-2, 10 m)**. Chacune **couvre l'AOI**. Sous RADD, l'application précise qu'elle ne détecte que dans la forêt tropicale humide primaire : ailleurs dans le département, seules GLAD-L et GLAD-S2 peuvent signaler des alertes."
 
-msgid "**Optional layers**: to judge alerts against a recent image, add one `optional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), with **Three bands (RGB)** on, **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected."
-msgstr "**Couches facultatives** : pour juger les alertes au regard d'une image récente, ajoutez une `couche facultative <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), avec **Trois bandes (RGB)** activé, **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché."
+msgid "**Optional layers**: to judge alerts against a recent image, add one `optional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected."
+msgstr "**Couches facultatives** : pour juger les alertes au regard d'une image récente, ajoutez une `couche facultative <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché."
 
-msgid "A Planet NICFI monthly mosaic would cover the whole department, but the account used for this article has no NICFI access. This is also why the *Planet* chip of the Analysis timeline reads 0 in the screenshots below."
-msgstr "Une mosaïque mensuelle Planet NICFI couvrirait tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est aussi pourquoi la pastille *Planet* de la frise d'Analyse indique 0 sur les captures d'écran ci-dessous."
+msgid "Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip."
+msgstr "Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi la frise d'Analyse des captures d'écran ci-dessous n'a pas de pastille *Planet*."
 
 msgid "The September round"
 msgstr "Le cycle de septembre"
@@ -3700,11 +3841,11 @@ msgstr "garde la grille proposée, la zone UTM du département (``EPSG:32719``) 
 msgid "adds a mask so that only alerts in forest count: **Add mask**, the Hansen Global Forest Change image ``UMD/hansen/global_forest_change_2025_v1_13``, band ``treecover2000``, named ``forest_2000``, mode **Keep**; and"
 msgstr "ajoute un masque pour que seules les alertes en forêt comptent : **Ajouter un masque**, l'image Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, bande ``treecover2000``, nommée ``forest_2000``, mode **Conserver** ; et"
 
-msgid "selects **Run … pending**, which aligns the mask, then downloads and harmonizes the three sources."
-msgstr "sélectionne **Exécuter … en attente**, qui aligne le masque, puis télécharge et harmonise les trois sources."
+msgid "selects **Run … pending** in the footer of the table, which aligns the mask, then downloads and harmonizes the three sources."
+msgstr "sélectionne **Exécuter … en attente** dans le pied du tableau, qui aligne le masque, puis télécharge et harmonise les trois sources."
 
-msgid "The run took about 15 minutes. Each source then reads **ready**: GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458."
-msgstr "L'exécution a pris environ 15 minutes. Chaque source indique alors **prête** : GLAD-L avec 2362718 pixels d'alerte, RADD avec 1508527 et GLAD-S2 avec 1462458."
+msgid "The run took about 15 minutes. The mask and each source then read \"Ready\": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458."
+msgstr "L'exécution a pris environ 15 minutes. Le masque et chaque source indiquent alors « Prête » : GLAD-L avec 2362718 pixels d'alerte, RADD avec 1508527 et GLAD-S2 avec 1462458."
 
 msgid "In `Integrate & vectorize <defo-integrate_>`_, the coordinator:"
 msgstr "Dans `Intégrer et vectoriser <defo-integrate_>`_, la coordinatrice :"
