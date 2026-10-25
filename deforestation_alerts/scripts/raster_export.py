@@ -13,6 +13,7 @@ the ones started from ``spawn_in_context`` daemon threads.
 """
 
 import asyncio
+import contextlib
 import errno
 import logging
 import threading
@@ -38,6 +39,42 @@ _DOWNLOAD_LOCK = threading.Lock()
 # ``DownloadBusy`` (a TimeoutError), and cancelling an export does NOT stop its
 # thread, so an unbounded wait could otherwise strand a second user indefinitely.
 _DOWNLOAD_LOCK_TIMEOUT_S = 30 * 60
+
+#: Tiles requested from Earth Engine at once (geedim's default).
+EE_MAX_REQUESTS = 32
+
+#: Tiles requested at once once Earth Engine has said "Too Many Requests". A
+#: project in restricted mode (out of its monthly EECU quota) answered 32 with
+#: 429 "Exceeded Earth Engine concurrency limit" and the download failed
+#: (2026-10-25).
+EE_RESTRICTED_REQUESTS = 8
+
+#: The Earth Engine client's retries of a 429 during a restricted export (its
+#: default is 5, with a random wait of up to 2**n s before retry n). geedim does
+#: not retry an ``EEException``, so one tile whose retries run out fails the
+#: whole download; 9 lets a restricted project's download go on, slowly.
+EE_RESTRICTED_RETRIES = 9
+
+# Set by the first 429 of the session: later downloads start gently too. A
+# project stays restricted until its monthly quota resets.
+_restricted = False
+
+
+def _too_many_requests(exc: BaseException) -> bool:
+    """Earth Engine's 429 to a project over its concurrency limit."""
+    return isinstance(exc, ee.EEException) and "Too Many Requests" in str(exc)
+
+
+@contextlib.contextmanager
+def _patient_ee_client():
+    """Raise the Earth Engine client's retries for the export, then restore them.
+    The setting is process-wide; the download lock keeps exports from nesting."""
+    before = ee.data._get_state().max_retries  # the client has a setter, no getter
+    ee.data.setMaxRetries(max(before, EE_RESTRICTED_RETRIES))
+    try:
+        yield
+    finally:
+        ee.data.setMaxRetries(before)
 
 
 class DownloadBusy(KeyedError, TimeoutError):
@@ -130,7 +167,9 @@ def download_ee_image(
 ) -> None:
     """Download `image` as a GeoTIFF at `filename`. Tiling (so national-scale
     exports stream safely, D4) is controlled by `max_tile_size` (MB) /
-    `max_tile_dim` (px); `num_threads` maps to geedim's `max_requests`.
+    `max_tile_dim` (px); `num_threads` maps to geedim's `max_requests`. An export
+    Earth Engine refuses with "Too Many Requests" (a project in restricted mode)
+    runs again with fewer requests at once, and so do the session's later ones.
 
     The export region handed to geedim is always the *bounds* of `region` — the
     footprint itself is applied by the clip (see `export_bounds`).
@@ -159,7 +198,6 @@ def download_ee_image(
     tiff_opts = {
         "max_tile_size": max_tile_size,
         "max_tile_dim": max_tile_dim,
-        "max_requests": num_threads,
     }
     tiff_opts = {k: v for k, v in tiff_opts.items() if v is not None}
 
@@ -187,9 +225,25 @@ def download_ee_image(
         # retry of its own; a DNS blip there failed whole exports (spec §12).
         with_retries(lambda: prefetch_stac(img))
         nodata = True if nodata_value is None else nodata_value
-        img.gd.toGeoTIFF(
-            file=filename, overwrite=overwrite, nodata=nodata, **tiff_opts, **kwargs
-        )
+        requests = num_threads or EE_MAX_REQUESTS
+
+        def to_geotiff(max_requests):
+            img.gd.toGeoTIFF(file=filename, overwrite=overwrite, nodata=nodata,
+                             max_requests=max_requests, **tiff_opts, **kwargs)
+
+        global _restricted
+        if not _restricted:
+            try:
+                to_geotiff(requests)
+            except Exception as exc:
+                if not _too_many_requests(exc):
+                    raise
+                logger.warning("Earth Engine is restricting this project; downloading again "
+                               "with %d requests at once: %s", EE_RESTRICTED_REQUESTS, exc)
+                _restricted = True
+        if _restricted:
+            with _patient_ee_client():
+                to_geotiff(min(requests, EE_RESTRICTED_REQUESTS))
     finally:
         _DOWNLOAD_LOCK.release()
 
