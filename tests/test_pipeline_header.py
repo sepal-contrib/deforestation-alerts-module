@@ -37,7 +37,7 @@ def test_count_text_pluralizes_and_falls_back():
     from gui.widget.pipeline_header import count_text
 
     aoi_spec, alerts_spec, integrate = STEPS[0], STEPS[1], STEPS[step_index("integrate")]
-    assert count_text(integrate, _project(n_alerts=5)) == "5 alerts"
+    assert count_text(integrate, _project(n_alerts=5)) == "5 clusters"
     assert count_text(integrate, _project()) == "nothing yet"
     # AOI step: the badge is the AOI name (a string count).
     assert count_text(aoi_spec, _project(aoi_name="Acre")) == "Acre"

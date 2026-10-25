@@ -81,10 +81,10 @@
       "many": "{count} prontas",
       "other": "{count} prontas"
     },
-    "count_alerts": {
-      "one": "{count} alerta",
-      "many": "{count} de alertas",
-      "other": "{count} alertas"
+    "count_clusters": {
+      "one": "{count} agrupamento",
+      "many": "{count} de agrupamentos",
+      "other": "{count} agrupamentos"
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nada ainda",

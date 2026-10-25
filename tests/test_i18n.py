@@ -402,7 +402,7 @@ def test_counted_labels_agree_with_their_count():
 
     assert i18n.tn("steps.prepare.run_all", 1) == "Run 1 pending"
     assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")
-    assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed alert in this set will be discarded."
+    assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed cluster in this set will be discarded."
     assert i18n.tn("steps.sets.alerts", 1) == "1 alert"
     set_locale("es-ES")
     assert i18n.tn("steps.prepare.run_all", 2) == "Ejecutar 2 pendientes"
@@ -480,11 +480,11 @@ def test_the_integrate_and_grid_texts_follow_the_language():
 
     assert integrate_jobs.outcome_lines({"GLAD-L": {"alert_pixels": 1, "alert_pixels_unmasked": 1}}, {}) == [
         "GLAD-L: 1 alert pixel (below the minimum size, or under earlier sets' footprints)"]
-    assert i18n.tn("steps.integrate.done", 1) == "1 alert ready for review"
+    assert i18n.tn("steps.integrate.done", 1) == "1 cluster ready for review"
     set_locale("es-ES")
     assert integrate_jobs.outcome_lines({"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 12345}}, {}) == [
         "RADD: los 12.345 píxeles de alerta eliminados por máscaras"]
-    assert i18n.tn("steps.integrate.done", 2) == "2 alertas listas para revisar"
+    assert i18n.tn("steps.integrate.done", 2) == "2 grupos listos para revisar"
     grid = SimpleNamespace(width=12345, height=6789)
     original = grid_form.gridmod.estimate_bytes
     grid_form.gridmod.estimate_bytes = lambda g: 2_500_000_000

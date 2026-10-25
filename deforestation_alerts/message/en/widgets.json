@@ -75,9 +75,9 @@
       "one": "{count} ready",
       "other": "{count} ready"
     },
-    "count_alerts": {
-      "one": "{count} alert",
-      "other": "{count} alerts"
+    "count_clusters": {
+      "one": "{count} cluster",
+      "other": "{count} clusters"
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nothing yet",

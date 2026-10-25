@@ -379,7 +379,7 @@ def test_a_run_with_growth_alerts_says_how_many_were_linked(monkeypatch, tmp_pat
     integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
     done = tn("steps.integrate.done", 3) + ". " + tn("steps.integrate.growth_linked", 2, small=1)
     assert notifier.toasts == [("success", done)]
-    assert tn("steps.integrate.growth_linked", 2, small=1) == "Linked 2 alerts to earlier loss (1 under the minimum area)"
+    assert tn("steps.integrate.growth_linked", 2, small=1) == "Linked 2 clusters to earlier loss (1 under the minimum area)"
 
 
 def test_growth_toast_without_small_alerts_has_no_parenthesis(monkeypatch, tmp_path):
@@ -392,7 +392,7 @@ def test_growth_toast_without_small_alerts_has_no_parenthesis(monkeypatch, tmp_p
     integrate_jobs.run_integration_job(state, notifier, _job(pdir=tmp_path / "d"))
     done = tn("steps.integrate.done", 3) + ". " + tn("steps.integrate.growth_linked_plain", 2)
     assert notifier.toasts == [("success", done)]
-    assert tn("steps.integrate.growth_linked_plain", 2) == "Linked 2 alerts to earlier loss"
+    assert tn("steps.integrate.growth_linked_plain", 2) == "Linked 2 clusters to earlier loss"
 
 
 def test_the_published_alerts_are_stamped_with_the_store_the_run_wrote(monkeypatch, tmp_path):

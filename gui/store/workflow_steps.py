@@ -120,7 +120,7 @@ STEPS: List[StepSpec] = [
              icon="mdi-vector-union",
              unlocked=lambda p: bool(_ready(p)), lock_reason_key="workflow.lock_integrate",
              count=lambda p: active_set(p).n_alerts if active_set(p) else 0,
-             count_key="workflow.count_alerts"),
+             count_key="workflow.count_clusters"),
     StepSpec(key="questionnaire", page_view="questionnaire_tile", label_key="app.drawer_item.questionnaire",
              icon="mdi-clipboard-list-outline",
              # its questions are asked of an alert set: after Integrate & vectorize

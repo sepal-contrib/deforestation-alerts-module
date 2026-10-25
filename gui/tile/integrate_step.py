@@ -77,7 +77,7 @@ def integrate_choices(p, pdir, period) -> list:
     return out
 
 
-#: The alert limit a ticked "Limit the number of alerts" starts from.
+#: The alert limit a ticked "Limit the number of clusters" starts from.
 DEFAULT_LIMIT = 100
 
 

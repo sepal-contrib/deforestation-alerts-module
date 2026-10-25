@@ -562,48 +562,48 @@
       "d_pixels_masked": "{kept} ({before} antes das máscaras: {removed} removidos)"
     },
     "integrate": {
-      "description": "Combine as fontes baixadas, ignore os pixels que um período anterior já reportou e transforme os agrupamentos em alertas.",
+      "description": "Combine as fontes baixadas, ignore os pixels que um período anterior já reportou e reúna os pixels de alerta vizinhos em agrupamentos.",
       "info_header": "Sobre Integrar e vetorizar",
-      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os alertas que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Pixels vizinhos se tornam alertas. Os alertas menores que o **tamanho mínimo** são descartados; você pode limitar o número de alertas, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada alerta.\n\nOs pixels pequenos demais para formar um alerta, ou além do número máximo de alertas, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os alertas revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
+      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
       "sources": "Fontes a combinar",
-      "min_size": "Tamanho mínimo do alerta",
-      "min_size_hint": "Os agrupamentos de alertas menores que isto ({px} pixels na grade) são descartados e ficam fora do conjunto, das suas exportações e do mapa.",
+      "min_size": "Tamanho mínimo do agrupamento",
+      "min_size_hint": "Os agrupamentos menores que isto ({px} pixels na grade) são descartados e ficam fora do conjunto, das suas exportações e do mapa.",
       "include_probable": "Incluir alertas prováveis (não confirmados)",
       "probable_per_source": "Definir por fonte",
       "probable_mixed": "Misto: as fontes abaixo diferem.",
       "probable_none": "{source}: só datas, sem nível provável",
       "sorting": "Ordem",
-      "sorting_1": "Alertas maiores primeiro",
-      "sorting_2": "Alertas menores primeiro",
-      "sorting_3": "Alertas recentes primeiro",
-      "sorting_4": "Alertas mais antigos primeiro",
-      "max_alerts": "Número máximo de alertas",
-      "limit_alerts": "Limitar o número de alertas",
+      "sorting_1": "Agrupamentos maiores primeiro",
+      "sorting_2": "Agrupamentos menores primeiro",
+      "sorting_3": "Agrupamentos recentes primeiro",
+      "sorting_4": "Agrupamentos mais antigos primeiro",
+      "max_alerts": "Número máximo de agrupamentos",
+      "limit_alerts": "Limitar o número de agrupamentos",
       "max_alerts_hint_1": {
-        "one": "Mantém {n} alerta: o maior.",
-        "many": "Mantém os {n} de alertas maiores.",
-        "other": "Mantém os {n} maiores alertas."
+        "one": "Mantém {n} agrupamento: o maior.",
+        "many": "Mantém os {n} de agrupamentos maiores.",
+        "other": "Mantém os {n} maiores agrupamentos."
       },
       "max_alerts_hint_2": {
-        "one": "Mantém {n} alerta: o menor.",
-        "many": "Mantém os {n} de alertas menores.",
-        "other": "Mantém os {n} menores alertas."
+        "one": "Mantém {n} agrupamento: o menor.",
+        "many": "Mantém os {n} de agrupamentos menores.",
+        "other": "Mantém os {n} menores agrupamentos."
       },
       "max_alerts_hint_3": {
-        "one": "Mantém {n} alerta: o mais recente.",
-        "many": "Mantém os {n} de alertas mais recentes.",
-        "other": "Mantém os {n} alertas mais recentes."
+        "one": "Mantém {n} agrupamento: o mais recente.",
+        "many": "Mantém os {n} de agrupamentos mais recentes.",
+        "other": "Mantém os {n} agrupamentos mais recentes."
       },
       "max_alerts_hint_4": {
-        "one": "Mantém {n} alerta: o mais antigo.",
-        "many": "Mantém os {n} de alertas mais antigos.",
-        "other": "Mantém os {n} alertas mais antigos."
+        "one": "Mantém {n} agrupamento: o mais antigo.",
+        "many": "Mantém os {n} de agrupamentos mais antigos.",
+        "other": "Mantém os {n} agrupamentos mais antigos."
       },
       "attr_name": "Nome da camada",
-      "attr_name_hint": "As colunas dos alertas se chamam <nome da camada>_<banda>.",
+      "attr_name_hint": "As colunas dos agrupamentos se chamam <nome da camada>_<banda>.",
       "attr_bands": "Bandas",
-      "attr_band_one": "Uma banda ({name}): sua estatística é adicionada a cada alerta.",
-      "attr_bands_pick": "{count} bandas. Escolha as que serão adicionadas aos alertas.",
+      "attr_band_one": "Uma banda ({name}): sua estatística é adicionada a cada agrupamento.",
+      "attr_bands_pick": "{count} bandas. Escolha as que serão adicionadas aos agrupamentos.",
       "attr_stat_majority": "Maioria",
       "attr_stat_mean": "Média",
       "attr_stat_min": "Mínimo",
@@ -615,43 +615,43 @@
       "run": "Integrar e vetorizar",
       "replace_title": "Substituir este conjunto de alertas?",
       "replace_message": {
-        "one": "{n} alerta revisado deste conjunto será descartado.",
-        "many": "{n} de alertas revisados deste conjunto serão descartados.",
-        "other": "{n} alertas revisados deste conjunto serão descartados."
+        "one": "{n} agrupamento revisado deste conjunto será descartado.",
+        "many": "{n} de agrupamentos revisados deste conjunto serão descartados.",
+        "other": "{n} agrupamentos revisados deste conjunto serão descartados."
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… e mais {n}",
       "replace_split": "A divisão entre avaliadores e suas devoluções pendentes serão descartadas.",
       "replace_links": {
-        "one": "{n} alerta de um período posterior está vinculado a este conjunto; seu vínculo será rompido.",
-        "many": "{n} de alertas de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.",
-        "other": "{n} alertas de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos."
+        "one": "{n} agrupamento de um período posterior está vinculado a este conjunto; seu vínculo será rompido.",
+        "many": "{n} de agrupamentos de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.",
+        "other": "{n} agrupamentos de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos."
       },
       "job_title": "Integrar e vetorizar",
       "step_combine": "Combinando as fontes",
       "step_vectorize": "Vetorizando os agrupamentos",
       "step_footprint": "Gravando a pegada",
-      "step_store": "Salvando os alertas",
+      "step_store": "Salvando os agrupamentos",
       "step_tiles": "Gerando os blocos do mapa",
       "no_tippecanoe": "O tippecanoe não está instalado: o mapa mostrará os pontos dos alertas sem polígonos.",
       "tiles_failed": "Não foi possível exibir os blocos do mapa ({error}): mostrando os pontos dos alertas sem polígonos.",
       "done": {
-        "one": "{n} alerta pronto para revisão",
-        "many": "{n} de alertas prontos para revisão",
-        "other": "{n} alertas prontos para revisão"
+        "one": "{n} agrupamento pronto para revisão",
+        "many": "{n} de agrupamentos prontos para revisão",
+        "other": "{n} agrupamentos prontos para revisão"
       },
       "growth_linked": {
-        "one": "{n} alerta vinculado a uma perda anterior ({small} abaixo da área mínima)",
-        "many": "{n} de alertas vinculados a perdas anteriores ({small} abaixo da área mínima)",
-        "other": "{n} alertas vinculados a perdas anteriores ({small} abaixo da área mínima)"
+        "one": "{n} agrupamento vinculado a uma perda anterior ({small} abaixo da área mínima)",
+        "many": "{n} de agrupamentos vinculados a perdas anteriores ({small} abaixo da área mínima)",
+        "other": "{n} agrupamentos vinculados a perdas anteriores ({small} abaixo da área mínima)"
       },
       "growth_linked_plain": {
-        "one": "{n} alerta vinculado a uma perda anterior",
-        "many": "{n} de alertas vinculados a perdas anteriores",
-        "other": "{n} alertas vinculados a perdas anteriores"
+        "one": "{n} agrupamento vinculado a uma perda anterior",
+        "many": "{n} de agrupamentos vinculados a perdas anteriores",
+        "other": "{n} agrupamentos vinculados a perdas anteriores"
       },
-      "done_empty": "Nenhum alerta novo neste período: o conjunto de alertas está vazio.",
-      "done_empty_detail": "Nenhum alerta novo neste período: o conjunto de alertas está vazio. {details}",
+      "done_empty": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio.",
+      "done_empty_detail": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio. {details}",
       "outcome_pixels": {
         "one": "{source}: {n} pixel de alerta (abaixo do tamanho mínimo, ou sob as pegadas de conjuntos anteriores)",
         "many": "{source}: {n} de pixels de alerta (todos abaixo do tamanho mínimo, ou sob as pegadas de conjuntos anteriores)",
@@ -663,7 +663,7 @@
         "many": "{source}: todos os {n} de pixels de alerta removidos pelas máscaras",
         "other": "{source}: todos os {n} pixels de alerta removidos pelas máscaras"
       },
-      "outcome_none": "{source}: 0 alertas encontrados",
+      "outcome_none": "{source}: 0 pixels de alerta encontrados",
       "outcome_left_out": "{source}: não coberta",
       "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "O período, a área de interesse ou a grade do projeto mudou durante a execução, então o conjunto de alertas não foi registrado. Execute Integrar e vetorizar novamente.",
@@ -682,7 +682,7 @@
       "attr_err_no_bands": "Mantenha pelo menos uma banda.",
       "attr_err_duplicate": "Outra camada de atributos já lê este raster.",
       "attr_list_title": "Camadas de atributos",
-      "attr_empty": "Nenhuma camada de atributos. Cada uma adiciona estatísticas de suas bandas a cada alerta.",
+      "attr_empty": "Nenhuma camada de atributos. Cada uma adiciona estatísticas de suas bandas a cada agrupamento.",
       "attr_col_raster": "Raster",
       "attr_columns": "Colunas: {columns}"
     },

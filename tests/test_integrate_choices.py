@@ -67,7 +67,7 @@ def test_outcome_lines_of_an_empty_set():
     assert lines == [
         "GLAD-L: 120 alert pixels (all below the minimum size, or under earlier sets' footprints)",
         "MINE: all 7 alert pixels removed by masks",
-        "RADD: 0 alerts found",
+        "RADD: 0 alert pixels found",
         "GLAD-S2 does not cover this AOI",
     ]
 
@@ -118,6 +118,6 @@ def test_publish_alerts_refuses_once_another_set_is_active():
 def test_outcome_lines_say_when_probable_alerts_were_left_out():
     outcomes = {"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 0}, "GLAD-L": {"alert_pixels": 0, "alert_pixels_unmasked": 0}}
     lines = integrate_jobs.outcome_lines(outcomes, {}, confirmed_only=["RADD", "OTHER"])
-    assert lines == ["GLAD-L: 0 alerts found", "RADD: 0 alerts found",
+    assert lines == ["GLAD-L: 0 alert pixels found", "RADD: 0 alert pixels found",
                      t("steps.integrate.outcome_confirmed_only", source="RADD")]
     assert "left out" in lines[-1]

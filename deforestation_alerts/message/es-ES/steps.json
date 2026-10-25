@@ -562,48 +562,48 @@
       "d_pixels_masked": "{kept} ({before} antes de las máscaras: {removed} eliminados)"
     },
     "integrate": {
-      "description": "Combina las fuentes descargadas, omite los píxeles que un período anterior ya reportó y convierte los grupos en alertas.",
+      "description": "Combina las fuentes descargadas, omite los píxeles que un período anterior ya reportó y agrupa los píxeles de alerta vecinos en grupos.",
       "info_header": "Acerca de Integrar y vectorizar",
-      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: las alertas que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada alerta recuerda qué fuentes la detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles vecinos se convierten en alertas. Las alertas más pequeñas que el **tamaño mínimo** se descartan; puedes limitar el número de alertas, ordenadas como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada alerta.\n\nLos píxeles demasiado pequeños para ser una alerta, o que superan el número máximo de alertas, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Un interruptor **incluir alertas probables** vale para todas las fuentes elegidas (**Definir por fuente** para elegir cada una); desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera las alertas revisadas que descartaría. Cuando la ejecución termina, el nuevo conjunto pasa a ser el activo: prepara el cuestionario y luego inicia Análisis.",
+      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: los grupos que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada píxel de alerta recuerda qué fuentes lo detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles de alerta vecinos se agrupan en **grupos**; cada grupo conserva las fuentes de todos sus píxeles. Los grupos más pequeños que el **tamaño mínimo** se descartan; puedes limitar el número de grupos, ordenados como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada grupo.\n\nLos píxeles de grupos demasiado pequeños para conservarse, o que superan el número máximo de grupos, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Un interruptor **incluir alertas probables** vale para todas las fuentes elegidas (**Definir por fuente** para elegir cada una); desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera los grupos revisados que descartaría. Cuando la ejecución termina, el nuevo conjunto pasa a ser el activo: prepara el cuestionario y luego inicia Análisis.",
       "sources": "Fuentes a combinar",
-      "min_size": "Tamaño mínimo de alerta",
-      "min_size_hint": "Se descartan los grupos de alertas más pequeños que esto ({px} píxeles en la cuadrícula), y quedan fuera del conjunto, de sus exportaciones y del mapa.",
+      "min_size": "Tamaño mínimo de grupo",
+      "min_size_hint": "Se descartan los grupos más pequeños que esto ({px} píxeles en la cuadrícula), y quedan fuera del conjunto, de sus exportaciones y del mapa.",
       "include_probable": "Incluir alertas probables (no confirmadas)",
       "probable_per_source": "Definir por fuente",
       "probable_mixed": "Mixto: las fuentes de abajo difieren.",
       "probable_none": "{source}: solo fechas, sin nivel probable",
       "sorting": "Orden",
-      "sorting_1": "Alertas más grandes primero",
-      "sorting_2": "Alertas más pequeñas primero",
-      "sorting_3": "Alertas más recientes primero",
-      "sorting_4": "Alertas más antiguas primero",
-      "max_alerts": "Número máximo de alertas",
-      "limit_alerts": "Limitar el número de alertas",
+      "sorting_1": "Grupos más grandes primero",
+      "sorting_2": "Grupos más pequeños primero",
+      "sorting_3": "Grupos más recientes primero",
+      "sorting_4": "Grupos más antiguos primero",
+      "max_alerts": "Número máximo de grupos",
+      "limit_alerts": "Limitar el número de grupos",
       "max_alerts_hint_1": {
-        "one": "Conserva {n} alerta: la más grande.",
-        "many": "Conserva las {n} de alertas más grandes.",
-        "other": "Conserva las {n} alertas más grandes."
+        "one": "Conserva {n} grupo: el más grande.",
+        "many": "Conserva los {n} de grupos más grandes.",
+        "other": "Conserva los {n} grupos más grandes."
       },
       "max_alerts_hint_2": {
-        "one": "Conserva {n} alerta: la más pequeña.",
-        "many": "Conserva las {n} de alertas más pequeñas.",
-        "other": "Conserva las {n} alertas más pequeñas."
+        "one": "Conserva {n} grupo: el más pequeño.",
+        "many": "Conserva los {n} de grupos más pequeños.",
+        "other": "Conserva los {n} grupos más pequeños."
       },
       "max_alerts_hint_3": {
-        "one": "Conserva {n} alerta: la más reciente.",
-        "many": "Conserva las {n} de alertas más recientes.",
-        "other": "Conserva las {n} alertas más recientes."
+        "one": "Conserva {n} grupo: el más reciente.",
+        "many": "Conserva los {n} de grupos más recientes.",
+        "other": "Conserva los {n} grupos más recientes."
       },
       "max_alerts_hint_4": {
-        "one": "Conserva {n} alerta: la más antigua.",
-        "many": "Conserva las {n} de alertas más antiguas.",
-        "other": "Conserva las {n} alertas más antiguas."
+        "one": "Conserva {n} grupo: el más antiguo.",
+        "many": "Conserva los {n} de grupos más antiguos.",
+        "other": "Conserva los {n} grupos más antiguos."
       },
       "attr_name": "Nombre de la capa",
-      "attr_name_hint": "Las columnas de las alertas se llaman <nombre de la capa>_<banda>.",
+      "attr_name_hint": "Las columnas de los grupos se llaman <nombre de la capa>_<banda>.",
       "attr_bands": "Bandas",
-      "attr_band_one": "Una banda ({name}): su estadística se añade a cada alerta.",
-      "attr_bands_pick": "{count} bandas. Elige las que se añaden a las alertas.",
+      "attr_band_one": "Una banda ({name}): su estadística se añade a cada grupo.",
+      "attr_bands_pick": "{count} bandas. Elige las que se añaden a los grupos.",
       "attr_stat_majority": "Mayoría",
       "attr_stat_mean": "Media",
       "attr_stat_min": "Mínimo",
@@ -615,43 +615,43 @@
       "run": "Integrar y vectorizar",
       "replace_title": "¿Reemplazar este conjunto de alertas?",
       "replace_message": {
-        "one": "Se descartará {n} alerta revisada de este conjunto.",
-        "many": "Se descartarán {n} de alertas revisadas de este conjunto.",
-        "other": "Se descartarán {n} alertas revisadas de este conjunto."
+        "one": "Se descartará {n} grupo revisado de este conjunto.",
+        "many": "Se descartarán {n} de grupos revisados de este conjunto.",
+        "other": "Se descartarán {n} grupos revisados de este conjunto."
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… y {n} más",
       "replace_split": "Se descartarán el reparto entre evaluadores y sus devoluciones pendientes.",
       "replace_links": {
-        "one": "{n} alerta de un período posterior está vinculada a este conjunto; su vínculo se romperá.",
-        "many": "{n} de alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.",
-        "other": "{n} alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán."
+        "one": "{n} grupo de un período posterior está vinculado a este conjunto; su vínculo se romperá.",
+        "many": "{n} de grupos de períodos posteriores están vinculados a este conjunto; sus vínculos se romperán.",
+        "other": "{n} grupos de períodos posteriores están vinculados a este conjunto; sus vínculos se romperán."
       },
       "job_title": "Integrar y vectorizar",
       "step_combine": "Combinando fuentes",
       "step_vectorize": "Vectorizando grupos",
       "step_footprint": "Escribiendo la huella",
-      "step_store": "Guardando las alertas",
+      "step_store": "Guardando los grupos",
       "step_tiles": "Generando las teselas del mapa",
       "no_tippecanoe": "tippecanoe no está instalado: el mapa mostrará los puntos de alerta sin polígonos.",
       "tiles_failed": "No se pudieron mostrar las teselas del mapa ({error}): se muestran los puntos de alerta sin polígonos.",
       "done": {
-        "one": "{n} alerta lista para revisar",
-        "many": "{n} de alertas listas para revisar",
-        "other": "{n} alertas listas para revisar"
+        "one": "{n} grupo listo para revisar",
+        "many": "{n} de grupos listos para revisar",
+        "other": "{n} grupos listos para revisar"
       },
       "growth_linked": {
-        "one": "Se vinculó {n} alerta a una pérdida anterior ({small} por debajo del área mínima)",
-        "many": "Se vincularon {n} de alertas a pérdidas anteriores ({small} por debajo del área mínima)",
-        "other": "Se vincularon {n} alertas a pérdidas anteriores ({small} por debajo del área mínima)"
+        "one": "Se vinculó {n} grupo a una pérdida anterior ({small} por debajo del área mínima)",
+        "many": "Se vincularon {n} de grupos a pérdidas anteriores ({small} por debajo del área mínima)",
+        "other": "Se vincularon {n} grupos a pérdidas anteriores ({small} por debajo del área mínima)"
       },
       "growth_linked_plain": {
-        "one": "Se vinculó {n} alerta a una pérdida anterior",
-        "many": "Se vincularon {n} de alertas a pérdidas anteriores",
-        "other": "Se vincularon {n} alertas a pérdidas anteriores"
+        "one": "Se vinculó {n} grupo a una pérdida anterior",
+        "many": "Se vincularon {n} de grupos a pérdidas anteriores",
+        "other": "Se vincularon {n} grupos a pérdidas anteriores"
       },
-      "done_empty": "No hay alertas nuevas en este período: el conjunto de alertas está vacío.",
-      "done_empty_detail": "No hay alertas nuevas en este período: el conjunto de alertas está vacío. {details}",
+      "done_empty": "No hay grupos nuevos en este período: el conjunto de alertas está vacío.",
+      "done_empty_detail": "No hay grupos nuevos en este período: el conjunto de alertas está vacío. {details}",
       "outcome_pixels": {
         "one": "{source}: {n} píxel de alerta (por debajo del tamaño mínimo, o bajo las huellas de conjuntos anteriores)",
         "many": "{source}: {n} de píxeles de alerta (todos por debajo del tamaño mínimo, o bajo las huellas de conjuntos anteriores)",
@@ -663,7 +663,7 @@
         "many": "{source}: los {n} de píxeles de alerta eliminados por máscaras",
         "other": "{source}: los {n} píxeles de alerta eliminados por máscaras"
       },
-      "outcome_none": "{source}: 0 alertas encontradas",
+      "outcome_none": "{source}: 0 píxeles de alerta encontrados",
       "outcome_left_out": "{source}: no cubierta",
       "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "El período, el área de interés o la cuadrícula del proyecto cambiaron mientras la ejecución estaba en curso, así que el conjunto de alertas no se registró. Ejecuta Integrar y vectorizar de nuevo.",
@@ -682,7 +682,7 @@
       "attr_err_no_bands": "Conserva al menos una banda.",
       "attr_err_duplicate": "Otra capa de atributos ya lee este raster.",
       "attr_list_title": "Capas de atributos",
-      "attr_empty": "Ninguna capa de atributos. Cada una añade estadísticas de sus bandas a cada alerta.",
+      "attr_empty": "Ninguna capa de atributos. Cada una añade estadísticas de sus bandas a cada grupo.",
       "attr_col_raster": "Raster",
       "attr_columns": "Columnas: {columns}"
     },
