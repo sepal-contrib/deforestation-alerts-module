@@ -458,7 +458,7 @@ Fuentes personalizadas
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/alerts-add-custom.png
     :alt: Añadir una fuente personalizada desde un recurso de Earth Engine
 
-Una fuente personalizada lee tu propio raster de alertas a través de uno de cuatro formatos predefinidos.
+Una fuente personalizada lee tu propio raster de alertas a través de uno de cuatro formatos predefinidos. El formulario se lee de arriba abajo: el nombre, de dónde viene el raster, el propio raster y luego sus bandas. Las bandas se leen en cuanto se elige el raster ("Leyendo las bandas…"), y los campos que dependen de ellas solo aparecen una vez leídas.
 
 .. list-table::
     :header-rows: 1
@@ -470,24 +470,26 @@ Una fuente personalizada lee tu propio raster de alertas a través de uno de cua
     *   -   **Nombre**
         -   El nombre de la fuente en listas, leyendas y nombres de archivo.
         -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único en el proyecto. GLAD-L, RADD y GLAD-S2 están reservados.
-    *   -   **Origen del raster**
-        -   De dónde se lee el raster: **Recurso de Earth Engine** o **GeoTIFF en mi carpeta de SEPAL**.
-        -   **Recurso de Earth Engine**.
+    *   -   **Fuente**
+        -   De dónde se lee el raster: **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine**.
     *   -   Recurso o **GeoTIFF**
         -   La imagen o colección de imágenes de GEE, o el archivo .tif.
         -   Una colección de imágenes se usa completa, con la imagen más reciente encima. Para una colección de instantáneas semanales (como la propia de RADD), indica en su lugar el identificador de la última imagen. El GeoTIFF necesita un sistema de referencia de coordenadas.
     *   -   **Formato de las alertas**
-        -   Cómo se leen las bandas (ver más abajo).
-        -   Se sugiere a partir de los nombres de las bandas cuando la aplicación los reconoce.
+        -   Cómo se leen las bandas (ver más abajo). Aparece cuando el raster tiene dos bandas o más. Un raster con una banda no tiene formato que elegir: el formulario indica "Una banda (…): se lee como la fecha de la alerta." y la fuente se lee como **Solo fecha**.
+        -   Se sugiere a partir de los nombres de las bandas cuando la aplicación los reconoce, y se marca "(sugerido)".
     *   -   **Banda de alerta**
         -   La banda que contiene la clase de alerta.
-        -   Solo para **RADD**, **Alertas CCDC de SEPAL** y **Alertas PyEO de SEPAL**.
+        -   Solo para **RADD**, **Alertas CCDC de SEPAL** y **Alertas PyEO de SEPAL**. Empieza en la banda que espera el formato; cuando el raster no tiene esa banda, la ayuda indica "Elige la banda que contiene el nivel de la alerta."
     *   -   **Banda de fecha**
         -   La banda que contiene la fecha de detección.
-        -   Siempre obligatoria.
+        -   Siempre obligatoria. Empieza en la banda que espera el formato, y su ayuda la nombra (por ejemplo, "3 bandas. Date parece la fecha de la alerta."), o te pide que la elijas.
     *   -   **Codificación de fecha**
-        -   Cómo está escrita la fecha.
-        -   Solo para **Solo fecha**: **yymm (año y mes; la alerta se fecha el día 1)**, **yyddd (año y día del año)**, **yyyyddd (año y día del año)** o **año decimal**.
+        -   Cómo está escrita la fecha: **yymm (año y mes; la alerta se fecha el día 1)**, **yyddd (año y día del año)**, **yyyyddd (año y día del año)** o **año decimal**.
+        -   Solo para **Solo fecha**. Se sugiere a partir de los valores de la banda de fecha (ver más abajo).
+
+Para una fuente **Solo fecha**, la aplicación lee los valores mínimo y máximo de la banda de fecha sobre la AOI ("Leyendo los valores de fecha…") y sugiere la codificación que les corresponde, por ejemplo "Valores de 24001 a 24366: se leen como yyddd." Comprueba la sugerencia: la aplicación solo lee los dos extremos del rango. Cuando los valores no parecen fechas ("… no parecen fechas. Revisa la banda de fecha."), o cuando ningún píxel de la AOI tiene fecha ("Ningún píxel con fecha en el AOI: elige la codificación."), elige tú la codificación.
 
 Los cuatro formatos:
 
@@ -511,7 +513,7 @@ Al seleccionar **Añadir fuente**, la aplicación comprueba el raster: que las b
 Editar una fuente personalizada
 """""""""""""""""""""""""""""""
 
-Selecciona el icono de lápiz para volver a abrir el formulario, titulado con el nombre de la fuente. El nombre no se puede cambiar; el raster, el formato y las bandas sí.
+Selecciona el icono de lápiz para volver a abrir el formulario, titulado con el nombre de la fuente. El nombre no se puede cambiar; el raster, el formato y las bandas sí. El formulario conserva el formato y las bandas guardados hasta que se elige otro raster.
 
 En cuanto un conjunto de alertas usa la fuente, ya no se puede editar: elimínala y añade una nueva.
 
@@ -540,11 +542,15 @@ Mensajes frecuentes
 Capas opcionales
 ----------------
 
-Las capas de visualización ayudan a revisar las alertas: un mapa de cobertura del suelo, una línea base de bosque, un mosaico reciente. Nunca modifican las alertas. Una capa se puede mostrar en el mapa principal y, con **Mostrar en Análisis** marcado, en los dos mapas de la pantalla de `Análisis <defo-analysis_>`_.
+Las capas de visualización ayudan a revisar las alertas: un mapa de cobertura del suelo, una línea base de bosque, un mosaico reciente. Nunca modifican las alertas. Una capa es una imagen de Earth Engine o un GeoTIFF. Se puede mostrar en el mapa principal y, con **Mostrar en Análisis** marcado, en los dos mapas de la pantalla de `Análisis <defo-analysis_>`_.
 
 Abre el paso **Capas opcionales** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene una `AOI <defo-aoi_>`_.
 
 El paso es opcional: sáltalo y vuelve en cualquier momento. En cuanto el proyecto tiene un `período de monitoreo <defo-period_>`_, el panel **Flujo de trabajo** da el paso por completado aunque no haya ninguna capa, y su indicador muestra "ninguna" en lugar de "nada todavía".
+
+.. note::
+
+    Los mosaicos de Planet NICFI no son una capa opcional: si tu cuenta de GEE tiene acceso a NICFI, llegan con las imágenes *Planet* de la `línea de tiempo de Análisis <defo-analysis-timeline_>`_.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-list.png
     :alt: El paso Capas opcionales con una capa
@@ -555,9 +561,9 @@ La lista de capas
 Cada fila de **Capas de visualización** muestra:
 
 -   el **Nombre** de la capa;
--   una etiqueta con su tipo (**Earth Engine**, **GeoTIFF** o **Planet NICFI**);
+-   una etiqueta con su fuente (**Earth Engine** o **GeoTIFF**);
 -   una etiqueta **en Análisis** cuando se muestra en los mapas de Análisis; y
--   una nota con sus bandas y su rango de valores (o su mes, en el caso de Planet NICFI).
+-   una nota con sus bandas y su rango de valores o, para una capa categórica, su banda y su número de clases ("banda Map · 9 clases").
 
 Los iconos a la derecha de cada fila:
 
@@ -568,15 +574,7 @@ Los iconos a la derecha de cada fila:
 Añadir una capa
 ^^^^^^^^^^^^^^^
 
-Selecciona **Añadir capa** para abrir el diálogo **Añadir una capa de visualización**. Elige primero el **Tipo**: los demás campos dependen de él.
-
-Imagen de Earth Engine y GeoTIFF
-""""""""""""""""""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-add-rgb.png
-    :alt: Añadir una capa RGB desde una imagen de Earth Engine
-
-.. labels-ok: Color verdadero; Infrarrojo falso color
+Selecciona **Añadir capa** para abrir el diálogo **Añadir una capa de visualización**. El formulario se lee de arriba abajo: el nombre, la fuente, la imagen y luego cómo se dibujan sus bandas. Las bandas se leen en cuanto se elige la imagen ("Leyendo las bandas…"), y cada elección posterior es un menú desplegable.
 
 .. list-table::
     :header-rows: 1
@@ -587,46 +585,32 @@ Imagen de Earth Engine y GeoTIFF
         -   Valor predeterminado y límites
     *   -   **Nombre**
         -   El nombre de la capa en la lista, en los mapas y en la leyenda.
-        -   Se sugiere a partir del nombre de la imagen o del archivo, más la banda o la combinación. Como máximo 24 caracteres, único en el proyecto.
+        -   Si lo dejas vacío, se toma del nombre del recurso o del archivo, más la banda o la combinación. Como máximo 24 caracteres, único en el proyecto.
+    *   -   **Fuente**
+        -   **Earth Engine** (un recurso de imagen) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine**.
     *   -   Recurso o **GeoTIFF**
-        -   Una *imagen* de GEE (no una colección), o un archivo .tif de tu carpeta de SEPAL.
+        -   Una *imagen* de GEE (no una colección), o un archivo .tif.
         -   Hay que poder escribir en la carpeta del GeoTIFF: la aplicación escribe a su lado un archivo de pirámides para que la capa se dibuje rápido.
-    *   -   **Tres bandas (RGB)**
-        -   Desactivado: una banda dibujada con una rampa de color. Activado: tres bandas como composición rojo-verde-azul (RGB).
-        -   Desactivado.
-    *   -   **Banda**
-        -   La banda que se dibuja (capa de una banda).
-        -
-    *   -   **Rampa de color**
-        -   Los colores de una capa de una banda: **Escala de grises**, **Azules**, **Verdes**, **Naranjas**, **Frío–cálido**, **Viridis**, **Terreno**, **Calor** o **Magma**.
-        -   **Escala de grises**.
-    *   -   **Invertir**
-        -   Invierte la rampa.
-        -   Desactivado.
-    *   -   **Rojo**, **Verde**, **Azul**, **NIR**, **SWIR**
-        -   Qué banda de la imagen corresponde a cada color, al infrarrojo cercano (NIR) y al infrarrojo de onda corta (SWIR) (capa RGB). Deja vacías las que no conozcas.
-        -   Se deducen de los nombres de las bandas (por ejemplo, ``B4`` o ``SR_B4`` para el rojo).
-    *   -   **Combinación**
-        -   Rellena las tres bandas a partir de esos papeles: **Color verdadero**, **Infrarrojo falso color** (NIR / rojo / verde), **SWIR / NIR / rojo**, o **Personalizada** para elegirlas tú.
-        -   La primera combinación que permiten los papeles. Una combinación solo se ofrece cuando sus papeles están rellenos.
-    *   -   **Banda roja**, **Banda verde**, **Banda azul**
-        -   Las bandas que se dibujan en rojo, verde y azul.
-        -   Deben ser tres bandas distintas. Si eliges una a mano, **Combinación** pasa a **Personalizada**.
-    *   -   **Mín**, **Máx**
-        -   El rango de valores que se estira sobre los colores.
-        -   0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**.
 
-.. tip::
+Lo que sigue depende del número de bandas de la imagen:
 
-    Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie). Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas.
+-   Una banda: el formulario la nombra ("Una banda (…): se dibuja sola.").
+-   Dos bandas: elige en **Banda** la que se dibuja. RGB necesita tres bandas o más.
+-   Tres bandas o más: **Bandas** pide **Seleccionar una banda** (y luego **Banda**) o **Compuesto RGB**. Se sugiere **Compuesto RGB** cuando los nombres de las bandas dan el rojo, el verde y el azul (por ejemplo, ``B4``, ``B3`` y ``B2`` de Sentinel-2). **Banda** empieza en la primera banda.
 
-Planet NICFI
-""""""""""""
+Una banda
+"""""""""
 
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-add-nicfi.png
-    :alt: Añadir una capa Planet NICFI
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-add-categorical.png
+    :alt: Añadir una capa categórica desde una imagen de cobertura del suelo
 
-El mosaico tropical mensual de Planet NICFI, leído a través de GEE y dibujado en color verdadero.
+Una banda sola lleva un **Tipo de raster**:
+
+-   **Continuo: una rampa de color** para valores medidos (reflectancia, altitud, cobertura arbórea); o
+-   **Categórico: un color por clase** para clases de números enteros (un mapa de cobertura del suelo, una máscara de bosque, un año de pérdida). Se sugiere cuando el nombre de la banda parece de clases (por ejemplo, ``landcover``, ``class``, ``lossyear``, ``datamask``).
+
+Debajo de los campos aparece una vista previa de la leyenda de la capa.
 
 .. list-table::
     :header-rows: 1
@@ -635,28 +619,75 @@ El mosaico tropical mensual de Planet NICFI, leído a través de GEE y dibujado 
     *   -   Campo
         -   Descripción
         -   Valor predeterminado y límites
-    *   -   **Nombre**
-        -   El nombre de la capa.
-        -   Como máximo 24 caracteres, único en el proyecto.
-    *   -   **Mes (AAAA-MM)**
-        -   El mes del mosaico.
-        -   Vacío: el último mes del período activo, que sigue al período activo cuando cambia. Sin período, el mes pasado.
+    *   -   **Rampa de color**
+        -   *Continuo*: los colores, de **Mín** a **Máx**: **Escala de grises**, **Azules**, **Verdes**, **Naranjas**, **Frío–cálido**, **Viridis**, **Terreno**, **Calor** o **Magma**.
+        -   **Escala de grises**.
+    *   -   **Invertir**
+        -   *Continuo*: invierte la rampa.
+        -   Desactivado.
+    *   -   **Mín**, **Máx**
+        -   *Continuo*: el rango de valores que se estira sobre los colores.
+        -   0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**.
+    *   -   **Ajustar al AOI (2–98 %)**
+        -   *Continuo*: rellena **Mín** y **Máx** con los percentiles 2 y 98 de la banda sobre el rectángulo que envuelve la AOI.
+        -
+    *   -   **Buscar las clases en el AOI**
+        -   *Categórico*: enumera los valores enteros presentes sobre la AOI, cada uno con un color, su valor, una **Etiqueta** y un icono de ojo que lo oculta o lo muestra. Cuando la imagen nombra sus clases y sus colores (como ESA WorldCover), las clases los toman; si no, cada clase se etiqueta con su valor.
+        -   Como máximo 50 clases. Los valores no enumerados y las clases ocultas son transparentes.
+    *   -   **Añadir un valor**
+        -   *Categórico*: añade una clase a mano. Escribe el número entero y pulsa **Intro** o selecciona el icono de suma.
+        -   Cada valor una sola vez.
+    *   -   **Paleta**
+        -   *Categórico*: vuelve a colorear todas las clases con una paleta: **Set1**, **Set2**, **Tab10** o **Paired**. Selecciona el cuadrado de color de una clase para elegir su color a mano.
+        -
 
-La región (**América**, **África** o **Asia**) se deduce del centro de la AOI y se muestra debajo del mes. Al guardar la capa, la aplicación comprueba que tu cuenta de GEE puede leer esa región.
+.. labels-ok: Intro
 
-.. important::
+Cuando una banda solo contiene 0 y 1 sobre la AOI, las clases encontradas nombran el 1 como la banda y empiezan con el 0 oculto: "Solo 0 y 1 en el AOI: 1 lleva el nombre de la banda y 0 empieza oculto (transparente)." Selecciona el icono de ojo del 0 para dibujarlo también.
 
-    "Tu cuenta de Earth Engine no tiene acceso a Planet NICFI …" significa que a la cuenta no se le ha concedido acceso a NICFI. Solicítalo al programa NICFI de Planet y vuelve a añadir la capa.
+Compuesto RGB
+"""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-add-rgb.png
+    :alt: Añadir una capa RGB desde una imagen de Earth Engine
+
+.. labels-ok: Color verdadero; Infrarrojo falso color; SWIR / NIR / rojo
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Campo
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **Compuesto**
+        -   Una combinación estándar, nombrada con sus bandas (por ejemplo, "Color verdadero (B4 / B3 / B2)"): **Color verdadero**, **Infrarrojo falso color** (infrarrojo cercano, rojo, verde) o **SWIR / NIR / rojo** (infrarrojo de onda corta, infrarrojo cercano, rojo); o **Personalizado: elige las bandas**. La ayuda enumera los papeles de banda detectados a partir de los nombres de las bandas ("Detectadas por los nombres de las bandas: …").
+        -   La primera combinación que permiten los nombres de las bandas. Una combinación cuyas bandas no se reconocieron todas indica "(bandas no encontradas)" y no se puede elegir. Si no se reconoce ningún nombre de banda, las tres primeras bandas se usan como rojo, verde y azul.
+    *   -   **Banda roja**, **Banda verde**, **Banda azul**
+        -   Las bandas que se dibujan en rojo, verde y azul.
+        -   Las rellena el **Compuesto**. Deben ser tres bandas distintas. Las bandas elegidas a mano que coinciden con una combinación la seleccionan; las demás seleccionan **Personalizado: elige las bandas**.
+    *   -   **Mín**, **Máx**
+        -   El rango de valores que se estira sobre los colores, el mismo para las tres bandas.
+        -   0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**.
+    *   -   **Ajustar al AOI (2–98 %)**
+        -   Rellena **Mín** y **Máx** con un solo rango para las tres bandas, a partir de sus percentiles 2 y 98 sobre el rectángulo que envuelve la AOI.
+        -
+
+.. tip::
+
+    Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie), o selecciona **Ajustar al AOI (2–98 %)**. Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas.
 
 Mostrar en Análisis
 """""""""""""""""""
 
-**Mostrar en Análisis** (todos los tipos) añade la capa a los dos mapas de la pantalla de `Análisis <defo-analysis_>`_, desactivada. Actívala allí desde el menú de capas. Los mapas de Análisis no muestran su leyenda.
+**Mostrar en Análisis** añade la capa a los dos mapas de la pantalla de `Análisis <defo-analysis_>`_, desactivada. Actívala allí desde el menú de capas. Los mapas de Análisis no muestran su leyenda.
 
 Guardar una capa
 ^^^^^^^^^^^^^^^^
 
-Selecciona **Añadir capa** (o **Guardar** al editar). La aplicación comprueba las bandas, el rango y, para un GeoTIFF, la carpeta. Cualquier problema se muestra en rojo dentro del diálogo, que sigue abierto. Mientras se hace la comprobación, el botón indica **Cancelar** y la detiene.
+Selecciona **Añadir capa** (o **Guardar** al editar). La aplicación comprueba las bandas, el rango o las clases y, para un GeoTIFF, la carpeta. Cualquier problema se muestra en rojo dentro del diálogo, que sigue abierto. Mientras se hace la comprobación, el botón indica **Cancelar** y la detiene.
+
+Las capas guardadas antes de que existieran los estilos de visualización conservan exactamente su aspecto.
 
 Mensajes frecuentes
 ^^^^^^^^^^^^^^^^^^^
@@ -666,6 +697,18 @@ Mensajes frecuentes
 
 "Elige tres bandas distintas para rojo, verde y azul."
     Elige una banda distinta para cada color.
+
+"Esta banda tiene valores no enteros: dibújala como Continua."
+    **Buscar las clases en el AOI** encontró valores decimales: la banda no es un conjunto de clases. Pon **Tipo de raster** en **Continuo: una rampa de color**.
+
+"Más de 50 valores: esta banda parece continua."
+    Dibuja la banda como **Continuo: una rampa de color**, o añade a mano las clases que necesites con **Añadir un valor**.
+
+"No hay valores en el AOI." o "La banda no tiene dispersión de valores en el AOI."
+    La banda no tiene datos sobre la AOI, o tiene el mismo valor en todas partes. Revisa la imagen y la banda, o escribe tú **Mín** y **Máx**.
+
+"Busca las clases o añade un valor." o "Muestra al menos una clase."
+    Una capa categórica necesita al menos una clase, y al menos una clase que no esté oculta.
 
 "No se puede escribir en la carpeta …, así que no se pueden generar las pirámides de la capa."
     Mueve el GeoTIFF a una carpeta propia en SEPAL.
@@ -905,7 +948,7 @@ Añadir una máscara
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-mask-add.png
     :alt: Añadir una máscara
 
-Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**.
+Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**. Las bandas se leen en cuanto se elige el raster.
 
 .. list-table::
     :header-rows: 1
@@ -917,15 +960,15 @@ Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**.
     *   -   **Nombre**
         -   El nombre de la máscara en listas, leyendas y nombres de archivo.
         -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único entre las máscaras del proyecto.
-    *   -   **Origen del raster**
-        -   **Recurso de Earth Engine** o **GeoTIFF en mi carpeta de SEPAL**.
-        -   **Recurso de Earth Engine**.
+    *   -   **Fuente**
+        -   **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine**.
     *   -   Recurso o **GeoTIFF**
         -   La imagen o colección de imágenes de GEE, o el archivo .tif.
-        -   Las bandas se leen en cuanto se elige.
+        -
     *   -   **Banda**
-        -   La banda que define la máscara.
-        -   Obligatoria.
+        -   La banda que define la máscara. Aparece cuando el raster tiene dos bandas o más; con una banda, el formulario indica "Una banda (…): la máscara se hace con ella."
+        -   La banda cuyo nombre parece de máscara (por ejemplo, ``datamask``), nombrada en la ayuda ("… parece una máscara; los píxeles distintos de cero están dentro de ella."); si no hay ninguna, elígela tú.
     *   -   **Modo en el período activo**
         -   **Conservar** o **Excluir**.
         -   **Conservar**. La máscara se activa solo en el período activo; los demás períodos la dejan inactiva hasta que se active en ellos.
@@ -935,22 +978,39 @@ Al seleccionar **Añadir máscara**, la aplicación comprueba el raster y su ban
 La lista de máscaras
 """"""""""""""""""""
 
-Cada fila de **Máscaras** muestra el nombre de la máscara, su **Modo** en el período activo y un icono de estado para su descarga y su alineación con la cuadrícula (pasa el cursor por encima para leer ambos). La nota bajo el nombre indica su origen (**Earth Engine** o **GeoTIFF**) y su tamaño en disco.
+Cada fila de **Máscaras** muestra:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Columna
+        -   Descripción
+    *   -   **Máscara**
+        -   El nombre de la máscara. La línea de debajo indica su fuente y su tamaño en disco una vez lista ("Earth Engine · 18,9 MB"), o por qué necesita una ejecución ("aún no descargada", "la cuadrícula cambió (…): alinear de nuevo"). Termina con "Inactiva" cuando la máscara está inactiva en el período activo.
+    *   -   **Modo**
+        -   El modo de la máscara en el período activo: **Inactiva**, **Conservar** o **Excluir**. Un cambio se aplica enseguida; las fuentes del período pasan entonces a estar desactualizadas.
+    *   -   **Estado**
+        -   "Lista", o un botón para la siguiente ejecución de la máscara: **Descargar** (una máscara de GEE todavía no descargada) o **Alinear** (con la cuadrícula). Un botón naranja rehace un archivo desactualizado. Durante una ejecución, la celda indica "Descargando 42%", "Alineando" o "En cola".
 
 Los iconos a la derecha de cada fila:
 
--   el icono de nube descarga y alinea la máscara;
--   el icono de nube con flechas (solo máscaras de GEE) la vuelve a descargar, para un recurso que ha cambiado;
--   el icono de mapa la muestra en el mapa: una máscara de GEE se puede previsualizar antes de descargarla, y una máscara GeoTIFF, una vez alineada;
--   el icono de lápiz abre **Editar máscara** *nombre*: el raster y la banda se pueden cambiar, el nombre no. En cuanto un conjunto de alertas ha usado la máscara, ya no se puede editar (**Un conjunto de alertas ya usa esta máscara: añade una nueva en su lugar.**); y
--   el icono de papelera elimina la máscara. Se eliminan su descarga y su archivo alineado, y todos los períodos dejan de usarla. Los conjuntos de alertas que la usaban conservan sus alertas y aparecen como desactualizados.
+-   el icono de mapa muestra la máscara en el mapa: una máscara de GEE se puede previsualizar antes de descargarla, y una máscara GeoTIFF, una vez alineada;
+-   el icono de información abre sus **Detalles** (consulta `El diálogo de detalles <defo-prepare-details_>`_); y
+-   el menú **Más acciones** (tres puntos) contiene:
+
+    -   **Descargar de nuevo** (solo máscaras de GEE), para un recurso que ha cambiado. La aplicación pregunta primero: "Esto obtiene la máscara de nuevo desde Earth Engine, reemplaza su descarga y luego la alinea.";
+    -   **Editar**, que abre **Editar máscara** *nombre*: el raster y la banda se pueden cambiar, el nombre no. En cuanto un conjunto de alertas ha usado la máscara, ya no se puede editar (**Un conjunto de alertas ya usa esta máscara: añade una nueva en su lugar.**); y
+    -   **Eliminar máscara…**, que elimina la máscara después de confirmar. Se eliminan su descarga y su archivo alineado, y todos los períodos dejan de usarla. Los conjuntos de alertas que la usaban conservan sus alertas y aparecen como desactualizados.
 
 Una máscara se descarga y se alinea una sola vez para todo el proyecto, sea cual sea el período que la ejecute.
+
+.. _defo-prepare-sources:
 
 Fuentes de este período
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-La tabla tiene una fila por cada fuente de alertas del proyecto:
+La tabla tiene una fila por cada fuente de alertas del proyecto, con dos columnas:
 
 .. list-table::
     :header-rows: 1
@@ -959,42 +1019,94 @@ La tabla tiene una fila por cada fuente de alertas del proyecto:
     *   -   Columna
         -   Descripción
     *   -   **Fuente**
-        -   El nombre de la fuente. Las notas debajo indican sus avisos de cobertura, lo que encontró su archivo armonizado ("lista · 1234 píxeles de alerta", "lista · 0 alertas encontradas" o "lista · los 56 píxeles de alerta eliminados por las máscaras") y su tamaño en disco.
-    *   -   **Descarga**
-        -   La descarga en la ventana de búsqueda del período.
+        -   El nombre de la fuente. La línea de debajo indica lo que contiene la fila o lo que espera (ver más abajo). Los avisos, como una cobertura parcial, y los errores aparecen como líneas bajo la fila.
+    *   -   **Estado**
+        -   El estado de la fila, o un botón para su siguiente ejecución.
+
+La columna **Estado** indica:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Estado
+        -   Significado
+    *   -   "Lista"
+        -   Descargada y armonizada con las entradas actuales. La línea bajo el nombre indica la fecha de descarga, el tamaño en disco y lo que encontró el archivo armonizado: "descargada el 2026-10-20 · 31,7 MB · 2.362.718 píxeles de alerta".
+    *   -   **Descargar**
+        -   La fuente todavía no está descargada para la ventana de búsqueda de este período, o su descarga está desactualizada. Selecciona el botón para ejecutar la fila: alinea las máscaras del período que lo necesiten, descarga la fuente y luego la armoniza.
     *   -   **Armonizar**
-        -   La alineación con la cuadrícula, con las máscaras aplicadas.
+        -   La descarga está al día, pero el archivo armonizado falta o está desactualizado (una cuadrícula nueva, un cambio de máscara). La ejecución vuelve a armonizar sin descargar. Una fuente GeoTIFF nunca se descarga: se lee de su archivo, así que su botón siempre indica **Armonizar**.
+    *   -   **Reintentar**
+        -   La última ejecución de la fila falló. Su error aparece en rojo bajo la fila.
+    *   -   "Descargando 42%", "Armonizando", "En cola"
+        -   La fila está en curso, o espera su turno en una ejecución ("esperando a la fila de arriba").
+    *   -   "no cubierta", "sin datos"
+        -   La fuente no se puede ejecutar en este período: no cubre la AOI, o no tiene datos para la ventana de búsqueda. La línea bajo el nombre da el motivo. Consulta `Fuentes de alertas <defo-alerts_>`_ para la cobertura.
+    *   -   "Sin archivo"
+        -   El archivo de una fuente GeoTIFF ya no está (consulta `Mensajes frecuentes <defo-prepare-messages_>`_).
 
-Cada etapa indica:
+En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A descargar", "A armonizar" o "A alinear".
 
--   **lista**;
--   **desactualizada**, cuando sus entradas cambiaron (las fechas del período, la AOI, la cuadrícula o una máscara);
--   **falta**, cuando todavía no se ha hecho; o
--   **en ejecución**, con el porcentaje de la descarga.
+Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre dice entonces por qué y qué hace la ejecución al respecto: por ejemplo, "la cuadrícula cambió (EPSG:32719 · 30 m → EPSG:32719 · 10 m): armonizar de nuevo", "la ventana de búsqueda cambió (…): descargar de nuevo", "la máscara forest_2000 cambió: armonizar de nuevo" o "el AOI cambió: descargar de nuevo".
 
-Una fuente que no se puede ejecutar indica **no cubierta** o **sin datos** en ambas celdas, con el motivo bajo su nombre ("No cubierta: …" o "Sin datos para este período: …"). Consulta `Fuentes de alertas <defo-alerts_>`_ para la cobertura.
+.. note::
+
+    Una fila lista no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**.
 
 Los iconos a la derecha de cada fila:
 
--   el icono de nube ejecuta la fila: primero alinea las máscaras del período que lo necesiten, luego descarga la fuente (si hace falta) y la armoniza. Está desactivado cuando la fila está lista;
--   el icono de nube con flechas vuelve a descargar la fuente aunque nada haya cambiado, para un catálogo que actualiza sus alertas en las mismas fechas; y
--   el icono de mapa muestra en el mapa las alertas armonizadas.
+-   el icono de mapa (**Mostrar en el mapa**) muestra en el mapa las alertas armonizadas;
+-   el icono de información abre los **Detalles** de la fila (ver más abajo);
+-   **Descargar de nuevo** vuelve a obtener la fuente aunque nada haya cambiado y luego la armoniza. La aplicación pregunta primero, con la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF ("Nada que descargar de nuevo: se lee de un archivo"), y espera mientras una máscara del período necesite una ejecución ("Ejecute primero las máscaras pendientes"); y
+-   **Eliminar archivos** quita la descarga y el archivo armonizado de la fuente en este período, después de confirmar. La fuente sigue en el proyecto: ejecuta la fila de nuevo para reconstruirlos. Los conjuntos de alertas de este período hechos con la fuente pasan a estar desactualizados; sus alertas y sus revisiones se conservan.
+
+.. _defo-prepare-details:
+
+El diálogo de detalles
+""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-details.png
+    :alt: El diálogo de detalles de una fuente
+
+El icono de información de una fuente o de una máscara abre un resumen de solo lectura de con qué se hicieron sus archivos. Empieza con el estado de la fila y, para una fuente, el período. Cuando la fila está desactualizada, una línea naranja **Motivo:** dice qué cambió.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Sección
+        -   Lo que enumera
+    *   -   **Fuente**
+        -   Una fuente predefinida: su **Catálogo** y su **Cobertura** de la AOI, con la última fecha de datos y el día en que se comprobó. Una fuente personalizada: su **Tipo**, **Referencia**, **Formato**, **Codificación de fechas**, **Bandas** y **Cuadrícula nativa**. Una máscara: su **Referencia**, **Banda**, **Cuadrícula nativa** y los períodos en que se usa (**Usada en**).
+    *   -   **Descarga** (**Lectura del archivo** para una fuente GeoTIFF)
+        -   La **Ventana de búsqueda**, la **Cuadrícula nativa** en la que se descargó el archivo, su **Tamaño** y su **Archivo** en la carpeta del proyecto.
+    *   -   **Armonización** (**Alineación** para una máscara)
+        -   La **Cuadrícula usada**, con la cuadrícula actual cuando cambió desde entonces, el **Remuestreo**, las **Máscaras** aplicadas con su modo, los **Píxeles de alerta** conservados (y cuántos eliminaron las máscaras), las **Fechas de alerta** encontradas, el **Tamaño** y el **Archivo**. Para una máscara: sus **Píxeles de la máscara**.
+
+Cada sección indica la fecha y la hora en que se escribió su archivo, o "Aún no ejecutado". Selecciona **Cerrar**, o pulsa **Esc**, para cerrar el diálogo.
+
+.. labels-ok: Esc
 
 Ejecutarlo todo
 """""""""""""""
 
-Selecciona **Ejecutar … pendientes** (por ejemplo, **Ejecutar 4 pendientes**). Primero alinea las máscaras que lo necesitan y luego ejecuta cada fuente que falte o esté desactualizada, una fila tras otra:
+El pie de la tabla ejecuta las filas en lote. Selecciona **Ejecutar … pendientes** (por ejemplo, **Ejecutar 4 pendientes**). Primero alinea las máscaras activas en el período que lo necesitan y luego ejecuta cada fuente que necesite una ejecución, una fila tras otra:
 
--   las filas que indican **no cubierta** o **sin datos** se omiten;
+-   las filas que indican "no cubierta" o "sin datos" se omiten;
 -   una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente.
 
-**Detener después de esta fila** termina la ejecución cuando acaba la fila en curso. Las filas ya hechas quedan hechas.
+Mientras dura la ejecución, el pie cuenta sus filas ("1 en curso · 3 en cola", luego "2 de 4 terminadas", con una barra de progreso) y el botón pasa a ser **Detener**, que detiene la ejecución después de la fila en curso. Hasta que esa fila termina, el botón indica "Deteniendo…". Las filas ya hechas quedan hechas.
 
-La ejecución aparece como una notificación de tarea titulada **Descargar y armonizar**, con la etapa en la que está ("Preparando GLAD-L", luego "Armonizando GLAD-L") y el porcentaje de la descarga ("Descargar y armonizar · 35%"). El porcentaje también aparece en la celda **Descarga** de la fila.
+La flecha junto a **Ejecutar … pendientes** (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo y luego se armoniza, después de confirmar.
+
+La ejecución también aparece como una notificación de tarea titulada **Descargar y armonizar**, con la etapa en la que está ("Preparando GLAD-L", luego "Armonizando GLAD-L") y el porcentaje de la descarga ("Descargar y armonizar · 35%").
 
 .. tip::
 
     Cada fila necesita espacio libre en disco para sus archivos. La aplicación lo comprueba antes de escribir y detiene la fila con un mensaje cuando el disco está demasiado lleno. La línea del tamaño de la cuadrícula da una idea de cuánto puede ocupar una fuente.
+
+.. _defo-prepare-messages:
 
 Mensajes frecuentes
 ^^^^^^^^^^^^^^^^^^^
@@ -1014,14 +1126,14 @@ Mensajes frecuentes
 "Un trabajo está escribiendo en este proyecto; guarda la cuadrícula cuando termine."
     La cuadrícula, las máscaras y las fuentes no pueden cambiar mientras hay en curso una descarga o una ejecución de **Integrar y vectorizar**.
 
-"falta: archivo no encontrado: …" (bajo una fila) o "Máscara …: archivo no encontrado (…). Vuelve a poner el archivo en esta ruta para usar la máscara."
+"Sin archivo", con "falta: archivo no encontrado: …" bajo la fila, o "Máscara …: archivo no encontrado (…). Vuelve a poner el archivo en esta ruta para usar la máscara."
     Una fuente o máscara GeoTIFF se movió, se renombró o se eliminó de tu carpeta de SEPAL. Vuelve a poner el archivo en la ruta indicada, o edita la fuente o la máscara para que apunte a su nueva ubicación.
 
 "Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Ejecutar … pendientes alinea primero las máscaras."
-    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Ejecutar … pendientes**, o ejecuta primero la fila de la máscara.
+    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Ejecutar … pendientes**, o primero el botón **Alinear** de la máscara.
 
 "Máscara …: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara."
-    La aplicación no sabe cómo descargar esta máscara de GEE. Ábrela con el icono de lápiz y vuelve a guardarla, para que su raster se compruebe de nuevo.
+    La aplicación no sabe cómo descargar esta máscara de GEE. Ábrela con **Editar** en su menú **Más acciones** y vuelve a guardarla, para que su raster se compruebe de nuevo.
 
 .. _defo-integrate:
 
@@ -1142,10 +1254,10 @@ Una *capa de atributos* añade a cada alerta información de un raster (por ejem
 Para añadir una capa de atributos:
 
 1.  Selecciona **Añadir capa de atributos** para abrir el diálogo **Añadir una capa de atributos**.
-2.  Elige el **Origen del raster** (**Recurso de Earth Engine**, una imagen, o **GeoTIFF en mi carpeta de SEPAL**) y luego elige el raster.
-3.  Selecciona **Cargar bandas**. Las bandas se leen y se enumeran ("Bandas de …").
-4.  Comprueba el **Nombre de la capa**, sugerido a partir del raster. Las columnas se llaman *nombre de la capa*\_\ *banda*.
-5.  En **Bandas**, selecciona una o varias bandas. Para cada una, elige la estadística que se calcula sobre la alerta: **Mayoría** (la predeterminada, para clases), **Media**, **Mínimo**, **Máximo** o **Mediana**. El nombre de la columna aparece al lado.
+2.  Comprueba el **Nombre de la capa**, sugerido a partir del raster una vez elegido. Las columnas se llaman *nombre de la capa*\_\ *banda*.
+3.  Elige la **Fuente** (**Earth Engine**, una imagen, o **GeoTIFF**, un archivo de tu carpeta de SEPAL) y luego elige el raster. Sus bandas se leen enseguida.
+4.  Con una banda, el formulario indica "Una banda (…): su estadística se añade a cada alerta." Con dos o más, selecciona una o varias en **Bandas**.
+5.  Para cada banda, elige la estadística que se calcula sobre la alerta: **Mayoría** (para clases), **Media**, **Mínimo**, **Máximo** o **Mediana**. Empieza en **Mayoría** cuando el nombre de la banda parece de clases (por ejemplo, ``landcover``), y en **Media** en los demás casos, marcada "(sugerido)". El nombre de la columna aparece al lado.
 6.  Selecciona **Añadir capa de atributos**.
 
 Reglas:
@@ -1768,6 +1880,8 @@ El menú **Capas** contiene:
 
 Un mapa muestra "No se pudieron cargar las imágenes" cuando los mosaicos de su imagen no se cargan.
 
+.. _defo-analysis-timeline:
+
 Elegir las imágenes: la línea de tiempo
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1778,7 +1892,7 @@ La línea de tiempo muestra todas las imágenes que cubren la alerta, desde unos
 
 -   las franjas de *Sentinel-2* arriba;
 -   *Landsat* en el medio; y
--   *Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, abajo.
+-   *Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, abajo, solo cuando tu cuenta de GEE tiene acceso a NICFI.
 
 Una franja atenuada de media altura es una imagen que supera el límite de nubes. La banda dorada es la *ventana de alerta*: las fechas en las que se detectó la alerta. En una `alerta de crecimiento <defo-integrate-growth_>`_, una banda gris detrás de ella marca las fechas de detección de cada alerta anterior a la que está vinculada: elige una imagen de antes tomada después del desmonte anterior para ver solo la pérdida nueva.
 
@@ -1806,7 +1920,7 @@ La barra de herramientas sobre la pista:
         -   Descripción
         -   Valor predeterminado
     *   -   Etiquetas *Planet*, *Sentinel-2* y *Landsat*
-        -   Muestran u ocultan una colección. Cada etiqueta cuenta las imágenes de la colección que están a la vista y luego ("+7") las que superan el límite de nubes. La etiqueta de Planet está desactivada cuando tu cuenta de GEE no tiene acceso a NICFI.
+        -   Muestran u ocultan una colección. Cada etiqueta cuenta las imágenes de la colección que están a la vista y luego ("+7") las que superan el límite de nubes. La etiqueta de Planet solo aparece cuando tu cuenta de GEE tiene acceso a NICFI.
         -   Todas activadas.
     *   -   Botón **?**
         -   Muestra u oculta una leyenda de la línea de tiempo.
@@ -2386,11 +2500,11 @@ La coordinadora configura el proyecto así:
 1.  **Proyecto**: en la aplicación, selecciona **Nuevo proyecto** y lo llama ``madre_de_dios`` (consulta `Crear un proyecto <defo-project-create_>`_).
 2.  **AOI**: en el paso `AOI <defo-aoi_>`_, elige **Nivel administrativo 1**, luego Perú y luego "Madre De Dios" (como lo escribe la lista), y selecciona **Usar selección**. El área se guarda como ``PER_Madre_De_Dios``. Un departamento entero es un área grande: todos los pasos siguientes tardan más que para un distrito.
 3.  **Alertas**: en `Fuentes de alertas <defo-alerts_>`_, añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**. Cada una **cubre la AOI**. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas.
-4.  **Capas opcionales**: para evaluar las alertas frente a una imagen reciente, añade una `capa opcional <defo-layers_>`_: una imagen Sentinel-2 de **Earth Engine** del 27 de septiembre de 2026 (tesela 19LDF, al este de Puerto Maldonado), con **Tres bandas (RGB)** activado, **Color verdadero** (B4, B3, B2), **Mín** 0 y **Máx** 3000, llamada ``Sentinel-2 2026-09-27``, y con **Mostrar en Análisis** marcado.
+4.  **Capas opcionales**: para evaluar las alertas frente a una imagen reciente, añade una `capa opcional <defo-layers_>`_: una imagen Sentinel-2 de **Earth Engine** del 27 de septiembre de 2026 (tesela 19LDF, al este de Puerto Maldonado), dibujada como **Compuesto RGB** en **Color verdadero** (B4, B3, B2), **Mín** 0 y **Máx** 3000, llamada ``Sentinel-2 2026-09-27``, y con **Mostrar en Análisis** marcado.
 
 .. note::
 
-    Un mosaico mensual de Planet NICFI cubriría todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la etiqueta *Planet* de la línea de tiempo de Análisis indica 0 en las capturas siguientes.
+    Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la línea de tiempo de Análisis de las capturas siguientes no tiene etiqueta *Planet*.
 
 La ronda de septiembre
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -2414,9 +2528,9 @@ En `Descargar y armonizar <defo-prepare_>`_, la coordinadora:
 
 1.  conserva la cuadrícula sugerida, la zona UTM del departamento (``EPSG:32719``) a 10 m, y selecciona **Guardar cuadrícula**. La cuadrícula mide 41425 × 38561 píxeles, unos 12,8 GB por fuente antes de la compresión, así que la aplicación avisa de que las descargas tardarán un rato;
 2.  añade una máscara para que solo cuenten las alertas en bosque: **Añadir máscara**, la imagen Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, banda ``treecover2000``, llamada ``forest_2000``, modo **Conservar**; y
-3.  selecciona **Ejecutar … pendientes**, que alinea la máscara y luego descarga y armoniza las tres fuentes.
+3.  selecciona **Ejecutar … pendientes** en el pie de la tabla, que alinea la máscara y luego descarga y armoniza las tres fuentes.
 
-La ejecución tardó unos 15 minutos. Después, cada fuente indica **lista**: GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458.
+La ejecución tardó unos 15 minutos. Después, la máscara y cada fuente indican "Lista": GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458.
 
 Integrar y vectorizar
 """""""""""""""""""""
