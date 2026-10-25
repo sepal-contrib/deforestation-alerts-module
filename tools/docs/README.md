@@ -176,7 +176,7 @@ PATH=<the defo-alerts env>/bin:$PATH \
   setup first gives the September set the full run's reviews (`september_state`), so the comparison
   with September reads the same in a full run and with `--only`. `--only` runs the setups its shots
   need, so any subset works. The
-  typed values (the added question, its options, the NICFI layer's name) are in `--lang` (`TYPED`).
+  typed values (the added question and its options) are in `--lang` (`TYPED`).
 - The later period's source data come from a cache, so every language gets the same October set
   (its alerts, areas and Overview figures) whatever Earth Engine serves on the day: the sources keep
   publishing and revising alerts, so a new download of the same window differs. The server hook

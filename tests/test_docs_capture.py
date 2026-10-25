@@ -111,7 +111,7 @@ def test_typed_values_exist_in_every_language():
     assert set(TYPED) == set(LANGS)
     for lang, typed in TYPED.items():
         label, yes, no = typed["question"]
-        assert label and yes and no and yes != no and typed["nicfi_layer"], lang
+        assert label and yes and no and yes != no, lang
 
 
 @pytest.mark.parametrize("code", ["en", "es-ES", "fr", "pt-BR"])
@@ -119,8 +119,10 @@ def test_the_run_button_pattern_reads_every_language(code):
     """``phases.prepare_labels`` matches the Run … pending button in each catalogue."""
     msgs = REPO / "deforestation_alerts" / "message" / code / "steps.json"
     forms = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
-    labels = ph.prepare_labels(forms.values(), "ready", "running")
+    prepare = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["prepare"]
+    labels = ph.prepare_labels(forms.values(), "Ready", ["Queued"], prepare["footer_stop"])
     for form in forms.values():
         assert labels["run"].match(form.replace("{n}", "12"))
         assert labels["run"].match(form.replace("{n}", "0"))
-    assert not labels["run"].match("Stop after this row")
+    assert not labels["run"].match(prepare["footer_stop"])
+    assert labels["stop"].match(prepare["footer_stop"])

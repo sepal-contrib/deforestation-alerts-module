@@ -253,14 +253,14 @@ def st_layer(page, rec, ctx):
     w.goto_step(page, "layers", 2000)
     ph.visible_btn(page, w.en("steps.layers.add"), RIGHT).click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the layer modal")
-    ph.choose(page, w.en("steps.layers.field_kind"), w.en("steps.layers.kind_gee"))
-    ph.type_asset(page, LAYER_IMAGE)
-    loading = w.en("steps.raster_input.bands_loading")
-    w.wait_for(lambda: loading not in ph.modal_text(page), 180, "the image's bands")
-    page.wait_for_timeout(1500)
-    switch_on(page, w.en("steps.layers.field_rgb"))
-    page.wait_for_timeout(1500)
     ph.modal_field(page, w.en("steps.layers.field_name")).fill(LAYER_NAME)
+    ph.choose_source(page, "gee")
+    ph.type_asset(page, LAYER_IMAGE)
+    # three bands or more ask Bands: RGB composite (suggested for Sentinel-2's band names), true colour
+    if ph.wait_bands_read(page, LAYER_IMAGE, select_label=w.en("steps.layers.field_bands"),
+                          one_band_line=w.en("steps.layers.bands_one_hint").split("{")[0], timeout=180):
+        ph.choose(page, w.en("steps.layers.field_bands"), w.en("steps.layers.bands_all"))
+    page.wait_for_timeout(1500)
     ph.modal_field(page, w.en("steps.layers.field_min")).fill(LAYER_RANGE[0])
     ph.modal_field(page, w.en("steps.layers.field_max")).fill(LAYER_RANGE[1])
     switch_on(page, w.en("steps.layers.field_show_in_analysis"))
@@ -311,7 +311,7 @@ def prepared(data: Path) -> bool:
 
 
 def st_prepare(page, rec, ctx):
-    ph.run_all(page, rec, out=ctx["shots"], expect_ready=2 * len(SOURCES) + 2, timeout=STAGE_TIMEOUTS["prepare"])
+    ph.run_all(page, rec, out=ctx["shots"], expect_ready=len(SOURCES) + 1, timeout=STAGE_TIMEOUTS["prepare"])
     m = manifest(ctx["data"])
     rec["harmonized"] = {k: {"alert_pixels": a.get("stats", {}).get("alert_pixels"), "mb": round(
         (a.get("size_bytes") or 0) / 1e6, 1)} for k, a in m["artifacts"].items() if k.startswith("harm:")}

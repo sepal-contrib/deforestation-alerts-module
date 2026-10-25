@@ -170,8 +170,8 @@ def prepare_labels():
     """The Prepare panel's labels in the run's language, for ``phases.run_all``."""
     from tools.walk import phases as ph
 
-    return ph.prepare_labels(T_forms("steps.prepare.run_all"), T("widgets.product_table.status_ready"),
-                             T("widgets.product_table.status_running"))
+    return ph.prepare_labels(T_forms("steps.prepare.run_all"), T("steps.prepare.state_ready"),
+                             [T(k) for k in ph.RUNNING_KEYS], T("steps.prepare.footer_stop"))
 
 
 def set_language(page, lang: str) -> None:
@@ -409,6 +409,35 @@ def type_asset(page, asset_id, scope=None):
     f.press("Enter")
     f.press("Tab")
     wait(page, 1500)
+
+
+def choose_source(page, origin, scope=None):
+    """The Source select above a raster picker: ``"gee"`` (Earth Engine) or ``"file"`` (GeoTIFF)."""
+    choose(page, T("steps.raster_input.field_source"), T(f"steps.raster_input.source_{origin}"), scope, exact=True)
+
+
+def has_select(page, label, scope=None) -> bool:
+    scope = scope or w.MODAL
+    return page.locator(f'{scope} .v-select:has(label:text-is("{label}"))').count() > 0
+
+
+def bands_read(page, select_label, one_band_key, timeout=180) -> bool:
+    """Wait until the picked raster's bands are read: the select labelled
+    ``select_label`` (two bands or more) or the one-band line (catalogue key
+    ``one_band_key``) shows. True when the select shows."""
+    one = T(one_band_key).split("{")[0]
+    failed = T("steps.raster_input.bands_failed").split("{")[0]
+
+    def settled():
+        text = modal(page).inner_text()
+        if T("steps.raster_input.bands_loading") in text:
+            return False
+        return failed in text or one in text or has_select(page, select_label)
+
+    w.wait_for(settled, timeout, "the bands read")
+    if failed in modal(page).inner_text():
+        raise AssertionError(f"the bands could not be read: {modal(page).inner_text()[:300]}")
+    return has_select(page, select_label)
 
 
 def switch(page, label, on=True, scope=None):
@@ -673,14 +702,12 @@ def shot_alerts_add_custom(page):
     open_add_source(page)
     choose(page, T("steps.alerts.mode_label"), T("steps.alerts.mode_custom", n=0))
     wait(page, 1200)
-    choose(page, T("steps.raster_input.origin_label"), T("steps.raster_input.origin_gee"))
+    choose_source(page, "gee")
     type_asset(page, CUSTOM_SOURCE)
-    w.wait_for(lambda: T("steps.raster_input.bands_loading") not in modal(page).inner_text(), 180, "the bands")
-    wait(page, 1500)
-    choose(page, T("steps.alerts.format_label"), T("steps.alerts.format_radd"), exact=True)
-    wait(page, 1500)
-    quiet(page)
-    save(page, "alerts-add-custom", modal_box(page))
+    # the bands read, then the Alert format (suggested from them) and its band selects
+    w.wait_for(lambda: has_select(page, T("steps.alerts.format_label")), 180, "the bands and the Alert format")
+    wait(page, 2500)
+    modal_shot(page, "alerts-add-custom")
     cancel_modal(page)
 
 
@@ -716,14 +743,19 @@ def open_add_layer(page):
 
 
 def shot_layers_add_rgb(page):
+    """An optical image drawn as RGB: Bands = RGB composite (suggested: the
+    Sentinel-2 band names give red, green and blue), Composite = false-colour
+    infrared."""
     open_add_layer(page)
-    choose(page, T("steps.layers.field_kind"), T("steps.layers.kind_gee"), exact=True)
+    choose_source(page, "gee")
     type_asset(page, OPTICAL_IMAGE)
-    w.wait_for(lambda: T("steps.raster_input.bands_loading") not in modal(page).inner_text(), 180, "the bands")
+    if bands_read(page, T("steps.layers.field_bands"), "steps.layers.bands_one_hint"):
+        choose(page, T("steps.layers.field_bands"), T("steps.layers.bands_all"))
     wait(page, 1500)
-    switch(page, T("steps.layers.field_rgb"))
-    wait(page, 1500)
-    choose(page, T("steps.layers.field_combo"), T("steps.layers.combo_false_color"))
+    open_select(page, T("steps.layers.field_composite"))
+    page.locator(".menuable__content__active .v-list-item",
+                 has_text=re.compile(re.escape(T("steps.layers.combo_false_color")), re.IGNORECASE)).first.click()
+    wait(page, 1200)
     field_input(page, T("steps.layers.field_min")).fill("0")
     field_input(page, T("steps.layers.field_max")).fill("4000")
     switch(page, T("steps.layers.field_show_in_analysis"))
@@ -732,15 +764,28 @@ def shot_layers_add_rgb(page):
     cancel_modal(page)
 
 
-def shot_layers_add_nicfi(page):
+#: A land-cover image for the categorical layer and the attribute layer (ESA WorldCover 2021, one band, Map).
+LANDCOVER_IMAGE = "ESA/WorldCover/v200/2021"
+
+
+def shot_layers_add_categorical(page):
+    """A one-band land-cover image drawn as Categorical, its classes found over the AOI."""
     open_add_layer(page)
-    choose(page, T("steps.layers.field_kind"), T("steps.layers.kind_nicfi"), exact=True)
-    wait(page, 1500)
-    field_input(page, T("steps.layers.field_name")).fill(TYPED[RUN.lang]["nicfi_layer"])
-    switch(page, T("steps.layers.field_show_in_analysis"))
+    choose_source(page, "gee")
+    type_asset(page, LANDCOVER_IMAGE)
+    bands_read(page, T("steps.layers.field_band"), "steps.layers.bands_one_hint")
     wait(page, 1200)
-    quiet(page)
-    save(page, "layers-add-nicfi", modal_box(page))
+    open_select(page, T("steps.layers.field_raster_type"))
+    page.locator(".menuable__content__active .v-list-item",
+                 has_text=T("steps.layers.style_categorical_item")).first.click()
+    wait(page, 1200)
+    btn(page, T("steps.layers.find_classes"), w.MODAL).click()
+    w.wait_for(lambda: page.locator(f"{w.MODAL} .dv-class-row").count() > 0
+               or "error--text" in (modal(page).inner_html()), 300, "the classes found")
+    wait(page, 2000)
+    switch(page, T("steps.layers.field_show_in_analysis"))
+    wait(page, 1000)
+    modal_shot(page, "layers-add-categorical")
     cancel_modal(page)
 
 
@@ -789,41 +834,59 @@ def shot_prepare_mask_add(page):
     btn(page, T("steps.prepare.mask_add"), ".right-panel").click()
     w.wait_for(lambda: modal_open(page), 15, "the Add mask dialog")
     wait(page, 1000)
-    choose(page, T("steps.raster_input.origin_label"), T("steps.raster_input.origin_gee"))
+    choose_source(page, "gee")
     type_asset(page, MASK_ASSET)
-    w.wait_for(lambda: T("steps.raster_input.bands_loading") not in modal(page).inner_text(), 180, "the bands")
-    wait(page, 1500)
-    choose(page, T("steps.prepare.mask_band"), MASK_BAND, exact=True)
+    if bands_read(page, T("steps.prepare.mask_band"), "steps.prepare.mask_band_one"):
+        choose(page, T("steps.prepare.mask_band"), MASK_BAND, exact=True)
     page.locator(f"{w.MODAL} .v-radio", has_text=T("steps.prepare.mask_mode_keep")).first.click()
     wait(page, 1000)
     modal_shot(page, "prepare-mask-add")
     cancel_modal(page)
 
 
+def shot_prepare_details(page):
+    """The Details dialog of the demo's GLAD-L row (ready)."""
+    ensure_open(page)
+    step(page, "prepare")
+    from tools.walk import phases as ph
+
+    ph.row_button(page, "GLAD-L", "mdi-information-outline").click()
+    dialog = w.MODAL
+    w.wait_for(lambda: page.locator(f"{dialog} .v-card").count(), 15, "the Details dialog")
+    wait(page, 1500)
+    quiet(page)
+    save(page, "prepare-details", box(page, f"{dialog} .v-card", last=True))
+    exact_btn(page, T("common.close"), dialog).click()
+    wait(page, 800)
+
+
 # ---------------------------------------------------------------- shots: integrate
-#: A land-cover image for the attribute layer (ESA WorldCover 2021, band Map).
-ATTRIBUTE_IMAGE = "ESA/WorldCover/v200/2021"
+ATTRIBUTE_IMAGE = LANDCOVER_IMAGE
 ATTRIBUTE_NAME = "worldcover"
 
 
 def fill_attribute(page):
-    """The Add an attribute layer dialog, filled in (not added)."""
+    """The Add an attribute layer dialog, filled in (not added): Layer name,
+    Source, the image; its one band is read and taken with its statistic."""
     step(page, "integrate")
     btn(page, T("steps.integrate.attr_add"), ".right-panel").click()
     w.wait_for(lambda: modal_open(page), 15, "the Add attribute layer dialog")
     wait(page, 1000)
-    choose(page, T("steps.raster_input.origin_label"), T("steps.raster_input.origin_gee"))
-    type_asset(page, ATTRIBUTE_IMAGE)
-    btn(page, T("steps.integrate.attr_load"), w.MODAL).click()
-    loaded = T("steps.integrate.attr_loaded", source=ATTRIBUTE_IMAGE)
-    w.wait_for(lambda: loaded in modal(page).inner_text(), 180, "the attribute image's bands")
-    wait(page, 1000)
     field_input(page, T("steps.integrate.attr_name")).fill(ATTRIBUTE_NAME)
-    open_select(page, T("steps.integrate.attr_bands"))
-    page.locator(".menuable__content__active .v-list-item").first.click()
-    wait(page, 800)
-    close_menus(page)
+    choose_source(page, "gee")
+    type_asset(page, ATTRIBUTE_IMAGE)
+    if bands_read(page, T("steps.integrate.attr_bands"), "steps.integrate.attr_band_one"):
+        open_select(page, T("steps.integrate.attr_bands"))
+        page.locator(".menuable__content__active .v-list-item").first.click()
+        wait(page, 800)
+        close_menus(page)
     wait(page, 1500)
+    # land-cover classes: Majority, not the Mean suggested for a band name that does not say "classes"
+    page.locator(f"{w.MODAL} .v-select .v-select__slot").last.click()
+    wait(page, 700)
+    page.locator(".menuable__content__active .v-list-item",
+                 has_text=T("steps.integrate.attr_stat_majority")).first.click()
+    wait(page, 1000)
 
 
 def attribute_listed(page) -> bool:
@@ -1149,13 +1212,12 @@ def shot_evaluation_table(page):
 
 # ---------------------------------------------------------------- shots: questionnaire
 #: What the guide types, per language: the question it adds to the default
-#: questionnaire (label, then its options "yes" and "no") and the name of the
-#: Planet NICFI layer it fills in (the dialog is cancelled, never saved).
+#: questionnaire (label, then its options "yes" and "no").
 TYPED = {
-    "en": {"question": ("Access road nearby?", "Yes", "No"), "nicfi_layer": "NICFI monthly"},
-    "es": {"question": ("¿Camino de acceso cerca?", "Sí", "No"), "nicfi_layer": "NICFI mensual"},
-    "fr": {"question": ("Route d'accès à proximité ?", "Oui", "Non"), "nicfi_layer": "NICFI mensuel"},
-    "pt": {"question": ("Estrada de acesso próxima?", "Sim", "Não"), "nicfi_layer": "NICFI mensal"},
+    "en": {"question": ("Access road nearby?", "Yes", "No")},
+    "es": {"question": ("¿Camino de acceso cerca?", "Sí", "No")},
+    "fr": {"question": ("Route d'accès à proximité ?", "Oui", "Non")},
+    "pt": {"question": ("Estrada de acesso próxima?", "Sim", "Não")},
 }
 
 
@@ -1542,21 +1604,22 @@ def ensure_later_period(page):
         select_period(page, p["start"], p["end"])
     step(page, "prepare")
     labels = prepare_labels()
-    # The button is always rendered once the project has a grid (the demo's
-    # is saved): "Run 0 pending" and disabled when nothing is left, disabled
-    # too while a run of this period is going (Stop is enabled then) or when
-    # the project is read-only. So wait for it, then run only when it has rows
-    # to run, or wait out the run already going, and fail at once otherwise.
+    # The footer's main button is always rendered once the project has a grid
+    # (the demo's is saved): "Run 0 pending" and disabled when nothing is
+    # left, or when the project is read-only; while a run of this period is
+    # going, "Stop" takes its place. So wait out a run already going, then run
+    # only when it has rows to run, and fail at once otherwise.
     run = ph.run_button(page, labels)
+    w.wait_for(lambda: run.count() or ph.job_running(page, labels), 60, "the Run … pending or Stop button")
+    if ph.job_running(page, labels):  # the footer's Stop replaces Run while a job of this period runs
+        w.wait_for(lambda: not ph.job_running(page, labels), 3600, "the running prepare job")
     w.wait_for(lambda: run.count(), 60, "the Run … pending button")
     if ph.pending_count(page, labels) and not run.is_enabled():
-        stop = btn(page, T("steps.prepare.stop"), ".right-panel")
-        if not (stop.count() and stop.is_enabled()):
-            raise AssertionError(f"Run {ph.pending_count(page, labels)} pending is disabled and no prepare job "
-                                 f"runs (Stop is disabled): is the project read-only?")
-        w.wait_for(lambda: run.is_enabled() or not ph.pending_count(page, labels), 3600, "the running prepare job")
+        raise AssertionError(f"Run {ph.pending_count(page, labels)} pending is disabled and no prepare job "
+                             f"runs: is the project read-only?")
     if ph.pending_count(page, labels):
-        ph.run_all(page, {}, out=RUN.data / "_capture", expect_ready=8, timeout=3600,
+        # one Ready cell per row: the three sources and the mask
+        ph.run_all(page, {}, out=RUN.data / "_capture", expect_ready=4, timeout=3600,
                    shot_name="later_period_prepared", labels=labels)
     step(page, "integrate")
     limit = f'.right-panel .v-input--checkbox:has(label:text-is("{T("steps.integrate.limit_alerts")}"))'
@@ -1882,11 +1945,12 @@ SHOTS: dict[str, Callable] = {
     "alerts-list": shot_alerts_list,
     "layers-list": shot_layers_list,
     "layers-add-rgb": shot_layers_add_rgb,
-    "layers-add-nicfi": shot_layers_add_nicfi,
+    "layers-add-categorical": shot_layers_add_categorical,
     "period-list": shot_period_list,
     "period-new": shot_period_new,
     "prepare-step": shot_prepare_step,
     "prepare-mask-add": shot_prepare_mask_add,
+    "prepare-details": shot_prepare_details,
     "integrate-attribute": shot_integrate_attribute,
     "integrate-form": shot_integrate_form,
     "integrate-replace": shot_integrate_replace,
