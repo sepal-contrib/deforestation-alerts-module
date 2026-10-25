@@ -33,6 +33,9 @@ DATE_BAND = en("steps.alerts.band_date")
 DATE_ENCODING = en("steps.alerts.encoding_label")
 ALERT_ONE_BAND = en("steps.alerts.band_one").split("{")[0]
 DATES_LOADING = en("steps.alerts.dates_loading")
+#: The toast Integrate ends with: ``steps.integrate.done`` is a plural node
+#: ("{n} alert(s) ready for review"), so its common tail
+INTEGRATE_DONE = "ready for review"
 
 
 def manifest(data_dir, project):
@@ -250,15 +253,27 @@ def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=2,
 
 def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
     """Integrate & vectorize until Analysis shows the set. ``replace``: the set
-    exists, so confirm the Replace dialog first."""
+    exists, so confirm the Replace dialog first. Analysis does not open by
+    itself once Integrate is done: Evaluation's *Start analysis* opens it."""
     goto_step(page, "integrate", 2000)
     t_int = now_ms(page)
     visible_btn(page, "Integrate & vectorize").click()
     if replace:
         wait_for(lambda: dialog_open(page), 30, "the Replace dialog")
         modal_button(page, "Replace").click()
-    t0, landed = time.time(), False
+    t0, done = time.time(), False
     while time.time() - t0 < timeout:
+        toasts = toasts_since(page, t_int)
+        if errors(toasts):
+            break
+        if any(INTEGRATE_DONE in x["msg"] for x in toasts):
+            done = True
+            break
+        page.wait_for_timeout(2000)
+    if done:
+        goto_step(page, "analysis")
+    t0, landed = time.time(), False
+    while done and time.time() - t0 < 60:
         # Block A's card is on screen. NOT "the new set's alert is on screen":
         # the Source / Detected / Status labels are written once at build and
         # the values are left alone while another set's rows are current
