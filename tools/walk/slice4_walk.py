@@ -180,20 +180,44 @@ def d_legends(page, rec, *, out):
     w.shot(page, out, "legends")
 
 
+#: The visualization-layer form's labels (``gui/widget/vis_layer_modal``, its
+#: fields in ``gui/widget/vis_style_fields``), from the English catalogue
+LAYER_NAME = w.en("steps.layers.field_name")
+LAYER_BANDS = w.en("steps.layers.field_bands")  # three bands or more: one band or an RGB composite
+LAYER_BAND = w.en("steps.layers.field_band")
+LAYER_ONE_BAND = w.en("steps.layers.bands_one_hint").split("{")[0]
+LAYER_RGB = w.en("steps.layers.bands_all")
+LAYER_CHANNELS = (w.en("steps.layers.field_red"), w.en("steps.layers.field_green"), w.en("steps.layers.field_blue"))
+LAYER_RAMP = w.en("steps.layers.field_ramp")
+LAYER_MIN, LAYER_MAX = w.en("steps.layers.field_min"), w.en("steps.layers.field_max")
+LAYER_SHOW = w.en("steps.layers.field_show_in_analysis")
+LAYER_ADD = w.en("steps.layers.add")
+
+
 def _modal_check(page, label):
     ph.modal(page).locator(f'.v-input:has(label:text-is("{label}")) .v-input--selection-controls__input').first.click()
     page.wait_for_timeout(400)
 
 
-def add_layer(page, rec, *, kind, name, fill, out) -> bool:
-    """Optional layers → Add layer; False when the modal refuses it."""
+def add_layer(page, rec, *, origin, ref, name, fill, out) -> bool:
+    """Optional layers → Add layer: Name, the Source select and its picker
+    (``origin`` "gee" or "file", ``ref`` an asset id or a path), then, once the
+    raster's bands are read, ``fill(has_bands_select)`` sets the rest; shown in
+    Analysis. False when the modal refuses it."""
     w.goto_step(page, "layers", 2000)
-    ph.visible_btn(page, "Add layer", ".right-panel").click()
+    ph.visible_btn(page, LAYER_ADD, ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the layer modal")
-    ph.choose(page, "Kind", kind)
-    ph.modal_field(page, "Name").fill(name)
-    fill()
-    _modal_check(page, "Show in Analysis")
+    ph.modal_field(page, LAYER_NAME).fill(name)
+    ph.choose_source(page, origin)
+    if origin == "gee":
+        ph.type_asset(page, ref)
+    else:
+        ph.pick_file(page, w.en("steps.raster_input.file"), ref, scope=ph.MODAL)
+    # one band is a line; two a Band select; three or more the Bands select
+    select = ph.wait_bands_read(page, ref, select_label=LAYER_BANDS, one_band_line=LAYER_ONE_BAND) or \
+        ph.has_select(page, LAYER_BAND)
+    fill(select)
+    _modal_check(page, LAYER_SHOW)
     w.shot(page, out, f"layer_modal_{name}")
     ph.primary_button(page).click()  # "Add layer": the form's Enter default
     try:
@@ -218,32 +242,32 @@ def analysis_layer_controls(page) -> list:
 
 
 def e_vis_layers(page, rec, *, out, s2):
-    def gee():
-        ph.type_asset(page, s2)
-        w.wait_for(lambda: "Reading the bands" not in ph.modal_text(page), 120, "the image's bands")
-        ph.modal(page).locator('.v-input--switch:has(label:has-text("Three bands (RGB)")) '
-                               '.v-input--selection-controls__input').first.click()
-        for label, band in (("Red band", "B4"), ("Green band", "B3"), ("Blue band", "B2")):
+    def gee(has_select):
+        assert has_select and ph.has_select(page, LAYER_BANDS), ph.modal_text(page)[:300]
+        ph.choose(page, LAYER_BANDS, LAYER_RGB)  # S2's B4/B3/B2 suggest it; picked all the same
+        for label, band in zip(LAYER_CHANNELS, ("B4", "B3", "B2")):
             ph.choose(page, label, band)
-        ph.modal_field(page, "Min").fill("0")
-        ph.modal_field(page, "Max").fill("3000")
+        ph.modal_field(page, LAYER_MIN).fill("0")
+        ph.modal_field(page, LAYER_MAX).fill("3000")
 
-    def tif():
-        ph.pick_file(page, "GeoTIFF", USER / "slope.tif", scope=ph.MODAL)
-        w.wait_for(lambda: "Reading the bands" not in ph.modal_text(page), 60, "the file's bands")
-        ph.choose(page, "Band", "slope")
-        ph.choose(page, "Colormap", "viridis")
-        ph.modal_field(page, "Min").fill("0")
-        ph.modal_field(page, "Max").fill("45")
+    def tif(has_select):
+        assert not has_select and f"{LAYER_ONE_BAND}slope)" in ph.modal_text(page), ph.modal_text(page)[:300]
+        ph.choose(page, LAYER_RAMP, w.en("steps.layers.ramp_viridis"))  # Continuous, the default type
+        ph.modal_field(page, LAYER_MIN).fill("0")
+        ph.modal_field(page, LAYER_MAX).fill("45")
 
-    assert add_layer(page, rec, kind="Earth Engine", name="s2", fill=gee, out=out)
+    assert add_layer(page, rec, origin="gee", ref=s2, name="s2", fill=gee, out=out), rec.get("s2_refused")
     ph.row_button(page, "s2", "mdi-map-plus").click()
-    w.wait_for(lambda: "RGB composite of B4, B3, B2, 0–3000" in ph.legend_text(page), 180, "the s2 legend")
-    assert add_layer(page, rec, kind="GeoTIFF", name="slope", fill=tif, out=out)
+    s2_legend = w.en("legend.vis.rgb").format(bands="B4, B3, B2", min="0", max="3000")
+    w.wait_for(lambda: s2_legend in ph.legend_text(page), 180, "the s2 legend")
+    rec["s2_legend"] = ph.legend_text(page)
+    assert add_layer(page, rec, origin="file", ref=USER / "slope.tif", name="slope", fill=tif, out=out), \
+        rec.get("slope_refused")
     ph.row_button(page, "slope", "mdi-map-plus").click()
     w.wait_for(lambda: "slope" in ph.legend_text(page) and "45" in ph.legend_text(page), 180, "the slope legend")
+    rec["slope_legend"] = ph.legend_text(page)
     w.goto_step(page, "analysis", 6000)
-    wanted = ["slope"]
+    wanted = ["s2", "slope"]  # both added with Show in Analysis
 
     def listed():
         lists = analysis_layer_controls(page)
