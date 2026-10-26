@@ -776,7 +776,24 @@ def _by_class(rc, cls, widget=v.Btn):
 
 
 def _labels(rc):
-    return [f.v_model for f in rc.find(v.TextField, label=t("steps.layers.class_label")).widgets]
+    return [f.v_model for f in _by_class(rc, "dv-class-label", v.TextField)]
+
+
+def test_class_labels_have_one_header_not_a_floating_label_per_row():
+    # a floating label needs the field's top padding, which the compact rows
+    # drop: it rose into the row above, over the previous field's underline
+    from gui.widget.vis_style_fields import ClassList
+
+    classes = [VisClass(value=0, color="e41a1c", label="0"), VisClass(value=1, color="377eb8", label="")]
+    _box, rc = reacton.render(ClassList(classes, lambda _: None), handle_error=False)
+    try:
+        fields = _by_class(rc, "dv-class-label", v.TextField)
+        assert [f.label for f in fields] == [None, None]
+        assert [f.placeholder for f in fields] == [t("steps.layers.class_label")] * 2
+        header = rc.find(v.Html, class_="dv-class-header").widgets
+        assert len(header) == 1 and t("steps.layers.class_label") in _flat(header[0])
+    finally:
+        rc.close()
 
 
 def _swatches(rc):
@@ -900,7 +917,7 @@ def test_a_hidden_class_and_a_renamed_label_are_saved(monkeypatch):
             assert await _settle(lambda: len(_labels(rc)) == 2)
             _by_class(rc, "dv-class-hide")[1].fire_event("click", None)
             assert _hide_icons(rc) == ["mdi-eye", "mdi-eye-off"]
-            rc.find(v.TextField, label=t("steps.layers.class_label")).widgets[0].v_model = "Forest"
+            _by_class(rc, "dv-class-label", v.TextField)[0].v_model = "Forest"
             _field(rc, "steps.layers.field_name").v_model = "wc"
             _button(rc, "steps.layers.add").fire_event("click", None)
             assert await _settle(lambda: open_.value is False)
@@ -1149,7 +1166,7 @@ def test_a_new_find_keeps_the_edits_and_adds_the_new_values(monkeypatch):
             await _find(rc)
             assert await _settle(lambda: _labels(rc) == ["10", "80"])
             rc.find(v.ColorPicker).widgets[0].v_model = "#123456"
-            rc.find(v.TextField, label=t("steps.layers.class_label")).widgets[1].v_model = "Water"
+            _by_class(rc, "dv-class-label", v.TextField)[1].v_model = "Water"
             _by_class(rc, "dv-class-hide")[1].fire_event("click", None)
             _field(rc, "steps.layers.class_add").v_model = "99"
             _by_class(rc, "dv-class-add")[0].fire_event("click", None)

@@ -193,6 +193,7 @@ _CLASS_ROW = "display:flex;align-items:center;gap:8px;"
 _CLASS_SWATCH = ("min-width:22px;width:22px;height:22px;padding:0;border-radius:4px;"
                  "border:1px solid rgba(0,0,0,0.25);background:{color} !important;")
 _CLASS_VALUE = "min-width:3em;text-align:right;font-variant-numeric:tabular-nums;"
+_CLASS_HEADER_SKIP = "min-width:calc(22px + 3em + 8px);"  # the swatch, the gap and the value
 _PALETTE_BAR = "display:inline-block;width:72px;height:12px;border-radius:2px;margin-right:8px;background:{gradient};"
 
 
@@ -237,6 +238,12 @@ def ClassList(classes, on_classes, disabled=False):
     # take its field's widget (and with it the Enter handler, use_event below)
     with rv.Html(tag="div", class_="dv-class-list", style_="margin-top:8px;"):
         with rv.Html(tag="div", key="rows"):
+            # one "Label" over the column: a floating label per field needs the
+            # top padding the compact rows drop, and rises into the row above
+            if classes:
+                with rv.Html(tag="div", key="header", class_="dv-class-header", style_=_CLASS_ROW + MUTED):
+                    rv.Html(tag="span", style_=_CLASS_HEADER_SKIP)
+                    rv.Html(tag="span", class_="text-caption", children=[t("steps.layers.class_label")])
             for i, c in enumerate(classes):
                 color = f"#{vis_palettes._bare(c.color)}"
                 with rv.Html(tag="div", key=f"class{c.value}", class_="dv-class-row",
@@ -247,9 +254,9 @@ def ClassList(classes, on_classes, disabled=False):
                         rv.ColorPicker(v_model=color, on_v_model=lambda value, i=i: _update(i, color=_bare_hex(value)),
                                        hide_inputs=True, hide_mode_switch=True, mode="hexa")
                     rv.Html(tag="span", style_=_CLASS_VALUE, children=[str(c.value)])
-                    rv.TextField(label=t("steps.layers.class_label"), v_model=c.label,
+                    rv.TextField(placeholder=t("steps.layers.class_label"), v_model=c.label,
                                  on_v_model=lambda value, i=i: _update(i, label=value or ""), dense=True,
-                                 hide_details=True, disabled=disabled, class_="mt-0 pt-0")
+                                 hide_details=True, disabled=disabled, class_="dv-class-label mt-0 pt-0")
                     solara.Button(icon_name="mdi-eye" if c.visible else "mdi-eye-off", icon=True, small=True,
                                   on_click=lambda *_, i=i, shown=c.visible: _update(i, visible=not shown),
                                   disabled=disabled, classes=["dv-class-hide"])
