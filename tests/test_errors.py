@@ -37,6 +37,8 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/project/models.py", "ValueError", "is already a source"),
     # the question form always keeps one verdict ticked; this guards a hand-edited manifest
     ("deforestation_alerts/project/models.py", "ValueError", "asked for at least one verdict"),
+    # Analysis offers "Remove from group" only on a member of a group
+    ("deforestation_alerts/project/review_groups.py", "ValueError", "is not a member of a group"),
     # the environment: geedim is a dependency
     ("deforestation_alerts/scripts/raster_export.py", "ImportError", "Install geedim"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),
