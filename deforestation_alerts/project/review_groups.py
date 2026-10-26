@@ -398,19 +398,24 @@ class NearbyResult:
     more: int = 0  # candidates within the distance left out by ``limit``
 
 
-#: the metric geometries of the last ``cache_key`` searched: ``(key, geometries)``
-_METRIC_CACHE: list = []
+#: the last keyed projection, one immutable ``(key, n_rows, geometries)`` tuple replaced whole
+_METRIC_CACHE: tuple = (None, 0, None)
 
 
 def _metric(gdf, crs, cache_key) -> np.ndarray:
     """The rows' Integrate geometries in ``crs`` (or their estimated UTM zone)
     as an array. ``cache_key`` (the set id and its store generation), when not
-    None, keeps the last projection for the next search."""
-    if cache_key is not None and _METRIC_CACHE and _METRIC_CACHE[0] == (cache_key, len(gdf)):
-        return _METRIC_CACHE[1]
+    None, keeps the last projection for the next search; a call without a key
+    neither reads nor clears it."""
+    global _METRIC_CACHE
+    key = None if cache_key is None else (cache_key, str(crs))
+    cached = _METRIC_CACHE  # read once: another thread may replace it
+    if key is not None and cached[0] == key and cached[1] == len(gdf):
+        return cached[2]
     series = gdf.geometry if gdf.crs is not None else gdf.geometry.set_crs("EPSG:4326")
     geoms = series.to_crs(crs or series.estimate_utm_crs()).to_numpy()
-    _METRIC_CACHE[:] = [(cache_key, len(gdf)), geoms] if cache_key is not None else []
+    if key is not None:
+        _METRIC_CACHE = (key, len(gdf), geoms)
     return geoms
 
 

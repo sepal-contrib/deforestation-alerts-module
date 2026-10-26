@@ -451,6 +451,15 @@ def test_the_metric_cache_is_keyed_and_bounded():
     assert rg._metric(gdf, CRS, ("s", 1)) is not first  # only the last key is kept
 
 
+def test_a_keyless_call_bypasses_the_cache_and_keeps_it():
+    gdf = _alerts(3)
+    first = rg._metric(gdf, CRS, ("s", 1))
+    assert rg.nearby(gdf, 0, 300, CRS).rows[0].distance_m == pytest.approx(101.7, abs=1.0)
+    assert rg.neighbourhoods(gdf, 300, CRS) == [(0, 1, 2)]
+    assert rg._metric(gdf, CRS, ("s", 1)) is first
+    assert rg._metric(gdf, "EPSG:32722", ("s", 1)) is not first  # same key, other CRS
+
+
 # ---- neighbourhoods -----------------------------------------------------------
 def test_neighbourhoods_chain_by_single_linkage():
     gdf = _spaced([100, 100, 900, 100])
