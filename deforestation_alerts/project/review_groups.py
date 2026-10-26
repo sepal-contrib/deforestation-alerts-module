@@ -375,3 +375,130 @@ def group_record(gdf, p) -> tuple:
     row["group_size"] = len(rows)
     row["group_alerts"] = ", ".join(str(q + 1) for q in sorted(rows))
     return row, group_shape(gdf, p)
+
+
+# ---- the nearby search (§6.1) ---------------------------------------------
+@dataclass(frozen=True)
+class NearbyRow:
+    """One row of the Nearby list."""
+
+    position: int
+    distance_m: Optional[float]  # edge to edge from the opened group; None for the group's own rows
+    status: str
+    group: Optional[int]  # the position of the main of its group, None when in none
+    blocked: bool  # another evaluator's (or, in a copy, not the copy's): it cannot be ticked
+    evaluator: str  # "" when the set has no evaluators
+    area_ha: float  # its Integrate area (``own_area``)
+    date_min: Optional[float]  # its ``alert_date_min``
+
+
+@dataclass(frozen=True)
+class NearbyResult:
+    rows: tuple = ()  # the group's own rows and the selected rows first, then the candidates, nearest first
+    more: int = 0  # candidates within the distance left out by ``limit``
+
+
+#: the metric geometries of the last ``cache_key`` searched: ``(key, geometries)``
+_METRIC_CACHE: list = []
+
+
+def _metric(gdf, crs, cache_key) -> np.ndarray:
+    """The rows' Integrate geometries in ``crs`` (or their estimated UTM zone)
+    as an array. ``cache_key`` (the set id and its store generation), when not
+    None, keeps the last projection for the next search."""
+    if cache_key is not None and _METRIC_CACHE and _METRIC_CACHE[0] == (cache_key, len(gdf)):
+        return _METRIC_CACHE[1]
+    series = gdf.geometry if gdf.crs is not None else gdf.geometry.set_crs("EPSG:4326")
+    geoms = series.to_crs(crs or series.estimate_utm_crs()).to_numpy()
+    _METRIC_CACHE[:] = [(cache_key, len(gdf)), geoms] if cache_key is not None else []
+    return geoms
+
+
+def _date_min(gdf, p) -> Optional[float]:
+    if "alert_date_min" not in gdf.columns:
+        return None
+    value = pd.to_numeric(pd.Series([gdf["alert_date_min"].iloc[p]], dtype=object), errors="coerce").iloc[0]
+    return None if pd.isna(value) else float(value)
+
+
+def nearby(gdf, main, radius_m, crs=None, *, include=(), offer_reviewed=False, evaluator=None,
+           limit=50, cache_key=None) -> NearbyResult:
+    """The Nearby list of the group whose main is ``main`` (spec §6.1).
+
+    Distances are edge to edge from the union of the group's Integrate
+    polygons (the main and its stored members), in ``crs``. Listed first: the
+    group's own rows (``distance_m`` None) and every row of ``include`` (the
+    selection, whatever its distance); then the nearest candidates within
+    ``radius_m``, at most ``limit`` (ties by position), ``more`` counting the
+    ones left out. Candidates are unreviewed rows, reviewed rows that are in
+    a group, and (``offer_reviewed``) reviews from before grouping. The main
+    is never listed. A row is ``blocked`` when its evaluator is not the
+    main's or, in a copy (``evaluator`` given), not ``evaluator``."""
+    values = group_values(gdf)
+    by_id = _positions_by_id(gdf)
+    own_rows = [] if pd.isna(values.iloc[main]) else [p for p in _rows_of(values, values.iloc[main]) if p != main]
+    origin = [main, *own_rows]
+    geoms = _metric(gdf, crs, cache_key)
+    source = shapely.union_all(geoms[origin])
+    radius = max(float(radius_m), 0.0)
+    selected = sorted({int(p) for p in include} - {main} - set(own_rows))
+    unreviewed = np.array([status_of(gdf, p) == NOT_REVIEWED for p in range(len(gdf))], dtype=bool)
+    grouped = values.notna().to_numpy()
+    offered = unreviewed | grouped | offer_reviewed
+    near = shapely.STRtree(geoms).query(source, predicate="dwithin", distance=radius)
+    skip = {main, *own_rows, *selected}
+    cands = [int(p) for p in near if int(p) not in skip and offered[int(p)]]
+    far = selected
+    distance = {p: float(d) for p, d in zip(cands + far, shapely.distance(geoms[cands + far], source))} \
+        if cands or far else {}
+    cands = sorted(cands, key=lambda p: (distance[p], p))
+    own = _evaluator(gdf, main)
+
+    def _row(p, measured=True):
+        value = values.iloc[p]
+        group = None if pd.isna(value) else by_id.get(int(value))
+        mine = _evaluator(gdf, p)
+        blocked = mine != own or (evaluator is not None and mine != evaluator)
+        return NearbyRow(p, distance[p] if measured else None, status_of(gdf, p), group, blocked, mine,
+                         own_area(gdf, p, crs), _date_min(gdf, p))
+
+    rows = [_row(p, False) for p in own_rows]
+    rows += [_row(p) for p in sorted(selected, key=lambda p: (distance[p], p))]
+    rows += [_row(p) for p in cands[:limit]]
+    return NearbyResult(tuple(rows), max(len(cands) - limit, 0))
+
+
+def neighbourhoods(gdf, radius_m, crs=None, *, eligible=None) -> list:
+    """The connected components (single linkage) of the ``eligible`` positions
+    (all when None) whose polygons are within ``radius_m`` of each other,
+    edge to edge in ``crs``: sorted position tuples ordered by their first
+    position. The eligible rows of a stored group (two rows or more) are one
+    unit."""
+    positions = sorted(range(len(gdf)) if eligible is None else {int(p) for p in eligible})
+    parent = {p: p for p in positions}
+
+    def find(p):
+        while parent[p] != p:
+            parent[p] = parent[parent[p]]
+            p = parent[p]
+        return p
+
+    def union(a, b):
+        parent[max(find(a), find(b))] = min(find(a), find(b))
+
+    values = group_values(gdf)
+    by_id = _positions_by_id(gdf)
+    first = {}
+    for p in positions:
+        value = values.iloc[p]
+        if not pd.isna(value) and int(value) in by_id:
+            union(first.setdefault(int(value), p), p)
+    if len(positions) > 1:
+        geoms = _metric(gdf, crs, None)[positions]
+        pairs = shapely.STRtree(geoms).query(geoms, predicate="dwithin", distance=max(float(radius_m), 0.0))
+        for a, b in pairs.T:
+            union(positions[int(a)], positions[int(b)])
+    components = {}
+    for p in positions:
+        components.setdefault(find(p), []).append(p)
+    return sorted(tuple(c) for c in components.values())

@@ -380,3 +380,90 @@ def test_group_record_outline_is_the_mains_drawing():
     gdf = _alerts(3, statuses=["Confirmed"] * 2 + [NR], groups=[101, 101, None])
     gdf.at[1, "alert_polygon"] = DRAWING
     assert rg.group_record(gdf, 0)[1].equals(DRAWING)
+
+
+# ---- the nearby search ------------------------------------------------------
+def _spaced(gaps, **kw):
+    """Alerts 50 m wide whose edge-to-edge gaps in metres are ``gaps`` (built in UTM, stored in 4326)."""
+    gdf = _alerts(len(gaps) + 1, **kw)
+    x, boxes = 500_000.0, []
+    for i in range(len(gaps) + 1):
+        boxes.append(box(x, 7_345_000.0, x + 50.0, 7_345_050.0))
+        x += 50.0 + (gaps[i] if i < len(gaps) else 0.0)
+    gdf.geometry = gpd.GeoSeries(boxes, crs=CRS).to_crs("EPSG:4326").values
+    return gdf
+
+
+def test_nearby_measures_edge_to_edge_and_lists_the_nearest_first():
+    gdf = _alerts(5)
+    res = rg.nearby(gdf, 0, 250, CRS)
+    assert [r.position for r in res.rows] == [1] and res.more == 0
+    assert res.rows[0].distance_m == pytest.approx(101.7, abs=1.0)
+    assert res.rows[0].area_ha == 2.0 and res.rows[0].status == NR and res.rows[0].group is None
+    assert res.rows[0].date_min == pytest.approx(2026.011)
+    assert [r.position for r in rg.nearby(gdf, 0, 300, CRS).rows] == [1, 2]
+
+
+def test_the_radius_is_edge_to_edge_at_ten_metres():
+    assert [r.position for r in rg.nearby(_spaced([8.0]), 0, 10, CRS).rows] == [1]
+    assert rg.nearby(_spaced([12.0]), 0, 10, CRS).rows == ()
+
+
+def test_nearby_from_a_group_lists_its_rows_and_measures_from_every_one():
+    gdf = _alerts(5, statuses=["Confirmed"] * 2 + [NR] * 3, groups=[100, 100, None, None, None])
+    res = rg.nearby(gdf, 0, 150, CRS)
+    assert [(r.position, r.distance_m and round(r.distance_m)) for r in res.rows] == [(1, None), (2, 102)]
+    assert res.rows[0].group == 0 and res.rows[1].group is None
+
+
+def test_selected_rows_are_always_listed_first_whatever_their_distance():
+    res = rg.nearby(_alerts(5), 0, 150, CRS, include={4})
+    assert [r.position for r in res.rows] == [4, 1]
+
+
+def test_the_limit_counts_what_it_leaves_out():
+    res = rg.nearby(_alerts(6), 0, 5000, CRS, limit=2)
+    assert [r.position for r in res.rows] == [1, 2] and res.more == 3
+
+
+def test_the_main_is_never_listed_and_other_evaluators_are_blocked():
+    res = rg.nearby(_alerts(3, evaluators=["ana", "bo", "ana"]), 0, 1000, CRS)
+    assert [(r.position, r.blocked, r.evaluator) for r in res.rows] == [(1, True, "bo"), (2, False, "ana")]
+
+
+def test_reviewed_rows_from_before_grouping_are_not_offered():
+    gdf = _alerts(4, statuses=[NR, "Confirmed", "Confirmed", NR], groups=[None, None, 102, None])
+    assert [r.position for r in rg.nearby(gdf, 0, 1000, CRS).rows] == [2, 3]
+    assert [r.position for r in rg.nearby(gdf, 0, 1000, CRS, offer_reviewed=True).rows] == [1, 2, 3]
+
+
+def test_in_a_copy_rows_of_others_are_blocked():
+    gdf = _alerts(4, evaluators=["ana", "ana", "bo", ""])
+    res = rg.nearby(gdf, 0, 1000, CRS, evaluator="ana")
+    assert [(r.position, r.blocked) for r in res.rows] == [(1, False), (2, True), (3, True)]
+
+
+def test_the_metric_cache_is_keyed_and_bounded():
+    gdf = _alerts(3)
+    first = rg._metric(gdf, CRS, ("s", 1))
+    assert rg._metric(gdf, CRS, ("s", 1)) is first
+    assert rg._metric(gdf, CRS, ("s", 2)) is not first
+    assert rg._metric(gdf, CRS, ("s", 1)) is not first  # only the last key is kept
+
+
+# ---- neighbourhoods -----------------------------------------------------------
+def test_neighbourhoods_chain_by_single_linkage():
+    gdf = _spaced([100, 100, 900, 100])
+    assert rg.neighbourhoods(gdf, 500, CRS) == [(0, 1, 2), (3, 4)]
+
+
+def test_a_stored_group_is_one_unit():
+    gdf = _spaced([2000, 2000, 2000, 2000], statuses=["Confirmed"] + [NR] * 3 + ["Confirmed"],
+                  groups=[100, None, None, None, 100])
+    assert rg.neighbourhoods(gdf, 100, CRS) == [(0, 4), (1,), (2,), (3,)]
+
+
+def test_ineligible_rows_are_left_out():
+    gdf = _spaced([100, 100])
+    assert rg.neighbourhoods(gdf, 150, CRS, eligible=[0, 2]) == [(0,), (2,)]
+    assert rg.neighbourhoods(gdf, 250, CRS, eligible=[0, 2]) == [(0, 2)]
