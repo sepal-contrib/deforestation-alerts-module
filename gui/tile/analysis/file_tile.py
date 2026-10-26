@@ -7,9 +7,13 @@ A ``custom_sw.DownloadBtn`` underneath, so ``set_url`` builds the link from
 follows whichever SEPAL serves the app), sets the ``download`` attribute and
 disables the tile on "#". ``set_file`` is what the
 export section calls: the set-folder path of the file, or None to clear.
-``set_action`` gives a tile with no file a second face, for the GIF tile:
-a plain button (no link) that makes the file when clicked, its detail saying
-whether it can.
+``set_action`` gives a tile with no file a second face, for Overview's
+tiles: a plain button (no link) that makes the file when clicked, its detail
+saying whether it can.
+
+``BuildTile`` is the Analysis list's last row (user, 2026-10-26): the build
+of the files above, in the same row shape, with an icon where a file has its
+format badge.
 """
 
 from pathlib import Path
@@ -73,7 +77,7 @@ class FileTile(custom_sw.DownloadBtn):
                          style_=TILE_STYLE, **kwargs)
         # ``DownloadBtn`` puts its own icon + text in; the tile is the S1 row.
         self.children = [
-            v.Html(tag="div", class_="primary--text", style_=_BADGE, children=[
+            v.Html(tag="div", class_="primary--text defo-file-badge", style_=_BADGE, children=[
                 v.Html(tag="span", class_="primary", style_=_BADGE_LAYER),
                 v.Html(tag="span", style_="position:relative;", children=[kind.upper()]),
             ]),
@@ -163,3 +167,55 @@ class FileTile(custom_sw.DownloadBtn):
         self._draw_meta()
         self._icon.children = [icon]
         return self
+
+
+#: The build row's icon box: the badge's size, outlined in the primary.
+_BUILD_BADGE = ("width:30px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;"
+                "flex:0 0 auto;border:1px solid currentColor;")
+
+
+class BuildTile(v.Btn):
+    """The last row of the Analysis file list: *Build files* until the files
+    exist, *Rebuild files* after, *Building files…* (a spinner in the icon
+    box) while a build runs. A plain button, not a link; its click is the
+    export section's build. ``set_face`` writes what it says, ``set_busy``
+    swaps the icon for the spinner."""
+
+    def __init__(self, **kwargs):
+        self._title = v.Html(tag="div", class_="primary--text", style_=_TITLE, children=[""])
+        self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[""])
+        self._glyph = v.Icon(small=True, children=["mdi-cogs"])
+        self._spinner = v.ProgressCircular(indeterminate=True, size=16, width=2, style_="display:none;")
+        self._box = v.Html(tag="div", class_="primary--text", style_=_BUILD_BADGE,
+                           children=[self._glyph, self._spinner])
+        super().__init__(text=True, block=True, class_="defo-file-tile defo-build-tile", style_=TILE_STYLE,
+                         children=[
+                             self._box,
+                             v.Html(tag="div", class_="ml-3 text-left", style_="flex:1 1 auto;min-width:0;",
+                                    children=[self._title, self._meta]),
+                         ], **kwargs)
+        self.busy = False
+
+    def set_face(self, title: str, detail: str, icon: str) -> "BuildTile":
+        """What the row says, and the icon it shows when not busy."""
+        self._title.children = [title]
+        self._meta.children = [detail]
+        self._glyph.children = [icon]
+        return self
+
+    def set_busy(self, flag: bool) -> "BuildTile":
+        """A build runs: the spinner in place of the icon, and no click."""
+        self.busy = bool(flag)
+        self._glyph.style_ = "display:none;" if self.busy else ""
+        self._spinner.style_ = "" if self.busy else "display:none;"
+        if self.busy:
+            self.disabled = True
+        return self
+
+    @property
+    def title(self) -> str:
+        return self._title.children[0]
+
+    @property
+    def detail(self) -> str:
+        return self._meta.children[0]

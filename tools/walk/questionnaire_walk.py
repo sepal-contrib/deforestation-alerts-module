@@ -12,10 +12,10 @@ report with a screenshot:
  1. the stepper has 7 steps and ends at Evaluation, whose Next is *Start analysis*
  2. the question is added: list row, tags, ``{road_access}`` and ``{verdict}`` chips
  3. Analysis: Questions closed, badge "required missing" in orange after True alert
- 4. Save & next with the answer missing: warning toast naming it, the section opens, no advance
- 5. answer Yes, Save & next advances; Previous shows Yes again
- 6. the footer stays in view while the panel scrolls
- 7. build: ZIP and DOCX tiles with sizes, Rebuild, GIF disabled
+ 4. Save with the answer missing: warning toast naming it, the section opens, no advance
+ 5. answer Yes, Save, then Next advances; Previous shows Yes again
+ 6. the dock stays on the panel's bottom edge while the panel scrolls
+ 7. build: ZIP, DOCX and GIF rows with sizes, the build row says Rebuild files
  8. the DOCX downloaded from its link says "Yes" in ``Road: {road_access}``
  9. Overview has a "Road access" card
 10. dark theme: footer not white, Questions labels readable
@@ -50,6 +50,8 @@ PLACEHOLDER = "{road_access}"
 #: not the questionnaire's, so tolerated in the dark-theme check only.
 THEME_SWAP_ERROR = "Cannot set properties of null (setting '_fadeAnimated')"
 FOOTER = ".defo-analysis-footer"
+#: The part of the panel that scrolls, above the dock (``analysis_tile.build_screen``).
+SCROLL = ".defo-analysis-scroll"
 PANEL = w.PANEL  # the right panel, or the analysis screen's console while it shows
 
 
@@ -95,8 +97,18 @@ def yes_selected(page) -> bool:
     return question_card(page).locator('.v-radio.v-item--active:has(label:text-is("Yes"))').count() > 0
 
 
-def save_next_btn(page):
-    return page.locator(f"{FOOTER} button:visible", has_text=re.compile(r"Save & next")).first
+def next_btn(page):
+    """The dock's *Next* -- scoped to the dock: the top bar has a Next too."""
+    return page.locator(f"{FOOTER} button:visible", has_text=re.compile(r"^\s*Next\s*$")).first
+
+
+def save_and_wait(page):
+    """The dock's *Save*, then its outcome toast; returns the toasts since the click."""
+    t0 = w.now_ms(page)
+    ph.save_btn(page).click()
+    w.wait_for(lambda: any("saved" in x["msg"].lower() or x["kind"] in ("toast-error", "toast-warning")
+                           for x in w.toasts_since(page, t0)), 120, "the save outcome toast")
+    return w.toasts_since(page, t0)
 
 
 def previous_btn(page):
@@ -114,49 +126,25 @@ def goto_analysis(page):
     page.wait_for_timeout(1500)
 
 
-def scroller(page):
-    """JS that finds the footer's scrolling ancestor (the panel's scroll
-    container: the nearest ancestor that can scroll vertically)."""
-    return """() => {
-        const f = document.querySelector('%s');
-        let e = f && f.parentElement;
-        while (e && e !== document.body) {
-            const oy = getComputedStyle(e).overflowY;
-            if ((oy === 'auto' || oy === 'scroll') && e.scrollHeight > e.clientHeight + 2) return e;
-            e = e.parentElement;
-        }
-        return null;
-    }""" % FOOTER
-
-
 def footer_geometry(page):
-    return page.evaluate("""() => {
-        const f = document.querySelector('%s');
-        let e = f && f.parentElement, sc = null;
-        while (e && e !== document.body) {
-            const oy = getComputedStyle(e).overflowY;
-            if ((oy === 'auto' || oy === 'scroll') && e.scrollHeight > e.clientHeight + 2) { sc = e; break; }
-            e = e.parentElement;
-        }
+    """Where the dock sits: its box, the panel column's (its parent) and the
+    scrolling part's above it (its sibling), and whether that part scrolls."""
+    return page.evaluate("""([fs, ss]) => {
+        const f = document.querySelector(fs), sc = document.querySelector(ss);
         if (!f || !sc) return {footer: !!f, scroller: false};
-        const fb = f.getBoundingClientRect(), sb = sc.getBoundingClientRect();
-        return {footer: true, scroller: true, cls: sc.className.slice(0, 80), scrollTop: sc.scrollTop,
-                scrollHeight: sc.scrollHeight, clientHeight: sc.clientHeight,
-                footer_bottom: fb.bottom, panel_bottom: sb.bottom, footer_top: fb.top, footer_h: fb.height};
-    }""" % FOOTER)
+        const fb = f.getBoundingClientRect(), pb = f.parentElement.getBoundingClientRect(),
+              sb = sc.getBoundingClientRect();
+        return {footer: true, scroller: sc.scrollHeight > sc.clientHeight + 2, scrollTop: sc.scrollTop,
+                scrollHeight: sc.scrollHeight, clientHeight: sc.clientHeight, scroll_bottom: sb.bottom,
+                footer_bottom: fb.bottom, panel_bottom: pb.bottom, footer_top: fb.top, footer_h: fb.height};
+    }""", [FOOTER, SCROLL])
 
 
 def scroll_to(page, where):
-    page.evaluate("""(where) => {
-        const f = document.querySelector('%s');
-        let e = f && f.parentElement;
-        while (e && e !== document.body) {
-            const oy = getComputedStyle(e).overflowY;
-            if ((oy === 'auto' || oy === 'scroll') && e.scrollHeight > e.clientHeight + 2) {
-                e.scrollTop = where === 'top' ? 0 : e.scrollHeight; return; }
-            e = e.parentElement;
-        }
-    }""" % FOOTER, where)
+    page.evaluate("""([ss, where]) => {
+        const e = document.querySelector(ss);
+        if (e) e.scrollTop = where === 'top' ? 0 : e.scrollHeight;
+    }""", [SCROLL, where])
     page.wait_for_timeout(500)
 
 
@@ -238,7 +226,13 @@ def check_2_add_question(page, rec, *, out, data, template):
 
 def check_3_badge(page, rec, *, out):
     goto_analysis(page)
-    assert not questions_open(page), "the Questions section is open by default"
+    # The seed project may open Questions by default (its questions_expanded
+    # switch): closed by hand, so the badge and the refusal are tested closed.
+    rec["questions_open_by_default"] = questions_open(page)
+    if rec["questions_open_by_default"]:
+        questions_header(page).click()
+        w.wait_for(lambda: not questions_open(page), 15, "the Questions section closed")
+        page.wait_for_timeout(500)
     assert not question_card(page).is_visible(), "Questions body is visible while collapsed"
     rec["badge_before_verdict"] = badge_text(page)
     ph.visible_btn(page, "True alert").click()
@@ -249,7 +243,8 @@ def check_3_badge(page, rec, *, out):
     rec["badge_color"] = chip.evaluate("e => getComputedStyle(e).color")
     assert "warning" in rec["badge_class"], rec["badge_class"]
     r, g, b = (int(x) for x in re.findall(r"\d+", rec["badge_color"])[:3])
-    assert r > 200 and 80 < g < 200 and b < 90, f"badge is not orange: {rec['badge_color']}"
+    # an orange hue: the badge's text is the dark orange on its light tint
+    assert r > 150 and 0.35 * r < g < 0.85 * r and b < 0.5 * g, f"badge is not orange: {rec['badge_color']}"
     w.shot(page, out, "03_questions_collapsed_badge")
 
 
@@ -257,7 +252,7 @@ def check_4_required_refusal(page, rec, *, out):
     before = counter(page)
     assert not questions_open(page)
     t0 = w.now_ms(page)
-    save_next_btn(page).click()
+    ph.save_btn(page).click()
     got = w.wait_for(lambda: [x for x in w.toasts_since(page, t0) if x["kind"] == "toast-warning"], 60,
                      "a warning toast")
     rec["toast"] = got[0]["msg"]
@@ -281,17 +276,21 @@ def check_5_answer_and_previous(page, rec, *, out):
     w.wait_for(lambda: "required missing" not in badge_text(page), 10, "the badge without required-missing")
     rec["badge_after_answer"] = badge_text(page)
     t0 = w.now_ms(page)
-    save_next_btn(page).click()
+    saved = save_and_wait(page)
+    assert not ph.errors(saved), [x["msg"] for x in saved]
+    page.wait_for_timeout(1000)
+    assert counter(page)[0] == first, "Save moved off the alert"
+    next_btn(page).click()  # saved: Next moves at once, no Discard / Stay
     wait_counter(page, first + 1, timeout=120)
     rec["toasts"] = [f"{x['kind']}: {x['msg']}" for x in w.toasts_since(page, t0)]
     assert not ph.errors(w.toasts_since(page, t0)), rec["toasts"]
     assert counter(page)[0] == first + 1
-    # The next alert has no answer yet; its Export is "save first".
+    # The next alert has no answer yet; its Export waits for a save.
     assert not yes_selected(page), "the next alert shows the previous answer"
     ph.open_section(page, "Export this alert")
     build = page.locator(".defo-build-tile:visible").first
     rec["build_tile_unsaved"] = re.sub(r"\s+", " ", build.inner_text())
-    assert "save first" in rec["build_tile_unsaved"], rec["build_tile_unsaved"]
+    assert "Save this alert first" in rec["build_tile_unsaved"], rec["build_tile_unsaved"]
     w.shot(page, out, "05a_next_alert")
     previous_btn(page).click()
     wait_counter(page, first, timeout=90)
@@ -300,13 +299,14 @@ def check_5_answer_and_previous(page, rec, *, out):
     w.shot(page, out, "05b_previous_yes")
 
 
-def check_6_sticky_footer(page, rec, *, out):
+def check_6_docked_footer(page, rec, *, out):
     ph.open_section(page, "Questions")
     ph.open_section(page, "Refine polygon")
     page.wait_for_timeout(800)
     top = footer_geometry(page)
     rec["at_top"] = top
     assert top.get("scroller"), f"the panel does not scroll with Questions and Refine open: {top}"
+    assert top["footer_top"] >= top["scroll_bottom"] - 2, f"the dock overlaps the scrolling part: {top}"
     scroll_to(page, "top")
     top = footer_geometry(page)
     w.shot(page, out, "06a_footer_scrolled_top")
@@ -316,7 +316,8 @@ def check_6_sticky_footer(page, rec, *, out):
     w.shot(page, out, "06b_footer_scrolled_bottom")
     assert bottom["scrollTop"] > top["scrollTop"] + 20, (top, bottom)
     for name, g in (("top", top), ("bottom", bottom)):
-        assert abs(g["footer_bottom"] - g["panel_bottom"]) <= 2, f"footer not at the panel bottom ({name}): {g}"
+        assert abs(g["footer_bottom"] - g["panel_bottom"]) <= 2, f"dock not at the panel bottom ({name}): {g}"
+    assert top["footer_top"] == bottom["footer_top"], "the dock moved with the scroll"
     scroll_to(page, "top")
     # Refine closed again, as the next checks expect
     if page.locator(f'{PANEL} button:has-text("Refine polygon"):visible').first.locator(".mdi-chevron-down").count():
@@ -340,7 +341,7 @@ def check_7_build(page, rec, *, out):
     rec["build_tile"] = re.sub(r"\s+", " ", build.inner_text())
     w.shot(page, out, "07a_build_tile")
     build.click()
-    w.wait_for(lambda: page.locator(".defo-rebuild:visible").count()
+    w.wait_for(lambda: "Rebuild files" in build.inner_text()
                or ph.errors(w.toasts_since(page, t0)), 900, "the build to finish", poll=2)
     assert not ph.errors(w.toasts_since(page, t0)), [x["msg"] for x in w.toasts_since(page, t0)]
     page.wait_for_timeout(2000)
@@ -353,11 +354,11 @@ def check_7_build(page, rec, *, out):
             "href": tile.get_attribute("href"),
         }
     rec["tiles"] = tiles
-    for kind in ("zip", "docx", "gif"):  # the GIF tile is a real download since feat/alert-gif
+    for kind in ("zip", "docx", "gif"):  # the build of a true alert on its saved pair makes the GIF
         assert re.search(r"\d+(\.\d)? (B|KB|MB|GB)", tiles[kind]["text"]), tiles[kind]
         assert not tiles[kind]["disabled"] and tiles[kind]["href"] and tiles[kind]["href"] != "#", tiles[kind]
-    assert page.locator(".defo-rebuild:visible").count() == 1
-    rec["rebuild"] = re.sub(r"\s+", " ", page.locator(".defo-rebuild:visible").first.inner_text())
+    rec["rebuild"] = re.sub(r"\s+", " ", build.inner_text())
+    assert "Rebuild files" in rec["rebuild"] and build.is_enabled(), rec["rebuild"]
     page.wait_for_timeout(500)
     w.shot(page, out, "07b_file_tiles")
 
@@ -452,7 +453,7 @@ def check_10_dark(page, rec, *, out):
                 dark: !!document.querySelector('.v-application.theme--dark')};
     }""", FOOTER)
     rec.update(info)
-    scroll_to(page, "bottom")  # the footer covers the sections below the fold at the top
+    scroll_to(page, "bottom")  # the sections below the fold, above the dock
     w.shot(page, out, "10_dark_theme")
     assert info["dark"], "not in the dark theme"
     assert info["bg"] not in ("rgb(255, 255, 255)", "rgba(255, 255, 255, 1)", "rgba(0, 0, 0, 0)"), info["bg"]
@@ -503,7 +504,7 @@ def main(argv=None):
                 ("c03_badge", watched(lambda pg, r: check_3_badge(pg, r, out=out))),
                 ("c04_required_refusal", watched(lambda pg, r: check_4_required_refusal(pg, r, out=out))),
                 ("c05_answer_previous", watched(lambda pg, r: check_5_answer_and_previous(pg, r, out=out))),
-                ("c06_sticky_footer", watched(lambda pg, r: check_6_sticky_footer(pg, r, out=out))),
+                ("c06_docked_footer", watched(lambda pg, r: check_6_docked_footer(pg, r, out=out))),
                 ("c07_build", watched(lambda pg, r: check_7_build(pg, r, out=out))),
                 ("c08_docx", watched(lambda pg, r: check_8_docx(pg, r, out=out, data=data))),
                 ("c09_overview", watched(lambda pg, r: check_9_overview(pg, r, out=out))),

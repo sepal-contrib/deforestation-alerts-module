@@ -160,7 +160,7 @@
   "analysis_tile": {
     "description": "Revise cada alerta comparando as imagens de antes e depois: dê um veredito, responda às perguntas e então salve e passe para o próximo.",
     "info_header": "Sobre a análise",
-    "info_md": "A barra superior reúne o filtro de alertas, o seletor de conjuntos, o progresso da revisão e **Anterior** / **Próximo**; o contador entre os dois abre um menu para ir a um número de alerta ou ao próximo alerta não revisado. Os dois mapas mostram as imagens de antes e depois escolhidas na linha do tempo compartilhada abaixo deles. Em **Veredito**, responda com um dos três botões e então responda às perguntas do projeto em **Perguntas** (por padrão, o vetor da perda); **Salvar e próximo** grava a revisão na base de alertas do conjunto e abre o alerta seguinte — **Salvar** mantém você neste. **Refinar polígono** abre as ferramentas de desenho e os dois modelos de detecção automática. Depois que o alerta é salvo, **Exportar este alerta** oferece **Gerar arquivos do alerta**: o GeoPackage, as imagens de antes/depois e um relatório Word a partir do modelo de relatório do projeto, escolhido na etapa Questionário. Para um alerta verdadeiro, **Timelapse** anima as imagens de antes e depois com as duas imagens de cada lado, e o zip dos arquivos do alerta o inclui.",
+    "info_md": "A barra superior reúne o filtro de alertas, o seletor de conjuntos, o progresso da revisão e **Anterior** / **Próximo**; o contador entre os dois abre um menu para ir a um número de alerta ou ao próximo alerta não revisado. Os dois mapas mostram as imagens de antes e depois escolhidas na linha do tempo compartilhada abaixo deles. Em **Veredito**, responda com um dos três botões e então responda às perguntas do projeto em **Perguntas** (por padrão, o vetor da perda); **Salvar** grava a revisão na base de alertas do conjunto e **Próximo** abre o alerta seguinte; com alterações não salvas, Próximo pergunta se deve **Descartar** ou **Ficar**. **Refinar polígono** abre as ferramentas de desenho e os dois modelos de detecção automática. **Exportar este alerta**, embaixo com Salvar e Próximo, lista os arquivos do alerta; depois que o alerta é salvo, **Gerar arquivos** os cria: o GeoPackage, as imagens de antes/depois, um relatório Word a partir do modelo de relatório do projeto (escolhido na etapa Questionário) e, para um alerta verdadeiro, um **Timelapse** que anima as imagens de antes e depois com as duas imagens de cada lado, incluído também no zip.",
     "img_selection": {
       "prev_image_title": "Imagem de antes",
       "post_image_title": "Imagem de depois"
@@ -215,9 +215,12 @@
       "true": "Alerta verdadeiro",
       "false": "Falso positivo",
       "revision": "Precisa de revisão",
-      "save_next": "Salvar e próximo",
       "unsaved": "Alterações não salvas neste alerta",
-      "saved_at": "Salvo às {time}"
+      "saved_at": "Salvo às {time}",
+      "unsaved_title": "Este alerta tem alterações não salvas",
+      "unsaved_hint": "Descartar as apaga e passa para outro alerta. Ficar mantém você neste.",
+      "discard": "Descartar",
+      "stay": "Ficar"
     },
     "questions": {
       "required_missing": "Responda “{question}” antes de salvar.",
@@ -282,8 +285,8 @@
     },
     "export_labels": {
       "save_btn": "Salvar",
-      "build_tile": "Gerar arquivos do alerta",
-      "save_first": "salve primeiro",
+      "build_tile": "Gerar arquivos",
+      "save_first": "Salve este alerta primeiro",
       "rebuild_tile": "Gerar arquivos novamente",
       "tile_zip": "Dados do alerta",
       "tile_zip_detail": "GeoPackage + GeoTIFF de antes/depois",
@@ -291,7 +294,6 @@
       "tile_docx_detail": "Word, a partir do modelo do projeto",
       "tile_gif": "Timelapse",
       "tile_gif_detail": "GIF animado",
-      "tile_gif_make": "GIF animado · clique para criá-lo",
       "save_task_title": "Salvando atributos do alerta",
       "save_step": "Gravando a base de alertas…",
       "save_done": "Atributos do alerta salvos.",
@@ -316,11 +318,13 @@
       "gif_same_image": "As imagens de antes e depois são a mesma imagem, então o GIF não mostraria nenhuma mudança. Escolha duas imagens diferentes na linha do tempo.",
       "gif_too_few": "Menos de duas imagens puderam ser renderizadas para este alerta, então nenhum GIF foi criado.",
       "gif_hint": "Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo",
-      "gif_task_title": "Exportando o GIF do alerta",
-      "gif_step": "Renderizando {count} imagens…",
-      "gif_done": "GIF do alerta pronto.",
-      "gif_stale": "O GIF terminou depois que você passou para outro alerta ou mudou as imagens dele, então não foi oferecido aqui.",
-      "gif_zip_skipped": "Os arquivos do alerta estão prontos, mas não foi possível criar o GIF, então o zip não contém o GIF."
+      "gif_zip_skipped": "Os arquivos do alerta estão prontos, mas não foi possível criar o GIF, então o zip não contém o GIF.",
+      "save_changes_first": "Salve suas alterações primeiro",
+      "build_detail": "Gera os arquivos acima a partir da revisão salva",
+      "rebuild_detail": "Gera-os novamente a partir da revisão salva",
+      "building": "Gerando arquivos…",
+      "building_detail": "Eles são liberados acima quando ficam prontos",
+      "tile_gif_true_only": "Apenas alertas verdadeiros"
     },
     "earlier": {
       "show": "Mostrar nos mapas",

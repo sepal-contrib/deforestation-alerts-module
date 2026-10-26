@@ -245,7 +245,7 @@ def facts_widgets(card):
 _NAV_WIDTH = "min-width: 124px;"
 
 
-def _build_nav(app_state, id_field, counter, labels):
+def _build_nav(app_state, id_field, counter, labels, guard=None):
     """Previous / Next, and the counter as a button that opens a small menu:
     "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
     alert". The menu floats over the panel, so opening it moves nothing.
@@ -254,14 +254,16 @@ def _build_nav(app_state, id_field, counter, labels):
     ``value - 1``; ``go_to`` clamps and is safe with no alerts loaded
     (``max_alert_id`` is -1, so every press lands on 0). ``id_field`` is the
     ``v.TextField`` the tile owns, where the tests read and write
-    ``.v_model``."""
+    ``.v_model``. Every alert change goes through ``guard`` (see
+    ``build_context``)."""
+    guard = guard if guard is not None else (lambda move: move())
     # The app's secondary buttons (``gui.widget.buttons``), the words kept
     # beside the chevrons; the label hook below writes them. One width for
     # both, whatever their words ("Previous" is longer than "Next").
     prev = btn("secondary", icon="mdi-chevron-left", style_=_NAV_WIDTH)
     nxt = btn("secondary", icon_right="mdi-chevron-right", style_=_NAV_WIDTH)
-    prev.on_event("click", lambda *_: app_state.go_prev())
-    nxt.on_event("click", lambda *_: app_state.go_next())
+    prev.on_event("click", lambda *_: guard(app_state.go_prev))
+    nxt.on_event("click", lambda *_: guard(app_state.go_next))
 
     # The counter is a chip, or a sentence, not a button's words: no capitals.
     jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn",
@@ -316,7 +318,7 @@ def _build_nav(app_state, id_field, counter, labels):
             if target < len(mask) and not mask[target]:
                 _show_refusal(target + 1)
                 return
-        app_state.go_to(target)
+        guard(lambda: app_state.go_to(target))
         menu.v_model = False
 
     go.on_event("click", _on_go)
@@ -327,7 +329,7 @@ def _build_nav(app_state, id_field, counter, labels):
         target = next_unreviewed_match(app_state.alerts_gdf.value, app_state.alert_mask(),
                                        app_state.actual_alert_id.value)
         if target is not None:
-            app_state.go_to(target)
+            guard(lambda: app_state.go_to(target))
         menu.v_model = False
 
     unreviewed.on_event("click", _on_unreviewed)
@@ -411,18 +413,21 @@ def _build_facts(labels):
                   "history_row": history_row, "history": history}
 
 
-def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
+def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None) -> v.Card:
     """Block A, built once per session; it subscribes to the alerts table and
     the current position and refreshes itself. ``labels`` is the screen's
     ``labels.Labels`` (a fresh one when none is given); ``analysis`` is the
-    session's ``AnalysisState``, whose ``history`` the History row shows."""
+    session's ``AnalysisState``, whose ``history`` the History row shows.
+    ``guard(move)`` runs each alert change the navigation starts (the dock's
+    ``footer.build_footer``: it asks first over unsaved work); without one
+    they run at once."""
     labels = labels if labels is not None else Labels()
     counter = v.Html(tag="span", class_=_COUNTER_CLASS, style_="white-space: nowrap;", children=[])
     tally = v.Html(tag="span", class_=TYPE_LABEL, style_="white-space: nowrap;", children=[])
     bar = v.ProgressLinear(value=0, height=4, color="primary", rounded=True)
 
     facts_grid, facts_slots = _build_facts(labels)
-    nav_slots = _build_nav(app_state, id_field, counter, labels)
+    nav_slots = _build_nav(app_state, id_field, counter, labels, guard=guard)
 
     shown = [None]  # the facts on screen, for a language switch
 

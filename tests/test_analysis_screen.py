@@ -78,7 +78,7 @@ def _by_class(root, name):
     return [w for w in _widgets(root) if name in (getattr(w, "class_", None) or "").split()]
 
 
-def _screen(state, theme_state=None):
+def _screen(state, theme_state=None, controls=None):
     """``build_screen`` around stand-in analysis widgets (real views)."""
     panes = make_panes()
     widgets = SimpleNamespace(
@@ -88,7 +88,8 @@ def _screen(state, theme_state=None):
         head_after=v.Html(tag="div", class_="analysis-mapbox"),
         timeline=v.Html(tag="div", class_="analysis-timeline"),
     )
-    controls = v.Html(tag="div", class_="defo-test-controls")
+    if controls is None:
+        controls = v.Html(tag="div", class_="defo-test-controls")
     return build_screen(widgets, controls, state, theme_state)
 
 
@@ -409,7 +410,14 @@ def test_leaving_the_screen_shows_mapapp_before_hiding_the_views():
 
 
 def test_the_screen_holds_the_back_button_the_views_the_strip_and_the_controls():
-    layout = _screen(AppState())
+    from gui.tile.analysis import analysis_tile
+
+    # Controls as ``build_controls`` leaves them: the dock found through
+    # ``panel_sections``, not among the controls' children.
+    controls = v.Html(tag="div", class_="defo-test-controls")
+    footer = SimpleNamespace(root=v.Html(tag="div", class_="defo-analysis-footer"))
+    setattr(controls, analysis_tile._PANEL, SimpleNamespace(footer=footer))
+    layout = _screen(AppState(), controls=controls)
     root = layout.screen
     style = root.children[0]
     assert isinstance(style, v.Html) and style.tag == "style" and style.children == [SCREEN_CSS]
@@ -421,7 +429,12 @@ def test_the_screen_holds_the_back_button_the_views_the_strip_and_the_controls()
     assert heads.children == [layout.widgets.head_before, layout.widgets.head_after]
     assert slot.children == [layout.widgets.panes_widget]
     assert strip.children == [layout.widgets.timeline]
-    assert right.children == [layout.controls]
+    # The part that scrolls, then the dock fixed under it (user, 2026-10-26,
+    # option B): the dock is a flex sibling of the scroll, not inside it.
+    scroll, dock = right.children
+    assert scroll.class_ == "defo-analysis-scroll" and scroll.children == [layout.controls]
+    assert dock is footer.root
+    assert ".defo-analysis-scroll {" in SCREEN_CSS and "overflow-y: auto" in SCREEN_CSS
     assert "100vh" not in SCREEN_CSS, "a full-height flex layout: no height computed from the viewport"
     assert root.style_ == "display: none;", "the screen is built hidden"
     assert {"defo-analysis-screen", "analysis-stage"} <= set(root.class_.split())

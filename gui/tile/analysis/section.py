@@ -48,12 +48,15 @@ def panel_block(children, *, class_: str = "py-3"):
     return v.Html(tag="div", class_=class_, style_=BLOCK_STYLE, children=children)
 
 
-def build_section(title: str, body, *, badge: str = "", open: bool = False, divided: bool = True):
+def build_section(title: str, body, *, badge: str = "", open: bool = False, divided: bool = True,
+                  closed_icon: str = "mdi-chevron-right"):
     """A collapsed-by-default section. ``title`` and ``badge`` are already
     translated by the caller (nothing here resolves a message). ``divided``
     draws the block's hairline; the footer's section has the footer's own.
+    ``closed_icon`` is the chevron of the closed section: the footer's points
+    up, where its body opens.
     ``set_title`` renames it (a language switch); ``title_span`` holds the title."""
-    chevron = v.Icon(small=True, children=["mdi-chevron-right"])
+    chevron = v.Icon(small=True, children=[closed_icon])
     badge_chip = v.Chip(
         x_small=True,
         class_=badge_classes(None),
@@ -84,7 +87,7 @@ def build_section(title: str, body, *, badge: str = "", open: bool = False, divi
     def set_open(flag: bool) -> None:
         state["open"] = bool(flag)
         body_box.style_ = "" if state["open"] else _HIDDEN
-        chevron.children = ["mdi-chevron-down" if state["open"] else "mdi-chevron-right"]
+        chevron.children = ["mdi-chevron-down" if state["open"] else closed_icon]
 
     def set_badge(text: str, color=None) -> None:
         # The colour is written on EVERY call, the ``None`` of a neutral state

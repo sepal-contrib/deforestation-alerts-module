@@ -1,21 +1,31 @@
-"""The Analysis panel's sticky footer (spec D6, layout A): the Export
-section, then Save & next / Save, then the save-state line, pinned to the
-bottom of the Workflow panel so the review rhythm (answer, Save & next) never
-needs a scroll, however many questions the project asks.
+"""The Analysis panel's dock (user, 2026-10-26, option B): the Export
+section, then *Save* / *Next*, then the save-state line, fixed to the bottom
+edge of the panel -- a sibling of the scrolling area (``build_screen``), so it
+never floats halfway up when the sections above are closed, and the review
+rhythm (answer, Save, Next) never needs a scroll, however many questions the
+project asks. The Export header is the dock's first line: closed, its chevron
+points up, where its list opens.
 
 Architecture layer: view (raw-widget builder, no ``@solara.component``),
 built once per session with the rest of the panel; the reactive subscriptions
 below are registered once and their unsubscribers deliberately discarded.
 
-**Save & next** is the panel's one primary button: it saves and advances only
-if the save wrote (spec §4). Both buttons drive the export section's
-``run_save`` -- there is one save runner in the panel -- and are registered
-with it (``run_save.guard``) so a save started from one cannot be raced by
-the other over the same store and row.
+**Save** and **Next** are two buttons. The filled one moves: *Save* while the
+alert has unsaved work or no saved review, *Next* once its review is saved.
+*Save* drives the export section's ``run_save`` -- there is one save runner
+in the panel -- and is registered with it (``run_save.guard``) so a second
+save cannot start over the same store and row.
 
-The background is opaque: the panel scrolls under the footer. The inline
-colour is the light theme's (``--v-background-base`` is not themed, so its
-fallback is what renders); the dark theme's is restated in the shell's
+**Next with unsaved work** asks first (``guard``): the button row gives way to
+an inline prompt, *Discard* (move on; the alert opens again from its store)
+or *Stay*. Every alert change started on the screen goes through the same
+``guard``: this *Next*, and the top bar's Previous, Next, Go and next
+unreviewed (``context.build_context``).
+
+Flat on the panel's surface, like the blocks above it: the same 16 px edges
+and the same hairline, no card of its own. The background is opaque; the
+inline colour is the light theme's (``--v-background-base`` is not themed, so
+its fallback is what renders); the dark theme's is restated in the shell's
 stylesheet (``solara_app._AppShell``: ``.theme--dark .defo-analysis-footer``).
 """
 
@@ -25,51 +35,127 @@ from types import SimpleNamespace
 import ipyvuetify as v
 
 from gui.i18n import t
+from gui.tile.analysis import alert_files
 from gui.tile.analysis.labels import Labels
+from gui.tile.analysis.section import TYPE_LABEL, TYPE_TITLE
 from gui.widget.buttons import btn, set_label
 
-# ``margin-bottom: -32px`` cancels the Workflow panel's own bottom space (its
-# 16px padding and the 16px under each section): a sticky element stays inside
-# its parent, so without it the footer rose 32px off the panel's bottom edge
-# once the content was scrolled to its end.
-FOOTER_STYLE = ("position: sticky; bottom: 0; z-index: 3; padding: 8px 8px 10px; "
-                "margin-top: 8px; margin-bottom: -32px; "
+FOOTER_STYLE = ("flex: 0 0 auto; padding: 0 16px 12px; "
                 "background-color: var(--v-background-base, #ffffff); "
-                "border-top: 1px solid rgba(128, 128, 128, 0.25); box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);")
+                "border-top: 1px solid rgba(128, 128, 128, 0.25);")
+#: The unsaved-work prompt: the warning badge's orange, as a light panel.
+PROMPT_STYLE = ("border: 1px solid rgba(239, 138, 12, 0.55); background-color: rgba(239, 138, 12, 0.07); "
+                "border-radius: 6px; padding: 8px 10px 10px;")
+_HIDDEN = "display: none;"
 _SLOTS = "_defo_footer_slots"
 
 
 def footer_widgets(root):
-    """``(save_next, save, state_line)`` of a footer ``build_footer`` built."""
+    """``(save, next, state_line)`` of a footer ``build_footer`` built."""
     s = getattr(root, _SLOTS)
-    return s["save_next"], s["save"], s["state_line"]
+    return s["save"], s["next"], s["state_line"]
+
+
+def prompt_widgets(root):
+    """``(prompt, discard, stay)``: the unsaved-work prompt of a footer
+    ``build_footer`` built, and its two buttons."""
+    s = getattr(root, _SLOTS)
+    return s["prompt"], s["discard"], s["stay"]
 
 
 def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
-    """Build and return ``SimpleNamespace(root, save_next, save, state_line)``.
+    """Build and return ``SimpleNamespace(root, save, next, state_line,
+    prompt, guard)``.
 
     ``run_save`` is the export section's runner (``export.make_save_runner``),
-    ``export_root`` the Export section's card, placed first in the footer.
+    ``export_root`` the Export section, placed first in the dock.
     ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
     given): the buttons' words and the state line follow a language switch.
+    ``guard(move)`` runs ``move`` (an alert change) at once, or after the
+    reviewer's *Discard* when the alert has unsaved work.
     """
     labels = labels if labels is not None else Labels()
-    # The end of an alert's review: the filled button, *Save* its outlined
-    # twin. The screen's size (``small``), and halves of the row, as Start /
-    # Save drawing above them (user, 2026-10-21: one button width).
-    save_next = btn("primary", t("analysis_tile.verdict.save_next"), icon_right="mdi-arrow-right",
-                    class_="flex-grow-1", style_="flex-basis: 0;")
-    save = btn("secondary", t("analysis_tile.export_labels.save_btn"), icon="mdi-content-save-outline",
+    # The screen's size (``small``), and halves of the row, as the verdict
+    # buttons above them. Which one is filled is ``_sync_emphasis``'s call.
+    save = btn("primary", t("analysis_tile.export_labels.save_btn"), icon="mdi-content-save-outline",
                class_="flex-grow-1", style_="flex-basis: 0;")
+    nxt = btn("secondary", t("analysis_tile.nav.next"), icon_right="mdi-arrow-right",
+              class_="flex-grow-1", style_="flex-basis: 0;")
+    buttons = v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[save, nxt])
     state_line = v.Html(tag="div", class_="dat-caption mt-2", children=[])
 
+    # The prompt, in place of the button row while it asks. *Stay* is the
+    # filled one: the safe answer, and the one Enter would mean.
+    prompt_title = v.Html(tag="span", class_=TYPE_TITLE, children=[""])
+    prompt_hint = v.Html(tag="div", class_=TYPE_LABEL, style_="margin: 2px 0 8px 26px;", children=[""])
+    discard = btn("secondary", "", icon="mdi-delete-outline", color="warning",
+                  class_="flex-grow-1", style_="flex-basis: 0;")
+    stay = btn("primary", "", class_="flex-grow-1", style_="flex-basis: 0;")
+    prompt = v.Html(tag="div", class_="defo-unsaved-prompt", style_=PROMPT_STYLE + _HIDDEN, children=[
+        v.Html(tag="div", class_="d-flex align-center warning--text", style_="gap: 6px;", children=[
+            v.Icon(small=True, color="warning", children=["mdi-alert-outline"]), prompt_title]),
+        prompt_hint,
+        v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[discard, stay]),
+    ])
+
+    # The alert change the prompt holds, run by *Discard*.
+    pending = {"move": None}
+
+    def _show_prompt(flag):
+        prompt.style_ = PROMPT_STYLE + ("" if flag else _HIDDEN)
+        # by class, not style: Vuetify's ``.d-flex`` is ``display: flex
+        # !important``, which an inline ``display: none`` does not beat
+        buttons.class_ = "d-none" if flag else "d-flex"
+        if not flag:
+            pending["move"] = None
+
+    def guard(move):
+        """Run ``move`` now, or ask first when the alert has unsaved work."""
+        if not analysis.dirty.value:
+            move()
+            return
+        pending["move"] = move
+        _show_prompt(True)
+
+    def _discard(*_):
+        move = pending["move"]
+        _show_prompt(False)
+        # Nothing to undo by hand: the alert change re-seeds the review from
+        # the store (``reset_alert`` and the per-alert load).
+        if move is not None:
+            move()
+
     save.on_event("click", lambda *_: run_save(save))
-    save_next.on_event("click", lambda *_: run_save(save_next, then=app_state.go_next))
-    # Both buttons are the same save: the runner holds them together for its
-    # duration. ``getattr`` because a test may inject a plain callable.
-    guard = getattr(run_save, "guard", None)
-    if guard is not None:
-        guard(save_next, save)
+    nxt.on_event("click", lambda *_: guard(app_state.go_next))
+    discard.on_event("click", _discard)
+    stay.on_event("click", lambda *_: _show_prompt(False))
+    # ``getattr`` because a test may inject a plain callable.
+    run_guard = getattr(run_save, "guard", None)
+    if run_guard is not None:
+        run_guard(save)
+
+    # The question is about one alert's work: an alert change (however it
+    # came) or a save that leaves nothing unsaved answers it.
+    analysis.alert_token.subscribe(lambda *_: _show_prompt(False))
+    analysis.dirty.subscribe(lambda dirty: None if dirty else _show_prompt(False))
+
+    def _saved_review():
+        """A save of this alert landed, this session or before (its row has a
+        status)."""
+        if analysis.last_save_time.value:
+            return True
+        return alert_files.saved_status(app_state.alerts_gdf.value, app_state.actual_alert_id.value) is not None
+
+    def _sync_emphasis(*_):
+        # Save is the next step while there is something to save; once the
+        # review is stored, Next is.
+        filled_save = bool(analysis.dirty.value) or not _saved_review()
+        save.outlined = not filled_save
+        nxt.outlined = filled_save
+
+    for reactive in (analysis.dirty, analysis.last_save_time, app_state.alerts_gdf, app_state.actual_alert_id):
+        reactive.subscribe(_sync_emphasis)
+    _sync_emphasis()
 
     def _sync_state_line(*_):
         if analysis.drawing_unapplied.value:
@@ -101,16 +187,22 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
     labels.add(_sync_state_line)
 
     def _label():
-        # text only: a save in flight keeps its buttons disabled and loading
-        set_label(save_next, t("analysis_tile.verdict.save_next"))
+        # text only: a save in flight keeps its button disabled and loading
         set_label(save, t("analysis_tile.export_labels.save_btn"))
+        set_label(nxt, t("analysis_tile.nav.next"))
+        set_label(discard, t("analysis_tile.verdict.discard"))
+        set_label(stay, t("analysis_tile.verdict.stay"))
+        prompt_title.children = [t("analysis_tile.verdict.unsaved_title")]
+        prompt_hint.children = [t("analysis_tile.verdict.unsaved_hint")]
 
     labels.add(_label)
 
     root = v.Html(tag="div", class_="defo-analysis-footer", style_=FOOTER_STYLE, children=[
         export_root,
-        v.Html(tag="div", class_="d-flex mt-2 px-1", style_="gap: 8px;", children=[save_next, save]),
-        v.Html(tag="div", class_="px-1", children=[state_line]),
+        buttons,
+        prompt,
+        state_line,
     ])
-    setattr(root, _SLOTS, {"save_next": save_next, "save": save, "state_line": state_line})
-    return SimpleNamespace(root=root, save_next=save_next, save=save, state_line=state_line)
+    setattr(root, _SLOTS, {"save": save, "next": nxt, "state_line": state_line,
+                           "prompt": prompt, "discard": discard, "stay": stay})
+    return SimpleNamespace(root=root, save=save, next=nxt, state_line=state_line, prompt=prompt, guard=guard)

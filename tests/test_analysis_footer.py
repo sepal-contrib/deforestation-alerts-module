@@ -1,7 +1,9 @@
-"""The sticky footer (spec D6): Export section, then Save & next / Save, then
-the save-state line; a required refusal opens the Questions section.
+"""The dock (user, 2026-10-26, option B): the Export section, then Save and
+Next, then the save-state line, fixed to the panel's bottom edge; Next (and
+every other alert change started on the screen) asks Discard / Stay over
+unsaved work; a required refusal opens the Questions section.
 
-The Save buttons and the save-state line moved here from the verdict card
+The Save button and the save-state line moved here from the verdict card
 (block B), so their tests moved with them from tests/test_analysis_verdict.py.
 """
 
@@ -9,6 +11,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import ipyvuetify as v
+import pandas as pd
 import pytest
 from pysepal.i18n import set_locale
 
@@ -18,10 +21,11 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis import review_save
-from gui.tile.analysis.footer import build_footer, footer_widgets
+from gui.tile.analysis.footer import FOOTER_STYLE, build_footer, footer_widgets, prompt_widgets
 from gui.tile.analysis.state import AnalysisState
 from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
+from tests.conftest import _alerts_gdf
 
 
 @pytest.fixture(autouse=True)
@@ -42,11 +46,12 @@ def panel(tmp_path, monkeypatch):
     analysis = AnalysisState()
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
+    id_field = v.TextField(v_model=None)
     controls = analysis_tile.build_controls(
         widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
-        aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
-    return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis)
+        aux_model=model, app_tile_model=model, id_field=id_field)
+    return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis, id_field=id_field)
 
 
 def _texts(root, out=None):
@@ -64,77 +69,106 @@ def _texts(root, out=None):
     return out
 
 
+def _three_alerts(app_state):
+    """Three alerts on screen, the first one current, so a move is a real
+    change of ``actual_alert_id`` and not a clamp."""
+    one = _alerts_gdf()
+    app_state.alerts_gdf.value = pd.concat([one, one, one], ignore_index=True)
+    app_state.actual_alert_id.value = 0
+
+
+def _prompt_shown(footer_root):
+    """Whether the unsaved-work prompt is up, and the button row given way."""
+    prompt, _discard, _stay = prompt_widgets(footer_root)
+    buttons = footer_root.children[1]
+    shown = "display: none" not in prompt.style_
+    # The row by class: Vuetify's ``.d-flex`` is ``!important`` and would
+    # beat an inline ``display: none``.
+    assert shown == (buttons.class_ == "d-none"), "the prompt and the buttons share one place"
+    return shown
+
+
 # ---------------------------------------------------------------------------
-# The footer in the assembled panel
+# The dock in the assembled panel
 # ---------------------------------------------------------------------------
-def test_the_footer_is_the_panels_last_child_and_sticks(panel):
-    controls = panel.controls
-    footer = controls.children[-1]
-    assert "position: sticky" in footer.style_ and "bottom: 0" in footer.style_
-    # The Workflow panel pads its content (16px) and spaces its sections (16px):
-    # a sticky element stays inside its parent, so without this negative
-    # margin the footer stops 32px above the panel's bottom edge once the
-    # content is scrolled to its end (seen in the browser walk).
-    assert "margin-bottom: -32px" in footer.style_
-    sections = analysis_tile.panel_sections(controls)
-    assert footer is sections.footer.root
-    assert footer.children[0] is sections.export.root
-    save_next, save, state_line = footer_widgets(footer)
-    assert save_next.color == "primary"
+def test_the_dock_is_export_then_save_and_next_then_the_state_line(panel):
+    sections = analysis_tile.panel_sections(panel.controls)
+    footer = sections.footer.root
+    # Not one of the scrolling controls: ``build_screen`` docks it under them.
+    assert footer not in panel.controls.children
+    # Fixed by the layout (a flex sibling of the scrolling part), not sticky:
+    # no sticky offset, no negative margin to cancel the panel's padding.
+    assert "sticky" not in footer.style_ and "margin-bottom" not in footer.style_
+    assert footer.style_ == FOOTER_STYLE
+    save, nxt, state_line = footer_widgets(footer)
+    prompt, _discard, _stay = prompt_widgets(footer)
     # The literal English (the fixture pins the locale), not ``t()`` of the
     # same key, which passes on the ``⟦key⟧`` placeholder too.
-    assert label_of(save) == "Save" and label_of(save_next) == "Save & next"
-    # The order inside the footer: Export, the two buttons, the state line.
-    assert save_next in footer.children[1].children and save in footer.children[1].children
-    assert footer.children[2].children == [state_line]
-    # The background is an opaque surface: the panel content scrolls under it.
+    assert label_of(save) == "Save" and label_of(nxt) == "Next"
+    # The order inside the dock: Export, the two buttons, the (hidden)
+    # prompt, the state line.
+    assert footer.children == [sections.export.root, footer.children[1], prompt, state_line]
+    assert footer.children[1].children == [save, nxt]
+    assert "display: none" in prompt.style_
+    # The background is an opaque surface: the panel content scrolls above it.
     assert "background-color" in footer.style_
 
 
-def test_the_panel_order_is_head_verdict_questions_refine_footer(panel):
+def test_the_docks_export_chevron_points_up_while_closed(panel):
+    """The dock's list opens upward, so its closed chevron points there; the
+    sections above keep their right-pointing one."""
+    sections = analysis_tile.panel_sections(panel.controls)
+    export_chevron = sections.export.header.children[0]
+    assert not sections.export.is_open()
+    assert export_chevron.children == ["mdi-chevron-up"]
+    sections.export.header.fire_event("click", None)
+    assert export_chevron.children == ["mdi-chevron-down"]
+    sections.export.header.fire_event("click", None)
+    assert export_chevron.children == ["mdi-chevron-up"]
+    assert sections.refine.header.children[0].children == ["mdi-chevron-right"]
+
+
+def test_the_panel_order_is_head_verdict_questions_refine_earlier(panel):
     from gui.tile.analysis import context, review_panel
 
     sections = analysis_tile.panel_sections(panel.controls)
-    _banner, block_a, block_b, questions, refine, _earlier, footer = panel.controls.children
+    _banner, block_a, block_b, questions, refine, earlier = panel.controls.children
     context.facts_widgets(block_a)              # block A owns the facts...
     assert set(review_panel.verdict_widgets(block_b)) == {
         "Confirmed", "False Positive", "Need revision"}  # ...block B the verdict
-    assert [questions, refine, footer] == [sections.questions.root, sections.refine.root,
-                                           sections.footer.root]
-    kids = panel.controls.children
-    assert kids.index(sections.questions.root) == kids.index(sections.refine.root) - 1
+    assert [questions, refine, earlier] == [sections.questions.root, sections.refine.root,
+                                            sections.earlier.root]
 
 
 def test_the_verdict_card_no_longer_holds_the_save(panel):
-    """The Save buttons and the state line left block B for the footer."""
+    """The Save and Next buttons and the state line left block B for the dock."""
     _banner, _block_a, block_b, *_ = panel.controls.children
     texts = _texts(block_b)
-    assert "Save" not in texts and "Save & next" not in texts
+    assert "Save" not in texts and "Next" not in texts
 
 
-def test_the_export_body_has_no_template_field_and_three_tiles(panel):
+def test_the_export_body_has_no_template_field_and_one_list(panel):
     sections = analysis_tile.panel_sections(panel.controls)
     parts = sections.export_parts
     assert [tile.kind for tile in parts.tiles] == ["zip", "docx", "gif"]
-    assert parts.tiles[2].disabled  # TODO(timelapse) placeholder
-    # The report template now lives in the Questionnaire step (Task 4).
+    # The report template lives in the Questionnaire step (Task 4).
     texts = _texts(sections.export.body_box)
     for key in ("report_template_label", "report_template_hint"):
         assert t(f"analysis_tile.export_labels.{key}") not in texts
-    # Before a save: the dashed build tile (disabled, "save first") and the
-    # GIF tile, shown in every state; the zip and report tiles wait for a build.
+    # Before a save: one list, every row disabled, the build row last and
+    # saying what it waits for.
     from tests.conftest import _build_button, _shown
 
-    zip_tile, docx_tile, gif_tile = parts.tiles
     build = _build_button(parts.body)
-    assert _shown(parts.body, build) and build.disabled
-    assert "Build alert files" in texts and "(save first)" in texts
-    assert _shown(parts.body, gif_tile) and gif_tile.disabled
-    assert not _shown(parts.body, zip_tile) and not _shown(parts.body, docx_tile)
+    assert parts.body.children == [*parts.tiles, build]
+    assert build.disabled and (build.title, build.detail) == ("Build files", "Save this alert first")
+    for tile in parts.tiles:
+        assert _shown(parts.body, tile) and tile.disabled
 
 
-def test_the_footer_registers_both_save_buttons_with_the_runner():
-    """One writer at a time: the runner holds both buttons while it saves."""
+def test_the_footer_registers_its_save_with_the_runner():
+    """One writer at a time: the runner holds the Save while it saves. Next
+    saves nothing, so it is not held."""
     guarded = []
 
     def run_save(button=None, then=None):
@@ -143,7 +177,7 @@ def test_the_footer_registers_both_save_buttons_with_the_runner():
     run_save.guard = lambda *buttons: guarded.extend(buttons)
     app_state, analysis = AppState(), AnalysisState()
     footer = build_footer(run_save, v.Html(tag="div"), app_state, analysis)
-    assert set(map(id, guarded)) == {id(footer.save_next), id(footer.save)}
+    assert list(map(id, guarded)) == [id(footer.save)]
 
 
 # ---------------------------------------------------------------------------
@@ -162,13 +196,13 @@ def test_a_required_refusal_opens_the_questions_section(panel, monkeypatch):
     assert not sections.questions.is_open()
     _refuse_with(monkeypatch, review_save.REQUIRED_MISSING,
                  question="Road access", question_key="road_access")
-    save_next, _save, _ = footer_widgets(sections.footer.root)
+    save, _next, _ = footer_widgets(sections.footer.root)
 
-    save_next.fire_event("click", None)
+    save.fire_event("click", None)
 
     assert sections.questions.is_open()
     assert "display: none" not in sections.questions.body_box.style_
-    assert save_next.loading is False and save_next.disabled is False
+    assert save.loading is False and save.disabled is False
 
 
 def test_any_other_refusal_leaves_the_questions_section_alone(panel, monkeypatch):
@@ -176,7 +210,7 @@ def test_any_other_refusal_leaves_the_questions_section_alone(panel, monkeypatch
     verdict or the drawing has nothing to show there."""
     sections = analysis_tile.panel_sections(panel.controls)
     _refuse_with(monkeypatch, "analysis_tile.questionarie.confirmation_missing")
-    _save_next, save, _ = footer_widgets(sections.footer.root)
+    save, _next, _ = footer_widgets(sections.footer.root)
 
     save.fire_event("click", None)
 
@@ -230,14 +264,16 @@ def test_a_save_that_wrote_does_not_call_the_refusal_hook(tmp_path, monkeypatch)
 
 
 # ---------------------------------------------------------------------------
-# The Save buttons and the save-state line (moved from the verdict card)
+# Save, Next and the save-state line (moved from the verdict card)
 # ---------------------------------------------------------------------------
 def _footer(monkeypatch, tmp_path, saves=None):
-    """The footer alone, on a fake runner (``saves(button, then)``)."""
+    """The footer alone, on a fake runner (``saves(button, then)``), over
+    three alerts with the first one on screen."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
     app_state.new_project_state(
         Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
+    _three_alerts(app_state)
     analysis = AnalysisState()
     calls = saves or (lambda button, then: None)
     footer = build_footer(lambda button=None, then=None: calls(button, then),
@@ -296,29 +332,30 @@ def test_the_state_line_asks_for_the_apply_before_it_asks_for_a_save(tmp_path, m
     assert state_line.children == [t("analysis_tile.verdict.unsaved")]
 
 
-def test_save_and_next_asks_to_advance_and_plain_save_does_not(tmp_path, monkeypatch):
+def test_save_saves_and_stays_and_next_moves_without_saving(tmp_path, monkeypatch):
+    """Two buttons (user, 2026-10-26): *Save* runs the save and never moves;
+    *Next* moves and never saves."""
     calls = []
     footer, _, app_state = _footer(monkeypatch, tmp_path,
                                    saves=lambda b, then: calls.append((b, then)))
-    save_next, save, _ = footer_widgets(footer.root)
+    save, nxt, _ = footer_widgets(footer.root)
 
     save.fire_event("click", None)
     assert calls == [(save, None)]
+    assert app_state.actual_alert_id.value == 0
 
-    save_next.fire_event("click", None)
-    assert calls[1] == (save_next, app_state.go_next)
+    nxt.fire_event("click", None)
+    assert calls == [(save, None)]
+    assert app_state.actual_alert_id.value == 1
 
 
-def test_a_refused_save_and_next_stays_on_the_alert(tmp_path, monkeypatch):
-    """Review Focus: pressing **Save & next** on an alert with no verdict must
-    refuse, leave the reviewer where they are and give the button back.
+def test_a_refused_save_stays_on_the_alert_and_gives_the_button_back(tmp_path, monkeypatch):
+    """Review Focus: pressing **Save** on an alert with no verdict must
+    refuse, leave the reviewer where they are and give the button back; a
+    save that writes stays too, and Next then moves without asking.
 
-    The real ``make_save_runner`` runs, inline, against the real alert store —
-    only ``then``-after-a-write keeps the queue from moving, so it is pinned
-    here at the footer's own level and not merely trusted of the runner.
+    The real ``make_save_runner`` runs, inline, against the real alert store.
     """
-    import pandas as pd
-
     from tests.test_feedback_notifications import _save_harness
 
     # The harness's own recorder, not a second one: ``_record_feedback`` also
@@ -332,18 +369,164 @@ def test_a_refused_save_and_next_stays_on_the_alert(tmp_path, monkeypatch):
 
     run_save = export_mod.make_save_runner(widgets, app_state, analysis, model)
     footer = build_footer(run_save, v.Html(tag="div"), app_state, analysis)
-    save_next, _, _ = footer_widgets(footer.root)
+    save, nxt, _ = footer_widgets(footer.root)
 
-    save_next.fire_event("click", None)  # no verdict chosen
+    save.fire_event("click", None)  # no verdict chosen
     assert app_state.actual_alert_id.value == 0
     assert app_state.alerts_gdf.value["status"].tolist() == ["Not reviewed"] * 2
-    assert save_next.loading is False and save_next.disabled is False
+    assert save.loading is False and save.disabled is False
     assert feedback.toasts() == [
         ("warning", t("analysis_tile.questionarie.confirmation_missing"))
     ]
 
     analysis.verdict.set("Confirmed")
-    save_next.fire_event("click", None)
-    assert app_state.actual_alert_id.value == 1
+    analysis.dirty.set(True)
+    save.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 0  # Save never moves
     assert app_state.alerts_gdf.value["status"].tolist() == ["Confirmed", "Not reviewed"]
-    assert save_next.loading is False and save_next.disabled is False
+    assert save.loading is False and save.disabled is False
+    assert analysis.dirty.value is False
+
+    nxt.fire_event("click", None)  # nothing unsaved: no question
+    assert not _prompt_shown(footer.root)
+    assert app_state.actual_alert_id.value == 1
+
+
+# ---------------------------------------------------------------------------
+# Next over unsaved work: Discard / Stay
+# ---------------------------------------------------------------------------
+def test_next_over_unsaved_work_asks_and_discard_moves_on(tmp_path, monkeypatch):
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    _save, nxt, _ = footer_widgets(footer.root)
+    _prompt, discard, _stay = prompt_widgets(footer.root)
+    assert not _prompt_shown(footer.root)
+
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+
+    assert _prompt_shown(footer.root)
+    assert app_state.actual_alert_id.value == 0  # asked, not moved
+
+    discard.fire_event("click", None)
+
+    assert app_state.actual_alert_id.value == 1
+    assert not _prompt_shown(footer.root)
+
+
+def test_stay_keeps_the_alert_and_its_work(tmp_path, monkeypatch):
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    _save, nxt, _ = footer_widgets(footer.root)
+    _prompt, discard, stay = prompt_widgets(footer.root)
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+
+    stay.fire_event("click", None)
+
+    assert not _prompt_shown(footer.root)
+    assert app_state.actual_alert_id.value == 0
+    assert analysis.dirty.value is True
+    # The answer forgot the move it held: a stray Discard moves nothing.
+    discard.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 0
+
+
+def test_the_prompt_words_follow_the_catalogue(tmp_path, monkeypatch):
+    footer, _, _ = _footer(monkeypatch, tmp_path)
+    prompt, discard, stay = prompt_widgets(footer.root)
+    texts = _texts(prompt)
+    assert "This alert has unsaved changes" in texts
+    assert "Discard drops them and moves on. Stay keeps you on this alert." in texts
+    assert (label_of(discard), label_of(stay)) == ("Discard", "Stay")
+
+
+def test_an_alert_change_or_a_save_answers_the_prompt(tmp_path, monkeypatch):
+    """The question is about one alert's work: another alert (however it
+    came) or a save that leaves nothing unsaved hides it, and drops the move
+    it held."""
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    _save, nxt, _ = footer_widgets(footer.root)
+    _prompt, discard, _stay = prompt_widgets(footer.root)
+
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    assert _prompt_shown(footer.root)
+    analysis.reset_alert()  # e.g. a pick on the Overview map
+    assert not _prompt_shown(footer.root)
+
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    assert _prompt_shown(footer.root)
+    analysis.dirty.set(False)  # the save landed
+    assert not _prompt_shown(footer.root)
+    discard.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 0
+
+
+def test_the_filled_button_follows_the_saved_review(tmp_path, monkeypatch):
+    """Save is filled while there is something to save -- unsaved work, or no
+    saved review of the alert -- and Next once the review is saved, this
+    session or before (its row has a status)."""
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    save, nxt, _ = footer_widgets(footer.root)
+
+    def filled():
+        assert save.outlined != nxt.outlined, "exactly one of the two is filled"
+        return "save" if not save.outlined else "next"
+
+    assert filled() == "save"  # nothing saved yet
+    analysis.last_save_time.set(datetime(2026, 10, 3, 14, 32).timestamp())
+    assert filled() == "next"
+    analysis.dirty.set(True)
+    assert filled() == "save"
+    analysis.dirty.set(False)
+    assert filled() == "next"
+    analysis.reset_alert()  # another alert, never saved
+    assert filled() == "save"
+
+    gdf = app_state.alerts_gdf.value.copy()
+    gdf["status"] = ["Not reviewed", "Confirmed", "Not reviewed"]
+    app_state.alerts_gdf.value = gdf
+    assert filled() == "save"  # this row is "Not reviewed"
+    app_state.actual_alert_id.value = 1  # a row saved in an earlier session
+    assert filled() == "next"
+
+
+# ---------------------------------------------------------------------------
+# The top bar's alert changes ask the same question
+# ---------------------------------------------------------------------------
+def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
+    from gui.tile.analysis import context
+
+    _three_alerts(panel.app_state)
+    footer = analysis_tile.panel_sections(panel.controls).footer.root
+    _prompt, discard, stay = prompt_widgets(footer)
+    _banner, card, *_ = panel.controls.children
+    prev, nxt, _jump, _menu, go, unreviewed = context.nav_widgets(card)
+    panel.analysis.dirty.set(True)
+
+    def asks(click):
+        click()
+        shown = _prompt_shown(footer)
+        moved = panel.app_state.actual_alert_id.value
+        stay.fire_event("click", None)
+        return shown, moved
+
+    panel.app_state.actual_alert_id.value = 1
+    panel.analysis.dirty.set(True)
+    assert asks(lambda: prev.fire_event("click", None)) == (True, 1)
+    assert asks(lambda: nxt.fire_event("click", None)) == (True, 1)
+    panel.id_field.v_model = "3"
+    assert asks(lambda: go.fire_event("click", None)) == (True, 1)
+    assert asks(lambda: unreviewed.fire_event("click", None)) == (True, 1)
+
+    # Discard runs the move the prompt held: here, Go to alert 3.
+    panel.id_field.v_model = "3"
+    go.fire_event("click", None)
+    discard.fire_event("click", None)
+    assert panel.app_state.actual_alert_id.value == 2
+
+    # Nothing unsaved: the top bar moves at once.
+    panel.analysis.dirty.set(False)
+    prev.fire_event("click", None)
+    assert not _prompt_shown(footer)
+    assert panel.app_state.actual_alert_id.value == 1

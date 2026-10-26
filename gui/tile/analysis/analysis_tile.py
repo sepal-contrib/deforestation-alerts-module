@@ -12,8 +12,8 @@ It establishes:
     ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
     plus one immediate call so a pre-selected alert renders on first build,
   * the right-panel review console (``build_controls``: the head, block A,
-    block B, the Questions and Refine sections and the sticky footer that
-    holds the Export section and the Save buttons),
+    block B, the Questions and Refine sections and the dock fixed under
+    them that holds the Export list and Save / Next),
   * and the sub-component builders (imagery / review / edit / export).
 
 WHY A RAW BUILDER (not a ``@solara.component``): the analysis screen is built
@@ -503,17 +503,18 @@ def _open_questions_for(questions):
 
 
 def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field, *, labels=None) -> v.Html:
-    """The right panel: the head, the two blocks, two sections and the footer.
+    """The right panel: the head, the two blocks, two sections and the dock.
 
-    In order (spec §3-§6, D4, D6): the help text with its info popup, the
-    alert-set selector, the set-status banner, **block A** (the queue counter,
-    its progress, the navigation row and the facts grid with its status chip),
-    **block B** (the verdict buttons), the collapsible *Questions* (one
-    control per project question, the loss driver among them) and *Refine
-    polygon* sections, then the **sticky footer**: the collapsible *Export
-    this alert* section, *Save & next* / *Save* and the save-state line. The
-    six always-open cards of the old panel are gone with it, as is the
-    separate navigation card (block A absorbed it).
+    In order (spec §3-§6, D4): the set-status banner, **block A** (the facts
+    grid with its status chip; the queue and the navigation went to the top
+    bar), **block B** (the verdict buttons), the collapsible *Questions* (one
+    control per project question, the loss driver among them), *Refine
+    polygon* and *Earlier alerts* sections. These are ``controls``' children,
+    the part that scrolls. The **dock** (``footer.build_footer``: the
+    collapsible *Export this alert* list, *Save* / *Next* and the save-state
+    line) is NOT one of them: ``build_screen`` puts it under the scrolling
+    part, fixed to the panel's bottom edge (user, 2026-10-26, option B), and
+    finds it in ``panel_sections(controls).footer``.
 
     Built once per session with the rest of the layout, so every subscription
     the sub-builders register is registered once; the section bodies are
@@ -538,10 +539,12 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # section: a save refused for a required answer opens it.
     questions = build_questions_section(app_state, analysis, labels=labels)
 
-    # Built before the footer so the footer's two Save buttons drive the
-    # export section's ONE save runner: a save from either runs its post-save
-    # step, which is what enables its build tile and moves its badge on.
-    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"), divided=False)
+    # Built before the footer so the footer's Save drives the export
+    # section's ONE save runner: a save runs its post-save step, which is
+    # what offers its build and moves its badge on. In the dock, its list
+    # opens upward: the closed chevron points there.
+    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"), divided=False,
+                            closed_icon="mdi-chevron-up")
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
@@ -559,7 +562,9 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Bound before block A is built, which subscribes to the bound filter
     # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
     app_state.bind_alert_filter(analysis.alert_filter)
-    context = build_context(app_state, id_field, labels=labels, analysis=analysis)
+    # The top bar's alert changes ask first over unsaved work, as the dock's
+    # Next does: one prompt, in the dock.
+    context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
     controls = v.Html(
@@ -572,7 +577,6 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             questions.root,
             refine.root,
             earlier.root,
-            footer.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
@@ -645,9 +649,26 @@ SCREEN_CSS = (
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
     " padding: 8px; }\n"
-    # The review console, at the workflow panel's width (480 px) it was laid out at.
-    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; overflow-y: auto; padding: 8px 16px 0 16px;"
+    # The review console, at the workflow panel's width (480 px) it was laid
+    # out at: the part that scrolls over the dock (``footer``), which stays on
+    # the bottom edge whatever the height of the sections above.
+    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; display: flex; flex-direction: column;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 16px 16px 16px; }\n"
+    # The Export list (``export.build_export``): the file rows and the build
+    # row as ONE bordered list with hairlines between the rows, not a tile
+    # each. Scoped to the screen: Overview's tiles stay tiles.
+    ".defo-analysis-screen .defo-file-list { border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px;"
+    " overflow: hidden; margin-bottom: 8px; }\n"
+    ".defo-analysis-screen .defo-file-list > .defo-file-tile { border: 0 !important; border-radius: 0 !important;"
+    " margin: 0 !important; }\n"
+    ".defo-analysis-screen .defo-file-list > .defo-file-tile + .defo-file-tile"
+    " { border-top: 1px solid rgba(128, 128, 128, 0.2) !important; }\n"
+    # A file row before its build: the badge greys with the text.
+    ".defo-analysis-screen .defo-file-list .v-btn--disabled .defo-file-badge { filter: grayscale(1); opacity: 0.5; }\n"
+    # The build row is an action: tinted, until it is disabled.
+    ".defo-analysis-screen .defo-build-tile:not(.v-btn--disabled) { background-color: rgba(91, 181, 42, 0.07); }\n"
+    ".defo-analysis-screen .defo-build-tile.v-btn--disabled .primary--text { color: inherit !important; }\n"
     # One header cell per view, in a row over the views: equal halves, as the
     # views split the width (``.mv-layout-row``). min-width:0 keeps a long
     # title from widening its half.
@@ -805,7 +826,11 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
     panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
     strip = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
     left = v.Html(tag="div", class_="defo-analysis-left", children=[heads, panes_slot, strip])
-    right = v.Html(tag="div", class_="defo-analysis-right", children=[controls])
+    # The panel: the part that scrolls, then the dock, fixed under it.
+    footer = getattr(panel, "footer", None)
+    scroll = v.Html(tag="div", class_="defo-analysis-scroll", children=[controls])
+    right = v.Html(tag="div", class_="defo-analysis-right",
+                   children=[scroll, *([footer.root] if footer is not None else [])])
     body = v.Html(tag="div", class_="defo-analysis-body", children=[left, right])
     screen = v.Html(
         tag="div",
@@ -977,8 +1002,8 @@ def build_analysis_layout(
     analysis.image_area.subscribe(_on_area)
 
     # The review console -- the head, block A, block B, the Questions and
-    # Refine sections and the sticky footer (``build_controls``) -- in the
-    # screen's right column.
+    # Refine sections and the dock (``build_controls``) -- in the screen's
+    # right column.
     controls = build_controls(
         widgets=widgets,
         app_state=app_state,

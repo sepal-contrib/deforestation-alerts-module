@@ -157,7 +157,7 @@
   "analysis_tile": {
     "description": "Review each alert against its before and after imagery: give a verdict, answer the questions, then save and move on.",
     "info_header": "About analysis",
-    "info_md": "The top bar holds the alert filter, the set selector, the review progress and **Previous** / **Next**; the counter between those two opens a menu to jump to an alert number or to the next unreviewed alert. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, then answer the project's questions under **Questions** (the loss driver by default); **Save & next** writes the review into the set's alert store and opens the following alert — **Save** keeps you on this one. **Refine polygon** opens the drawing tools and the two auto-detection models. Once the alert is saved, **Export this alert** offers **Build alert files**: its GeoPackage, its before/after images and a Word report from the project's report template, chosen in the Questionnaire step. For a true alert, **Timelapse** animates its before and after images with the two images on either side, and the zip of the alert files includes it.",
+    "info_md": "The top bar holds the alert filter, the set selector, the review progress and **Previous** / **Next**; the counter between those two opens a menu to jump to an alert number or to the next unreviewed alert. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, then answer the project's questions under **Questions** (the loss driver by default); **Save** writes the review into the set's alert store and **Next** opens the following alert; with unsaved changes, Next asks whether to **Discard** them or **Stay**. **Refine polygon** opens the drawing tools and the two auto-detection models. **Export this alert**, at the bottom with Save and Next, lists the alert's files; once the alert is saved, **Build files** makes them: its GeoPackage, its before/after images, a Word report from the project's report template (chosen in the Questionnaire step) and, for a true alert, a **Timelapse** that animates its before and after images with the two images on either side, also included in the zip.",
     "img_selection": {
       "prev_image_title": "Before image",
       "post_image_title": "After image"
@@ -211,9 +211,12 @@
       "true": "True alert",
       "false": "False positive",
       "revision": "Needs review",
-      "save_next": "Save & next",
       "unsaved": "Unsaved changes on this alert",
-      "saved_at": "Saved {time}"
+      "saved_at": "Saved {time}",
+      "unsaved_title": "This alert has unsaved changes",
+      "unsaved_hint": "Discard drops them and moves on. Stay keeps you on this alert.",
+      "discard": "Discard",
+      "stay": "Stay"
     },
     "questions": {
       "required_missing": "Answer “{question}” before saving.",
@@ -275,8 +278,8 @@
     },
     "export_labels": {
       "save_btn": "Save",
-      "build_tile": "Build alert files",
-      "save_first": "save first",
+      "build_tile": "Build files",
+      "save_first": "Save this alert first",
       "rebuild_tile": "Rebuild files",
       "tile_zip": "Alert data",
       "tile_zip_detail": "GeoPackage + before/after GeoTIFF",
@@ -284,7 +287,6 @@
       "tile_docx_detail": "Word, from the project's template",
       "tile_gif": "Timelapse",
       "tile_gif_detail": "Animated GIF",
-      "tile_gif_make": "Animated GIF · click to create it",
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
       "save_done": "Alert attributes saved.",
@@ -309,11 +311,13 @@
       "gif_same_image": "The before and after images are the same image, so the GIF would show no change. Pick two different images on the timeline.",
       "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made.",
       "gif_hint": "Save as a true alert, with the images on screen, to create it",
-      "gif_task_title": "Exporting the alert GIF",
-      "gif_step": "Rendering {count} images…",
-      "gif_done": "Alert GIF ready.",
-      "gif_stale": "The GIF finished after you moved to another alert or changed its images, so it was not offered here.",
-      "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF."
+      "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF.",
+      "save_changes_first": "Save your changes first",
+      "build_detail": "Makes the files above from the saved review",
+      "rebuild_detail": "Makes them again from the saved review",
+      "building": "Building files…",
+      "building_detail": "They unlock above when they are ready",
+      "tile_gif_true_only": "True alerts only"
     },
     "earlier": {
       "show": "Show on the maps",

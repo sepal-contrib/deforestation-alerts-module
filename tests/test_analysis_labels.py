@@ -8,6 +8,7 @@ from pysepal.i18n import set_locale
 
 from gui.i18n import app_available_locales, t
 from gui.tile.analysis.analysis_tile import panel_sections
+from gui.tile.analysis.footer import prompt_widgets
 from gui.tile.analysis.labels import Labels
 from gui.widget.buttons import label_of
 from tests._i18n_sweep import build_layout, english_leftovers, leftovers_of
@@ -249,14 +250,15 @@ def test_a_save_in_flight_keeps_its_buttons_held_across_a_switch(tmp_path, monke
     """Review Focus 5."""
     built = build_layout(tmp_path, monkeypatch)
     footer = panel_sections(built.layout.controls).footer
-    footer.save.disabled = footer.save_next.disabled = True
+    footer.save.disabled = True
     footer.save.loading = True
-    icon = footer.save_next.children[-1]
+    icons = (footer.save.children[0], footer.next.children[-1])
     _switch(built)
     assert footer.save.disabled is True and footer.save.loading is True
-    assert footer.save_next.disabled is True
-    assert footer.save_next.children[-1] is icon
-    assert footer.save_next.children[0] == t("analysis_tile.verdict.save_next")  # read in French
+    assert footer.save.children[0] is icons[0] and footer.next.children[-1] is icons[1]
+    # read in French
+    assert label_of(footer.save) == t("analysis_tile.export_labels.save_btn") != "Save"
+    assert label_of(footer.next) == t("analysis_tile.nav.next") != "Next"
 
 
 def test_refine_polygon_follows_the_language(tmp_path, monkeypatch):
@@ -372,11 +374,14 @@ def test_switching_back_to_english_leaves_no_french(tmp_path, monkeypatch):
     footer, refine = panel.footer, panel.refine
 
     def _shown():
-        return (label_of(footer.save_next), label_of(footer.save), refine.title_span.children[0])
+        prompt, discard, stay = prompt_widgets(footer.root)
+        return (label_of(footer.next), label_of(footer.save), label_of(discard), label_of(stay),
+                prompt.children[0].children[1].children[0], refine.title_span.children[0])
 
     def _expected():
-        return (t("analysis_tile.verdict.save_next"), t("analysis_tile.export_labels.save_btn"),
-                t("analysis_tile.sections.refine"))
+        return (t("analysis_tile.nav.next"), t("analysis_tile.export_labels.save_btn"),
+                t("analysis_tile.verdict.discard"), t("analysis_tile.verdict.stay"),
+                t("analysis_tile.verdict.unsaved_title"), t("analysis_tile.sections.refine"))
 
     english = _expected()
     set_locale("fr")

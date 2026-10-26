@@ -1,6 +1,6 @@
 """Navigation over the Analysis filter (spec §8.1, §8.3, §8.4): the filter
 lives on ``AnalysisState`` and is bound into ``AppState``; Previous / Next,
-Save & next, the counter, the jump menu, Next unreviewed, the start position
+the dock's Next, the counter, the jump menu, Next unreviewed, the start position
 and Overview's Go all follow it. A real ``AppState`` and ``AnalysisState``,
 stand-in widgets, as tests/test_analysis_context.py drives block A."""
 
@@ -15,7 +15,7 @@ from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter
 from gui.scripts.set_context import SetContext
 from gui.tile.analysis import analysis_tile, context
-from gui.tile.analysis.footer import build_footer, footer_widgets
+from gui.tile.analysis.footer import build_footer, footer_widgets, prompt_widgets
 from gui.tile.analysis.state import AnalysisState, apply_start_filter
 from tests.test_analysis_context import _alerts, _state
 from tests.test_set_store import _project_with_set, _session
@@ -362,15 +362,21 @@ def test_next_unreviewed_keeps_to_the_matches(tmp_path, monkeypatch):
     assert unreviewed.disabled, "Ana has nothing else left to review"
 
 
-# ---- the footer: Save & next -----------------------------------------------------------
+# ---- the dock: Next ---------------------------------------------------------------------
 
-def test_save_and_next_advances_to_the_next_match(tmp_path, monkeypatch):
+def test_the_docks_next_advances_to_the_next_match(tmp_path, monkeypatch):
     s, analysis = _bound(tmp_path, monkeypatch)
-    footer = build_footer(lambda button=None, then=None: then() if then else None,
-                          v.Html(tag="div"), s, analysis)
-    save_next, _, _ = footer_widgets(footer.root)
+    footer = build_footer(lambda button=None, then=None: None, v.Html(tag="div"), s, analysis)
+    _save, nxt, _ = footer_widgets(footer.root)
     s.alerts_gdf.set(_six())
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
-    save_next.fire_event("click", None)
+    nxt.fire_event("click", None)
     assert s.actual_alert_id.value == 2
+    # Over unsaved work it asks first; Discard takes the same filtered step.
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    assert s.actual_alert_id.value == 2
+    _prompt, discard, _stay = prompt_widgets(footer.root)
+    discard.fire_event("click", None)
+    assert s.actual_alert_id.value == 4

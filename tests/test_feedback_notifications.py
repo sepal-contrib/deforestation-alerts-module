@@ -158,12 +158,16 @@ def _set_context_fake():
 
 def _button(root, msg):
     """Find the button in ``root`` whose label is ``msg``: an ``sw.Btn`` by
-    its ``.msg``, or a plain ``v.Btn`` (the export section's build tile) by a
-    text child of its own."""
+    its ``.msg``, the export list's build row (``file_tile.BuildTile``) by
+    its title, or a plain ``v.Btn`` by a text child of its own."""
     import ipyvuetify as v
+
+    from gui.tile.analysis.file_tile import BuildTile
 
     for widget in _widgets(root):
         if getattr(widget, "msg", None) == msg:
+            return widget
+        if isinstance(widget, BuildTile) and widget.title == msg:
             return widget
         if isinstance(widget, v.Btn) and msg in (getattr(widget, "children", None) or []):
             return widget
@@ -585,17 +589,14 @@ def _one_row_gdf():
     return gdf
 
 
-def _download_toolbar(card):
-    """The container of the S1 file tiles (built hidden, shown on success)."""
+def _file_tiles(card):
+    """The zip and the report rows of the export list: disabled until a build
+    links their files."""
     from gui.tile.analysis.file_tile import FileTile
 
-    for widget in _widgets(card):
-        if hasattr(widget, "viz") and any(
-            isinstance(child, FileTile)
-            for child in (getattr(widget, "children", None) or [])
-        ):
-            return widget
-    raise AssertionError("no downloads toolbar in the export card")
+    tiles = [w for w in _widgets(card) if isinstance(w, FileTile) and w.kind in ("zip", "docx")]
+    assert [tile.kind for tile in tiles] == ["zip", "docx"], "no file rows in the export card"
+    return tiles
 
 
 @pytest.mark.parametrize(
@@ -629,7 +630,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
         app_state.alerts_gdf.value = _one_row_gdf()
         app_state.actual_alert_id.value = 0
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -642,8 +643,10 @@ def test_export_download_refusal_fails_the_task_and_says_why(
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", expected)]
     # nothing was revealed, and the button is released
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_without_images_is_refused_before_any_file_is_written(
@@ -674,7 +677,7 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     app_state.alerts_gdf.value = _one_row_gdf()
     app_state.actual_alert_id.value = 0
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     download_btn.fire_event("click", None)
     feedback.join()
@@ -686,8 +689,10 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", expected)]
     assert data_files(data_root) == []  # no alert_0.gpkg left behind
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_success_reveals_the_files(export_card, monkeypatch, data_root):
@@ -703,7 +708,7 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
         },
     )
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -718,10 +723,11 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
     assert feedback.toasts() == [
         ("success", t("analysis_tile.export_labels.download_done"))
     ]
-    assert toolbar.viz is True
-    assert download_btn.loading is False and download_btn.disabled is False
-    # The two file tiles link this build's zip and report.
-    zip_tile, docx_tile = toolbar.children
+    assert not zip_tile.disabled and not docx_tile.disabled
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
+    # The two file rows link this build's zip and report.
     assert zip_tile.disabled is False and zip_tile.attributes["download"] == "alert_0.zip"
     assert docx_tile.disabled is False and docx_tile.attributes["download"] == "alert_0.docx"
     from gui.tile.analysis.file_tile import FileTile
@@ -741,7 +747,7 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
 
     monkeypatch.setattr(export, "_download_data", _boom)
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -749,8 +755,10 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
     feedback.join()
 
     feedback.assert_one_error_after_fail(equals="disk full")
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
@@ -775,7 +783,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
 
     monkeypatch.setattr(local_files, "home_relative", _reject)
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -785,8 +793,10 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     feedback.assert_one_error_after_fail(
         equals="not under the SEPAL home: /elsewhere/alert_0.zip"
     )
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
@@ -1991,7 +2001,7 @@ def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
     assert feedback.task().status == TaskStatus.FAILED
     assert feedback.task().error_message == reason
     # The spinner stopped, but the button stays as the alert change left it.
-    assert build_btn.loading is False and build_btn.disabled is True
+    assert build_btn.busy is False and build_btn.disabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -2068,8 +2078,8 @@ def _save_harness(tmp_path, monkeypatch):
 
 
 def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeypatch):
-    """Save & next passes ``go_next`` as ``then``: a refused save must leave
-    the reviewer on the alert that was not saved.
+    """A caller that passes ``go_next`` as ``then`` (the old Save & next): a
+    refused save must leave the reviewer on the alert that was not saved.
 
     ``moved`` alone cannot tell a save that WROTE from one that only ran:
     ``_save_alerts_to_gdf`` returns early on an empty ``_save_target`` while
@@ -2144,9 +2154,10 @@ def test_an_edit_made_while_the_save_runs_stays_unsaved_and_does_not_advance(
 
 
 def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
-    """One writer at a time, and both save buttons say so.
+    """One writer at a time, and every button registered with the runner says so.
 
-    The footer has two buttons on the same runner, and only the clicked
+    The footer used to have two save buttons on the same runner (it has one
+    since 2026-10-26; ``guard`` still takes any number), and only the clicked
     one used to be disabled: the other could start a second writer over the
     same store and the same row while the first was still in its admin
     lookups, with the later writer's row values winning by luck of timing.
@@ -2178,7 +2189,7 @@ def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
 
 
 def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, monkeypatch):
-    """A stale *Save & next* must not move the reviewer on from where they are.
+    """A stale save with a ``then`` must not move the reviewer on from where they are.
 
     The save is slow (GEE admin lookups plus the store write), so the reviewer
     can navigate by hand while it runs. ``then`` is ``app_state.go_next``: left

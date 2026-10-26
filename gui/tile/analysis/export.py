@@ -3,9 +3,9 @@
 Architecture layer: view (raw-widget builder, no ``@solara.component``). Ports the
 OLD ``AnalysisTile`` export card (``card06`` +
 ``label35``/``toolBarSaveExport``/``toolBarDownloads``) as the **body of the
-collapsible Export section** (spec §5), which sits in the panel's sticky
-footer (spec D6, ``footer``): the section owns the title, and the footer owns
-the Save, so ``build_export`` builds neither.
+collapsible Export section** (spec §5), which sits in the panel's dock
+(``footer``, fixed to its bottom edge): the section owns the title, and the
+footer owns the Save, so ``build_export`` builds neither.
 
 * The OLD **Save** button (``save_btn``) ran ``save_attributes_to_gdf`` —
   writing the user's verdict / answers / image-info / GEE-admin attributes
@@ -13,33 +13,23 @@ the Save, so ``build_export`` builds neither.
   What a Save writes, and the store transaction, live in ``review_save``;
   the runner that drives it is ``make_save_runner`` (module level) and the button
   itself in the footer, which drives that runner; the runner's ``then``
-  is what moves to the next alert, and only a save that wrote calls it.
+  runs only after a save that wrote.
   ``build_export`` returns the runner so there is ONE save for the panel.
 * The section's **summary badge** (``set_badge``) says what the section can
-  offer without opening it: nothing until a save of this alert lands, then a
+  offer without opening it: nothing until a saved review is on screen, then a
   build, then the count of files that build left ready. An alert change takes
-  it back to the first state, because the build button and the two download
-  links belong to the alert they were made for.
-* The dashed **Build alert files** tile (``download_alert_data_btn``, in
-  ``toolbar_build``) runs the OLD ``download_data`` (``alert_files``) — building the single-alert
-  gpkg, the before/after-image GeoTIFF, the zip, and the Word report. Until a
-  save of this alert lands it is disabled and carries a muted "(save first)"
-  hint (``save_first``).
-* The S1 file tiles (``file_tile.FileTile``: ``files_dwn_btn`` / ``report_dwn_btn``)
-  live in a ``toolbar_downloads`` that is hidden until a build completes, then
-  get the zip / report (``set_file``) and are revealed. In that READY state the
-  build tile is hidden and a small right-aligned **Rebuild** text button
-  (``rebuild_btn``, in ``toolbar_rebuild``) runs the same build; anything that
-  invalidates the files (a new save, a template change) brings the build tile
-  back.
-* The **Timelapse** tile (``gif_dwn_btn``, a ``FileTile``) is always shown and
-  is its own export button (spec D9). Until a GIF of the alert exists it is a
-  plain button (``set_action``) that animates a true alert's before/after
-  pair with its neighbours: clickable only while the alert's row is Confirmed
-  on the saved pair, its detail saying why not otherwise, rendered on a
-  worker. Once the GIF exists the tile is its download link. A Confirmed
-  alert's zip build makes the GIF too and puts it in the zip; the badge
-  counts it among the files ready.
+  it back to the first state, because the build and the download links
+  belong to the alert they were made for.
+* The body is **one list** (user, 2026-10-26): the three file rows
+  (``file_tile.FileTile``: zip, docx, GIF), disabled until a build gives them
+  a file, and the build as the list's last row (``file_tile.BuildTile``):
+  *Build files*, then *Rebuild files* once the files exist. It runs the OLD
+  ``download_data`` (``alert_files``) — the single-alert gpkg, the
+  before/after-image GeoTIFF, the zip, the Word report and, for a true alert
+  on its saved pair, the Timelapse GIF (spec D9), which is also in the zip.
+  The build waits for a saved review on screen with nothing unsaved over it;
+  anything that invalidates the files (a new save, another pick, a template
+  change) clears the links and offers the build again.
 
 WHY A RAW WIDGET (not a Solara component + ``solara.display``): MapApp renders the
 Analysis dialog with ``v-if``, so it DESTROYS the dialog DOM on close and REBUILDS it
@@ -127,11 +117,9 @@ file tiles get URLs relative to the served root (``local_files``).
 
 import logging
 from datetime import datetime
-from pathlib import Path
 from types import SimpleNamespace
 
 import ipyvuetify as v
-from pysepal import sepalwidgets as sw
 
 from deforestation_alerts.project.review_status import CONFIRMED
 from gui.i18n import t, tn
@@ -141,13 +129,10 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis import alert_files, review_save
 from gui.tile.analysis import gif as gif_mod
-from gui.tile.analysis.file_tile import FileTile
+from gui.tile.analysis.file_tile import BuildTile, FileTile
 from gui.tile.analysis.labels import Labels
-from gui.tile.analysis.paths import alert_gif_name
 from gui.tile.analysis.review_save import SaveRefused
 from gui.tile.analysis.state import capture_alert
-from gui.widget.buttons import btn, set_label
-from gui.widget.text_style import MUTED
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -168,12 +153,13 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
 
 
 def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None):
-    """The review save, as a callable the footer's two buttons drive.
+    """The review save, as a callable the footer's *Save* drives.
 
     ``run_save(button, then=None)``: spin ``button`` (optional), capture the
     alert on the UI thread, write the store on a worker, and run ``then`` only
     after a save that actually wrote **and only while the alert that was saved
-    is still the one on screen** — Save & next passes ``go_next``, so a refusal
+    is still the one on screen** — a ``then`` of ``go_next`` (the old *Save &
+    next*) shows why: a refusal
     must leave the reviewer on the alert it refused (with the message that
     explains it), and a save that lands after the reviewer navigated by hand
     must not advance from where they went. ``then`` runs on the worker thread,
@@ -189,7 +175,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
     and changes nothing else -- the refusal has already been reported.
 
     One save runs at a time, whichever button starts it: ``run_save.guard``
-    registers the buttons that share the runner (the footer's two), so
+    registers the buttons that share the runner (the footer's *Save*), so
     they are all held for the duration and none of them can start a second
     writer over the same store and row.
     """
@@ -306,16 +292,16 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
             # shows no time at all), so a save that lands after the reviewer
             # navigated must not stamp the alert they went to as saved.
             analysis.apply_if_current(token, lambda: outpaced.append(not _mark_saved(alert)))
-            # Said, not left to the state line alone: after *Save & next* the
-            # reviewer is watching for the next alert, and the one thing on
-            # screen would be a save they pressed that did not advance.
+            # Said, not left to the state line alone: the reviewer pressed Save
+            # and is about to move on, and the one thing on screen would be a
+            # save they pressed that did not take everything.
             if any(outpaced):
                 reason = t("analysis_tile.export_labels.save_outpaced")
                 notifier.warning(reason)
                 logger.info("Analysis: %s", reason)
-            # Only now — Save & next must not move off an alert whose review
-            # was refused. And only for the alert this save was for: ``then``
-            # is ``go_next``, so a save that lands after the reviewer navigated
+            # Only now — a ``then`` that moves on must not move off an alert
+            # whose review was refused. And only for the alert this save was
+            # for: were ``then`` ``go_next``, a save that lands after the reviewer navigated
             # by hand would advance from THERE and leave them one alert further
             # than where they went, with nothing to say why. ``is_current``,
             # not ``apply_if_current``: ``go_next`` republishes
@@ -366,14 +352,15 @@ def build_export(
 ):
     """Build and return the Export section's body and the review save runner.
 
-    ``SimpleNamespace(body, run_save, tiles)``: ``body`` is what the
-    collapsible Export section wraps (the dashed build tile and the hidden
-    file tiles, spec D6) — the section owns the title, and the footer owns
+    ``SimpleNamespace(body, run_save, tiles, build_tile)``: ``body`` is what
+    the collapsible Export section wraps -- ONE list (user, 2026-10-26): the
+    three file rows and, as its last row, the build (``build_tile``, a
+    ``file_tile.BuildTile``). The section owns the title, and the footer owns
     the Save, so neither is built here. The report template is picked in the
-    Questionnaire step now; a change of it still invalidates the files built
-    here. ``run_save`` is the one save runner, handed to the footer so both
-    save paths run the same post-save step and light up the build tile below.
-    ``tiles`` are the three ``FileTile`` (zip, docx and the GIF placeholder).
+    Questionnaire step; a change of it still invalidates the files built
+    here. ``run_save`` is the one save runner, handed to the footer so every
+    save runs the same post-save step and lights up the build row.
+    ``tiles`` are the three ``FileTile`` (zip, docx and the GIF).
 
     ``on_refused`` goes to ``make_save_runner``: what the panel does with a
     refused save once its warning is out.
@@ -386,80 +373,69 @@ def build_export(
     folder.
 
     ``labels`` (a ``Labels``) gets the section's label hook: a language switch
-    rewrites the build tile, *Rebuild* and the three file tiles' words, and the
-    GIF tile's action text (a GIF still rendering included).
+    rewrites the three file rows and the build row.
     """
     labels = labels if labels is not None else Labels()
 
     # ------------------------------------------------------------------
-    # The S1 layout (spec D6, the mockup's three states), created once so the
-    # imperative .show()/.hide()/.disabled/.set_file() calls port unchanged:
+    # The list (user, 2026-10-26), created once so the imperative
+    # .disabled / .set_file() calls stay put. Its states:
     #
-    # * BEFORE A SAVE -- the dashed build tile, disabled, "(save first)";
-    # * SAVED -- the build tile, enabled, without the hint;
-    # * READY -- the build tile gives way to the zip and report tiles and a
-    #   small *Rebuild* under them, which runs the same build.
+    # * NO SAVED REVIEW ON SCREEN -- the three file rows are disabled, and so
+    #   is the build row, which says what it waits for: a save of the alert,
+    #   or of the changes made over its saved review;
+    # * BUILDABLE -- the build row is live, *Build files*;
+    # * BUILDING -- its spinner in place of the icon;
+    # * READY -- the file rows are download links and the build row says
+    #   *Rebuild files*, which runs the same build.
     #
-    # The GIF tile is shown, disabled, in every state. ``_show_badge_for_state``
-    # is what puts the body in its state. The ns keys of the build tile and
-    # the two file tiles are the OLD buttons' names, so the logic around them
-    # reads as it did.
+    # The Timelapse is a row like the others: the build makes it for a true
+    # alert on its saved pair (spec D9) and nothing else does any more; its
+    # detail says why it was not made otherwise. ``_draw_state`` is what puts
+    # the list in its state.
     # ------------------------------------------------------------------
-    def _build_widgets():
-        ns = {}
-
-        ns["save_first"] = v.Html(
-            tag="span", class_="font-weight-regular ml-1", style_=MUTED,
-            children=[f"({t('analysis_tile.export_labels.save_first')})"],
-        )
-        ns["download_alert_data_btn"] = v.Btn(
-            outlined=True, block=True, color="primary", disabled=True, class_="defo-build-tile",
-            style_="border-style:dashed;height:44px;text-transform:none;letter-spacing:normal;margin-bottom:6px;",
-            children=[v.Icon(left=True, small=True, children=["mdi-cogs"]), "", ns["save_first"]],
-        )
-        # A minor link under the tiles, as the workflow's *Edit split*.
-        ns["rebuild_btn"] = btn("tertiary", icon="mdi-refresh", color="primary", small=False, x_small=True,
-                                class_="defo-rebuild")
-        ns["files_dwn_btn"] = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
-                                       t("analysis_tile.export_labels.tile_zip_detail"))
-        ns["report_dwn_btn"] = FileTile("docx", t("analysis_tile.export_labels.tile_docx"),
-                                        t("analysis_tile.export_labels.tile_docx_detail"))
-        ns["gif_dwn_btn"] = FileTile("gif", t("analysis_tile.export_labels.tile_gif"),
-                                     t("analysis_tile.export_labels.tile_gif_detail"))
-        ns["toolbar_build"] = sw.Html(tag="div", children=[ns["download_alert_data_btn"]])
-        ns["toolbar_downloads"] = sw.Html(tag="div", children=[
-            ns["files_dwn_btn"], ns["report_dwn_btn"]]).hide()
-        ns["toolbar_rebuild"] = sw.Html(tag="div", class_="d-flex justify-end",
-                                        children=[ns["rebuild_btn"]]).hide()
-        # No file yet: the tile is the Export GIF button, locked until the gate
-        # (``_refresh_gif_gate``) opens it.
-        ns["gif_dwn_btn"].set_action(False, t("analysis_tile.export_labels.gif_hint"))
-
-        return ns
-
-    ns = _build_widgets()
+    zip_tile = FileTile("zip", t("analysis_tile.export_labels.tile_zip"),
+                        t("analysis_tile.export_labels.tile_zip_detail"))
+    docx_tile = FileTile("docx", t("analysis_tile.export_labels.tile_docx"),
+                         t("analysis_tile.export_labels.tile_docx_detail"))
+    gif_tile = FileTile("gif", t("analysis_tile.export_labels.tile_gif"),
+                        t("analysis_tile.export_labels.tile_gif_detail"))
+    build_tile = BuildTile(disabled=True)
 
     # What this section can offer for the alert under review: whether a save
-    # of it has landed (so a build is possible) and how many files the last
-    # build left ready. Kept here rather than read back off the build button's
-    # ``disabled``, which is ALSO true while a build runs (the click handler
-    # spins it) and would make the badge say "available after save" over a
-    # build in progress. Reset by every alert change. ``rev`` / ``gif_rev``:
-    # the revisions of the inputs of the zip build and of the GIF, which a
-    # worker compares with the one it started on (a template change bumps
-    # ``rev`` alone: the GIF is not made from it).
-    built = {"saved": False, "files": 0, "rev": 0, "gif": 0, "gif_rev": 0}
-    # A GIF of this section is rendering: the gate holds the button disabled.
-    gif_running = {"on": False}
-    # The key of the GIF tile's action text, so a switch can reword a tile
-    # held by a running GIF (the gate skips it then). The tile starts locked.
-    gif_action = {"key": "analysis_tile.export_labels.gif_hint"}
+    # of it has landed this session and how many files the last build left
+    # ready. Reset by every alert change. ``rev``: the revision of the inputs
+    # of the build, which a worker compares with the one it started on.
+    built = {"saved": False, "files": 0, "rev": 0, "gif": 0}
+    # A build of this section is running: the build row holds its spinner,
+    # whichever alert is on screen, until the worker releases it.
+    building = {"on": False}
 
-    def _set_build_enabled(flag):
-        """The build tile and *Rebuild* are one action (two faces of it, per
-        S1 state), so they are enabled and disabled together."""
-        ns["download_alert_data_btn"].disabled = not flag
-        ns["rebuild_btn"].disabled = not flag
+    def _row():
+        return app_state.alerts_gdf.value, app_state.actual_alert_id.value
+
+    def _has_saved_review():
+        """A save of this alert landed, this session or before (its row has a
+        status)."""
+        return built["saved"] or alert_files.saved_status(*_row()) is not None
+
+    def _review_on_screen(fresh=False):
+        """Whether the build may run: the review on screen is a saved one,
+        with nothing unsaved over it. A save this session, or a reopened
+        alert on the pair its row was saved with (the rule the GIF already
+        followed, spec D9). ``fresh``: an alert change is under way and the
+        picks are still the previous alert's -- they say nothing about this
+        row (two alerts can share an image)."""
+        if analysis.dirty.value:
+            return False
+        if built["saved"]:
+            return True
+        if fresh:
+            return False
+        alerts, alert_id = _row()
+        return (alert_files.saved_status(alerts, alert_id) is not None
+                and alert_files.picks_are_saved(alerts, alert_id, analysis.before_info.value,
+                                                analysis.after_info.value))
 
     def _invalidate_built_files(gif=True):
         """Stop offering what the last build left ready.
@@ -467,131 +443,117 @@ def build_export(
         The zip and the report are a snapshot: of the review as the save
         wrote it, of the imagery pair they were exported from and of the
         report template they were rendered with. Once any of those changes the
-        files on disk are the previous answer, and the two links plus the
+        files on disk are the previous answer, and the links plus the
         "N files ready" badge would hand the reviewer that answer for the
         state in front of them. Nothing is deleted -- the files stay in the
-        set folder; they are simply not this review's any more, and the
-        section goes back to offering the rebuild.
+        set folder; they are simply not this review's any more, and the list
+        goes back to offering the build.
 
-        The links are cleared, not only hidden: ``set_file(None)`` points both
-        at the sandbox file route's own "#" (nothing of this project's),
-        disables them, drops their ``download`` attribute and their size, so
-        anything that reveals the toolbar again cannot resurrect them.
+        The links are cleared, not only disabled: ``set_file(None)`` points
+        them at the sandbox file route's own "#" (nothing of this project's),
+        disables them, drops their ``download`` attribute and their size.
 
         ``rev`` is the revision a build carries from its click
         (``_on_download``): one that started before the change cannot restore
-        a readiness that is already stale. The caller refreshes the badge --
+        a readiness that is already stale. The caller redraws --
         ``_forget_previous_alert`` has more to change before it reads.
 
         The GIF is of the same review and the same pair (spec D9), but not of
         the report template: ``gif=False`` (a template change) leaves its link
-        and its own revision, ``gif_rev``, alone, so a GIF still rendering
-        lands.
+        alone.
         """
-        ns["files_dwn_btn"].set_file(None)
-        ns["report_dwn_btn"].set_file(None)
-        ns["toolbar_downloads"].hide()
+        zip_tile.set_file(None)
+        docx_tile.set_file(None)
         built["files"] = 0
         built["rev"] += 1
         if gif:
-            ns["gif_dwn_btn"].set_file(None)
-            # Back to the locked button; the gate reopens it if it may.
-            gif_action["key"] = "analysis_tile.export_labels.gif_hint"
-            ns["gif_dwn_btn"].set_action(False, t(gif_action["key"]))
+            gif_tile.set_file(None)
             built["gif"] = 0
-            built["gif_rev"] += 1
 
     # ------------------------------------------------------------------
-    # The section's summary badge: what this section can offer right now,
-    # without opening it. Three states, in the order a reviewer meets them —
-    # nothing to build yet, a build is possible, the files are ready.
+    # The list's state and the section's summary badge: what this section can
+    # offer right now. Three badge states, in the order a reviewer meets
+    # them -- nothing to build yet, a build is possible, the files are ready.
     # ------------------------------------------------------------------
     def _badge(text, color=None):
         if set_badge is not None:
             set_badge(text, color=color)
 
-    def _show_badge_for_state():
-        # ``viz`` is sw.SepalWidget's shown flag (what .show()/.hide() write);
-        # a plain widget has none, and then the toolbar counts as shown.
-        revealed = getattr(ns["toolbar_downloads"], "viz", True)
-        built_files = built["files"] if revealed else 0
-        files = built_files + built["gif"]
-        # The body's S1 state (see ``_build_widgets``): the hint until a save
-        # of this alert lands, and the build tile or -- once a build has left
-        # files -- the small *Rebuild* under them.
-        ns["save_first"].style_ = MUTED if not built["saved"] else "display: none;"
-        if built_files:
-            ns["toolbar_build"].hide()
-            ns["toolbar_rebuild"].show()
+    def _draw_gif_detail():
+        """The Timelapse row's line while it has no GIF: what the build will
+        make, or why it will not (spec D9)."""
+        if gif_tile.path is not None:
+            gif_tile.set_detail(t("analysis_tile.export_labels.tile_gif_detail"))
+            return
+        alerts, alert_id = _row()
+        status = alert_files.saved_status(alerts, alert_id)
+        if alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value):
+            key = "analysis_tile.export_labels.tile_gif_detail"
+        elif status is not None and status != CONFIRMED:
+            key = "analysis_tile.export_labels.tile_gif_true_only"
         else:
-            ns["toolbar_rebuild"].hide()
-            ns["toolbar_build"].show()
-        # Files first: the GIF can be offered without a save in this session
-        # (its gate reads the row, spec D9), and a live link under "available
-        # after save" would contradict it.
+            key = "analysis_tile.export_labels.gif_hint"
+        gif_tile.set_detail(t(key))
+
+    def _draw_state(fresh=False):
+        can_build = _review_on_screen(fresh=fresh)
+        first = not built["files"]
+        if building["on"]:
+            build_tile.disabled = True
+            build_tile.set_face(t("analysis_tile.export_labels.building"),
+                                t("analysis_tile.export_labels.building_detail"), "mdi-cogs")
+        else:
+            if can_build:
+                detail = t("analysis_tile.export_labels.build_detail" if first
+                           else "analysis_tile.export_labels.rebuild_detail")
+            elif analysis.dirty.value and _has_saved_review():
+                detail = t("analysis_tile.export_labels.save_changes_first")
+            else:
+                detail = t("analysis_tile.export_labels.save_first")
+            build_tile.disabled = not can_build
+            build_tile.set_face(t("analysis_tile.export_labels.build_tile" if first
+                                  else "analysis_tile.export_labels.rebuild_tile"),
+                                detail, "mdi-cogs" if first else "mdi-refresh")
+        if not fresh:
+            _draw_gif_detail()
+        files = built["files"] + built["gif"]
+        # Files first: a link on screen under "available after save" would
+        # contradict it.
         if files:
             _badge(tn("analysis_tile.sections.export_files", files), color="primary")
-        elif built["saved"]:
+        elif can_build:
             _badge(t("analysis_tile.sections.export_build"))
         else:
             _badge(t("analysis_tile.sections.export_after_save"))
 
-    def _invalidate_and_badge(*_, gif=True):
-        """``_invalidate_built_files`` + the badge, for the subscribers whose
+    def _invalidate_and_draw(*_, gif=True):
+        """``_invalidate_built_files`` + the redraw, for the subscribers whose
         only job is the invalidation."""
         try:
             _invalidate_built_files(gif=gif)
-            _show_badge_for_state()
+            _draw_state()
         except Exception:
             logger.exception("Analysis: invalidating the built files failed")
 
-    def _refresh_gif_gate(*_):
-        """The Timelapse tile makes a GIF for a true alert (spec D9): the row's stored
-        status is Confirmed and the pair on screen (both sides picked) is the
-        pair the row was saved with -- another pick disables it, picking the
-        saved pair back enables it. The row, not this session's saves: a true
-        alert reopened on its saved pair offers it at once. Held disabled
-        while a GIF of this section renders; a tile that already links its
-        GIF is left a link (anything that invalidates it clears it first)."""
-        if gif_running["on"] or ns["gif_dwn_btn"].path is not None:
-            return
-        alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
-        allowed = alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value)
-        gif_action["key"] = ("analysis_tile.export_labels.tile_gif_make" if allowed
-                             else "analysis_tile.export_labels.gif_hint")
-        ns["gif_dwn_btn"].set_action(allowed, t(gif_action["key"]))
-
     def _label():
-        """The section's words in the current language. Text only, plus the
-        two audited callbacks (the gate and the badge), whose other writes are
-        derived from state a switch does not change."""
-        ns["save_first"].children = [f"({t('analysis_tile.export_labels.save_first')})"]
-        build = ns["download_alert_data_btn"]
-        build.children = [build.children[0], t("analysis_tile.export_labels.build_tile"), ns["save_first"]]
-        set_label(ns["rebuild_btn"], t("analysis_tile.export_labels.rebuild_tile"))
+        """The list's words in the current language: the three file rows'
+        own titles and details, then the state, which words the build row
+        and the badge."""
         # Literal keys (not f-strings), so the catalogue test sees each one.
-        for name, title, detail in (
-            ("files_dwn_btn", "analysis_tile.export_labels.tile_zip", "analysis_tile.export_labels.tile_zip_detail"),
-            ("report_dwn_btn", "analysis_tile.export_labels.tile_docx",
-             "analysis_tile.export_labels.tile_docx_detail"),
-            ("gif_dwn_btn", "analysis_tile.export_labels.tile_gif", "analysis_tile.export_labels.tile_gif_detail"),
+        for tile, title, detail in (
+            (zip_tile, "analysis_tile.export_labels.tile_zip", "analysis_tile.export_labels.tile_zip_detail"),
+            (docx_tile, "analysis_tile.export_labels.tile_docx", "analysis_tile.export_labels.tile_docx_detail"),
+            (gif_tile, "analysis_tile.export_labels.tile_gif", "analysis_tile.export_labels.tile_gif_detail"),
         ):
-            ns[name].set_title(t(title))
-            ns[name].set_detail(t(detail))
-        # A running GIF: the gate below returns at once, so the held tile's
-        # words are rewritten here, and nothing else on it (a no-op on a
-        # tile that links its GIF: ``set_file`` cleared its action).
-        ns["gif_dwn_btn"].relabel_action(t(gif_action["key"]))
-        _refresh_gif_gate()
-        _show_badge_for_state()
+            tile.set_title(t(title))
+            tile.set_detail(t(detail))
+        _draw_state()
 
     # ------------------------------------------------------------------
-    # An alert change takes the section back to its empty state. What it can
-    # offer belongs to ONE alert: the build button was enabled by a save of
-    # the previous alert, and the two download links still point at that
-    # alert's zip and report. Left alone they are a badge that counts files
-    # the reviewer cannot get for the alert in front of them — the same leak
-    # as the save stamp that used to outlive its alert.
+    # An alert change takes the list back to its empty state. What it can
+    # offer belongs to ONE alert: the links still point at the previous
+    # alert's files. Left alone they are a badge that counts files the
+    # reviewer cannot get for the alert in front of them.
     #
     # Keyed on ``alert_token`` (bumped by EVERY ``reset_alert``), not on the
     # save stamp: the stamp is cleared to the value it already has when no
@@ -599,14 +561,13 @@ def build_export(
     # notifies nobody.
     # ------------------------------------------------------------------
     def _forget_previous_alert(*_):
-        _set_build_enabled(False)
-        # Off, without asking the gate: at the token bump the picks are still
-        # the previous alert's while the row may already be the next one's,
-        # and comparing the two could enable it. ``reset_alert`` clears the
-        # picks right after, and each pick that lands runs the gate.
-        _invalidate_built_files()  # the GIF tile goes back to locked with it
+        _invalidate_built_files()
         built["saved"] = False
-        _show_badge_for_state()
+        # ``fresh``: at the token bump the picks are still the previous
+        # alert's while the row may already be the next one's, and comparing
+        # the two could offer a build. ``reset_alert`` clears the picks right
+        # after, and each pick that lands redraws.
+        _draw_state(fresh=True)
 
     # Registered once (the builder runs once per session); the unsubscriber is
     # deliberately discarded, as everywhere else under analysis/.
@@ -619,8 +580,13 @@ def build_export(
     # an unsaved change to the review, ``state.imagery_changed``) leaves them
     # describing imagery the reviewer is no longer looking at. Both infos,
     # because either side alone changes the composite.
-    analysis.before_info.subscribe(lambda *_: (_invalidate_and_badge(), _refresh_gif_gate()))
-    analysis.after_info.subscribe(lambda *_: (_invalidate_and_badge(), _refresh_gif_gate()))
+    analysis.before_info.subscribe(_invalidate_and_draw)
+    analysis.after_info.subscribe(_invalidate_and_draw)
+
+    # Unsaved work over the saved review holds the build (the files would
+    # describe a review that is not the one on screen); a save that clears it
+    # gives it back.
+    analysis.dirty.subscribe(lambda *_: _draw_state())
 
     # The report template: the reviewer's own ``.docx``, picked in the
     # Questionnaire step. It is a project value, so what the picker writes arrives as a
@@ -633,32 +599,28 @@ def build_export(
         value = aux_model.custom_report_template
         if value != template_seen["value"]:
             template_seen["value"] = value
-            _invalidate_and_badge(gif=False)
+            _invalidate_and_draw(gif=False)
 
     app_state.project.subscribe(_on_project)
 
     # ------------------------------------------------------------------
-    # Post-save apply (OLD save effect, success path) — enable the download button
-    # + poke the alerts_gdf reactive. Runs at the END of the save worker's tracked
-    # block, only when the save wrote something (main thread previously; trait
-    # sets / reactive rebind from the worker thread are fine), so a failure here
-    # still fails the task. The OLD error branch becomes tracked_job's error.
+    # Post-save apply (OLD save effect, success path) — offer the build + poke
+    # the alerts_gdf reactive. Runs at the END of the save worker's tracked
+    # block, only when the save wrote something, so a failure here still fails
+    # the task.
     # ------------------------------------------------------------------
     def _apply_save():
-        _set_build_enabled(True)
         built["saved"] = True
         # The review just written is not the one the last build captured, so
-        # its zip and report are the previous answer: the links go, and the
-        # section offers the rebuild that was enabled a line above.
+        # its files are the previous answer: the links go, and the list offers
+        # the build again (user, 2026-10-26: cleared, not kept).
         _invalidate_built_files()
-        # Right after the enable, not at the end: the rebind below can raise
-        # (a gdf that refuses to copy), and a badge still reading "available
-        # after save" over an enabled build button would be a lie the error
-        # toast does not explain.
-        _show_badge_for_state()
-        # Export GIF follows the verdict this save wrote: on for Confirmed,
-        # off again for a later Need revision / False Positive (spec D9).
-        _refresh_gif_gate()
+        # Before the rebind, not at the end: the rebind below can raise (a gdf
+        # that refuses to copy), and a badge still reading "available after
+        # save" over a live build row would be a lie the error toast does not
+        # explain. The row was written in place, so the Timelapse line already
+        # reads the verdict this save wrote.
+        _draw_state()
         # Poke the alerts_gdf reactive so dependents refresh. The save mutated
         # the gdf in place (.at[id, col]) which does NOT change the reactive's
         # object identity, so Overview (whose refresh effect keys on
@@ -669,10 +631,10 @@ def build_export(
             app_state.alerts_gdf.value = gdf.copy()
 
     # ------------------------------------------------------------------
-    # Post-download apply (OLD download effect, success path) — point the two
-    # file tiles at the files + reveal them with the worker's computed paths. Runs
-    # at the END of the download worker's tracked block (a failure here still
-    # fails the task). The OLD error branch becomes tracked_job's error.
+    # Post-download apply (OLD download effect, success path) — point the file
+    # rows at the files with the worker's computed paths. Runs at the END of
+    # the download worker's tracked block (a failure here still fails the
+    # task). The OLD error branch becomes tracked_job's error.
     # ------------------------------------------------------------------
     def _apply_download(result, rev):
         """Offer this build's files. Returns whether they were offered.
@@ -680,49 +642,35 @@ def build_export(
         ``rev`` is the revision the build started on: an input that changed
         meanwhile (a later save of this alert, another imagery pick, another
         template) has already invalidated what this build was for, and
-        revealing it now would restore a readiness that is stale -- links to
+        offering it now would restore a readiness that is stale -- links to
         files built from a review the reviewer has since replaced. The caller
         says so, like the stale-alert case.
         """
         if rev != built["rev"]:
             return False
-        # The zip/report live in the set folder, so the tiles link paths
+        # The zip/report live in the set folder, so the rows link paths
         # relative to the served root: ``set_file`` -> ``local_files.home_relative``
         # -> ``custom_sw.DownloadBtn.set_url`` prefixes the download base. A path
         # outside the served root raises here, inside the tracked block: a
         # FAILED task.
-        ns["files_dwn_btn"].set_file(result["zip_path"])
-        ns["report_dwn_btn"].set_file(result["report_path"])
-        # A Confirmed alert's zip build made its GIF too (spec D9).
+        zip_tile.set_file(result["zip_path"])
+        docx_tile.set_file(result["report_path"])
+        # A Confirmed alert's build made its GIF too (spec D9).
         if result.get("gif_path"):
-            _offer_gif(result["gif_path"])
-        ns["toolbar_downloads"].show()
+            gif_tile.set_file(str(result["gif_path"]))
+            built["gif"] = 1
         # What the badge counts: the files this build actually produced, read
         # off the result rather than assumed to be two.
         built["files"] = len(
             [p for p in (result.get("zip_path"), result.get("report_path")) if p]
         )
-        _show_badge_for_state()
-        return True
-
-    def _offer_gif(path):
-        """Point the GIF link at ``path`` and reveal its row (spec D9)."""
-        ns["gif_dwn_btn"].set_file(str(path))
-        built["gif"] = 1
-        _show_badge_for_state()
-
-    def _apply_gif(path, rev):
-        """Offer this GIF, unless what it was made from has changed since
-        (``rev``: the ``gif_rev`` at its click)."""
-        if rev != built["gif_rev"]:
-            return False
-        _offer_gif(path)
+        _draw_state()
         return True
 
     # ------------------------------------------------------------------
     # Save: the shared runner (``make_save_runner``), with this section's own
-    # post-save apply step. The footer's "Save" and "Save & next" drive the
-    # SAME runner, so there is one save flow for both buttons.
+    # post-save apply step. The footer's *Save* drives it, so there is one
+    # save flow for the panel.
     # ------------------------------------------------------------------
     run_save = make_save_runner(
         widgets, app_state, analysis, app_tile_model, apply_save=_apply_save,
@@ -735,11 +683,15 @@ def build_export(
     # zip/report paths; on failure tracked_job publishes the error as a toast and
     # logs its traceback.
     # ------------------------------------------------------------------
-    def _on_download(clicked, *_):
-        # ``clicked`` is the build tile or *Rebuild* (both run this): it spins,
-        # and both are held so the build cannot be started twice.
-        clicked.loading = True
-        _set_build_enabled(False)
+    def _on_download(*_):
+        # The build row spins (*Build files* and *Rebuild files* are its two
+        # faces), and is held so the build cannot be started twice -- held in
+        # Python too: a click queued while the row was disabled still lands.
+        if building["on"]:
+            return
+        building["on"] = True
+        build_tile.set_busy(True)
+        _draw_state()
         alert = capture_alert(analysis, widgets, app_state)  # as in _on_save
         token = alert.token  # the alert this build is for
         rev = built["rev"]  # ...and the inputs it is built from
@@ -815,15 +767,15 @@ def build_export(
                 notifier.warning(t("analysis_tile.export_labels.gif_zip_skipped"))
 
         def _release():
-            clicked.loading = False
-            # The spinner always stops; the button only comes back for the
-            # alert this build was for. An unconditional re-enable would undo
-            # ``_forget_previous_alert``'s disable and leave a clickable build
-            # button under "available after save". Through
-            # ``apply_if_current``: a bare ``is_current`` check followed by the
-            # write is two statements outside ``_alert_lock``, and a
-            # ``reset_alert`` landing between them re-enables the button anyway.
-            analysis.apply_if_current(token, lambda: _set_build_enabled(True))
+            building["on"] = False
+            build_tile.set_busy(False)
+            # The spinner always stops; whether the row comes back is the
+            # state's call, for whichever alert is on screen now -- an
+            # unconditional re-enable would leave a live build row under
+            # "available after save" on the alert navigated to. Under the
+            # alert lock (``token=None``: any alert), so an alert change
+            # cannot land between the state's read and its write.
+            analysis.apply_if_current(None, _draw_state)
 
         run_button_job(
             t("analysis_tile.export_labels.download_task_title"), _body,
@@ -832,103 +784,24 @@ def build_export(
             spawn=spawn_in_context, notifier=current_notifier,
         )
 
-    # ------------------------------------------------------------------
-    # Export GIF (spec D9): the job is captured at the click (UI thread), the
-    # frames render on a worker under ``tracked_job``, and the link is offered
-    # only while the alert and the inputs it was made from are still current.
-    # ------------------------------------------------------------------
-    def _on_gif(*_):
-        # The tile is also the GIF's download link: a click on it then is the
-        # browser's download, not a request for another GIF.
-        if gif_running["on"] or ns["gif_dwn_btn"].path is not None or ns["gif_dwn_btn"].disabled:
-            return
-        alert = capture_alert(analysis, widgets, app_state)
-        token, rev = alert.token, built["gif_rev"]
-        folder = app_tile_model.recipe_folder_path
-        # ``crashed``: a capture that failed for any other reason. Raised again
-        # inside the worker's ``tracked_job``, so the click is a FAILED task
-        # with one error toast and its traceback in the log, and the button
-        # is released -- never a click that silently does nothing.
-        crashed = None
-        try:
-            if not folder:
-                raise gif_mod.GifRefused(key="analysis_tile.export_labels.download_no_recipe")
-            job, refused = gif_mod.capture_gif(app_state, widgets, analysis, alert), None
-        except gif_mod.GifRefused as exc:
-            job, refused = None, exc
-        except Exception as exc:  # noqa: BLE001 - reported by the worker's tracked_job
-            job, refused, crashed = None, None, exc
-        dest = None if job is None else Path(
-            alert_gif_name(str(folder), alert.alert_id, alert.before_info, alert.after_info))
-        gif_running["on"] = True
-        ns["gif_dwn_btn"].loading = True
-        ns["gif_dwn_btn"].disabled = True
+    # Wired once (the widgets are built once per session).
+    build_tile.on_event("click", _on_download)
 
-        def _body(task, notifier):
-            if crashed is not None:
-                raise crashed
-            if refused is not None:
-                return error_text(refused)
-            task.step(t("analysis_tile.export_labels.gif_step", count=len(job.frames)))
-            # Writer tracking: the GIF is written into the set's folder.
-            with writing(writer_name(app_state)):
-                try:
-                    path = gif_mod.build_gif(job, dest)
-                except gif_mod.GifRefused as exc:
-                    return error_text(exc)
-            # Only while the alert it was made for is on screen, and nothing it
-            # was made from has changed since (``rev``).
-            offered = {"ok": False}
-            analysis.apply_if_current(token, lambda: offered.update(ok=_apply_gif(path, rev)))
-            return None if offered["ok"] else t("analysis_tile.export_labels.gif_stale")
-
-        def _release():
-            ns["gif_dwn_btn"].loading = False
-            gif_running["on"] = False
-            # The gate decides, for whichever alert is on screen now: it reads
-            # that alert's row (its stored status and saved pair) and the picks
-            # on screen, so the button comes back for a true alert still on its
-            # saved pair, stays off for one whose row is not Confirmed or whose
-            # pair has changed, and is not left held for one saved Confirmed
-            # while this GIF rendered (the gate skipped it then). Under the
-            # alert lock (``token=None``: any alert), so an alert change cannot
-            # land between the gate's read and its write.
-            analysis.apply_if_current(None, _refresh_gif_gate)
-
-        run_button_job(
-            t("analysis_tile.export_labels.gif_task_title"), _body,
-            release=_release,
-            on_success=lambda notifier: notifier.success(t("analysis_tile.export_labels.gif_done")),
-            refused_log="Analysis: GIF not offered", logger=logger,
-            spawn=spawn_in_context, notifier=current_notifier,
-        )
-
-    # ------------------------------------------------------------------
-    # Wire click handlers once (the widgets are built once per build). The buttons
-    # start their workers; loading state is toggled inside the handlers.
-    # ------------------------------------------------------------------
-    def _register_handlers():
-        ns["download_alert_data_btn"].on_event("click", _on_download)
-        ns["rebuild_btn"].on_event("click", _on_download)
-        ns["gif_dwn_btn"].on_event("click", _on_gif)
-
-    _register_handlers()
-
-    # The section's words and the badge's opening state, once everything they
-    # read exists: a build is not possible until a save of this alert has
-    # landed. ``add`` runs the hook now (in place of a direct badge call) and
+    # The list's words and the badge's opening state, once everything they
+    # read exists. ``add`` runs the hook now (in place of a direct call) and
     # again on every language switch.
     labels.add(_label)
 
     # ------------------------------------------------------------------
-    # Layout: the section BODY — the build tile's row and the (hidden) file
-    # tiles. No title and no Save: the collapsible section owns the first and
-    # the footer the second. The report template is the Questionnaire step's.
-    # The OLD inline error alert is gone: failures are error toasts.
+    # Layout: the section BODY -- the one list. No title and no Save: the
+    # collapsible section owns the first and the footer the second. The
+    # rows are drawn as one bordered list by the screen's stylesheet
+    # (``analysis_tile.SCREEN_CSS``: ``.defo-file-list``). The OLD inline
+    # error alert is gone: failures are error toasts.
     # ------------------------------------------------------------------
     return SimpleNamespace(
-        body=v.Html(tag="div", children=[ns["toolbar_build"], ns["toolbar_downloads"],
-                                         ns["gif_dwn_btn"], ns["toolbar_rebuild"]]),
+        body=v.Html(tag="div", class_="defo-file-list", children=[zip_tile, docx_tile, gif_tile, build_tile]),
         run_save=run_save,
-        tiles=[ns["files_dwn_btn"], ns["report_dwn_btn"], ns["gif_dwn_btn"]],
+        tiles=[zip_tile, docx_tile, gif_tile],
+        build_tile=build_tile,
     )

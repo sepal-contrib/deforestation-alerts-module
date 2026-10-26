@@ -24,7 +24,7 @@ from gui.tile.analysis.state import AnalysisState
 # ``_in`` / ``_build_button`` / ``_alerts_gdf`` live in conftest: the assembled
 # panel's tests (tests/test_analysis_sections.py) drive the same export section
 # through ``build_controls`` and need them too.
-from tests.conftest import _alerts_gdf, _build_button, _in, _rebuild_button, _shown
+from tests.conftest import _alerts_gdf, _build_button, _in
 
 # Smallest valid JPEG so python-docx's add_picture accepts the stubbed renders.
 _JPEG_1PX = base64.b64decode(
@@ -356,36 +356,9 @@ def test_the_download_writes_the_links_joined_and_no_working_growth_columns(down
 
 
 # ---------------------------------------------------------------------------
-# The export section's summary badge (Task 9)
+# The export section's list and summary badge (user, 2026-10-26: one list,
+# the build as its last row)
 # ---------------------------------------------------------------------------
-def _downloads_toolbar(body):
-    """The container of the S1 file tiles (built hidden, shown by a build)."""
-    from gui.tile.analysis.file_tile import FileTile
-
-    for widget in _in(body):
-        if hasattr(widget, "viz") and any(
-            isinstance(child, FileTile)
-            for child in (getattr(widget, "children", None) or [])
-        ):
-            return widget
-    raise AssertionError("no downloads toolbar in the export section body")
-
-
-def _download_buttons(body):
-    """The two file tiles a build sets (the zip and the report), in tree order.
-    The GIF tile sits outside their container: it is shown in every state,
-    and linked by Export GIF as well as by a Confirmed alert's build."""
-    from gui.tile.analysis.file_tile import FileTile
-
-    tiles = [
-        child
-        for child in (getattr(_downloads_toolbar(body), "children", None) or [])
-        if isinstance(child, FileTile)
-    ]
-    assert [tile.kind for tile in tiles] == ["zip", "docx"]
-    return tiles
-
-
 def _project_poke(app_state):
     """A project object to republish ``app_state.project`` with, as
     ``update_project`` does when the report template is picked."""
@@ -402,7 +375,7 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False, labels=N
 
     What the badge says is imperative, per-alert widget state, so it is read
     through the very paths that change it — the shared ``run_save`` and the
-    build button's own click handler — with only the blocking bodies stubbed
+    build row's own click handler — with only the blocking bodies stubbed
     and ``spawn_in_context`` running on the calling thread. No notification
     provider is mounted, so the workers publish to a ``NoopNotifier``.
 
@@ -445,17 +418,17 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False, labels=N
         set_badge=set_badge,
         labels=labels,
     )
-    build_btn = _build_button(parts.body)
+    build_tile = _build_button(parts.body)
+    assert build_tile is parts.build_tile
     return SimpleNamespace(
         parts=parts,
         analysis=analysis,
         app_state=app_state,
         model=model,
-        build_btn=build_btn,
-        downloads=_downloads_toolbar(parts.body),
-        download_btns=_download_buttons(parts.body),
+        build_tile=build_tile,
+        download_btns=parts.tiles[:2],
         save=parts.run_save,
-        build=lambda: build_btn.fire_event("click", None),
+        build=lambda: build_tile.fire_event("click", None),
         held=held,
         run=lambda: held.pop(0)(),
     )
@@ -478,60 +451,55 @@ def test_the_export_badge_follows_what_is_available(tmp_path, monkeypatch):
     assert seen[-1] == "2 files ready"
 
 
-def _strings(widget):
-    out = []
-    for c in getattr(widget, "children", None) or []:
-        out.extend([c] if isinstance(c, str) else _strings(c))
-    return out
-
-
 def _state(harness):
-    """What the export body shows, per S1 state (the mockup's three rows)."""
-    body = harness.parts.body
-    zip_tile, docx_tile, gif_tile = harness.parts.tiles
-    hint = next(w for w in _in(harness.build_btn) if "(save first)" in (getattr(w, "children", None) or []))
-    rebuild = _rebuild_button(body)
+    """What the list shows: the build row's face and whether it can be
+    clicked, and whether the zip and the report are live links."""
+    zip_tile, docx_tile, _gif = harness.parts.tiles
+    row = harness.build_tile
     return SimpleNamespace(
-        build=_shown(body, harness.build_btn), build_enabled=not harness.build_btn.disabled,
-        hint=_shown(body, hint) if _shown(body, harness.build_btn) else False,
-        files=_shown(body, zip_tile) and _shown(body, docx_tile),
-        gif=_shown(body, gif_tile) and gif_tile.disabled,
-        rebuild=_shown(body, rebuild) and not rebuild.disabled,
+        title=row.title, detail=row.detail, icon=row._glyph.children[0],
+        build_enabled=not row.disabled, busy=row.busy,
+        files=not zip_tile.disabled and not docx_tile.disabled,
     )
 
 
-def test_the_export_body_follows_the_s1_states(tmp_path, monkeypatch):
-    """Spec D6 / the S1 mockup: BEFORE A SAVE the dashed tile is disabled and
-    says "(save first)"; SAVED it builds; READY it gives way to the file tiles
-    and a small *Rebuild* under them. The GIF tile is there in every state,
-    locked (the alert is not saved Confirmed here)."""
+def test_the_export_list_follows_its_states(tmp_path, monkeypatch):
+    """User, 2026-10-26: ONE list -- Alert data, Alert report, Timelapse, then
+    the build row. BEFORE A SAVE the three file rows and the build row are
+    disabled, the build row saying why; SAVED it builds; READY the file rows
+    are links and the build row says *Rebuild files*. The Timelapse row is
+    there in every state, disabled without a GIF (the alert is not saved
+    Confirmed here)."""
     (tmp_path / "alert_0.zip").write_bytes(b"z" * 3072)
     harness = _export_harness(tmp_path, monkeypatch)
-    zip_tile, docx_tile, _gif = harness.parts.tiles
-    label = [c for c in harness.build_btn.children if isinstance(c, str)]
-    assert label == ["Build alert files"]
-    assert harness.build_btn.children[0].children == ["mdi-cogs"]
-    assert _strings(_rebuild_button(harness.parts.body)) == ["mdi-refresh", "Rebuild files"]
+    zip_tile, docx_tile, gif_tile = harness.parts.tiles
+    assert harness.parts.body.children == [zip_tile, docx_tile, gif_tile, harness.build_tile]
+    assert [tile.kind for tile in harness.parts.tiles] == ["zip", "docx", "gif"]
 
     before = _state(harness)
-    assert (before.build, before.build_enabled, before.hint) == (True, False, True)
-    assert (before.files, before.gif, before.rebuild) == (False, True, False)
+    assert (before.title, before.detail, before.icon) == ("Build files", "Save this alert first", "mdi-cogs")
+    assert (before.build_enabled, before.busy, before.files) == (False, False, False)
+    assert gif_tile.disabled
 
     harness.save()
     saved = _state(harness)
-    assert (saved.build, saved.build_enabled, saved.hint) == (True, True, False)
-    assert (saved.files, saved.gif, saved.rebuild) == (False, True, False)
+    assert (saved.title, saved.detail, saved.icon) == (
+        "Build files", "Makes the files above from the saved review", "mdi-cogs")
+    assert (saved.build_enabled, saved.files) == (True, False)
+    assert gif_tile.disabled
 
     harness.build()
     ready = _state(harness)
-    assert (ready.build, ready.files, ready.gif, ready.rebuild) == (False, True, True, True)
-    assert zip_tile.disabled is False and zip_tile.href.endswith("alert_0.zip")
-    assert docx_tile.disabled is False and docx_tile.href.endswith("alert_0.docx")
+    assert (ready.title, ready.detail, ready.icon) == (
+        "Rebuild files", "Makes them again from the saved review", "mdi-refresh")
+    assert (ready.build_enabled, ready.busy, ready.files) == (True, False, True)
+    assert gif_tile.disabled
+    assert zip_tile.href.endswith("alert_0.zip") and docx_tile.href.endswith("alert_0.docx")
     assert zip_tile.attributes["download"] == "alert_0.zip"
     assert zip_tile.size_text == "3 KB"
     assert docx_tile.size_text == ""  # not on disk in this harness: no size, still linked
 
-    harness.save()  # a new save invalidates the files: back to the build tile
+    harness.save()  # a new save clears the files: back to *Build files*
     assert _state(harness) == saved
     assert zip_tile.size_text == "" and zip_tile.disabled is True
 
@@ -540,44 +508,101 @@ def test_the_export_body_follows_the_s1_states(tmp_path, monkeypatch):
     assert _state(harness) == before
 
 
+def test_the_file_rows_stay_disabled_until_the_first_build(tmp_path, monkeypatch):
+    """The three file rows are not links before a build has made their files:
+    no href, disabled, whatever the save state."""
+    harness = _export_harness(tmp_path, monkeypatch)
+    for tile in harness.parts.tiles:
+        assert tile.disabled is True and tile.path is None
+    harness.save()
+    for tile in harness.parts.tiles:
+        assert tile.disabled is True and tile.path is None
+    harness.build()
+    assert [tile.disabled for tile in harness.parts.tiles] == [False, False, True]
+
+
 def test_rebuild_runs_the_build_again(tmp_path, monkeypatch):
-    """*Rebuild* does what the build tile did: the same build, and the
-    section stays READY with the new files."""
+    """*Rebuild files* is the same row and the same build; the list stays
+    READY with the new files."""
     harness = _export_harness(tmp_path, monkeypatch)
     builds = []
     real = export_mod._download_data
     monkeypatch.setattr(export_mod, "_download_data", lambda *a, **k: builds.append(1) or real(*a, **k))
     harness.save()
     harness.build()
-    rebuild = _rebuild_button(harness.parts.body)
+    assert harness.build_tile.title == "Rebuild files"
 
-    rebuild.fire_event("click", None)
+    harness.build()
 
     assert builds == [1, 1]
-    assert _state(harness).rebuild and _state(harness).files
-    assert rebuild.loading is False and rebuild.disabled is False
+    state = _state(harness)
+    assert state.files and state.title == "Rebuild files"
+    assert state.build_enabled and not state.busy
+
+
+def test_the_build_row_spins_while_a_build_runs(tmp_path, monkeypatch):
+    """BUILDING: the spinner in place of the icon, the row held and saying
+    so, until the worker releases it."""
+    harness = _export_harness(tmp_path, monkeypatch, defer=True)
+    harness.save()
+    harness.run()
+
+    harness.build()
+
+    row = harness.build_tile
+    assert (row.title, row.detail) == ("Building files…", "They unlock above when they are ready")
+    assert row.busy is True and row.disabled is True
+    assert "display:none" in row._glyph.style_ and "display:none" not in row._spinner.style_
+    harness.build()  # a click queued while the row was held
+    assert len(harness.held) == 1, "a second build started over the first"
+
+    harness.run()
+
+    assert row.busy is False and row.disabled is False and row.title == "Rebuild files"
+    assert "display:none" not in row._glyph.style_ and "display:none" in row._spinner.style_
+
+
+def test_unsaved_changes_hold_the_build(tmp_path, monkeypatch):
+    """The files are of the saved review: unsaved work over it holds the
+    build row, which says to save the changes; a save gives it back."""
+    harness = _export_harness(tmp_path, monkeypatch)
+    harness.save()
+    assert _state(harness).build_enabled
+
+    harness.analysis.dirty.set(True)
+    state = _state(harness)
+    assert (state.build_enabled, state.detail) == (False, "Save your changes first")
+
+    harness.analysis.dirty.set(False)
+    assert _state(harness).build_enabled
 
 
 def test_a_template_change_takes_ready_back_to_the_build_tile(tmp_path, monkeypatch):
     harness = _export_harness(tmp_path, monkeypatch)
     harness.save()
     harness.build()
-    assert _state(harness).rebuild
+    assert _state(harness).title == "Rebuild files"
 
     harness.model.custom_report_template = str(tmp_path / "mine.docx")
     harness.app_state.project.value = _project_poke(harness.app_state)
 
     state = _state(harness)
-    assert (state.build, state.build_enabled, state.files, state.rebuild) == (True, True, False, False)
+    assert (state.title, state.build_enabled, state.files) == ("Build files", True, False)
+
+
+def _dead_links(harness):
+    """Whether the two download links offer nothing (no path, both disabled)."""
+    return all("alert_0" not in btn.href and btn.disabled is True
+               for btn in harness.download_btns)
 
 
 def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, monkeypatch):
     """What this section can offer belongs to ONE alert.
 
     The save stamp leaked across alerts earlier on this branch; the build
-    button and the two download links are the same kind of per-alert state.
+    row and the two download links are the same kind of per-alert state.
     An alert change (``reset_alert``) must take the badge back to "available
-    after save", and with it the button that would rebuild the previous
+    after save", and with it the row that would rebuild the previous
     alert's files and the links that still point at them.
     """
     seen = []
@@ -591,22 +616,21 @@ def test_the_export_badge_does_not_claim_the_previous_alerts_files(tmp_path, mon
     harness.analysis.reset_alert()  # the reviewer moved on
 
     assert seen[-1] == "available after save"
-    assert harness.build_btn.disabled is True
-    assert harness.downloads.viz is False
-    # The links themselves, not only the toolbar that hides them: a later
-    # reveal must not resurrect the previous alert's zip and report.
-    for btn in harness.download_btns:
-        assert "alert_0" not in btn.href and btn.disabled is True
+    assert harness.build_tile.disabled is True
+    assert harness.build_tile.title == "Build files"
+    # The links themselves: a later build must not resurrect the previous
+    # alert's zip and report.
+    assert _dead_links(harness)
 
 
 def test_a_build_that_lands_after_the_alert_change_offers_nothing(tmp_path, monkeypatch):
     """A worker that finishes after the reviewer moved on applies nothing.
 
     The build is slow (an imagery download plus the Word report), so the
-    reviewer can navigate while it runs. Its apply step is what reveals the
-    downloads toolbar, so "the toolbar is hidden" is no protection: left
-    unguarded, the stale worker shows the previous alert's zip and report
-    under a badge counting them, beside the alert now on screen.
+    reviewer can navigate while it runs. Its apply step is what links the
+    file rows: left unguarded, the stale worker offers the previous alert's
+    zip and report under a badge counting them, beside the alert now on
+    screen.
     """
     seen = []
     harness = _export_harness(
@@ -615,23 +639,35 @@ def test_a_build_that_lands_after_the_alert_change_offers_nothing(tmp_path, monk
     )
     harness.save()
     harness.run()  # the save of this alert landed while it was on screen
-    assert harness.build_btn.disabled is False
+    assert harness.build_tile.disabled is False
 
     harness.build()  # the build starts here...
     harness.analysis.reset_alert()  # ...the reviewer moves on...
     harness.run()  # ...and only now does the build land
 
-    assert harness.downloads.viz is False
-    assert harness.build_btn.disabled is True  # not re-enabled by the worker
+    assert harness.build_tile.disabled is True  # not re-enabled by the worker
+    assert harness.build_tile.busy is False
     assert seen[-1] == "available after save"
-    for btn in harness.download_btns:
-        assert "alert_0" not in btn.href and btn.disabled is True
+    assert _dead_links(harness)
 
 
-def _dead_links(harness):
-    """Whether the two download links offer nothing (no path, both disabled)."""
-    return all("alert_0" not in btn.href and btn.disabled is True
-               for btn in harness.download_btns)
+def test_a_build_still_running_does_not_hold_the_next_alerts_row(tmp_path, monkeypatch):
+    """The row spins while a build runs, whichever alert is on screen. A save
+    of the NEXT alert that lands meanwhile is drawn on that alert's own state
+    once the old build ends, so the row is not left disabled over a save."""
+    harness = _export_harness(tmp_path, monkeypatch, defer=True)
+    harness.save()
+    harness.run()
+    harness.build()  # the build of this alert starts...
+    harness.analysis.reset_alert()  # ...the reviewer moves on...
+    harness.save()
+    harness.held.pop()()  # ...and saves the next one
+    assert harness.build_tile.busy is True  # held while the old build runs
+
+    harness.run()  # the old build lands, stale
+
+    state = _state(harness)
+    assert (state.busy, state.build_enabled, state.title, state.files) == (False, True, "Build files", False)
 
 
 def test_a_later_save_stops_offering_the_files_the_previous_one_built(tmp_path, monkeypatch):
@@ -639,10 +675,9 @@ def test_a_later_save_stops_offering_the_files_the_previous_one_built(tmp_path, 
 
     Save -> build -> change the answer -> Save again: the two links and the
     "2 files ready" badge otherwise still hand the reviewer the report built
-    from the previous save, for a review that no longer says that. Only an
-    alert change used to clear them. The files are not deleted (they stay in
-    the set folder) -- they are simply not this review's answer any more, so
-    the section goes back to offering the rebuild.
+    from the previous save, for a review that no longer says that. The files
+    are not deleted (they stay in the set folder) -- they are simply not this
+    review's answer any more, so the list goes back to *Build files*.
     """
     seen = []
     harness = _export_harness(
@@ -655,9 +690,8 @@ def test_a_later_save_stops_offering_the_files_the_previous_one_built(tmp_path, 
     harness.save()  # the reviewer changed their answer and saved again
 
     assert seen[-1] == "ready to build"
-    assert harness.downloads.viz is False
     assert _dead_links(harness)
-    assert harness.build_btn.disabled is False
+    assert harness.build_tile.disabled is False and harness.build_tile.title == "Build files"
 
 
 def test_other_imagery_stops_offering_the_files_built_from_the_old_pair(tmp_path, monkeypatch):
@@ -674,8 +708,8 @@ def test_other_imagery_stops_offering_the_files_built_from_the_old_pair(tmp_path
     harness.analysis.before_info.set(["Landsat", 1, None, "Landsat 2026-04-10 ", "_100426"])
 
     assert seen[-1] == "ready to build"
-    assert harness.downloads.viz is False
     assert _dead_links(harness)
+    assert harness.build_tile.title == "Build files"
 
 
 def test_another_report_template_stops_offering_the_report_of_the_old_one(tmp_path, monkeypatch):
@@ -695,13 +729,12 @@ def test_another_report_template_stops_offering_the_report_of_the_old_one(tmp_pa
     harness.app_state.project.value = _project_poke(harness.app_state)
 
     assert seen[-1] == "ready to build"
-    assert harness.downloads.viz is False
     assert _dead_links(harness)
 
 
 def test_a_build_that_lands_after_a_later_save_offers_nothing(tmp_path, monkeypatch):
     """The same hole from the other side: the build is in flight when the
-    inputs change, and its apply step is what reveals the links. Without a
+    inputs change, and its apply step is what links the files. Without a
     revision captured at the click it restores a readiness that is already
     stale -- the links would point at files built from the review the save has
     just replaced."""
@@ -718,15 +751,15 @@ def test_a_build_that_lands_after_a_later_save_offers_nothing(tmp_path, monkeypa
     harness.held.pop()()   # ...a later save of the same alert lands...
     harness.run()          # ...and only now does the build
 
-    assert harness.downloads.viz is False
     assert seen[-1] == "ready to build"
     assert _dead_links(harness)
+    assert harness.build_tile.title == "Build files"
 
 
 def test_a_save_that_lands_after_the_alert_change_offers_no_build(tmp_path, monkeypatch):
     """The save path has the same hole, and the set-wide half still runs.
 
-    A late ``_apply_save`` would enable the build button and badge "ready to
+    A late ``_apply_save`` would enable the build row and badge "ready to
     build" for an alert that was never saved. The ``alerts_gdf`` rebind is NOT
     alert-scoped — the store write did land, and Overview's counts read that
     reactive — so it has to happen even when the alert-scoped half is dropped.
@@ -743,7 +776,7 @@ def test_a_save_that_lands_after_the_alert_change_offers_no_build(tmp_path, monk
     harness.analysis.dirty.set(True)  # ...and edits the alert now on screen
     harness.run()  # ...and only now does the save land
 
-    assert harness.build_btn.disabled is True
+    assert harness.build_tile.disabled is True
     assert seen[-1] == "available after save"
     # The new alert's unsaved edit is still unsaved: the save wrote the
     # previous alert's review, not this one's.
@@ -806,15 +839,16 @@ def test_a_failed_gif_still_builds_the_zip_and_says_so(download_ctx, monkeypatch
 
 
 def _gif_tile(body):
-    """The Timelapse tile: the Export GIF button until the GIF exists, then
-    its download link (``path`` set)."""
+    """The Timelapse row: disabled until a build makes the GIF, then its
+    download link (``path`` set)."""
     from gui.tile.analysis.file_tile import FileTile
 
     return next(w for w in _in(body) if isinstance(w, FileTile) and w.kind == "gif")
 
 
 def _gif_harness(tmp_path, monkeypatch, status=None, **kw):
-    """``_export_harness`` with the GIF stubbed and the pair picked.
+    """``_export_harness`` with the GIF stubbed and the pair picked; its
+    build makes a GIF (on disk) along with the zip and the report.
 
     ``status`` writes the row's verdict and saved pair BEFORE the picks land,
     as for an alert reopened on its saved pair (no save in this session)."""
@@ -823,12 +857,20 @@ def _gif_harness(tmp_path, monkeypatch, status=None, **kw):
     harness = _export_harness(tmp_path, monkeypatch, **kw)
     monkeypatch.setattr(gif_mod, "capture_gif", lambda *a, **k: _gif_job())
     monkeypatch.setattr(gif_mod, "build_gif", _fake_build_gif)
+    (tmp_path / _GIF_NAME).write_bytes(b"GIF89a")
+
+    def _download(*a, **k):
+        paths = {"zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")}
+        if k.get("gif") is not None:
+            paths["gif_path"] = str(tmp_path / _GIF_NAME)
+        return paths
+
+    monkeypatch.setattr(export_mod, "_download_data", _download)
     if status is not None:
         _status(harness, status)
     harness.analysis.before_info.set(_BEFORE_INFO)
     harness.analysis.after_info.set(_AFTER_INFO)
     harness.gif_tile = _gif_tile(harness.parts.body)
-    harness.make_gif = lambda: harness.gif_tile.fire_event("click", None)
     return harness
 
 
@@ -841,29 +883,47 @@ def _status(harness, value):
     gdf["after_img"] = _AFTER_INFO[3]
 
 
-def test_the_gif_button_waits_for_a_confirmed_save(tmp_path, monkeypatch):
+def _gif_detail(harness):
+    return " ".join(_strings(harness.gif_tile._meta))
+
+
+def _strings(widget):
+    out = []
+    for c in getattr(widget, "children", None) or []:
+        out.extend([c] if isinstance(c, str) else _strings(c))
+    return out
+
+
+def test_the_timelapse_row_waits_for_a_confirmed_save(tmp_path, monkeypatch):
+    """Spec D9: only the build makes the GIF, for a true alert on its saved
+    pair. Until then the Timelapse row is disabled and says why: nothing
+    saved yet, a verdict that is not a true alert, or what the build will
+    make."""
     harness = _gif_harness(tmp_path, monkeypatch)
-    assert harness.gif_tile.disabled  # nothing saved yet
+    assert harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Save as a true alert, with the images on screen, to create it"
     _status(harness, "Need revision")
     harness.save()
-    assert harness.gif_tile.disabled
+    assert harness.gif_tile.disabled and _gif_detail(harness) == "True alerts only"
     _status(harness, "Confirmed")
     harness.save()
-    assert not harness.gif_tile.disabled
-    harness.analysis.reset_alert()  # another alert
+    assert harness.gif_tile.disabled and _gif_detail(harness) == "Animated GIF"
+    harness.analysis.reset_alert()  # another alert: its picks are not the saved pair
     assert harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Save as a true alert, with the images on screen, to create it"
 
 
-def test_the_gif_is_offered_on_its_own_link_and_counted(tmp_path, monkeypatch):
+def test_the_build_of_a_confirmed_alert_links_its_gif_and_counts_it(tmp_path, monkeypatch):
     seen = []
     harness = _gif_harness(tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text))
     _status(harness, "Confirmed")
     harness.save()
-    harness.make_gif()
-    assert harness.gif_tile.path is not None
-    assert harness.gif_tile.attributes["download"] == _GIF_NAME
-    assert seen[-1] == "1 file ready"
-    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
+    harness.build()
+    tile = harness.gif_tile
+    assert tile.path is not None and tile.attributes["download"] == _GIF_NAME
+    assert not tile.disabled and tile.href and "mdi-download" in _strings(tile)
+    assert _gif_detail(harness) == "Animated GIF · 6 B"
+    assert seen[-1] == "3 files ready"
 
 
 def test_a_later_false_positive_save_withdraws_the_gif(tmp_path, monkeypatch):
@@ -871,73 +931,19 @@ def test_a_later_false_positive_save_withdraws_the_gif(tmp_path, monkeypatch):
     harness = _gif_harness(tmp_path, monkeypatch)
     _status(harness, "Confirmed")
     harness.save()
-    harness.make_gif()
+    harness.build()
+    assert harness.gif_tile.path is not None
     _status(harness, "False Positive")
     harness.save()
     assert harness.gif_tile.path is None and harness.gif_tile.disabled
-
-
-def test_a_gif_that_lands_after_the_alert_change_offers_nothing(tmp_path, monkeypatch):
-    """Review Focus #4."""
-    harness = _gif_harness(tmp_path, monkeypatch, defer=True)
-    _status(harness, "Confirmed")
-    harness.save()
-    harness.run()  # the save's worker
-    harness.make_gif()
-    assert harness.gif_tile.disabled and harness.gif_tile.loading
-    harness.analysis.reset_alert()
-    harness.run()  # the GIF lands for the alert that is gone
-    assert harness.gif_tile.path is None
-    assert harness.gif_tile.disabled and not harness.gif_tile.loading
-
-
-def test_a_gif_still_rendering_does_not_hold_the_next_alerts_button(tmp_path, monkeypatch):
-    """The gate is held while a GIF renders. A save of the NEXT alert that
-    lands meanwhile is gated on that alert's own state once the old GIF ends,
-    so the button is not left disabled over a Confirmed save."""
-    harness = _gif_harness(tmp_path, monkeypatch, defer=True)
-    _status(harness, "Confirmed")
-    harness.save()
-    harness.run()
-    harness.make_gif()  # the GIF of this alert starts rendering...
-    harness.analysis.reset_alert()  # ...the reviewer moves on...
-    harness.analysis.before_info.set(_BEFORE_INFO)
-    harness.analysis.after_info.set(_AFTER_INFO)
-    harness.save()
-    harness.held.pop()()  # ...and saves the next one as Confirmed
-    assert harness.gif_tile.disabled  # held while the old GIF renders
-    harness.run()  # the old GIF lands, stale
-    assert harness.gif_tile.path is None
-    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
-
-
-def test_the_zip_build_of_a_confirmed_alert_offers_its_gif_too(tmp_path, monkeypatch):
-    seen = []
-    harness = _gif_harness(tmp_path, monkeypatch, set_badge=lambda text, color=None: seen.append(text))
-    monkeypatch.setattr(export_mod, "_download_data", lambda *a, **k: {
-        "zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx"),
-        "gif_path": str(tmp_path / _GIF_NAME)})
-    _status(harness, "Confirmed")
-    harness.save()
-    harness.build()
-    assert harness.gif_tile.path is not None
-    assert seen[-1] == "3 files ready"
+    assert _gif_detail(harness) == "True alerts only"
 
 
 def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(tmp_path, monkeypatch):
     """Spec D9: a GIF that cannot be made costs the GIF, not the build."""
-    from pysepal.solara.notifications import NoopNotifier
-
     from gui.tile.analysis import gif as gif_mod
 
-    class _Notifier(NoopNotifier):
-        def __init__(self):
-            self.warnings = []
-
-        def warning(self, message, *, timeout=None):
-            self.warnings.append(message)
-
-    notifier = _Notifier()
+    notifier = _Toasts()
     harness = _gif_harness(tmp_path, monkeypatch)
     monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
     passed = {}
@@ -960,45 +966,41 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
 
 
-def test_the_gif_button_follows_the_saved_pair(tmp_path, monkeypatch):
+def test_the_timelapse_row_follows_the_saved_pair(tmp_path, monkeypatch):
     """Spec D9: the GIF animates the reviewed pair only. Another pick after
-    the Confirmed save disables it; picking the saved pair back enables it."""
+    the Confirmed save means no GIF in the build; picking the saved pair back
+    puts it in again."""
     harness = _gif_harness(tmp_path, monkeypatch)
     _status(harness, "Confirmed")
     harness.save()
-    assert not harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Animated GIF"
     harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])
-    assert harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Save as a true alert, with the images on screen, to create it"
     harness.analysis.before_info.set(_BEFORE_INFO)
-    assert not harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Animated GIF"
+    harness.build()
+    assert harness.gif_tile.path is not None
 
 
 def test_a_row_without_a_saved_pair_offers_no_gif(tmp_path, monkeypatch):
-    """A missing or empty saved pick is no match: the gate stays off."""
+    """A missing or empty saved pick is no match: the build makes no GIF."""
     import numpy as np
 
     harness = _gif_harness(tmp_path, monkeypatch)
     _status(harness, "Confirmed")
     harness.app_state.alerts_gdf.value["after_img"] = np.nan
     harness.save()
-    assert harness.gif_tile.disabled
+    assert _gif_detail(harness) == "Save as a true alert, with the images on screen, to create it"
+    harness.build()
+    assert harness.gif_tile.path is None and harness.gif_tile.disabled
 
 
 def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
     """Spec D9: a failed GIF does not fail the build -- not even one whose
     capture raises something other than ``GifRefused`` at the click."""
-    from pysepal.solara.notifications import NoopNotifier
-
     from gui.tile.analysis import gif as gif_mod
 
-    class _Notifier(NoopNotifier):
-        def __init__(self):
-            self.warnings = []
-
-        def warning(self, message, *, timeout=None):
-            self.warnings.append(message)
-
-    notifier = _Notifier()
+    notifier = _Toasts()
     harness = _gif_harness(tmp_path, monkeypatch)
     monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
 
@@ -1009,8 +1011,8 @@ def test_a_gif_capture_that_crashes_still_builds_the_zip(tmp_path, monkeypatch):
     _status(harness, "Confirmed")
     harness.save()
     harness.build()
-    assert not harness.download_btns[0].disabled and harness.downloads.viz is True
-    assert not harness.build_btn.disabled and not harness.build_btn.loading
+    assert not harness.download_btns[0].disabled
+    assert not harness.build_tile.disabled and not harness.build_tile.busy
     assert harness.gif_tile.path is None
     assert notifier.warnings == [
         "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
@@ -1035,72 +1037,58 @@ class _Toasts:
         return _Notifier()
 
 
-def test_a_reopened_true_alert_offers_its_gif_without_a_new_save(tmp_path, monkeypatch):
-    """Spec D9 (amended): the gate reads the row, not this session's saves. An
-    alert saved Confirmed on its pair, reopened on that pair, offers Export
-    GIF at once; the badge counts the GIF it makes."""
+def test_a_reopened_true_alert_builds_with_its_gif_without_a_new_save(tmp_path, monkeypatch):
+    """Spec D9 (amended), and the build's rule since 2026-10-26: both read
+    the row, not this session's saves. An alert saved Confirmed on its pair,
+    reopened on that pair, can build at once, and the build makes its GIF."""
     seen = []
     harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed",
                            set_badge=lambda text, color=None: seen.append(text))
-    assert not harness.gif_tile.disabled
-    assert harness.build_btn.disabled  # "Download alert data" keeps its own rule
-    harness.make_gif()
+    assert not harness.build_tile.disabled
+    assert _gif_detail(harness) == "Animated GIF"
+    harness.build()
     assert harness.gif_tile.path is not None
     assert harness.gif_tile.attributes["download"] == _GIF_NAME
-    assert seen[-1] == "1 file ready"
+    assert seen[-1] == "3 files ready"
 
 
 def test_a_reopened_alert_not_saved_confirmed_offers_no_gif(tmp_path, monkeypatch):
     harness = _gif_harness(tmp_path, monkeypatch, status="Need revision")
-    assert harness.gif_tile.disabled
+    assert not harness.build_tile.disabled  # saved on its pair: it builds
+    assert _gif_detail(harness) == "True alerts only"
+    harness.build()
+    assert harness.gif_tile.path is None and harness.gif_tile.disabled
 
 
-def test_a_gif_capture_that_crashes_is_said_and_releases_the_button(tmp_path, monkeypatch):
-    """A capture failing with something other than ``GifRefused`` at the
-    click: a failed task with an error toast, the button released and gated
-    again -- not a click that silently does nothing."""
-    from gui.tile.analysis import gif as gif_mod
-
-    notifier = _Toasts()
-    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
-    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
-
-    def _crash(*a, **k):
-        raise RuntimeError("scene index is malformed")
-
-    monkeypatch.setattr(gif_mod, "capture_gif", _crash)
-    harness.make_gif()
-    assert notifier.errors and "scene index is malformed" in notifier.errors[0]
-    assert not harness.gif_tile.loading
-    assert not harness.gif_tile.disabled  # the gate decided again: still a true alert
-    assert harness.gif_tile.path is None
+def test_a_row_the_store_marks_not_reviewed_is_no_saved_review(tmp_path, monkeypatch):
+    """The alert store writes "Not reviewed" into every row it has not had a
+    save for: that is no saved review, whatever the row's pair. The build
+    waits for a save, and the Timelapse row says what to save."""
+    harness = _gif_harness(tmp_path, monkeypatch, status="Not reviewed")
+    assert harness.build_tile.disabled
+    assert harness.build_tile.detail == "Save this alert first"
+    assert _gif_detail(harness) == "Save as a true alert, with the images on screen, to create it"
+    harness.analysis.dirty.set(True)  # work on an alert never saved: still "save this alert"
+    assert harness.build_tile.detail == "Save this alert first"
 
 
 def test_a_template_change_leaves_the_gif_alone(tmp_path, monkeypatch):
-    """Spec D9: the GIF does not depend on the report template."""
+    """Spec D9: the GIF does not depend on the report template, the zip and
+    the report do."""
     seen = []
     harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed",
                            set_badge=lambda text, color=None: seen.append(text))
-    harness.make_gif()
+    harness.build()
     harness.model.custom_report_template = str(tmp_path / "mine.docx")
     harness.app_state.project.value = _project_poke(harness.app_state)
     assert harness.gif_tile.path is not None and harness.gif_tile.attributes["download"] == _GIF_NAME
+    assert _dead_links(harness)
     assert seen[-1] == "1 file ready"
 
 
-def test_a_template_change_does_not_drop_a_gif_still_rendering(tmp_path, monkeypatch):
-    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed", defer=True)
-    harness.make_gif()  # the GIF starts rendering...
-    harness.model.custom_report_template = str(tmp_path / "mine.docx")
-    harness.app_state.project.value = _project_poke(harness.app_state)  # ...the template changes...
-    harness.run()  # ...and the GIF lands
-    assert harness.gif_tile.path is not None
-    assert not harness.gif_tile.disabled and not harness.gif_tile.loading
-
-
 def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp_path, monkeypatch):
-    """Spec D9: the zip follows the button's rule. A Confirmed row whose pair
-    on screen is not the saved pair gets no GIF capture, and one warning."""
+    """Spec D9: the zip follows the gate. A Confirmed row whose pair on
+    screen is not the saved pair gets no GIF capture, and one warning."""
     notifier = _Toasts()
     harness = _gif_harness(tmp_path, monkeypatch)
     monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
@@ -1121,54 +1109,18 @@ def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp
     assert harness.gif_tile.path is None
 
 
-def test_a_gif_that_lands_after_another_pick_offers_nothing(tmp_path, monkeypatch):
-    """Stale by revision, not by alert: the pair changed while it rendered."""
-    notifier = _Toasts()
-    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed", defer=True)
-    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
-    harness.make_gif()  # the GIF starts rendering...
-    harness.analysis.before_info.set(["Landsat", 1, None, "LS_other", "_100426"])  # ...another pick...
-    harness.run()  # ...and only now does it land
-    assert harness.gif_tile.path is None
-    assert notifier.warnings == [export_mod.t("analysis_tile.export_labels.gif_stale")]
-    assert not harness.gif_tile.loading
-    assert harness.gif_tile.disabled  # the new pair is not the saved one
-    harness.analysis.before_info.set(_BEFORE_INFO)  # the saved pair back
-    assert not harness.gif_tile.disabled
-
-
-def test_the_timelapse_tile_says_why_it_is_locked_and_what_a_click_does(tmp_path, monkeypatch):
-    """Spec D9: the GIF animates the saved pair, so the locked tile says the
-    images on screen are what has to be saved; an open one says a click
-    makes it; a made one is its download link, with its size."""
-    def _text(w):
-        return " ".join(c if isinstance(c, str) else _text(c) for c in (getattr(w, "children", None) or []))
-
-    harness = _gif_harness(tmp_path, monkeypatch)
-    tile = harness.gif_tile
-    assert tile.disabled and tile.href is None
-    assert "Save as a true alert, with the images on screen, to create it" in _text(tile)
-    _status(harness, "Confirmed")
-    harness.save()
-    assert not tile.disabled and tile.href is None and "click to create it" in _text(tile)
-    harness.make_gif()
-    assert tile.path is not None and tile.href and "mdi-download" in _text(tile)
-    assert "Animated GIF · 6 B" in _text(tile)
-
-
-def test_a_click_on_the_gif_link_makes_no_new_gif(tmp_path, monkeypatch):
-    """Once made, the tile is the download link: its click is the browser's."""
-    from gui.tile.analysis import gif as gif_mod
-
+def test_a_click_on_the_gif_link_builds_nothing(tmp_path, monkeypatch):
+    """Once made, the Timelapse row is the download link: its click is the
+    browser's, not a capture or a build -- the row has no click handler at
+    all (the standalone GIF button is gone; only the build makes a GIF)."""
     harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
-    harness.make_gif()
-    calls = []
-    monkeypatch.setattr(gif_mod, "capture_gif", lambda *a, **k: calls.append(a))
-    harness.make_gif()
-    assert calls == [] and harness.gif_tile.path is not None
+    harness.build()
+    with pytest.raises(ValueError, match="'click' not found"):
+        harness.gif_tile.fire_event("click", None)
+    assert harness.gif_tile.path is not None
 
 
-def test_a_switch_while_a_gif_renders_rewords_the_tile_and_holds_it(tmp_path, monkeypatch):
+def test_a_switch_while_a_build_runs_rewords_the_row_and_holds_it(tmp_path, monkeypatch):
     from pysepal.i18n import set_locale
 
     from gui.tile.analysis.labels import Labels
@@ -1179,16 +1131,16 @@ def test_a_switch_while_a_gif_renders_rewords_the_tile_and_holds_it(tmp_path, mo
     harness.save()
     while harness.held:
         harness.run()
-    assert not harness.gif_tile.disabled
-    harness.make_gif()
-    assert len(harness.held) == 1 and harness.gif_tile.loading, "the GIF worker is held"
+    harness.build()
+    assert len(harness.held) == 1 and harness.build_tile.busy, "the build worker is held"
     try:
         set_locale("fr")
         labels.run()
-        tile = harness.gif_tile
-        assert tile._meta.children == [t("analysis_tile.export_labels.tile_gif_make")]
-        assert tile.loading is True and tile.disabled is True and tile.path is None
-        harness.run()                        # the GIF lands after the switch
-        assert tile.path is not None and not tile.loading
+        row = harness.build_tile
+        assert row.title == t("analysis_tile.export_labels.building") != "Building files…"
+        assert row.busy is True and row.disabled is True
+        harness.run()                        # the build lands after the switch
+        assert row.busy is False and row.title == t("analysis_tile.export_labels.rebuild_tile")
+        assert harness.gif_tile.path is not None
     finally:
         set_locale("en")

@@ -199,24 +199,15 @@ def _in(root):
 
 
 def _build_button(body):
-    """The dashed *Build alert files* tile in an export section body.
+    """The build row (``file_tile.BuildTile``) of an export section body: the
+    file list's last row, *Build files* / *Rebuild files* / *Building files…*.
 
-    Found by its class, not its label. The tile's label never changes: once
-    files are built the dashed tile hides and a separate *Rebuild* button
-    (``_rebuild_button``) appears.
+    Found by its class, not its label, which changes with the list's state.
     """
     for widget in _in(body):
         if "defo-build-tile" in (getattr(widget, "class_", "") or "").split():
             return widget
     raise AssertionError("no build tile in the export section body")
-
-
-def _rebuild_button(body):
-    """The small *Rebuild* text button under the file tiles (READY state)."""
-    for widget in _in(body):
-        if "defo-rebuild" in (getattr(widget, "class_", "") or "").split():
-            return widget
-    raise AssertionError("no rebuild button in the export section body")
 
 
 def _shown(root, target):

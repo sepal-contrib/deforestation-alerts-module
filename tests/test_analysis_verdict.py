@@ -2,8 +2,8 @@
 
 The loss driver left this block for the Questions section (spec D4): its
 hiding for a false positive, its codes and its dirty mark are tested in
-tests/test_analysis_questions_panel.py. Save & next, Save and the save-state
-line left it for the panel's sticky footer (spec D6): tested in
+tests/test_analysis_questions_panel.py. Save, Next and the save-state line
+left it for the panel's dock (spec D6; option B, 2026-10-26): tested in
 tests/test_analysis_footer.py.
 """
 
@@ -114,10 +114,10 @@ def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
 def test_a_save_with_an_unapplied_drawing_is_refused_before_anything_is_written(
     tmp_path, monkeypatch
 ):
-    """The reviewer draws (or adds a model's prediction) and presses Save &
-    next without *Apply*: the polygon on the maps is not what ``defo_layer``
+    """The reviewer draws (or adds a model's prediction) and presses Save
+    without *Apply*: the polygon on the maps is not what ``defo_layer``
     holds, so the save would store the previous polygon -- or none -- over work
-    still on screen, and Save & next would navigate it away. OLD disabled the
+    still on screen. OLD disabled the
     review Save for the whole edit session; the refusal is that guard, as a
     message that names what to do. Nothing is written: not the store, not the
     row."""

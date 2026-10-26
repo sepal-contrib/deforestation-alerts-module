@@ -59,9 +59,9 @@ def visible_btn(page, text, scope=""):
 # (queue counter, navigation, facts grid + status chip), block B (the verdict)
 # and three sections -- Questions (the loss driver and every other project
 # question, spec D4), Refine polygon, and Export this alert, which sits in the
-# sticky footer above Save & next / Save (spec D6) -- whose bodies are
-# COLLAPSED (hidden with ``display``), so nothing inside them is ``:visible``
-# until the header is clicked. The retired "Alert info" card's facts live in block A.
+# dock fixed to the panel's bottom edge, above Save / Next (spec D6; option B,
+# 2026-10-26) -- whose bodies are COLLAPSED (hidden with ``display``), so
+# nothing inside them is ``:visible`` until the header is clicked. The retired "Alert info" card's facts live in block A.
 # Block A is a flat ``panel_block`` (a ``div.py-3``, no longer a ``v-card``).
 _BLOCK_A_JS = """
     const card = [...document.querySelectorAll('.defo-analysis-right .py-3, .defo-analysis-right .pb-3')]
@@ -94,7 +94,8 @@ def status_chip(page):
 def open_section(page, title):
     """Open a collapsible Analysis section ("Questions" / "Refine polygon" /
     "Export this alert"): its body is hidden with ``display`` until the 50px header is
-    clicked, and the header's chevron says which way it is."""
+    clicked, and the header's chevron says which way it is -- down when open
+    (closed, the sections point right and the dock's Export up)."""
     header = visible_btn(page, title)
     wait_for(lambda: header.count(), 30, f'the "{title}" section header')
     if not header.locator(".mdi-chevron-down").count():
@@ -102,28 +103,27 @@ def open_section(page, title):
         page.wait_for_timeout(800)
 
 
-#: The panel's sticky footer (``gui/tile/analysis/footer.py``), by its class.
+#: The panel's dock (``gui/tile/analysis/footer.py``), by its class.
 _FOOTER = ".defo-analysis-footer"
 
 
 def save_btn(page):
-    """The footer's *Save* -- exact text, since *Save & next* also reads
-    "Save", and SCOPED to the footer, since three other catalogue strings
+    """The dock's *Save* -- exact text, as no other dock button reads
+    "Save" in part, and SCOPED to the dock, since three other catalogue strings
     render exactly "Save" too (the alert-source, period and visualization
     modals' own Save buttons). All three live inside modals today, so a
     document-wide match is unique only by luck: a modal a preceding phase left
-    open would be clicked instead, with no diagnostic. The footer's buttons
+    open would be clicked instead, with no diagnostic. The dock's buttons
     sit outside the collapsed Export body, so no section has to be opened."""
     return page.locator(f"{_FOOTER} button:visible",
                         has_text=re.compile(r"^\s*Save\s*$")).first
 
 
 def download_btn(page):
-    """The dashed *Build alert files* tile (``.defo-build-tile``), in the
-    Export section's body (open it first). Only before a build: it hides once
-    a build left files, and *Rebuild files* is another button
-    (``.defo-rebuild``). Found by its class, not its label: "(save first)"
-    shows in the label until the alert is saved."""
+    """The build row (``.defo-build-tile``), the last row of the Export
+    section's file list (open it first). The same row before and after a
+    build: *Build files*, then *Rebuild files*, *Building files…* while one
+    runs. Found by its class, not its title, which changes with the state."""
     return page.locator('.defo-analysis-right .defo-build-tile:visible').first
 
 
@@ -297,7 +297,7 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
 def review_and_save(page, rec, *, out):
     """Block B: answer the verdict question, pick a loss driver in the
     Questions section (collapsed by default, so opened first), then **Save**
-    (not *Save & next*: the assertions below read the alert that was saved).
+    (not *Next*: the assertions below read the alert that was saved).
     There is no default answer any more -- an unanswered Save is refused -- so
     the verdict button is pressed here."""
     page.wait_for_timeout(2000)
@@ -324,7 +324,7 @@ def review_and_save(page, rec, *, out):
     # answer and not the button that was pressed.
     assert (rec["status_after_save"] or "").startswith("Reviewed"), rec["facts_after_save"]
     open_section(page, "Export this alert")
-    assert not download_btn(page).is_disabled(), "Build alert files still disabled after the Save"
+    assert not download_btn(page).is_disabled(), "Build files still disabled after the Save"
 
 
 def _lane_options(page):

@@ -48,16 +48,16 @@ from datetime import datetime
 from types import SimpleNamespace
 
 #: ``(phase, sections it opens first, the Analysis texts it reaches for)``.
-#: A text is matched as a substring, so "Build alert files" covers the label
-#: of the build tile however it is decorated.
+#: A text is matched as a substring, so "Build files" covers the title of
+#: the build row however it is decorated.
 WALK = [
     ("phases.integrate_and_land (alert_facts)", (), ("Source", "Detected", "Status")),
     ("phases.review_and_save (verdict button)", (), ("True alert",)),
     ("phases.review_and_save (loss driver)", ("Questions",), ("Loss driver",)),
-    # In the sticky footer, outside every section body (spec D6).
+    # In the dock, outside every section body (spec D6; option B, 2026-10-26).
     ("phases.review_and_save (save_btn)", (), ("Save",)),
-    ("phases.review_and_save (download_btn)", ("Export this alert",), ("Build alert files",)),
-    ("phases.download_with_images (download_btn)", ("Export this alert",), ("Build alert files",)),
+    ("phases.review_and_save (download_btn)", ("Export this alert",), ("Build files",)),
+    ("phases.download_with_images (download_btn)", ("Export this alert",), ("Build files",)),
     ("phases.open_section (the headers themselves)", (),
      ("Questions", "Refine polygon", "Export this alert")),
     ("phases.analysis_jump_field (after the # toggle)", (), ("Go",)),
@@ -106,7 +106,9 @@ def _texts(root, hidden=False, out=None):
 
 
 def build_panel(tmp):
-    """``(controls, sections)`` of a panel built on stand-in models."""
+    """``(controls, sections)`` of a panel built on stand-in models. The dock
+    (``sections.footer.root``) is not one of ``controls``' children:
+    ``build_screen`` places it under them."""
     import ipyvuetify as v
 
     from deforestation_alerts.project.models import Project
@@ -133,7 +135,8 @@ def main():
     os.environ.setdefault("DEFORESTATION_ALERTS_DATA_DIR", tmp)
     controls, sections = build_panel(tmp)
 
-    panel = _texts(controls)
+    # The scrolling controls and the dock under them: the walks reach into both.
+    panel = _texts(sections.footer.root, out=_texts(controls))
     bodies = {"Questions": _texts(sections.questions.body_box),
               "Refine polygon": _texts(sections.refine.body_box),
               "Export this alert": _texts(sections.export.body_box)}
