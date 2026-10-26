@@ -321,9 +321,9 @@ def test_review_columns_follow_the_questions():
     qs = [*default_questions(), Question(key="cause", label="Cause"), Question(key="cause", label="Again")]
     assert review_columns(qs) == ["status", "description", "q_cause", "before_img", "before_img_info", "after_img",
                                   "after_img_info", "admin1", "admin2", "admin3", "alert_polygon", "area_ha",
-                                  "grows_from"]
+                                  "grows_from", "review_group"]
     assert review_columns([]) == ["status", "before_img", "before_img_info", "after_img", "after_img_info",
-                                  "admin1", "admin2", "admin3", "alert_polygon", "area_ha", "grows_from"]
+                                  "admin1", "admin2", "admin3", "alert_polygon", "area_ha", "grows_from", "review_group"]
 
 
 # ---- value equality ------------------------------------------------------------------

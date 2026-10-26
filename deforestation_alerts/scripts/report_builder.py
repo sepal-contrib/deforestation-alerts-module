@@ -1,5 +1,6 @@
 from docx import Document
 from docx.shared import Pt
+import pandas as pd
 import geopandas as gpd
 import rasterio
 import matplotlib.pyplot as plt
@@ -117,6 +118,10 @@ def plot_tiff_with_overlay(
     plt.close(fig)
 
 
+def _present(row, key) -> bool:
+    return key in row and not pd.isna(row[key])
+
+
 def row_attributes(gdf_row) -> dict:
     """The placeholders the report fills from the alert's own row (the names
     ``project.questions.REPORT_PLACEHOLDERS`` reserves)."""
@@ -131,6 +136,8 @@ def row_attributes(gdf_row) -> dict:
         "after_img": gdf_row["after_img"],
         "alert_system": gdf_row["alert_sources"],
         "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
+        "group_size": str(int(gdf_row["group_size"])) if _present(gdf_row, "group_size") else "1",
+        "group_alerts": str(gdf_row["group_alerts"]) if _present(gdf_row, "group_alerts") else "",
     }
 
 

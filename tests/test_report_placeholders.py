@@ -36,3 +36,12 @@ def test_the_builder_s_own_placeholders_are_the_reserved_ones():
                      "alert_date_max": 2026.010, "before_img": "b", "after_img": "a",
                      "alert_sources": "GLAD-L", "area_ha": 1.25})
     assert set(report_builder.row_attributes(row)) == set(REPORT_PLACEHOLDERS)
+
+
+def test_row_attributes_fill_the_group_placeholders():
+    base = {"admin1": "A", "admin2": "B", "admin3": "C", "alert_date_min": 2026.001, "alert_date_max": 2026.010,
+            "before_img": "b", "after_img": "a", "alert_sources": "GLAD-L", "area_ha": 1.25}
+    plain = report_builder.row_attributes(pd.Series(base))
+    assert plain["group_size"] == "1" and plain["group_alerts"] == ""
+    grouped = report_builder.row_attributes(pd.Series({**base, "group_size": 3, "group_alerts": "2, 5, 7"}))
+    assert grouped["group_size"] == "3" and grouped["group_alerts"] == "2, 5, 7"

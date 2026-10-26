@@ -82,6 +82,11 @@ def test_ids_measures_dates_images_and_lists_are_never_offered():
     assert "q_deleted" not in offered  # a deleted question's answers
 
 
+def test_review_group_is_not_a_filter_attribute():
+    gdf = _six().assign(review_group=[1, 1, 2, 2, 3, 3])
+    assert "review_group" not in {c.column for c in filter_columns(gdf, QS)}
+
+
 def test_a_column_needs_two_to_fifty_distinct_values():
     few = _alerts(code=["a"] * 3)
     assert [c.column for c in filter_columns(few, [])] == []

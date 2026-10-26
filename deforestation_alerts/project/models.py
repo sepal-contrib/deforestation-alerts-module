@@ -288,6 +288,10 @@ class EvaluatorSplit(BaseModel):
     packaged: bool = False  # set once any package was built (re-split warns)
     questions_digest: str = ""  # the questionnaire's digest when packaged (spec §7.1)
     returns: dict[str, EvaluatorReturn] = Field(default_factory=dict)  # by evaluator name
+    #: the grouping this split was dealt under (None = grouping off); the
+    #: project setting no longer applies once a set is split
+    group_radius_m: Optional[float] = None
+    group_include_reviewed: bool = False
 
 
 class ReviewCopy(BaseModel):
@@ -321,6 +325,7 @@ class AlertSet(BaseModel):
     footprint_rel_path: str
     n_alerts: int = 0
     n_reviewed: int = 0
+    n_groups: int = 0  # review groups (>= 2 rows) saved in this set's store
     last_alert_index: int = 0
     fingerprint: str
     created_at: datetime
@@ -394,6 +399,15 @@ def default_questions() -> list[Question]:
     )]
 
 
+class GroupReview(BaseModel):
+    """The opt-in setting to review nearby alerts together (spec 2026-10-26).
+    ``radius_m`` is not range-validated here; ``grouping.effective`` clamps it."""
+
+    enabled: bool = False
+    radius_m: float = 500.0
+    include_reviewed: bool = False
+
+
 class Project(BaseModel):
     schema_version: int = SCHEMA_VERSION
     name: str
@@ -420,6 +434,8 @@ class Project(BaseModel):
     #: whether the Evaluators step splits the alerts between evaluators;
     #: False is a solo evaluation, None until the user picks a review mode
     multi_evaluator: Optional[bool] = None
+    #: review nearby alerts together (off by default)
+    group_review: GroupReview = Field(default_factory=GroupReview)
 
     @model_validator(mode="before")
     @classmethod
