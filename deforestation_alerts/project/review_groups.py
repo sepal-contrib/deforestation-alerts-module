@@ -22,10 +22,14 @@ Solara, no Earth Engine.
 from dataclasses import dataclass
 from typing import Optional
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
+import shapely
+from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.project import review_status, store_schema
+from deforestation_alerts.project.questions import is_answer_column
 
 COLUMN = store_schema.REVIEW_GROUP
 NOT_REVIEWED = review_status.NOT_REVIEWED
@@ -35,6 +39,10 @@ SAVE, REMOVE = "save", "remove"
 
 #: how a row the plan rewrites changes, as the save's confirmation names it
 OVERWRITTEN, MOVED, JOINED, REMOVED = "overwritten", "moved", "joined", "removed"
+
+#: the image picks and the admin names a review writes, copied to members and cleared on a reset
+IMAGE_COLUMNS = ("before_img", "before_img_info", "after_img", "after_img_info")
+ADMIN_COLUMNS = ("admin1", "admin2", "admin3")
 
 
 @dataclass(frozen=True)
@@ -215,3 +223,155 @@ def foreign_rows(gdf, plan, evaluator: str) -> tuple:
     """The positions a plan touches that are not assigned to ``evaluator``,
     sorted: what a review copy may not write."""
     return tuple(p for p in _plan_rows(plan) if _evaluator(gdf, p) != evaluator)
+
+
+# ---- what a plan writes (§4.3-§4.5) ---------------------------------------
+def _is_geometry(value) -> bool:
+    return isinstance(value, BaseGeometry) and not value.is_empty
+
+
+def _links(cell) -> list:
+    # ``growth`` will read groups from this module: import it at call time.
+    from deforestation_alerts.project.growth import links_of
+
+    return links_of(cell)
+
+
+def polygon_area_ha(geom, crs=None, *, source="EPSG:4326") -> float:
+    """The area of ``geom`` (in ``source``) in hectares, measured in ``crs``
+    (``state.area_crs``: the grid's, metric), or in its estimated UTM zone."""
+    series = gpd.GeoSeries([geom], crs=source)
+    return float(series.to_crs(crs or series.estimate_utm_crs()).area.iloc[0]) / 10_000.0
+
+
+def own_area(gdf, p, crs=None) -> float:
+    """The row's Integrate area (§4.3): its stored ``area_ha`` while that is
+    still Integrate's (no drawing stored, a positive number), else the area
+    of its Integrate geometry in ``crs``."""
+    stored = gdf["area_ha"].iloc[p] if "area_ha" in gdf.columns else None
+    stored = pd.to_numeric(pd.Series([stored], dtype=object), errors="coerce").iloc[0]
+    drawn = gdf["alert_polygon"].iloc[p] if "alert_polygon" in gdf.columns else None
+    if not _is_geometry(drawn) and pd.notna(stored) and stored > 0:
+        return float(stored)
+    return polygon_area_ha(gdf.geometry.iloc[p], crs, source=gdf.crs or "EPSG:4326")
+
+
+def reset_values(gdf, p, crs=None) -> dict:
+    """The cells of a row taken out of a review (§4.4): unreviewed, every
+    answer column ``""``, no picks, no admin names, no drawing, its Integrate
+    area, no group and, in a store with growth columns, its automatic links."""
+    values = {"status": NOT_REVIEWED}
+    values.update({c: "" for c in gdf.columns if is_answer_column(c)})
+    values.update({c: None for c in (*IMAGE_COLUMNS, *ADMIN_COLUMNS) if c in gdf.columns})
+    values["alert_polygon"] = None
+    values["area_ha"] = own_area(gdf, p, crs)
+    auto = store_schema.GROWS_FROM_AUTO
+    if store_schema.GROWS_FROM in gdf.columns or auto in gdf.columns:
+        values[store_schema.GROWS_FROM] = _links(gdf[auto].iloc[p]) if auto in gdf.columns else []
+    values[COLUMN] = pd.NA
+    return values
+
+
+def plan_updates(gdf, plan, review=None, *, drawing=None, crs=None, links=None) -> dict:
+    """``{position: {column: value}}``, every cell ``plan`` writes (§4.3-§4.5).
+
+    ``review`` is the reviewer's values for the main (status, the current
+    questions' answer columns, the image picks, the admin names); a REMOVE
+    plan takes none and changes only its detached row. ``drawing`` is the
+    drawn polygon (EPSG:4326, the union), or None; its area is measured in
+    ``crs``. ``links``, when not None, are the group's ``grows_from`` and go
+    to the main and every member. A SAVE writes ``review_group`` = the main's
+    id on the main (a group of one when it has no members) and its members."""
+    updates = {}
+    if plan.kind == SAVE:
+        review = dict(review or {})
+        drawn = drawing if _is_geometry(drawing) else None
+        main_id = int(ids(gdf)[plan.main])
+        updates[plan.main] = {
+            **review,
+            "alert_polygon": drawn,
+            "area_ha": polygon_area_ha(drawn, crs) if drawn is not None else own_area(gdf, plan.main, crs),
+            COLUMN: main_id,
+        }
+        # Answers to deleted questions: what the main stored, on every member.
+        archived = {c: gdf[c].iloc[plan.main] for c in gdf.columns if is_answer_column(c) and c not in review}
+        for p in plan.members:
+            updates[p] = {
+                **review,
+                **archived,
+                "alert_polygon": None,
+                "area_ha": 0.0 if drawn is not None else own_area(gdf, p, crs),
+                COLUMN: main_id,
+            }
+        if links is not None:
+            for p in (plan.main, *plan.members):
+                updates[p][store_schema.GROWS_FROM] = list(links)
+    for p in plan.detached:
+        updates[p] = reset_values(gdf, p, crs)
+    return updates
+
+
+def ensure_column(gdf) -> None:
+    """Make ``review_group`` an ``Int64`` column of ``gdf`` in place: added
+    (all ``<NA>``) when missing, cast when stored as object or float."""
+    if COLUMN not in gdf.columns or str(gdf[COLUMN].dtype) != "Int64":
+        gdf[COLUMN] = pd.array(group_values(gdf).to_numpy(), dtype="Int64")
+
+
+def bounds(gdf, positions) -> tuple:
+    """``(minx, miny, maxx, maxy)`` around the rows' boxes (their geometry
+    without a ``bounding_box`` column): where the admin lookup looks."""
+    column = "bounding_box" if "bounding_box" in gdf.columns else gdf.geometry.name
+    return tuple(float(v) for v in gpd.GeoSeries(list(gdf[column].iloc[list(positions)])).total_bounds)
+
+
+def n_groups(gdf) -> int:
+    """The groups with members: ``review_group`` values held by two rows or more."""
+    counts = group_values(gdf).dropna().value_counts()
+    return int((counts >= 2).sum())
+
+
+# ---- what the outputs read (§9) -------------------------------------------
+def group_shape(gdf, p) -> Optional[BaseGeometry]:
+    """The group's outline: its main's drawing, else the union of the
+    group's Integrate geometries (the row's own for a single row)."""
+    main, members = group_of(gdf, p)
+    drawn = gdf["alert_polygon"].iloc[main] if "alert_polygon" in gdf.columns else None
+    if _is_geometry(drawn):
+        return drawn
+    if not members:
+        return gdf.geometry.iloc[main]
+    return shapely.union_all(gdf.geometry.iloc[[main, *members]].to_numpy())
+
+
+def _sources(values) -> str:
+    parts = (part.strip() for value in values if isinstance(value, str) for part in value.split(";"))
+    return "; ".join(dict.fromkeys(part for part in parts if part))
+
+
+def group_record(gdf, p) -> tuple:
+    """``(row, outline)`` the per-alert outputs describe (§9). For a grouped
+    row: the main's row with the group's summed ``area_ha``, its first and
+    last detection dates and its distinct sources (the main's first). A
+    single row is itself. Either row carries ``group_size``, ``group_alerts``
+    (the 1-based alert numbers, comma separated) and, in a store with links,
+    ``grows_from`` as the main's links joined by ``";"``. The outline is
+    ``group_shape``."""
+    main, members = group_of(gdf, p)
+    rows = [main, *members]
+    row = gdf.iloc[main].copy()
+    if members:
+        part = gdf.iloc[rows]
+        if "area_ha" in part.columns:
+            row["area_ha"] = float(pd.to_numeric(part["area_ha"], errors="coerce").fillna(0.0).sum())
+        if "alert_date_min" in part.columns:
+            row["alert_date_min"] = pd.to_numeric(part["alert_date_min"], errors="coerce").min()
+        if "alert_date_max" in part.columns:
+            row["alert_date_max"] = pd.to_numeric(part["alert_date_max"], errors="coerce").max()
+        if "alert_sources" in part.columns:
+            row["alert_sources"] = _sources(part["alert_sources"])
+    if store_schema.GROWS_FROM in gdf.columns:
+        row[store_schema.GROWS_FROM] = ";".join(_links(gdf[store_schema.GROWS_FROM].iloc[main]))
+    row["group_size"] = len(rows)
+    row["group_alerts"] = ", ".join(str(q + 1) for q in sorted(rows))
+    return row, group_shape(gdf, p)

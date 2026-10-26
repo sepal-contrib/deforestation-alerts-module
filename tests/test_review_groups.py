@@ -6,6 +6,7 @@ Earth Engine."""
 import geopandas as gpd
 import pandas as pd
 import pytest
+import shapely
 from shapely.geometry import box
 
 from deforestation_alerts.project import review_groups as rg
@@ -42,6 +43,17 @@ def _alerts(n=4, *, statuses=None, groups=None, ids=True, evaluators=None, gap=0
     if evaluators is not None:
         gdf["evaluator"] = evaluators
     return gdf
+
+
+def _apply(gdf, updates):
+    """``updates`` written into a copy, as the save writes them."""
+    out = gdf.copy()
+    if any(rg.COLUMN in u for u in updates.values()):
+        rg.ensure_column(out)
+    for position, values in updates.items():
+        for column, value in values.items():
+            out.at[position, column] = value
+    return out
 
 
 # ---- identity ---------------------------------------------------------------
@@ -178,3 +190,193 @@ def test_foreign_rows_are_the_other_evaluators():
 def test_pre_grouping_is_a_review_without_a_group():
     gdf = _alerts(3, statuses=["Confirmed", "Confirmed", NR], groups=[None, 101, None])
     assert [rg.pre_grouping(gdf, p) for p in range(3)] == [True, False, False]
+
+
+def test_without_alert_id_a_group_holds_positions():
+    gdf = _alerts(3, ids=False)
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW))
+    assert out[rg.COLUMN].tolist()[:2] == [0, 0] and pd.isna(out[rg.COLUMN].iloc[2])
+    rg.check_groups(out)
+
+
+# ---- what a plan writes ------------------------------------------------------
+def test_a_group_save_copies_the_review_and_points_members_at_the_main():
+    gdf = _alerts(4)
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1, 2}), REVIEW))
+    rg.check_groups(out)
+    assert out[rg.COLUMN].tolist()[:3] == [100, 100, 100] and pd.isna(out[rg.COLUMN].iloc[3])
+    assert out["status"].tolist() == ["Confirmed"] * 3 + [NR]
+    assert out["q_loss_driver"].tolist() == ["mining"] * 3 + [""]
+    assert out["admin1"].tolist()[:3] == ["Brasil"] * 3
+    assert out["area_ha"].tolist() == [1.0, 2.0, 3.0, 4.0]  # no drawing: each keeps its own
+
+
+def test_a_group_of_one_holds_its_own_id():
+    gdf = _alerts(3)
+    updates = rg.plan_updates(gdf, rg.plan_group(gdf, 1, set()), REVIEW)
+    assert list(updates) == [1]
+    assert updates[1] == {**REVIEW, "alert_polygon": None, "area_ha": 2.0, rg.COLUMN: 101}
+
+
+def test_a_drawn_group_puts_the_area_on_the_main_and_zero_on_members():
+    gdf = _alerts(4)
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1, 2}), REVIEW, drawing=DRAWING, crs=CRS))
+    assert out.loc[0, "area_ha"] == pytest.approx(rg.polygon_area_ha(DRAWING, CRS))
+    assert out.loc[0, "alert_polygon"].equals(DRAWING)
+    assert out["area_ha"].tolist()[1:] == [0.0, 0.0, 4.0]
+    assert out.loc[1, "alert_polygon"] is None
+
+
+def test_members_take_the_mains_answers_to_deleted_questions():
+    gdf = _alerts(3)
+    gdf["q_gone"] = ["old", "x", "y"]
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW))
+    assert out["q_gone"].tolist() == ["old", "old", "y"]
+
+
+def test_links_go_to_every_row_of_the_group():
+    gdf = _alerts(3)
+    gdf["grows_from"] = pd.Series([[], [], []], dtype="object")
+    updates = rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW, links=["s#1@r"])
+    assert updates[0]["grows_from"] == ["s#1@r"] and updates[1]["grows_from"] == ["s#1@r"]
+    assert updates[0]["grows_from"] is not updates[1]["grows_from"]
+    assert 2 not in updates
+    assert "grows_from" not in rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW)[0]
+
+
+def test_a_detached_row_is_reset_to_unreviewed_with_its_integrate_area():
+    gdf = _alerts(3, statuses=["Confirmed"] * 3, groups=[100] * 3)
+    gdf["q_loss_driver"] = ["mining"] * 3
+    gdf["description"] = ["note"] * 3
+    gdf["before_img"] = pd.Series(["b"] * 3, dtype="object")
+    gdf["admin1"] = pd.Series(["Brasil"] * 3, dtype="object")
+    gdf.at[0, "alert_polygon"] = DRAWING
+    gdf["area_ha"] = [5.0, 0.0, 0.0]  # a drawn group: the members' areas are 0
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW, crs=CRS))
+    row = out.iloc[2]
+    assert row["status"] == NR and row["q_loss_driver"] == "" and row["description"] == ""
+    assert pd.isna(row["before_img"]) and pd.isna(row["admin1"]) and row["alert_polygon"] is None
+    assert pd.isna(row[rg.COLUMN])
+    assert row["area_ha"] == pytest.approx(rg.polygon_area_ha(gdf.geometry.iloc[2], CRS))
+    rg.check_groups(out)
+
+
+def test_a_detached_row_goes_back_to_its_automatic_links():
+    gdf = _alerts(3, statuses=["Confirmed"] * 3, groups=[100] * 3)
+    gdf["grows_from"] = pd.Series([["s#1@r"]] * 3, dtype="object")
+    gdf["grows_from_auto"] = pd.Series([[], [], ["s#9@r"]], dtype="object")
+    updates = rg.plan_updates(gdf, rg.plan_group(gdf, 0, set()), REVIEW)
+    assert updates[2]["grows_from"] == ["s#9@r"]
+    assert updates[1]["grows_from"] == []
+    gdf["grows_from_auto"] = pd.Series([None, None, "s#8@r;s#9@r"], dtype="object")
+    assert rg.reset_values(gdf, 2)["grows_from"] == ["s#8@r", "s#9@r"]
+    assert rg.reset_values(gdf, 1)["grows_from"] == []
+    assert "grows_from" not in rg.reset_values(_alerts(2), 1)  # a store without growth columns
+
+
+def test_a_removed_member_leaves_its_main_a_single_review():
+    gdf = _alerts(2, statuses=["Confirmed"] * 2, groups=[100, 100])
+    updates = rg.plan_updates(gdf, rg.plan_remove(gdf, 1))
+    assert list(updates) == [1]  # the main keeps its values
+    out = _apply(gdf, updates)
+    assert out.loc[0, rg.COLUMN] == 100 and out.loc[0, "status"] == "Confirmed"
+    assert out.loc[1, "status"] == NR and pd.isna(out.loc[1, rg.COLUMN])
+    rg.check_groups(out)
+
+
+def test_absorbing_a_group_drops_its_polygon():
+    gdf = _alerts(5, statuses=[NR] * 3 + ["Confirmed"] * 2, groups=[None] * 3 + [103] * 2)
+    gdf.at[3, "alert_polygon"] = DRAWING
+    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {3}), REVIEW))
+    assert out.loc[3, "alert_polygon"] is None and out[rg.COLUMN].tolist()[3:] == [100, 100]
+    rg.check_groups(out)
+    updates = rg.plan_updates(gdf, rg.plan_group(gdf, 0, {4}), REVIEW)
+    assert 3 not in updates  # K's main, left alone, is not touched
+    out = _apply(gdf, updates)
+    assert out.loc[3, rg.COLUMN] == 103 and out.loc[3, "status"] == "Confirmed"
+    assert out.loc[3, "alert_polygon"].equals(DRAWING)
+    rg.check_groups(out)
+
+
+def test_own_area_is_the_stored_integrate_area_unless_a_drawing_replaced_it():
+    gdf = _alerts(2)
+    assert rg.own_area(gdf, 0) == 1.0
+    gdf.at[0, "alert_polygon"] = DRAWING
+    gdf.at[0, "area_ha"] = 9.9
+    assert rg.own_area(gdf, 0, CRS) == pytest.approx(rg.polygon_area_ha(gdf.geometry.iloc[0], CRS))
+
+
+def test_polygon_area_matches_a_known_utm_area():
+    square = gpd.GeoSeries([box(500000, 7300000, 501000, 7301000)], crs=CRS).to_crs(4326).iloc[0]
+    assert rg.polygon_area_ha(square, CRS) == pytest.approx(100.0, rel=1e-6)
+    assert rg.polygon_area_ha(square) == pytest.approx(100.0, rel=1e-6)  # its own UTM zone is 21S
+
+
+def test_bounds_span_the_rows_boxes():
+    gdf = _alerts(3)
+    minx, miny, maxx, maxy = rg.bounds(gdf, [0, 2])
+    assert (minx, miny) == pytest.approx(gdf.geometry.iloc[0].bounds[:2])
+    assert (maxx, maxy) == pytest.approx(gdf.geometry.iloc[2].bounds[2:])
+
+
+def test_ensure_column_adds_a_nullable_int_column():
+    gdf = _alerts(3)
+    rg.ensure_column(gdf)
+    assert str(gdf[rg.COLUMN].dtype) == "Int64" and gdf[rg.COLUMN].isna().all()
+    for values in (pd.Series([100, None, 100], dtype="object"), pd.Series([100.0, float("nan"), 100.0])):
+        gdf = _alerts(3)
+        gdf[rg.COLUMN] = values
+        rg.ensure_column(gdf)
+        assert str(gdf[rg.COLUMN].dtype) == "Int64"
+        assert gdf[rg.COLUMN].tolist()[::2] == [100, 100] and pd.isna(gdf[rg.COLUMN].iloc[1])
+
+
+def test_review_group_survives_the_parquet_round_trip(tmp_path):
+    from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
+
+    gdf = _alerts(3, statuses=["Confirmed"] * 2 + [NR], groups=[100, 100, None])
+    path = tmp_path / "alert_db.parquet"
+    save_gdf_to_parquet(gdf, path)
+    back = load_gdf_from_parquet(path)
+    assert str(back[rg.COLUMN].dtype) == "Int64"
+    assert rg.group_of(back, 1) == (0, (1,))
+    rg.check_groups(back)
+
+
+def test_n_groups_counts_groups_of_two_or_more():
+    gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[100, 100, 102, None])
+    assert rg.n_groups(gdf) == 1
+    assert rg.n_groups(_alerts(2)) == 0
+
+
+# ---- what the outputs read ---------------------------------------------------
+def test_group_shape_is_the_drawing_else_the_union():
+    gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[101] * 3 + [None])
+    union = shapely.union_all(gdf.geometry.iloc[[0, 1, 2]].to_numpy())
+    assert rg.group_shape(gdf, 0).equals(union)
+    assert rg.group_shape(gdf, 3).equals(gdf.geometry.iloc[3])
+    gdf.at[1, "alert_polygon"] = DRAWING
+    assert rg.group_shape(gdf, 2).equals(DRAWING)
+
+
+def test_group_record_sums_the_group_and_numbers_its_alerts_from_one():
+    gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[101] * 3 + [None])
+    gdf["alert_sources"] = ["GLAD-L", "RADD; GLAD-L", "RADD", "GLAD-S2"]
+    gdf["grows_from"] = pd.Series([[], ["s#1@r", "s#2@r"], [], []], dtype="object")
+    row, outline = rg.group_record(gdf, 2)
+    assert row["alert_id"] == 101 and row["area_ha"] == 6.0
+    assert row["alert_date_min"] == pytest.approx(2026.010)
+    assert row["alert_date_max"] == pytest.approx(2026.022)
+    assert row["alert_sources"] == "RADD; GLAD-L"  # the main's first
+    assert row["grows_from"] == "s#1@r;s#2@r"
+    assert row["group_size"] == 3 and row["group_alerts"] == "1, 2, 3"
+    assert outline.equals(shapely.union_all(gdf.geometry.iloc[[0, 1, 2]].to_numpy()))
+    row, outline = rg.group_record(gdf, 3)
+    assert row["group_size"] == 1 and row["group_alerts"] == "4" and row["grows_from"] == ""
+    assert outline.equals(gdf.geometry.iloc[3])
+
+
+def test_group_record_outline_is_the_mains_drawing():
+    gdf = _alerts(3, statuses=["Confirmed"] * 2 + [NR], groups=[101, 101, None])
+    gdf.at[1, "alert_polygon"] = DRAWING
+    assert rg.group_record(gdf, 0)[1].equals(DRAWING)
