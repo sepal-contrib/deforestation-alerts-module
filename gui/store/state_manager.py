@@ -279,6 +279,17 @@ class AppState:
         if target is not None:
             self.go_to(target)
 
+    def next_unreviewed(self):
+        """The next unreviewed alert among the filter's matches (every alert
+        without one), wrapping round; None when there is none."""
+        return af.next_unreviewed_match(self.alerts_gdf.value, self.alert_mask(), self.actual_alert_id.value)
+
+    def go_next_unreviewed(self):
+        """The next unreviewed alert (``next_unreviewed``); with none, stay."""
+        target = self.next_unreviewed()
+        if target is not None:
+            self.go_to(target)
+
     def go_prev(self):
         """The previous alert, or under a filter the previous match; at the start, stay."""
         if self.alert_filter is None:

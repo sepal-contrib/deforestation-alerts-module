@@ -198,6 +198,27 @@ def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
     assert unreviewed.disabled, "nothing else left to review"
 
 
+def test_the_skip_icon_beside_next_goes_to_the_next_unreviewed_alert(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    skip = context.next_unreviewed_widget(card)
+    nxt = context.nav_widgets(card)[1]
+    topnav = context.build_topnav(card, v.Select(items=[]))
+    nav = topnav.children[-1]
+    assert nav.children[-1].class_ == "defo-topnav-next" and nav.children[-1].children == [nxt, skip]
+    assert skip.attributes["title"] == skip.attributes["aria-label"] == t("analysis_tile.nav.next_unreviewed")
+    s.alerts_gdf.set(_alerts(["Not reviewed", "Confirmed", "False Positive", None, "Need revision"]))
+    s.actual_alert_id.value = 0
+    assert not skip.disabled
+    skip.fire_event("click", None)
+    assert s.actual_alert_id.value == 3
+    skip.fire_event("click", None)
+    assert s.actual_alert_id.value == 0  # wraps round
+    s.alerts_gdf.set(_alerts(["Not reviewed", "Confirmed"]))
+    s.actual_alert_id.value = 0
+    assert skip.disabled, "nothing else left to review"
+
+
 def _walk(w):
     out = [w]
     for c in getattr(w, "children", None) or []:

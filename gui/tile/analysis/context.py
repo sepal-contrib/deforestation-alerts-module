@@ -48,7 +48,7 @@ from gui.store.workflow_steps import active_set
 from gui.tile.analysis.filter_menu import build_filter_menu
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
-from gui.widget.buttons import btn, set_label
+from gui.widget.buttons import btn, icon_btn, set_label, set_tip
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
 #: else) can reach them without re-deriving the tree's shape.
@@ -215,6 +215,12 @@ def queue_widgets(card):
     return slots["counter"], slots["tally"], slots["bar"]
 
 
+def next_unreviewed_widget(card):
+    """The icon-only *Next unreviewed alert* button beside Next of a card
+    built by ``build_context``."""
+    return getattr(card, _SLOTS)["skip"]
+
+
 def nav_widgets(card):
     """``(prev, next, jump, menu, go, unreviewed)`` of a card built by
     ``build_context``: ``jump`` is the counter's button, which opens ``menu``
@@ -255,12 +261,15 @@ def facts_widgets(card):
 
 
 _NAV_WIDTH = "min-width: 124px;"
+#: an icon-only button as tall as the words beside it
+_SKIP_STYLE = "min-width: 0; padding: 0 6px;"
 
 
 def _build_nav(app_state, id_field, counter, labels, guard=None):
-    """Previous / Next, and the counter as a button that opens a small menu:
-    "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
-    alert". The menu floats over the panel, so opening it moves nothing.
+    """Previous / Next, an icon-only "Next unreviewed alert" beside Next
+    (``skip``), and the counter as a button that opens a small menu: "Go to
+    alert number" (``id_field`` and ``go``) and "Next unreviewed alert" again.
+    The menu floats over the panel, so opening it moves nothing.
 
     The field takes the 1-based number the counter shows, so ``go_to`` takes
     ``value - 1``; ``go_to`` clamps and is safe with no alerts loaded
@@ -276,6 +285,10 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
     nxt = btn("secondary", icon_right="mdi-chevron-right", style_=_NAV_WIDTH)
     prev.on_event("click", lambda *_: guard(app_state.go_prev))
     nxt.on_event("click", lambda *_: guard(app_state.go_next))
+    # The jump menu's "Next unreviewed alert" one click away (user,
+    # 2026-10-27, option B); the dock's Next has its own.
+    skip = icon_btn("secondary", "mdi-skip-next", style_=_SKIP_STYLE)
+    skip.on_event("click", lambda *_: guard(app_state.go_next_unreviewed))
 
     # The counter is a chip, or a sentence, not a button's words: no capitals.
     jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn",
@@ -338,10 +351,8 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
 
     def _on_unreviewed(*_):
         # Among the filter's matches (every alert without one), wrapping.
-        target = next_unreviewed_match(app_state.alerts_gdf.value, app_state.alert_mask(),
-                                       app_state.actual_alert_id.value)
-        if target is not None:
-            guard(lambda: app_state.go_to(target))
+        if app_state.next_unreviewed() is not None:
+            guard(app_state.go_next_unreviewed)
         menu.v_model = False
 
     unreviewed.on_event("click", _on_unreviewed)
@@ -353,6 +364,7 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
                            "title": t("analysis_tile.nav.jump")}
         set_label(go, t("analysis_tile.nav.go"))
         set_label(unreviewed, t("analysis_tile.nav.next_unreviewed"))
+        set_tip(skip, t("analysis_tile.nav.next_unreviewed"))
         label.children = [t("analysis_tile.nav.jump")]
         if refused[0] is not None:
             # A switch with the menu open on a refusal: the same sentence in
@@ -361,8 +373,8 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
 
     labels.add(_label)
 
-    return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed,
-            "refusal": refusal}
+    return {"prev": prev, "next": nxt, "skip": skip, "jump": jump, "menu": menu, "go": go,
+            "unreviewed": unreviewed, "refusal": refusal}
 
 
 def _build_facts(labels):
@@ -495,7 +507,8 @@ def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None
         stuck = filtered and not mask.any()
         nav_slots["prev"].disabled = stuck
         nav_slots["next"].disabled = stuck
-        nav_slots["unreviewed"].disabled = next_unreviewed_match(gdf, mask, index) is None
+        nav_slots["skip"].disabled = nav_slots["unreviewed"].disabled = (
+            next_unreviewed_match(gdf, mask, index) is None)
         id_field.placeholder = f"1 – {format_number(total)}" if total else ""
 
         # The queue line refreshes before this guard returns: another set's
@@ -549,7 +562,7 @@ def build_topnav(card, set_selector, *, labels=None):
     built (their handlers and subscriptions stay there): the filter control
     (``filter_menu``: the funnel button and the filter's chip), the alert-set
     selector, the review progress (tally over its bar), and Previous · the
-    counter (its jump menu) · Next.
+    counter (its jump menu) · Next and its next-unreviewed icon.
 
     The filter, the set and its progress (then the screen's help, which
     ``build_screen`` inserts before the navigation) sit right of the title,
@@ -566,7 +579,8 @@ def build_topnav(card, set_selector, *, labels=None):
     slots["filter"] = control
     progress = v.Html(tag="div", class_="defo-topnav-progress", children=[slots["tally"], slots["bar"]])
     middle = v.Html(tag="div", class_="defo-topnav-pos", children=[slots["menu"]])
-    nav = v.Html(tag="div", class_="defo-topnav-nav", children=[slots["prev"], middle, slots["next"]])
+    after = v.Html(tag="div", class_="defo-topnav-next", children=[slots["next"], slots["skip"]])
+    nav = v.Html(tag="div", class_="defo-topnav-nav", children=[slots["prev"], middle, after])
     return v.Html(tag="div", class_="defo-topnav", children=[
         v.Html(tag="span", style_="flex: 1 1 auto;", children=[]),
         *([control.root] if control is not None else []),

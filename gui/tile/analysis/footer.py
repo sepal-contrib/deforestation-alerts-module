@@ -16,11 +16,14 @@ alert has unsaved work or no saved review, *Next* once its review is saved.
 in the panel -- and is registered with it (``run_save.guard``) so a second
 save cannot start over the same store and row.
 
+An icon after *Next* skips to the next unreviewed alert, as the top bar's
+does; it wears *Next*'s emphasis.
+
 **Next with unsaved work** asks first (``guard``): the button row gives way to
 an inline prompt, *Discard* (move on; the alert opens again from its store)
 or *Stay*. Every alert change started on the screen goes through the same
-``guard``: this *Next*, and the top bar's Previous, Next, Go and next
-unreviewed (``context.build_context``).
+``guard``: this *Next* and its next-unreviewed icon, and the top bar's
+Previous, Next, Go and next unreviewed (``context.build_context``).
 
 Flat on the panel's surface, like the blocks above it: the same 16 px edges
 and the same hairline, no card of its own. The background is opaque; the
@@ -44,7 +47,7 @@ from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE
 from gui.tile.analysis.state import save_size
-from gui.widget.buttons import btn, set_label
+from gui.widget.buttons import btn, icon_btn, set_label, set_tip
 
 FOOTER_STYLE = ("flex: 0 0 auto; padding: 0 16px 12px; "
                 "background-color: var(--v-background-base, #ffffff); "
@@ -65,6 +68,12 @@ def footer_widgets(root):
     """``(save, next, state_line)`` of a footer ``build_footer`` built."""
     s = getattr(root, _SLOTS)
     return s["save"], s["next"], s["state_line"]
+
+
+def next_unreviewed_widget(root):
+    """The icon-only *Next unreviewed alert* button beside *Next* of a footer
+    ``build_footer`` built."""
+    return getattr(root, _SLOTS)["skip"]
 
 
 def prompt_widgets(root):
@@ -173,7 +182,10 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
                class_="flex-grow-1", style_="flex-basis: 0;")
     nxt = btn("secondary", t("analysis_tile.nav.next"), icon_right="mdi-arrow-right",
               class_="flex-grow-1", style_="flex-basis: 0;")
-    buttons = v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[save, nxt])
+    # Next unreviewed (user, 2026-10-27, option B): an icon after *Next*,
+    # filled or outlined with it; disabled when every other alert is reviewed.
+    skip = icon_btn("secondary", "mdi-skip-next", style_="min-width: 0; padding: 0 10px;")
+    buttons = v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[save, nxt, skip])
     state_line = v.Html(tag="div", class_=_STATE_LINE, children=[])
 
     # The prompt, in place of the button row while it asks. *Stay* is the
@@ -253,6 +265,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
 
     save.on_event("click", _on_save)
     nxt.on_event("click", lambda *_: guard(app_state.go_next))
+    skip.on_event("click", lambda *_: guard(app_state.go_next_unreviewed))
     discard.on_event("click", _discard)
     stay.on_event("click", lambda *_: _show_prompt(False))
     # ``getattr`` because a test may inject a plain callable.
@@ -277,11 +290,19 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         # review is stored, Next is.
         filled_save = bool(analysis.dirty.value) or not _saved_review()
         save.outlined = not filled_save
-        nxt.outlined = filled_save
+        nxt.outlined = skip.outlined = filled_save
 
     for reactive in (analysis.dirty, analysis.last_save_time, app_state.alerts_gdf, app_state.actual_alert_id):
         reactive.subscribe(_sync_emphasis)
     _sync_emphasis()
+
+    def _sync_skip(*_):
+        skip.disabled = app_state.next_unreviewed() is None
+
+    # The filter too: the layout binds it into ``app_state`` after this dock.
+    for reactive in (app_state.alerts_gdf, app_state.actual_alert_id, analysis.alert_filter):
+        reactive.subscribe(_sync_skip)
+    _sync_skip()
 
     def _sync_state_line(*_):
         if analysis.drawing_unapplied.value:
@@ -316,6 +337,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         # text only: a save in flight keeps its button disabled and loading
         set_label(save, _save_text())
         set_label(nxt, t("analysis_tile.nav.next"))
+        set_tip(skip, t("analysis_tile.nav.next_unreviewed"))
         set_label(discard, t("analysis_tile.verdict.discard"))
         set_label(stay, t("analysis_tile.verdict.stay"))
         prompt_title.children = [t("analysis_tile.verdict.unsaved_title")]
@@ -336,7 +358,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         # a dialog draws nothing in place
         confirm.dialog,
     ])
-    setattr(root, _SLOTS, {"save": save, "next": nxt, "state_line": state_line,
+    setattr(root, _SLOTS, {"save": save, "next": nxt, "skip": skip, "state_line": state_line,
                            "prompt": prompt, "discard": discard, "stay": stay})
     return SimpleNamespace(root=root, save=save, next=nxt, state_line=state_line, prompt=prompt, guard=guard,
                            confirm=confirm)

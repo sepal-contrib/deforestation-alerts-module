@@ -779,6 +779,7 @@ SCREEN_CSS = (
     " justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
     ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-screen .defo-topnav-next { display: flex; align-items: center; gap: 6px; }\n"
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
     " padding: 8px; }\n"

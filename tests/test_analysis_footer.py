@@ -21,7 +21,13 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile
 from gui.tile.analysis import export as export_mod
 from gui.tile.analysis import review_save
-from gui.tile.analysis.footer import FOOTER_STYLE, build_footer, footer_widgets, prompt_widgets
+from gui.tile.analysis.footer import (
+    FOOTER_STYLE,
+    build_footer,
+    footer_widgets,
+    next_unreviewed_widget,
+    prompt_widgets,
+)
 from gui.tile.analysis.state import AnalysisState
 from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
@@ -105,12 +111,12 @@ def test_the_dock_is_export_then_save_and_next_then_the_state_line(panel):
     # The literal English (the fixture pins the locale), not ``t()`` of the
     # same key, which passes on the ``⟦key⟧`` placeholder too.
     assert label_of(save) == "Save" and label_of(nxt) == "Next"
-    # The order inside the dock: Export, the two buttons, the (hidden)
+    # The order inside the dock: Export, the buttons, the (hidden)
     # prompt, the state line; then the group save's confirmation, a dialog
     # that draws nothing in place.
     assert footer.children == [sections.export.root, footer.children[1], prompt, state_line,
                                sections.footer.confirm.dialog]
-    assert footer.children[1].children == [save, nxt]
+    assert footer.children[1].children == [save, nxt, next_unreviewed_widget(footer)]
     assert "display: none" in prompt.style_
     # The background is an opaque surface: the panel content scrolls above it.
     assert "background-color" in footer.style_
@@ -486,9 +492,11 @@ def test_the_filled_button_follows_the_saved_review(tmp_path, monkeypatch):
     session or before (its row has a status)."""
     footer, analysis, app_state = _footer(monkeypatch, tmp_path)
     save, nxt, _ = footer_widgets(footer.root)
+    skip = next_unreviewed_widget(footer.root)
 
     def filled():
         assert save.outlined != nxt.outlined, "exactly one of the two is filled"
+        assert skip.outlined == nxt.outlined, "the next-unreviewed icon wears Next's emphasis"
         return "save" if not save.outlined else "next"
 
     assert filled() == "save"  # nothing saved yet
@@ -509,6 +517,30 @@ def test_the_filled_button_follows_the_saved_review(tmp_path, monkeypatch):
     assert filled() == "next"
 
 
+def test_the_skip_icon_after_next_goes_to_the_next_unreviewed_alert(tmp_path, monkeypatch):
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    _save, nxt, _ = footer_widgets(footer.root)
+    skip = next_unreviewed_widget(footer.root)
+    assert footer.root.children[1].children[-2:] == [nxt, skip]
+    assert skip.attributes["title"] == skip.attributes["aria-label"] == t("analysis_tile.nav.next_unreviewed")
+    gdf = app_state.alerts_gdf.value.copy()
+    gdf["status"] = ["Not reviewed", "Confirmed", "Not reviewed"]
+    app_state.alerts_gdf.value = gdf
+    assert not skip.disabled
+
+    analysis.dirty.set(True)
+    skip.fire_event("click", None)
+    assert _prompt_shown(footer.root) and app_state.actual_alert_id.value == 0  # asks first
+    analysis.dirty.set(False)
+    skip.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 2  # past the reviewed alert 2
+
+    gdf = gdf.copy()
+    gdf["status"] = ["Confirmed", "Confirmed", "Not reviewed"]
+    app_state.alerts_gdf.value = gdf
+    assert skip.disabled, "nothing else left to review"
+
+
 # ---------------------------------------------------------------------------
 # The top bar's alert changes ask the same question
 # ---------------------------------------------------------------------------
@@ -520,6 +552,7 @@ def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
     _prompt, discard, stay = prompt_widgets(footer)
     _banner, card, *_ = panel.controls.children
     prev, nxt, _jump, _menu, go, unreviewed = context.nav_widgets(card)
+    skip = context.next_unreviewed_widget(card)
     panel.analysis.dirty.set(True)
 
     def asks(click):
@@ -536,6 +569,7 @@ def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
     panel.id_field.v_model = "3"
     assert asks(lambda: go.fire_event("click", None)) == (True, 1)
     assert asks(lambda: unreviewed.fire_event("click", None)) == (True, 1)
+    assert asks(lambda: skip.fire_event("click", None)) == (True, 1)
 
     # Discard runs the move the prompt held: here, Go to alert 3.
     panel.id_field.v_model = "3"
